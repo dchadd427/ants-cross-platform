@@ -11,10 +11,12 @@
 # a record of a running match in a folder of its own (mode 600 in a folder of mode 700), is stopped with SIGTERM in the middle of it and killed with SIGKILL, and started again over the same folder: the room
 # comes back with its code, paused, every seat held, the two real games (stopped meanwhile, so that they do not come back before the room is looked at) wake up and find the room by themselves, and the
 # record goes when the owner closes the room; a thousand records of a long match are replayed while the server answers /busy within 2 s of its launch and takes a new room's player at once
-# (the restore does not block it); the options of the records are refused or accepted in the options part.
+# (the restore does not block it); the options of the records are refused or accepted in the options part. The last part, replays, is the matches that the server keeps (docs/REPLAYS.md "On the
+# game server"): two real games play 32 seconds in a room, the owner closes it, and the match is kept as a file that the control interface and the public replay door list and give out (with the names
+# that the two games typed, and without the room's code), that survives a restart of the server, that replay_tool plays out to the same hashes, and that the owner can delete; the door is off unless it is asked for.
 # The sections below are PARTS: they run one after the other (the default), or alone with `--part NAME` (repeatable), each with its own server on its own ports and its own
 # scratch folder, so that ./run_tests.sh and the CI can run them at the same time. `--list-parts` prints the names.
-PART_NAMES="options rooms secret demo reconnect"
+PART_NAMES="options rooms secret demo reconnect replays"
 PARTS=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -64,7 +66,7 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
-    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+    for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
     rm -rf "$WORK"
 }
@@ -231,6 +233,27 @@ check "the edges of the restart options start the server: 30 and 1" "$([ "$(exit
 check "... and 3600 and 4096" "$([ "$(exit_of --restart-vote-seconds 3600 --restart-budget-mb 4096 --no-restart-records)" = "142" ]; echo $?)"
 check "--restart-dir makes its folder, for its owner only (mode 700)" "$([ -d "$WORK/rd_a" ] && [ "$(stat -c %a "$WORK/rd_a" 2> /dev/null || stat -f %Lp "$WORK/rd_a")" = "700" ]; echo $?)"
 check "--help names the restart options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--restart-dir DIR | --no-restart-records' && "$SERVER" --help 2>&1 | grep -q -- '--restart-vote-seconds 30-3600' && "$SERVER" --help 2>&1 | grep -q -- '--restart-budget-mb 1-4096'; echo $?)"
+# the replays (docs/SERVER.md "Replays"): the options and their edges
+check "--replays-days 0 is refused" "$([ "$(exit_of --replays-days 0)" = "2" ]; echo $?)"
+check "--replays-days above 3650 is refused" "$([ "$(exit_of --replays-days 3651)" = "2" ]; echo $?)"
+check "--replays-days that is no number is refused" "$([ "$(exit_of --replays-days soon)" = "2" ]; echo $?)"
+check "--replays-days without a value is refused" "$([ "$(exit_of --replays-days)" = "2" ]; echo $?)"
+check "--replays-max-mb 0 is refused" "$([ "$(exit_of --replays-max-mb 0)" = "2" ]; echo $?)"
+check "--replays-max-mb above 4096 is refused" "$([ "$(exit_of --replays-max-mb 4097)" = "2" ]; echo $?)"
+check "--replays-max-mb that is no number is refused" "$([ "$(exit_of --replays-max-mb lots)" = "2" ]; echo $?)"
+check "--replay-port that is no port is refused" "$([ "$(exit_of --replay-port web)" = "2" ]; echo $?)"
+check "--replay-port above 65535 is refused" "$([ "$(exit_of --replay-port 65536)" = "2" ]; echo $?)"
+check "--replay-port without a value is refused" "$([ "$(exit_of --replay-port)" = "2" ]; echo $?)"
+check "--replays-dir with an empty folder name is refused" "$([ "$(exit_of --replays-dir '')" = "2" ]; echo $?)"
+check "--replays-dir together with --no-replays is refused" "$([ "$(exit_of --replays-dir "$WORK/rp_none" --no-replays)" = "2" ]; echo $?)"
+check "--replays-dir that names a file stops the server (status 1: the operator asked for that folder)" "$([ "$(exit_of --replays-dir "$WORK/a_file")" = "1" ]; echo $?)"
+check "--replays-dir that is a folder below a file stops it too" "$([ "$(exit_of --replays-dir "$WORK/a_file/below")" = "1" ]; echo $?)"
+check "the edges of the replay options start the server: 1 day and 1 MiB" "$([ "$(exit_of --replays-days 1 --replays-max-mb 1 --replays-dir "$WORK/rp_a")" = "142" ]; echo $?)"
+check "... and 3650 days and 4096 MiB, with the replays switched off" "$([ "$(exit_of --replays-days 3650 --replays-max-mb 4096 --no-replays)" = "142" ]; echo $?)"
+check "... and --replay-port 0 (no public door: the default) starts it" "$([ "$(exit_of --replay-port 0)" = "142" ]; echo $?)"
+check "... and so does a public door on a free port of this machine" "$([ "$(exit_of --replay-port "$(free_port)")" = "142" ]; echo $?)"
+check "--replays-dir makes its folder (the server's own, it is written to when a match ends)" "$([ -d "$WORK/rp_a" ]; echo $?)"
+check "--help names the replay options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--replays-dir DIR | --no-replays' && "$SERVER" --help 2>&1 | grep -q -- '--replays-days 1-3650' && "$SERVER" --help 2>&1 | grep -q -- '--replays-max-mb 1-4096' && "$SERVER" --help 2>&1 | grep -q -- '--replay-port N' && "$SERVER" --help 2>&1 | grep -q -- '--replay-demo'; echo $?)"
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
@@ -1373,6 +1396,8 @@ for _ in $(seq 1 $((900 * TIME_SCALE))); do
     sleep 0.2
 done
 RR_RESTORE_S="$(python3 -c "import time; print(round(time.time() - $RR_T0, 1))")"
+# (a count that never comes is not always a restore that is slow: GET /rooms with a thousand rooms is one answer of about a megabyte, and the control interface answers 500 to one of more than 1 MiB)
+[ "$RR_BACK" = "0" ] || echo "  [restore e2e] no count of $RR_CLONES running rooms: GET /rooms now answers $(curl -s -m 5 -o /dev/null -w '%{http_code} with %{size_download} bytes' -H "Authorization: Bearer $SECRET" "$RR_URL/rooms") (an answer may have 1048576 bytes at the most); the log has $(grep -c ' restored: ' "$WORK/rr_server.log") restored rooms"
 check "all $RR_CLONES records are rooms again (running, restored) within $((3 * TIME_SCALE)) minutes" "$RR_BACK"
 check "the log says that the records wait for their replay and that their rooms were restored" "$(grep -q "restore: $RR_CLONES restart record(s) wait for their replay" "$WORK/rr_server.log" && [ "$(grep -c ' restored: ' "$WORK/rr_server.log")" -ge "$RR_CLONES" ]; echo $?)"
 kill -TERM "$SERVER_PID" 2> /dev/null
@@ -1382,6 +1407,156 @@ SERVER_PID=""
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
 echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; the room came back with $RR_RESTORED_TURNS turns, held its two seats, and came back again after a SIGKILL; the two games found it by themselves"
 echo "  [restore e2e] $RR_CLONES records of a long match were replayed in $RR_RESTORE_S s of the server's launch; meanwhile /busy answered after $RR_BUSY_S s (${RR_BUSY_MATCHES:-?} matches waited) and a new room's player had its Welcome $RR_WELCOME_S s after the launch"
+fi
+
+# ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER.md "Replays") ---------------------------------------------
+# Two real games play a match on a room of the control interface; after 32 seconds of play (640 ticks: the server keeps a match from 600 turns, 30 seconds, however it ended) the owner closes the room. The match is kept
+# as a file in the results folder, and the control interface (with the secret) and the public replay door (without) list it and give it out; the names that the two games typed ("Typed1", "Typed2") are in
+# the list and in the file, the room's code and the address are not; replay_tool plays the downloaded file out to the same hashes and shows the names; the file is still there after a restart of the server; the
+# door is not there when the server is started without it; the owner deletes the file.
+if part_enabled replays; then
+RP_PUB="$(free_port)"
+RP_RESULTS="$WORK/rp_results"
+RP_CODE="RP-ROOM-$RANDOM"
+RP_PUBURL="http://127.0.0.1:$RP_PUB"
+rp_server() {      # rp_server [options]: the server over the results folder, with the control interface; 0 when it answers
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$RP_RESULTS" "$@" >> "$WORK/rp_server.log" 2>&1 &
+    SERVER_PID=$!
+    for _ in $(seq 1 50); do
+        if curl -s -m 1 "$CTL/healthz" | grep -q '"ok"'; then return 0; fi
+        kill -0 "$SERVER_PID" 2> /dev/null || return 1
+        sleep 0.1
+    done
+    return 1
+}
+rp_auth() { curl -s -m 5 -H "Authorization: Bearer $SECRET" "$@"; }
+rp_list_ok() {      # rp_list_ok FILE: the control interface's list holds this one replay of TINY.LVL and says the colours with the names that the two games typed (the game whose Hello came first has Green: either order is right), not the room's code
+    rp_auth "$CTL/replays" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+r = d["replays"][0] if d["replays"] else {}
+ok = d["enabled"] is True and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30 and d["max_bytes"] == 100 * 1024 * 1024
+ok = ok and r.get("file") == sys.argv[1] and r.get("readable") is True and r.get("map") == "TINY.LVL" and r.get("players") in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r.get("finished") is False
+ok = ok and r.get("turns", 0) >= 600 and r.get("bytes", 0) > 0
+ok = ok and sys.argv[2] not in json.dumps(d)
+sys.exit(0 if ok else 1)' "$1" "$RP_CODE"
+}
+rp_public_ok() {      # rp_public_ok FILE: the public list holds the same replay, with exactly the keys of the public answer and the same players
+    curl -s -m 5 "$RP_PUBURL/replays" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+r = d["replays"][0] if d["replays"] else {}
+ok = sorted(d) == ["count", "keep_days", "replays"] and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30
+ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "players", "rules", "seconds", "turns"]
+ok = ok and r["file"] == sys.argv[1] and r["map"] == "TINY.LVL" and r["players"] in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r["finished"] is False and r["turns"] >= 600
+ok = ok and sys.argv[2] not in json.dumps(d)
+sys.exit(0 if ok else 1)' "$1" "$RP_CODE"
+}
+# the address of this machine on its network (the one a connection to elsewhere would leave from; empty where there is none): the public door must not answer there unless it is asked to
+RP_HOST_IP="$(python3 -c '
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(("192.0.2.1", 9))
+    print(s.getsockname()[0])
+except OSError:
+    pass' 2> /dev/null)"
+case "$RP_HOST_IP" in ""|127.*) RP_HOST_IP="" ;; esac
+rp_server --replay-port "$RP_PUB"
+check "the server is up over a results folder, with the control interface and the public replay door" "$?"
+check "its log says where the replays are kept, for how long and how much, that the matches of demo rooms are not kept unless it is asked, and that the public door is open on this machine only" "$(grep -q "replays kept in $RP_RESULTS/replays for 30 days, at most 100 MiB; the matches of demo rooms are not kept (--replay-demo keeps them)" "$WORK/rp_server.log" && grep -q "public replays on port $RP_PUB (this machine only)" "$WORK/rp_server.log"; echo $?)"
+check "nothing is kept yet: the control interface says enabled with an empty list" "$(rp_auth "$CTL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["enabled"] is True and d["count"] == 0 and d["replays"] == [] and d["bytes"] == 0 else 1)'; echo $?)"
+check "... and so does the public door (200 JSON that nobody may cache, no secret asked)" "$(curl -s -i -m 5 "$RP_PUBURL/replays" | tr -d '\r' | python3 -c '
+import sys, json
+text = sys.stdin.read()
+head, body = text.split("\n\n", 1)
+lines = head.split("\n")
+ok = lines[0] == "HTTP/1.1 200 OK" and any(l.lower() == "cache-control: no-store" for l in lines) and any(l.lower() == "content-type: application/json" for l in lines)
+d = json.loads(body)
+ok = ok and d == {"replays": [], "count": 0, "keep_days": 30}
+sys.exit(0 if ok else 1)'; echo $?)"
+# a match of two real games
+curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":2,\"code\":\"$RP_CODE\",\"seed\":7}" "$CTL/rooms" > /dev/null
+RP_PIDS=""
+for i in 1 2; do
+    "$GAME" --headless --no-lan --name "Typed$i" --join "127.0.0.1:$GAME_PORT" --room "$RP_CODE" --screenshot "$WORK/rp$i.png" --frames 4000000 > "$WORK/rp$i.log" 2>&1 &
+    RP_PIDS="$RP_PIDS $!"
+done
+RP_RUNNING=1
+for _ in $(seq 1 $((150 * TIME_SCALE))); do
+    if rp_auth "$CTL/rooms/$RP_CODE" | grep -q '"state":"running"'; then RP_RUNNING=0; break; fi
+    sleep 0.2
+done
+check "two games with typed names joined and the match started by itself" "$RP_RUNNING"
+RP_TICKS=0
+for _ in $(seq 1 $((500 * TIME_SCALE))); do
+    RP_TICKS="$(ticks_of "$RP_CODE")"
+    if [ "${RP_TICKS:-0}" -ge 640 ] 2> /dev/null; then break; fi
+    sleep 0.2
+done
+check "the match ran 640 ticks (32 seconds of play, past the 600 turns, 30 seconds, that a match needs to be kept however it ended): $RP_TICKS" "$([ "${RP_TICKS:-0}" -ge 640 ] 2> /dev/null; echo $?)"
+check "while the match runs nothing is kept yet and the room says so (replay kept false, note empty)" "$(rp_auth "$CTL/rooms/$RP_CODE" | python3 -c 'import sys, json; r = json.load(sys.stdin)["replay"]; sys.exit(0 if r["kept"] is False and r["file"] == "" and r["note"] == "" else 1)'; echo $?)"
+RP_CLOSED="$(rp_auth -X DELETE "$CTL/rooms/$RP_CODE")"
+for p in $RP_PIDS; do kill "$p" 2> /dev/null; done
+for p in $RP_PIDS; do wait "$p" 2> /dev/null; done
+RP_PIDS=""
+RP_FILE="$(echo "$RP_CLOSED" | python3 -c 'import sys, json; d = json.load(sys.stdin); print(d["replay"]["file"] if d["state"] == "failed" and d["replay"]["kept"] else "")' 2> /dev/null)"
+# (the store does not write a file when the disk would be left with less than 256 MiB free: say so, with the room's own reason, rather than only that the check below failed)
+[ -n "$RP_FILE" ] || echo "  [replays e2e] the match was not kept. The room says: $(echo "$RP_CLOSED" | python3 -c 'import sys, json; print(json.load(sys.stdin)["replay"]["note"])' 2> /dev/null). The disk of the work folder has $(df -Pk "$WORK" | awk 'NR == 2 {printf "%d", $4 / 1024}') MiB free (the server keeps a reserve of 256 MiB)"
+check "closing the room (state failed, closed by the owner) keeps its match as ants-TINY-<date>-<time>Z.antsrep: the answer says so [$RP_FILE]" "$(echo "$RP_FILE" | grep -qE '^ants-TINY-[0-9]{8}-[0-9]{6}Z\.antsrep$'; echo $?)"
+check "the file is in the replays folder of the results folder, and its status in the room list says kept and how big it is" "$([ -s "$RP_RESULTS/replays/$RP_FILE" ] && rp_auth "$CTL/rooms/$RP_CODE" | python3 -c 'import sys, json; r = json.load(sys.stdin)["replay"]; sys.exit(0 if r["kept"] and r["bytes"] > 0 and r["note"] == "" else 1)'; echo $?)"
+check "the server's log line of the ended room says kept as that file" "$(grep -q "kept as $RP_FILE" "$WORK/rp_server.log"; echo $?)"
+check "the control interface lists it: TINY.LVL, Green and Red with the names that the two games typed (and not the room's code), not finished, 600 turns or more, readable" "$(rp_list_ok "$RP_FILE"; echo $?)"
+check "the public door lists the same replay, with the keys of the public answer, the same names and no 'readable'" "$(rp_public_ok "$RP_FILE"; echo $?)"
+rp_auth -o "$WORK/rp_control.antsrep" "$CTL/replays/$RP_FILE"
+curl -s -m 5 -o "$WORK/rp_public.antsrep" -D "$WORK/rp_public.head" "$RP_PUBURL/replays/$RP_FILE"
+check "both give the file: the same bytes as on disk, application/octet-stream and no-store from the public door" "$(cmp -s "$WORK/rp_control.antsrep" "$RP_RESULTS/replays/$RP_FILE" && cmp -s "$WORK/rp_public.antsrep" "$RP_RESULTS/replays/$RP_FILE" && tr -d '\r' < "$WORK/rp_public.head" | grep -qi '^content-type: application/octet-stream$' && tr -d '\r' < "$WORK/rp_public.head" | grep -qi '^cache-control: no-store$'; echo $?)"
+check "the file is a replay file (its first eight bytes are the signature), holds the names that the two games typed, and holds neither the room's code nor an address" "$(python3 -c 'import sys; sys.exit(0 if open(sys.argv[1], "rb").read(8) == bytes([0x89, 0x41, 0x52, 0x50, 0x4C, 0x0D, 0x0A, 0x1A]) else 1)' "$WORK/rp_public.antsrep" && grep -qa 'Typed1' "$WORK/rp_public.antsrep" && grep -qa 'Typed2' "$WORK/rp_public.antsrep" && ! grep -qa "$RP_CODE" "$WORK/rp_public.antsrep" && ! grep -qa '127\.0\.0\.1' "$WORK/rp_public.antsrep"; echo $?)"
+RT="$ROOT/$BUILD/replay_tool"
+if [ -x "$RT" ]; then
+    "$RT" info "$WORK/rp_public.antsrep" > "$WORK/rp_info.log" 2>&1
+    RP_INFO=$?
+    "$RT" verify "$WORK/rp_public.antsrep" --maps-dir "$ROOT/Original-Ants/Maps" > "$WORK/rp_verify.log" 2>&1
+    RP_VERIFY=$?
+    [ "$RP_VERIFY" -ne 0 ] && sed 's/^/    /' "$WORK/rp_verify.log"
+    check "replay_tool info reads the downloaded file (TINY.LVL, the seats with the typed names, no room code) and verify plays the match out to every hash in it (exit 0) and names the players too" "$([ "$RP_INFO" = "0" ] && [ "$RP_VERIFY" = "0" ] && grep -q 'TINY' "$WORK/rp_info.log" && grep -q '^Seats:     Green (Typed[12]), Red (Typed[12])$' "$WORK/rp_info.log" && grep -q 'Typed1' "$WORK/rp_info.log" && grep -q 'Typed2' "$WORK/rp_info.log" && grep -q 'Typed' "$WORK/rp_verify.log" && ! grep -q "$RP_CODE" "$WORK/rp_info.log" "$WORK/rp_verify.log"; echo $?)"
+else
+    echo "  SKIP: replay_tool is not built ($RT): the downloaded file was NOT played again"
+fi
+# who may ask for what
+check "the control interface asks for the secret: the list and a file are 401 without it" "$([ "$(code_of "$CTL/replays")" = "401" ] && [ "$(code_of "$CTL/replays/$RP_FILE")" = "401" ] && [ "$(code_of -H "Authorization: Bearer wrong-$SECRET" "$CTL/replays")" = "401" ]; echo $?)"
+check "the control interface refuses a bad name or query: a path, another name and a parameter that is not limit are 404 / 400, ?limit=1 works, ?limit=0 and ?limit=1001 are 400" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays/..%2Fcontrol-secret")" = "404" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays/ants-TINY-20200101-000000Z.antsrep")" = "404" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays?x=1")" = "400" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays?limit=1")" = "200" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays?limit=0")" = "400" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays?limit=1001")" = "400" ]; echo $?)"
+check "the public door is read only and answers nothing else: POST and DELETE are 405 (Allow: GET), a query and any other path are 404, a request with a body is 400, and the secret opens nothing there" "$([ "$(code_of -X POST "$RP_PUBURL/replays")" = "405" ] && [ "$(code_of -X DELETE "$RP_PUBURL/replays/$RP_FILE")" = "405" ] && curl -s -i -m 3 -X POST "$RP_PUBURL/replays" | tr -d '\r' | grep -qi '^allow: GET$' && [ "$(code_of "$RP_PUBURL/replays?x=1")" = "404" ] && [ "$(code_of "$RP_PUBURL/replays/$RP_FILE?x=1")" = "404" ] && [ "$(code_of "$RP_PUBURL/rooms")" = "404" ] && [ "$(code_of "$RP_PUBURL/stats")" = "404" ] && [ "$(code_of "$RP_PUBURL/")" = "404" ] && [ "$(code_of -H "Authorization: Bearer $SECRET" "$RP_PUBURL/rooms/$RP_CODE")" = "404" ] && [ "$(code_of --path-as-is "$RP_PUBURL/replays/../control-secret")" = "404" ] && [ "$(code_of "$RP_PUBURL/replays/ants-TINY-20200101-000000Z.antsrep")" = "404" ] && [ "$(code_of "$RP_PUBURL/replays/$RP_FILE.tmp")" = "404" ] && [ "$(code_of -X GET -d 'x' "$RP_PUBURL/replays")" = "400" ] && [ "$(code_of -X GET -d 'x' "$RP_PUBURL/replays/$RP_FILE")" = "400" ] && [ "$(code_of "$RP_PUBURL/healthz")" = "200" ]; echo $?)"
+if [ -n "$RP_HOST_IP" ]; then
+    check "the public door answers on this machine only: on this machine's network address ($RP_HOST_IP) the connection is refused" "$([ "$(code_of "http://$RP_HOST_IP:$RP_PUB/replays")" = "000" ]; echo $?)"
+else
+    echo "  SKIP: this machine has no address of its own on a network: the public door was NOT tried from one"
+fi
+# the files are the store: a restart of the server loses nothing
+stop_server
+rp_server --replay-port "$RP_PUB"
+check "after the server was stopped (SIGTERM) and started again over the same folder, the match is in both lists, with the same bytes" "$(rp_list_ok "$RP_FILE" && rp_public_ok "$RP_FILE" && curl -s -m 5 "$RP_PUBURL/replays/$RP_FILE" | cmp -s - "$RP_RESULTS/replays/$RP_FILE"; echo $?)"
+# the door is off unless it is asked for
+stop_server
+RP_LOG_LINES="$(wc -l < "$WORK/rp_server.log" | tr -d ' ')"      # (this start's lines are the ones after these: the log is one file for all the starts of the part)
+rp_server
+check "a server started without --replay-port has no public door (the connection is refused) and still lists the replay for its owner" "$([ "$(code_of "$RP_PUBURL/replays")" = "000" ] && rp_list_ok "$RP_FILE" && ! tail -n +$((RP_LOG_LINES + 1)) "$WORK/rp_server.log" | grep -q "public replays on port"; echo $?)"
+stop_server
+rp_server --no-replays
+check "--no-replays keeps nothing and lists nothing (enabled false, 404 for the old file), and the old file is left alone on disk" "$(rp_auth "$CTL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["enabled"] is False and d["replays"] == [] else 1)' && [ "$(code_of -H "Authorization: Bearer $SECRET" "$CTL/replays/$RP_FILE")" = "404" ] && [ -s "$RP_RESULTS/replays/$RP_FILE" ]; echo $?)"
+stop_server
+# the owner deletes it
+rp_server --replay-port "$RP_PUB"
+check "the owner deletes the replay: 200 with the name, then the list is empty, the file is gone from disk and the public door says 404" "$(rp_auth -X DELETE "$CTL/replays/$RP_FILE" | python3 -c 'import sys, json; sys.exit(0 if json.load(sys.stdin) == {"deleted": sys.argv[1]} else 1)' "$RP_FILE" && [ ! -e "$RP_RESULTS/replays/$RP_FILE" ] && [ "$(code_of "$RP_PUBURL/replays/$RP_FILE")" = "404" ] && curl -s -m 5 "$RP_PUBURL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["count"] == 0 and d["replays"] == [] else 1)'; echo $?)"
+check "a second delete of the same name is 404" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/replays/$RP_FILE")" = "404" ]; echo $?)"
+stop_server
+# the settings reach the store: its own folder, 7 days, 5 MiB and the demo option are in the log and in both lists, whatever the defaults are
+RP_OTHER="$WORK/rp_other_folder"
+rp_server --replay-port "$RP_PUB" --replay-any-interface --replays-dir "$RP_OTHER" --replays-days 7 --replays-max-mb 5 --replay-demo
+check "a server with its own replays folder, 7 days, 5 MiB and --replay-demo says so in its log, and makes the folder" "$(grep -q "replays kept in $RP_OTHER for 7 days, at most 5 MiB; the matches of demo rooms are kept too (--replay-demo)" "$WORK/rp_server.log" && [ -d "$RP_OTHER" ]; echo $?)"
+check "with --replay-any-interface the log says that the door is open to every interface, and (where the machine has an address) it answers there" "$(grep -q "public replays on port $RP_PUB (all interfaces: the host must restrict it)" "$WORK/rp_server.log" && { [ -z "$RP_HOST_IP" ] || [ "$(code_of "http://$RP_HOST_IP:$RP_PUB/replays")" = "200" ]; }; echo $?)"
+check "... and the control interface and the public door both say 7 days (and the first one 5 MiB) for a list that is empty" "$(rp_auth "$CTL/replays" | python3 -c 'import sys, json; d = json.load(sys.stdin); sys.exit(0 if d["enabled"] is True and d["count"] == 0 and d["keep_days"] == 7 and d["max_bytes"] == 5 * 1024 * 1024 else 1)' && curl -s -m 5 "$RP_PUBURL/replays" | python3 -c 'import sys, json; sys.exit(0 if json.load(sys.stdin) == {"replays": [], "count": 0, "keep_days": 7} else 1)'; echo $?)"
+stop_server
 fi
 
 echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"

@@ -888,3 +888,39 @@ target_link_libraries(test_touch_app PRIVATE ants_test_paths)
 
 add_test(NAME test_touch_app COMMAND test_touch_app)
 set_tests_properties(test_touch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# Replays in the application: a headless application plays a game on this computer and a match of the network (the other machine is a bare NetGame over loopback sockets); the file that it keeps
+# of each is played again by the replay player on the engine alone and must reach the state in which the match ended
+add_executable(test_replay_app
+    test_replay_app.cpp
+)
+
+target_include_directories(test_replay_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_replay_app PRIVATE
+    ants_app
+    ants_replay
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_replay_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_replay_app PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_replay_app PRIVATE ants_test_paths)
+
+add_test(NAME test_replay_app COMMAND test_replay_app)
+set_tests_properties(test_replay_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

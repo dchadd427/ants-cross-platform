@@ -167,6 +167,7 @@ add_subdirectory(src/ants_assets)
 add_subdirectory(src/ants_sim)
 add_subdirectory(src/ants_net)
 add_subdirectory(src/ants_ai)         # the computer players (virtual clients, docs/BOTS.md): no SDL, no sockets, no threads, so it builds for the web too
+add_subdirectory(src/ants_replay)     # the replay file, its recorder and player (docs/REPLAYS.md): no SDL, no sockets, no threads, so it builds for the web too
 if(NOT EMSCRIPTEN)
     add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
     add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
@@ -209,6 +210,11 @@ if(NOT EMSCRIPTEN)
     #   (./build/bot_arena --selftest checks the tool itself)
     add_executable(bot_arena EXCLUDE_FROM_ALL tools/bot_arena.cpp)
     target_link_libraries(bot_arena PRIVATE ants_ai ants_sim ants_assets ants_test_paths Threads::Threads)
+
+    # Replay tool (not part of the normal build): checks a replay file and lists its orders with their time, place and ant type (docs/REPLAYS.md)
+    #   cmake --build build --target replay_tool && ./build/replay_tool orders match.antsrep   (info, verify and orders; ./build/replay_tool --help)
+    add_executable(replay_tool EXCLUDE_FROM_ALL tools/replay_tool.cpp)
+    target_link_libraries(replay_tool PRIVATE ants_replay ants_net ants_sim ants_assets ants_test_paths)
 endif()
 
 # Testing
@@ -259,6 +265,7 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_sim)
     add_subdirectory(tests/test_net)
     add_subdirectory(tests/test_ai)
+    add_subdirectory(tests/test_replay)
     if(NOT EMSCRIPTEN)
         add_subdirectory(tests/test_ctl)
         add_subdirectory(tests/test_server)

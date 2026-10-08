@@ -47,6 +47,12 @@
 // in the log or a result file, `empty_close_ms` after the last person has gone. The leader's START reaches the room in every pass while every person is a game: the room loads the plan's map (the server
 // offers the maps of --demo-maps), checks that the seats which play can play it, asks the server whether it has a place for another match, and then seats the plan's bots and starts like any room; what it
 // cannot do ends the START with a notice to the leader (HostLobby::end_start) and the room goes on waiting. A failed start never fails the room. A match that a lobby room has begun is a room like the others.
+//
+// Replays (replay_store.hpp, docs/REPLAYS.md "On the game server"). A room of a server that keeps replays records its match: ants_replay's Recorder watches every turn that the referee's own runner
+// executes (LockstepRunner::set_on_executed), from the first, and when the match is over, or the room fails or is closed while it runs, the recording is written as a .antsrep file and handed to the
+// server's ReplayStore. A match is kept when it ran 600 turns (30 seconds), however it ended; a seat has the name that the room showed everybody (what the person typed: replay_person_name; a seat that has no name
+// of its own is the colour in the readers) or, for a computer player, its display name. A room that was brought back from a restart record does not record (the part of its match before the restart is not seen).
+// The status says whether the match was kept, under what name and, if not, why. A room made with `"record": false` records nothing.
 
 #include <array>
 #include <cstdint>
@@ -63,7 +69,9 @@
 #include "ants_net/session.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/replay_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_sim/start_teams.hpp"
@@ -118,6 +126,7 @@ struct RoomSpec {
     uint32_t resume_countdown_ms{net::kResumeCountdownMs};   // after a pause of at least 3 s the match is held this long before it goes on (0 .. 60 s, 0 = none; the control key "resume_countdown_seconds")
     size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
+    bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -238,11 +247,22 @@ struct RoomStatus {
     std::string record_note;                // when it is not: why (the server keeps none, the room holds no seats, the turn log passed its limit, the disk refused ...); "" while it is kept
     uint64_t record_bytes{0};               // the size of the record
     uint32_t record_sync_ms{0};             // the interval to the record's next flush: RestartConfig::sync_every_ms, longer while a flush is slow (0: no record, or not yet flushed)
+    // Replays (replay_store.hpp). The file's name is the map and the end time, never the name of a person (the file itself holds the names that the room showed).
+    bool replay_kept{false};                // the match was kept as a replay on the server ...
+    std::string replay_file;                // ... under this name (never a path)
+    uint64_t replay_bytes{0};
+    std::string replay_note;                // when it was not, or will not be: why (the server keeps none, the room records nothing, the match was too short, the store refused ...); "" while it may still be kept
     bool restored{false};                   // the room came back from a record after a restart of the server
     uint32_t restored_turns{0};             // ... holding this many turns
     uint32_t restore_ms{0};                 // ... which the replay took this long to run (real time)
     uint64_t restored_hash{0};              // ... and the referee's state hash (StateHash::total) was this at the restored tick
 };
+
+/// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most
+/// 32 characters, the blanks at both ends cut. The words that the game itself uses for a seat that has no name of its own give "" (the readers then show the colour: "Green", not "Green (Player)"): "Player"
+/// (what a game proposes and sends when nothing was typed), "Player 1" to "Player 4" (what the lobby calls a person whose name looks like a bot's, and what every screen shows for a seat without a name), and
+/// nothing at all. A name that only starts like them ("Players", "Player 5", "player") is a name.
+std::string replay_person_name(const std::string& shown);
 
 /// What a lobby room asks of the server that runs it (protocol 16; RoomManager gives it to the rooms it makes). The room has no maps folder of its own and does not know the server's limits.
 struct LobbyServices {
@@ -278,6 +298,9 @@ public:
     /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
     /// match is started. Null (the default): the room keeps none.
     void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
+    /// The server's store of replays (replay_store.hpp; it must outlive the room): the match is recorded and kept there. Null (the default): the room records nothing, and `why_not` is what its status says. Set it
+    /// right after the room is made, before its match is started.
+    void set_replay_store(ReplayStore* store, const std::string& why_not = std::string());
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
@@ -371,6 +394,9 @@ private:
     void drop_record();                                      // delete the record and let the writer go; a delete that fails is remembered (stale_path_)
     void sync_record(uint32_t now_ms);                       // the timed flush, and its pace (RestartConfig::slow_sync_ms)
     void end_replay() noexcept;                              // the replay is over (it is rebuilt or refused): the record is not read any more
+    // Replays kept on the server (replay_store.hpp)
+    void replay_begin(const net::StartMsg& start);           // the recorder of the match is made and taps the referee's runner (begin_match: before the first turn)
+    void replay_end();                                       // the match is over (finish, fail while it ran): the recording is made into a file and kept, or the status says why not
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
@@ -415,6 +441,11 @@ private:
     std::unique_ptr<net::HostSession> session_;
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
     std::unique_ptr<ai::BotController> bot_controller_;
+    ReplayStore* replay_store_{nullptr};
+    std::unique_ptr<replay::Recorder> recorder_;     // the match so far (null: it is not recorded, or it is over)
+    std::string replay_file_;                // the match was kept under this name ...
+    uint64_t replay_bytes_{0};
+    std::string replay_note_;                // ... or this says why not
     uint32_t last_ticks_{0};
     uint32_t last_turns_{0};
     bool connections_closed_{false};

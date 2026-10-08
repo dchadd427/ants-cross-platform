@@ -1256,6 +1256,9 @@ void NetGame::install_hooks() {
         if (c.type == sim::CommandType::Drop) events_.push_back(Event{Event::Type::PlayerLeft, c.issuer});
         if (on_command_) on_command_(c, res);
     });
+    r->set_on_executed([this](const TurnMsg& turn) {
+        if (on_executed_) on_executed_(turn);
+    });
     auto chat = [this](const ChatMsg& m) {
         if (on_chat_) on_chat_(m);
     };
@@ -1266,6 +1269,8 @@ void NetGame::install_hooks() {
 void NetGame::set_on_tick(std::function<void()> fn) { on_tick_ = std::move(fn); }
 
 void NetGame::set_on_command(std::function<void(const sim::Command&, const sim::CommandResult&)> fn) { on_command_ = std::move(fn); }
+
+void NetGame::set_on_executed(std::function<void(const TurnMsg&)> fn) { on_executed_ = std::move(fn); }
 
 // ---- the prediction of one's own orders -----------------------------------------------------------------------------------------------------------
 

@@ -166,7 +166,7 @@ Every save writes the whole file beside it and then gives it its name (a replace
 | `host_teams` | The Host panel's Teams row: `ffa`, or two seat numbers such as `0+1`, as `--teams`. A choice that the number of players does not offer, and anything else, is free for all. |
 | `server` | `host[:port]`: the game server of the start menu. Written by hand: the menu shows it and never changes it. `--server` beats it, and a value that is not an address is the default server. |
 
-Two more files lie in the same places. `rejoin.txt` beside the settings file holds the keys of the seats that the first panel's "Rejoin your match (CODE)" may offer again. `chat.txt` is the transcript of the chat log that the original writes when the program ends after a match; the game writes it into the per-user folder (not the folder of `--settings FILE`). The web build and headless runs write nothing.
+Two more files lie in the same places. `rejoin.txt` beside the settings file holds the keys of the seats that the first panel's "Rejoin your match (CODE)" may offer again. `chat.txt` is the transcript of the chat log that the original writes when the program ends after a match; the game writes it into the per-user folder (not the folder of `--settings FILE`). The web build and headless runs write nothing. The folder `replays` beside the settings file holds the recordings of the matches that were played ([`REPLAYS.md`](REPLAYS.md)); the web build records nothing.
 
 ## Mouse Controls
 

@@ -67,7 +67,31 @@ ai::Level ai_level_of(net::FillLevel fill) noexcept {
     }
 }
 
+// A text for the head of a replay file: printable ASCII only (anything else becomes a '?': the reader refuses other texts), at most `limit` characters
+std::string ascii_text(const std::string& raw, size_t limit) {
+    std::string out;
+    for (const char c : raw) {
+        if (out.size() >= limit) break;
+        const unsigned char u = static_cast<unsigned char>(c);
+        out.push_back(u >= 0x20 && u <= 0x7E ? c : '?');
+    }
+    return out;
+}
+
 }  // namespace
+
+// (see room.hpp) A name that the game itself gives to a seat without one is not what a person typed, and a file that kept it would show "Green (Player 1)" for a person who gave no name.
+std::string replay_person_name(const std::string& shown) {
+    const std::string text = ascii_text(shown, replay::kMaxTextBytes / 2);
+    const size_t first = text.find_first_not_of(' ');
+    if (first == std::string::npos) return std::string();                   // (nothing, or only blanks)
+    const std::string name = text.substr(first, text.find_last_not_of(' ') - first + 1);
+    if (name == "Player") return std::string();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (name == "Player " + std::to_string(static_cast<unsigned>(seat) + 1u)) return std::string();
+    }
+    return name;
+}
 
 // Where a bot's commands go: into the sequencer of the room's session for the bot's seat, as the commands of a person do from its connection (the verdict arrives with the turn, like every
 // command's: a bot never sees it). While the match is paused for an absent player the session refuses them (a bot waits like everybody): the controller counts that as a command sent, and the
@@ -165,6 +189,7 @@ void Room::fail(const std::string& reason, uint32_t now_ms) {
     ended_ms_ = now_ms;
     end_log(now_ms);
     record_discard();                                            // the room is over: nothing to bring back after a restart
+    replay_end();                                                // (a match that was running is kept as a replay, whatever ended it)
     close_connections();
 }
 
@@ -280,6 +305,7 @@ void Room::begin_match(uint32_t now_ms) {
         session_->set_rejoin_start(start);                          // what a machine that starts from nothing is sent first
     }
     record_hook_up();                                               // (before the first turn can be sealed: every turn goes to the restart record before it goes to anybody)
+    replay_begin(start);                                            // (and the recording sees every turn that the referee runs, from the first)
     session_->start(now_ms);
     std::string bot_problem;
     if (!start_bots(start.seed, bot_problem)) {
@@ -297,6 +323,7 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
     if (session_) session_->freeze();
     end_log(now_ms);
     record_discard();                                            // the match is over: nothing to bring back after a restart
+    replay_end();
     if (sim_) {
         final_hash_ = sim_->state_hash().total;                       // (once, at the end: the hash is not worth computing at every pass)
         const sim::MatchResult result = sim_->get_world_state().match_result;
@@ -637,6 +664,76 @@ void Room::release_record() {
     record_.reset();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Replays kept on the server (replay_store.hpp)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void Room::set_replay_store(ReplayStore* store, const std::string& why_not) {
+    replay_store_ = store != nullptr && store->enabled() ? store : nullptr;
+    replay_note_ = replay_store_ == nullptr ? (why_not.empty() ? std::string("this server keeps no replays") : why_not) : std::string();
+}
+
+// The recorder of the match, made from the Start message that every machine of the match got, and the tap on the referee's runner: it sees every turn that the referee executes, with the commands as they were
+// sealed (the bots' too), and only watches. The names are the Start's, what the room showed everybody: a person's seat has what was typed (replay_person_name: a seat that was given no name is left empty, and the
+// readers show the colour), a computer player's seat has its display name ("Bot (Medium)"). Nothing else of the room is in the file: no address, room code, key or chat.
+void Room::replay_begin(const net::StartMsg& start) {
+    recorder_.reset();
+    if (replay_store_ == nullptr || session_ == nullptr) return;
+    replay::Header head;
+    head.game_version = ascii_text(replay_store_->config().game_version, replay::kMaxTextBytes);
+    head.build_id = ascii_text(replay_store_->config().build_id, replay::kMaxTextBytes);
+    head.venue = "game server";
+    head.map_name = start.map_name;
+    head.map_hash = start.map_hash;
+    head.seed = start.seed;
+    head.roster = start.roster;
+    head.fog = start.fog;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((start.roster & (1u << seat)) == 0) continue;
+        head.names[seat] = lobby_.room().slots[seat].state == net::SlotState::Bot ? ascii_text(start.names[seat], replay::kMaxTextBytes / 2) : replay_person_name(start.names[seat]);
+    }
+    head.teams = start.teams();
+    head.recorder_seat = replay::kNoSeat;                        // (the server plays nobody)
+    recorder_ = std::make_unique<replay::Recorder>(std::move(head));
+    session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
+        if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
+    });
+}
+
+// The match is over, or the room failed or was closed (it may never have started): a match that was recorded is written as a file and handed to the store when it ran 600 turns (kReplayMinTurns),
+// however it ended (a Quit ends a match of two at once: a loop of starts and Quits must not fill the store); the status says what became of it. The recorder and its tap go in any case.
+void Room::replay_end() {
+    if (recorder_ == nullptr) {
+        if (replay_file_.empty() && replay_note_.empty()) replay_note_ = "no match was played";
+        return;
+    }
+    std::unique_ptr<replay::Recorder> recorder = std::move(recorder_);
+    if (session_ != nullptr) session_->runner().set_on_executed(nullptr);
+    if (replay_store_ == nullptr || sim_ == nullptr) return;
+    if (recorder->turns() == 0) {
+        replay_note_ = "no match was played";
+        return;
+    }
+    if (recorder->turns() < kReplayMinTurns) {
+        replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
+        return;
+    }
+    std::string error;
+    const std::vector<uint8_t> bytes = recorder->finish(*sim_, error);
+    if (bytes.empty()) {
+        replay_note_ = "the match could not be written as a replay: " + error;
+        replay_store_->report("room " + spec_.code + ": the match could not be written as a replay: " + error);
+        return;
+    }
+    const ReplaySave saved = replay_store_->save(bytes);
+    if (saved.kept) {
+        replay_file_ = saved.file;
+        replay_bytes_ = saved.bytes;
+    } else {
+        replay_note_ = saved.note;
+    }
+}
+
 RoomSpec room_spec_of(const RestartHead& h) {
     RoomSpec spec;
     spec.code = h.code;
@@ -676,6 +773,7 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
     room->ended_ms_ = now_ms;
     room->connections_closed_ = true;
     room->from_record_ = true;
+    room->replay_note_ = "the room was not brought back from its restart record: no match of it was recorded";
     room->roster_ = head.start.roster;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((head.start.roster & (1u << seat)) != 0) room->names_[seat] = head.start.names[seat];
@@ -730,6 +828,7 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((bot_mask & (1u << seat)) != 0) session_->add_bot_seat(seat);
     }
+    replay_note_ = "the room was brought back from a restart record: the part of its match before the restart was not recorded";   // (it never calls replay_begin, so nothing of it is recorded)
     replay_rec_ = &rec;
     replay_reader_ = std::make_unique<RestartTurnReader>(rec);
     replay_next_check_ = 0;
@@ -972,6 +1071,10 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.record_bytes = static_cast<uint64_t>(std::filesystem::file_size(stale_path_, size_ec));
         if (size_ec) s.record_bytes = 0;
     }
+    s.replay_kept = !replay_file_.empty();
+    s.replay_file = replay_file_;
+    s.replay_bytes = replay_bytes_;
+    s.replay_note = replay_file_.empty() ? replay_note_ : std::string();
     s.record_note = record_note_;
     if (stale) {
         s.record_note = "the file of this room's record could not be deleted yet: a restart now would bring the room back from it; the server tries again every 10 s";

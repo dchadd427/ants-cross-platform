@@ -201,12 +201,12 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     def test_the_other_suites_of_the_runner_are_steps_of_the_linux_and_macos_jobs(self):
         for job in ("linux", "macos"):
             block = "\n".join(job_block(job))
-            for needle in ("build/map_sweep --selftest", "build/bot_arena --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
+            for needle in ("build/map_sweep --selftest", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
                            "tests/scripts/test_ants_server.sh --list-parts", "tests/scripts/test_ants_server.sh --part", "python3 tools/check_version_consistency.py",
                            "python3 tests/scripts/run_python_tests.py", "ctest --test-dir build"):
                 self.assertIn(needle, block, "%s: no step runs `%s`" % (job, needle))
         windows = "\n".join(job_block("windows"))
-        for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "e2e_runner.exe --all"):
+        for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
 
     def test_the_commands_of_the_runners_script_and_python_suites_are_what_the_ci_runs(self):
@@ -215,6 +215,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("test_start_game.sh", self.runner)
         self.assertIn("map_sweep\" --selftest", self.runner)
         self.assertIn("bot_arena\" --selftest", self.runner)
+        self.assertIn("replay_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
 
     def test_the_web_job_builds_both_images_and_checks_the_stacks_and_the_label(self):

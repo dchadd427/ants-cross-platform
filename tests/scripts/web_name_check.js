@@ -46,6 +46,7 @@ function between(text, begin, end, path) {
 }
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
+const NOTICE_HTML = 'Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.';       // (the line under the name field of both pages)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The rules of a name: the same text in both pages, on a table
@@ -356,6 +357,14 @@ for (const [label, e, want] of [
     const stepMarkup = shellText.slice(shellText.indexOf('id="name-step"'), shellText.indexOf('<div class="view-bar"'));
     check('the card has a way out: "Back to the front page", a plain link to the front page (no query: nothing of the match goes with it), after the hint and inside the card',
           /<a class="btn sm name-step-back" id="name-step-back" href="\/">&larr; Back to the front page<\/a>\s*<\/div>\s*<\/div>/.test(stepMarkup) && stepMarkup.indexOf('name-step-hint') < stepMarkup.indexOf('name-step-back'));
+    // The notice (the owner chose "Add the line" on 2026-10-08): where a page asks for a name it also says what the server does with an online match, in the hint's own type under the name field. The
+    // words are the ones of the picture that he approved, in both pages; 30 days is the stack's default (tests/scripts/test_nginx_replays.py pins it to docker-compose.stack.yml)
+    const noticeAt = stepMarkup.indexOf('<div class="name-step-hint name-step-notice">' + NOTICE_HTML + '</div>');
+    const hintAt = stepMarkup.indexOf('<div class="name-step-hint">The name the other players see.');
+    check('the card tells a player who joins by a link what the server does with an online match: one more paragraph of the hint\'s own type, after the hint and before the way out, once',
+          hintAt !== -1 && noticeAt > hintAt && noticeAt < stepMarkup.indexOf('name-step-back') && shellText.split(NOTICE_HTML).length === 2);
+    check('the front page says the same words once, inside the hint under the name field after the step\'s own line, and the markup does not hide them (only the step for a game on this computer does)',
+          lobbyText.includes('<span id="who-step-hint" hidden></span><span class="notice" id="who-notice">' + NOTICE_HTML + '</span></p>') && lobbyText.split(NOTICE_HTML).length === 2);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -504,6 +513,7 @@ function randomName(n) { return NAMES_OF_THE_PAGE.indexOf(n) !== -1; }
     check('nothing is asked first: the card and "How it works" are there, the step\'s button and its way out are not', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-back').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
     check('... and the page is not in its room mode', !env.body.classList.contains('in-room'));
     check('nothing remembered: the field is empty and its placeholder is Player', env.$('player-name').value === '' && env.$('player-name').getAttribute('placeholder') === 'Player' && env.$('player-name').getAttribute('maxlength') === '32');
+    check('the notice that online matches are recorded is shown under the name (the plain page hides nothing of it)', !env.$('who-notice').hidden && !env.$('who-hint').hidden);
 }
 {
     const env = runLobby('', { 'ants.name': 'Maya' });
@@ -749,12 +759,14 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
     check('... nothing starts before the button: no room panel, no frame, the address is not rewritten', !env.roomStarted() && env.frames().length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.$('cards').hidden && env.$('how').hidden);
     check('... the step has a way out: "Back to the front page" is shown, a plain link to the site\'s front page (no query: nothing of the match goes with it)', !env.$('who-back').hidden && env.$('who-back').getAttribute('href') === '/');
     check('... the name step is the full page, not a room (the room class comes with the room)', !env.body.classList.contains('in-room'));
+    check('... the step tells the person that online matches are recorded (the step\'s own line replaces the general line, the notice stays)', !env.$('who-notice').hidden && env.$('who-general').hidden && !env.$('who-step-hint').hidden);
     env.type('player-name', 'Bot (x)');
     env.$('who-go').click();
     check('... a bad name does not start it and says why', !env.roomStarted() && env.$('name-msg').textContent.length > 8);
     env.type('player-name', 'Zed');
     env.$('player-name').key('Enter');
     check('... Enter with a good name does: the room panel opens (the address is rewritten to the room), the step goes away', env.roomStarted() && env.replaced.length === 1 && env.$('who-go').hidden && env.$('who-title').hidden && env.$('who-back').hidden && env.storage.data['ants.name'] === 'Zed');
+    check('... and the notice stays under the name above the room panel, with the general line back', !env.$('who-notice').hidden && !env.$('who-general').hidden && env.$('who-step-hint').hidden);
     env.rowButton(1, 'Play here').click();
     check('... and the seat that this person plays takes the name', env.param(env.frameOf(1).src, 'name') === 'Zed');
     // a room that this page did not make (its address has no create block): four seats, and nothing of a block anywhere: the page sends none, and a code that no room has is the game server's to refuse
@@ -778,6 +790,7 @@ check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobb
 {
     const env = runLobby('?map=treasure&players=2', {});
     check('a link that hosts a match on a map asks for the name first too (button: Host), and has its way out too', !env.$('who-go').hidden && !env.$('who-back').hidden && env.$('who-go').textContent === 'Host' && !env.roomStarted() && env.replaced.length === 0);
+    check('... and its step tells the person that online matches are recorded (a hosted match is one)', !env.$('who-notice').hidden);
     env.type('player-name', 'Alice');
     env.$('who-go').click();
     check('... then the room is made on that map: a new code of six characters and its create block (Treasure, two seats) are in the address of the page', env.roomStarted() && env.replaced.length === 1 && /^\/\?room=[a-z2-9]{6}&roommap=treasure&roomseats=2$/.test(String(env.replaced[0][2])), String(env.replaced[0] && env.replaced[0][2]));
@@ -1420,11 +1433,13 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya' });
     check('?map=small&players=1&fill=hard asks for the name first (button Play), and nothing starts before', !env.$('who-go').hidden && env.$('who-go').textContent === 'Play' && /computer/.test(env.$('who-title').textContent) && env.assigned.length === 0 && env.$('cards').hidden && env.$('how').hidden);
     check('... the step explains itself in its own line, and the general line is not shown', !env.$('who-step-hint').hidden && /game on this computer/.test(env.$('who-step-hint').textContent) && env.$('who-general').hidden);
+    check('... and no notice about recorded matches: the server records the matches of its rooms, and this game is on this computer', env.$('who-notice').hidden);
     env.$('who-go').click();
     const u = env.assigned[0] || '';
     check('... then the game of this computer on that map with the Hard bots and the name', env.assigned.length === 1 && env.param(u, 'map') === 'small' && env.param(u, 'bots') === 'hard' && env.param(u, 'name') === 'Maya', u);
     check('... in no room: no door, no code, and nothing of a create block (a game on this computer makes none)', ['join', 'room', 'roommap', 'roomseats', 'roomteams', 'roomleaderstart', 'platform', 'seat', 'start'].every((k) => env.param(u, k) === null) && env.replaced.length === 0, u);
     check('... and the step is gone, the general line is back', env.$('who-step-hint').hidden && !env.$('who-general').hidden && env.$('who-go').hidden && env.$('who-title').hidden && env.$('who-back').hidden);
+    check('... and the page is whole again when the step ends, the notice with it (nothing stays half-changed if the browser shows this page again)', !env.$('who-notice').hidden);
     same('... such an address writes nothing of the card\'s or of the earlier pages\' keys (the card remembers its own choices only)', Object.keys(env.storage.data).sort(), ['ants.name']);
 }
 {

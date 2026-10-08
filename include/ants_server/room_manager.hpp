@@ -148,6 +148,15 @@ public:
     bool enable_restart_records(RestartConfig config, std::string& why);
     /// The server's restart records (null when it keeps none)
     const RestartStore* restart_store() const noexcept { return restart_.get(); }
+    /// Starts to keep the matches of the rooms as replays (replay_store.hpp, docs/REPLAYS.md "On the game server"): every match that is played in a room is recorded and, when it is over, kept in the folder for
+    /// `config.keep_days`. `include_demo`: the rooms that a visitor's create block makes (RoomSpec::public_room: the games of the front page) are recorded too; off, only the rooms of the control interface are. Call it before any room is made.
+    /// False, with the reason, when the folder cannot be used (the server then keeps none). An empty `config.dir` keeps none and is true.
+    bool enable_replays(ReplayConfig config, bool include_demo, std::string& why);
+    /// The server's replays (null when it keeps none)
+    ReplayStore* replay_store() noexcept { return replays_.get(); }
+    const ReplayStore* replay_store() const noexcept { return replays_.get(); }
+    /// The rooms that a visitor's create block makes are recorded too (false when the server keeps no replays)
+    bool replays_include_demo() const noexcept { return replays_ != nullptr && replay_demo_; }
     /// Reads the records of the folder, newest first (by the time of their last write), and judges each one: a record that cannot be read is a line in the log and is deleted; one that cannot be restored
     /// (another network protocol, a map that is gone or has changed, too old, no room for it, ...) becomes a FAILED room with the reason and is moved to `refused`; every other record is QUEUED (its code is
     /// taken: create_room answers 409). update() replays the queue in slices of RestartConfig::restore_slice_ms a pass (a room for which a Hello waits first, then the newest record), so the server serves
@@ -163,7 +172,7 @@ public:
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.
     size_t shutdown(uint32_t now_ms);
-    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not): once each, never a key
+    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not) and the replays (files purged, a match that was not kept): once each, never a key
     std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
@@ -264,6 +273,8 @@ private:
     ServerLimits limits_;
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
+    std::unique_ptr<ReplayStore> replays_;       // (and the store of the replays that they keep)
+    bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due
     uint32_t next_stale_retry_ms_{0};

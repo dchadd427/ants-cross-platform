@@ -126,14 +126,19 @@ float music_volume_of(int32_t v) {
     return static_cast<float>(word) / 65535.0f;
 }
 
-// Where the commands of a bot of a local game go: straight into the simulation, as a click of the local player does
-class LocalBotSink final : public sim::CommandSink {
+// Where the commands of a game on this computer go, the HUD's orders and the computer players' alike: straight into the simulation, as a click of the local player does, and into the recording of the
+// match when there is one (replay.hpp). The recording is told a command before the engine is given it, so that the command stands at the turn whose tick runs next.
+class LocalSink final : public sim::CommandSink {
 public:
-    explicit LocalBotSink(sim::SimulationEngine& sim) : sim_(sim) {}
-    sim::CommandResult submit(const sim::Command& command) override { return sim_.apply_command(command); }
+    LocalSink(sim::SimulationEngine& sim, const std::unique_ptr<replay::Recorder>& recorder) : sim_(sim), recorder_(recorder) {}
+    sim::CommandResult submit(const sim::Command& command) override {
+        if (recorder_) recorder_->on_command(command);
+        return sim_.apply_command(command);
+    }
 
 private:
     sim::SimulationEngine& sim_;
+    const std::unique_ptr<replay::Recorder>& recorder_;     // (the application's: a match that ends or begins changes it, and the sink follows)
 };
 
 // ... and of a room's host: into the sequencer of the session, for the seat of the bot (the verdict arrives with the turn, like every command's: a bot ignores it)
@@ -664,9 +669,11 @@ bool Application::init(const ApplicationConfig& config) {
         if (bots_) {                                                  // the same seats play again, with new bots
             stop_bots();
             sim_.init(current_level_, config_.random_seed + 1, local_roster_);
+            begin_local_recording(config_.random_seed + 1, false);   // (no teams again: init() leaves none)
             start_local_bots(config_.random_seed + 1);
         } else {
             sim_.init(current_level_, config_.random_seed + 1);
+            begin_local_recording(config_.random_seed + 1, false);
         }
         match_over_handled_ = false;
         hud_.reset();
@@ -851,7 +858,11 @@ bool Application::init(const ApplicationConfig& config) {
             scorecard_.show(mr, 0);
             scorecard_.update(0.25f);                                // the preview shows the rows, not the waiting label
         }
-        form_start_teams();                                          // --teams: the teams are made before the first tick
+        const bool teams_made = form_start_teams();                  // --teams: the teams are made before the first tick
+        if (!networked) {
+            use_local_sink();
+            begin_local_recording(config_.random_seed, teams_made);
+        }
         if (local_seats) {                                           // --map with --bot or --alone: the game is running already, the bots (if any) join it
             hud_.set_roster_mask(local_roster_);                     // (the bots are named: every taken seat has its label and its row)
             scorecard_.set_shown_teams(local_roster_);
@@ -1112,6 +1123,7 @@ bool Application::write_chat_transcript(const std::string& path) const {
 
 void Application::shutdown() {
     is_running_ = false;
+    finish_recording();                                   // (a match that the program ends in the middle of: its file, as for any match that is left)
     if (menu_enabled_) start_menu_.flush();
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
     if (presentation_hidden_) {                           // (closed inside a fullscreen Space that the game made the Dock and the menu bar leave: the system's own behaviour comes back)
@@ -1162,7 +1174,9 @@ bool Application::start_game(const std::string& map_path) {
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
-    form_start_teams();                                               // --teams: the teams are made before the first tick (the dialog of the start is up)
+    const bool teams_made = form_start_teams();                       // --teams: the teams are made before the first tick (the dialog of the start is up)
+    use_local_sink();
+    begin_local_recording(config_.random_seed, teams_made);
     if (!config_.bots.empty()) start_local_bots(config_.random_seed);
     return true;
 }
@@ -1329,7 +1343,7 @@ bool Application::start_local_bots(uint32_t match_seed) {
     bots_ = std::make_unique<ai::BotController>(sim_, match_seed);
     bool all = true;
     for (const ai::BotSpec& spec : config_.bots) {
-        bot_sinks_.push_back(std::make_unique<LocalBotSink>(sim_));
+        bot_sinks_.push_back(std::make_unique<LocalSink>(sim_, recorder_));
         std::string why;
         if (!add_bot(spec, *bot_sinks_.back(), why)) {
             std::cerr << "[Application] No bot at seat " << static_cast<unsigned>(spec.seat) << ": " << why << std::endl;
@@ -1341,14 +1355,42 @@ bool Application::start_local_bots(uint32_t match_seed) {
 
 // --teams: each pair of the plan becomes a team with the original's own commands, applied straight to the simulation before its first tick: the first seat invites, the second accepts (so the News Flash
 // "... are a team now!" is in the chat log and no dialog opens). What cannot be made is said, and the game starts without teams.
-void Application::form_start_teams() {
-    if (!config_.teams.set) return;                                    // (a room never gets here: its machines make the teams of the Start message, net_load_match)
+bool Application::form_start_teams() {
+    if (!config_.teams.set) return false;                              // (a room never gets here: its machines make the teams of the Start message, net_load_match)
     const LocalTeamsPlan plan = plan_local_teams(config_.teams, sim_.roster_mask());
     if (!plan.why.empty()) {
         show_setup_notice("--teams " + local_teams_text(config_.teams) + ": " + plan.why + " The game starts without teams.");
-        return;
+        return false;
     }
     sim::apply_start_teams(sim_, config_.teams);
+    return true;
+}
+
+// The HUD's orders of a game on this computer reach the engine through the sink that the recording sees too (a network game's reach net_, which hud_ is given when its match begins)
+void Application::use_local_sink() {
+    if (!local_sink_) local_sink_ = std::make_unique<LocalSink>(sim_, recorder_);
+    hud_.set_command_sink(local_sink_.get());
+}
+
+// The recording of a match on this computer (replay.hpp), made when its engine has been initialised and its teams made, before any command is given. The engine says the seats that play and the Fog of War
+// setting; the map is the one that load_match (or init) put in default_map_path. A match whose map a file cannot name is not recorded. The names are the ones that were typed or given: a bot's, --name,
+// -N, a name typed in the start menu; what the program makes of the system user ("user@machine") stays out of a file that may be sent to somebody.
+void Application::begin_local_recording(uint32_t seed, bool teams_made) {
+    recorder_.reset();
+    withdraw_replay();
+    replay::Header head;
+    head.map_name = std::filesystem::path(config_.default_map_path).filename().string();
+    if (!net::valid_map_name(head.map_name) || !net::hash_file(config_.default_map_path, head.map_hash)) return;
+    head.venue = "local game";
+    head.seed = seed;
+    head.roster = sim_.roster_mask();
+    head.fog = sim_.is_fog_of_war_enabled();
+    std::array<std::string, 4> names = config_.bots.empty() ? config_.team_names : local_team_names();
+    if (local_player_id_ < 4 && player_name_ != get_system_username()) names[local_player_id_] = player_name_;
+    for (uint8_t p = 0; p < 4; ++p) head.names[p] = ((head.roster >> p) & 1u) != 0 ? names[p] : std::string();
+    if (teams_made) head.teams = config_.teams;
+    head.recorder_seat = local_player_id_ < sim::MAX_PLAYERS ? local_player_id_ : replay::kNoSeat;
+    begin_recording(std::move(head));
 }
 
 // The host of a room runs the room's bots: their commands go into the host's sequencer. A guest (and a guest that took over as host) never does.
@@ -1465,7 +1507,11 @@ void Application::show_opening_screens() {
 
 void Application::return_to_map_select() {
     stop_bots();
-    if (network_active() || (net_ && map_select_.room().networked)) net_end_session(net_notice_);   // the setup screen after a room is the local game's: also when the room was left first
+    if (network_active() || (net_ && map_select_.room().networked)) {
+        net_end_session(net_notice_);                     // leaving a match leaves the room: the local setup screen follows (and the match's file is made there); the setup screen after a room is the local game's: also when the room was left first
+    } else {
+        finish_recording();                               // (a match that is left keeps its file when something happened in it; the file of one that ended stays offered until the next match begins)
+    }
     net_notice_.clear();
     enter_map_select();
     scorecard_.hide();
@@ -2420,6 +2466,7 @@ void Application::update_simulation(float dt) {
                     if (on_local_match_started_) on_local_match_started_();
                 }
                 sim_.tick();
+                if (recorder_) recorder_->on_tick(sim_);
                 post_tick();
             }
             tick_accumulator_ -= 0.050f;
@@ -2499,6 +2546,7 @@ void Application::post_tick() {
 void Application::check_match_over() {
     if (!sim_.is_match_over() || match_over_handled_) return;
     match_over_handled_ = true;
+    finish_recording();                                          // (the replay is the match as it ended: every command and every tick are in it)
     const auto& world = sim_.get_world_state();
     scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)
@@ -2540,6 +2588,7 @@ void Application::confirm_quit() {
         if (network_active()) {
             net_->submit(quit_command);                          // it reaches the simulation with the turn that carries it, on every machine alike
         } else {
+            if (recorder_) recorder_->on_command(quit_command);
             sim_.apply_command(quit_command);
             check_match_over();
         }
@@ -2863,6 +2912,9 @@ void Application::net_load_match() {
         if (renderer_) renderer_->set_hud_team(local_player_id_);
         apply_team_names(start.names, start.roster);
         sim::apply_start_teams(sim_, start.teams());                         // (protocol 13: the teams of the Start, with the original's own commands, after init and the names and before the first tick: every machine, the referee and a machine that comes back from nothing do the same)
+        begin_net_recording();                                               // (the runner's tap, attach_net, tells it every turn from the first, a catch-up's too)
+    } else {
+        recorder_.reset();
     }
     net_->report_loaded(ok);
 }
@@ -2899,6 +2951,7 @@ void Application::net_end_session(const std::string& notice) {
     say_sent_ = false;
     if (net_) net_->leave();
     hud_.set_command_sink(nullptr);
+    finish_recording();                                       // (a match that was left, or lost, keeps its file when something happened in it)
     hud_.set_roster_mask(0x0F);
     MapSelectScreen::RoomView local;
     local.status = notice;                                    // a notice stays on the setup screen until the next action

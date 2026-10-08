@@ -51,12 +51,23 @@ class TheMarkup(unittest.TestCase):
         self.assertEqual(len(re.findall(r"ANTS_NAME_GATE\.when\(startGame\)", page)), 2)
         self.assertEqual(len(re.findall(r"\bstartGame\(\)", page)), 1)                      # only the definition: function startGame()
 
+    def test_both_name_screens_say_that_online_matches_are_recorded(self):
+        words = "Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names."      # (the owner chose "Add the line", 2026-10-08)
+        self.assertEqual(read(LOBBY).count(words), 1)
+        self.assertEqual(read(SHELL).count(words), 1)
+        self.assertIn('<span class="notice" id="who-notice">' + words + "</span>", read(LOBBY))     # (under the hint of the field; only the step of a game on this computer hides it, by script)
+        self.assertIn('<div class="name-step-hint name-step-notice">' + words + "</div>", read(SHELL))
+        self.assertIn(words.replace("&rsquo;", "'"), read(os.path.join(REPO, "docs", "SERVER.md")))      # (the one document that quotes it: it also says when the line is true)
+
 
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_network_notes_say_what_the_pages_do(self):
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
         self.assertIn("`ants.name`", page)
         self.assertIn("asks for your name first, every time", page)
+        self.assertIn("A line under the field says what the server does with an online match", page)      # (the notice of both name screens, and the step that has none)
+        self.assertIn("not in the step of a game on this computer", page)
+        self.assertIn("`who-notice`", read(os.path.join(REPO, "docs", "SERVER.md")))      # (what an operator who changes the line must leave where it is)
         notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))
         self.assertIn("asksForName", notes)
         self.assertIn("no `name` parameter at all", notes)

@@ -481,7 +481,7 @@ class RealTable(unittest.TestCase):
         listed = subprocess.run(["bash", os.path.join(REPO, "tests", "scripts", "test_ants_server.sh"), "--list-parts"], capture_output=True, text=True).stdout.split()
         self.assertEqual(sorted(used), sorted(listed), "run_tests.sh and tests/scripts/test_ants_server.sh --list-parts name different parts")
         self.assertEqual(len(used), len(set(used)))
-        for suite_id in ("3.9", "3.9.1", "3.9.2", "3.9.3", "3.9.4"):
+        for suite_id in ("3.9", "3.9.1", "3.9.2", "3.9.3", "3.9.4", "3.9.5"):
             self.assertIn(suite_id, {row[0] for row in self.full})
 
     def test_every_suite_that_the_ci_script_steps_run_is_in_the_full_run(self):

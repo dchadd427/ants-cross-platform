@@ -453,6 +453,9 @@ void Application::attach_net() {
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)
     net_->set_start_teams(config_.teams);                                          // ... and the teams that it makes (protocol 13)
     net_->set_on_tick([this]() { post_tick(); });
+    net_->set_on_executed([this](const net::TurnMsg& turn) {                       // every turn that the confirmed engine runs, the catch-up's too: the replay's recorder (docs/REPLAYS.md)
+        if (recorder_) recorder_->on_turn(turn, sim_);
+    });
     net_->set_on_wake([this]() { background_pump(); });                            // the browser build: a message of the server wakes a hidden page (docs/NETWORK_PORT.md)
     net_->set_on_chat([this](const net::ChatMsg& m) {
         if (m.sender == local_player_id_ || m.sender >= 4) return;                // the own text is in the log already

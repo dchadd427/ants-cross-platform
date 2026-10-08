@@ -18,9 +18,22 @@
 #                                                   below (in your copy of this file).
 #   ANTS_DEMO_MAPS=TINY.LVL,SMALL.LVL,...           the maps a room code may choose (the six maps of the original game by default, which the page offers; comma
 #                                                   separated, blanks around a name are dropped; every one must be in the maps folder, or the server stops at startup)
+#   ANTS_REPLAY_DAYS=30 ANTS_REPLAY_MAX_MB=100      how long the server keeps the recorded matches (1 to 3650 days) and how much room they may take together (1 to 4096 MiB; the oldest go first past it). They are
+#                                                   in the folder replays of the volume ants-server-results, next to the control secret and the restart records, so the server also stops keeping
+#                                                   matches when the disk has less than 256 MiB free. A match is kept when it ran 30 seconds or more, however it ended, the games of the front page (demo
+#                                                   rooms) included. A value out of range makes the server exit at its start, and with restart: unless-stopped it then restarts again and again
+#                                                   (docs/REPLAYS.md "On the game server")
+#   ANTS_REPLAY_PORT=4020                           the port, inside the container, where the server answers GET /replays and GET /replays/<file> for the site's nginx: the list and the files of the
+#                                                   recorded matches are PUBLIC here, read only, with no secret. They hold the names that the players typed (plain ASCII, 32 characters at most; a
+#                                                   player with no name shows as a colour, a computer player as "Bot (Medium)"), so everybody can read those names; no address, room code or chat is
+#                                                   in them. The port is not published on the host. Leave it at 4020, the one that docker/nginx.conf passes to, or set 0, which switches the public
+#                                                   list off. Any other number leaves the server listening where nginx does not look, and the site answers 404 for both addresses as if the list
+#                                                   were off.
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
+# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. Every container of that network can reach the control port (behind the secret)
+# and the replay port (read only, no secret): do not put a container there that you do not trust.
 services:
   ants-beta:
     build:
@@ -56,7 +69,11 @@ services:
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4"]
+    # Replays: a match that ran 30 seconds or more is kept for ANTS_REPLAY_DAYS days (default 30), all of them together at most ANTS_REPLAY_MAX_MB MiB (100), in /results/replays; --replay-demo keeps the
+    # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
+    # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
+    # The files and the list hold the names that the players typed (a player with no name shows as a colour), so those names are public here; no address, room code or chat is in them.
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

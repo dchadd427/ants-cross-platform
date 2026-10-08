@@ -60,6 +60,7 @@ One field at the top of the page, shared by **START!**, **Have a code?** and the
 - The seat that you play from this page plays under it (when you play several seats yourself, the first seat does and the others keep random names). An empty field gives a random name when you start a match with **START!** (a game for one included) and "Player" when you join with a code.
 - **A link that somebody sends you asks for your name first, every time, except on a reload of a game page whose seat this browser holds** (the reload takes the seat back and asks nobody). This covers the game page's `?join=...&room=...` (an invitation of the card is such a link), the room links of this page and the links that host a match on a map. A small card shows your remembered name with a Join button (Host on a link that hosts a match on a map; or press Enter), and the game does not connect before you have chosen.
 - The page's own frames and windows already carry the name chosen on the page and ask nobody, nor does `&play=here`.
+- **A line under the field says what the server does with an online match.** It is under the front page's name field (the plain page, the step of a shared link, a link that hosts a match, and above the room panel) and in the game page's name card, and not in the step of a game on this computer (the server does not record that game). Its words, and what an operator who runs the server with other settings changes: [`SERVER.md`](SERVER.md#replays).
 
 ### Rejoin your match (CODE)
 

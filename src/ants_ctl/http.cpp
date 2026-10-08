@@ -441,6 +441,7 @@ struct HttpServer::Impl {
     socket_t listen_fd{kBadSocket};
     uint16_t port{0};
     std::string secret;
+    bool read_only{false};                                        // listen_public(): no secret, GET only, no body
     uint32_t request_timeout_ms{HttpServer::kRequestTimeoutMs};
     int send_buffer_bytes{0};
     std::vector<std::unique_ptr<Conn>> conns;
@@ -514,6 +515,13 @@ void HttpServer::Impl::advance_head(Conn& c, uint32_t now, const Handler& handle
 
     const HttpRequest& r = c.head.request;
     const bool health = r.method == "GET" && r.path == "/healthz";
+    if (read_only) {                                              // the public door: nobody is asked for a secret, and nothing but a plain GET gets as far as the handler
+        if (health) return respond(c, now, 200, "application/json", "{\"ok\":true}");
+        if (r.method != "GET") return respond_error(c, now, 405, "method not allowed", "Allow: GET\r\n");
+        if (c.head.body_status != 0) return respond_error(c, now, c.head.body_status, c.head.body_error);
+        if (c.head.has_content_length && c.head.content_length > 0) return respond_error(c, now, 400, "a request here has no body");
+        return dispatch(c, now, handler);
+    }
     if (!health && !authenticated(r, secret)) return respond_error(c, now, 401, "unauthorized", "WWW-Authenticate: Bearer\r\n");
     if (health) return respond(c, now, 200, "application/json", "{\"ok\":true}");
     if (r.method != "GET" && r.method != "POST" && r.method != "DELETE") {
@@ -600,6 +608,12 @@ HttpServer::~HttpServer() = default;
 
 std::unique_ptr<HttpServer> HttpServer::listen(uint16_t port, std::string bearer_secret, bool loopback_only) {
     if (!valid_secret(bearer_secret)) return nullptr;             // no secret, no server
+    return open(port, std::move(bearer_secret), loopback_only, false);
+}
+
+std::unique_ptr<HttpServer> HttpServer::listen_public(uint16_t port, bool loopback_only) { return open(port, std::string(), loopback_only, true); }
+
+std::unique_ptr<HttpServer> HttpServer::open(uint16_t port, std::string bearer_secret, bool loopback_only, bool read_only) {
     ensure_sockets();
     const socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
     if (s == kBadSocket) return nullptr;
@@ -629,6 +643,7 @@ std::unique_ptr<HttpServer> HttpServer::listen(uint16_t port, std::string bearer
     impl->listen_fd = s;
     impl->port = actual;
     impl->secret = std::move(bearer_secret);
+    impl->read_only = read_only;
     return std::unique_ptr<HttpServer>(new HttpServer(std::move(impl)));
 }
 

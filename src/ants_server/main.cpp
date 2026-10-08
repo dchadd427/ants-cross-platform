@@ -4,6 +4,7 @@
 //               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--max-catch-up-seconds N]
 //               [--resume-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
+//               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -56,6 +57,17 @@
 //   --restart-budget-mb N
 //                      the disk that all the restart records together may take (1 - 4096, default 256); one record is at most 48 MiB (3 times the turn log's limit); a record that the disk or
 //                      the budget refuses is deleted and its room plays on without one (its status says why)
+//   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match that ran 30 seconds or more is over, its .antsrep file is kept
+//                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
+//   --no-replays       keep no replays, whatever --results-dir says
+//   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
+//   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
+//   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
+//                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
+//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays (GET /replays, GET /replays/<file>; no secret, nothing else answers): 0 = off, the default. This machine only;
+//                      the site's reverse proxy passes the two paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
+//   --replay-any-interface
+//                      the replay port listens on every interface (for a container only, like --ws-any-interface)
 //   --version, --help
 //
 // SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack
@@ -124,6 +136,13 @@ struct Options {
     bool no_restart_records{false};
     long restart_vote_s{90};
     long restart_budget_mb{256};
+    std::string replays_dir;                   // --replays-dir (empty: the folder "replays" in the results folder, when there is one)
+    bool no_replays{false};
+    bool replay_demo{false};                   // --replay-demo: the matches of the demo rooms are kept too
+    long replays_days{30};
+    long replays_max_mb{100};
+    uint16_t replay_port{0};                   // --replay-port: the public read-only door of the replays (0: none)
+    bool replay_any_interface{false};
 };
 
 void usage(FILE* to) {
@@ -134,6 +153,8 @@ void usage(FILE* to) {
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
+                 "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
+                 "                    [--replay-port N] [--replay-any-interface]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -188,12 +209,29 @@ int main(int argc, char** argv) {
                 return 2;
             }
             (a == "--port" ? o.port : a == "--ws-port" ? o.ws_port : o.ctl_port) = p;
+        } else if (a == "--replay-port") {
+            if (!parse_port(value("--replay-port"), o.replay_port)) {
+                std::fprintf(stderr, "--replay-port takes a port number (0 - 65535)\n");
+                return 2;
+            }
         } else if (a == "--public") {
             o.is_public = true;
         } else if (a == "--ws-any-interface") {
             o.ws_any_interface = true;
         } else if (a == "--ctl-any-interface") {
             o.ctl_any_interface = true;
+        } else if (a == "--replay-any-interface") {
+            o.replay_any_interface = true;
+        } else if (a == "--replay-demo") {
+            o.replay_demo = true;
+        } else if (a == "--no-replays") {
+            o.no_replays = true;
+        } else if (a == "--replays-dir") {
+            o.replays_dir = value("--replays-dir");
+            if (o.replays_dir.empty()) {
+                std::fprintf(stderr, "--replays-dir takes a folder\n");
+                return 2;
+            }
         } else if (a == "--results-dir") {
             o.results_dir = value("--results-dir");
         } else if (a == "--secret-file") {
@@ -236,7 +274,7 @@ int main(int argc, char** argv) {
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
         } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
-                   a == "--restart-budget-mb") {
+                   a == "--restart-budget-mb" || a == "--replays-days" || a == "--replays-max-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
             const long n = std::strtol(text, &end, 10);
@@ -248,6 +286,8 @@ int main(int argc, char** argv) {
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
             else if (a == "--restart-vote-seconds") { lo = 30; hi = 3600; target = &o.restart_vote_s; }
             else if (a == "--restart-budget-mb") { lo = 1; hi = 4096; target = &o.restart_budget_mb; }
+            else if (a == "--replays-days") { lo = 1; hi = 3650; target = &o.replays_days; }
+            else if (a == "--replays-max-mb") { lo = 1; hi = 4096; target = &o.replays_max_mb; }
             if (end == text || *end != '\0' || n < lo || n > hi) {
                 std::fprintf(stderr, "%s takes a whole number from %ld to %ld\n", a.c_str(), lo, hi);
                 return 2;
@@ -290,6 +330,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "--restart-dir and --no-restart-records exclude each other\n");
         return 2;
     }
+    if (o.no_replays && !o.replays_dir.empty()) {
+        std::fprintf(stderr, "--replays-dir and --no-replays exclude each other\n");
+        return 2;
+    }
     std::error_code ec;
     if (!std::filesystem::is_directory(o.maps_dir, ec)) {
         std::fprintf(stderr, "the maps folder '%s' does not exist\n", o.maps_dir.c_str());
@@ -322,6 +366,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<ants::net::TcpListener> tcp;
     std::unique_ptr<ants::net::WsListener> ws;
     std::unique_ptr<ants::ctl::HttpServer> http;
+    std::unique_ptr<ants::ctl::HttpServer> replay_http;           // the public, read-only door of the replays (--replay-port)
     if (o.port != 0) {
         tcp = ants::net::TcpListener::listen(o.port, !o.is_public);
         if (!tcp) {
@@ -340,6 +385,13 @@ int main(int argc, char** argv) {
         http = ants::ctl::HttpServer::listen(o.ctl_port, secret, !o.ctl_any_interface);
         if (!http) {
             std::fprintf(stderr, "cannot listen on control port %u\n", static_cast<unsigned>(o.ctl_port));
+            return 1;
+        }
+    }
+    if (o.replay_port != 0) {
+        replay_http = ants::ctl::HttpServer::listen_public(o.replay_port, !o.replay_any_interface);
+        if (!replay_http) {
+            std::fprintf(stderr, "cannot listen on replay port %u\n", static_cast<unsigned>(o.replay_port));
             return 1;
         }
     }
@@ -460,6 +512,36 @@ int main(int argc, char** argv) {
             log("restart records are off: no --results-dir or --restart-dir to keep them in: a running match ends with the server");
         }
     }
+    // Replays (replay_store.hpp): in --replays-dir, else in the folder "replays" of the results folder, unless switched off. An explicit folder that cannot be used stops the server (the operator asked for it);
+    // the default one is given up with a line in the log.
+    {
+        ants::server::ReplayConfig rc;
+        if (!o.no_replays) {
+            if (!o.replays_dir.empty()) rc.dir = o.replays_dir;
+            else if (!o.results_dir.empty()) rc.dir = (std::filesystem::path(o.results_dir) / "replays").string();
+        }
+        rc.keep_days = static_cast<uint32_t>(o.replays_days);
+        rc.max_bytes = static_cast<uint64_t>(o.replays_max_mb) * 1024u * 1024u;
+        rc.game_version = std::string(ants::VERSION_STRING);
+        rc.build_id = std::string(ants::BUILD_ID);
+        std::string why;
+        if (!rc.dir.empty() && !rooms.enable_replays(rc, o.replay_demo, why)) {
+            if (!o.replays_dir.empty()) {
+                std::fprintf(stderr, "%s\n", why.c_str());
+                return 1;
+            }
+            log("replays are off: " + why);
+        }
+        for (const std::string& line : rooms.take_notices()) log(line);                 // (what the store found in its folder)
+        if (const ants::server::ReplayStore* kept = rooms.replay_store()) {                      // (the log says what the store was given, not what was asked for)
+            log("replays kept in " + kept->config().dir + " for " + std::to_string(kept->config().keep_days) + " days, at most " + std::to_string(kept->config().max_bytes / (1024 * 1024)) + " MiB; " +
+                (rooms.replays_include_demo() ? "the matches of demo rooms are kept too (--replay-demo)" : "the matches of demo rooms are not kept (--replay-demo keeps them)"));
+        } else if (o.no_replays) {
+            log("replays are off (--no-replays): no match is kept");
+        } else if (rc.dir.empty()) {
+            log("replays are off: no --results-dir or --replays-dir to keep them in");
+        }
+    }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
@@ -470,6 +552,10 @@ int main(int argc, char** argv) {
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
+    if (replay_http) {
+        log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
+            ": GET /replays and GET /replays/<file>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+    }
     if (http) {
         using ants::server::SecretSource;
         if (secret_info.source == SecretSource::File) {
@@ -503,6 +589,7 @@ int main(int argc, char** argv) {
         }
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
+        if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
             stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)
             const bool demo = s.public_room;
@@ -512,6 +599,7 @@ int main(int argc, char** argv) {
                 held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
                        " refused by a budget";
             }
+            if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
                 std::ofstream out(std::filesystem::path(o.results_dir) / (s.code + ".json"), std::ios::binary | std::ios::trunc);

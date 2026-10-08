@@ -8,7 +8,7 @@ need the site's /ws to lead to a game server: --ws-port is the port that it lead
 protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway headless browser (its own profile and port; nothing of yours is touched). Parts:
 
   * front    the page at "/" (a first visit: ONE card with Treasure, You at Green, a Friend in the other three seats, START on, "Have a code?"; the header links, the footer's version and build,
-             the picture's two buttons, the name field, the font; the line of numbers (not there, or well formed); 21 widths from 320 to 1600 px: no sideways scroll, the five buttons of every seat on
+             the picture's two buttons, the name field with its line about recorded online matches, the font; the line of numbers (not there, or well formed); 21 widths from 320 to 1600 px: no sideways scroll, the five buttons of every seat on
              ONE line, the seat's line (colour, buttons and Sit here on one line from 701 px, two under it), two columns from 1100 px; the contrast of all text at 1440 and 390 px, also with an invitation
              and the note about changed links up);
   * seats    the keyboard and the pointer: the arrows move and check inside a seat's group, Tab goes on to Sit here and the next seat, the focused button shows its outline; Sit here (the key Enter and the
@@ -29,15 +29,15 @@ protocol is spoken with the client of web_hidden_check.py, standard library only
              player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
              the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
   * old      the old addresses: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a
-             shared link (with its way back to the front page), /play.html with nothing is today's front page (the setup screen, no arguments), /?map=...&players=1 asks for a name and plays a game on
-             this computer;
+             shared link (with its way back to the front page), /play.html with nothing is today's front page (the setup screen, no arguments), /?map=...&players=1 asks for a name (a step without that line: a game on this computer is not recorded)
+             and plays a game on this computer;
   * room     an address that hosts a match (/?map=treasure&players=3&fill=easy&teams=0+1) makes the room panel (a new six-character code shown in two groups of three; the map, the seats and the
              team are the room's own choices, which every link of it carries), and "Play in this tab" takes this tab to the game page with the room, its choices, the name and the bots of the
              leader's START;
   * game     the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure
              card; 19 widths from 320 to 1600 px with no sideways scroll, the header's seven controls (one row with "More" up to 700 px: the five other links, over the picture), the picture, the bar
              and the guide inside the frame, a phone on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs
-             under the game (the chosen one is pressed in; the clicks keep their ids and what they remember); the name step of a shared link; the contrast of every text (4.5:1) in each of these states.
+             under the game (the chosen one is pressed in; the clicks keep their ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts
 that play no game server of this tree or a site whose /ws does not lead to it).
 """
@@ -135,6 +135,21 @@ LAYOUT_JS = """(function () {
   }
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: rect(left), right: rect(right), rows: rows });
 })()"""
+
+
+NOTICE_TEXT = "Online matches are recorded and kept for 30 days. The recordings are public and show the players\u2019 names."      # (the line under the name field of the front page and of the game page's name card)
+FRONT_NOTICE_JS = """JSON.stringify((function () {
+  var n = document.getElementById('who-notice'), box = document.getElementById('who').getBoundingClientRect(), r = n.getBoundingClientRect(), s = getComputedStyle(n);
+  var line = [document.getElementById('who-general'), document.getElementById('who-step-hint')].filter(function (e) { return !e.hidden; })[0].getBoundingClientRect();
+  return { text: n.textContent, shown: !n.hidden && r.width > 0 && r.height > 0 && s.display === 'block', below: r.top >= line.bottom - 1, inside: r.left >= box.left - 1 && r.right <= box.right + 1 && r.bottom <= box.bottom + 1,
+           sideways: document.documentElement.scrollWidth > window.innerWidth };
+})())"""
+CARD_NOTICE_JS = """JSON.stringify((function () {
+  var c = document.querySelector('.name-step').getBoundingClientRect(), hint = document.querySelector('.name-step-hint'), n = document.querySelector('.name-step-notice'), back = document.getElementById('name-step-back');
+  var r = n.getBoundingClientRect(), h = hint.getBoundingClientRect(), b = back.getBoundingClientRect(), sn = getComputedStyle(n), sh = getComputedStyle(hint);
+  return { text: n.textContent, shown: r.width > 0 && r.height > 0, sameType: sn.fontSize === sh.fontSize && sn.color === sh.color && sn.lineHeight === sh.lineHeight, order: r.top >= h.bottom && r.bottom <= b.top,
+           inside: r.left >= c.left && r.right <= c.right && r.bottom <= c.bottom };
+})())"""
 
 
 def wait_for(condition, timeout=10.0, step=0.1):
@@ -449,6 +464,9 @@ def main():
             for width, height, name in ((1366, 900, "home_front_1366"), (768, 1000, "home_front_768")):
                 tab.emulate(width, height, 1)
                 time.sleep(0.4)
+                notice = json.loads(value(FRONT_NOTICE_JS))
+                check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"],
+                      "the plain page at %d px says under the name that online matches are recorded, kept for 30 days and public with the players' names: a block under the hint, inside the name box (%s)" % (width, notice))
                 shot(name)
             tab.emulate(390, 844, 2, mobile=True)
             tab.open(web, wait=False)
@@ -460,6 +478,18 @@ def main():
             tab.ev("document.getElementById('seat-1-friend').click(); document.getElementById('seat-2-friend').click(); 1")
             time.sleep(0.4)
             shot("home_front_phone_friends")
+            tab.open(web, wait=False)
+            time.sleep(1.5)
+            notice = json.loads(value(FRONT_NOTICE_JS))
+            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and on a phone (390 px) the plain page has the notice under the hint too, inside the box, with no sideways scroll (%s)" % notice)
+            tab.open(web + "?room=k7m2xq&roommap=small&roomseats=2", wait=False)
+            time.sleep(1.5)
+            notice = json.loads(value(FRONT_NOTICE_JS))
+            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and so does the page that asks for the name of a shared link, under the step's own line (%s)" % notice)
+            tab.open(web + "?map=small&players=1&fill=hard", wait=False)
+            time.sleep(1.5)
+            check(tab.ev("document.getElementById('who-notice').hidden") is True and tab.ev("getComputedStyle(document.getElementById('who-notice')).display") == "none",
+                  "... and the step of a game on this computer has no notice (that game is not recorded by the server)")
             tab.emulate(1440, 900, 1)
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -901,6 +931,8 @@ def main():
             info = json.loads(value("JSON.stringify({path: location.pathname, search: location.search, lobby: !!document.getElementById('player-name'), ask: !document.getElementById('who-go').hidden, title: document.getElementById('who-title').textContent, back: !document.getElementById('who-back').hidden && document.getElementById('who-back').getAttribute('href')})"))
             check(info["path"] == "/" and info["search"].startswith("?room=k7m2xq&roommap=small&roomseats=2&fill=medium") and info["lobby"], "/four.html?room=... goes to /?room=... for good, with its whole query (%s%s)" % (info["path"], info["search"]))
             check(info["ask"] and info["title"] == "Join the match k7m 2xq" and info["back"] == "/", "... and the front page asks for the name of the shared link (its code in two groups of three), with its way back to the front page (%r)" % info["title"])
+            notice = json.loads(value(FRONT_NOTICE_JS))
+            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and that step has the notice about recorded matches under its own line (%s)" % notice)
             load(web + "play.html", ready=True, settle=1.0)
             info = json.loads(value("JSON.stringify({args: ANTS_ARGS})"))
             given = [a for a in info["args"] if a != "./this.program"]                             # (the runtime puts the program's own name in front)
@@ -1227,6 +1259,9 @@ def main():
                 })())"""))
                 check(back["href"] == "/" and "front page" in back["text"] and back["bg"] == "rgb(43, 99, 87)" and back["inside"],
                       "... and its way out at %s: a teal \"Back to the front page\" link under the hint, inside the card (%s)" % (label, back))
+                notice = json.loads(value(CARD_NOTICE_JS))
+                check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["sameType"] and notice["order"] and notice["inside"],
+                      "... and its notice at %s: online matches are recorded, kept for 30 days and public with the players' names, in the hint's own type, between the hint and the way out, inside the card (%s)" % (label, notice))
                 real_click("#name-step-back")
                 time.sleep(1.0)
                 check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('player-name')"), "... which takes the friend to the front page (the card, no room in the address)")

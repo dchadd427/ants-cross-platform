@@ -2,6 +2,7 @@
 
 The design of replays (`.antsrep` files, a viewer, the replays menu) and of watching bots play each other (1v1v1v1, 1v1, 2v2), made and measured on 2026-10-03; the owner approved the mock-ups ("I really like that. That looks nice. Good job.").
 
+- **Built so far:** recording, the file and `replay_tool`, in the form that [`../REPLAYS.md`](../REPLAYS.md) describes (it says what exists where it differs from DESIGN.md). Not built: the viewer, the menus, Watch mode and the server's recording. Two differences from the design so far: the game writes a file whole when a match ends or is left (no `.part` file written as it goes, so a crash leaves nothing), and a recording that would pass 1 MiB is not kept (DESIGN.md says 900 KiB, marked incomplete).
 - [DESIGN.md](DESIGN.md): the format, the recorder, the viewer, the menus, the web and the server.
 - [PLAN.md](PLAN.md): the build in three phases (A: the engine underneath, no visible change; B: the viewer and the menu panels; C: the server's recording and the web page's bar).
 - [FACTS.md](FACTS.md): what was measured (file sizes, seek times) and checked in the engine.
