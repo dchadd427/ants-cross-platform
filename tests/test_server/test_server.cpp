@@ -37,6 +37,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <random>
 #include <set>
 #include <sstream>
@@ -199,6 +200,8 @@ struct Client {
     std::string name;
     std::string room;
     uint8_t want_seat{255};
+    std::optional<net::CreateBlock> create;  // the create block of the Hello (protocol 15): what makes a public room on a server that offers them
+    uint8_t platform{0};
     net::Connection* end{nullptr};
     net::Connection* server_end{nullptr};    // the other end of the link (the server's): open until the server closes it, whatever this client has or has not read
     std::unique_ptr<net::ClientLobby> lobby;
@@ -227,6 +230,8 @@ struct Client {
         cc.name = name;
         cc.room = room;
         cc.want_seat = want_seat;
+        cc.create = create;
+        cc.platform = platform;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -301,6 +306,8 @@ struct World {
     explicit World(ServerLimits limits = ServerLimits(), const std::string& dir = maps_dir()) : mgr(MapStore(dir), limits) {}
 
     std::vector<std::unique_ptr<Throttled>> throttles;                      // the slow downlinks of connect_throttled (index = the order they were made in)
+    std::optional<net::CreateBlock> next_create;                            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
+    uint8_t next_platform{0};                                               // the platform byte that the next connect() puts in its Hello (0: not told); it stays until it is set again
 
     Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}, Throttled** throttle = nullptr) {
         auto ends = net.connect(link);
@@ -310,6 +317,8 @@ struct World {
         c.name = name;
         c.room = room;
         c.want_seat = seat;
+        c.create = next_create;
+        c.platform = next_platform;
         c.server_end = ends.first;
         net::Connection* end = ends.second;
         if (throttle != nullptr) {
@@ -318,6 +327,15 @@ struct World {
             end = throttles.back().get();
         }
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
+        return c;
+    }
+    // A Hello that carries a create block: on a server that offers public rooms it makes the room when there is none. The room is made before the call returns: the Hellos of two links that are sent in the
+    // same millisecond arrive in either order (the links jitter), and a guest whose Hello comes first has no room yet (a guest's Hello has no block: the front page's links carry it, these do not)
+    Client& connect_creating(const std::string& name, const std::string& room, const net::CreateBlock& block, uint8_t seat = 255) {
+        next_create = block;
+        Client& c = connect(name, room, seat);
+        next_create.reset();
+        run(100);
         return c;
     }
     void run(uint32_t ms) {
@@ -334,6 +352,17 @@ struct World {
         return s;
     }
 };
+
+// A create block for a room of `seats` on `map` (a file name as the server lists it, "" for the server's own choice), with the teams (255 = free for all) and the leader-starts flag.
+net::CreateBlock block_of(const std::string& map = "", uint8_t seats = 2, uint8_t team_a = net::kNoTeam, uint8_t team_b = net::kNoTeam, bool leader_starts = false) {
+    net::CreateBlock b;
+    b.map_name = map;
+    b.seats = seats;
+    b.team_a = team_a;
+    b.team_b = team_b;
+    b.flags = leader_starts ? net::kCreateLeaderStarts : uint8_t{0};
+    return b;
+}
 
 RoomSpec spec_of(const std::string& code, uint8_t players = 2, const char* map = "TINY.LVL") {
     RoomSpec s;
@@ -592,6 +621,8 @@ struct RClient {
     std::function<void(sim::SimulationEngine&)> tamper;      // runs on the engine when the machine has loaded the map (to make its state differ)
     bool fail_load{false};                   // the machine cannot load the map: it says so, and the start is cancelled
     uint16_t listen_port{0};                 // the port that the machine announces for the other guests (a game on the local network does; a server's room never uses it)
+    std::optional<net::CreateBlock> create;  // the create block of its Hello (protocol 15): what makes a public room on a server that offers them
+    uint8_t platform{0};
 
     void start(net::Connection* client_end, uint32_t seed) {
         end = client_end;
@@ -602,6 +633,8 @@ struct RClient {
         cc.want_seat = want_seat;
         cc.key = key;
         cc.listen_port = listen_port;
+        cc.create = create;
+        cc.platform = platform;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -626,6 +659,7 @@ struct RWorld : LinkSource {
         mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", now);
         return ends.second;
     }
+    std::optional<net::CreateBlock> next_create;                             // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
@@ -634,7 +668,14 @@ struct RWorld : LinkSource {
         c.room = room;
         c.want_seat = seat;
         c.key = key;
+        c.create = next_create;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
+        return c;
+    }
+    RClient& connect_creating(const std::string& name, const std::string& room, const net::CreateBlock& block, uint8_t seat = 255) {
+        next_create = block;
+        RClient& c = connect(name, room, seat);
+        next_create.reset();
         return c;
     }
     void run(uint32_t ms) {
@@ -881,7 +922,7 @@ net::TurnMsg sample_turn(uint32_t n) {
 
 bool same_head(const RestartHead& a, const RestartHead& b) {
     return a.identity.game_version == b.identity.game_version && a.identity.protocol == b.identity.protocol && a.identity.build_id == b.identity.build_id && a.code == b.code && a.map == b.map &&
-           a.map_hash == b.map_hash && a.players == b.players && a.fog == b.fog && a.early_start == b.early_start && a.wait_ms == b.wait_ms && a.load_ms == b.load_ms && a.keep_ms == b.keep_ms &&
+           a.map_hash == b.map_hash && a.players == b.players && a.fog == b.fog && a.early_start == b.early_start && a.public_room == b.public_room && a.wait_ms == b.wait_ms && a.load_ms == b.load_ms && a.keep_ms == b.keep_ms &&
            a.run_ms == b.run_ms && a.vote_after_ms == b.vote_after_ms && a.max_pause_ms == b.max_pause_ms && a.max_catch_up_ms == b.max_catch_up_ms && a.resume_countdown_ms == b.resume_countdown_ms &&
            a.max_log_bytes == b.max_log_bytes && a.max_connections == b.max_connections && a.fill_mask == b.fill_mask && a.keys == b.keys && net::encode(a.start) == net::encode(b.start) &&
            a.bots.size() == b.bots.size() &&
@@ -981,6 +1022,7 @@ struct PWorld : LinkSource {
         return ends.second;
     }
     uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
+    std::optional<net::CreateBlock> next_create;            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
@@ -990,7 +1032,14 @@ struct PWorld : LinkSource {
         c.want_seat = seat;
         c.key = key;
         c.listen_port = announce_port;
+        c.create = next_create;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
+        return c;
+    }
+    RClient& connect_creating(const std::string& name, const std::string& room, const net::CreateBlock& block, uint8_t seat = 255) {
+        next_create = block;
+        RClient& c = connect(name, room, seat);
+        next_create.reset();
         return c;
     }
     void run(uint32_t ms) {
@@ -1116,11 +1165,11 @@ void run_manager_tests() {
         RoomManager junk{MapStore(dir)};
         ASSERT_EQ(junk.create_room(spec_of("J-1", 2, "junk.lvl"), 0).http_status, 422);
         fs::remove_all(dir);
-        // generated codes: eight characters, valid, different
+        // generated codes: six characters, valid, different
         RoomSpec anon = spec_of("");
         const CreateResult a = mgr.create_room(anon, 0);
         const CreateResult b = mgr.create_room(anon, 0);
-        ASSERT_TRUE(a.ok && b.ok && a.code.size() == 8 && b.code.size() == 8 && a.code != b.code && net::valid_room_code(a.code));
+        ASSERT_TRUE(a.ok && b.ok && a.code.size() == kDrawnRoomCodeChars && b.code.size() == kDrawnRoomCodeChars && a.code != b.code && net::valid_room_code(a.code));
         ASSERT_TRUE(mgr.create_room(spec_of("ROOM-3"), 0).ok);                          // the fourth room
         ASSERT_EQ(mgr.create_room(spec_of("ROOM-4"), 0).http_status, 503);              // no room for a fifth
         ASSERT_EQ(mgr.room_count(), size_t{4});
@@ -1216,110 +1265,167 @@ void run_manager_tests() {
 
 // (placed before the match tests: the door's tests)
 void run_demo_tests() {
-    TEST_CASE("S3.10 Demo Rooms: Off Unless Asked For; A Hello For \"demo-...\" Makes The Room, Only With The Prefix, Only Up To The Limit, And An Unfilled One Fails After Its Wait (One Minute Here, Ten By Default)") {
+    TEST_CASE("S3.10 Public Rooms: Off Unless Asked For; A Hello With A Create Block Makes The Room For A Code That Does Not Exist, Only With The Block, Only Up To The Limit, And An Unfilled One Fails After Its Wait (One Minute Here, Ten By Default)") {
         auto reject_of = [](World& w, Client& c) {
             w.run(300);
             return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
         };
         {
-            World w;                                                                      // the default: no demo rooms
-            Client& a = w.connect("Ann", "demo-a");
+            World w;                                                                      // the default: no public rooms
+            Client& a = w.connect_creating("Ann", "k7m2xq", block_of());
             ASSERT_EQ(reject_of(w, a), net::RejectReason::NoSuchRoom);
             ASSERT_EQ(w.mgr.room_count(), size_t{0});
         }
         ServerLimits limits;
         limits.demo_rooms = 2;
         limits.demo_map = "TINY.LVL";
-        limits.demo_players = 2;
         limits.demo_wait_ms = 60000;                                                     // (the default is ten minutes: S3.25)
         World w(limits);
-        Client& other = w.connect("Other", "other-1");                                    // no prefix: no room is made
+        Client& other = w.connect("Other", "other-1");                                    // no block: no room is made, whatever the code
         ASSERT_EQ(reject_of(w, other), net::RejectReason::NoSuchRoom);
-        Client& bare = w.connect("Bare", "demo-");                                        // the prefix alone is no code
+        Client& bare = w.connect_creating("Bare", "", block_of());                        // a block and no code: there is no room to make
         ASSERT_EQ(reject_of(w, bare), net::RejectReason::NoSuchRoom);
+        Client& dotted = w.connect_creating("Dotted", "no.good", block_of());             // '.' is no character of a room code: the Hello is refused, no room
+        w.run(300);
+        ASSERT_TRUE(dotted.lobby->phase() != net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{0});
-        Client& ann = w.connect("Ann", "demo-a");
+        {   // a capital in the code: the codes of the control interface are the operator's (the server draws capitals, and an operator who chooses one gives it a capital), so a visitor's block cannot take one first
+            World wc(limits);
+            Client& loud = wc.connect_creating("Loud", "ROOM-1", block_of());
+            ASSERT_EQ(reject_of(wc, loud), net::RejectReason::NoSuchRoom);
+            Client& mixed = wc.connect_creating("Mixed", "k7m2Xq", block_of());
+            ASSERT_EQ(reject_of(wc, mixed), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(wc.mgr.room_count(), size_t{0});
+            ASSERT_TRUE(wc.mgr.create_room(spec_of("ROOM-1", 2), wc.now).ok);              // so the operator's POST /rooms is not met by a 409, and its room is not a public one
+            ASSERT_FALSE(wc.status("ROOM-1").public_room);
+            Client& guest = wc.connect("Guest", "ROOM-1");
+            wc.run(300);
+            ASSERT_EQ(guest.lobby->phase(), net::ClientLobby::Phase::InRoom);
+            ASSERT_EQ(wc.mgr.room_count(), size_t{1});
+        }
+        {   // a Hello that shows a key makes no room, whatever block it carries: a key is of a seat in a room that was, and that room is gone (RJ1.6 and RJ1.21 have it through a real client)
+            auto ends = w.net.connect({20, 10});
+            w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
+            net::HelloMsg hello;
+            hello.name = "Keyed";
+            hello.room = "eeee5555";
+            for (uint8_t& v : hello.key) v = 7;
+            hello.create = block_of();
+            ends.second->send(net::encode(hello));
+            w.run(300);
+            ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::NoSuchRoom));
+            ASSERT_EQ(w.mgr.room_count(), size_t{0});
+        }
+        Client& ann = w.connect_creating("Ann", "aaaa1111", block_of());
         w.run(300);
         ASSERT_EQ(ann.lobby->phase(), net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{1});
-        ASSERT_TRUE(w.status("demo-a").state == RoomState::Waiting);
-        ASSERT_EQ(w.status("demo-a").map, std::string("TINY.LVL"));
-        ASSERT_EQ(w.status("demo-a").expected, 2);
-        Client& bob = w.connect("Bob", "demo-a");                                         // the second Hello finds the room that the first one made
+        ASSERT_TRUE(w.status("aaaa1111").state == RoomState::Waiting);
+        ASSERT_EQ(w.status("aaaa1111").map, std::string("TINY.LVL"));
+        ASSERT_EQ(w.status("aaaa1111").expected, 2);
+        Client& bob = w.connect("Bob", "aaaa1111");                                       // the second Hello (no block needed) finds the room that the first one made
         w.run(800);
         ASSERT_EQ(bob.lobby->my_seat(), 1);
         ASSERT_EQ(w.mgr.room_count(), size_t{1});
-        ASSERT_TRUE(w.status("demo-a").state == RoomState::Loading || w.status("demo-a").state == RoomState::Running);
-        Client& cat = w.connect("Cat", "demo-b");                                         // a second demo room
+        ASSERT_TRUE(w.status("aaaa1111").state == RoomState::Loading || w.status("aaaa1111").state == RoomState::Running);
+        Client& cat = w.connect_creating("Cat", "bbbb2222", block_of());                  // a second public room
         w.run(300);
         ASSERT_EQ(cat.lobby->phase(), net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
-        Client& dan = w.connect("Dan", "demo-c");                                         // the limit is two
+        Client& dan = w.connect_creating("Dan", "cccc3333", block_of());                  // the limit is two
         ASSERT_EQ(reject_of(w, dan), net::RejectReason::NoSuchRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
-        w.run(62000);                                                                     // demo-b never filled: it fails after its minute (the match of demo-a goes on)
-        ASSERT_TRUE(w.status("demo-b").state == RoomState::Failed);
-        ASSERT_EQ(ServerLimits().demo_players, 4);                                        // the default is a room of four (this test uses two)
+        w.run(62000);                                                                     // the second never filled: it fails after its minute (the match of the first goes on)
+        ASSERT_TRUE(w.status("bbbb2222").state == RoomState::Failed);
         ASSERT_EQ(ServerLimits().demo_rooms, size_t{0});
-        w.run(31000);                                                                     // a failed demo room is forgotten after 30 s, and its place is free again
+        w.run(31000);                                                                     // a failed public room is forgotten after 30 s, and its place is free again
         ASSERT_EQ(w.mgr.room_count(), size_t{1});
-        Client& eve = w.connect("Eve", "demo-d");
+        Client& eve = w.connect_creating("Eve", "dddd4444", block_of());
         w.run(300);
         ASSERT_EQ(eve.lobby->phase(), net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(w.mgr.room_count(), size_t{2});
     } TEST_END();
 
-    TEST_CASE("S3.23 A Demo Room Code Can Choose Its Map: demo-<map>-... Makes The Room On That Map When It Is In The List, In Any Case; Every Other Code Keeps The Default Map; Without A List Nothing Changes") {
+    TEST_CASE("S3.10c The Codes That The Control Interface Draws Always Have A Capital (The First Character Is A Letter), Six Characters Of The Alphabet Without The Look-Alikes, So That A Visitor's Block, Which Takes Only A Code With No Capital, Never Takes The Name Of A Room That Is Yet To Be Made; net::public_room_code Is That Rule") {
+        std::mt19937 rng(20261008);
+        const std::string alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+        for (int i = 0; i < 20000; ++i) {
+            const std::string code = draw_room_code(rng);
+            ASSERT_EQ(code.size(), kDrawnRoomCodeChars);
+            ASSERT_EQ(kDrawnRoomCodeChars, size_t{6});                                    // (as many as the codes that the game makes: the front page and the menu)
+            ASSERT_TRUE(net::valid_room_code(code));
+            ASSERT_TRUE(code[0] >= 'A' && code[0] <= 'Z');                                // the first is a letter: a capital in every code, not in all but a few
+            for (const char c : code) ASSERT_TRUE(alphabet.find(c) != std::string::npos);
+            ASSERT_FALSE(net::public_room_code(code));                                    // so no visitor's block makes a room of it
+        }
+        {   // the draws are not all the same (a generator that is not asked)
+            std::set<std::string> seen;
+            for (int i = 0; i < 200; ++i) seen.insert(draw_room_code(rng));
+            ASSERT_TRUE(seen.size() > 190);
+        }
+        // the rule: a valid code of one or more characters with no upper-case letter
+        for (const char* open : {"k7m2xq", "a", "room_7", "a-b", "0123456789", "demo-treasure-4p-t01-k7m2xq"}) ASSERT_TRUE(net::public_room_code(open));
+        for (const char* closed : {"", "ROOM-1", "k7m2Xq", "Aa", "a b", "a.b", "caf\xC3\xA9", "r\n"}) ASSERT_FALSE(net::public_room_code(closed));
+        ASSERT_TRUE(net::public_room_code(std::string(net::kMaxRoomCodeChars, 'r')));
+        ASSERT_FALSE(net::public_room_code(std::string(net::kMaxRoomCodeChars + 1, 'r')));
+    } TEST_END();
+
+    TEST_CASE("S3.23 A Create Block Can Choose Its Map: A File Name That The Server Lists Makes The Room On That Map, In Any Case; Every Other Name, And None, Keeps The Default Map; Without A List Nothing Changes") {
         ServerLimits limits;
-        limits.demo_rooms = 13;                                                   // room for the twelve codes below and one more
+        limits.demo_rooms = 13;
         limits.demo_map = "TINY.LVL";
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "GAUNTLET.LVL"};
-        limits.demo_players = 2;
         World w(limits);
-        auto map_of = [&](const std::string& code) {
-            w.connect("P", code);
-            w.run(300);
-            return w.status(code).map;
+        int made = 0;
+        auto map_of = [&](World& in, const std::string& map_name) {
+            const std::string code = "room" + std::to_string(++made);
+            in.connect_creating("P", code, block_of(map_name));
+            in.run(300);
+            return in.status(code).map;
         };
-        ASSERT_EQ(map_of("demo-small-x7k2"), std::string("SMALL.LVL"));              // the choice
-        ASSERT_EQ(map_of("demo-SMALL-upper"), std::string("SMALL.LVL"));             // any case in the code
-        ASSERT_EQ(map_of("demo-tiny-ab12"), std::string("TINY.LVL"));
-        ASSERT_EQ(map_of("demo-GaUnTlEt-q"), std::string("GAUNTLET.LVL"));           // the name as the list spells it, whatever the case of the code
-        ASSERT_EQ(map_of("demo-small-a-b-c"), std::string("SMALL.LVL"));             // only the first word counts
-        ASSERT_EQ(map_of("demo-small-"), std::string("SMALL.LVL"));                  // an empty tail is a valid code
-        ASSERT_EQ(map_of("demo-medium-x1"), std::string("TINY.LVL"));                // a real map that is not in the list: the default
-        ASSERT_EQ(map_of("demo-smallish-x1"), std::string("TINY.LVL"));              // a longer word is not the map
-        ASSERT_EQ(map_of("demo-smal-x1"), std::string("TINY.LVL"));                  // nor a shorter one
-        ASSERT_EQ(map_of("demo-small"), std::string("TINY.LVL"));                    // no dash after the word: that is just a code
-        ASSERT_EQ(map_of("demo--x1"), std::string("TINY.LVL"));                      // an empty word
-        ASSERT_EQ(map_of("demo-x7k2"), std::string("TINY.LVL"));                     // the page's old codes
-        ASSERT_EQ(map_of("demo-small.lvl-x"), std::string());                        // '.' is no character of a room code: refused, no room
-        ASSERT_EQ(w.mgr.room_count(), size_t{12});
-        // a second Hello for the same code finds the room that the first one made, on the same map
-        Client& second = w.connect("Q", "demo-small-x7k2");
+        ASSERT_EQ(map_of(w, "SMALL.LVL"), std::string("SMALL.LVL"));                      // the choice
+        ASSERT_EQ(map_of(w, "small.lvl"), std::string("SMALL.LVL"));                      // any case: the name as the list spells it
+        ASSERT_EQ(map_of(w, "Small.LVL"), std::string("SMALL.LVL"));
+        ASSERT_EQ(map_of(w, "TINY.LVL"), std::string("TINY.LVL"));
+        ASSERT_EQ(map_of(w, "GaUnTlEt.LVL"), std::string("GAUNTLET.LVL"));
+        ASSERT_EQ(map_of(w, ""), std::string("TINY.LVL"));                                // no name: the default
+        ASSERT_EQ(map_of(w, "MEDIUM.LVL"), std::string("TINY.LVL"));                      // a real map that is not in the list: the default
+        ASSERT_EQ(map_of(w, "SMALLISH.LVL"), std::string("TINY.LVL"));                    // a longer name is not the map
+        ASSERT_EQ(map_of(w, "SMAL.LVL"), std::string("TINY.LVL"));                        // nor a shorter one
+        ASSERT_EQ(map_of(w, "NO-SUCH-MAP.LVL"), std::string("TINY.LVL"));
+        ASSERT_EQ(map_of(w, "small"), std::string());                                     // no ".LVL": no valid block, the client leaves it out and the Hello joins: no room
+        ASSERT_EQ(w.mgr.room_count(), size_t{10});
+        {   // the default is the server's --demo-map, not the first map of the list: with SMALL.LVL as the default (the list's second), no name and a name that the list lacks get SMALL.LVL
+            ServerLimits other = limits;
+            other.demo_map = "SMALL.LVL";
+            World d(other);
+            ASSERT_EQ(map_of(d, ""), std::string("SMALL.LVL"));
+            ASSERT_EQ(map_of(d, "MEDIUM.LVL"), std::string("SMALL.LVL"));
+            ASSERT_EQ(map_of(d, "TINY.LVL"), std::string("TINY.LVL"));                    // (a name that the list has is still the block's)
+        }
+        // a second Hello for the same code finds the room that the first one made, on the same map, and its own block is ignored
+        Client& second = w.connect_creating("Q", "room1", block_of("GAUNTLET.LVL", 4));
         w.run(800);
         ASSERT_EQ(second.lobby->my_seat(), 1);
-        ASSERT_EQ(w.mgr.room_count(), size_t{12});
-        ASSERT_EQ(w.status("demo-small-x7k2").map, std::string("SMALL.LVL"));
-        // no list: the choice is ignored, every demo room is on the default map (what the server did before the list existed)
+        ASSERT_EQ(w.mgr.room_count(), size_t{10});
+        ASSERT_EQ(w.status("room1").map, std::string("SMALL.LVL"));
+        ASSERT_EQ(static_cast<int>(w.status("room1").expected), 2);
+        // no list: the name is ignored, every public room is on the default map (what the server did before the list existed)
         ServerLimits plain;
         plain.demo_rooms = 4;
         plain.demo_map = "TINY.LVL";
-        plain.demo_players = 2;
         ASSERT_TRUE(plain.demo_maps.empty());
         World p(plain);
-        p.connect("P", "demo-small-x7k2");
-        p.run(300);
-        ASSERT_EQ(p.status("demo-small-x7k2").map, std::string("TINY.LVL"));
+        ASSERT_EQ(map_of(p, "SMALL.LVL"), std::string("TINY.LVL"));
         // a listed map that does not load makes the Hello fail like any room with a bad map: the room is not made
         ServerLimits broken = limits;
         broken.demo_maps = {"NO-SUCH-MAP.LVL"};
         World b(broken);
-        Client& lost = b.connect("P", "demo-no-such-map-x");
+        Client& lost = b.connect_creating("P", "lost1111", block_of("NO-SUCH-MAP.LVL"));
         b.run(300);
         ASSERT_TRUE(lost.lobby->phase() != net::ClientLobby::Phase::InRoom);
         ASSERT_EQ(b.mgr.room_count(), size_t{0});
-        // of two names that fit, the longest wins (a name may contain dashes): a maps folder with BIG.LVL and BIG-ISLAND.LVL (copies of TINY.LVL)
+        // a name is the whole file name: of BIG.LVL and BIG-ISLAND.LVL (copies of TINY.LVL) each is its own, whatever the other is called
         const std::string big_dir = temp_dir_for("demo_longest");
         fs::copy_file(maps_dir() + "/TINY.LVL", big_dir + "/BIG.LVL");
         fs::copy_file(maps_dir() + "/TINY.LVL", big_dir + "/BIG-ISLAND.LVL");
@@ -1327,102 +1433,183 @@ void run_demo_tests() {
         two.demo_rooms = 4;
         two.demo_map = "BIG.LVL";
         two.demo_maps = {"BIG.LVL", "BIG-ISLAND.LVL"};
-        two.demo_players = 2;
         World g(two, big_dir);
-        g.connect("P", "demo-big-island-2p-x");
-        g.connect("Q", "demo-big-y");
-        g.connect("R", "demo-BIG-ISLAND-z");
+        g.connect_creating("P", "gggg0001", block_of("big-island.lvl"));
+        g.connect_creating("Q", "gggg0002", block_of("BIG.LVL"));
+        g.connect_creating("R", "gggg0003", block_of("BIG-ISLAND.LVL"));
         g.run(300);
-        ASSERT_EQ(g.status("demo-big-island-2p-x").map, std::string("BIG-ISLAND.LVL"));
-        ASSERT_EQ(g.status("demo-big-y").map, std::string("BIG.LVL"));
-        ASSERT_EQ(g.status("demo-BIG-ISLAND-z").map, std::string("BIG-ISLAND.LVL"));
+        ASSERT_EQ(g.status("gggg0001").map, std::string("BIG-ISLAND.LVL"));
+        ASSERT_EQ(g.status("gggg0002").map, std::string("BIG.LVL"));
+        ASSERT_EQ(g.status("gggg0003").map, std::string("BIG-ISLAND.LVL"));
         std::error_code ignore;
         fs::remove_all(big_dir, ignore);
     } TEST_END();
 
-    TEST_CASE("S3.24 A Demo Room Code Can Choose Its Number Of Players: demo-[<map>-]<n>p-... Makes A Room For 2, 3 Or 4; Anything Else Keeps The Default; A Room For Two Starts With Two") {
+    TEST_CASE("S3.24 A Create Block Chooses Its Number Of Seats: A Room For 2, 3 Or 4; A Room For Two Starts With Two And A Third Cannot Get In") {
         ServerLimits limits;
         limits.demo_rooms = 20;
         limits.demo_map = "TINY.LVL";
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "GAUNTLET.LVL"};
-        ASSERT_EQ(limits.demo_players, 4);                                        // the default: four
         World w(limits);
-        auto made = [&](const std::string& code) {
-            w.connect("P", code);
+        auto made = [&](const std::string& code, const net::CreateBlock& block) {
+            w.connect_creating("P", code, block);
             w.run(300);
             return w.status(code);
         };
-        struct Case { const char* code; const char* map; int players; };
+        struct Case { const char* code; const char* map; uint8_t seats; };
         const Case cases[] = {
-            {"demo-small-2p-a", "SMALL.LVL", 2}, {"demo-small-3P-b", "SMALL.LVL", 3}, {"demo-small-4p-c", "SMALL.LVL", 4},
-            {"demo-2p-d", "TINY.LVL", 2},                                          // a player count without a map: the default map
-            {"demo-gauntlet-3p-e", "GAUNTLET.LVL", 3},
-            {"demo-small-5p-f", "SMALL.LVL", 4}, {"demo-small-1p-g", "SMALL.LVL", 4}, {"demo-small-0p-h", "SMALL.LVL", 4},   // not 2 to 4: the default
-            {"demo-small-2px-i", "SMALL.LVL", 4},                                  // no dash after the word: part of the code
-            {"demo-small-2p", "SMALL.LVL", 4},                                     // the word without a dash after it
-            {"demo-small-22p-j", "SMALL.LVL", 4}, {"demo-medium-x-2p-m", "TINY.LVL", 4},   // the players word is the first or second word only
-            {"demo-medium-2p-k", "TINY.LVL", 2},                                   // a map that is not allowed: the default map, but the players are read (the page offers six maps)
-            {"demo-2p-small-l", "TINY.LVL", 2},                                    // the order is map, then players: here the map word comes too late
-            {"demo-x7k2", "TINY.LVL", 4},                                          // the page's old codes
+            {"seats002", "SMALL.LVL", 2}, {"seats003", "SMALL.LVL", 3}, {"seats004", "SMALL.LVL", 4},
+            {"seats005", "", 2},                                                    // seats without a map: the default map
+            {"seats006", "GAUNTLET.LVL", 3},
         };
         for (const Case& c : cases) {
-            const RoomStatus st = made(c.code);
-            ASSERT_MSG(st.map == c.map, c.code);
-            ASSERT_MSG(static_cast<int>(st.expected) == c.players, c.code);
+            const RoomStatus st = made(c.code, block_of(c.map, c.seats));
+            ASSERT_MSG(st.map == (std::string(c.map).empty() ? "TINY.LVL" : c.map), c.code);
+            ASSERT_MSG(st.expected == c.seats, c.code);
         }
-        // without a list of maps the player count is still chosen
-        ServerLimits plain;
-        plain.demo_rooms = 4;
-        plain.demo_map = "TINY.LVL";
-        World p(plain);
-        p.connect("P", "demo-2p-x");
-        p.connect("Q", "demo-small-2p-y");
-        p.run(300);
-        ASSERT_EQ(static_cast<int>(p.status("demo-2p-x").expected), 2);
-        ASSERT_EQ(p.status("demo-2p-x").map, std::string("TINY.LVL"));
-        ASSERT_EQ(static_cast<int>(p.status("demo-small-2p-y").expected), 2);                     // no list: "small" is no map here, the players are still read
+        // a block with a seat count that no room has is no block: the client leaves it out, and no room is made
+        ASSERT_TRUE(made("seats007", block_of("", 5)).map.empty());
+        ASSERT_TRUE(made("seats008", block_of("", 1)).map.empty());
+        ASSERT_TRUE(made("seats009", block_of("", 0)).map.empty());
+        ASSERT_EQ(w.mgr.room_count(), size_t{5});
         // a room for two starts as soon as two have joined, and a third player cannot get in
         World s2(limits);
-        Client& ann = s2.connect("Ann", "demo-small-2p-duel");
-        Client& bob = s2.connect("Bob", "demo-small-2p-duel");
+        Client& ann = s2.connect_creating("Ann", "duel0001", block_of("SMALL.LVL", 2));
+        Client& bob = s2.connect("Bob", "duel0001");
         s2.run(800);
         ASSERT_EQ(ann.lobby->my_seat() != bob.lobby->my_seat(), true);
-        ASSERT_TRUE(s2.status("demo-small-2p-duel").state == RoomState::Loading || s2.status("demo-small-2p-duel").state == RoomState::Running);
-        ASSERT_EQ(static_cast<int>(s2.status("demo-small-2p-duel").joined), 2);
-        Client& cat = s2.connect("Cat", "demo-small-2p-duel");
+        ASSERT_TRUE(s2.status("duel0001").state == RoomState::Loading || s2.status("duel0001").state == RoomState::Running);
+        ASSERT_EQ(static_cast<int>(s2.status("duel0001").joined), 2);
+        Client& cat = s2.connect("Cat", "duel0001");
         s2.run(800);
         ASSERT_TRUE(cat.lobby->phase() == net::ClientLobby::Phase::Rejected || cat.lobby->phase() == net::ClientLobby::Phase::Closed);
-        ASSERT_EQ(static_cast<int>(s2.status("demo-small-2p-duel").joined), 2);
+        ASSERT_EQ(static_cast<int>(s2.status("duel0001").joined), 2);
     } TEST_END();
 
-    TEST_CASE("S3.74 The Public Stack's Demo Rooms (docker-compose.stack.yml: --demo-map TREASURE.LVL and the six maps of the page): A Code That Names No Map Is Made On TREASURE.LVL For Four Players; A Code That Names One Of The Six Is Made On It, Whatever Its Case; The Players Word Is Read With And Without A Map") {
+    TEST_CASE("S3.24b A Create Block That Says The Leader Starts (Protocol 15): A Room That Is Full Does Not Start By Itself, It Waits For Its Leader's START, And Every Client Is Told So In The Room Message; A Guest's START Does Nothing, The Leader's Starts It With The Block's Teams; The Same Room Without The Flag Starts By Itself; A Full Room Whose Leader Never Starts Ends After Its Wait And Says Why") {
+        ServerLimits limits;
+        limits.demo_rooms = 20;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_wait_ms = 60000;                                                     // (ten minutes by default: S3.25)
+        World w(limits);
+        const auto started = [&](const std::string& code) {
+            const RoomState state = w.status(code).state;
+            return state == RoomState::Loading || state == RoomState::Running;
+        };
+        // the same room of three seats, once without the flag and once with it: the flag is what holds a full room
+        Client& open_ann = w.connect_creating("Ann", "free0001", block_of("TINY.LVL", 3, 0, 1));
+        w.connect("Bob", "free0001");
+        w.connect("Cat", "free0001");
+        w.run(1500);
+        ASSERT_TRUE(started("free0001"));                                                 // (it starts by itself when it is full)
+        ASSERT_FALSE(open_ann.lobby->room().leader_starts() || w.status("free0001").leader_starts);
+        Client& ann = w.connect_creating("Ann", "hold0001", block_of("TINY.LVL", 3, 0, 1, true));
+        Client& bob = w.connect("Bob", "hold0001");
+        w.run(100);                                                                       // (Ann is first: she leads)
+        Client& cat = w.connect("Cat", "hold0001");
+        w.run(2000);
+        RoomStatus st = w.status("hold0001");
+        ASSERT_TRUE(st.state == RoomState::Waiting && st.joined == 3 && st.expected == 3 && st.public_room && st.leader_starts && st.room_teams == "0+1");
+        ASSERT_TRUE(ann.lobby->room().leader_starts() && bob.lobby->room().leader_starts() && cat.lobby->room().leader_starts());      // (every client is told)
+        ASSERT_TRUE(ann.lobby->is_leader() && !bob.lobby->is_leader() && st.leader == ann.lobby->my_seat());
+        w.run(5000);                                                                      // a full room that waits does not start however long it is full
+        ASSERT_TRUE(w.status("hold0001").state == RoomState::Waiting);
+        ASSERT_FALSE(bob.lobby->request_start());                                         // (a guest sends nothing: only the leader asks)
+        w.run(1000);
+        ASSERT_TRUE(w.status("hold0001").state == RoomState::Waiting);
+        ASSERT_TRUE(ann.lobby->request_start());                                          // the leader's START starts it, with the teams that the block named
+        w.run(1500);
+        st = w.status("hold0001");
+        ASSERT_TRUE((st.state == RoomState::Loading || st.state == RoomState::Running) && st.teams == "0+1");
+        // a full room whose leader never presses START ends after the wait, and the reason names the leader and not the players that did not come
+        Client& dan = w.connect_creating("Dan", "idle0001", block_of("TINY.LVL", 2, net::kNoTeam, net::kNoTeam, true));
+        w.connect("Eve", "idle0001");
+        w.run(2000);
+        ASSERT_TRUE(w.status("idle0001").state == RoomState::Waiting && w.status("idle0001").joined == 2);
+        ASSERT_TRUE(dan.lobby->is_leader());
+        w.run(61000);
+        st = w.status("idle0001");
+        ASSERT_TRUE(st.state == RoomState::Failed && st.reason.find("leader did not start the match") != std::string::npos && st.reason.find("2 players") != std::string::npos);
+        // the same wait for a room that was never full names the players
+        w.connect_creating("Fay", "slow0001", block_of("TINY.LVL", 4, net::kNoTeam, net::kNoTeam, true));
+        w.run(62000);
+        st = w.status("slow0001");
+        ASSERT_TRUE(st.state == RoomState::Failed && st.reason.find("did not all come (1 of 4)") != std::string::npos);
+    } TEST_END();
+
+    TEST_CASE("S3.24c The Platform Byte Through A Real Room (Protocol 15): What A Player Tells In Its Hello Is Shown To Everybody At Its Seat; It Goes With The Player When The Leader Swaps Two Colours; A Player Who Leaves Takes It Away (The Seat Says 0 Until A Newcomer Says Its Own); The Start Of The Match Carries The Platform Of Every Seat That Plays") {
+        ServerLimits limits;
+        limits.demo_rooms = 4;
+        limits.demo_map = "TINY.LVL";
+        World w(limits);
+        const uint8_t mac_page = static_cast<uint8_t>(net::kPlatformBrowser | net::kOsMacos);                  // 18
+        const auto platforms = [](const Client& c) {                                      // "<seat 0> <seat 1> <seat 2> <seat 3>": the byte of each seat as this player's screen shows it
+            std::string out;
+            for (const net::RoomMsg::Slot& slot : c.lobby->room().slots) out += (out.empty() ? "" : " ") + std::to_string(static_cast<unsigned>(slot.platform));
+            return out;
+        };
+        w.next_platform = net::kOsWindows;
+        Client& ann = w.connect_creating("Ann", "plat0001", block_of("TINY.LVL", 4));
+        w.next_platform = mac_page;
+        Client& bob = w.connect("Bob", "plat0001");
+        w.run(100);
+        w.next_platform = net::kOsAndroid;
+        Client& cat = w.connect("Cat", "plat0001");
+        w.next_platform = net::kPlatformUnknown;
+        w.run(1000);
+        ASSERT_TRUE(w.status("plat0001").state == RoomState::Waiting && ann.lobby->is_leader());
+        for (const Client* c : {&ann, &bob, &cat}) ASSERT_EQ(platforms(*c), std::string("1 18 4 0"));
+        ASSERT_TRUE(ann.lobby->request_seat_move(1, 2));                                  // Ann swaps Bob and Cat: each takes its platform to the other colour
+        w.run(500);
+        for (const Client* c : {&ann, &bob, &cat}) ASSERT_EQ(platforms(*c), std::string("1 4 18 0"));
+        bob.lobby->leave();                                                               // Bob goes: his colour says nothing any more
+        w.run(500);
+        for (const Client* c : {&ann, &cat}) ASSERT_EQ(platforms(*c), std::string("1 4 0 0"));
+        w.next_platform = net::kOsIos;
+        Client& dan = w.connect("Dan", "plat0001");                                       // a newcomer takes the colour that is free, with its own byte
+        w.next_platform = net::kPlatformUnknown;
+        w.run(500);
+        ASSERT_EQ(dan.lobby->my_seat(), 2);
+        for (const Client* c : {&ann, &cat, &dan}) ASSERT_EQ(platforms(*c), std::string("1 4 5 0"));
+        ASSERT_TRUE(ann.lobby->request_start());                                          // three people: the leader starts the match
+        w.run(1500);
+        ASSERT_TRUE(w.status("plat0001").state == RoomState::Loading || w.status("plat0001").state == RoomState::Running);
+        for (const Client* c : {&ann, &cat, &dan}) {
+            const net::StartMsg& start = c->lobby->start_info();
+            ASSERT_TRUE(start.roster == 0x07u && start.platforms[0] == net::kOsWindows && start.platforms[1] == net::kOsAndroid && start.platforms[2] == net::kOsIos && start.platforms[3] == 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.74 The Public Stack's Rooms (docker-compose.stack.yml: --demo-map TREASURE.LVL and the six maps of the page): A Block That Names No Map Is Made On TREASURE.LVL; One That Names One Of The Six Is Made On It, Whatever Its Case; The Seats Are The Block's") {
         ServerLimits limits;                                                      // the options of the stack file: --demo-rooms 48 --demo-map TREASURE.LVL --demo-maps <the six>
         limits.demo_rooms = 48;
         limits.demo_map = "TREASURE.LVL";
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
         World w(limits);
-        auto made = [&](const std::string& code) {
-            w.connect("P", code);
+        int made_rooms = 0;
+        auto made = [&](const net::CreateBlock& block) {
+            const std::string code = "stack" + std::to_string(++made_rooms);
+            w.connect_creating("P", code, block);
             w.run(300);
             return w.status(code);
         };
-        struct Case { const char* code; const char* map; int players; };
+        struct Case { const char* map; uint8_t seats; const char* expect; };
         const Case cases[] = {
-            {"demo-x7k2", "TREASURE.LVL", 4}, {"demo-abc", "TREASURE.LVL", 4},    // the page's old codes and every other code that names no map: the default map
-            {"demo-2p-n", "TREASURE.LVL", 2},                                      // a players word without a map: the default map
-            {"demo-tiny-a", "TINY.LVL", 4}, {"demo-small-b", "SMALL.LVL", 4}, {"demo-medium-c", "MEDIUM.LVL", 4},      // a map of the page's six: that map, four players
-            {"demo-gauntlet-d", "GAUNTLET.LVL", 4}, {"demo-treasure-e", "TREASURE.LVL", 4}, {"demo-islands-f", "ISLANDS.LVL", 4},
-            {"demo-ISLANDS-3p-g", "ISLANDS.LVL", 3}, {"demo-tiny-2p-h", "TINY.LVL", 2},                                // whatever the case, and with the players word
+            {"", 4, "TREASURE.LVL"}, {"", 2, "TREASURE.LVL"},                       // no name: the default map
+            {"BIG-FUN.LVL", 4, "TREASURE.LVL"},                                      // a name that the stack does not list: the default map
+            {"TINY.LVL", 4, "TINY.LVL"}, {"small.lvl", 4, "SMALL.LVL"}, {"MEDIUM.LVL", 4, "MEDIUM.LVL"},      // a map of the page's six: that map
+            {"GAUNTLET.LVL", 4, "GAUNTLET.LVL"}, {"Treasure.LVL", 4, "TREASURE.LVL"}, {"islands.lvl", 4, "ISLANDS.LVL"},
+            {"ISLANDS.LVL", 3, "ISLANDS.LVL"}, {"TINY.LVL", 2, "TINY.LVL"},          // with the seats
         };
         for (const Case& c : cases) {
-            const RoomStatus st = made(c.code);
-            ASSERT_MSG(st.map == c.map, c.code);
-            ASSERT_MSG(static_cast<int>(st.expected) == c.players, c.code);
+            const RoomStatus st = made(block_of(c.map, c.seats));
+            ASSERT_MSG(st.map == c.expect, std::string(c.map) + " " + std::to_string(c.seats));
+            ASSERT_MSG(st.expected == c.seats, std::string(c.map) + " " + std::to_string(c.seats));
         }
         ASSERT_EQ(w.mgr.room_count(), sizeof(cases) / sizeof(cases[0]));
     } TEST_END();
 
-    TEST_CASE("S3.25 Friends Who Come Late: A Demo Room Waits Ten Minutes By Default; A Code Whose Demo Room Is Over Makes A New One (Its End Is Still Reported); A Room Of The Control Interface That Is Over Answers \"No Such Room\", Not \"Match Running\"") {
+    TEST_CASE("S3.25 Friends Who Come Late: A Public Room Waits Ten Minutes By Default; A Code Whose Public Room Is Over Makes A New One When The Hello Brings A Block (Its End Is Still Reported), And Is \"No Such Room\" When It Does Not; A Room Of The Control Interface That Is Over Answers \"No Such Room\", Not \"Match Running\", Block Or Not") {
         ASSERT_EQ(ServerLimits().demo_wait_ms, 600000u);
         ServerLimits limits;
         limits.demo_rooms = 4;
@@ -1430,38 +1617,46 @@ void run_demo_tests() {
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL"};
         {
             World w(limits);                                                          // the default wait: a friend can come after a minute
-            w.connect("Host", "demo-small-2p-slow");
+            w.connect_creating("Host", "slow0001", block_of("SMALL.LVL", 2));
             w.run(61000);
-            ASSERT_TRUE(w.status("demo-small-2p-slow").state == RoomState::Waiting);
-            Client& friend_ = w.connect("Friend", "demo-small-2p-slow");
+            ASSERT_TRUE(w.status("slow0001").state == RoomState::Waiting);
+            Client& friend_ = w.connect("Friend", "slow0001");
             w.run(800);
             ASSERT_EQ(friend_.lobby->my_seat(), 1);
-            ASSERT_TRUE(w.status("demo-small-2p-slow").state == RoomState::Loading || w.status("demo-small-2p-slow").state == RoomState::Running);
+            ASSERT_TRUE(w.status("slow0001").state == RoomState::Loading || w.status("slow0001").state == RoomState::Running);
         }
         ServerLimits short_wait = limits;
         short_wait.demo_wait_ms = 60000;
         World w(short_wait);
-        Client& host = w.connect("Host", "demo-small-2p-late");
+        Client& host = w.connect_creating("Host", "late0001", block_of("SMALL.LVL", 2));
         w.run(61000);                                                                 // nobody came in time: the room failed
-        ASSERT_TRUE(w.status("demo-small-2p-late").state == RoomState::Failed);
+        ASSERT_TRUE(w.status("late0001").state == RoomState::Failed);
         ASSERT_TRUE(host.lobby->phase() != net::ClientLobby::Phase::InRoom);
-        Client& late = w.connect("Late", "demo-small-2p-late");                       // within the 30 s of keep time: a new room at once, not "match running"
+        Client& plain = w.connect("Plain", "late0001");                               // within the 30 s of keep time, a Hello without a block: the room is over, nothing is made
+        w.run(300);
+        ASSERT_TRUE(plain.lobby->phase() == net::ClientLobby::Phase::Rejected);
+        ASSERT_EQ(plain.lobby->reject_reason(), net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.status("late0001").state == RoomState::Failed);
+        Client& late = w.connect_creating("Late", "late0001", block_of("SMALL.LVL", 2));       // ... and one with the block (the link carries it): a new room at once, not "match running"
         w.run(300);
         ASSERT_EQ(late.lobby->phase(), net::ClientLobby::Phase::InRoom);
-        ASSERT_TRUE(w.status("demo-small-2p-late").state == RoomState::Waiting);
-        ASSERT_EQ(static_cast<int>(w.status("demo-small-2p-late").joined), 1);
-        ASSERT_EQ(w.status("demo-small-2p-late").map, std::string("SMALL.LVL"));
+        ASSERT_TRUE(w.status("late0001").state == RoomState::Waiting);
+        ASSERT_EQ(static_cast<int>(w.status("late0001").joined), 1);
+        ASSERT_EQ(w.status("late0001").map, std::string("SMALL.LVL"));
         bool reported = false;
-        for (const RoomStatus& st : w.mgr.take_ended(w.now)) reported = reported || (st.code == "demo-small-2p-late" && st.state == RoomState::Failed);
+        for (const RoomStatus& st : w.mgr.take_ended(w.now)) reported = reported || (st.code == "late0001" && st.state == RoomState::Failed);
         ASSERT_TRUE(reported);                                                        // the old room's end is not lost
-        // a room of the control interface that is over is not replaced: "no such room"
+        // a room of the control interface that is over is not replaced: "no such room", with a block too
         ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-1", 2), w.now).ok);
         ASSERT_TRUE(w.mgr.close_room("CTL-1", w.now));
         ASSERT_TRUE(w.status("CTL-1").state == RoomState::Failed);
         Client& too_late = w.connect("TooLate", "CTL-1");
+        Client& too_late_block = w.connect_creating("TooLate2", "CTL-1", block_of());
         w.run(300);
         ASSERT_TRUE(too_late.lobby->phase() == net::ClientLobby::Phase::Rejected);
         ASSERT_EQ(too_late.lobby->reject_reason(), net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(too_late_block.lobby->phase() == net::ClientLobby::Phase::Rejected);
+        ASSERT_EQ(too_late_block.lobby->reject_reason(), net::RejectReason::NoSuchRoom);
         ASSERT_TRUE(w.status("CTL-1").state == RoomState::Failed);
     } TEST_END();
 }
@@ -1935,7 +2130,7 @@ void run_leader_tests() {
         ASSERT_EQ(ann.sim.current_tick(), bob.sim.current_tick());
     } TEST_END();
 
-    TEST_CASE("S3.26b The Leader Moves The Colours (Protocol 14) In A Real Room: Bob Is Put In Black And Cat In Red, Everybody Is Told, The Status Shows The Seats And The Counts, The Match Runs With The Seats As They Are Now (Each Client Plays The Colour It Was Moved To) And The Clients Agree With The Referee; A Player Who Is Not The Leader Moves Nobody; A Press After The Start Is Ignored And Counted") {
+    TEST_CASE("S3.26b The Leader Moves The Colours (Protocol 14, The Swap And The Guard Of 15) In A Real Room: Cat And Bob Change Places And Bob Is Put In Black, Everybody Who Moved Is Told, The Status Shows The Seats And The Counts, The Match Runs With The Seats As They Are Now (Each Client Plays The Colour It Was Moved To) And The Clients Agree With The Referee; A Player Who Is Not The Leader Moves Nobody, Nor Does A Press That Was Made For Other Seats; A Press After The Start Is Ignored And Counted") {
         World w;
         ASSERT_TRUE(w.mgr.create_room(spec_of("MOVE-1", 4), w.now).ok);
         Client& ann = w.connect("Ann", "MOVE-1");
@@ -1950,22 +2145,27 @@ void run_leader_tests() {
         ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty());
         ASSERT_TRUE(s.seat_moves == 0 && s.ignored_seat_moves == 0);
         // Bob does not lead: a press of his (a client that is not the game's) is ignored and counted, and nobody moves
-        bob.end->send(net::encode(net::SeatMoveMsg{2, 3}));
+        bob.end->send(net::encode(net::SeatMoveMsg{2, 3, net::seating_hash(bob.lobby->room())}));
         w.run(500);
         s = w.status("MOVE-1");
         ASSERT_TRUE(s.names[1] == "Bob" && s.names[2] == "Cat" && s.names[3].empty() && s.seat_moves == 0 && s.ignored_seat_moves == 1);
         ASSERT_EQ(bob.lobby->phase(), net::ClientLobby::Phase::InRoom);
         for (Client* c : {&ann, &bob, &cat}) c->room_chat.clear();
-        // the leader's press on a colour that a player holds (Cat onto Bob) is ignored and counted: nobody is displaced, nobody is told
-        ASSERT_TRUE(ann.lobby->request_seat_move(2, 1));
+        // the leader's press that was made for other seats than these (a guard that is not the room's) is ignored and counted: nobody is displaced, nobody is told
+        ann.end->send(net::encode(net::SeatMoveMsg{2, 1, net::seating_hash(ann.lobby->room()) ^ 0x5A5A5A5Au}));
         w.run(500);
         s = w.status("MOVE-1");
         ASSERT_TRUE(s.names[1] == "Bob" && s.names[2] == "Cat" && s.seat_moves == 0 && s.ignored_seat_moves == 2);
         ASSERT_TRUE(ann.room_chat.empty() && bob.room_chat.empty() && cat.room_chat.empty());
-        // Ann puts Bob (red) in black (nobody holds it), then Cat (blue) in red (free now)
-        ASSERT_TRUE(ann.lobby->request_seat_move(1, 3));
-        w.run(300);
+        // Ann puts Cat (blue) onto Bob's colour (red): the two change places and both are told; then Bob (blue now) in black (nobody holds it)
         ASSERT_TRUE(ann.lobby->request_seat_move(2, 1));
+        w.run(500);
+        s = w.status("MOVE-1");
+        ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Cat" && s.names[2] == "Bob" && s.names[3].empty() && s.seat_moves == 1 && s.ignored_seat_moves == 2);
+        ASSERT_TRUE(cat.lobby->my_seat() == 1 && bob.lobby->my_seat() == 2);
+        ASSERT_TRUE(bob.room_chat.size() == 1 && bob.room_chat[0].notice() && bob.room_chat[0].text == "Ann moved you to Blue.");
+        ASSERT_TRUE(cat.room_chat.size() == 1 && cat.room_chat[0].notice() && cat.room_chat[0].text == "Ann moved you to Red.");
+        ASSERT_TRUE(ann.lobby->request_seat_move(2, 3));
         w.run(500);
         s = w.status("MOVE-1");
         ASSERT_TRUE(s.state == RoomState::Waiting && s.joined == 3 && s.leader == 0);
@@ -1977,7 +2177,7 @@ void run_leader_tests() {
             ASSERT_TRUE(c->lobby->room().slots[2].state == net::SlotState::Empty && c->lobby->room().leader == 0);
         }
         ASSERT_TRUE(ann.room_chat.empty());                                                // the leader is told nothing
-        ASSERT_TRUE(bob.room_chat.size() == 1 && bob.room_chat[0].notice() && bob.room_chat[0].text == "Ann moved you to Black.");
+        ASSERT_TRUE(bob.room_chat.size() == 2 && bob.room_chat[1].notice() && bob.room_chat[1].text == "Ann moved you to Black.");      // (Bob's first notice is the swap's)
         ASSERT_TRUE(cat.room_chat.size() == 1 && cat.room_chat[0].notice() && cat.room_chat[0].text == "Ann moved you to Red.");
         // the match starts from the seats as they are now
         ASSERT_TRUE(ann.lobby->request_start());
@@ -1989,7 +2189,7 @@ void run_leader_tests() {
         ASSERT_TRUE(ann.session != nullptr && bob.session != nullptr && cat.session != nullptr);
         ASSERT_TRUE(ann.session->player() == 0 && cat.session->player() == 1 && bob.session->player() == 3);              // each client plays the colour it was moved to
         // the leader's press that crossed the Start: the running match ignores it and counts it, and the match is as it was
-        ann.end->send(net::encode(net::SeatMoveMsg{3, 2}));
+        ann.end->send(net::encode(net::SeatMoveMsg{3, 2, net::seating_hash(ann.lobby->room())}));
         w.run(500);
         ASSERT_EQ(w.status("MOVE-1").ignored_seat_moves, 3u);
         ASSERT_TRUE(w.status("MOVE-1").state == RoomState::Running && ann.session != nullptr && !ann.lost && !bob.lost && !cat.lost);
@@ -2095,6 +2295,22 @@ void run_leader_tests() {
             w.connect("Cat", "NOEARLY-1");                                                // the third seat: it starts by itself, as ever
             w.run(1500);
             ASSERT_TRUE(w.status("NOEARLY-1").state == RoomState::Running);
+        }
+        {   // protocol 15's rule that a full room waits for its leader needs a leader: a room that allows no early start has none, so the rule is no rule there (not told, not shown) and the full room starts by itself
+            World w;
+            RoomSpec spec = spec_of("NOLEAD-1", 3);
+            spec.early_start = false;
+            spec.leader_starts = true;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "NOLEAD-1");
+            w.connect("Bob", "NOLEAD-1");
+            w.run(500);
+            const RoomStatus s = w.status("NOLEAD-1");
+            ASSERT_TRUE(!s.early_start && s.leader == 255 && !s.leader_starts);
+            ASSERT_TRUE(!ann.lobby->room().leader_starts() && !ann.lobby->is_leader());
+            w.connect("Cat", "NOLEAD-1");
+            w.run(1500);
+            ASSERT_TRUE(w.status("NOLEAD-1").state == RoomState::Running);
         }
         {   // every seat taken: the room starts by itself, nobody has to ask (and nothing is counted)
             World w;
@@ -2243,7 +2459,7 @@ void run_leader_tests() {
         fs::remove_all(dir, ignore);
     } TEST_END();
 
-    TEST_CASE("S3.30 The Control Interface Knows The Early Start: early_start Goes In And Comes Out (On By Default; A Wrong Type Is A 400), The Status Names The Leader And Counts The Requests That Were Ignored; Demo Rooms Have It On And Their Leader Starts Them") {
+    TEST_CASE("S3.30 The Control Interface Knows The Early Start: early_start Goes In And Comes Out (On By Default; A Wrong Type Is A 400), The Status Names The Leader And Counts The Requests That Were Ignored; Public Rooms Have It On And Their Leader Starts Them") {
         ServerLimits limits;
         limits.demo_rooms = 2;
         limits.demo_map = "TINY.LVL";
@@ -2297,7 +2513,7 @@ void run_leader_tests() {
         bob.end->send(net::encode(net::StartRequestMsg{}));
         w.run(500);
         ASSERT_EQ(json_of(call("GET", "/rooms/J-1")).get("ignored_start_requests").as_int_or(0), 1);
-        bob.end->send(net::encode(net::SeatMoveMsg{1, 3}));                               // the same for a move: Bob does not lead, the press is counted and nobody moves
+        bob.end->send(net::encode(net::SeatMoveMsg{1, 3, net::seating_hash(bob.lobby->room())}));       // the same for a move: Bob does not lead, the press is counted and nobody moves
         w.run(500);
         v = json_of(call("GET", "/rooms/J-1"));
         ASSERT_TRUE(v.get("ignored_seat_moves").as_int_or(0) == 1 && v.get("seat_moves").as_int_or(9) == 0 && v.get("players").size() == 2);
@@ -2320,17 +2536,17 @@ void run_leader_tests() {
         v = json_of(call("GET", "/rooms/J-2"));
         ASSERT_TRUE(v.get("leader").is_null() && !v.get("early_start").as_bool_or(true) && v.get("joined").as_int_or(0) == 2);
         ASSERT_FALSE(cat.lobby->is_leader());
-        // a demo room has the early start on, and its leader can start it
-        Client& eve = w.connect("Eve", "demo-small-4p-x1");
+        // a public room has the early start on, and its leader can start it
+        Client& eve = w.connect_creating("Eve", "early0001", block_of("", 4));
         w.run(100);                                                                       // (Eve is first: the Hellos of two connections made in one tick arrive in either order, by the links' jitter)
-        w.connect("Fay", "demo-small-4p-x1");
+        w.connect("Fay", "early0001");
         w.run(500);
-        v = json_of(call("GET", "/rooms/demo-small-4p-x1"));
+        v = json_of(call("GET", "/rooms/early0001"));
         ASSERT_TRUE(v.get("early_start").as_bool_or(false) && v.get("leader").as_int_or(9) == 0 && v.get("state").str() == "waiting");
         ASSERT_TRUE(eve.lobby->is_leader());
         ASSERT_TRUE(eve.lobby->request_start());
         w.run(1500);
-        ASSERT_TRUE(json_of(call("GET", "/rooms/demo-small-4p-x1")).get("state").str() == "running");
+        ASSERT_TRUE(json_of(call("GET", "/rooms/early0001")).get("state").str() == "running");
     } TEST_END();
 
     TEST_CASE("S3.31 Over Real Sockets: The Leader Of A Room For Four Starts It With Two Players, Both Play Bit-Identically") {
@@ -2341,14 +2557,6 @@ void run_leader_tests() {
         ASSERT_TRUE(mgr.create_room(spec_of("SOCK-4", 4), now).ok);
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<std::unique_ptr<net::TcpConnection>> links;
-        for (const char* name : {"Ann", "Bob"}) {
-            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
-            ASSERT_TRUE(links.back() != nullptr);
-            clients.push_back(std::make_unique<Client>());
-            clients.back()->name = name;
-            clients.back()->room = "SOCK-4";
-            clients.back()->start(links.back().get(), 55u);
-        }
         const auto pump = [&]() {
             now += 10;
             for (int k = 0; k < 4; ++k) {
@@ -2360,6 +2568,16 @@ void run_leader_tests() {
             for (auto& c : clients) c->update(now, maps_dir());
             std::this_thread::sleep_for(std::chrono::microseconds(200));
         };
+        for (const char* name : {"Ann", "Bob"}) {
+            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(links.back() != nullptr);
+            clients.push_back(std::make_unique<Client>());
+            clients.back()->name = name;
+            clients.back()->room = "SOCK-4";
+            clients.back()->start(links.back().get(), 55u);
+            // Ann is in, and the leader, before Bob connects: two Hellos sent at once over two sockets can be read in either order (a Mac's loopback is handed over by a kernel thread), and the first one in is the leader
+            for (int i = 0; i < 3000 && !clients[0]->lobby->is_leader(); ++i) pump();
+        }
         for (int i = 0; i < 3000; ++i) {                                                  // both are in the room (the room waits for four)
             pump();
             RoomStatus s;
@@ -2419,7 +2637,7 @@ void run_control_tests() {
         r = call("POST", "/rooms", R"({"map":"SMALL.LVL"})");                           // the code is drawn
         ASSERT_EQ(r.status, 201);
         const std::string drawn = json_of(r).get("code").str();
-        ASSERT_TRUE(drawn.size() == 8 && net::valid_room_code(drawn));
+        ASSERT_TRUE(drawn.size() == kDrawnRoomCodeChars && net::valid_room_code(drawn));
         r = call("GET", "/rooms");
         ASSERT_TRUE(r.status == 200 && json_of(r).get("rooms").size() == 2);
         r = call("GET", "/stats");
@@ -3630,7 +3848,7 @@ void run_reconnect_tests() {
         ASSERT_TRUE(captured.str().empty());                                              // the server code writes nothing to stderr
     } TEST_END();
 
-    TEST_CASE("S3.47 The Reconnect Settings Of A Room And Of The Server: The Control Interface Takes \"reconnect\", \"hold_vote_seconds\" (5 - 3600) And \"max_pause_seconds\" (60 - 86400) And Refuses What Is Outside Or Of Another Kind; A Body Without Them Gets The Server's Defaults (Hold Seats Unless --no-reconnect, --hold-vote-seconds, --max-pause-seconds); create_room Checks The Bounds Too; Demo Rooms Follow The Server's Setting") {
+    TEST_CASE("S3.47 The Reconnect Settings Of A Room And Of The Server: The Control Interface Takes \"reconnect\", \"hold_vote_seconds\" (5 - 3600) And \"max_pause_seconds\" (60 - 86400) And Refuses What Is Outside Or Of Another Kind; A Body Without Them Gets The Server's Defaults (Hold Seats Unless --no-reconnect, --hold-vote-seconds, --max-pause-seconds); create_room Checks The Bounds Too; Public Rooms Follow The Server's Setting") {
         {
             RoomManager mgr{MapStore(maps_dir())};
             const auto call = [&](const std::string& body) {
@@ -3735,17 +3953,17 @@ void run_reconnect_tests() {
             ASSERT_TRUE(made("B-7", [](RoomSpec& s) { s.vote_after_ms = 5000; s.max_pause_ms = 60000; s.max_log_bytes = 1024; }).ok);
             ASSERT_TRUE(made("B-8", [](RoomSpec& s) { s.vote_after_ms = 3600000; s.max_pause_ms = 86400000; s.max_log_bytes = size_t{1} << 30; }).ok);
         }
-        {   // demo rooms follow the server's setting: keys in the Welcome (or none), and the status says so
+        {   // public rooms follow the server's setting: keys in the Welcome (or none), and the status says so
             for (const bool hold : {false, true}) {
                 ServerLimits limits;
                 limits.demo_rooms = 2;
                 limits.demo_map = "TINY.LVL";
                 limits.reconnect = hold;
                 RWorld w(limits);
-                RClient& a = w.connect("Ann", "demo-tiny-2p-held");
-                RClient& b = w.connect("Bob", "demo-tiny-2p-held");
+                RClient& a = w.connect_creating("Ann", "held0001", block_of("", 2));
+                RClient& b = w.connect("Bob", "held0001");
                 w.run(4000 + kPre);
-                const RoomStatus s = w.status("demo-tiny-2p-held");
+                const RoomStatus s = w.status("held0001");
                 ASSERT_TRUE(s.state == RoomState::Running && s.reconnect == hold);
                 ASSERT_EQ(!net::key_is_zero(a.lobby->key()) && !net::key_is_zero(b.lobby->key()), hold);
                 ASSERT_EQ(net::key_is_zero(a.lobby->key()) && net::key_is_zero(b.lobby->key()), !hold);
@@ -4897,7 +5115,7 @@ void run_bot_tests() {
                 ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
             }
         }
-        {   // only the leader's request counts: a guest's StartRequest with teams is ignored altogether; a room that names no teams of its own and fills up starts by itself with none (S3.129: a room whose code names them has them)
+        {   // only the leader's request counts: a guest's StartRequest with teams is ignored altogether; a room that names no teams of its own and fills up starts by itself with none (S3.129: a room whose create block names them has them)
             World w;
             ASSERT_TRUE(w.mgr.create_room(spec_of("TM-6", 4), w.now).ok);
             Client& ann = w.connect("Ann", "TM-6");
@@ -4949,7 +5167,7 @@ void run_bot_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.129 Protocol 13, The Room's Own Teams (Its Code Names Them: demo-tiny-4p-t01-<random>): A Room That Fills With People Starts By Itself WITH The Teams On Every Engine And The Referee's Own, Before The First Tick; So Does An Early START Whose Request Names No Teams; The Room's Teams Win Over A Leader's Request (Even When The Room's Cannot Be Made: It Starts Without Teams And Says Why, Once, To Everybody); A Word That The Room's Seats Cannot Make (A Seat That Does Not Play, A Room Of Two) Says So At The Start; The Code's Reading, Edge By Edge") {
+    TEST_CASE("S3.129 Protocol 13, The Room's Own Teams (Its Create Block Names Them, Protocol 15): A Room That Fills With People Starts By Itself WITH The Teams On Every Engine And The Referee's Own, Before The First Tick; So Does An Early START Whose Request Names No Teams; The Room's Teams Win Over A Leader's Request (Even When The Room's Cannot Be Made: It Starts Without Teams And Says Why, Once, To Everybody); A Pair That The Room's Seats Cannot Make (A Seat That Does Not Play, A Room Of Two) Says So At The Start; What A Block May Name, Edge By Edge") {
         using net::FillLevel;
         const auto allies_text = [](const std::array<uint8_t, 4>& a) {
             std::string out;
@@ -4965,17 +5183,19 @@ void run_bot_tests() {
         limits.demo_rooms = 40;
         limits.demo_map = "TINY.LVL";
         limits.demo_maps = {"TINY.LVL", "SMALL.LVL"};
-        {   // four people fill a room whose code names 0 + 1: it starts by itself, nobody pressed START, nobody asked for teams
+        {   // four people fill a room whose block names 0 + 1: it starts by itself, nobody pressed START, nobody asked for teams
             World w(limits);
-            const std::string code = "demo-tiny-4p-t01-aaaaaa";
-            Client& ann = w.connect("Ann", code);
+            const std::string code = "aaaaaaaa";
+            Client& ann = w.connect_creating("Ann", code, block_of("TINY.LVL", 4, 0, 1));
             w.run(300);
             RoomStatus s = w.status(code);
-            ASSERT_TRUE(s.state == RoomState::Waiting && s.expected == 4 && s.room_teams == "0+1" && s.teams.empty());     // (the room has them from its code: before anybody asks)
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.expected == 4 && s.room_teams == "0+1" && s.teams.empty());     // (the room has them from its block: before anybody asks)
+            ASSERT_TRUE(ann.lobby->room().teams() == sim::StartTeams({true, 0, 1}));              // (and says so in the Room message, to its first player ...)
             Client& bob = w.connect("Bob", code);
             Client& cat = w.connect("Cat", code);
             w.run(300);
             ASSERT_TRUE(w.status(code).state == RoomState::Waiting && w.status(code).joined == 3);
+            ASSERT_TRUE(bob.lobby->room().teams() == sim::StartTeams({true, 0, 1}) && cat.lobby->room().teams() == sim::StartTeams({true, 0, 1}));      // (... and to those who come after)
             Client& dan = w.connect("Dan", code);                                                // the room is full now
             w.run(2500);
             s = w.status(code);
@@ -4995,18 +5215,21 @@ void run_bot_tests() {
             for (Client* c : {&ann, &bob, &cat, &dan}) ASSERT_TRUE(!c->session->desynced() && !c->lost);
             ASSERT_EQ(allies_text(s.allies), std::string("1032"));
         }
-        {   // the other words of a four-player room, and a room of three: each makes its own pair (the other seats as a team when both play)
-            struct Case { const char* code; uint8_t players; const char* teams; const char* allies; };
+        {   // the other pairs of a four-player room, and a room of three: each makes its own pair (the other seats as a team when both play)
+            struct Case { const char* code; uint8_t players; uint8_t a; uint8_t b; const char* teams; const char* allies; };
             const Case cases[] = {
-                {"demo-tiny-4p-t02-bbbbbb", 4, "0+2", "2301"},
-                {"demo-tiny-4p-t03-cccccc", 4, "0+3", "3210"},
-                {"demo-tiny-3p-t12-dddddd", 3, "1+2", "4214"},                                     // seat 0 plays alone
-                {"demo-tiny-3p-T01-eeeeee", 3, "0+1", "1044"},                                     // (any case of the word) seat 2 plays alone
+                {"bbbbbbbb", 4, 0, 2, "0+2", "2301"},
+                {"cccccccc", 4, 0, 3, "0+3", "3210"},
+                {"dddddddd", 3, 1, 2, "1+2", "4214"},                                              // seat 0 plays alone
+                {"eeeeeeee", 3, 0, 1, "0+1", "1044"},                                              // seat 2 plays alone
             };
             for (const Case& c : cases) {
                 World w(limits);
                 std::vector<Client*> people;
-                for (uint8_t i = 0; i < c.players; ++i) people.push_back(&w.connect(std::string("P") + std::to_string(i), c.code));
+                for (uint8_t i = 0; i < c.players; ++i) {
+                    const std::string name = std::string("P") + std::to_string(i);
+                    people.push_back(i == 0 ? &w.connect_creating(name, c.code, block_of("TINY.LVL", c.players, c.a, c.b)) : &w.connect(name, c.code));
+                }
                 w.run(3500);
                 const RoomStatus s = w.status(c.code);
                 ASSERT_MSG(s.state == RoomState::Running && s.joined == c.players && s.teams == c.teams && s.room_teams == c.teams, c.code);
@@ -5018,8 +5241,8 @@ void run_bot_tests() {
         }
         {   // an early START: three people and a leader whose request names no teams: the room's teams are made for the seats that play (seat 2 plays alone), no notice
             World w(limits);
-            const std::string code = "demo-tiny-4p-t01-ffffff";
-            Client& ann = w.connect("Ann", code);
+            const std::string code = "ffffffff";
+            Client& ann = w.connect_creating("Ann", code, block_of("TINY.LVL", 4, 0, 1));
             Client& bob = w.connect("Bob", code);
             Client& cat = w.connect("Cat", code);
             w.run(600);
@@ -5038,8 +5261,8 @@ void run_bot_tests() {
         }
         {   // an early START with a bot that the leader seated: the same teams, now for four seats
             World w(limits);
-            const std::string code = "demo-tiny-4p-t01-gggggg";
-            Client& ann = w.connect("Ann", code);
+            const std::string code = "gggggggg";
+            Client& ann = w.connect_creating("Ann", code, block_of("TINY.LVL", 4, 0, 1));
             Client& bob = w.connect("Bob", code);
             Client& cat = w.connect("Cat", code);
             w.run(600);
@@ -5053,10 +5276,10 @@ void run_bot_tests() {
                 ASSERT_TRUE(said(c->room_chat).empty());
             }
         }
-        {   // precedence: the leader's request names 1 + 2, the room's code 0 + 1: the room's
+        {   // precedence: the leader's request names 1 + 2, the room's block 0 + 1: the room's
             World w(limits);
-            const std::string code = "demo-tiny-4p-t01-hhhhhh";
-            Client& ann = w.connect("Ann", code);
+            const std::string code = "hhhhhhhh";
+            Client& ann = w.connect_creating("Ann", code, block_of("TINY.LVL", 4, 0, 1));
             Client& bob = w.connect("Bob", code);
             Client& cat = w.connect("Cat", code);
             w.run(600);
@@ -5069,10 +5292,10 @@ void run_bot_tests() {
                 ASSERT_EQ(engine_allies(c->sim), std::string("1044"));
                 ASSERT_TRUE(said(c->room_chat).empty());
             }
-            // ... and the same request in a room whose code names none is what it always was (S3.126): the leader's pair
+            // ... and the same request in a room whose block names none is what it always was (S3.126): the leader's pair
             World v(limits);
-            const std::string plain = "demo-tiny-4p-iiiiii";
-            Client& dan = v.connect("Dan", plain);
+            const std::string plain = "iiiiiiii";
+            Client& dan = v.connect_creating("Dan", plain, block_of("TINY.LVL", 4));
             Client& eve = v.connect("Eve", plain);
             Client& fay = v.connect("Fay", plain);
             v.run(600);
@@ -5085,8 +5308,8 @@ void run_bot_tests() {
         }
         {   // the room's teams that its seats cannot make stay the room's: the match starts WITHOUT teams (never with the request's), and everybody in the room is told why, once
             World w(limits);
-            const std::string code = "demo-tiny-4p-t03-jjjjjj";                                    // seat 3 would be the other half of the team
-            Client& ann = w.connect("Ann", code);
+            const std::string code = "jjjjjjjj";                                                   // seat 3 would be the other half of the team
+            Client& ann = w.connect_creating("Ann", code, block_of("TINY.LVL", 4, 0, 3));
             Client& bob = w.connect("Bob", code);
             Client& cat = w.connect("Cat", code);
             w.run(600);
@@ -5102,17 +5325,18 @@ void run_bot_tests() {
                 ASSERT_TRUE(c->lobby->start_info().team_a == net::kNoTeam && c->lobby->start_info().team_b == net::kNoTeam);
             }
         }
-        {   // a word that the room's seats cannot make, and nobody asked for anything: a room of three that names seat 3, and a room of two that names a team of both
+        {   // a pair that the room's seats cannot make, and nobody asked for anything: a room of three that names seat 3, and a room of two that names a team of both
             World w(limits);
-            const std::string three = "demo-tiny-3p-t03-kkkkkk";
+            const std::string three = "kkkkkkkk";
             std::vector<Client*> people;
-            for (const char* name : {"Ann", "Bob", "Cat"}) people.push_back(&w.connect(name, three));
+            people.push_back(&w.connect_creating("Ann", three, block_of("TINY.LVL", 3, 0, 3)));
+            for (const char* name : {"Bob", "Cat"}) people.push_back(&w.connect(name, three));
             w.run(3500);
             RoomStatus s = w.status(three);
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.teams == "ffa" && s.room_teams == "0+3" && allies_text(s.allies) == "4444");
             for (Client* c : people) ASSERT_EQ(said(c->room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoTeams + "Black does not play in this match."}));
-            const std::string two = "demo-tiny-2p-t01-llllll";
-            Client& dan = w.connect("Dan", two);
+            const std::string two = "llllllll";
+            Client& dan = w.connect_creating("Dan", two, block_of("TINY.LVL", 2, 0, 1));
             Client& eve = w.connect("Eve", two);
             w.run(3500);
             s = w.status(two);
@@ -5122,7 +5346,7 @@ void run_bot_tests() {
             ASSERT_EQ(said(eve.room_chat), (std::vector<std::string>{notice}));
         }
         {   // a room without early start has no leader: a StartRequest with teams (raw: no client lobby sends one there) counts for nothing, and the room that fills up in the same pass starts by itself
-            // with no teams when it names none, and with its own when it names some (a room's own teams do not depend on a leader, nor on the code: they are its specification)
+            // with no teams when it names none, and with its own when it names some (a room's own teams do not depend on a leader, nor on a block: they are its specification)
             for (const bool own : {false, true}) {
                 World w;
                 RoomSpec spec = spec_of(own ? "TM-10" : "TM-9", 4);
@@ -5149,32 +5373,33 @@ void run_bot_tests() {
                 }
             }
         }
-        {   // the code's reading, edge by edge (one Hello makes each room; the room says what it read)
+        {   // what a block may name, edge by edge (one Hello makes each room; the room says what it read)
             World w(limits);
-            struct Case { const char* code; const char* teams; int players; };
+            struct Case { const char* code; const char* map; uint8_t seats; uint8_t a; uint8_t b; const char* teams; };
             const Case cases[] = {
-                {"demo-tiny-4p-mmmmmm", "", 4},                                                    // no word: what a code always meant
-                {"demo-tiny-2p-nnnnnn", "", 2},
-                {"demo-nnnnnn", "", 4},
-                {"demo-tiny-4p-t10-oooooo", "", 4},                                                // the lower seat first: this is no word
-                {"demo-tiny-4p-t11-pppppp", "", 4},
-                {"demo-tiny-4p-t04-qqqqqq", "", 4},                                                // a seat that no match has
-                {"demo-tiny-4p-t0-rrrrrr", "", 4},
-                {"demo-tiny-4p-t012-ssssss", "", 4},
-                {"demo-tiny-4p-xt01-tttttt", "", 4},
-                {"demo-t01-4p-uuuuuu", "", 4},                                                     // the first word is the map's, never a word of teams
-                {"demo-tiny-3p-t12-vvvvvv", "1+2", 3},
-                {"demo-tiny-t23-wwwwww", "2+3", 4},                                                // no player count in the code: the server's default (four) and the word are both read
-                {"demo-tiny-4p-t13", "1+3", 4},                                                    // the word may end the code
-                {"demo-small-4p-t01-t23-xxxxxx", "0+1", 4},                                        // the first word counts
-                {"demo-small-2p-t01-yyyyyy", "0+1", 2},                                            // a word in a room of two is read (the start says it cannot be)
+                {"mmmmmmmm", "TINY.LVL", 4, net::kNoTeam, net::kNoTeam, ""},                      // no teams: free for all
+                {"nnnnnnnn", "TINY.LVL", 2, net::kNoTeam, net::kNoTeam, ""},
+                {"oooooooo", "TINY.LVL", 3, 1, 2, "1+2"},
+                {"pppppppp", "TINY.LVL", 4, 2, 3, "2+3"},
+                {"qqqqqqqq", "TINY.LVL", 4, 1, 3, "1+3"},
+                {"rrrrrrrr", "SMALL.LVL", 4, 0, 1, "0+1"},
+                {"ssssssss", "SMALL.LVL", 2, 0, 1, "0+1"},                                         // a pair in a room of two is read (the start says it cannot be)
             };
             for (const Case& c : cases) {
-                w.connect("P", c.code);
+                w.connect_creating("P", c.code, block_of(c.map, c.seats, c.a, c.b));
                 w.run(300);
                 const RoomStatus st = w.status(c.code);
-                ASSERT_MSG(st.state == RoomState::Waiting && st.room_teams == c.teams && static_cast<int>(st.expected) == c.players, c.code);
+                ASSERT_MSG(st.state == RoomState::Waiting && st.room_teams == c.teams && st.expected == c.seats, c.code);
             }
+            // a block that no honest client sends is no block (the lobby leaves it out, the Hello joins: no room is made)
+            struct Bad { const char* code; uint8_t a; uint8_t b; };
+            const Bad bad[] = {{"tttttttt", 1, 0}, {"uuuuuuuu", 1, 1}, {"vvvvvvvv", 0, 4}, {"wwwwwwww", 0, net::kNoTeam}, {"xxxxxxxx", net::kNoTeam, 2}, {"yyyyyyyy", 4, 5}};
+            for (const Bad& c : bad) {
+                w.connect_creating("P", c.code, block_of("TINY.LVL", 4, c.a, c.b));
+                w.run(300);
+                ASSERT_MSG(w.status(c.code).map.empty(), c.code);
+            }
+            ASSERT_EQ(w.mgr.room_count(), sizeof(cases) / sizeof(cases[0]));
         }
     } TEST_END();
 
@@ -5463,15 +5688,6 @@ void run_bot_tests() {
         ASSERT_TRUE(mgr.create_room(spec_of("SOCK-5", 4), now).ok);
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<std::unique_ptr<net::TcpConnection>> links;
-        for (const char* name : {"Ann", "Bob"}) {
-            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
-            ASSERT_TRUE(links.back() != nullptr);
-            clients.push_back(std::make_unique<Client>());
-            clients.back()->name = name;
-            clients.back()->room = "SOCK-5";
-            clients.back()->record_hashes = true;
-            clients.back()->start(links.back().get(), 77u);
-        }
         const auto pump = [&]() {
             now += 10;
             for (int k = 0; k < 4; ++k) {
@@ -5483,6 +5699,17 @@ void run_bot_tests() {
             for (auto& c : clients) c->update(now, maps_dir());
             std::this_thread::sleep_for(std::chrono::microseconds(200));
         };
+        for (const char* name : {"Ann", "Bob"}) {
+            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(links.back() != nullptr);
+            clients.push_back(std::make_unique<Client>());
+            clients.back()->name = name;
+            clients.back()->room = "SOCK-5";
+            clients.back()->record_hashes = true;
+            clients.back()->start(links.back().get(), 77u);
+            // Ann is in, and the leader, before Bob connects: two Hellos sent at once over two sockets can be read in either order (a Mac's loopback is handed over by a kernel thread), and the first one in is the leader
+            for (int i = 0; i < 3000 && !clients[0]->lobby->is_leader(); ++i) pump();
+        }
         for (int i = 0; i < 3000; ++i) {
             pump();
             RoomStatus s;
@@ -5710,11 +5937,11 @@ void run_bot_tests() {
         ASSERT_EQ(raw.size(), size_t{1});                                                    // and the raw client still only the line for all
     } TEST_END();
 
-    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves) Or 15 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
+    TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves), 14 (The Release Before The Create Block) Or 16 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{14});                  // (13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{15}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{15});                  // (14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{16}, uint16_t{1}, uint16_t{0}}) {
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;
@@ -5724,6 +5951,22 @@ void run_bot_tests() {
                 ends.second->send(net::encode(hello));
                 w.run(300);
                 ASSERT_EQ(reject_on(ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
+            }
+            {   // the very bytes that v0.10.0 sent (protocol 14 has no platform byte and no create block): the door reads the version and the name, answers, and never reads the rest
+                auto old_ends = w.net.connect({20, 10});
+                w.mgr.add_connection(std::make_unique<Borrowed>(old_ends.first), "127.0.0.1", w.now);
+                net::HelloMsg old;
+                old.version = 14;
+                old.name = "Old";
+                old.room = "NO-SUCH-ROOM";
+                std::vector<uint8_t> bytes = net::encode(old);
+                ASSERT_TRUE(!bytes.empty());
+                bytes.pop_back();                                                                // (the platform byte ends a Hello that has no block: what is left is the layout of 14)
+                net::HelloMsg again;
+                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 15 reader takes it for no Hello at all)
+                old_ends.second->send(bytes);
+                w.run(300);
+                ASSERT_EQ(reject_on(old_ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
             }
             auto ends = w.net.connect({20, 10});
             w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
@@ -6300,6 +6543,36 @@ void run_persist_tests() {
             ASSERT_TRUE(after != nullptr);
         }
 #endif
+    } TEST_END();
+
+    TEST_CASE("S3.82b The Flags Of A Head (Protocol 15): Fog, The Early Start And A Public Room Are Bits 0 - 2 Of One Byte And Read Back In Every Combination; Any Other Bit Is A Flag That This Build Does Not Know, And The Head Is Refused") {
+        const RestartHead sample = sample_head();
+        const std::vector<uint8_t> whole = encode_restart_head(sample);
+        const std::vector<uint8_t> payload(whole.begin() + 5, whole.end() - 4);                  // (type and length in front, the CRC behind)
+        // the flags byte comes after the format, the version, the protocol, the build, the code, the map, the map's hash and the players
+        const size_t at = 2 + 1 + sample.identity.game_version.size() + 2 + 1 + sample.identity.build_id.size() + 1 + sample.code.size() + 1 + sample.map.size() + 8 + 1;
+        ASSERT_TRUE(at < payload.size() && payload[at] == 2);                                    // (the sample has the early start only: the offset is right)
+        for (unsigned mask = 0; mask < 8; ++mask) {
+            RestartHead h = sample_head();
+            h.fog = (mask & 1u) != 0;
+            h.start.fog = h.fog;                                                                    // (the head's parts must agree: the Start in it is the room's, fog included)
+            h.early_start = (mask & 2u) != 0;
+            h.public_room = (mask & 4u) != 0;
+            const std::vector<uint8_t> frame = encode_restart_head(h);
+            ASSERT_TRUE(frame.size() == whole.size() && frame[5 + at] == mask);                  // the three flags are the three low bits
+            RestartHead read;
+            std::string why;
+            ASSERT_TRUE(decode_restart_head(frame.data() + 5, frame.size() - 9, read, why) && why.empty());
+            ASSERT_TRUE(same_head(read, h) && read.fog == h.fog && read.early_start == h.early_start && read.public_room == h.public_room);
+        }
+        for (const unsigned bit : {8u, 16u, 32u, 64u, 128u}) {
+            std::vector<uint8_t> changed = payload;
+            changed[at] = static_cast<uint8_t>(changed[at] | bit);
+            RestartHead read;
+            std::string why;
+            ASSERT_FALSE(decode_restart_head(changed.data(), changed.size(), read, why));
+            ASSERT_TRUE(why.find("flags that this build does not know") != std::string::npos);
+        }
     } TEST_END();
 
     TEST_CASE("S3.83 The Reader Is Safe With Anything: Every Prefix Of A Record Is Read As Far As It Is Whole (A Cut Inside The Head Is Refused, A Cut After It Is A Torn Tail); Every Flipped Bit In A Frame Is Either Refused Or Stops The Reading Early (Never Altered Turns); Garbage, Hostile Lengths, Repeated, Reordered And Misplaced Frames, A Second Head, A Checkpoint Of A Turn That Is Not There, Heads That Are Wrong In Each Field, A File That Is Too Big Or No File: All Refused With A Reason, None Crashes Or Allocates Without Bound (Runs Under AddressSanitizer)") {
@@ -7566,7 +7839,7 @@ void run_persist_server_tests_4() {
         ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // (the bots kept their teams to the end)
     } TEST_END();
 
-    TEST_CASE("S3.128 A Record Of Protocol 12 (Its Start Message Has No Team Bytes) Is Read As A Start Without Teams And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout That No Release Wrote (Protocol 11, 13 Or 14 With It) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
+    TEST_CASE("S3.128 A Record Of Protocol 12, 13 Or 14 (Its Start Message Lacks What Later Protocols Added: The Team Bytes, The Platform Bytes) Is Read As The Start That Its Release Wrote And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart (Run Through With A Record Of Protocol 12; The Parser Reads The Other Two The Same Way) It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout Under A Protocol That Did Not Write It (11, Or 13 Under 12, Or 15) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
         PWorld w("persist-126");
         w.start_server(500);
         const auto crash = [](PWorld& world, const char* code) {                               // a match that is played for a while, and a server that dies with its record
@@ -7580,14 +7853,15 @@ void run_persist_server_tests_4() {
         const RestartLoaded rec = parse_restart_record(bytes.data(), bytes.size());
         ASSERT_TRUE(rec.ok() && rec.head.start.team_a == net::kNoTeam && rec.head.identity.protocol == net::kProtocolVersion);
         const std::vector<uint8_t> start = net::encode(rec.head.start);                        // the Start inside the head, in this build's layout
-        // the record as protocol `protocol` with the old layout wrote it: the Start without its two team bytes (and its length in front of it), and the protocol in the identity
-        const auto old_layout = [&](uint16_t protocol) {
+        // the record as protocol `protocol` with the old layout wrote it: the Start without what later protocols added at its end (`lacking` bytes: protocol 12's has neither the two team bytes nor the four
+        // platform bytes of protocol 15, protocol 13's and 14's lack the platform bytes), its length in front of it, and the protocol in the identity
+        const auto old_layout = [&](uint16_t protocol, size_t lacking) {
             std::vector<uint8_t> payload(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].first + 5), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second - 4));
             const auto found = std::search(payload.begin(), payload.end(), start.begin(), start.end());
             if (found == payload.end()) throw std::runtime_error("the Start is not in the record's head");
             const size_t at = static_cast<size_t>(found - payload.begin());
-            payload.erase(payload.begin() + static_cast<std::ptrdiff_t>(at + start.size() - 2), payload.begin() + static_cast<std::ptrdiff_t>(at + start.size()));      // protocol 12's Start: the same bytes without the two team bytes ...
-            const uint16_t old_length = static_cast<uint16_t>(start.size() - 2);
+            payload.erase(payload.begin() + static_cast<std::ptrdiff_t>(at + start.size() - lacking), payload.begin() + static_cast<std::ptrdiff_t>(at + start.size()));      // the old Start: the same bytes without what came later ...
+            const uint16_t old_length = static_cast<uint16_t>(start.size() - lacking);
             payload[at - 2] = static_cast<uint8_t>(old_length & 0xFFu);                        // ... and its length in front of it
             payload[at - 1] = static_cast<uint8_t>(old_length >> 8);
             const size_t protocol_at = 2u + 1u + payload[2];                                   // the identity: format (u16), game version (str8), then the protocol (u16)
@@ -7597,16 +7871,30 @@ void run_persist_server_tests_4() {
             record.insert(record.end(), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end());
             return record;
         };
-        const std::vector<uint8_t> v12 = old_layout(12);
-        {   // the parser: protocol 12's record reads, as a Start without teams (the rest of it is what this build reads), and that is what the refusal judges
+        const std::vector<uint8_t> v12 = old_layout(12, 6);
+        {   // the parser: protocol 12's record reads, as a Start without teams and without platforms (the rest of it is what this build reads), and that is what the refusal judges
             const RestartLoaded old = parse_restart_record(v12.data(), v12.size());
             ASSERT_TRUE(old.ok() && old.head.identity.protocol == 12);
             ASSERT_TRUE(old.head.start.team_a == net::kNoTeam && old.head.start.team_b == net::kNoTeam && old.head.start.roster == rec.head.start.roster && old.head.start.seed == rec.head.start.seed);
+            for (const uint8_t platform : old.head.start.platforms) ASSERT_EQ(platform, net::kPlatformUnknown);
             ASSERT_TRUE(old.turn_count == rec.turn_count && old.turn_count > 100 && !old.checks.empty() && old.head.code == "OLD-1" && old.head.players == 2);
-            // the old layout is no Start of any other protocol: it is read only for the release that wrote it
-            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
-                const std::vector<uint8_t> not_12 = old_layout(other);
+            // the layout of protocols 13 and 14 (the team bytes, no platforms) reads for them: the same record of a release that wrote it
+            for (const uint16_t protocol : {uint16_t{13}, uint16_t{14}}) {
+                const std::vector<uint8_t> v = old_layout(protocol, 4);
+                const RestartLoaded r = parse_restart_record(v.data(), v.size());
+                ASSERT_TRUE(r.ok() && r.head.identity.protocol == protocol);
+                ASSERT_TRUE(r.head.start.team_a == net::kNoTeam && r.head.start.team_b == net::kNoTeam && r.head.start.roster == rec.head.start.roster && r.head.start.seed == rec.head.start.seed);
+                for (const uint8_t platform : r.head.start.platforms) ASSERT_EQ(platform, net::kPlatformUnknown);
+            }
+            // each old layout is no Start of any other protocol: it is read only for the releases that wrote it
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{13}, uint16_t{14}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_12 = old_layout(other, 6);                      // (protocol 12's layout under another number)
                 const RestartLoaded r = parse_restart_record(not_12.data(), not_12.size());
+                ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
+            }
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{12}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_13 = old_layout(other, 4);                      // (the layout of 13 and 14 under another number)
+                const RestartLoaded r = parse_restart_record(not_13.data(), not_13.size());
                 ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
             }
         }
@@ -7679,7 +7967,7 @@ void run_persist_server_tests_4() {
         ASSERT_TRUE(status_to_json(ended[0]).get("state_hash").str().size() == 16);
     } TEST_END();
 
-    TEST_CASE("S3.97 The Switch Is On (Release B): Rooms Hold Seats By Default (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Demo Room) And A Room's Own Key Wins Either Way; A Server That Was Told Not To (--no-reconnect: ServerLimits::reconnect false) Holds None By Default And The Rooms That Say So; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
+    TEST_CASE("S3.97 The Switch Is On (Release B): Rooms Hold Seats By Default (ServerLimits, A Room Specification Made By The Manager, A Room Made By The Control Interface Without A \"reconnect\" Key, A Public Room) And A Room's Own Key Wins Either Way; A Server That Was Told Not To (--no-reconnect: ServerLimits::reconnect false) Holds None By Default And The Rooms That Say So; A Restored Room Holds Seats Whatever The Default Is Now (It Held Them When It Was Written)")  {
         ASSERT_TRUE(kReconnectByDefault);                                                      // the switch itself: a test of its value, not only of the plumbing behind it
         ASSERT_TRUE(ServerLimits().reconnect);
         World dflt;
@@ -7699,16 +7987,16 @@ void run_persist_server_tests_4() {
             ASSERT_EQ(handle_control(dflt.mgr, rq, dflt.now).status, 201);
             ASSERT_FALSE(dflt.status("SW-3").reconnect);
         }
-        {   // a demo room follows the default
+        {   // a public room follows the default
             ServerLimits l;
             l.demo_rooms = 2;
             l.demo_map = "TINY.LVL";
             World w(l);
-            w.connect("Ann", "demo-tiny-2p-abc");
+            w.connect_creating("Ann", "abcd1234", block_of());
             w.run(500);
-            ASSERT_TRUE(w.status("demo-tiny-2p-abc").reconnect);
+            ASSERT_TRUE(w.status("abcd1234").reconnect);
         }
-        {   // a server that does not hold seats by default (--no-reconnect): none of its rooms does unless it says so, the demo rooms included
+        {   // a server that does not hold seats by default (--no-reconnect): none of its rooms does unless it says so, the public rooms included
             ServerLimits l;
             l.reconnect = false;
             l.demo_rooms = 2;
@@ -7724,9 +8012,9 @@ void run_persist_server_tests_4() {
             rq.body = "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"SW-7\", \"reconnect\": true}";
             ASSERT_EQ(handle_control(w.mgr, rq, w.now).status, 201);
             ASSERT_TRUE(w.status("SW-7").reconnect);
-            w.connect("Ann", "demo-tiny-2p-abc");
+            w.connect_creating("Ann", "abcd1234", block_of());
             w.run(500);
-            ASSERT_FALSE(w.status("demo-tiny-2p-abc").reconnect);
+            ASSERT_FALSE(w.status("abcd1234").reconnect);
         }
         {   // a server that holds seats by default, said out loud: the same default for every room that does not say
             ServerLimits l;
@@ -8458,12 +8746,13 @@ struct RealWorld : LinkSource {
         links.push_back(net::TcpConnection::connect("127.0.0.1", port));
         return links.back().get();
     }
-    RClient& connect(const std::string& name, const std::string& room) {
+    RClient& connect(const std::string& name, const std::string& room, const std::optional<net::CreateBlock>& create = std::nullopt) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
         RClient& c = *clients.back();
         c.name = name;
         c.room = room;
+        c.create = create;                                                              // (the block of a Hello that makes a public room, protocol 15)
         c.record_hashes = true;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
@@ -8530,7 +8819,7 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     ASSERT_TRUE(server.start(args, secret, log_file));
     ASSERT_TRUE(port_accepts(game_port, 15000));
     ASSERT_TRUE(port_accepts(ctl_port, 5000));
-    const std::string code = control_room ? "RP-1" : "demo-tiny-2p-r1";
+    const std::string code = control_room ? "RP-1" : "pubroom1";
     if (control_room) {
         int http = 0;
         const ctl::JsonValue made = ctl_call(ctl_port, "POST", "/rooms", secret, "{\"map\": \"TINY.LVL\", \"players\": 2, \"code\": \"RP-1\", \"reconnect\": true, \"resume_countdown_seconds\": 0, \"max_pause_seconds\": 300}", &http);
@@ -8539,7 +8828,7 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     RealWorld w;
     w.port = game_port;
     w.maps = maps_dir();
-    RClient& a = w.connect("Ann", code);
+    RClient& a = w.connect("Ann", code, control_room ? std::nullopt : std::optional<net::CreateBlock>(block_of("", 2)));        // (a public room: Ann's Hello carries the block that makes it)
     RClient& b = w.connect("Bob", code);
     ASSERT_TRUE(w.until([&]() { return a.session != nullptr && b.session != nullptr && a.session->runner().next_turn_expected() >= 130 && b.session->runner().next_turn_expected() >= 130; }, 40000));
     // the record is there, for its owner only, and the control interface says so
@@ -9939,34 +10228,65 @@ void run_restore_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.119 A Record That Is Refused In Its Replay Becomes The Failed Room, And Its Parked Hellos Are Told NoSuchRoom (The Replay Disagrees With A Checkpoint In A Slice Of Its Own): The Record Is Refused (Kept For A Day), The Room's Code Is Taken Until Its Keep Time Is Over; A Demo Code's Failed Room Is Replaced By A New Room At The Hello, As It Always Was, And The Parked Hello Joins That Room; A Record That Cannot Be Read When Its Turn Comes (It Was Changed While It Waited), And A Map That Changed Meanwhile, Are Refused With Their Reasons And Release The Hellos That Waited") {
+    TEST_CASE("S3.131 A Public Room Is Still A Public Room After A Restart (Protocol 15): Its Record Says So, The Restored Room Counts Against The Limit Of Public Rooms Again, And The Room Of The Control Interface Next To It Is Not One") {
         ServerLimits limits;
-        limits.demo_rooms = 1;                                                                  // (one demo room at a time: a queued record of the demo kind is one)
+        limits.demo_rooms = 1;                                                                  // (one public room at a time)
         limits.demo_map = "TINY.LVL";
-        {   // a replay that disagrees with a checkpoint: a failed room, NoSuchRoom for the Hellos that waited; the demo code makes a new room for the Hello
+        PWorld w("restart-131", limits);
+        w.start_server(500);
+        RClient& ann = w.connect_creating("Ann", "pubaaaaa", block_of("", 2));                  // a visitor's room: its first Hello brings the block
+        RClient& bob = w.connect("Bob", "pubaaaaa");
+        ann.record_hashes = true;
+        bob.record_hashes = true;
+        const std::vector<RClient*> control = play_room(w, held_spec("CTRL-131", 2), 6000);      // a room of the control interface, running beside it
+        w.run(6000 + kPre);
+        RoomStatus s = w.status("pubaaaaa");
+        ASSERT_TRUE(s.state == RoomState::Running && s.public_room && s.record_kept && s.joined == 2);
+        ASSERT_TRUE(w.status("CTRL-131").state == RoomState::Running && !w.status("CTRL-131").public_room);
+        ASSERT_TRUE(w.read_record("pubaaaaa").head.public_room && !w.read_record("CTRL-131").head.public_room);          // what the record says
+        for (RClient* p : control) p->reconnects = false;
+        ann.reconnects = false;
+        bob.reconnects = false;
+        w.stop_server(false);                                                                   // the server dies
+        w.start_server(500);
+        s = w.status("pubaaaaa");
+        ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.public_room);              // the room that comes back is a public one ...
+        ASSERT_TRUE(w.status("CTRL-131").state == RoomState::Running && w.status("CTRL-131").restored && !w.status("CTRL-131").public_room);          // ... and the other is not
+        RClient& cat = w.connect_creating("Cat", "pubbbbbb", block_of("", 2));                  // ... so the one public place is taken: another visitor's block makes no room
+        w.run(300);
+        ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);
+        ASSERT_TRUE(w.status("pubbbbbb").code.empty() && w.mgr->room_count() == 2);
+    } TEST_END();
+
+    TEST_CASE("S3.119 A Record That Is Refused In Its Replay Becomes The Failed Room, And Its Parked Hellos Are Told NoSuchRoom (The Replay Disagrees With A Checkpoint In A Slice Of Its Own): The Record Is Refused (Kept For A Day), The Room's Code Is Taken Until Its Keep Time Is Over; A Public Room's Failed Room Is Replaced By A New Room At The Hello That Carries A Block, As It Always Was, And The Parked Hello Joins That Room; A Record That Cannot Be Read When Its Turn Comes (It Was Changed While It Waited), And A Map That Changed Meanwhile, Are Refused With Their Reasons And Release The Hellos That Waited") {
+        ServerLimits limits;
+        limits.demo_rooms = 1;                                                                  // (one public room at a time: a queued record of a public room is one)
+        limits.demo_map = "TINY.LVL";
+        {   // a replay that disagrees with a checkpoint: a failed room, NoSuchRoom for the Hellos that waited; a public room's code makes a new room for the Hello that carries a block
             PWorld w("restore-119", limits);
             w.start_server(500);
             crash_with_record_of(w, "RF-1", 20000, 2);
             const RestartLoaded original = w.read_record("RF-1");
             lengthen_record(w, "RF-1", 2000);                                                  // (RF-2, the good one, takes a second of the world's time at a piece of work a pass; the tampered ones are refused at turn 59)
-            copy_record_as(w, "RF-1", "demo-tiny-2p-rf", std::chrono::seconds(0));
+            copy_record_as(w, "RF-1", "pubrf001", std::chrono::seconds(0));
+            rewrite_head(w, "pubrf001", [](RestartHead& h) { h.public_room = true; });         // (the record of a room that a visitor's block made)
             copy_record_as(w, "RF-1", "RF-2", std::chrono::seconds(0));
             tamper_checkpoint(w, "RF-1", 3);
-            tamper_checkpoint(w, "demo-tiny-2p-rf", 3);
-            age_record(w, "RF-2", 10);                                                          // the queue's order: RF-2, RF-1, the demo room's
+            tamper_checkpoint(w, "pubrf001", 3);
+            age_record(w, "RF-2", 10);                                                          // the queue's order: RF-2, RF-1, the public room's
             age_record(w, "RF-1", 20);
-            age_record(w, "demo-tiny-2p-rf", 30);
+            age_record(w, "pubrf001", 30);
             w.restart.restore_slice_ms = 0;
             w.start_server(500, false);
             ASSERT_EQ(w.mgr->restoring_count(), size_t{3});
             net::Connection* keyed = say_hello(w, "RF-1", original.head.keys[0]);
             net::Connection* stranger = say_hello(w, "RF-1");
-            RClient& dee = w.connect("Dee", "demo-tiny-2p-rf");                               // (a demo code: the player comes without a key, as a page does)
+            RClient& dee = w.connect_creating("Dee", "pubrf001", block_of("", 2));              // (a public room's code, a block: the player comes without a key, as a page does)
             RClient& back = w.connect(original.head.start.names[0], "RF-2", 0, original.head.keys[0]);       // (a record that is good: its player is served)
-            net::Connection* other_demo = say_hello(w, "demo-tiny-2p-other");                  // (another demo code: the queued record of the demo kind counts for the limit of one, so no room is made for it)
+            RClient& other_new = w.connect_creating("Eli", "pubother", block_of("", 2));       // (another code with a block: the queued record of a public room counts for the limit of one, so no room is made for it)
             w.run(300);
             ASSERT_EQ(w.mgr->parked_count(), size_t{4});
-            ASSERT_EQ(reject_on(other_demo), static_cast<int>(net::RejectReason::NoSuchRoom));
+            ASSERT_TRUE(other_new.was_rejected && other_new.rejected == net::RejectReason::NoSuchRoom);
             ASSERT_TRUE(w.until([&]() { return w.mgr->restoring_count() == 0; }, 60000));
             ASSERT_EQ(w.report.queued, size_t{3});
             const RestoreReport& done = w.mgr->restore_report();
@@ -9981,8 +10301,8 @@ void run_restore_tests() {
             ASSERT_EQ(reject_on(stranger), static_cast<int>(net::RejectReason::NoSuchRoom));
             ASSERT_TRUE(w.mgr->create_room(held_spec("RF-1", 2), w.server_now()).http_status == 409);         // the failed room has its code until its keep time is over
             ASSERT_TRUE(w.record_files().size() == 1 && fs::exists(w.record_path("RF-2")));                    // (the refused records are put by in refused/)
-            // the demo code: the failed room is replaced by a new room, and the Hello that waited is in it
-            ASSERT_TRUE(w.until([&]() { return w.status("demo-tiny-2p-rf").state == RoomState::Waiting && w.status("demo-tiny-2p-rf").joined == 1; }, 5000));
+            // the public room's code: the failed room is replaced by a new room, and the Hello that waited (it carries the block) is in it
+            ASSERT_TRUE(w.until([&]() { return w.status("pubrf001").state == RoomState::Waiting && w.status("pubrf001").joined == 1; }, 5000));
             ASSERT_TRUE(!dee.lost && !dee.was_rejected && dee.lobby != nullptr);
             ASSERT_TRUE(w.until([&]() { return w.status("RF-2").rejoins == 1; }, 30000));
             ASSERT_TRUE(back.session != nullptr && !back.lost);

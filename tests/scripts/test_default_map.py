@@ -3,8 +3,8 @@
 did not (the owner's request). The C++ suites test the setup screen's highlight (test_app_integration 8.9), the start menu's Host panel (test_start_menu M4.4,
 test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What no C++ test reaches is read here, from the files themselves:
 
-  - docker-compose.stack.yml: the map of a demo room whose code names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a code may choose, and the comments that
-    say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a code that names no map:
+  - docker-compose.stack.yml: the map of a public room whose create block names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a create block may choose, and the comments that
+    say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a create block that names no map:
     tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here. The number of
     demo rooms and the size of a room's turn log are read too: their product stays under the budget that all the logs share.
   - web/lobby.html (the front page): the map of its card is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),

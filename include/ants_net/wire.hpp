@@ -81,6 +81,8 @@ public:
     }
     /// Whole message consumed and nothing failed
     bool done() const noexcept { return ok_ && left_ == 0; }
+    /// How many bytes are not read yet (a message with an optional tail looks at it before it reads the tail)
+    size_t left() const noexcept { return left_; }
 
 private:
     bool need(size_t n) {

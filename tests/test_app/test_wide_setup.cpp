@@ -1626,6 +1626,51 @@ void test_pointer(const assets::AssetArchive& arc) {
         s.handle_key_down(SDLK_q);
         check(starts == 2 && quits == 2, "the keys are the original's, unchanged (S starts, Q leaves)");
     }
+    // a press on a player's row moves that player when it is let go of, and nobody else: the player of the row must still be the one that was pressed (the leader's screen alone)
+    {
+        ScreenState state(kIslands);
+        state.online(false);
+        MapSelectScreen& s = state.screen;
+        std::vector<int> moved;
+        s.set_on_move_seat([&](uint8_t seat) { moved.push_back(seat); });
+        const auto centre = [&](size_t row) {
+            const LayoutRect r = s.player_row_rect(row);
+            return std::make_pair(r.x + r.w / 2, r.y + r.h / 2);
+        };
+        const auto press = [&](size_t row) {
+            const auto c = centre(row);
+            s.handle_mouse_motion(c.first, c.second);
+            s.handle_mouse_down(c.first, c.second, SDL_BUTTON_LEFT);
+        };
+        const auto release = [&](size_t row) {
+            const auto c = centre(row);
+            s.handle_mouse_up(c.first, c.second, SDL_BUTTON_LEFT);
+        };
+        check(s.can_move_players(), "the leader's screen with its players shown can move them");
+        press(1);
+        release(1);
+        check(moved == std::vector<int>({1}), "a press and a release on Ben's row (seat 1) move Ben");
+        press(1);
+        MapSelectScreen::RoomView room = s.room();
+        room.seats[1].thumb = MapSelectScreen::Thumb::Bad;                    // the connection changed, the player did not
+        s.set_room(room);
+        release(1);
+        check(moved == std::vector<int>({1, 1}), "... a thumb that changes while the press is held does not void it");
+        press(1);
+        room.seats[1].name = "Cat";                                           // Ben left and Cat took his seat while the press was held
+        s.set_room(room);
+        release(1);
+        check(moved.size() == 2, "... a newcomer who takes the seat while the press is held is not moved by the release");
+        check(s.pressed_row() == -1, "... and the press is over");
+        press(1);
+        release(1);
+        check(moved == std::vector<int>({1, 1, 1}), "... the next press, on the row as it shows now, moves Cat");
+        press(1);
+        room.seats[1].occupied = false;                                       // the rows close up: row 1 now shows the bot's seat (2)
+        s.set_room(room);
+        release(1);
+        check(moved.size() == 3, "... and the player whose seat the row shows after the rows closed up is not moved either");
+    }
     // the classic page's buttons are where they always were (a screen that is not wide)
     {
         ScreenState state(kSmall, false);

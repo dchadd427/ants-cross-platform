@@ -54,6 +54,19 @@ void run_island_small_tests() {
         ASSERT_FALSE(m.sim.grid().has_powerup_at(TileCoord{8, 8}));
     } TEST_END();
 
+    TEST_CASE("AI19.2b The Same With The Flower Rules On (Medium Plays None As Shipped): The Swimmer That Is Put Down Eight Tiles From The Hill Of Seat 3 Is Still Taken By Seat 3 Within 600 Ticks (The Drops Of The Flowers In The Same Ticks Go To The Seats Whose Side They Are On: AI23)")
+    {
+        Match m;
+        m.ferry = true;
+        m.init("SMALL", 1, 0x0F, Level::Medium, 0, [](LevelPlan& p) { p.flower_sides = p.flower_fire = p.flower_recover = p.flower_recall = true; });
+        m.run(3000);
+        const uint32_t before = swimmers_of(m, 3);
+        m.sim.grid_mut().place_powerup(8, 8, 5);
+        m.run(600);
+        ASSERT_EQ(swimmers_of(m, 3), before + 1u);
+        ASSERT_FALSE(m.sim.grid().has_powerup_at(TileCoord{8, 8}));
+    } TEST_END();
+
     TEST_CASE("AI19.3 Nothing Changes Where Nothing Lies Beyond Water: On TINY, MEDIUM, GAUNTLET And TREASURE Four Bots Of A Level With The Island Machinery On And Four With It Off Play The Same Match, Tick For Tick (The State Hash Of Every 20th Tick Is The Same), At Every Level")
     {
         for (const char* map : {"TINY", "MEDIUM", "GAUNTLET", "TREASURE"}) {

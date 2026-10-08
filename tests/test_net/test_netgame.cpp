@@ -905,7 +905,7 @@ void run_migration_tests() {
 
 // A client that is refused: every reason of a Reject ends the join with its own text on the screen
 void run_reject_tests() {
-    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were") {
+    TEST_CASE("N3.17 Rejections (Protocol 10): Dropped Is The Original's Text For A Dropped Machine (String 94), RejoinFailed And Superseded Say What Happened, Each Ends The Join With Its Own Line; The Texts Of The Older Reasons Are What They Were; (Protocol 15) The Hello Of Each Join Tells The Machine's Platform And Carries A Create Block Only When It Was Given One, And NoSuchRoom For A Hello With A Block Says That The Server Cannot Make The Room, Unless Its Code Has A Capital (A Room Of The Control Interface: A Block Never Makes It, So It Does Not Exist)") {
         struct Case {
             RejectReason reason;
             std::string text;
@@ -922,16 +922,26 @@ void run_reject_tests() {
             {RejectReason::Superseded, "This game was taken over by another window."},
         };
         ASSERT_EQ(sim::strings::text(sim::strings::kDroppedFromGame), std::string("Sorry, you have been dropped from the game.  Hit OK to exit the program."));
-        // A code that begins "demo-" is one that the server makes the room of when somebody comes: NoSuchRoom for it is the place that is missing (the cap of demo rooms), not a room that does not
-        // exist, and it is told so; every other refusal, and NoSuchRoom for any other code, is as it was
-        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
-        for (const Case& c : cases) for (const std::string& room : {std::string("ROOM-1"), std::string("demo-tiny-4p-abcdef")}) {
-            const bool demo = room.compare(0, 5, "demo-") == 0;
+        // A Hello that carries a create block is one that the server makes the room of when somebody comes: NoSuchRoom for it is the place that is missing (the cap of public rooms), not a room
+        // that does not exist, and it is told so; every other refusal, and NoSuchRoom for a Hello without a block, is as it was. So is NoSuchRoom for a block with a code that has a capital (variant 3: the
+        // name of a room of the control interface, which a block never makes: a room that does not exist, not a place that is missing). The Hello also tells what the machine runs on (protocol 15): its
+        // own platform unless it was told another (variant 0: never set; 1: the web's word, with a block; 2: a byte that is no platform, so the machine's own)
+        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
+        for (const Case& c : cases) for (const int variant : {0, 1, 2, 3}) {
+            const bool with_block = variant == 1 || variant == 3;
+            const uint8_t told = variant == 1 ? static_cast<uint8_t>(kPlatformBrowser | kOsMacos) : native_platform();
+            const std::string room = variant == 3 ? "Party-1" : "k7m2xq";
             auto listener = TcpListener::listen(0, true);
             ASSERT_TRUE(listener != nullptr);
             sim::SimulationEngine sim;
             NetGame net(sim);
             net.set_discovery(0);
+            CreateBlock block;
+            block.map_name = "TINY.LVL";
+            block.seats = 4;
+            if (with_block) net.set_create(block);
+            if (variant == 1) net.set_platform(told);
+            if (variant == 2) net.set_platform(0xFF);
             ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "Bob", 255, room));
             std::unique_ptr<TcpConnection> server;
             bool replied = false;
@@ -945,6 +955,9 @@ void run_reject_tests() {
                     if (server->poll(m)) {
                         HelloMsg h;
                         ASSERT_TRUE(decode(m, h) && h.room == room && h.version == kProtocolVersion && key_is_zero(h.key) && h.have_turns == 0);      // (a new player: no key)
+                        ASSERT_TRUE(h.create.has_value() == with_block && (!with_block || *h.create == block));                                         // (the block that the machine was given, and only then)
+                        ASSERT_EQ(static_cast<unsigned>(h.platform), static_cast<unsigned>(told));                                                      // (what the machine said it runs on)
+                        ASSERT_TRUE(valid_platform(h.platform));
                         server->send(encode(RejectMsg{c.reason}));
                         replied = true;
                     }
@@ -953,10 +966,39 @@ void run_reject_tests() {
             }
             ASSERT_TRUE(replied);
             ASSERT_EQ(net.phase(), NetGame::Phase::Failed);
-            ASSERT_EQ(net.status_text(), demo && c.reason == RejectReason::NoSuchRoom ? no_place : c.text);
+            ASSERT_EQ(net.status_text(), variant == 1 && c.reason == RejectReason::NoSuchRoom ? no_place : c.text);
             bool failed = false;
             for (const NetGame::Event& e : net.take_events()) failed = failed || e.type == NetGame::Event::Type::Failed;
             ASSERT_TRUE(failed);
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.17b A Host With A Seat Tells Its Own Platform (Protocol 15): The Seat Of A LAN Or Direct Host Shows What The Machine Says It Runs On, For The Host And For Every Guest; A Host That Told Nothing Is The Machine It Runs On, And So Is One That Told A Byte That Is No Platform") {
+        const uint8_t told = static_cast<uint8_t>(kPlatformBrowser | kOsLinux);
+        {
+            Table t;
+            Machine& host = t.add("Alice");
+            host.net.set_platform(told);
+            ASSERT_TRUE(host.net.host(0, "Alice", true));
+            host.net.set_map("TINY.LVL");
+            Machine& bob = t.add("Bob");
+            bob.net.set_platform(kOsMacos);
+            ASSERT_TRUE(bob.net.join("127.0.0.1", host.net.listen_port(), "Bob"));
+            ASSERT_TRUE(t.run_until([&]() { return bob.net.phase() == NetGame::Phase::Room && bob.net.my_seat() == 1; }, 3000));
+            t.run(300);
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[0].platform), static_cast<unsigned>(told));
+            ASSERT_EQ(static_cast<unsigned>(bob.net.room().slots[0].platform), static_cast<unsigned>(told));       // a guest sees where the host runs
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[1].platform), static_cast<unsigned>(kOsMacos));
+            ASSERT_EQ(static_cast<unsigned>(bob.net.room().slots[1].platform), static_cast<unsigned>(kOsMacos));
+        }
+        for (const bool set_invalid : {false, true}) {
+            Table t;
+            Machine& host = t.add("Dan");
+            if (set_invalid) host.net.set_platform(0xFF);
+            ASSERT_TRUE(host.net.host(0, "Dan", true));
+            t.run(100);
+            ASSERT_EQ(static_cast<unsigned>(host.net.room().slots[0].platform), static_cast<unsigned>(native_platform()));
+            ASSERT_TRUE(valid_platform(host.net.room().slots[0].platform));
         }
     } TEST_END();
 }
@@ -1186,7 +1228,7 @@ void run_room_chat_tests() {
 // Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
 void run_start_delay_tests() {
     TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
-        ASSERT_EQ(kProtocolVersion, 14);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34; 14 added the SeatMove)
+        ASSERT_EQ(kProtocolVersion, 15);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34; 14 added the SeatMove; 15 the platform and the create block)
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
@@ -1527,81 +1569,20 @@ void run_team_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N3.36 Protocol 13, The Room's Own Teams (Its Code Names Them): One Reading Of The Code For The Server And Every Game (Every Line Of tests/data/room_code_teams.tsv, The Table That The Web Page's Reading Is Tested Against), The Word Is Made And Read Back For Every Pair, A Client Of Such A Room Shows And Asks For The Room's Teams And Not Its Own (A Room Without Them Keeps Its Own, The Host Of A LAN Room Has None), And The Leader's Prompt And Footer Say That The Teams Are The Room's") {
-        // ---- the table: what each code names (the page's codeTeams is tested against the same lines) ----
-        {
-            std::ifstream in(std::string(TEST_DATA_DIR) + "/room_code_teams.tsv");
-            ASSERT_TRUE(in.is_open());
-            std::string line;
-            size_t lines = 0;
-            size_t named = 0;
-            while (std::getline(in, line)) {
-                if (!line.empty() && line.back() == '\r') line.pop_back();                            // (a checkout with CRLF line ends reads the same)
-                if (line.empty() || line[0] == '#') continue;
-                const size_t tab = line.find('\t');
-                ASSERT_TRUE(tab != std::string::npos);
-                const std::string code = line.substr(0, tab);
-                const std::string expected = line.substr(tab + 1);
-                ++lines;
-                named += expected != "ffa" ? 1u : 0u;
-                const sim::StartTeams got = room_code_teams(code);
-                if (sim::start_teams_text(got) != expected) {
-                    std::cout << "FAILED!\n    " << code << " names " << sim::start_teams_text(got) << ", the table says " << expected << "\n";
-                    ++g_test_failures;
-                    return;
-                }
-                ASSERT_TRUE(got.set ? (got.a < got.b && got.b < 4) : (!got.a && !got.b));
-            }
-            ASSERT_TRUE(lines >= 50 && named >= 15 && lines - named >= 30);                       // (a table that is cut short must not pass)
-        }
-        // ---- the word of a pair, and what it reads back as ----
-        for (unsigned a = 0; a < 6; ++a) {
-            for (unsigned b = 0; b < 6; ++b) {
-                const sim::StartTeams pair{true, static_cast<uint8_t>(a), static_cast<uint8_t>(b)};
-                const std::string word = room_code_team_word(pair);
-                if (a < b && b < 4) {
-                    ASSERT_EQ(word, std::string("t") + static_cast<char>('0' + a) + static_cast<char>('0' + b));
-                    ASSERT_TRUE(room_code_teams("demo-small-4p-" + word + "-abcdef") == pair);
-                    ASSERT_TRUE(room_code_teams("demo-small-4p-" + word) == pair);
-                } else {
-                    ASSERT_TRUE(word.empty());                                                    // (no pair that the code could not read back as itself)
-                }
-            }
-        }
-        ASSERT_TRUE(room_code_team_word(sim::StartTeams{}).empty());
-        ASSERT_TRUE(room_code_team_word(sim::StartTeams{false, 0, 1}).empty());                   // free for all is no word whatever the bytes say
-        for (const uint8_t players : {uint8_t{3}, uint8_t{4}}) {                                  // the choices of a room are all words
-            for (const sim::StartTeams& choice : sim::room_team_choices(players)) {
-                const std::string word = room_code_team_word(choice);
-                ASSERT_EQ(word.empty(), !choice.set);
-                ASSERT_TRUE(room_code_teams("demo-treasure-" + std::to_string(players) + "p-" + word + "-k7m2xq") == choice);
-            }
-        }
-        // ---- a client of such a room: the room's teams, else its own ----
+    TEST_CASE("N3.36 Protocol 13, The Room's Own Teams (Protocol 15: The Room Message Names Them, A Create Block Chose Them): The Host Of A LAN Room, And A Client That Has Been Told No Room Yet, Have None And The Machine's Own Choice Counts; The Leader's Prompt And Footer Say That The Teams Are The Room's (A Client Of A Room That Has Them: RJ1.26)") {
+        // ---- no room teams: the machine's own choice ----
         {
             Table t;
-            Machine& named = t.add("Zed");
-            ASSERT_TRUE(named.net.join("127.0.0.1", 1, "Zed", 255, "demo-tiny-4p-t01-abcdef"));
-            ASSERT_TRUE(named.net.room_teams() == sim::StartTeams({true, 0, 1}));
-            ASSERT_TRUE(named.net.effective_teams() == sim::StartTeams({true, 0, 1}));            // no choice of its own
-            named.net.set_start_teams(sim::StartTeams{true, 1, 2});
-            ASSERT_TRUE(named.net.start_teams() == sim::StartTeams({true, 1, 2}));                // (its own choice is kept, and does not count in this room)
-            ASSERT_TRUE(named.net.effective_teams() == sim::StartTeams({true, 0, 1}));
-            Machine& plain = t.add("Yan");
-            ASSERT_TRUE(plain.net.join("127.0.0.1", 1, "Yan", 255, "demo-tiny-4p-abcdef"));
-            plain.net.set_start_teams(sim::StartTeams{true, 1, 2});
-            ASSERT_FALSE(plain.net.room_teams().set);
-            ASSERT_TRUE(plain.net.effective_teams() == sim::StartTeams({true, 1, 2}));            // a room without teams of its own: the leader's choice
-            Machine& other = t.add("Xi");
-            ASSERT_TRUE(other.net.join("127.0.0.1", 1, "Xi", 255, "party-t01-abcdef"));          // not a demo code: the server reads no teams from it, and no game does
-            other.net.set_start_teams(sim::StartTeams{true, 2, 3});
-            ASSERT_FALSE(other.net.room_teams().set);
-            ASSERT_TRUE(other.net.effective_teams() == sim::StartTeams({true, 2, 3}));
             Machine& lan = t.add("Alice");
             ASSERT_TRUE(lan.net.host(0, "Alice", true));
             lan.net.set_start_teams(sim::StartTeams{true, 0, 3});
-            ASSERT_FALSE(lan.net.room_teams().set);                                               // the host of a room on the local network has no code
+            ASSERT_FALSE(lan.net.room_teams().set);                                               // the host of a room on the local network has no code and no block
             ASSERT_TRUE(lan.net.effective_teams() == sim::StartTeams({true, 0, 3}));
+            Machine& zed = t.add("Zed");
+            ASSERT_TRUE(zed.net.join("127.0.0.1", 1, "Zed", 255, "k7m2xq"));                    // (no server answers: no Room message has come)
+            zed.net.set_start_teams(sim::StartTeams{true, 1, 2});
+            ASSERT_FALSE(zed.net.room_teams().set);
+            ASSERT_TRUE(zed.net.effective_teams() == sim::StartTeams({true, 1, 2}));
         }
         // ---- the words: the teams are the room's ----
         const auto room_with = [](std::initializer_list<uint8_t> people, std::initializer_list<uint8_t> bots = {}) {
@@ -1646,7 +1627,7 @@ void run_team_tests() {
 }
 
 void run_seat_move_tests() {
-    TEST_CASE("N3.38 Protocol 14, The Colour That A Tap Asks For (NetGame::seat_move_target): The Next Colour That Nobody Holds, Round Again After Black; Nowhere To Go When Every Colour Is Taken; Never The Seat Of A Bot Or Of The Host, Nothing For A Seat That Holds No Person; Every Room Of Four Seats Of Four Kinds Agrees With The Rule Said Another Way") {
+    TEST_CASE("N3.38 Protocol 14 And 15, The Colour That A Tap Asks For (NetGame::seat_move_target): The Next Colour That Nobody Holds, Round Again After Black; When Every Colour Is Held, The Next Colour Of Another Guest (The Two Change Places); Never The Seat Of A Bot Or Of The Host, Nothing For A Seat That Holds No Person Or Has No Guest To Go To; Every Room Of Four Seats Of Four Kinds Agrees With The Rule Said Another Way") {
         const auto room_of = [](const std::string& kinds) {                         // "CC.B": a person, a person, nobody, a bot (H: the host's own seat)
             RoomMsg r;
             for (size_t seat = 0; seat < 4; ++seat) {
@@ -1671,25 +1652,34 @@ void run_seat_move_tests() {
         ASSERT_EQ(target(".C.C", 1), 2);
         ASSERT_EQ(target(".C.C", 3), 0);
         ASSERT_EQ(target("C..C", 3), 1);                                           // (green is taken: the next free is red)
-        // every colour taken by people: nowhere to go (a room of four starts at once, so the screen has no such moment to show)
-        for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(target("CCCC", seat), 255);
-        // a bot's seat is not taken from it, and a bot does not move; the host's seat is its own
-        ASSERT_EQ(target("CBCC", 0), 255);                                         // no free colour: the bot's seat is not one
-        ASSERT_EQ(target("CBCC", 2), 255);
+        // every colour held by people (a room that does not start by itself when it is full, protocol 15): the next colour of another guest, round again, so that a person goes round with every press and
+        // the leader can have every arrangement of the people
+        for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(target("CCCC", seat), (seat + 1) % 4);
+        // a bot's seat is not taken from it, and a bot does not move: past it, the next guest
+        ASSERT_EQ(target("CBCC", 0), 2);                                           // no free colour: the next guest's, past the bot
+        ASSERT_EQ(target("CBCC", 2), 3);
+        ASSERT_EQ(target("CBCC", 3), 0);
         ASSERT_EQ(target("CBCC", 1), 255);                                         // (a bot is no person)
-        ASSERT_EQ(target("CB.C", 0), 2);                                           // a free colour is found past the bot
+        ASSERT_EQ(target("CBBC", 0), 3);
+        ASSERT_EQ(target("CBBB", 0), 255);                                         // a lone guest among bots has nobody to change places with
+        ASSERT_EQ(target("BBBC", 3), 255);
+        ASSERT_EQ(target("CB.C", 0), 2);                                           // a free colour is found past the bot (and goes before a guest's: seat 3 is a guest's)
         ASSERT_EQ(target("CB.C", 3), 2);
-        ASSERT_EQ(target("HCCC", 3), 255);                                         // the host sits in green: nothing to take, and no seat to swap with
+        ASSERT_EQ(target("C.BC", 0), 1);
+        ASSERT_EQ(target("HCCC", 3), 1);                                           // the host sits in green: its seat is nobody's to take, the next guest is red's
         ASSERT_EQ(target("HC.C", 1), 2);
+        ASSERT_EQ(target("HCCC", 1), 2);
         ASSERT_EQ(target("HCCC", 0), 255);                                         // (the host's seat holds no guest)
+        ASSERT_EQ(target("HBCB", 2), 255);                                         // nobody else to go to
         ASSERT_EQ(target("C.CB", 0), 1);
         ASSERT_EQ(target("C.CB", 2), 1);                                           // round the bot and the leader to the free red
         ASSERT_EQ(target("....", 0), 255);
         ASSERT_EQ(target("C...", 1), 255);                                         // nobody sits there
         ASSERT_EQ(target("C...", 4), 255);                                         // no such seat
         ASSERT_EQ(target("C...", 255), 255);
-        // every room of four seats of four kinds, every seat: the rule said another way (the first free colour after the seat, looked up in a list)
+        // every room of four seats of four kinds, every seat: the rule said another way (the first free colour after the seat, else the first guest's colour after it, looked up in a list)
         size_t answered = 0;
+        size_t swaps = 0;
         for (unsigned code = 0; code < 256; ++code) {
             std::string kinds;
             for (unsigned i = 0; i < 4; ++i) kinds += ".CBH"[(code >> (2 * i)) & 3u];
@@ -1704,14 +1694,19 @@ void run_seat_move_tests() {
                 for (unsigned step = 1; step < 4 && want == 255; ++step) {         // the first free colour after this one, round the circle
                     if (kinds[(seat + step) % 4u] == '.') want = static_cast<uint8_t>((seat + step) % 4u);
                 }
+                for (unsigned step = 1; step < 4 && want == 255; ++step) {         // ... else the first colour of another guest
+                    if (kinds[(seat + step) % 4u] == 'C') want = static_cast<uint8_t>((seat + step) % 4u);
+                }
                 ASSERT_EQ(got, want);
                 if (got != 255) {
-                    ASSERT_TRUE(got < 4 && got != seat && kinds[got] == '.');     // (a colour that nobody holds: never a person's, a bot's or the host's)
+                    ASSERT_TRUE(got < 4 && got != seat && (kinds[got] == '.' || kinds[got] == 'C'));     // (a free colour or a guest's: never a bot's or the host's)
+                    if (kinds.find('.') != std::string::npos) ASSERT_EQ(kinds[got], '.');                  // (a free colour goes before a guest's: a move, not a swap, whenever one can be had)
+                    else ++swaps;
                     ++answered;
                 }
             }
         }
-        ASSERT_TRUE(answered > 100);                                               // (the rule answers for many of the rooms: the test is no empty loop)
+        ASSERT_TRUE(answered > 100 && swaps > 10);                                 // (the rule answers for many of the rooms, and for the rooms with no free colour: the test is no empty loop)
     } TEST_END();
 
     TEST_CASE("N3.39 Protocol 14, The Plan Of Bots Follows The Room Message By Message (NetGame::follow_moved_player, With A Server That Is A Script): A Message In Which A Person Left One Colour And Took Another Trades The Levels Of The Two Colours; A Person Who Only Comes Or Goes, Two Who Go And One Who Comes, One Who Goes And Two Who Come, A Bot Seated Or Nothing Changed Trade Nothing; Messages Read Together Are Compared One By One (A Person Who Goes And Another Who Comes Are No Move, A Move With A Newcomer After It Is One); A Guest's Plan Never Moves") {
@@ -1817,6 +1812,24 @@ void run_seat_move_tests() {
                 ASSERT_TRUE(net.fill_bots() == want);
                 ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.my_seat() == 0);
             }
+            {   // two guests that changed places (protocol 15): the names go with the guests, the colours that are free are the same colours, so nothing trades
+                ASSERT_TRUE(say("CCC."));
+                ASSERT_TRUE(run_until([&]() { return shows("CCC."); }));
+                net.set_fill_bots(base);
+                RoomMsg swapped = room_of("CCC.", leader_of("CCC."));
+                std::swap(swapped.slots[1], swapped.slots[2]);
+                ASSERT_TRUE(swapped.slots[1].name == "P2" && swapped.slots[2].name == "P1");
+                ASSERT_TRUE(server->send(encode(swapped)));
+                ASSERT_TRUE(run_until([&]() { return net.room().slots[1].name == "P2"; }));
+                net.update(now);
+                ASSERT_TRUE(net.fill_bots() == base);
+                RoomMsg and_a_move = room_of("CC.C", leader_of("CC.C"));                          // ... and a swap is no move that hides one: the person of Blue goes to Black, and the plan trades
+                ASSERT_TRUE(server->send(encode(and_a_move)));
+                ASSERT_TRUE(run_until([&]() { return shows("CC.C"); }));
+                net.update(now);
+                ASSERT_TRUE(net.fill_bots() == (leads ? traded(2, 3) : base));
+                ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.my_seat() == 0);
+            }
             // a session that follows another one starts afresh: its first Room message is not compared with the last room of the session before it (the machine shows that room until
             // the new one speaks: "C.CC" left, "CC.C" is a room of other people, so nobody has moved)
             net.leave();
@@ -1837,6 +1850,163 @@ void run_seat_move_tests() {
             ASSERT_TRUE(run_until([&]() { return net.phase() == NetGame::Phase::Room && shows("CC.C"); }));
             ASSERT_EQ(net.is_leader(), leads);
             ASSERT_TRUE(net.fill_bots() == base);
+        }
+    } TEST_END();
+
+    TEST_CASE("N3.40 Protocol 15, The Leader's Press (NetGame::request_move_seat(from, to), With A Server That Is A Script): A Machine That Leads An Open Room Sends A SeatMove With The Guard Of The Seats That It Shows, To A Free Colour And To A Guest's Alike; Whatever The Rule Refuses Is Not Sent; The Next Press Waits Half A Second And For The Room's Answer (A Second At Most); The Tap On A Row Sends What seat_move_target Names; A Machine That Does Not Lead Sends Nothing") {
+        // a room as the script says it: "CCB." is a person, a person, a bot, nobody; this machine (a person) is seat 0
+        const auto room_of = [](const std::string& kinds, uint8_t leader) {
+            RoomMsg r;
+            r.map_name = "TINY.LVL";
+            r.you = 0;
+            r.leader = leader;
+            for (size_t seat = 0; seat < 4; ++seat) {
+                if (kinds[seat] == 'C') r.slots[seat] = {SlotState::Client, "P" + std::to_string(seat), 10};
+                else if (kinds[seat] == 'B') r.slots[seat] = {SlotState::Bot, "Bot (Easy)", 0};
+            }
+            return r;
+        };
+        for (const bool leads : {true, false}) {
+            auto listener = TcpListener::listen(0, true);
+            ASSERT_TRUE(listener != nullptr);
+            sim::SimulationEngine sim;
+            NetGame net(sim);
+            net.set_discovery(0);
+            ASSERT_TRUE(net.join("127.0.0.1", listener->port(), "P0", 255, "ROOM-1"));
+            std::unique_ptr<TcpConnection> server;
+            uint32_t now = 1000;
+            std::vector<SeatMoveMsg> sent;                                                                         // every SeatMove that the script's server has read, in order
+            size_t garbage = 0;
+            bool hello_heard = false;
+            const auto read = [&]() {
+                std::vector<uint8_t> m;
+                while (server != nullptr && server->poll(m)) {
+                    if (peek_type(m) == MsgType::Hello) hello_heard = true;
+                    if (peek_type(m) != MsgType::SeatMove) continue;                                               // (a ping ...)
+                    SeatMoveMsg move;
+                    if (decode(m, move)) sent.push_back(move);
+                    else ++garbage;
+                }
+            };
+            const auto run_for = [&](uint32_t ms) {                                                                 // the machine's clock runs; the script's server listens
+                for (const uint32_t end = now + ms; now < end;) {
+                    now += 10;
+                    net.update(now);
+                    if (!server) server = listener->accept();
+                    read();
+                    ants_test::short_pause();
+                }
+            };
+            const auto run_until = [&](const std::function<bool()>& cond) {
+                for (int i = 0; i < 3000 && !cond(); ++i) run_for(10);
+                return ants_test::real_time_tail(cond, [&]() {                      // (real time for a late kernel, the game clock standing still: see run_until of N3.39)
+                    net.update(now);
+                    if (!server) server = listener->accept();
+                    read();
+                });
+            };
+            const auto shows = [&](const std::string& kinds) {
+                for (size_t seat = 0; seat < 4; ++seat) {
+                    const SlotState want = kinds[seat] == 'C' ? SlotState::Client : kinds[seat] == 'B' ? SlotState::Bot : SlotState::Empty;
+                    if (net.room().slots[seat].state != want) return false;
+                }
+                return true;
+            };
+            const auto leader_of = [&](const std::string& kinds) -> uint8_t {                                       // a guest that is led by somebody else sees the last person as the leader
+                if (leads) return 0;
+                for (size_t seat = 3; seat > 0; --seat) {
+                    if (kinds[seat] == 'C') return static_cast<uint8_t>(seat);
+                }
+                return 0;
+            };
+            const auto say = [&](const std::string& kinds) {
+                ASSERT_TRUE(server->send(encode(room_of(kinds, leader_of(kinds)))));
+                ASSERT_TRUE(run_until([&]() { return shows(kinds); }));
+            };
+            // The windows of the press rule (half a second between two presses, a second for the room's answer) are counted in the machine's game time, and a step of game time lasts a fraction of a
+            // millisecond of real time, so a late kernel could use the window up while a wait for a message goes on (the review's second round). A wait that a window assertion follows therefore lets
+            // the real clock run and the game clock stand still: one pass over the machine and the script's server for each millisecond, up to two seconds.
+            const auto pass_still = [&]() {
+                net.update(now);
+                if (!server) server = listener->accept();
+                read();
+            };
+            const auto wait_sent = [&](size_t count) { return ants_test::real_time_tail([&]() { return sent.size() >= count; }, pass_still); };
+            const auto say_still = [&](const std::string& kinds) {
+                ASSERT_TRUE(server->send(encode(room_of(kinds, leader_of(kinds)))));
+                ASSERT_TRUE(ants_test::real_time_tail([&]() { return shows(kinds); }, pass_still));
+            };
+            ASSERT_TRUE(run_until([&]() { return hello_heard; }));
+            ASSERT_TRUE(server->send(encode(WelcomeMsg{0, 4})));
+            say("CCC.");
+            ASSERT_TRUE(run_until([&]() { return net.phase() == NetGame::Phase::Room; }));
+            ASSERT_EQ(net.is_leader(), leads);
+            const auto sent_so_far = [&]() { run_for(50); return sent.size(); };
+            if (!leads) {                                                                                           // led by somebody else: no press of this machine goes out, whatever it asks
+                ASSERT_FALSE(net.request_move_seat(1, 3));
+                ASSERT_FALSE(net.request_move_seat(1, 2));
+                ASSERT_FALSE(net.request_move_seat(1));
+                ASSERT_EQ(sent_so_far(), size_t{0});
+                continue;
+            }
+            // what the rule refuses is not sent: the same seat twice, a seat that no room has, a seat that holds no guest, a colour that a bot holds, a bot that moves
+            say("CCB.");
+            const uint32_t seated = seating_hash(room_of("CCB.", 0));
+            ASSERT_TRUE(net.room().slots[2].state == SlotState::Bot && seating_hash(net.room()) == seated);
+            ASSERT_FALSE(net.request_move_seat(1, 1));
+            ASSERT_FALSE(net.request_move_seat(1, 4));
+            ASSERT_FALSE(net.request_move_seat(4, 1));
+            ASSERT_FALSE(net.request_move_seat(255, 255));
+            ASSERT_FALSE(net.request_move_seat(3, 1));                                                              // nobody sits in black
+            ASSERT_FALSE(net.request_move_seat(1, 2));                                                              // the bot's colour is not taken from it
+            ASSERT_FALSE(net.request_move_seat(2, 1));                                                              // ... and a bot does not move
+            ASSERT_FALSE(net.request_move_seat(2));                                                                 // (the tap on a bot's row asks nothing)
+            ASSERT_FALSE(net.request_move_seat(3));                                                                 // (nor the tap on an empty colour)
+            ASSERT_EQ(sent_so_far(), size_t{0});
+            // a free colour: one SeatMove, with the guard of the seats that the machine shows
+            ASSERT_TRUE(net.request_move_seat(1, 3));
+            ASSERT_TRUE(wait_sent(1));
+            ASSERT_EQ(sent.size(), size_t{1});
+            ASSERT_TRUE(sent[0].from == 1 && sent[0].to == 3 && sent[0].guard == seated && sent[0].guard != 0u);
+            // the next press waits: a double click is one press (half a second), and the answer of the room (a second at most: a request that the room cannot do is not answered at all)
+            ASSERT_FALSE(net.request_move_seat(1, 3));
+            run_for(300);
+            ASSERT_FALSE(net.request_move_seat(0, 3));                                                              // (a leader that moves itself is no different)
+            run_for(300);
+            ASSERT_FALSE(net.request_move_seat(0, 3));                                                              // 600 ms, and the room has not answered
+            ASSERT_EQ(sent_so_far(), size_t{1});
+            run_for(500);                                                                                           // more than a second: the room is not going to answer, and the leader may press again
+            ASSERT_TRUE(net.request_move_seat(1, 0));                                                               // a guest's colour: the leader's own, so the leader goes to red and the guest to green
+            ASSERT_TRUE(wait_sent(2));
+            ASSERT_TRUE(sent[1].from == 1 && sent[1].to == 0 && sent[1].guard == seated);                          // (the same seats as shown: the same guard)
+            // the room answers with the seats as they are: the guard of the next press is the new room's, and it may go out when half a second has passed
+            say_still("CC.C");
+            const uint32_t after = seating_hash(room_of("CC.C", 0));
+            ASSERT_TRUE(after != seated && seating_hash(net.room()) == after);
+            ASSERT_FALSE(net.request_move_seat(1, 2));                                                              // (the room's answer came a moment after the press: still one press)
+            run_for(600);
+            ASSERT_TRUE(net.request_move_seat(1, 2));
+            ASSERT_TRUE(run_until([&]() { return sent.size() == 3; }));
+            ASSERT_TRUE(sent[2].from == 1 && sent[2].to == 2 && sent[2].guard == after);
+            // the tap on a row: the next free colour, else the next guest's colour (a full room: protocol 15)
+            say("CCC.");
+            run_for(1100);
+            const uint32_t three = seating_hash(room_of("CCC.", 0));
+            ASSERT_TRUE(net.request_move_seat(2));                                                                  // blue goes to black
+            ASSERT_TRUE(run_until([&]() { return sent.size() == 4; }));
+            ASSERT_TRUE(sent[3].from == 2 && sent[3].to == 3 && sent[3].guard == three);
+            say("CCCC");
+            run_for(1100);
+            const uint32_t four = seating_hash(room_of("CCCC", 0));
+            ASSERT_TRUE(net.request_move_seat(2));                                                                  // no colour is free: blue changes places with black
+            ASSERT_TRUE(run_until([&]() { return sent.size() == 5; }));
+            ASSERT_TRUE(sent[4].from == 2 && sent[4].to == 3 && sent[4].guard == four);
+            run_for(1100);
+            ASSERT_TRUE(net.request_move_seat(3));                                                                  // ... and round again: black with green, the leader's own colour
+            ASSERT_TRUE(run_until([&]() { return sent.size() == 6; }));
+            ASSERT_TRUE(sent[5].from == 3 && sent[5].to == 0 && sent[5].guard == four);
+            ASSERT_EQ(garbage, size_t{0});
+            ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.is_leader());
         }
     } TEST_END();
 }

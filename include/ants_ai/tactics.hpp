@@ -70,6 +70,7 @@ struct LevelPlan {
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
     uint32_t gate_max_staged{8};         // carriers brought to the doorstep at a time
     bool gate_predictive{true};          // the entrance click is given before the gate is seen free (from the clip that the look showed first)
+    uint32_t gate_leaver_ticks{0};       // the entrance click waits at most this long while an own ant without food stands on the ramp (mostly one that has banked and leaves; 0: it does not wait)
     uint32_t gate_gap_ticks{47};         // with the gate guided the hill banks a deposit per 47 ticks per pile slot: the economy's cap of ants per pile follows (trip / gap + 1)
     bool typed_harvest{true};            // Fire and Bomber ants harvest between their jobs (HarvestTask::Params::extra_types)
     bool combat_harvests{false};         // Combat Ants harvest too (and punch what comes within two tiles of their way) instead of standing on a guard post
@@ -236,6 +237,14 @@ struct LevelPlan {
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
     bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
+    // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
+    bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
+    bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes
+    bool flower_recover{false};          // a pick-up trip whose ant took food on the way (a bite does not hear an order) is given up at once and tried again with another ant, instead of after minutes
+    bool flower_recall{false};           // a pick-up trip whose power-up changed kind on the way is called back at any distance (the plan takes it anyway only from `call_back_tiles` away: it would take a kind it does not want)
+    bool flower_watch{false};            // (Hard) an ant waits beside the drop tile of the own side's flower, arrives about `flower_watch_early` ticks before the landing that the bot has learned to expect (Memory::flower) and takes a kind that the plan lacks
+    uint32_t flower_watch_early{60};     // the ticks before the expected landing at which the watcher stands beside the drop tile (3 s)
+    uint32_t flower_watch_chance{150};   // the least chance in permille that the next landing is a kind the plan lacks, for the watcher to wait (every kind alike until three landings were seen)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -301,6 +310,9 @@ EastState east_state(const sim::Grid& grid, const HillInfo& hill) noexcept;
 /// other team of the match; -1 for a power-up that no hill reaches or that two hills reach equally well. On TREASURE every base has one power-up of each kind on its side.
 /// `present` is the bitmask of the teams in the match. A power-up that a flower dropper makes is not in the analysis of the start: it has no side.
 int power_up_side(const MapInfo& map, sim::TileCoord tile, uint8_t present) noexcept;
+/// The same for a drop of a flower dropper: the team whose hill walks to the drop tile at the least cost, strictly less than every other team of the match (MapInfo::flowers); -1 when `tile` is no
+/// flower's drop tile, no hill reaches it or two reach it equally well. (power_up_side knows only the power-ups of the start: a drop is on no list of it.)
+int drop_side(const MapInfo& map, sim::TileCoord tile, uint8_t present) noexcept;
 
 // ---- the memory ---------------------------------------------------------------------------------------------------------------------------------------
 
@@ -321,6 +333,22 @@ struct ThiefSighting {
     sim::TileCoord tile{};
     sim::TileCoord before{-1, -1};       // where it stood at the previous look, (-1, -1) when it was not in sight then
     bool carrying{false};
+};
+
+/// What the bot has seen of one flower dropper: the droplets that fell in its sight, counted once each. A person at the screen sees the flower, the droplet and what has landed, never the
+/// clock behind it, so the cadence and the mix are what the bot has counted (no table of the maps, no interval or percentage of the level file)
+struct FlowerLog {
+    sim::TileCoord drop{};               // the drop tile (the key)
+    uint32_t landings{0};                // droplets seen landing
+    uint64_t last{0};                    // the tick of the last landing seen (0: none)
+    uint64_t before_last{0};             // the tick of the one before it
+    std::array<uint32_t, 6> by_kind{};   // landings seen per kind (index = sim::AntType; the Worker's is never counted)
+    /// The ticks between the last two landings seen: the cycle as far as the bot has seen it (0 until two were seen)
+    uint32_t cycle() const noexcept { return landings >= 2 ? static_cast<uint32_t>(last - before_last) : 0u; }
+    /// The tick of the next landing if the cycle holds (0: not known yet)
+    uint64_t next() const noexcept { return landings >= 2 ? last + cycle() : 0u; }
+    /// The chance in permille that the next landing is one of `kinds` (a bit per sim::AntType): every one of the five kinds alike until three landings were seen, then what has landed
+    uint32_t chance(uint32_t kinds) const noexcept;
 };
 
 class Memory {
@@ -360,6 +388,8 @@ public:
     uint8_t hp_before(uint32_t ant) const noexcept;
     /// The most ants of `team` that were in sight at one look (0 for the own team): a team that shows few ants now and has shown many has LOST them
     uint32_t ants_peak(uint8_t team) const noexcept { return team < sim::MAX_PLAYERS ? peak_ants_[team] : 0u; }
+    /// What the bot has seen of the flower dropper whose drop tile is `drop` (nullptr: no droplet of it has been seen yet)
+    const FlowerLog* flower(sim::TileCoord drop) const noexcept;
     /// Whether the ant of another team was drawn in its attack clip within the last `window` ticks (a person sees who fights and who does not)
     bool fought_lately(uint32_t ant, uint64_t window) const noexcept {
         const auto it = attacking_.find(ant);
@@ -390,6 +420,7 @@ private:
     std::map<uint32_t, bool> ally_in_hit_;                     // the ally's ants that were in their hit clip at the previous look
     uint64_t last_loss_{0};
     std::map<std::pair<int32_t, int32_t>, uint64_t> wall_seen_;   // (x, y) of a wall tile of the thief hole -> the tick it was first seen
+    std::vector<FlowerLog> flowers_;                               // the flower droppers whose droplets have been seen
 };
 
 /// Where the bot stands in the match by the score boxes (what a person reads on the screen): its own box (its score plus its ally's), the leader (the highest box of the teams that are

@@ -95,6 +95,7 @@ struct RestartHead {
     uint8_t players{2};                                     // the room's seats (RoomSpec::players)
     bool fog{false};
     bool early_start{true};
+    bool public_room{false};                                // protocol 15: the room was made by a visitor's create block (it counts against the server's public-room cap and can be evicted)
     uint32_t wait_ms{0};
     uint32_t load_ms{0};
     uint32_t keep_ms{0};

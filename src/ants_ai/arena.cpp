@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <set>
 #include <utility>
 
@@ -16,6 +17,7 @@ namespace {
 
 constexpr uint64_t kTurnTicks = 2;                       // a turn of a lock-step room is 100 ms
 constexpr uint64_t kEndSlackTicks = 200;                 // the engine ends a match by its clock; this only bounds a loop that never would
+constexpr uint64_t kFlowerScanPeriod = 4;                // a droplet falls for 16 ticks and a pick-up animation lasts longer than 4: a look every 4 ticks counts each once
 
 /// Writes down what the engine is given, with the step it came after (null log: nothing is kept)
 struct Recorder {
@@ -178,6 +180,37 @@ void CantGoTally::scan(const sim::SimulationEngine& sim, const std::vector<sim::
     flagged_ = flagged;
 }
 
+void FlowerTally::scan(const sim::SimulationEngine& sim) {
+    const sim::WorldState& ws = sim.get_world_state();
+    if (dropping_.size() < ws.flower_droppers.size()) dropping_.resize(ws.flower_droppers.size(), 0);
+    for (size_t i = 0; i < ws.flower_droppers.size(); ++i) {
+        const sim::FlowerDropperSnapshot& d = ws.flower_droppers[i];
+        if (dropping_[i] != 0 && !d.is_dropping) {                                 // the droplet's last frame: the power-up is on the tile
+            ++landings_;
+            // the draws 0 Bomber, 1 Combat, 2 Thief, 3 Swimmer, 4 Fire (FlowerDropperSnapshot::powerup_type) as the AntType numbers
+            static constexpr std::array<size_t, 5> kKind = {1, 4, 3, 5, 2};
+            ++landed_[kKind[std::min<size_t>(d.powerup_type, 4)]];
+        }
+        dropping_[i] = d.is_dropping ? 1 : 0;
+    }
+    for (const sim::AntSnapshot& a : ws.ants) {
+        if (a.id > (1u << 20) || a.player_id >= sim::MAX_PLAYERS) continue;
+        if (a.id >= raw_type_.size()) raw_type_.resize(static_cast<size_t>(a.id) + 1, 255);
+        const uint8_t now = static_cast<uint8_t>(a.raw_type);
+        if (raw_type_[a.id] != 255 && raw_type_[a.id] != now && now >= 1 && now <= 5) {
+            Seat& seat = seats_[a.player_id];
+            ++seat.took[now];
+            for (const sim::FlowerDropperSnapshot& d : ws.flower_droppers) {
+                if (std::max(std::abs(a.tile_x - d.drop_x), std::abs(a.tile_y - d.drop_y)) <= 1) {
+                    ++seat.at_flowers;
+                    break;
+                }
+            }
+        }
+        raw_type_[a.id] = now;
+    }
+}
+
 void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {
     out.score = sim.get_player_score(seat);
     out.shown_score = sim.get_display_score(seat);
@@ -212,6 +245,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     ScoreLedger ledger;
     ledger.start(sim);
     CantGoTally tally;
+    FlowerTally flowers;
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
@@ -243,6 +277,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         const std::vector<sim::NewsEvent> news = sim.poll_news_events();
         const size_t audio = sim.poll_audio_events().size();
         tally.scan(sim, news);
+        if (sim.current_tick() % kFlowerScanPeriod == 0) flowers.scan(sim);
         out.news_events += news.size();
         out.audio_events += audio;
         out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news.size(), audio)));
@@ -255,6 +290,9 @@ ArenaResult play_match(const ArenaSpec& spec) {
     out.ticks = sim.current_tick();
     out.steps = steps;
     out.hash = sim.state_hash().total;
+    flowers.scan(sim);                                   // (the last ticks, when the match ended between two looks)
+    out.landings = flowers.landings();
+    for (size_t k = 1; k < out.landed.size(); ++k) out.landed[k] = flowers.landed(static_cast<sim::AntType>(k));
     {
         std::set<uint32_t> counted;
         const std::vector<sim::FoodObject>& objects = sim.grid().food_objects();
@@ -280,6 +318,8 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.cantgo_began = tally.seat(b.seat).began;
         r.orders = tally.seat(b.seat).orders;
         r.refused_orders = tally.seat(b.seat).refused;
+        r.took = flowers.seat(b.seat).took;
+        r.took_at_flowers = flowers.seat(b.seat).at_flowers;
         r.stats = controller.stats(b.seat);
         out.seats.push_back(r);
     }

@@ -123,7 +123,7 @@ function runLobby(path, search, stored, options) {
         body,
         getElementById(id) { if (id === 'aspect-16-9') return radios['16:9']; if (id === 'aspect-4-3') return radios['4:3']; throw new Error('the page asked for #' + id); },
     };
-    const inRoom = options && options.room ? "'demo-room'" : "''";
+    const inRoom = options && options.room ? "'k7m2xq'" : "''";
     const code = 'var room = ' + inRoom + ';\n' + helpers + shape + selector + '\nreturn { aspect: aspect, fromAddress: aspectFromAddress, key: ASPECT_KEY };';
     const result = new Function('window', 'document', code)(win, doc);
     result.storage = storage;

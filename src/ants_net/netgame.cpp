@@ -87,13 +87,10 @@ constexpr bool kInBrowser = true;          // the game runs in a web page (the p
 constexpr bool kInBrowser = false;
 #endif
 
-// A code that begins "demo-" (and has more) is one that the server makes the room of when somebody comes (the front page's card makes such codes): the server answers NoSuchRoom when it cannot,
-// so it is a place that is missing (the cap of demo rooms, the server's limit, a room of that code that has just ended), never a room that does not exist
-bool is_demo_room_code(const std::string& room) {
-    const size_t n = std::char_traits<char>::length(kDemoRoomPrefix);
-    return room.size() > n && room.compare(0, n, kDemoRoomPrefix) == 0;
-}
-constexpr const char* kTextNoPlace = "The server cannot make a room for this match now. Try again in a few minutes.";
+// A Hello with a create block is one that the server makes the room of when somebody comes (the front page's card and the start menu send them): the server answers NoSuchRoom when it cannot,
+// so it is mostly a place that is missing (the cap of public rooms, the server's limit, a server that makes none). The text is told only for a code that a block can make a room of
+// (public_room_code): a code with a capital is the name of a room of the control interface, which a block never makes, and the answer for it is a room that does not exist (or is over)
+constexpr const char* kTextNoPlace = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
 
 // "Green", "Red", "Blue", "Black": the colour word of a seat (seat 0 is green, the engine's own numbering), as every page names a seat
 std::string seat_colour(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(str::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
@@ -105,31 +102,19 @@ constexpr uint32_t kMoveGapMs = 500;                                            
 constexpr uint32_t kMoveAnswerMs = 1000;
 constexpr const char* kTextMoveHint = "Tap a player to change their colour.";
 
-// Who sits where, as one number: the state and the name of each seat (FNV-1a), never 0 (0 stands for "no request is out")
-uint64_t seating_hash(const RoomMsg& room) {
-    uint64_t h = 1469598103934665603ull;
-    const auto put = [&h](uint8_t byte) { h = (h ^ static_cast<uint64_t>(byte)) * 1099511628211ull; };
-    for (const RoomMsg::Slot& slot : room.slots) {
-        put(static_cast<uint8_t>(slot.state));
-        for (const char c : slot.name) put(static_cast<uint8_t>(c));
-        put(0);
-    }
-    return h | 1u;
-}
-
 }  // namespace
 
 // Why a join failed: the original's words where it has them (dropped from the game, unable to connect), the remake's for the rest. In a web page the refusal for another version says what a player
 // can do about it: the game that is open is the one that was loaded when the tab was opened, and after an update of the server only a reload fetches the current one (the desktop game has its own
 // text for this, the start menu's: "Update the game, or wait until the server is updated").
-std::string NetGame::reject_text(RejectReason r, bool in_browser, const std::string& room) {
+std::string NetGame::reject_text(RejectReason r, bool in_browser, bool made_a_room) {
     switch (r) {
         case RejectReason::Full: return "The room is full.";
         case RejectReason::VersionMismatch:
             return in_browser ? "This version cannot play with the host's version. Reload the page to update." : "This version cannot play with the host's version.";
         case RejectReason::MatchRunning: return "The match has already started.";
         case RejectReason::Kicked: return str::text(str::kDroppedFromGame);
-        case RejectReason::NoSuchRoom: return is_demo_room_code(room) ? kTextNoPlace : "There is no such room on this server.";
+        case RejectReason::NoSuchRoom: return made_a_room ? kTextNoPlace : "There is no such room on this server.";
         case RejectReason::Dropped: return str::text(str::kDroppedFromGame);                       // (protocol 10) a seat that was dropped while its player was away: the original's one text for a dropped machine, string 94
         case RejectReason::RejoinFailed: return "The game could not be rejoined.";                // (protocol 10; the remake's own: the original has no way back)
         case RejectReason::Superseded: return "This game was taken over by another window.";      // (protocol 10; the remake's own)
@@ -203,6 +188,7 @@ bool NetGame::host(uint16_t port, const std::string& name, bool loopback_only) {
     HostLobby::Config cfg;
     cfg.host_name = name;
     cfg.host_seat = 0;
+    cfg.host_platform = platform_;                                // (protocol 15: the host's own seat shows what this machine runs on, as a guest's does)
     host_lobby_ = std::make_unique<HostLobby>(cfg);
     role_ = Role::Host;
     phase_ = Phase::Room;
@@ -279,6 +265,8 @@ ClientLobby::Config NetGame::lobby_config(const SeatKey& key, uint8_t want_seat)
     cfg.room = target_.room;
     cfg.token = target_.token;
     cfg.key = key;                                            // (all zero: a new player; else the Hello shows the key of the seat that this machine had)
+    cfg.platform = platform_;
+    cfg.create = create_;                                     // (the lobby leaves a block out that no server would read; a keyed Hello never makes a room, the server ignores it there)
     return cfg;
 }
 
@@ -499,16 +487,20 @@ bool NetGame::request_start() {
     size_t players = 0;
     for (const auto& slot : room_.slots) players += slot.state != SlotState::Empty ? 1u : 0u;
     if (players < 2 && plan_fill_seats(fill_, room_, sim::MAX_PLAYERS).empty()) return false;      // "too few players": as the host's START (with bots to seat they make up the rest: one person is enough)
-    return client_lobby_->request_start(fill_.level, effective_teams());              // (the room's own teams are the ones its code names: it ignores these when it has any)
+    return client_lobby_->request_start(fill_.level, effective_teams());              // (the room's own teams, the Room message's, win: it ignores these when it has any)
 }
 
 uint8_t NetGame::seat_move_target(const RoomMsg& room, uint8_t seat) noexcept {
     if (seat >= sim::MAX_PLAYERS || room.slots[seat].state != SlotState::Client) return 255;
-    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {
+    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // the next colour that nobody holds ...
         const uint8_t next = static_cast<uint8_t>((seat + step) % sim::MAX_PLAYERS);
         if (room.slots[next].state == SlotState::Empty) return next;
     }
-    return 255;                                                                       // every colour is taken: nowhere to go (a room of four starts when the fourth player comes)
+    for (uint8_t step = 1; step < sim::MAX_PLAYERS; ++step) {                         // ... else the next guest's: the two change places (a bot's colour and the host's stay)
+        const uint8_t next = static_cast<uint8_t>((seat + step) % sim::MAX_PLAYERS);
+        if (room.slots[next].state == SlotState::Client) return next;
+    }
+    return 255;                                                                       // no other guest and no free colour: nowhere to go
 }
 
 // A SeatMove went out and the room has not answered it: the room still seats its people as it did, and less than a second has passed (a request that the room cannot do is not answered at all)
@@ -516,23 +508,29 @@ bool NetGame::move_unanswered() const noexcept {
     return move_pending_ != 0 && move_pending_ == seating_hash(room_) && now_ - move_sent_ms_ < kMoveAnswerMs;
 }
 
-bool NetGame::request_move_seat(uint8_t seat) {
+bool NetGame::request_move_seat(uint8_t from, uint8_t to) {
     if (!is_leader() || phase_ != Phase::Room || !client_lobby_) return false;
-    const uint8_t target = seat_move_target(room_, seat);
-    if (target >= sim::MAX_PLAYERS) return false;
+    if (from >= sim::MAX_PLAYERS || to >= sim::MAX_PLAYERS || from == to) return false;
+    if (room_.slots[from].state != SlotState::Client) return false;                  // (a person's colour: the host's, a bot's and an empty one do not move)
+    if (room_.slots[to].state != SlotState::Empty && room_.slots[to].state != SlotState::Client) return false;      // (a free colour, or a guest's: a bot's stays)
     if (move_pending_ != 0 && now_ - move_sent_ms_ < kMoveGapMs) return false;      // a double click is one press
     if (move_unanswered()) return false;                                              // the last request has not been answered
-    if (!client_lobby_->request_seat_move(seat, target)) return false;
+    if (!client_lobby_->request_seat_move(from, to)) return false;                   // (it carries the guard: the seats as this machine shows them)
     move_pending_ = seating_hash(room_);
     move_sent_ms_ = now_;
     return true;
 }
 
+bool NetGame::request_move_seat(uint8_t seat) {
+    const uint8_t target = seat_move_target(room_, seat);
+    return target < sim::MAX_PLAYERS && request_move_seat(seat, target);
+}
+
 // The leader's plan of bots is by colour: a level for each seat, seated in the seats that are empty at START. When the room shows a person in another colour (a colour that a person held is empty
 // now, one that was empty is a person's now, nothing else changed: the leader's SeatMove, whenever its answer comes) the bot that was for the colour that the person took is for the colour that it
-// left, so the match that START makes has the same people and the same bots as the leader saw. The plan follows what the room shows, not what was asked: a request that the room does not do, or
-// does once however many times it was sent, changes nothing here. Each Room message is compared with the one before it (a move is one message; a person who comes or goes is another), however
-// many arrive in one update.
+// left, so the match that START makes has the same people and the same bots as the leader saw. A swap of two guests leaves the same colours empty: nothing changes in any state, and the plan stays.
+// The plan follows what the room shows, not what was asked: a request that the room does not do, or does once however many times it was sent, changes nothing here. Each Room message is compared
+// with the one before it (a move is one message; a person who comes or goes is another), however many arrive in one update.
 void NetGame::follow_moved_player(const RoomMsg& before) {
     uint8_t left = 255;
     uint8_t took = 255;
@@ -787,7 +785,7 @@ void NetGame::update_client() {
                         status_ = way_back_text(reject_reason_);
                         if (way_back_forgets(reject_reason_)) forget_key();
                     } else {
-                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, target_.room);
+                        status_ = reject_text(client_lobby_->reject_reason(), kInBrowser, create_.has_value() && public_room_code(target_.room));
                     }
                     events_.push_back(Event{Event::Type::Failed, 255});
                     break;
@@ -871,6 +869,7 @@ HelloMsg NetGame::way_back_hello() const {
     h.room = target_.room;
     h.token = target_.token;
     h.want_seat = seat_;                                                  // (the key decides the seat: this is only what the server would be told by anybody)
+    h.platform = platform_;                                               // (a Hello with a key never makes a room: no create block)
     return h;
 }
 
@@ -931,7 +930,7 @@ void NetGame::forget_key() {
 // The lobby's Welcome is the moment that a room hands out a key (none from a game on the local network or a room that holds no seats). A rejoin's Welcome (the flag: the match is this machine's own, it
 // is running) announces the key at once. A new player's key waits for the Start (announce_start_key): a visit to a waiting room alone, a tab that is closed in it, leaves no key behind to be offered
 // for a match that never began. A Hello that showed a key and was answered as a new player's (the Welcome has no rejoin flag and another key: a room with the same code is waiting for its players, a
-// demo room that another Hello made; the server never makes one for a Hello that shows a key) found nothing to take the seat of: the old key is of no use, and the machine is a player of the waiting
+// public room that another Hello made; the server never makes one for a Hello that shows a key) found nothing to take the seat of: the old key is of no use, and the machine is a player of the waiting
 // room like any other. The same key without the flag is the seat taken back in a waiting room.
 void NetGame::note_lobby_welcome() {
     if (welcomed_ || !client_lobby_ || client_lobby_->my_seat() >= sim::MAX_PLAYERS) return;

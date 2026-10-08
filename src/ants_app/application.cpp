@@ -158,6 +158,14 @@ private:
 
 constexpr uint8_t seat_bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
 
+// The map file that --room-map names: a name with an extension is the file as it is ("my-map.lvl"), a plain word is the original's file of that name ("treasure" is TREASURE.LVL)
+std::string room_map_file(const std::string& text) {
+    if (text.find('.') != std::string::npos) return text;
+    std::string file;
+    for (const char c : text) file.push_back(static_cast<char>(c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c));
+    return file + ".LVL";
+}
+
 // A frame or a background step holds the flag while it runs: nothing may start another one inside it (Application::run_frame_with_delta, background_pump_after)
 struct AdvanceGuard {
     explicit AdvanceGuard(bool& flag) : flag_(flag) { flag_ = true; }
@@ -335,6 +343,50 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--start-when") == 0 && i + 1 < argc) {
             const int players = std::atoi(argv[++i]);                          // a test hook: the leader of a server's room presses START once this many players are in
             if (players >= 1 && players <= 4) cfg.net_start_when = static_cast<uint8_t>(players);       // (1: a leader with --fill-bots starts alone)
+        } else if (std::strcmp(argv[i], "--room-map") == 0) {                  // the create block of a join (protocol 15): the room that the server makes if it has none of the code
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--room-map needs a map: one of tiny, small, medium, gauntlet, treasure, islands, or a file name of the server's maps (TREASURE.LVL)";
+            } else {
+                const std::string file = room_map_file(argv[++i]);
+                if (!net::valid_map_name(file)) {
+                    if (cfg.startup_error.empty()) cfg.startup_error = "--room-map " + std::string(argv[i]) + ": not a map name (a word like treasure, or a file name that ends in .LVL and has none of / \\ : * ? \" < > | in it)";
+                } else {
+                    if (!cfg.net_create) cfg.net_create.emplace();
+                    cfg.net_create->map_name = file;
+                }
+            }
+        } else if (std::strcmp(argv[i], "--room-seats") == 0) {
+            const std::string text = i + 1 < argc ? argv[i + 1] : "";
+            const int seats = text.size() == 1 && text[0] >= '2' && text[0] <= '4' ? text[0] - '0' : 0;      // (one digit: "3x" and "2.5" are no number of seats)
+            if (i + 1 >= argc || seats == 0) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--room-seats needs 2, 3 or 4";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+                if (!cfg.net_create) cfg.net_create.emplace();
+                cfg.net_create->seats = static_cast<uint8_t>(seats);
+            }
+        } else if (std::strcmp(argv[i], "--room-teams") == 0) {
+            LocalTeams teams;
+            std::string why;
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--room-teams needs ffa or two seats like 0+1";
+            } else if (!parse_local_teams(argv[++i], teams, why)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--room-teams " + std::string(argv[i]) + ": " + why;
+            } else {
+                if (!cfg.net_create) cfg.net_create.emplace();
+                cfg.net_create->set_teams(teams);
+            }
+        } else if (std::strcmp(argv[i], "--room-leader-start") == 0) {         // a full room waits for its leader's START
+            if (!cfg.net_create) cfg.net_create.emplace();
+            cfg.net_create->flags = static_cast<uint8_t>(cfg.net_create->flags | net::kCreateLeaderStarts);
+        } else if (std::strcmp(argv[i], "--platform") == 0) {                  // what this game tells the room about itself (protocol 15)
+            if (i + 1 >= argc || !net::parse_platform(argv[i + 1], cfg.net_platform)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--platform needs windows, macos, linux, android, ios or other (browser-windows, ... for a game in a web page)";
+                if (i + 1 < argc) ++i;
+            } else {
+                ++i;
+            }
         } else if (std::strcmp(argv[i], "--fill-bots") == 0) {                // the bots that this player's START seats in the empty seats of its room (protocol 11; a level for each seat since 13)
             if (i + 1 >= argc) {
                 if (cfg.startup_error.empty()) cfg.startup_error = "--fill-bots needs none, easy, medium or hard (or four of them, one for each seat: none,none,easy,hard)";
@@ -707,6 +759,8 @@ bool Application::init(const ApplicationConfig& config) {
         hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
+        if (config_.net_platform != 0) net_->set_platform(config_.net_platform);        // (--platform, or the word of the page's address; else the build's own)
+        if (config_.net_create) net_->set_create(*config_.net_create);                  // (the room that a server makes when it has none of the code: --room-map, --room-seats, ...)
         const bool host_role = config_.net_role == ApplicationConfig::NetRole::Host;
         // A join that names a room of a server joins with the key of the seat that this machine had there, when the store has a fresh one (a game that was closed, a page that was reloaded): the
         // newest entry of that server and room, or of the seat that --seat asks for. The key goes into the Hello only; the seat is the entry's, so that the key can be let go of by its seat.

@@ -109,16 +109,18 @@ if grep -qF 'id="seat-0-friend"' "$FOUR_PAGE" && grep -qF 'id="seat-1-easy"' "$F
     && grep -qF "remember(CARD_KEY, cardText(card));" "$FOUR_PAGE" && grep -qF "var card = cardParse(recall(CARD_KEY)) || cardFromOld({" "$FOUR_PAGE"; then FILL_FORM=0; fi
 check 'web/lobby.html offers four seats with Friend, Easy, Medium, Hard and Nobody for each, Sit here and the Team 1 and Team 2 switches on its one card, and remembers them' "$FILL_FORM"
 FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInCode) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
-    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInCode ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF "(plan ? '&fill=' + plan : '')" "$FOUR_PAGE" \
+if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInBlock) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
+    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF "(plan ? '&fill=' + plan : '')" "$FOUR_PAGE" \
     && grep -qF "'&start=' + cardPeople(state)" "$FOUR_PAGE" && grep -qF "Starts at once, in this tab. Bots gather food, raid and fight back." "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/lobby.html puts the plan into every game link of a room and into its own address as &fill=<plan> (and &teams=A+B for a room whose code names no teams), the card's START and invitations carry &fill=<plan>&start=<people>, the address is read through validFillPlan and validRoomTeams, and the line under START says what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
-# the room's teams are a word of its code (protocol 13): the card puts the word into the code it makes, the page reads the words of a code as the server does, and the links carry &teams= only for a room whose code names none
-TEAM_WORD=1
-if grep -qF "var word = roomTeamWord(roomTeam);" "$FOUR_PAGE" && grep -qF "'p-' + (word ? word + '-' : '') + randomCode()" "$FOUR_PAGE" && grep -qF "var named = codeTeams(code);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInCode ? named : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" \
-    && grep -qF "joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams)" "$FOUR_PAGE" && grep -qF "hostTeam(wantedTeams, d.players)" "$FOUR_PAGE" \
-    && grep -qF "var word = roomTeamWord(state.teams);" "$FOUR_PAGE" && grep -qF "return 'demo-' + state.map + '-4p-' + (word ? word + '-' : '') + random;" "$FOUR_PAGE"; then TEAM_WORD=0; fi
-check "web/lobby.html makes the teams that the Team 1 and Team 2 switches make a word of the room's code (demo-<map>-<n>p-t01-<random>; the card's room is always demo-<map>-4p-...), reads the words of a code (codeTeams), lets the code's teams win over the address's, and narrows an address's &teams= to the player count that the code names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_WORD"
+check "web/lobby.html puts the plan into every game link of a room and into its own address as &fill=<plan> (and &teams=A+B for a room whose create block names no teams), the card's START and invitations carry &fill=<plan>&start=<people>, the address is read through validFillPlan and validRoomTeams, and the line under START says what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
+# the room's teams are a part of its create block (protocol 15, they were a word of the code in protocol 13): the card puts them into the block of the room that it makes, the page reads the block of an
+# address (roomBlockOf), and the links carry &teams= only for a room whose block names none
+TEAM_BLOCK=1
+if grep -qF "var wantedBlock = roomBlockOf(window.location.search);" "$FOUR_PAGE" && grep -qF "var roomTeam = hostTeam(validRoomTeams(teams), players);" "$FOUR_PAGE" \
+    && grep -qF "startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');" "$FOUR_PAGE" \
+    && grep -qF "var shown = shownRoomTeams(named, seatCount);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" && grep -qF "joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams)" "$FOUR_PAGE" \
+    && grep -qF "hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '')" "$FOUR_PAGE" && grep -qF "roomBlockQuery(cardBlock(state)) + '&seat='" "$FOUR_PAGE"; then TEAM_BLOCK=0; fi
+check "web/lobby.html puts the teams that the Team 1 and Team 2 switches make into the room's create block (roommap, roomseats and roomteams in every link; the card's room is always for four seats), reads the block of an address (roomBlockOf), lets the block's teams win over the address's &teams=, and narrows an address's &teams= to the seats that the block names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_BLOCK"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
@@ -240,7 +242,7 @@ cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
 env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1
 ODD_STATUS=$?
-check "a listed map that no room code can name is a warning at startup, not an error" "$([ "$ODD_STATUS" = "142" ] && grep -q "'A B.LVL' can never be chosen" "$WORK/odd.log" && ! grep -q "'TINY.LVL' can never be chosen" "$WORK/odd.log"; echo $?)"
+check "a listed map with a blank in its name starts the server (a create block names a map by its file name, as it is: nothing about a map can be unchoosable) and the startup line lists the choices" "$([ "$ODD_STATUS" = "142" ] && grep -q "unless the block names one of TINY.LVL, A B.LVL" "$WORK/odd.log" && ! grep -q "never be chosen" "$WORK/odd.log"; echo $?)"
 fi
 
 # ---- part rooms: the control secret, a room by code, the leader, bots that fill the seats, chat, flood control, closing a room, SIGTERM ---------------------------
@@ -524,7 +526,7 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)     # (protocol 10: no key, no turns)
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0])     # (protocol 10: no key, no turns; protocol 15: the platform byte, 0 = not told, and no create block)
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))
@@ -765,32 +767,41 @@ check "--secret-file puts the generated secret where it is told" "$(start_nosecr
 check "--secret-file together with --results-dir: the secret goes to the file that is named (owner-only), the default file in the results folder is not made" "$(start_nosecret "$WORK/gen5.log" "$(free_port)" --results-dir "$WORK/res5" --secret-file "$WORK/elsewhere5/key"; r=$?; stop_server; [ "$r" = "0" ] && [ -s "$WORK/elsewhere5/key" ] && [ "$(mode_of "$WORK/elsewhere5/key")" = "600" ] && [ ! -e "$WORK/res5/control-secret" ]; echo $?)"
 fi
 
-# ---- part demo: demo rooms that choose their map, and the stack's own defaults ------------------------------------------------------------------------------------
+# ---- part demo: public rooms that choose their map, and the stack's own defaults ---------------------------------------------------------------------------------
 if part_enabled demo; then
-# demo rooms that choose their map: "demo-<map>-..." makes the room on that map when it is in --demo-maps, any other code on --demo-map
+# public rooms that choose their map (protocol 15): the create block of a Hello (the game's --room-map and --room-seats) makes the room on that map when it is in --demo-maps, on --demo-map when the
+# block names another map or none; a Hello with no block makes no room, whatever the code is
 PICK_PORT="$(free_port)"
 PICK_CTL="$(free_port)"
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$PICK_PORT" --ctl-port "$PICK_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL > "$WORK/pick.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$PICK_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-check "the log names the maps that a demo code can choose" "$(grep -q 'chooses one of TINY.LVL, SMALL.LVL' "$WORK/pick.log"; echo $?)"
+check "the log names the maps that a create block can choose" "$(grep -q 'unless the block names one of TINY.LVL, SMALL.LVL' "$WORK/pick.log"; echo $?)"
 PICK_PIDS=""
-for code in demo-small-t1 demo-tiny-t2 demo-t3 demo-medium-t4 demo-small-2p-t5; do
-    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$PICK_PORT" --room "$code" --frames 400 > "$WORK/pick_$code.log" 2>&1 &
+for pick in "pick-small:--room-map small" "pick-tiny:--room-map tiny" "pick-none:--room-seats 4" "pick-medium:--room-map medium" "pick-small2:--room-map small --room-seats 2"; do
+    code="${pick%%:*}"
+    # (the options are words without blanks or wildcards: they are split on purpose)
+    # shellcheck disable=SC2086
+    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$PICK_PORT" --room "$code" ${pick#*:} --frames 400 > "$WORK/pick_$code.log" 2>&1 &
     PICK_PIDS="$PICK_PIDS $!"
 done
+"$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$PICK_PORT" --room pick-nobody --frames 400 > "$WORK/pick_pick-nobody.log" 2>&1 &
+PICK_NOBODY_PID=$!
 map_of_room() { for _ in $(seq 1 60); do M="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("map", ""))' 2> /dev/null)"; [ -n "$M" ] && break; sleep 0.2; done; echo "$M"; }
-check "demo-small-t1 is made on SMALL.LVL" "$([ "$(map_of_room demo-small-t1)" = "SMALL.LVL" ]; echo $?)"
-check "demo-tiny-t2 is made on TINY.LVL" "$([ "$(map_of_room demo-tiny-t2)" = "TINY.LVL" ]; echo $?)"
-check "demo-t3 (no map in the code) is made on the default map" "$([ "$(map_of_room demo-t3)" = "TINY.LVL" ]; echo $?)"
-check "demo-medium-t4 (a map that is not in the list) is made on the default map" "$([ "$(map_of_room demo-medium-t4)" = "TINY.LVL" ]; echo $?)"
+check "a block with --room-map small makes the room on SMALL.LVL" "$([ "$(map_of_room pick-small)" = "SMALL.LVL" ]; echo $?)"
+check "a block with --room-map tiny makes the room on TINY.LVL" "$([ "$(map_of_room pick-tiny)" = "TINY.LVL" ]; echo $?)"
+check "a block that names no map (only the seats) makes the room on the default map" "$([ "$(map_of_room pick-none)" = "TINY.LVL" ]; echo $?)"
+check "a block that names a map that is not in the list (medium) makes the room on the default map" "$([ "$(map_of_room pick-medium)" = "TINY.LVL" ]; echo $?)"
 expected_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("expected", ""))' 2> /dev/null; }
-check "demo-small-2p-t5 is made on SMALL.LVL for two players" "$([ "$(map_of_room demo-small-2p-t5)" = "SMALL.LVL" ] && [ "$(expected_of_room demo-small-2p-t5)" = "2" ] && [ "$(expected_of_room demo-small-t1)" = "4" ]; echo $?)"
-for p in $PICK_PIDS; do kill "$p" 2> /dev/null; done
+check "a block with --room-map small --room-seats 2 makes the room on SMALL.LVL for two players, another block for four" "$([ "$(map_of_room pick-small2)" = "SMALL.LVL" ] && [ "$(expected_of_room pick-small2)" = "2" ] && [ "$(expected_of_room pick-small)" = "4" ]; echo $?)"
+for _ in $(seq 1 100); do kill -0 "$PICK_NOBODY_PID" 2> /dev/null || break; sleep 0.2; done
+check "a Hello with no create block makes no room (the code is only a name: the control interface has no such room, 404)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
+check "... and the server refused that game, and no other (the control interface counts one refused connection)" "$([ "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/stats" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("refused", ""))' 2> /dev/null)" = "1" ]; echo $?)"
+for p in $PICK_PIDS $PICK_NOBODY_PID; do kill "$p" 2> /dev/null; done
 stop_server
 
 # the stack's own defaults: docker-compose.stack.yml, read as the stack starts it with nothing set in its environment (tests/scripts/stack_command.py), gives the demo options of the
-# public site. A code that names no map is made on its --demo-map, TREASURE.LVL (the map that is played most); a code that names another map of the six is made on that one
+# public site. A block that names no map is made on its --demo-map, TREASURE.LVL (the map that is played most); a block that names another map of the six is made on that one
 STACK_OPTS="$(python3 "$ROOT/tests/scripts/stack_command.py" "$ROOT/docker-compose.stack.yml" --demo 2> /dev/null)"
 check "docker-compose.stack.yml: the demo options can be read (--demo-rooms, --demo-map and --demo-maps with their defaults)" "$([ -n "$STACK_OPTS" ]; echo $?)"
 check "docker-compose.stack.yml: the default --demo-map is TREASURE.LVL" "$(echo "$STACK_OPTS" | grep -q -- '--demo-map TREASURE.LVL '; echo $?)"
@@ -808,26 +819,28 @@ for _ in $(seq 1 50); do
 done
 check "a server started with the stack's own demo options runs (the six maps are in the folder)" "$STACK_UP"
 STACK_PIDS=""
-for code in demo-n1 demo-tiny-n2 demo-treasure-n3 demo-islands-2p-n4; do
-    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$STACK_PORT" --room "$code" --frames 400 > "$WORK/stack_$code.log" 2>&1 &
+for pick in "stack-n1:--room-seats 4" "stack-tiny-n2:--room-map tiny" "stack-treasure-n3:--room-map treasure" "stack-islands-n4:--room-map islands --room-seats 2"; do
+    code="${pick%%:*}"
+    # shellcheck disable=SC2086
+    "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$STACK_PORT" --room "$code" ${pick#*:} --frames 400 > "$WORK/stack_$code.log" 2>&1 &
     STACK_PIDS="$STACK_PIDS $!"
 done
 stack_map_of_room() { for _ in $(seq 1 60); do M="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$STACK_CTL/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("map", ""))' 2> /dev/null)"; [ -n "$M" ] && break; sleep 0.2; done; echo "$M"; }
-check "the stack: demo-n1 (no map in the code) is made on the default map, TREASURE.LVL" "$([ "$(stack_map_of_room demo-n1)" = "TREASURE.LVL" ]; echo $?)"
-check "the stack: demo-tiny-n2 is made on TINY.LVL (a code that names a map still chooses it)" "$([ "$(stack_map_of_room demo-tiny-n2)" = "TINY.LVL" ]; echo $?)"
-check "the stack: demo-treasure-n3 is made on TREASURE.LVL" "$([ "$(stack_map_of_room demo-treasure-n3)" = "TREASURE.LVL" ]; echo $?)"
-check "the stack: demo-islands-2p-n4 is made on ISLANDS.LVL" "$([ "$(stack_map_of_room demo-islands-2p-n4)" = "ISLANDS.LVL" ]; echo $?)"
-# release B turned the switch on: the stack passes no reconnect option and its rooms hold the seat of a player whose connection is lost (the log says so; a demo room, and a room that the
+check "the stack: a block that names no map is made on the default map, TREASURE.LVL" "$([ "$(stack_map_of_room stack-n1)" = "TREASURE.LVL" ]; echo $?)"
+check "the stack: a block with --room-map tiny is made on TINY.LVL (a block that names a map still chooses it)" "$([ "$(stack_map_of_room stack-tiny-n2)" = "TINY.LVL" ]; echo $?)"
+check "the stack: a block with --room-map treasure is made on TREASURE.LVL" "$([ "$(stack_map_of_room stack-treasure-n3)" = "TREASURE.LVL" ]; echo $?)"
+check "the stack: a block with --room-map islands is made on ISLANDS.LVL" "$([ "$(stack_map_of_room stack-islands-n4)" = "ISLANDS.LVL" ]; echo $?)"
+# release B turned the switch on: the stack passes no reconnect option and its rooms hold the seat of a player whose connection is lost (the log says so; a public room, and a room that the
 # control interface makes without a setting, say reconnect true)
 stack_reconnect_of_room() { curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$STACK_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null; }
 check "the stack passes no reconnect option (the default is what holds the seats)" "$(echo "$STACK_OPTS" | grep -q -e '--reconnect' -e '--no-reconnect'; [ "$?" -ne 0 ]; echo $?)"
 check "the stack: the log says that rooms hold seats, as the default" "$(grep -q 'rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off)' "$WORK/stack_demo.log"; echo $?)"
-check "the stack: its demo rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room demo-n1)" = "true" ] && [ "$(stack_reconnect_of_room demo-islands-2p-n4)" = "true" ]; echo $?)"
+check "the stack: its public rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room stack-n1)" = "true" ] && [ "$(stack_reconnect_of_room stack-islands-n4)" = "true" ]; echo $?)"
 check "the stack: a room that the control interface makes without a setting holds seats, and one that says false does not" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-1"}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":true' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-2","reconnect":false}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":false'; echo $?)"
 for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
 stop_server
 
-# the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a demo room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
+# the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a public room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
 NOREC_PORT="$(free_port)"
 NOREC_CTL="$(free_port)"
 # shellcheck disable=SC2086
@@ -840,11 +853,11 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 check "a server started with the stack's options and --no-reconnect runs" "$NOREC_UP"
-"$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$NOREC_PORT" --room demo-nr1 --frames 400 > "$WORK/norec_demo.log" 2>&1 &
+"$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$NOREC_PORT" --room norec-nr1 --room-seats 4 --frames 400 > "$WORK/norec_demo.log" 2>&1 &
 NOREC_PID=$!
 norec_reconnect_of_room() { for _ in $(seq 1 60); do R="$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$NOREC_CTL/rooms/$1" | python3 -c 'import sys, json; print(str(json.load(sys.stdin).get("reconnect", "")).lower())' 2> /dev/null)"; [ -n "$R" ] && break; sleep 0.2; done; echo "$R"; }
 check "--no-reconnect: the log says that rooms hold no seats, and that no record is kept" "$(grep -q 'rooms hold no seats (--no-reconnect)' "$WORK/norec.log" && grep -q 'no room holds seats unless its specification says so (--no-reconnect), so none is kept now' "$WORK/norec.log"; echo $?)"
-check "--no-reconnect: a demo room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room demo-nr1)" = "false" ]; echo $?)"
+check "--no-reconnect: a public room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room norec-nr1)" = "false" ]; echo $?)"
 check "--no-reconnect: a room that the control interface makes without a setting holds none, and one that says true holds seats" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-1"}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":false' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-2","reconnect":true}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":true'; echo $?)"
 kill "$NOREC_PID" 2> /dev/null
 stop_server
@@ -1212,8 +1225,8 @@ def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
     return bytes([len(b)]) + b
-# a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns
-hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0)
+# a Hello (HelloMsg, include/ants_net/protocol.hpp): type 1, protocol, name, listen port 0, any seat (255), the room's code, no token, no key, no turns, the platform byte (protocol 15: 0 = not told; no create block)
+hello = bytes([1]) + struct.pack('<H', protocol) + str8('Newcomer') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0])
 hello_seconds, welcome_seconds, welcome = 99.0, 99.0, False
 if made:
     asked = time.time()

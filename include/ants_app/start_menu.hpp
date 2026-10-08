@@ -70,9 +70,9 @@ inline constexpr size_t kSeatChoiceCount = 4;
 /// "Empty", "Easy bot", "Medium bot", "Hard bot"
 const char* seat_choice_text(SeatChoice choice) noexcept;
 
-/// A map that a hosted match can be made on: the six maps of the original game, which the game server's demo rooms offer (web/lobby.html makes the same codes)
+/// A map that a hosted match can be made on: the six maps of the original game, which the game server's public rooms offer (web/lobby.html offers the same)
 struct MenuMap {
-    const char* key;       // the word of the room code ("small")
+    const char* key;       // the map's word ("small"; its file is the key in capitals and ".LVL": TINY.LVL ... ISLANDS.LVL)
     const char* name;      // what the screen shows ("Small")
 };
 inline constexpr size_t kMenuMapCount = 6;
@@ -94,17 +94,23 @@ const char* fill_choice_caption() noexcept;
 /// "Empty seats will be Medium bots." (the same level in every seat), else the seats one by one: "At START: Red gets an Easy bot, Black a Hard bot." (the short form "At START: Red Easy, Blue Medium,
 /// Black Hard." when the long one would not fit the line)
 std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
-/// What the room's panel tells about the teams of the room it made, "Room teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`; they are in the room's code,
-/// so the room makes them for every start); "" for free for all
+/// What the room's panel tells about the teams of the room it made, "Room teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`; they are in the room's
+/// create block, so the room makes them for every start); "" for free for all
 std::string room_teams_sentence(const LocalTeams& teams, int players);
 
-/// The room code of a hosted match, made as web/lobby.html makes it: "demo-<map>-<n>p-[<team word>-]<six characters>", the six from kRoomCodeAlphabet (lower case letters without i, l and o,
-/// and the digits 2 - 9: no look-alikes). `random` gives 32 random bits at each call. `teams` (protocol 13) is the room's teams: the word `t01` for the pair 0 + 1 (net::room_code_team_word) goes
-/// after the player count when `teams` is one of the choices of a room of `players` (three or four; free for all and anything else leave it out): the server makes the room with them for every
-/// start. At most 27 characters, so it always fits the 32 that a room code may hold.
+/// The room code of a hosted match (protocol 15), made as web/lobby.html makes it: kRoomCodeChars (6) characters of kRoomCodeAlphabet (lower case letters without i, l and o, and the digits 2 - 9: no
+/// look-alikes), 31 symbols, 8.9e8 codes. `random` gives 32 random bits at each call. The code is only a name: the map, the seats and the teams of the room are in the create block that the first
+/// Hello carries (make_create_block), and the server makes the room from that block when it has none of the code.
 inline constexpr const char* kRoomCodeAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
-inline constexpr size_t kRoomCodeRandomChars = 6;
-std::string make_room_code(const MenuMap& map, int players, const std::function<uint32_t()>& random, const LocalTeams& teams = LocalTeams{});
+inline constexpr size_t kRoomCodeChars = 6;
+std::string make_room_code(const std::function<uint32_t()>& random);
+/// A code as the screens show it, in two groups of three so that it can be read out and typed ("k7m2xq" is "k7m 2xq"); a code of another length (a room that the control interface made) as it is.
+/// check_room_code reads the grouped form back (it drops the blanks inside a code), and "Copy" copies the plain code.
+std::string room_code_display(const std::string& code);
+/// The create block of a hosted match (protocol 15): what the Host panel chose, which the server makes the room from when it has none of the code: the map's file ("TREASURE.LVL": the key in capitals),
+/// the seats (2 - 4), the teams when `teams` is one of the choices of a room of `players` (three or four; free for all and anything else leave them out) and, with `leader_starts`, the flag that a
+/// full room waits for its leader's START (the leader arranges the seats first)
+net::CreateBlock make_create_block(const MenuMap& map, int players, const LocalTeams& teams = LocalTeams{}, bool leader_starts = false);
 
 /// The player's name as the menu sends it: blanks at both ends cut away, printable ASCII only (what the original's edit field takes), at most `net::kMaxNameChars`
 std::string clean_player_name(const std::string& raw);
@@ -113,8 +119,8 @@ std::string clean_player_name(const std::string& raw);
 bool looks_like_bot_name(const std::string& name);
 /// True when `raw` can be sent as a player's name (`clean` holds it); else false with the reason in `why`
 bool check_player_name(const std::string& raw, std::string& clean, std::string& why);
-/// True when `raw` (blanks at both ends cut away into `clean`) is a room code of the server: 1 - 32 letters, digits, '-' and '_'. The case is NEVER changed: the server's codes are case
-/// sensitive ("demo-small-x7k2" and "DEMO-SMALL-X7K2" are two different rooms, and only the first is a demo room that the server makes on demand).
+/// True when `raw` (blanks at both ends and inside cut away into `clean`: a code has none, and the screens show it in two groups of three, "k7m 2xq") is a room code of the server: 1 - 32 letters,
+/// digits, '-' and '_'. The case is NEVER changed: the server's codes are case sensitive ("k7m2xq" and "K7M2XQ" are two different rooms).
 bool check_room_code(const std::string& raw, std::string& clean, std::string& why);
 
 /// Which of the remembered values changed (the owner stores that one: one file write per change)

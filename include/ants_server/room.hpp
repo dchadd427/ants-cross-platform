@@ -81,10 +81,16 @@ struct RoomSpec {
     /// is shown as a bot ("Bot (Medium)") and is run by the server as a virtual client. At least one seat must be left for a person, the seats are distinct and Fog of War is off
     /// (RoomManager::create_room refuses anything else). Empty: no bot code runs in the room, unless its leader's START asks for a fill.
     std::vector<ai::BotSpec> bots;
-    /// The room's own teams (protocol 13): a demo room's code names them (`demo-treasure-4p-t01-k7m2xq`: net::room_code_teams). The match starts with them EVERY time, when the full room starts by itself and
+    /// The room's own teams (protocol 13; the create block's since protocol 15): the match starts with them EVERY time, when the full room starts by itself and
     /// when its leader's START starts it early; a leader's StartRequest has teams of its own only in a room that has none (sim::start_teams_for). They are checked against the seats that really play at
     /// the start (sim::plan_start_teams): when they cannot be made the match starts without them and the room says why. Not set: the leader's START chooses.
     sim::StartTeams teams;
+    /// Protocol 15: a room that a visitor's create block made (RoomManager::make_public_room). The server counts these against its public-room cap (--demo-rooms), gives them the short pause cap and
+    /// ends the one that has been abandoned the longest when a new one needs the place; a room that the control interface made is not one.
+    bool public_room{false};
+    /// Protocol 15: the room does not start by itself when every seat is taken: only its leader's START starts the match (the leader can arrange the seats first). It needs a leader, so it is
+    /// for a room with `early_start` (a room that has none ignores it).
+    bool leader_starts{false};
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -151,6 +157,8 @@ struct RoomStatus {
     bool fog{false};
     uint8_t expected{0};
     bool early_start{true};                 // the room allows the leader's early start
+    bool public_room{false};                // made by a visitor's create block (protocol 15): for the tests, not shown by the control interface
+    bool leader_starts{false};              // the full room waits for its leader's START (protocol 15): for the tests, not shown by the control interface
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
     uint32_t seat_moves{0};                 // the colours that the leader moved a player to (protocol 14: each one that the room carried out)
@@ -167,7 +175,7 @@ struct RoomStatus {
     std::vector<Bot> bots;
     std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
     std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
-    std::string room_teams;                 // the room's own teams, "A+B" ("" when its code names none: the leader's START chooses): for the tests, not shown by the control interface
+    std::string room_teams;                 // the room's own teams, "A+B" ("" when it has none: the leader's START chooses): for the tests, not shown by the control interface
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick
@@ -285,6 +293,8 @@ public:
     void release_record();
 
     const std::string& code() const noexcept { return spec_.code; }
+    /// Made by a visitor's create block (protocol 15): one of the server's public rooms
+    bool public_room() const noexcept { return spec_.public_room; }
     RoomState state() const noexcept { return state_; }
     /// True while a client may still join (Waiting)
     bool accepting() const noexcept { return state_ == RoomState::Waiting; }

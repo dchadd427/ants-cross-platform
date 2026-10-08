@@ -181,9 +181,13 @@ public:
     bool tile_blacklisted(sim::TileCoord tile, uint64_t tick) const noexcept;
     /// The ants that are on their way and what for
     std::vector<std::pair<uint32_t, sim::AntType>> on_their_way() const;
+    /// The watcher (Hard): the ant that stands beside the drop tile of the own flower and waits for a landing of a kind that the plan lacks (0: none), and how many were sent
+    uint32_t watcher() const noexcept { return watch_.ant; }
+    uint32_t watchers_sent() const noexcept { return watched_; }
     const Params& params() const noexcept { return params_; }
 
 private:
+    static constexpr uint64_t kWatchHoldAfterHit = 600;              // ticks without a watcher after one was hit
     static constexpr uint64_t kPending = ~uint64_t{0};
     struct Take {
         sim::TileCoord tile{};
@@ -200,10 +204,29 @@ private:
     static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
     const std::vector<int32_t>& field_for(TaskContext& context, sim::TileCoord tile);
     bool try_start(TaskContext& context, sim::AntType kind);
+    void watch(TaskContext& context);
+    void step_off(TaskContext& context);
 
+    struct Watch {
+        uint32_t ant{0};
+        sim::TileCoord drop{};                       // the flower's drop tile
+        sim::TileCoord spot{};                       // the tile beside it where the ant stands
+        uint64_t ordered{0};                         // the tick of the last order to walk to the spot (0: none yet)
+        uint8_t hp{0};                               // its hit points when it was sent: fewer later mean that it was hit
+    };
+    struct StepOff {
+        uint32_t ant{0};
+        sim::TileCoord drop{};
+        sim::TileCoord spot{};
+        uint64_t until{0};
+    };
     Tactics& tactics_;
     Params params_;
     std::map<uint32_t, Take> takes_;                                 // ant -> its trip
+    Watch watch_;                                                    // the watcher
+    std::vector<StepOff> step_off_;                                  // typed ants that took a drop from the watcher's place and are still on the drop tile (a standing ant locks the flower)
+    uint32_t watched_{0};
+    uint64_t watch_off_until_{0};                                    // no watcher before this tick (the last one was hit)
     std::map<std::pair<uint32_t, int64_t>, uint64_t> black_;         // (ant, tile) -> until
     std::map<int64_t, uint64_t> tile_black_;                         // tile -> until
     std::map<int64_t, Cached> fields_;
@@ -593,6 +616,7 @@ public:
         uint32_t field_ticks{200};           // the walking field of the hill as it is now (MapInfo::field_now) is made again after this many ticks, and at once when a tile of the ring round the gate or of the queue row changed
         uint32_t ramp_wait_ticks{200};       // it waits this long for an own ant that stands on the ramp (a longer one is not waited for: the click is refused and the stop above takes over)
         bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits for the ramp: LevelPlan::cantgo_aware
+        uint32_t leaver_wait_ticks{0};       // the entrance click waits at most this long while an own ant without food stands on the ramp (0: it does not wait; it does not either with cantgo_aware off): LevelPlan::gate_leaver_ticks
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -659,6 +683,7 @@ private:
     std::map<uint32_t, uint64_t> clip_seen_;
     int64_t pending_free_at_{0};
     int64_t ramp_since_{-1};                      // the tick at which an own ant was first seen standing on the ramp (-1: none does)
+    int64_t leaver_since_{-1};                    // the tick at which an own ant without food was first seen on the ramp (-1: none is)
     uint32_t bite_waited_{0};
     uint32_t user_{0};
     uint64_t user_release_{0};

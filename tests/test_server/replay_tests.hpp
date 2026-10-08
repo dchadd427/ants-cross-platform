@@ -286,13 +286,15 @@ void run_replay_tests() {
             ASSERT_TRUE(w.mgr.replay_store() == nullptr);
             ASSERT_TRUE(w.mgr.create_room(spec_of("NONE-1", 2), w.now).ok);
             ASSERT_EQ(w.status("NONE-1").replay_note, std::string("this server keeps no replays"));
-            {   // the server's own reason comes first: neither "record": false nor a demo room's code hides it
+            {   // the server's own reason comes first: neither "record": false nor a demo room (one that a visitor's create block made) hides it
                 RoomSpec off = spec_of("NONE-2", 2);
                 off.record_replay = false;
                 ASSERT_TRUE(w.mgr.create_room(off, w.now).ok);
                 ASSERT_EQ(w.status("NONE-2").replay_note, std::string("this server keeps no replays"));
-                ASSERT_TRUE(w.mgr.create_room(spec_of("demo-none", 2), w.now).ok);
-                ASSERT_EQ(w.status("demo-none").replay_note, std::string("this server keeps no replays"));
+                RoomSpec visitors = spec_of("nonepub1", 2);
+                visitors.public_room = true;
+                ASSERT_TRUE(w.mgr.create_room(visitors, w.now).ok);
+                ASSERT_EQ(w.status("nonepub1").replay_note, std::string("this server keeps no replays"));
             }
             start_pair(w, "NONE-1", 38000);
             ASSERT_TRUE(w.mgr.close_room("NONE-1", w.now));
@@ -308,49 +310,43 @@ void run_replay_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.164 The Rooms That A Hello Makes (\"demo-...\": The Games Of The Front Page) Are Kept Only When The Server Is Started With --replay-demo; The Rooms Of The Control Interface Are Kept Either Way") {
+    TEST_CASE("S3.164 The Rooms That A Visitor's Create Block Makes (The Games Of The Front Page: The Demo Rooms) Are Kept Only When The Server Is Started With --replay-demo; The Rooms Of The Control Interface Are Kept Either Way, Whatever Their Code Begins With") {
         ReplayClock clock;
         ServerLimits limits;
         limits.demo_rooms = 2;
         limits.demo_map = "TINY.LVL";
-        limits.demo_players = 2;
         limits.demo_wait_ms = 60000;
         for (const bool include_demo : {false, true}) {
             World w(limits);
             std::string why;
             ASSERT_TRUE(w.mgr.enable_replays(replay_config(include_demo ? "replay-demo-on" : "replay-demo-off", &clock), include_demo, why));
-            start_pair(w, "demo-rec1", 38000);
-            RoomStatus s = w.status("demo-rec1");
-            ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600);
+            w.connect_creating("Ann", "recpub1", block_of("", 2));                                        // (the front page's way: Ann's Hello carries the block that makes the room)
+            w.connect("Bob", "recpub1");
+            w.run(1500 + kPre + 38000);
+            RoomStatus s = w.status("recpub1");
+            ASSERT_TRUE(s.public_room && s.state == RoomState::Running && s.turns >= 600);
             if (include_demo) ASSERT_TRUE(s.replay_note.empty());
             else ASSERT_TRUE(s.replay_note.find("demo rooms") != std::string::npos && s.replay_note.find("--replay-demo") != std::string::npos);
-            ASSERT_TRUE(w.mgr.close_room("demo-rec1", w.now));
-            s = w.status("demo-rec1");
+            ASSERT_TRUE(w.mgr.close_room("recpub1", w.now));
+            s = w.status("recpub1");
             ASSERT_EQ(s.replay_kept, include_demo);
             ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{1} : size_t{0});
             // a room of the control interface, with the same server: kept either way
             clock.now += 10;
             ASSERT_TRUE(w.mgr.create_room(spec_of("CTL-REC", 2), w.now).ok);
+            ASSERT_FALSE(w.status("CTL-REC").public_room);
             start_pair(w, "CTL-REC", 38000, "Cy", "Di");
             ASSERT_TRUE(w.mgr.close_room("CTL-REC", w.now));
             ASSERT_TRUE(w.status("CTL-REC").replay_kept);
             ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{2} : size_t{1});
-            // a room that the control interface makes with a "demo-" code is a demo room for this option: it is the code that says so (the front page's rooms are made from the codes that its visitors ask for)
+            // a code that begins with "demo-" is only a name since protocol 15 (it was the sign of a demo room before): a room of the control interface with such a code is an ordinary room, kept either way
             clock.now += 10;
             ASSERT_TRUE(w.mgr.create_room(spec_of("demo-ctl", 2), w.now).ok);
-            ASSERT_EQ(w.status("demo-ctl").replay_note.empty(), include_demo);
+            ASSERT_TRUE(w.status("demo-ctl").replay_note.empty());
             start_pair(w, "demo-ctl", 38000, "Ed", "Flo");
             ASSERT_TRUE(w.mgr.close_room("demo-ctl", w.now));
-            ASSERT_EQ(w.status("demo-ctl").replay_kept, include_demo);
-            ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{3} : size_t{1});
-            // the prefix alone is no demo room's code (a Hello makes a demo room from a code with something after the prefix): a room of that code is an ordinary room, kept either way
-            clock.now += 10;
-            ASSERT_TRUE(w.mgr.create_room(spec_of("demo-", 2), w.now).ok);
-            ASSERT_TRUE(w.status("demo-").replay_note.empty());
-            start_pair(w, "demo-", 38000, "Gus", "Hal");
-            ASSERT_TRUE(w.mgr.close_room("demo-", w.now));
-            ASSERT_TRUE(w.status("demo-").replay_kept);
-            ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{4} : size_t{2});
+            ASSERT_TRUE(w.status("demo-ctl").replay_kept);
+            ASSERT_EQ(w.mgr.replay_store()->count(), include_demo ? size_t{3} : size_t{2});
         }
     } TEST_END();
 
