@@ -2552,14 +2552,6 @@ void run_leader_tests() {
         ASSERT_TRUE(mgr.create_room(spec_of("SOCK-4", 4), now).ok);
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<std::unique_ptr<net::TcpConnection>> links;
-        for (const char* name : {"Ann", "Bob"}) {
-            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
-            ASSERT_TRUE(links.back() != nullptr);
-            clients.push_back(std::make_unique<Client>());
-            clients.back()->name = name;
-            clients.back()->room = "SOCK-4";
-            clients.back()->start(links.back().get(), 55u);
-        }
         const auto pump = [&]() {
             now += 10;
             for (int k = 0; k < 4; ++k) {
@@ -2571,6 +2563,16 @@ void run_leader_tests() {
             for (auto& c : clients) c->update(now, maps_dir());
             std::this_thread::sleep_for(std::chrono::microseconds(200));
         };
+        for (const char* name : {"Ann", "Bob"}) {
+            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(links.back() != nullptr);
+            clients.push_back(std::make_unique<Client>());
+            clients.back()->name = name;
+            clients.back()->room = "SOCK-4";
+            clients.back()->start(links.back().get(), 55u);
+            // Ann is in, and the leader, before Bob connects: two Hellos sent at once over two sockets can be read in either order (a Mac's loopback is handed over by a kernel thread), and the first one in is the leader
+            for (int i = 0; i < 3000 && !clients[0]->lobby->is_leader(); ++i) pump();
+        }
         for (int i = 0; i < 3000; ++i) {                                                  // both are in the room (the room waits for four)
             pump();
             RoomStatus s;
@@ -5681,15 +5683,6 @@ void run_bot_tests() {
         ASSERT_TRUE(mgr.create_room(spec_of("SOCK-5", 4), now).ok);
         std::vector<std::unique_ptr<Client>> clients;
         std::vector<std::unique_ptr<net::TcpConnection>> links;
-        for (const char* name : {"Ann", "Bob"}) {
-            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
-            ASSERT_TRUE(links.back() != nullptr);
-            clients.push_back(std::make_unique<Client>());
-            clients.back()->name = name;
-            clients.back()->room = "SOCK-5";
-            clients.back()->record_hashes = true;
-            clients.back()->start(links.back().get(), 77u);
-        }
         const auto pump = [&]() {
             now += 10;
             for (int k = 0; k < 4; ++k) {
@@ -5701,6 +5694,17 @@ void run_bot_tests() {
             for (auto& c : clients) c->update(now, maps_dir());
             std::this_thread::sleep_for(std::chrono::microseconds(200));
         };
+        for (const char* name : {"Ann", "Bob"}) {
+            links.push_back(net::TcpConnection::connect("127.0.0.1", listener->port()));
+            ASSERT_TRUE(links.back() != nullptr);
+            clients.push_back(std::make_unique<Client>());
+            clients.back()->name = name;
+            clients.back()->room = "SOCK-5";
+            clients.back()->record_hashes = true;
+            clients.back()->start(links.back().get(), 77u);
+            // Ann is in, and the leader, before Bob connects: two Hellos sent at once over two sockets can be read in either order (a Mac's loopback is handed over by a kernel thread), and the first one in is the leader
+            for (int i = 0; i < 3000 && !clients[0]->lobby->is_leader(); ++i) pump();
+        }
         for (int i = 0; i < 3000; ++i) {
             pump();
             RoomStatus s;
