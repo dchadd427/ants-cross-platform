@@ -2,20 +2,25 @@
 // AI and online. Only do online."): the page has one card, "New match", for every game, and an invitation for each friend in it.
 //   * web/lobby.html, the block CARD_BEGIN .. CARD_END: the card's rules. Four seats, exactly one of them You, every other seat Friend, Easy, Medium, Hard or Nobody; who plays and how many people to wait
 //     for; the Team 1 and Team 2 switches of the seats that play (a team is two seats on the same switch: cardSide, cardShownSides, cardSideOpen, cardTeamOf); what is remembered (cardParse / cardText) and what the first visit takes from the keys of the earlier pages (cardFromOld);
-//     Sit here (cardSit); the room's code (cardCode: demo-<map>-4p-[t<a><b>-]<random>, the teams a word of it) and when a code still fits the choices (cardRoomFits); the plan (cardFill) and the addresses
-//     of START and of an invitation (cardQuery); who is alone (cardAlone: START then plays a game for one on this computer) and the line under START (cardNote). Every state of the card is checked, and every address that it can make is read by the game
-//     page (web/shell.html, ANTS_PAGE.joinArguments) as the same seat, the same plan, the same number of people and no teams parameter (they are in the code), with a name only in START's;
+//     Sit here (cardSit); the room's create block (cardBlock: the card's map, four seats, the card's teams) and when the room that the tab kept still fits the choices (cardRoomFits: its code is six characters of the page's alphabet,
+//     its map and teams are the card's); the plan (cardFill) and the addresses of START and of an invitation (cardQuery, which carries the block); who is alone (cardAlone: START then plays a game for one on this computer) and the
+//     line under START (cardNote). Every state of the card is checked, and every address that it can make is read by the game page (web/shell.html, ANTS_PAGE.joinArguments) as the same seat, the same plan, the same number of people,
+//     the same create block (--room-map, --room-seats, --room-teams) and no --teams (the teams are in the block), with a name only in START's;
 //   * the block LOBBY_BEGIN .. LOBBY_END: what the old addresses mean and what the old pages left in the browser. playersChoice (1 .. 4, else the fallback), hostPlayers (an old stored 1 is 2), soloBots
 //     (nothing remembered is Medium, anything that is no level is none), soloSeats (one level per seat from the new key, else the old one), localGameQuery (the address of a game on THIS computer, which
 //     an address with &players=1 still plays: ?map=<key>[&bots=<levels>]&name=<name>&aspect=<shape>, never a ?join=, a room or a server), hostSeats / hostFillText / hostTeamChoices / hostTeam /
-//     hostTeamText / validFillPlan / validRoomTeams / hostPlanText (a room that an address asks for), roomTeamWord / codeTeams (the room's teams are a word of its code, demo-treasure-4p-t01-k7m2xq: the
-//     page reads a code as the server and every game do, every line of tests/data/room_code_teams.tsv, the table that net::room_code_teams is tested against too);
+//     hostTeamText / validFillPlan / validRoomTeams / hostPlanText (a room that an address asks for), codeText (a room code as a screen shows it: two groups of three) and roomBlockQuery / roomBlockOf (a room's create
+//     block as the links of the page carry it, &roommap= &roomseats= &roomteams= &roomleaderstart=, and as an address's block is read back: the game page turns it into --room-map, --room-seats, --room-teams and
+//     --room-leader-start; a room code is a name and nothing more, so no code carries the map, the seats or the teams);
 //   * web/shell.html, ANTS_PAGE.localArguments: the game page's local parameters through a WHITELIST (the map by its key out of the six shipped maps, the opponents by one level word or three,
 //     the teams by ffa or 0+N, a name of printable ASCII): what reaches the game's own arguments is a file name from a fixed table, level words that were tested, a seat that has a bot, a
 //     cleaned name and flags, never the text of the address; nothing at all for an address with no local parameter (today's front page: the setup screen);
+//   * web/shell.html, ANTS_PAGE.joinArguments: the parameters of a join of a room (&roommap= &roomseats= &roomteams= &roomleaderstart= &platform= next to the room, the seat, the plan, the teams, the people
+//     to wait for and the name), each through its own whitelist, only with a valid door, and in the order that the game is given them;
 //   * the two pages agree: the six maps (keys and files, which exist in Original-Ants/Maps), and every address that the lobby can make for a game on this computer is read by the game page as the same
 //     map, the same bot in each of the three other bases and the same name; every address of a ROOM that the room panel's old addresses can make (every room of 2 - 4 players, every set of levels,
-//     every team) is read by the game page as the same --fill-bots plan and the same --teams.
+//     every team) is read by the game page as the same --fill-bots plan and the same --teams; every create block that the page can put into a link (every map, 2 - 4 seats, every team that the seats offer, the
+//     leader-starts flag) is read by the game page as the same --room-map, --room-seats, --room-teams and --room-leader-start, and by the page itself as the same block.
 // tests/scripts/test_web_lobby.py runs this with node (the quick tier). usage: node web_lobby_check.js web/shell.html web/lobby.html     (exit 0: every check holds; failures are printed)
 'use strict';
 const fs = require('fs');
@@ -60,7 +65,7 @@ const lobbyCode = [
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
     between(lobbyText, 'CARD_BEGIN', 'CARD_END', lobbyPath),
-    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomTeamWord: roomTeamWord, codeTeams: codeTeams, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardSidesFix: cardSidesFix, cardSidesOf: cardSidesOf, cardPair: cardPair, cardTeamOf: cardTeamOf, cardShownSides: cardShownSides, cardSideOpen: cardSideOpen, cardRefusal: cardRefusal, cardSide: cardSide, cardTeamsText: cardTeamsText, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardFill: cardFill, cardCode: cardCode, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
+    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, codeText: codeText, roomBlockQuery: roomBlockQuery, roomBlockOf: roomBlockOf, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardSidesFix: cardSidesFix, cardSidesOf: cardSidesOf, cardPair: cardPair, cardTeamOf: cardTeamOf, cardShownSides: cardShownSides, cardSideOpen: cardSideOpen, cardRefusal: cardRefusal, cardSide: cardSide, cardTeamsText: cardTeamsText, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardFill: cardFill, cardBlock: cardBlock, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -126,6 +131,7 @@ try {
          ['easy,none,hard', 'none,none,none', 'medium,medium,medium', 'easy,none,hard']);
     same('soloSeats and soloSeatsText read each other', ['easy,none,hard', 'none,none,none', 'hard,hard,easy'].map((t) => L.soloSeatsText(L.soloSeats(t, null))), ['easy,none,hard', 'none,none,none', 'hard,hard,easy']);
     const FFA = { value: 'ffa', text: 'Free for all' };
+    const BLOCK = (map, seats, teams, leaderStart) => ({ map, seats, teams, leaderStart });          // (a room's create block as the page holds it)
 
     same('the page of a game on this computer is play.html', L.LOCAL_PAGE, 'play.html');
     same('localGameQuery: the whole choice', L.localGameQuery('treasure', 'medium', 'Bob', '16:9'), '?map=treasure&bots=medium&name=Bob&aspect=16%3A9'.replace('%3A', ':'));
@@ -359,38 +365,73 @@ try {
              [L.hostTeam('0+1', 4), L.hostTeam('0+3', 4), L.hostTeam('1+2', 3), L.hostTeam('1+2', 4), L.hostTeam('0+3', 3), L.hostTeam('0+1', 2), L.hostTeam('ffa', 4), L.hostTeam('0+4', 4), L.hostTeam('1+3', 4), L.hostTeam('', 4), L.hostTeam(null, 4), L.hostTeam('0 1', 4), L.hostTeam('constructor', 4)],
              ['0+1', '0+3', '1+2', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa', 'ffa']);
 
-        // the room's teams are a word of the code: what the card makes and what a code says (the same table as the game's reading: tests/data/room_code_teams.tsv)
-        same('roomTeamWord: t<a><b> for the pairs of seats 0 - 3, the lower first; free for all, anything else and a pair the wrong way round are no word', [L.roomTeamWord('0+1'), L.roomTeamWord('0+3'), L.roomTeamWord('1+2'), L.roomTeamWord('2+3'), L.roomTeamWord('ffa'), L.roomTeamWord(''), L.roomTeamWord('1+0'), L.roomTeamWord('2+2'), L.roomTeamWord('0+4'), L.roomTeamWord('0 1'), L.roomTeamWord(null), L.roomTeamWord(undefined), L.roomTeamWord(['0+1'])],
-             ['t01', 't03', 't12', 't23', '', '', '', '', '', '', '', '', '']);
-        {
-            const table = fs.readFileSync(path.join(repo, 'tests', 'data', 'room_code_teams.tsv'), 'utf8').split(/\r?\n/).filter((line) => line !== '' && line[0] !== '#');
-            let lines = 0;
-            let named = 0;
-            let wrongLines = '';
-            for (const line of table) {
-                const [code, teams] = line.split('\t');
-                lines++;
-                named += teams !== 'ffa' ? 1 : 0;
-                if ((L.codeTeams(code) || 'ffa') !== teams) wrongLines += ' ' + code + ' -> ' + JSON.stringify(L.codeTeams(code)) + ' (the table: ' + teams + ');';
-            }
-            check('codeTeams reads every code of the table as net::room_code_teams does (' + lines + ' codes, ' + named + ' with teams):' + wrongLines, lines >= 50 && named >= 15 && lines - named >= 30 && wrongLines === '');
+        // a room code is a name and nothing more: six characters that a screen shows in two groups of three (the plain code is what a link and a field hold)
+        same('codeText: six characters are two groups of three ("k7m2xq" is "k7m 2xq"); a code of any other length is shown as it is',
+             [L.codeText('k7m2xq'), L.codeText('abcdef'), L.codeText('A_b-12'), L.codeText('abcdefgh'), L.codeText('k7m2xq9'), L.codeText('abcde'), L.codeText('k7m2xq9pz'), L.codeText('a'), L.codeText('x'.repeat(32)), L.codeText('x-k7m2xq-xyz'), L.codeText('')],
+             ['k7m 2xq', 'abc def', 'A_b -12', 'abcdefgh', 'k7m2xq9', 'abcde', 'k7m2xq9pz', 'a', 'x'.repeat(32), 'x-k7m2xq-xyz', '']);
+        same('codeText: a value that is no text shows nothing', [L.codeText(null), L.codeText(undefined), L.codeText(5), L.codeText({}), L.codeText(['k7m2xq'])], ['', '', '', '', '']);
+        check('codeText: only one blank is added, in the middle (the plain code is what it was made of)', ['k7m2xq', 'abcdef', 'Room_1', '234567'].every((c) => L.codeText(c).replace(' ', '') === c && L.codeText(c).length === 7 && L.codeText(c).charAt(3) === ' '));
+        {   // the game page's name step shows a code the same way as the front page does (ANTS_PAGE.codeText and the lobby's say the same on every kind of text)
+            const TEXTS = ['k7m2xq', 'K7M2XQ', 'abcdef', 'abcdefgh', 'A_b-12', 'A_b-1234', 'mid-room', 'k7m2xq9', 'k7m2xq9pz', 'k7m 2xq', 'a', 'x'.repeat(32), 'demo-small-2p-x7k2', '', null, undefined, 5, {}, ['k7m2xq']];
+            const differ = TEXTS.filter((t) => P.codeText(t) !== L.codeText(t));
+            check('the game page shows a code as the front page does: six characters in two groups of three, any other text as it is, no text as nothing (' + differ.length + ' of ' + TEXTS.length + ' differ)', differ.length === 0);
+            same('the game page\'s codeText: "k7m2xq" is "k7m 2xq", five, seven, eight and nine characters stay as they are, a value that is no text is nothing', [P.codeText('k7m2xq'), P.codeText('abcde'), P.codeText('k7m2xq9'), P.codeText('abcdefgh'), P.codeText('k7m2xq9pz'), P.codeText(null)], ['k7m 2xq', 'abcde', 'k7m2xq9', 'abcdefgh', 'k7m2xq9pz', '']);
         }
-        {   // what the card makes is read back: every choice of a room of 2 - 4 players, on every map
-            let words = 0;
-            let bad = '';
-            for (const m of L.MAPS) {
-                for (const players of [2, 3, 4]) {
-                    for (const choice of L.hostTeamChoices(players)) {
-                        const word = L.roomTeamWord(choice.value);
-                        const code = 'demo-' + m.key + '-' + players + 'p-' + (word ? word + '-' : '') + 'k7m2xq';
-                        if (word) words++;
-                        if ((L.codeTeams(code) || 'ffa') !== choice.value || (word !== '') !== (choice.value !== 'ffa') || code.length > 27 || !/^[A-Za-z0-9_-]{1,32}$/.test(code)) bad += ' ' + code;
-                    }
-                }
-            }
-            check('every choice of the Host card is a word of its code that codeTeams reads back (' + words + ' words; free for all and two players have none; at most 27 characters):' + bad, words === L.MAPS.length * 6 && bad === '');
+
+        // the create block of a room (protocol 15): the text that every link of the room carries after the code, and what an address's block says
+        same('roomBlockQuery: the map and the seats, then the teams and the leader-starts flag when they are set (the + of the teams is encoded: an address reads a bare one as a blank)',
+             [L.roomBlockQuery(BLOCK('treasure', 4, '', false)), L.roomBlockQuery(BLOCK('small', 2, '', false)), L.roomBlockQuery(BLOCK('tiny', 3, '0+2', false)), L.roomBlockQuery(BLOCK('islands', 4, '', true)), L.roomBlockQuery(BLOCK('gauntlet', 4, '1+3', true))],
+             ['&roommap=treasure&roomseats=4', '&roommap=small&roomseats=2', '&roommap=tiny&roomseats=3&roomteams=0%2B2', '&roommap=islands&roomseats=4&roomleaderstart=1', '&roommap=gauntlet&roomseats=4&roomteams=1%2B3&roomleaderstart=1']);
+        same('roomBlockQuery: a room that was made some other way has no block, and no text', [L.roomBlockQuery(null), L.roomBlockQuery(undefined), L.roomBlockQuery(''), L.roomBlockQuery(5), L.roomBlockQuery(false), L.roomBlockQuery('map')], ['', '', '', '', '', '']);
+        same('roomBlockQuery: a block with no map has no &roommap= (the server picks its own); a part that is no good is the default one, and never goes into a link as it came',
+             [L.roomBlockQuery(BLOCK('', 3, '', false)), L.roomBlockQuery(BLOCK('nowhere', 3, '', false)), L.roomBlockQuery(BLOCK('Treasure', 3, '', false)), L.roomBlockQuery(BLOCK('&room=x', 3, '', false)), L.roomBlockQuery(BLOCK(undefined, 3, '', false)),
+              L.roomBlockQuery(BLOCK('tiny', 7, '', false)), L.roomBlockQuery(BLOCK('tiny', '3', '', false)), L.roomBlockQuery(BLOCK('tiny', undefined, '', false)), L.roomBlockQuery(BLOCK('tiny', 1, '', false)),
+              L.roomBlockQuery(BLOCK('tiny', 4, 'ffa', false)), L.roomBlockQuery(BLOCK('tiny', 4, '0+0', false)), L.roomBlockQuery(BLOCK('tiny', 4, '0+1&x=1', false)), L.roomBlockQuery(BLOCK('tiny', 4, null, false)),
+              L.roomBlockQuery(BLOCK('tiny', 4, '', 'yes')), L.roomBlockQuery(BLOCK('tiny', 4, '', 1)), L.roomBlockQuery(BLOCK('tiny', 4, '', undefined)), L.roomBlockQuery({ map: 'tiny' })],
+             ['&roomseats=3', '&roomseats=3', '&roomseats=3', '&roomseats=3', '&roomseats=3',
+              '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4',
+              '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4',
+              '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4', '&roommap=tiny&roomseats=4']);
+        same('roomBlockQuery: a pair of seats the wrong way round is written with the lower seat first (a pair has one spelling, as in the block)', L.roomBlockQuery(BLOCK('tiny', 4, '3+1', false)), '&roommap=tiny&roomseats=4&roomteams=1%2B3');
+        same('the six keys are the six map files by the game\'s rule for --room-map (the word in capitals and .LVL)', L.MAPS.map((m) => m.key.toUpperCase() + '.LVL').sort(), Object.values(FILES).sort());
+        same('roomBlockOf: the block of the page\'s own links is read back (the key in any case, the seats 2 - 4, the teams as A+B, a + that came as a blank, the flag exactly 1)',
+             [L.roomBlockOf('?join=/ws&room=k7m2xq&roommap=treasure&roomseats=4'), L.roomBlockOf('?room=k7m2xq&roommap=TINY&roomseats=2'), L.roomBlockOf('?room=k7m2xq&roommap=Islands&roomseats=3&roomteams=0%2B2'), L.roomBlockOf('?room=k7m2xq&roommap=small&roomseats=3&roomteams=1+2'),
+              L.roomBlockOf('?room=k7m2xq&roommap=gauntlet&roomseats=4&roomleaderstart=1&fill=easy&teams=0%2B1&name=Bob'), L.roomBlockOf('roommap=medium&roomseats=2')],
+             [BLOCK('treasure', 4, '', false), BLOCK('tiny', 2, '', false), BLOCK('islands', 3, '0+2', false), BLOCK('small', 3, '1+2', false), BLOCK('gauntlet', 4, '', true), BLOCK('medium', 2, '', false)]);
+        same('roomBlockOf: what an address leaves out is the server\'s own: no map, four seats, free for all, not the leader\'s start (any one of the four makes the block)',
+             [L.roomBlockOf('?room=a&roomseats=3'), L.roomBlockOf('?room=a&roommap=gauntlet'), L.roomBlockOf('?room=a&roomteams=0%2B3'), L.roomBlockOf('?room=a&roomleaderstart=1'), L.roomBlockOf('?room=a&roommap=nowhere&roomseats=3'), L.roomBlockOf('?room=a&roommap=small&roomseats=9')],
+             [BLOCK('', 3, '', false), BLOCK('gauntlet', 4, '', false), BLOCK('', 4, '0+3', false), BLOCK('', 4, '', true), BLOCK('', 3, '', false), BLOCK('small', 4, '', false)]);
+        same('roomBlockOf: an address with none of the four parameters has no block: the room was made some other way (null)',
+             ['', '?', '?room=k7m2xq', '?room=k7m2xq&fill=easy&teams=0%2B1', '?join=/ws&room=abc&seat=1&name=Bob', '?map=small&players=2', '?platform=linux'].map((s) => L.roomBlockOf(s)), Array(7).fill(null));
+        for (const bad of ['?roommap=', '?roommap=nowhere', '?roommap=TREASURE.LVL', '?roommap=treasure.lvl', '?roommap=../treasure', '?roommap=treasure%20', '?roommap=constructor', '?roommap=__proto__', '?roommap=tiny,small', '?roomseats=', '?roomseats=0', '?roomseats=1', '?roomseats=5', '?roomseats=03', '?roomseats=%203',
+                           '?roomseats=2.0', '?roomseats=two', '?roomseats=%D9%A2', '?roomteams=', '?roomteams=ffa', '?roomteams=0%2B0', '?roomteams=0%2B4', '?roomteams=0%2B1%2B2', '?roomteams=01', '?roomleaderstart=', '?roomleaderstart=0', '?roomleaderstart=true', '?roomleaderstart=11', '?roomleaderstart=%201',
+                           '?roommap=nowhere&roomseats=9&roomteams=ffa&roomleaderstart=0']) {
+            same('roomBlockOf: ' + bad + ' says nothing that is a block part: no block', L.roomBlockOf(bad), null);
         }
-        same('codeTeams: a code that is no string names nothing', [L.codeTeams(null), L.codeTeams(undefined), L.codeTeams(5), L.codeTeams({}), L.codeTeams(['demo-small-4p-t01-x'])], ['', '', '', '', '']);
+        same('roomBlockOf: the first of a repeated parameter counts, as it does for the game page', L.roomBlockOf('?roommap=tiny&roommap=small&roomseats=3&roomseats=2'), BLOCK('tiny', 3, '', false));
+        same('roomBlockOf: an address that is no text at all has no block', [L.roomBlockOf(null), L.roomBlockOf(undefined), L.roomBlockOf(5), L.roomBlockOf({}), L.roomBlockOf(['roommap'])], Array(5).fill(null));
+        {   // every block that the page can put into a link, through the game page's whitelist: the same --room-map, --room-seats, --room-teams and --room-leader-start, and read back whole by the page
+            let blocks = 0;
+            let wrong = '';
+            let withTeams = 0;
+            let flagged = 0;
+            for (const m of L.MAPS) for (const seats of [2, 3, 4]) for (const choice of L.hostTeamChoices(seats)) for (const leaderStart of [false, true]) {
+                const teams = choice.value === 'ffa' ? '' : choice.value;
+                const block = BLOCK(m.key, seats, teams, leaderStart);
+                const query = L.roomBlockQuery(block);
+                const address = '?join=/ws&room=k7m2xq' + query + '&seat=0&name=Bob';
+                const args = P.joinArguments(address, true, 'play.test').args;
+                const want = ['--join-url', 'wss://play.test/ws', '--room', 'k7m2xq', '--room-map', m.key, '--room-seats', String(seats), ...(teams ? ['--room-teams', teams] : []), ...(leaderStart ? ['--room-leader-start'] : []), '--seat', '0', '--name', 'Bob'];
+                blocks++;
+                if (teams) withTeams++;
+                if (leaderStart) flagged++;
+                if (JSON.stringify(args) !== JSON.stringify(want)) wrong += ' ' + address + ' -> ' + JSON.stringify(args);
+                if (JSON.stringify(L.roomBlockOf(address)) !== JSON.stringify(block)) wrong += ' (not read back) ' + address;
+                if (L.hostTeam(teams || 'ffa', seats) !== (teams || 'ffa') || query.indexOf('+') !== -1) wrong += ' (not a block that the card can make) ' + address;
+            }
+            check('every create block that the page can put into a link (' + blocks + ': ' + withTeams + ' with teams, ' + flagged + ' that wait for the leader) is read by the game page as the same --room-map, --room-seats, --room-teams and --room-leader-start, and by the page as the same block:' + wrong,
+                  wrong === '' && blocks === 6 * 9 * 2 && withTeams === 6 * 6 * 2 && flagged === 6 * 9);
+        }
 
         // what an address may say
         same('validFillPlan: one level in any case, or four words (none for none): the tested lower case text; no bots at all and anything else is ""',
@@ -399,7 +440,7 @@ try {
         for (const bad of ['easy,hard', 'easy,hard,easy', 'none,easy,none,hard,none', 'none,easy,,hard', 'none, easy,none,hard', 'none,easy,none,loud', ',,,', ',', 'none;easy;none;hard', 'easy hard', 'none,easy,none,hard\n', 'none,easy,none,hard&seat=1', 'none,easy,none,--room x', 'none,easy,none,hard,', 5, {}, ['easy'], 'hard,'.repeat(2000)]) {
             same('validFillPlan: ' + JSON.stringify(bad).slice(0, 40) + ' is no plan', L.validFillPlan(bad), '');
         }
-        same('validRoomTeams: two different seats 0 - 3 as A+B (a + that came as a blank too): the tested text', [L.validRoomTeams('0+1'), L.validRoomTeams('0 1'), L.validRoomTeams('1+2'), L.validRoomTeams('3+0'), L.validRoomTeams('2 3')], ['0+1', '0+1', '1+2', '3+0', '2+3']);
+        same('validRoomTeams: two different seats 0 - 3 as A+B, the lower seat first (a + that came as a blank too): the tested text', [L.validRoomTeams('0+1'), L.validRoomTeams('0 1'), L.validRoomTeams('1+2'), L.validRoomTeams('3+0'), L.validRoomTeams('2 3'), L.validRoomTeams('1+0'), L.validRoomTeams('3 1')], ['0+1', '0+1', '1+2', '0+3', '2+3', '0+1', '1+3']);
         for (const bad of ['', 'ffa', 'FFA', '0+0', '2+2', '0+4', '4+0', '01', '0++1', '0+1+2', ' 0+1', '0+1 ', '0 +1', '0+ 1', '0\t1', '0+1\n', '0+1&teams=ffa', 'a+b', '0+१', '0+１', 'constructor', null, undefined, 1, {}, ['0+1']]) {
             same('validRoomTeams: ' + JSON.stringify(bad) + ' is no team', L.validRoomTeams(bad), '');
         }
@@ -419,7 +460,7 @@ try {
                 const plan = L.hostFillText(levels, players);
                 for (const choice of L.hostTeamChoices(players)) {
                     const team = choice.value === 'ffa' ? '' : choice.value;
-                    const address = '?join=/ws&room=demo-small-' + players + 'p-abc123' + (plan ? '&fill=' + plan : '') + (team ? '&teams=' + encodeURIComponent(team) : '') + '&name=Bob';
+                    const address = '?join=/ws&room=k7m2xq' + (plan ? '&fill=' + plan : '') + (team ? '&teams=' + encodeURIComponent(team) : '') + '&name=Bob';
                     const args = P.joinArguments(address, true, 'play.test').args;
                     const fillAt = args.indexOf('--fill-bots');
                     const teamsAt = args.indexOf('--teams');
@@ -452,6 +493,85 @@ try {
                  [[...base, '--start-when', '1'], [...base, '--start-when', '4'], [...base, '--fill-bots', 'none,easy,none,hard', '--teams', '0+2', '--start-when', '3']]);
             for (const bad of ['', '0', '5', '9', '12', '01', 'two', ' 2', '2 ', '2\n--name x', '2;ls', '2&seat=1', '-1', '2.5', '\u0662']) same('the game page: &start=' + JSON.stringify(bad) + ' is no --start-when', rooms('&start=' + encodeURIComponent(bad)), base);
             same('... and without a join nothing about start goes to the game', [P.joinArguments('?start=2', true, 'play.test').args, P.joinArguments('?room=abc&start=2', true, 'play.test').args], [[], []]);
+            // the room's create block (protocol 15: --room-map, --room-seats, --room-teams, --room-leader-start) and the platform word (--platform): each through its own whitelist, right after the room
+            same('the game page passes the create block of a room, right after the room: the map by its key (in any case: the tested lower case key comes out), the seats 2 - 4, the teams (a + that came as a blank is read too) and the leader-starts flag',
+                 [rooms('&roommap=treasure&roomseats=4'), rooms('&roommap=Treasure&roomseats=3&roomteams=0%2B2'), rooms('&roommap=ISLANDS&roomseats=2&roomleaderstart=1'), rooms('&roomteams=1+2'), rooms('&roomseats=4'), rooms('&roommap=gauntlet'), rooms('&roomleaderstart=1')],
+                 [[...base, '--room-map', 'treasure', '--room-seats', '4'], [...base, '--room-map', 'treasure', '--room-seats', '3', '--room-teams', '0+2'], [...base, '--room-map', 'islands', '--room-seats', '2', '--room-leader-start'], [...base, '--room-teams', '1+2'], [...base, '--room-seats', '4'], [...base, '--room-map', 'gauntlet'], [...base, '--room-leader-start']]);
+            same('... in the order that the game is given them whatever the order of the address: the door, the room, the map, the seats, the teams, the flag, the platform, the seat, the plan, the teams of START, the number to wait for and the name',
+                 [rooms('&platform=Browser-Windows&roomleaderstart=1&roomteams=0%2B1&roomseats=4&roommap=small&seat=2&fill=easy&teams=1%2B2&start=3&name=Bob'), rooms('&name=Bob&start=3&teams=1%2B2&fill=easy&seat=2&platform=Browser-Windows&roomleaderstart=1&roomteams=0%2B1&roomseats=4&roommap=small')],
+                 Array(2).fill([...base, '--room-map', 'small', '--room-seats', '4', '--room-teams', '0+1', '--room-leader-start', '--platform', 'browser-windows', '--seat', '2', '--fill-bots', 'easy', '--teams', '1+2', '--start-when', '3', '--name', 'Bob']));
+            same('a frame of the front page (embed) still starts with the audio argument, then the door and the room and its block',
+                 P.joinArguments('?join=/ws&room=abc&roommap=tiny&roomseats=2&embed=1&seat=0', true, 'play.test').args, ['--audio-focus', ...base, '--room-map', 'tiny', '--room-seats', '2', '--seat', '0']);
+            same('the first of a repeated parameter counts', rooms('&roommap=tiny&roommap=small&roomseats=3&roomseats=2&platform=linux&platform=macos'), [...base, '--room-map', 'tiny', '--room-seats', '3', '--platform', 'linux']);
+            for (const bad of ['', 'nowhere', 'TREASURE.LVL', 'treasure.lvl', 'treasure ', ' treasure', '../treasure', '..%2F..%2Fetc%2Fpasswd', 'treasure;ls', 'treasure&x', 'constructor', '__proto__', 'hasOwnProperty', 'treasure\n--name x', 'treаsure', 'İslands', 'ｔｉｎｙ', 'tiny,small', 'tiny small', 'treasure'.repeat(500), '0', 'null'])
+                same('the game page: the map ' + JSON.stringify(bad.slice(0, 24)) + ' is no --room-map', rooms('&roommap=' + encodeURIComponent(bad)), base);
+            for (const bad of ['', '0', '1', '5', '9', '10', '12', '02', '03', '-2', '+2', '2.0', '2.5', '1e1', '0x2', ' 2', '2 ', '2\n', '\n2', '2,3', '2;ls', '2&seat=1', '2 --room x', 'two', '٢', '２', 'constructor', '2'.repeat(2000)])
+                same('the game page: ' + JSON.stringify(bad.slice(0, 24)) + ' is no --room-seats', rooms('&roomseats=' + encodeURIComponent(bad)), base);
+            for (const bad of ['', 'ffa', 'FFA', 'none', '0+0', '1+1', '0+4', '4+0', '01', '0++1', 'a+b', '0+1+2', ' 0+1', '0+1 ', '0+1\n--name x', '0+1;ls', '0+1&teams=ffa', '0+१', 'constructor', '__proto__'])
+                same('the game page: the teams ' + JSON.stringify(bad) + ' are no --room-teams', rooms('&roomteams=' + encodeURIComponent(bad)), base);
+            for (const bad of ['', '0', '2', 'true', 'yes', 'on', '11', '01', '1 ', ' 1', '1\n', '1,1', 'one', '١', '１', '1&seat=1', '1;ls'])
+                same('the game page: roomleaderstart=' + JSON.stringify(bad) + ' is no --room-leader-start (only 1, exactly)', rooms('&roomleaderstart=' + encodeURIComponent(bad)), base);
+            // what this game tells the room about itself: [browser-]windows, macos, linux, android, ios or other, in any case, as the lower case word that was tested; no detection, only the address's word
+            for (const os of ['windows', 'macos', 'linux', 'android', 'ios', 'other']) {
+                same('the game page: platform=' + os + ' (and browser-' + os + ', in any case) is --platform, as the lower case word', [rooms('&platform=' + os), rooms('&platform=browser-' + os), rooms('&platform=' + os.toUpperCase()), rooms('&platform=Browser-' + os.charAt(0).toUpperCase() + os.slice(1))],
+                     [[...base, '--platform', os], [...base, '--platform', 'browser-' + os], [...base, '--platform', os], [...base, '--platform', 'browser-' + os]]);
+            }
+            for (const bad of ['', 'browser', 'browser-', 'browser-browser-linux', 'win', 'windows10', 'windows ', ' windows', 'windows\n', 'linux;ls', 'linux&x', 'Linux --name x', 'ubuntu', 'chromeos', 'browser_windows', 'browser windows', 'browser-windows-x', 'constructor', '__proto__', 'window', 'mac', 'darwin',
+                              'İOS', 'ＩＯＳ', 'browser--ios', 'ios,linux', 'iosios', 'windows'.repeat(300)])
+                same('the game page: the platform ' + JSON.stringify(bad.slice(0, 24)) + ' is no --platform', rooms('&platform=' + encodeURIComponent(bad)), base);
+            same('without a valid join nothing about a create block or the platform goes to the game',
+                 [P.joinArguments('?room=abc&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=linux', true, 'play.test').args, P.joinArguments('?roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=linux', true, 'play.test').args,
+                  P.joinArguments('?join=/other&room=abc&roommap=small&roomseats=2&platform=linux', true, 'play.test').args, P.joinArguments('?join=//evil/ws&room=abc&roommap=small&platform=linux', true, 'play.test').args, P.joinArguments('?join=/ws/../x&room=abc&roomseats=2&platform=linux', true, 'play.test').args],
+                 Array(5).fill([]));
+        }
+        {   // 60000 random addresses of a join: whatever the pool puts into the parameters, every argument that comes out is a flag of the table with a value that passed its own test, once, in the order that the game is given them
+            const pools = {
+                join: ['/ws', '/ws', '/ws', '/ws/a', '/other', '//evil/ws', '/ws/../x', 'ws://evil/', ''], room: ['abc', 'k7m2xq', 'my_room-1', 'ABC', 'a b', '', 'x'.repeat(33), 'a&b'],
+                roommap: ['treasure', 'TINY', 'Small', 'islands', 'nowhere', '../x', 'gauntlet ', '', 'treasure.lvl', '--room-map', 'constructor'], roomseats: ['2', '3', '4', '5', '0', '1', '04', ' 3', '', '3 ', '\n4'],
+                roomteams: ['0+1', '1 2', '3+0', '0+0', 'ffa', '0+4', '', '0+1 --name x'], roomleaderstart: ['1', '0', 'true', '11', '', ' 1'], platform: ['linux', 'Browser-Windows', 'macos', 'browser-', 'windows ', 'ios', 'OTHER', '', '--name x', 'browser-other'],
+                seat: ['0', '1', '2', '3', '4', '-1', '', '1 '], fill: ['easy', 'none,none,easy,hard', 'none,none,none,none', 'x', '', 'EASY'], teams: ['0+1', '1 2', 'ffa', '0+0', ''], start: ['1', '2', '3', '4', '5', '', '2 '],
+                name: ['Bob', ' Bob ', 'x'.repeat(40), 'é', '--name', 'a&b=c', '', ' ', 'two words'], embed: ['1', '0', ''], x: ['y'],
+            };
+            const keys = Object.keys(pools);
+            const order = ['--audio-focus', '--join-url', '--room', '--room-map', '--room-seats', '--room-teams', '--room-leader-start', '--platform', '--seat', '--fill-bots', '--teams', '--start-when', '--name'];
+            const tests = {
+                '--join-url': (v) => /^wss:\/\/play\.test\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(v), '--room': (v) => /^[A-Za-z0-9_-]{1,32}$/.test(v), '--room-map': (v) => Object.keys(FILES).indexOf(v) !== -1, '--room-seats': (v) => /^[2-4]$/.test(v),
+                '--room-teams': (v) => /^[0-3]\+[0-3]$/.test(v) && v[0] !== v[2], '--platform': (v) => /^(browser-)?(windows|macos|linux|android|ios|other)$/.test(v), '--seat': (v) => /^[0-3]$/.test(v), '--fill-bots': (v) => L.validFillPlan(v) === v && v !== '',
+                '--teams': (v) => /^[0-3]\+[0-3]$/.test(v) && v[0] !== v[2], '--start-when': (v) => /^[1-4]$/.test(v), '--name': (v) => /^[\x20-\x7e]{1,32}$/.test(v) && v === v.trim(),
+            };
+            let seed = 11;
+            const rnd = (n) => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n; };
+            let wrong = 0;
+            let sample = '';
+            let blocks = 0;
+            let teamed = 0;
+            let flagged = 0;
+            let rich = 0;
+            for (let i = 0; i < 60000; i++) {
+                const parts = [];
+                for (const key of keys) if (rnd(4) !== 0) parts.push(key + '=' + encodeURIComponent(pools[key][rnd(pools[key].length)] + (rnd(8) === 0 ? pools[key][rnd(pools[key].length)] : '')));
+                const search = '?' + parts.join('&');
+                const args = P.joinArguments(search, true, 'play.test').args;
+                let at = -1;
+                let bad = false;
+                for (let k = 0; k < args.length; k++) {
+                    const flag = args[k];
+                    const rank = order.indexOf(flag);
+                    if (rank === -1 || rank <= at) { bad = true; break; }
+                    at = rank;
+                    if (flag === '--audio-focus' || flag === '--room-leader-start') continue;
+                    if (!tests[flag] || k + 1 >= args.length || !tests[flag](args[++k])) { bad = true; break; }
+                }
+                if (bad) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args); }
+                if (args.indexOf('--room-map') !== -1 || args.indexOf('--room-seats') !== -1 || args.indexOf('--room-teams') !== -1 || args.indexOf('--room-leader-start') !== -1) blocks++;
+                if (args.indexOf('--room') === -1 && args.some((a) => ['--room-map', '--room-seats', '--room-teams', '--room-leader-start'].indexOf(a) !== -1)) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args) + ' (a create block with no room)'; }
+                if (args.indexOf('--room-teams') !== -1) teamed++;
+                if (args.indexOf('--room-leader-start') !== -1) flagged++;
+                if (['--room-map', '--room-seats', '--platform', '--seat'].every((f) => args.indexOf(f) !== -1)) rich++;
+                if (args.indexOf('--join-url') === -1 && args.some((a) => a !== '--audio-focus')) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(args) + ' (no door)'; }
+            }
+            check('60000 random addresses of a join: every argument is a flag of the table, in its place, once, with a value that passed its own test; none without a door (' + sample + ')', wrong === 0);
+            check('... and the random addresses do reach the create block (' + blocks + ' with a part of it, ' + teamed + ' with teams, ' + flagged + ' with the leader-starts flag, ' + rich + ' with the map, the seats, the platform and a seat), so the rules above are not empty', blocks > 1000 && teamed > 100 && flagged > 100 && rich > 20);
         }
     }
 
@@ -574,7 +694,7 @@ try {
                 if (frozen(L.cardFix(state)) !== frozen(state)) note('fix ' + frozen(state));
                 if (state.teams !== oracle(state)) note('teams ' + frozen(state));
                 if (state.sides.some((v, x) => v !== 0 && (playing.indexOf(x) === -1 || playing.length < 3)) || [1, 2].some((k) => state.sides.filter((v) => v === k).length > 2)) note('sides ' + frozen(state));
-                if (state.teams !== 'ffa' && (L.roomTeamWord(state.teams) === '' || state.teams.split('+').some((x) => playing.indexOf(Number(x)) === -1) || (playing.length === 4 && state.teams.charAt(0) !== '0'))) note('team ' + frozen(state));
+                if (state.teams !== 'ffa' && (L.validRoomTeams(state.teams) !== state.teams || state.teams.split('+').some((x) => playing.indexOf(Number(x)) === -1) || (playing.length === 4 && state.teams.charAt(0) !== '0'))) note('team ' + frozen(state));
                 const shown = L.cardShownSides(state);
                 if (playing.some((x) => shown[x] === 0 && state.teams !== 'ffa' && playing.length === 4)) note('shown ' + frozen(state));
                 for (let seat = 0; seat < 4; seat++) for (const side of [1, 2]) {
@@ -606,7 +726,7 @@ try {
                     if ([1, 2].some((k) => playing.filter((x) => after[x] === k).length > 2)) note('three ' + frozen(out));
                 }
             }
-            check('every state of the card with any switches (' + states + ' of them, ' + presses + ' presses): the teams are what the switches make (the pair; with four the team of Green; a word for the code), a press is allowed exactly when the seat plays and its team has fewer than two other seats, an allowed press always shows (an off switch goes on; a lit one goes off, or takes every switch off when the other seats keep it lit), a refused one changes nothing and says why, the result is a valid state, and no team ever has three seats:' + bad, bad === '' && states === 4 * 81 * 81);
+            check('every state of the card with any switches (' + states + ' of them, ' + presses + ' presses): the teams are what the switches make (the pair; with four the team of Green; a value that a create block can say), a press is allowed exactly when the seat plays and its team has fewer than two other seats, an allowed press always shows (an off switch goes on; a lit one goes off, or takes every switch off when the other seats keep it lit), a refused one changes nothing and says why, the result is a valid state, and no team ever has three seats:' + bad, bad === '' && states === 4 * 81 * 81);
         }
         {   // the way in and the way out: any two seats make a team with two presses, and any state comes back to free for all by pressing the lit switches
             let bad = '';
@@ -726,29 +846,37 @@ try {
              ['none,easy,none,none', 'easy,medium,none,none', 'medium,none,hard,none', 'medium,none,medium,medium', 'none,hard,medium,easy']);
         same('... and no bot at all is no plan', [L.cardFill(st(0, ['hard', 'friend', 'friend', 'nobody'])), L.cardFill(st(2, ['nobody', 'nobody', 'easy', 'nobody'])), L.cardFill(st(1, ['friend', 'hard', 'friend', 'friend']))], ['', '', '']);
 
-        // the code of the room, and when a code still fits
+        // the room of the card: its create block, and when the room that the tab kept still fits the choices
+        const B4 = '&roommap=treasure&roomseats=4';                // (the block of a card on Treasure, free for all)
         {
             let bad = '';
-            let words = 0;
+            let withTeams = 0;
             let made = 0;
             for (const map of L.MAPS) for (const you of [0, 1, 2, 3]) for (const team of ['ffa', '0+1', '0+2', '0+3']) {
                 const state = L.cardFix(st(you, M4, team, map.key));
-                const code = L.cardCode(state, 'k7m2xq');
-                const word = L.roomTeamWord(state.teams);
+                const block = L.cardBlock(state);
+                const query = L.roomBlockQuery(block);
+                const want = { map: map.key, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false };
                 made++;
-                if (word) words++;
-                const want = 'demo-' + map.key + '-4p-' + (word ? word + '-' : '') + 'k7m2xq';
-                if (code !== want || code.length > 27 || !/^[A-Za-z0-9_-]{1,32}$/.test(code) || (L.codeTeams(code) || 'ffa') !== state.teams || !L.cardRoomFits(code, state)) bad += ' ' + code;
+                if (block.teams) withTeams++;
+                if (JSON.stringify(block) !== JSON.stringify(want) || JSON.stringify(L.roomBlockOf('?room=k7m2xq' + query)) !== JSON.stringify(want) || !/^&roommap=[a-z]+&roomseats=4(&roomteams=[0-3]%2B[0-3])?$/.test(query)) bad += ' ' + query;
             }
-            check('cardCode: demo-<map>-4p-[t<a><b>-]<six characters> for every map and team (' + words + ' words in ' + made + ' codes), at most 27 characters, the teams read back by codeTeams, and the code fits its own state:' + bad, bad === '' && words === 6 * 4 * 3);
+            check('cardBlock: the card\'s map, always four seats (any colour can be taken), the card\'s teams (ffa is none) and never the leader-starts flag, for every map and team (' + withTeams + ' with teams in ' + made + ' blocks); the page reads its link text back whole:' + bad, bad === '' && withTeams === 6 * 4 * 3 && made === 6 * 4 * 4);
+            same('cardBlock: free for all is no teams, and the choices of the seats that play (Nobody seats, a seat that is You) do not change the seats of the room: four', [L.cardBlock(st(0, M4, 'ffa', 'small')), L.cardBlock(st(2, M4, '0+1', 'islands')), L.cardBlock(st(0, ['medium', 'nobody', 'nobody', 'nobody'], 'ffa', 'tiny')), L.cardBlock(st(1, ['friend', 'friend', 'friend', 'friend'], '0+3', 'gauntlet'))],
+                 [BLOCK('small', 4, '', false), BLOCK('islands', 4, '0+1', false), BLOCK('tiny', 4, '', false), BLOCK('gauntlet', 4, '0+3', false)]);
         }
         {
             const state = st(0, M4, '0+1', 'small');
-            const code = L.cardCode(state, 'k7m2xq');
-            same('cardRoomFits: the code of these choices fits them', code, 'demo-small-4p-t01-k7m2xq');
-            same('... a code of another map, other teams (or none), another size or another shape does not', ['demo-tiny-4p-t01-k7m2xq', 'demo-small-4p-t02-k7m2xq', 'demo-small-4p-k7m2xq', 'demo-small-3p-t01-k7m2xq', 'demo-small-2p-t01-k7m2xq', 'demo-small-t01-k7m2xq', 'demo-small-4p-t01-k7m2x', 'demo-small-4p-t01-k7m2xqq', 'DEMO-small-4p-t01-k7m2xq', 'demo-small-4p-T01-k7m2xq', 'demo-small-4p-t10-k7m2xq', 'demo-small-4p-t01-K7M2XQ', 'demo-small-4p-t01-k7m2x!', 'demo-small-4p-t01-k7m2xq-', 'x demo-small-4p-t01-k7m2xq', '', 'constructor'].map((c) => L.cardRoomFits(c, state)), Array(17).fill(false));
-            same('... and a value that is no text fits nothing', [null, undefined, 5, {}, ['demo-small-4p-t01-k7m2xq']].map((c) => L.cardRoomFits(c, state)), Array(5).fill(false));
-            same('cardRoomFits: free for all fits a code with no team word only', [L.cardRoomFits('demo-small-4p-k7m2xq', st(0, M4, 'ffa', 'small')), L.cardRoomFits('demo-small-4p-t01-k7m2xq', st(0, M4, 'ffa', 'small'))], [true, false]);
+            const room = { code: 'k7m2xq', map: 'small', teams: '0+1', used: {} };
+            check('cardRoomFits: the room that was made for these choices fits them', L.cardRoomFits(room, state));
+            same('... a room of another map, or of other teams (or none), does not', [{ ...room, map: 'tiny' }, { ...room, teams: '0+2' }, { ...room, teams: 'ffa' }, { ...room, map: 'Small' }, { ...room, teams: '' }].map((r) => L.cardRoomFits(r, state)), Array(5).fill(false));
+            same('... free for all fits a room that was made for free for all (ffa), and only that', [L.cardRoomFits({ code: 'k7m2xq', map: 'small', teams: 'ffa' }, st(0, M4, 'ffa', 'small')), L.cardRoomFits({ code: 'k7m2xq', map: 'small', teams: '0+1' }, st(0, M4, 'ffa', 'small')), L.cardRoomFits({ code: 'k7m2xq', map: 'small', teams: '' }, st(0, M4, 'ffa', 'small'))], [true, false, false]);
+            same('... a code that is not six characters of the page\'s alphabet does not fit (the code of an earlier page, another length, capitals, a sign, a blank, a digit that the alphabet has not)',
+                 ['demo-small-4p-t01-k7m2xq', 'k7m2x', 'k7m2xq9', 'k7m2xq9p', 'k7m2xq9pp', 'K7M2XQ', 'k7m2x!', 'k7m 2xq', 'k7m2x ', ' k7m2x', 'k7m2x\n', 'k7m2x-', 'k7m2x_', 'k7m2x0', 'k7m2x1', '123456', '', 'constructor'].map((c) => L.cardRoomFits({ ...room, code: c }, state)), Array(18).fill(false));
+            same('... and other codes of the alphabet do fit (it is only a name)', ['abcdef', 'zzzzzz', '222222', '999999', 'k7m2xq', 'ilo2il'].map((c) => L.cardRoomFits({ ...room, code: c }, state)), Array(6).fill(true));
+            same('... an object of an earlier page\'s shape (a code and the links that were sent: nothing of the map and the teams) and a value that is no room fit nothing',
+                 [{ code: 'k7m2xq', used: {} }, { code: 'demo-small-4p-t01-k7m2xq', used: {} }, { code: 'k7m2xq', map: 'small', used: {} }, { code: 'k7m2xq', teams: '0+1' }, null, undefined, 5, 'k7m2xq', [], {}, { code: 5, map: 'small', teams: '0+1' }, { code: ['k7m2xq'], map: 'small', teams: '0+1' }].map((r) => L.cardRoomFits(r, state)), Array(12).fill(false));
+            check('... and the room that it was given is left as it was', JSON.stringify(room) === '{"code":"k7m2xq","map":"small","teams":"0+1","used":{}}');
         }
 
         // who is alone, and the line under START
@@ -763,17 +891,21 @@ try {
 
         // the addresses: START and an invitation
         {
-            const code = 'demo-treasure-4p-t12-k7m2xq';
-            same('cardQuery: START carries the room, your seat, the plan, your name (URL-encoded), the shape and the number of people; an invitation carries no name; the teams are in the code, so no teams parameter; no key',
-                 [L.cardQuery(st(2, ['easy', 'medium', 'x', 'nobody']), code, 2, 'Ann', '16:9'), L.cardQuery(st(0, ['x', 'friend', 'medium', 'friend']), code, 0, 'A&b <c>=', '4:3'), L.cardQuery(st(0, ['x', 'friend', 'medium', 'friend']), code, 3, null, '16:9'), L.cardQuery(st(0, ['x', 'friend', 'nobody', 'nobody']), code, 1, null, '4:3')],
-                 ['?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=2&fill=easy,medium,none,none&name=Ann&aspect=16:9&start=1',
-                  '?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=0&fill=none,none,medium,none&name=A%26b%20%3Cc%3E%3D&aspect=4:3&start=3',
-                  '?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=3&fill=none,none,medium,none&aspect=16:9&start=3',
-                  '?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=1&aspect=4:3&start=2']);
+            const code = 'k7m2xq';
+            const T12 = B4 + '&roomteams=1%2B2';
+            same('cardQuery: START carries the room and its create block (the map, four seats and the teams that the card chose), your seat, the plan, your name (URL-encoded), the shape and the number of people; an invitation carries no name; the teams are in the block, so no teams parameter; no key',
+                 [L.cardQuery(st(2, ['easy', 'medium', 'x', 'nobody']), code, 2, 'Ann', '16:9'), L.cardQuery(st(0, ['x', 'friend', 'medium', 'friend'], '1+2'), code, 0, 'A&b <c>=', '4:3'), L.cardQuery(st(0, ['x', 'friend', 'medium', 'friend'], '1+2'), code, 3, null, '16:9'), L.cardQuery(st(0, ['x', 'friend', 'nobody', 'nobody']), code, 1, null, '4:3')],
+                 ['?join=/ws&room=k7m2xq' + B4 + '&seat=2&fill=easy,medium,none,none&name=Ann&aspect=16:9&start=1',
+                  '?join=/ws&room=k7m2xq' + T12 + '&seat=0&fill=none,none,medium,none&name=A%26b%20%3Cc%3E%3D&aspect=4:3&start=3',
+                  '?join=/ws&room=k7m2xq' + T12 + '&seat=3&fill=none,none,medium,none&aspect=16:9&start=3',
+                  '?join=/ws&room=k7m2xq' + B4 + '&seat=1&aspect=4:3&start=2']);
+            same('... the block follows the map and the teams of the card, never the room\'s code: the same code on another map is another block', [L.cardQuery(st(0, M4, 'ffa', 'islands'), code, 0, null, '16:9'), L.cardQuery(st(0, M4, '0+3', 'tiny'), code, 0, null, '16:9')],
+                 ['?join=/ws&room=k7m2xq&roommap=islands&roomseats=4&seat=0&fill=none,medium,medium,medium&aspect=16:9&start=1', '?join=/ws&room=k7m2xq&roommap=tiny&roomseats=4&roomteams=0%2B3&seat=0&fill=none,medium,medium,medium&aspect=16:9&start=1']);
             same('... the shape is 16:9 or 4:3 and nothing else; with an empty name START still has its name parameter (the game page does not ask for it again)', [L.cardQuery(st(0, M4), code, 0, 'x', '21:9'), L.cardQuery(st(0, M4), code, 0, 'x', undefined), L.cardQuery(st(0, M4), code, 0, '', '16:9')],
-                 ['?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=0&fill=none,medium,medium,medium&name=x&aspect=16:9&start=1', '?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=0&fill=none,medium,medium,medium&name=x&aspect=16:9&start=1', '?join=/ws&room=demo-treasure-4p-t12-k7m2xq&seat=0&fill=none,medium,medium,medium&name=&aspect=16:9&start=1']);
+                 ['?join=/ws&room=k7m2xq' + B4 + '&seat=0&fill=none,medium,medium,medium&name=x&aspect=16:9&start=1', '?join=/ws&room=k7m2xq' + B4 + '&seat=0&fill=none,medium,medium,medium&name=x&aspect=16:9&start=1', '?join=/ws&room=k7m2xq' + B4 + '&seat=0&fill=none,medium,medium,medium&name=&aspect=16:9&start=1']);
+            same('... the code is encoded whatever it holds (the page only makes six characters of its alphabet, which need none)', L.cardQuery(st(0, M4), 'a b&c', 0, null, '16:9'), '?join=/ws&room=a%20b%26c' + B4 + '&seat=0&fill=none,medium,medium,medium&aspect=16:9&start=1');
         }
-        {   // every state of the card: the game page reads START and every invitation as the same seat, plan and number of people, no teams parameter, no name in an invitation
+        {   // every state of the card: the game page reads START and every invitation as the same create block, seat, plan and number of people, no teams parameter, no name in an invitation
             const P2 = P;
             let states = 0;
             let queries = 0;
@@ -784,7 +916,8 @@ try {
                 for (const team of teamsOf(base)) {
                     const state = withTeams(base, team);
                     states++;
-                    const code = L.cardCode(state, 'k7m2xq');
+                    const code = 'k7m2xq';
+                    const roomPart = ['--room-map', state.map, '--room-seats', '4', ...(state.teams === 'ffa' ? [] : ['--room-teams', state.teams])];          // (the create block of the card's room: its map, four seats, its teams)
                     const plan = L.cardFill(state);
                     const people = L.cardPeople(state);
                     const playing = L.cardPlaying(state);
@@ -795,25 +928,27 @@ try {
                     if (L.cardAlone(state) !== (playing.length === 1)) note('alone ' + frozen(state));
                     const args = P2.joinArguments(L.cardQuery(state, code, you, 'Ann', '16:9'), true, 'play.test').args;
                     queries++;
-                    const want = ['--join-url', 'wss://play.test/ws', '--room', code, '--seat', String(you), ...(plan ? ['--fill-bots', plan] : []), '--start-when', String(people), '--name', 'Ann'];
+                    const want = ['--join-url', 'wss://play.test/ws', '--room', code, ...roomPart, '--seat', String(you), ...(plan ? ['--fill-bots', plan] : []), '--start-when', String(people), '--name', 'Ann'];
                     if (JSON.stringify(args) !== JSON.stringify(want)) note('start ' + frozen(state) + ' -> ' + JSON.stringify(args));
                     for (const friend of friends) {
                         const invited = P2.joinArguments(L.cardQuery(state, code, friend, null, '16:9'), true, 'play.test').args;
                         queries++;
-                        const wantInvite = ['--join-url', 'wss://play.test/ws', '--room', code, '--seat', String(friend), ...(plan ? ['--fill-bots', plan] : []), '--start-when', String(people)];
+                        const wantInvite = ['--join-url', 'wss://play.test/ws', '--room', code, ...roomPart, '--seat', String(friend), ...(plan ? ['--fill-bots', plan] : []), '--start-when', String(people)];
                         if (JSON.stringify(invited) !== JSON.stringify(wantInvite) || invited.indexOf('--name') !== -1 || invited.indexOf('--teams') !== -1) note('invite ' + frozen(state) + ' ' + friend + ' -> ' + JSON.stringify(invited));
                     }
-                    if (L.codeTeams(code) !== (state.teams === 'ffa' ? '' : state.teams)) note('code ' + code);
+                    const carried = L.roomBlockOf(L.cardQuery(state, code, you, 'Ann', '16:9'));
+                    if (JSON.stringify(carried) !== JSON.stringify(L.cardBlock(state)) || carried.teams !== (state.teams === 'ffa' ? '' : state.teams) || carried.seats !== 4 || carried.map !== state.map) note('block ' + frozen(state));
                 }
             }
-            check('every state of the card (' + states + ' of them, with every team that it offers, on two maps) makes a START and ' + (queries - states) + ' invitations that the game page reads as the card meant: the seat, the plan, the people to wait for (--start-when), no --teams (the code has them), no name in an invitation; You, the Friends and the bots are the seats that play, once each:' + wrong,
+            check('every state of the card (' + states + ' of them, with every team that it offers, on two maps) makes a START and ' + (queries - states) + ' invitations that the game page reads as the card meant: the create block (--room-map, four --room-seats, --room-teams), the seat, the plan, the people to wait for (--start-when), no --teams (the block has them), no name in an invitation; the page reads the block back; You, the Friends and the bots are the seats that play, once each:' + wrong,
                   wrong === '' && states > 4000);
         }
         {   // what is made from text that was typed is only ever text: a name goes into START URL-encoded, and no text of an address becomes anything but a tested word, a seat, a code or the cleaned name
-            const evil = 'x&join=/ws&room=a&seat=1&fill=hard&start=1&teams=0+1 --name y';
-            const q = L.cardQuery(st(0, M4), 'demo-treasure-4p-abcdef', 0, evil, '16:9');
+            const evil = 'x&join=/ws&room=a&seat=1&fill=hard&start=1&teams=0+1&roommap=tiny&roomseats=2&roomteams=0+1&roomleaderstart=1&platform=linux --name y';
+            const q = L.cardQuery(st(0, M4), 'k7m2xq', 0, evil, '16:9');
             const args = P.joinArguments(q, true, 'play.test').args;
             check('a name with & = and a flag in it is one name in START, and the game page makes one --name of it (no other argument)', args.filter((a) => a === '--name').length === 1 && args.filter((a) => a === '--seat').length === 1 && args.filter((a) => a === '--start-when').length === 1 && args.filter((a) => a === '--room').length === 1 && args[args.indexOf('--name') + 1] === evil.slice(0, 32), JSON.stringify(args));
+            check('... and none of the block\'s or the platform\'s parameters inside the name reaches the game: the room is the card\'s (Treasure, four seats, no teams, the card does not make the leader start)', args[args.indexOf('--room-map') + 1] === 'treasure' && args[args.indexOf('--room-seats') + 1] === '4' && args.filter((a) => a === '--room-map' || a === '--room-seats').length === 2 && args.indexOf('--room-teams') === -1 && args.indexOf('--room-leader-start') === -1 && args.indexOf('--platform') === -1, JSON.stringify(args));
         }
     }
 } catch (e) {

@@ -1,12 +1,12 @@
 // The desktop start menu in the application (include/ants_app/start_menu.hpp, src/ants_app/application_menu.cpp): the whole of what a player does with it, against a REAL
 // RoomManager of the dedicated server behind a real TCP listener on the loopback interface (as test_network_app does for the leader's START): single player with no bot (the
-// original game exactly) and with bots (seated as --bot seats them, fog off), join a demo room, host a room (the code, the leader's screen, a second client, START), every way
+// original game exactly) and with bots (seated as --bot seats them, fog off), join a room, host a room (the code, the leader's screen, a second client, START), every way
 // a join can fail, cancel, and the way back to the menu after a network game. One Application per test (SDL is initialised once per process).
 //
 //   test_start_menu_app                         runs the tests
 //   test_start_menu_app --shots DIR [--wide]    writes the screenshots of every panel and state of the menu as DIR/*.png (they are what the menu looks like; nothing is compared); --wide: the 16:9 picture (960 x 540)
 //   test_start_menu_app --real-server H:P       runs the host / join / START scenario against a game server that is already running (the gate "a real server": a native ants_server
-//                                               on localhost started with --demo-rooms 4 --demo-map TINY.LVL ...), then exits
+//                                               on localhost started with --demo-rooms 4 --demo-map TINY.LVL ...: the public rooms), then exits
 //   test_start_menu_app --real-fill H:P         hosts a room through the menu with "Empty seats at START" = Medium bots, starts it ALONE (the server seats three bots) and plays it
 //                                               for ten seconds of real time (the rate of the ticks is measured and printed: 20 a second), against a game server that is already running
 //   test_start_menu_app --probe H:P             one join attempt with a room code that does not exist, against any server (beta.playants.org:4001): it must answer, never hang
@@ -171,6 +171,14 @@ struct Peer {
         }
     }
     bool join(const std::string& host, uint16_t port, const std::string& name, const std::string& room) { return net.join(host, port, name, 255, room); }
+    // A Hello that carries a create block (protocol 15): the server makes the room for it when it offers public rooms and has none of this code (the map's file, "" for the server's own, and the seats)
+    bool join_creating(const std::string& host, uint16_t port, const std::string& name, const std::string& room, const std::string& map, uint8_t seats) {
+        net::CreateBlock block;
+        block.map_name = map;
+        block.seats = seats;
+        net.set_create(block);
+        return join(host, port, name, room);
+    }
 };
 
 // ---- a dedicated server in the test: the real room manager behind a real TCP listener ----------------------------------------------------------------------------------
@@ -190,7 +198,7 @@ struct Server {
     std::unique_ptr<net::TcpListener> listener{net::TcpListener::listen(0, true)};
     uint32_t now{1000};
 
-    // `maps`: the maps that the server's demo rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer). `hold_seats`: whether its rooms hold the seat of a
+    // `maps`: the maps that the server's public rooms may be made on (--demo-maps; the menu offers the six of the original, a server may offer fewer). `hold_seats`: whether its rooms hold the seat of a
     // lost connection: the server's default since release B; false is a server that was started with --no-reconnect
     explicit Server(size_t demo_rooms = 4, const std::vector<std::string>& maps = kAllMaps, bool hold_seats = server::kReconnectByDefault) : mgr(server::MapStore(std::string(ORIGINAL_ASSETS_DIR) + "/Maps"), demo_limits(demo_rooms, maps, hold_seats)) {}
     uint16_t port() const { return listener ? listener->port() : uint16_t{0}; }
@@ -209,7 +217,7 @@ struct Server {
         mgr.status(code, s, now);
         return s;
     }
-    // A room that is not a demo room (the control interface makes these): `players` seats on the map
+    // A room that is not a public room (the control interface makes these): `players` seats on the map
     bool make_room(const std::string& code, uint8_t players, const std::string& map = "TINY.LVL") {
         server::RoomSpec spec;
         spec.code = code;
@@ -649,7 +657,7 @@ int make_shots(const std::string& dir, bool wide) {
     shot(app, dir + "/12_host_room_code.png");
     click(app, MenuId::Copy);
     shot(app, dir + "/13_host_room_code_copied.png");
-    // the room is left; the one demo room of this server is still there, so the next host attempt is refused: the server is busy
+    // the room is left; the one public room of this server is still there, so the next host attempt is refused: the server is busy
     press(app, SDLK_ESCAPE);
     hall.step(50);
     click(app, MenuId::Host);
@@ -668,7 +676,7 @@ int make_shots(const std::string& dir, bool wide) {
     shot(app, dir + "/17_join_old_code_selected.png");
     press(app, SDLK_ESCAPE);
     app.start_menu().set_clipboard([]() { return std::string(); }, [](const std::string&) { return false; });
-    app.start_menu().show_room("demo-gauntlet-4p-k3n7pq", 2, 4);
+    app.start_menu().show_room("k3n7pq", 2, 4);
     click(app, MenuId::Copy);
     shot(app, dir + "/18_room_copy_failed.png");
     app.start_menu().show_main();
@@ -814,7 +822,7 @@ int run_probe(const std::string& address) {
     cfg.menu_connect_timeout_ms = 30000;
     if (!app.init(cfg)) return 1;
     const auto begin = std::chrono::steady_clock::now();
-    menu_join(app, "Probe", "zz-no-such-room-probe");                   // (not a demo-... code: nothing is made on the server)
+    menu_join(app, "Probe", "zz-no-such-room-probe");                   // (a Join carries no block: nothing is made on the server)
     const bool answered = hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 40000);
     const long ms = static_cast<long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count());
     std::cout << "PROBE " << address << ": " << (answered ? "answered" : "NO ANSWER") << " after " << ms << " ms: \"" << app.start_menu().message() << "\"\n";
@@ -1292,12 +1300,12 @@ int main(int argc, char** argv) {
         }
     } TEST_END();
 
-    TEST_CASE("A3.1 Join a demo room as the second player: Connecting, then the quick help (the option's default), then the guest's screen with the room as the server has it; the window's title carries the code; the third player fills the room and the server starts the match") {
+    TEST_CASE("A3.1 Join a public room as the second player: Connecting, then the quick help (the option's default), then the guest's screen with the room as the server has it; the window's title carries the code; the third player fills the room and the server starts the match") {
         TempDir temp;
         Server server;
-        const std::string code = "demo-tiny-3p-aaaaaa";
+        const std::string code = "joinaaa1";
         Peer ann;
-        ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", code));                      // the first to join makes the demo room and leads it
+        ASSERT_TRUE(ann.join_creating("127.0.0.1", server.port(), "Ann", code, "TINY.LVL", 3));       // the first to join, with the block, makes the room and leads it
         Application app;
         Hall hall{&server, &app, {&ann}, nullptr, false};
         ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room && ann.net.is_leader(); }, 8000));
@@ -1340,7 +1348,8 @@ int main(int argc, char** argv) {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server;
-        const std::string code = "demo-tiny-3p-bbbbbb";
+        const std::string code = "joinbbb2";
+        ASSERT_TRUE(server.make_room(code, 3));                                              // (a room that nobody has joined yet: the Join panel makes none, a Hello without a block is no room's maker)
         Application app;
         Peer bob;
         Hall hall{&server, &app, {&bob}, nullptr, false};
@@ -1367,11 +1376,11 @@ int main(int argc, char** argv) {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server;
-        const std::string code = "demo-tiny-2p-last01";
+        const std::string code = "lastseat";
         Peer ann;
         Application app;
         Hall hall{&server, &app, {&ann}, nullptr, false};
-        ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", code));
+        ASSERT_TRUE(ann.join_creating("127.0.0.1", server.port(), "Ann", code, "TINY.LVL", 2));
         ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
         ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));
         menu_join(app, "Bob", code);
@@ -1384,7 +1393,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(hall.identical(app.sim(), ann.sim));
     } TEST_END();
 
-    TEST_CASE("A4.1 Host an online match: the code is demo-<map>-<n>p-<six>, shown with Copy; the player is the first in the room and its leader; a second client joins with the code; Continue leads to the leader's screen and START starts a two-player match; both machines stay identical") {
+    TEST_CASE("A4.1 Host an online match: the code is six characters of the page's alphabet and says nothing else (the block of the Hello made the room), shown in two groups of three with Copy; the player is the first in the room and its leader; a second client joins with the code; Continue leads to the leader's screen and START starts a two-player match; both machines stay identical") {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server;
@@ -1402,21 +1411,21 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.start_menu().panel(), MenuPanel::Connecting);
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
         const std::string code = shown_code(app);
-        ASSERT_TRUE(code.rfind("demo-small-3p-", 0) == 0 && code.size() == 20);              // the page's grammar: demo-<map>-<n>p-<six>
-        for (size_t i = 14; i < code.size(); ++i) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(code[i]) != std::string::npos);
+        ASSERT_EQ(code.size(), kRoomCodeChars);                                              // the page's grammar: six characters, no map and no seats in them
+        for (const char c : code) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(c) != std::string::npos);
         ASSERT_EQ(app.window_title(), "Ants - room " + code);                               // from the moment the player is in the room
         ASSERT_EQ(app.hud().get_player_name(), std::string("Hostess"));                      // and the name typed for the room is the player's name on the HUD
         const server::RoomStatus made = server.status(code);
-        ASSERT_TRUE(made.map == "SMALL.LVL" && made.expected == 3 && made.joined == 1 && made.names[0] == "Hostess" && made.leader == 0);
+        ASSERT_TRUE(made.map == "SMALL.LVL" && made.expected == 3 && made.joined == 1 && made.names[0] == "Hostess" && made.leader == 0 && made.public_room);      // (the block that the Hello carried)
         ASSERT_TRUE(app.net() != nullptr && app.net()->is_leader() && app.net()->my_seat() == 0);
         // the code is shown to share: Copy puts it on the clipboard
         MenuElement big;
         for (const MenuElement& e : app.start_menu().elements()) {
             if (e.kind == MenuKind::Code) big = e;
         }
-        ASSERT_EQ(big.text, code);
+        ASSERT_EQ(big.text, room_code_display(code));                                        // (two groups of three: "k7m 2xq")
         click(app, MenuId::Copy);
-        ASSERT_TRUE(copied.size() == 1 && copied[0] == code);
+        ASSERT_TRUE(copied.size() == 1 && copied[0] == code);                                // (the plain code is what is copied)
         // a second client joins with the code: the count on the panel follows
         ASSERT_TRUE(guest.join("127.0.0.1", server.port(), "Guest", code));
         ASSERT_TRUE(hall.until([&]() { return guest.net.phase() == net::NetGame::Phase::Room; }, 8000));
@@ -1442,7 +1451,7 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(hall.identical(app.sim(), guest.sim));
     } TEST_END();
 
-    TEST_CASE("A4.2 Host: Esc / Back on the room's panel leaves the room (the server sees the player go, the title is the program's again) and returns to the Host panel; the server that cannot make a room (its demo rooms are all taken) is told in words; a single-player game after that is the local player's, not the name that was typed for the room") {
+    TEST_CASE("A4.2 Host: Esc / Back on the room's panel leaves the room (the server sees the player go, the title is the program's again) and returns to the Host panel; the server that cannot make a room (its public rooms are all taken) is told in words; a single-player game after that is the local player's, not the name that was typed for the room") {
         TempDir temp;
         write_no_quick_help(temp.file("s.ini"));
         Server server(2);
@@ -1462,8 +1471,8 @@ int main(int argc, char** argv) {
         ASSERT_EQ(app.window_title(), std::string("Ants"));
         ASSERT_TRUE(hall.until([&]() { return server.status(code).joined == 0; }, 4000));    // the server saw the player go
         ASSERT_TRUE(app.start_menu().message().empty());
-        // the server has two demo rooms: the first (left empty, it stays until it expires) and now one that somebody else makes; the next host attempt is refused
-        ASSERT_TRUE(other.join("127.0.0.1", server.port(), "Other", "demo-tiny-2p-taken1"));
+        // the server has two public rooms: the first (left empty, it stays until it expires) and now one that somebody else makes; the next host attempt is refused
+        ASSERT_TRUE(other.join_creating("127.0.0.1", server.port(), "Other", "taken001", "TINY.LVL", 2));
         ASSERT_TRUE(hall.until([&]() { return other.net.phase() == net::NetGame::Phase::Room; }, 8000));
         click(app, MenuId::Host);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Host); }, 8000));
@@ -1526,10 +1535,10 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
-    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 900 million), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
+    TEST_CASE("A4.4 Host: when the server holds a room with the very code that the menu made (one in 890 million), the player would be a guest of somebody else's room, not its leader: the menu says so, leaves the room again and nothing stays") {
         TempDir temp;
         Server server;
-        const std::string taken = "demo-tiny-4p-aaaaaa";                                      // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
+        const std::string taken = "aaaaaa";                                                  // the code that a random source of all zeros makes: 'a' is the first character of the alphabet
         ASSERT_TRUE(server.make_room(taken, 4));
         Peer owner;
         Application app;
@@ -1567,10 +1576,10 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(shown_code(app) != code);
     } TEST_END();
 
-    TEST_CASE("A4.6 Host: with no map stored the panel opens on Treasure and a room that is made without choosing a map is a Treasure room (the code names it, the server makes it on TREASURE.LVL for four players); the default is not written to the settings; a map that is stored wins after a restart (the room is made on it)") {
+    TEST_CASE("A4.6 Host: with no map stored the panel opens on Treasure and a room that is made without choosing a map is a Treasure room (the block of the Hello names it, the server makes it on TREASURE.LVL for four players); the default is not written to the settings; a map that is stored wins after a restart (the room is made on it)") {
         TempDir temp;
         const std::string settings = ini(temp, "t.ini");
-        {   // nothing stored (the fixture server's own default map is TINY.LVL: a Treasure room can only come from the code that the menu made)
+        {   // nothing stored (the fixture server's own default map is TINY.LVL: a Treasure room can only come from the block that the menu made)
             Server server;
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
@@ -1583,7 +1592,7 @@ int main(int argc, char** argv) {
             click(app, MenuId::Host);
             ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
             const std::string code = shown_code(app);
-            ASSERT_TRUE(code.rfind("demo-treasure-4p-", 0) == 0 && code.size() == 23);       // the page's grammar: demo-<map>-<n>p-<six>
+            ASSERT_EQ(code.size(), kRoomCodeChars);                                          // the page's grammar: six characters; the map is in the Hello's block
             const server::RoomStatus made = server.status(code);
             ASSERT_TRUE(made.map == "TREASURE.LVL" && made.expected == 4 && made.joined == 1 && made.leader == 0);
         }
@@ -1605,7 +1614,7 @@ int main(int argc, char** argv) {
             click(app, MenuId::Host);
             ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
             const std::string code = shown_code(app);
-            ASSERT_TRUE(code.rfind("demo-gauntlet-4p-", 0) == 0);
+            ASSERT_EQ(code.size(), kRoomCodeChars);
             ASSERT_EQ(server.status(code).map, std::string("GAUNTLET.LVL"));
         }
     } TEST_END();
@@ -1695,7 +1704,7 @@ int main(int argc, char** argv) {
             ASSERT_TRUE(app.net() == nullptr);
         }
         press(app, SDLK_ESCAPE);
-        // hosting: the demo room that the server cannot make is NoSuchRoom, which is told as "busy" (there is no room to look for: the code is the player's own)
+        // hosting: the public room that the server cannot make is NoSuchRoom, which is told as "busy" (there is no room to look for: the code is the player's own)
         raw.reason = net::RejectReason::NoSuchRoom;
         menu_host(app, "Hostess", 0, 0);
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Host); }, 8000));
@@ -1775,9 +1784,9 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(app.net() == nullptr);
     } TEST_END();
 
-    TEST_CASE("A5.4 What a real server refuses: a room whose match has started is 'already started'; on a server without demo rooms a demo-... code is no room (the code is named); the first player of a room that exists joins at once") {
+    TEST_CASE("A5.4 What a real server refuses: a room whose match has started is 'already started'; on a server without public rooms a code that nobody made is no room (the code is named); the first player of a room that exists joins at once") {
         TempDir temp;
-        Server server(0);                                                                    // no demo rooms: only the rooms that somebody made
+        Server server(0);                                                                    // no public rooms: only the rooms that somebody made
         ASSERT_TRUE(server.make_room("run-room-1", 2));
         Peer ann;
         Peer bob;
@@ -1792,11 +1801,11 @@ int main(int argc, char** argv) {
         ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join); }, 8000));
         ASSERT_HAS(app.start_menu().message(), "already started");
         ASSERT_TRUE(app.net() == nullptr);
-        // a demo code on a server that makes no demo rooms
-        fill(app, MenuId::Code, "demo-tiny-2p-nothing");
+        // a code that nobody made on a server that makes no public rooms
+        fill(app, MenuId::Code, "k7m 2xq");
         click(app, MenuId::Join);
-        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("demo-tiny-2p-nothing") != std::string::npos; }, 8000));
-        ASSERT_HAS(app.start_menu().message(), "no room with the code demo-tiny-2p-nothing");
+        ASSERT_TRUE(hall.until([&]() { return failed_on(app, MenuPanel::Join) && app.start_menu().message().find("k7m2xq") != std::string::npos; }, 8000));
+        ASSERT_HAS(app.start_menu().message(), "no room with the code k7m2xq");
         // hosting there is refused in the words of a busy server
         press(app, SDLK_ESCAPE);
         menu_host(app, "Hostess", 0, 0);
@@ -1892,7 +1901,8 @@ int main(int argc, char** argv) {
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
             ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));
-            menu_join(app, "Dave", "demo-tiny-4p-leave1");
+            ASSERT_TRUE(server.make_room("leave001", 4));                                     // (a room that exists: the Join panel makes none)
+            menu_join(app, "Dave", "leave001");
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::MapSelect && app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 8000));
             hall.step(600);
             app.map_select().handle_key_down(SDLK_q);                                         // Q / X / the Leave button: leave
@@ -1900,16 +1910,17 @@ int main(int argc, char** argv) {
             ASSERT_EQ(app.state(), AppState::StartMenu);
             ASSERT_TRUE(app.net() == nullptr);
             ASSERT_EQ(app.window_title(), std::string("Ants"));
-            ASSERT_TRUE(hall.until([&]() { return server.status("demo-tiny-4p-leave1").joined == 0; }, 4000));
+            ASSERT_TRUE(hall.until([&]() { return server.status("leave001").joined == 0; }, 4000));
         }
         {   // the room dies under a player who is on the room's screen (the server closed it): not a dead screen, the menu with the reason
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
             ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));
-            menu_join(app, "Dave", "demo-tiny-4p-dead01");
+            ASSERT_TRUE(server.make_room("dead0001", 4));
+            menu_join(app, "Dave", "dead0001");
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::MapSelect && app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 8000));
             hall.step(600);
-            ASSERT_TRUE(server.mgr.close_room("demo-tiny-4p-dead01", server.now));
+            ASSERT_TRUE(server.mgr.close_room("dead0001", server.now));
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 8000));
             ASSERT_FALSE(app.start_menu().message().empty());
             ASSERT_TRUE(app.net() == nullptr && app.is_running());
@@ -1920,14 +1931,15 @@ int main(int argc, char** argv) {
             Peer bob;
             Hall hall{&server, &app, {&ann, &bob}, nullptr, false};
             ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));
-            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-3p-dialog"));
+            ASSERT_TRUE(server.make_room("dialog01", 3));
+            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "dialog01"));
             ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
-            ASSERT_TRUE(bob.join("127.0.0.1", server.port(), "Bob", "demo-tiny-3p-dialog"));
+            ASSERT_TRUE(bob.join("127.0.0.1", server.port(), "Bob", "dialog01"));
             ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
-            menu_join(app, "Dave", "demo-tiny-3p-dialog");
+            menu_join(app, "Dave", "dialog01");
             const bool started = hall.until([&]() { return app.state() == AppState::Playing; }, 20000);
             if (!started) {
-                const server::RoomStatus rs = server.status("demo-tiny-3p-dialog");
+                const server::RoomStatus rs = server.status("dialog01");
                 std::cout << "\n    state " << static_cast<int>(app.state()) << " panel " << static_cast<int>(app.start_menu().panel()) << " message '" << app.start_menu().message()
                           << "' net phase " << (app.net() ? static_cast<int>(app.net()->phase()) : -1) << " room state " << static_cast<int>(rs.state) << " joined " << static_cast<int>(rs.joined) << " expected "
                           << static_cast<int>(rs.expected) << " ann " << static_cast<int>(ann.net.phase()) << " bob " << static_cast<int>(bob.net.phase()) << "\n";
@@ -1957,7 +1969,8 @@ int main(int argc, char** argv) {
             cfg.net_role = ApplicationConfig::NetRole::Join;
             cfg.net_address = "127.0.0.1";
             cfg.net_port = server.port();
-            cfg.net_room = "demo-tiny-4p-nomenu";
+            ASSERT_TRUE(server.make_room("nomenu01", 4));
+            cfg.net_room = "nomenu01";
             cfg.player_name = "Dave";
             ASSERT_TRUE(app.init(cfg));
             ASSERT_FALSE(app.start_menu_enabled());
@@ -1979,10 +1992,11 @@ int main(int argc, char** argv) {
         cfg.title = "Ants test";
         ASSERT_TRUE(app.init(cfg));
         ASSERT_EQ(app.window_title(), std::string("Ants test"));
-        menu_join(app, "Dave", "demo-tiny-2p-title1");
+        ASSERT_TRUE(server.make_room("title001", 2));
+        menu_join(app, "Dave", "title001");
         ASSERT_EQ(app.window_title(), std::string("Ants test"));                             // not yet: only the room's player has its code in the title
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::MapSelect; }, 8000));
-        ASSERT_EQ(app.window_title(), std::string("Ants test - room demo-tiny-2p-title1"));
+        ASSERT_EQ(app.window_title(), std::string("Ants test - room title001"));
         app.map_select().handle_key_down(SDLK_x);
         ASSERT_EQ(app.state(), AppState::StartMenu);
         ASSERT_EQ(app.window_title(), std::string("Ants test"));
@@ -2026,7 +2040,7 @@ int main(int argc, char** argv) {
     TEST_CASE("A9.1 The clipboard: Cmd+V / Ctrl+V pastes what the system clipboard holds into the code (through the key events of the window), Copy hands the room's code to the system clipboard; a clipboard that fails says so") {
         TempDir temp;
         Server server;
-        std::string clipboard = "  demo-tiny-2p-pasted \n";
+        std::string clipboard = "  k7m2xq \n";
         std::vector<std::string> written;
         bool writable = true;
         Application app;
@@ -2041,7 +2055,7 @@ int main(int argc, char** argv) {
         click(app, MenuId::JoinWithCode);
         click(app, MenuId::Code);
         press(app, SDLK_v, KMOD_GUI);
-        ASSERT_EQ(app.start_menu().code(), std::string("demo-tiny-2p-pasted"));
+        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq"));
         press(app, SDLK_a, KMOD_CTRL);
         clipboard = "another-1";
         press(app, SDLK_v, KMOD_CTRL);
@@ -2066,11 +2080,11 @@ int main(int argc, char** argv) {
         Application app;
         Hall hall{&server, &app, {}, nullptr, false};
         ASSERT_TRUE(app.init(menu_config(server.address(), temp.file("s.ini"))));         // no clipboard hooks: the defaults, SDL's own
-        ASSERT_EQ(SDL_SetClipboardText("  demo-tiny-2p-real \n"), 0);
+        ASSERT_EQ(SDL_SetClipboardText("  k7m2xq \n"), 0);
         click(app, MenuId::JoinWithCode);
         click(app, MenuId::Code);
         press(app, SDLK_v, KMOD_GUI);
-        ASSERT_EQ(app.start_menu().code(), std::string("demo-tiny-2p-real"));
+        ASSERT_EQ(app.start_menu().code(), std::string("k7m2xq"));
         press(app, SDLK_ESCAPE);
         menu_host(app, "Hostess", 0, 1);
         ASSERT_TRUE(hall.until([&]() { return on_panel(app, MenuPanel::Room); }, 8000));
@@ -2286,9 +2300,9 @@ int main(int argc, char** argv) {
         app.run_frame_with_delta(0.016f);
         ASSERT_EQ(app.state(), AppState::StartMenu);
         ASSERT_EQ(app.start_menu().panel(), MenuPanel::Join);
-        push(text_event("demo-queued"));                                                     // typed text goes to the field that has the focus: the code (the name is proposed)
+        push(text_event("queued-room"));                                                     // typed text goes to the field that has the focus: the code (the name is proposed)
         app.run_frame_with_delta(0.016f);
-        ASSERT_EQ(app.start_menu().code(), std::string("demo-queued"));
+        ASSERT_EQ(app.start_menu().code(), std::string("queued-room"));
         app.start_menu().update(0.4f);
         push(key_event(SDLK_ESCAPE));                                                        // back to the first panel
         app.run_frame_with_delta(0.016f);
@@ -2329,7 +2343,7 @@ int main(int argc, char** argv) {
         press(app, SDLK_ESCAPE);
         click(app, MenuId::JoinWithCode);
         fill(app, MenuId::Name, "Bot (Hard)");
-        fill(app, MenuId::Code, "demo-tiny-2p-cue");
+        fill(app, MenuId::Code, "cue-room-1");
         const size_t before = app.audio_mixer().active_channel_count();
         press(app, SDLK_RETURN);                                                              // Enter on the code: Join, refused (a name for computer players)
         ASSERT_EQ(app.start_menu().panel(), MenuPanel::Join);
@@ -2525,11 +2539,12 @@ int main(int argc, char** argv) {
             Peer bob;
             Hall hall{&server, &app, {&ann, &bob}, nullptr, false};
             ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "f.ini"))));
-            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-3p-dblclk"));
+            ASSERT_TRUE(server.make_room("dblclk01", 3));
+            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "dblclk01"));
             ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
-            ASSERT_TRUE(bob.join("127.0.0.1", server.port(), "Bob", "demo-tiny-3p-dblclk"));
+            ASSERT_TRUE(bob.join("127.0.0.1", server.port(), "Bob", "dblclk01"));
             ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
-            menu_join(app, "Dave", "demo-tiny-3p-dblclk");
+            menu_join(app, "Dave", "dblclk01");
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
             hall.step(6000);
             SDL_KeyboardEvent q_ev{};
@@ -2687,10 +2702,10 @@ int main(int argc, char** argv) {
             Application app;
             Peer ann;
             Hall hall{&server, &app, {&ann}, nullptr, false};
-            ASSERT_TRUE(ann.join("127.0.0.1", server.port(), "Ann", "demo-tiny-2p-gone01"));
+            ASSERT_TRUE(ann.join_creating("127.0.0.1", server.port(), "Ann", "gone0001", "TINY.LVL", 2));
             ASSERT_TRUE(hall.until([&]() { return ann.net.phase() == net::NetGame::Phase::Room; }, 8000));
             ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, holds ? "c_holds.ini" : "c.ini"))));
-            menu_join(app, "Bob", "demo-tiny-2p-gone01");
+            menu_join(app, "Bob", "gone0001");
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && ann.net.phase() == net::NetGame::Phase::Playing; }, 20000));
             hall.step(1000);
             ASSERT_EQ(app.local_player_id(), 1);
@@ -2699,7 +2714,7 @@ int main(int argc, char** argv) {
             app.hud().open_quick_help();
             app.hud().open_options();
             ASSERT_TRUE(app.hud().is_quit_dialog_open() && app.hud().is_quick_help_open() && app.hud().is_options_open());
-            ASSERT_TRUE(server.mgr.close_room("demo-tiny-2p-gone01", server.now));
+            ASSERT_TRUE(server.mgr.close_room("gone0001", server.now));
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::StartMenu; }, 12000));
             ASSERT_FALSE(app.hud().is_quit_dialog_open());                                    // (a dialog of the match that is gone would be on the next match's screen)
             ASSERT_FALSE(app.hud().is_quick_help_open());
@@ -2736,7 +2751,9 @@ int main(int argc, char** argv) {
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
             ASSERT_TRUE(app.init(menu_config(server.address(), ini(temp, "a.ini"))));
-            menu_join(app, "Dave", "demo-tiny-4p-dead02");
+            const std::string code = dead == net::NetGame::Phase::Failed ? "dead0002" : "dead0003";                   // (a room of its own for each: the server keeps the first one)
+            ASSERT_TRUE(server.make_room(code, 4));
+            menu_join(app, "Dave", code);
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::MapSelect && app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 8000));
             app.net()->force_phase_for_test(dead);
             app.pump_network(0.01f);
@@ -2906,7 +2923,7 @@ int main(int argc, char** argv) {
             ASSERT_EQ(app.sim().get_player_name(3), std::string("Bot (Hard)"));
             ASSERT_EQ(app.sim().get_player_name(1), std::string("Zed"));                       // a seat without a bot keeps what the command line named it
         }
-        {   // a server whose demo rooms are on Tiny and Small only, and the player asked for Islands (the menu offers the six maps of the game)
+        {   // a server whose public rooms are on Tiny and Small only, and the player asked for Islands (the menu offers the six maps of the game)
             Server server(4, {"TINY.LVL", "SMALL.LVL"});
             Application app;
             Hall hall{&server, &app, {}, nullptr, false};
@@ -3125,8 +3142,8 @@ int main(int argc, char** argv) {
             code = shown_code(app);
             const net::FillPlan plan = fill_of(net::FillLevel::Easy, net::FillLevel::None, net::FillLevel::Hard);
             ASSERT_TRUE(app.fill_bots() == plan && app.net() != nullptr && app.net()->fill_bots() == plan);
-            // the teams are a word of the room's code (the room makes them every time, a full room's automatic start too), not the START's choice: this player's own START teams stay free for all
-            ASSERT_TRUE(code.find("-3p-") == std::string::npos && code.find("-4p-t01-") != std::string::npos && net::room_code_teams(code) == green_red);
+            // the teams are the create block's (the room makes them every time, a full room's automatic start too), not the START's choice: this player's own START teams stay free for all
+            ASSERT_TRUE(code.size() == kRoomCodeChars && server.status(code).room_teams == "0+1" && server.status(code).expected == 4);
             ASSERT_TRUE(app.net()->room_teams() == green_red && app.net()->effective_teams() == green_red && !app.start_teams().set && !app.net()->start_teams().set);
             bool seats = false;
             bool teams = false;

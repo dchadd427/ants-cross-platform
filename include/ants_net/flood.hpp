@@ -25,7 +25,7 @@ inline constexpr uint32_t kMessageBurst = 1000;
 /// player of a slow link three times. Up to this many of them from one connection cost nothing; each one after them is a violation, like any message that a guest may not send.
 inline constexpr uint32_t kIgnoredStartRequestsAllowed = 16;
 
-/// The colour moves of a room's leader (protocol 14, SeatMove). One that cannot be done (the sender does not lead, the room is loading or running, the player has left, somebody holds the colour) is no
+/// The colour moves of a room's leader (protocol 14, SeatMove). One that cannot be done (the sender does not lead, the room is loading or running, the player has left, a bot or the host holds the colour, the seating is not the one the press was made for) is no
 /// offence at first, as for a StartRequest: up to kIgnoredSeatMovesAllowed of them per connection cost nothing, each one after those is a violation. One that can be done is shown to the whole room (the Room
 /// message, a notice to each player that was moved), so a person's presses have a budget like a chat's (ChatBudget): a burst of kSeatMoveBurst, then kSeatMovesPerSecond a second (a finger presses a
 /// row twice a second, and the screen waits for the room's answer before it presses again); a move beyond it is dropped, kSeatMoveExcessBurst more are tolerated, and every one after that is a violation.

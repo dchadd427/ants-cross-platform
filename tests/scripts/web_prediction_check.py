@@ -3,7 +3,7 @@
 
 Needs a running stack (the web page and the game server with demo rooms: docker-compose.stack.yml), a Chromium-based browser and Python 3; nothing else (the DevTools protocol is
 spoken with the helpers of tests/scripts/web_hidden_check.py). It starts the browser with a throwaway profile on a free port (headless; nothing of yours is touched) and plays three
-matches of a demo room for two players, in two WINDOWS (both are shown, so both draw frames), the first window's player giving its orders with the mouse (a rubber band over the hill,
+matches of a public room for two players (the room that the create block of the first Hello makes: Small, two seats), in two WINDOWS (both are shown, so both draw frames), the first window's player giving its orders with the mouse (a rubber band over the hill,
 then a right click on open ground: the game's own HUD and the page's real input path), the second window's player now and then too, so that the first one has other players' orders to
 correct for:
 
@@ -86,9 +86,10 @@ class Seat:
 
 def play(devtools, web, ctl, secret, mode, orders, check, label):
     """One match of two windows; returns what the first window's game reported."""
-    code = "demo-small-2p-pred%s%d" % (mode, random.randint(10000, 99999))
-    a = Seat(devtools, web + "?join=/ws&room=%s&seat=0&name=Alice" % code + {"on": "&prediction=on", "off": "&prediction=off", "default": ""}[mode])
-    b = Seat(devtools, web + "?join=/ws&room=%s&seat=1&name=Bob" % code)
+    code = "pred%s%d" % (mode, random.randint(10000, 99999))       # (a code is only a name: the room is what the create block of its first Hello says)
+    block = "&roommap=small&roomseats=2"                          # (protocol 15: two seats on Small; every link of a room that the front page made carries it right after the code)
+    a = Seat(devtools, web + "?join=/ws&room=%s%s&seat=0&name=Alice" % (code, block) + {"on": "&prediction=on", "off": "&prediction=off", "default": ""}[mode])
+    b = Seat(devtools, web + "?join=/ws&room=%s%s&seat=1&name=Bob" % (code, block))
     try:
         deadline = time.time() + 150                                # the game data is about 15 MB: a cold start takes a while
         ready = False
@@ -190,7 +191,7 @@ def main():
         if devtools is None:
             print("  SKIP: the browser did not start")
             return 3
-        print("[web prediction] three matches of a demo room for two, two windows each, in %s: ?prediction=on, the default (off), ?prediction=off" % os.path.basename(browser))
+        print("[web prediction] three matches of a public room for two (Small, made by the first Hello's create block), two windows each, in %s: ?prediction=on, the default (off), ?prediction=off" % os.path.basename(browser))
         on = play(devtools, web, args.ctl, args.secret, "on", args.orders, check, "?prediction=on")
         if on is None:
             return 3

@@ -128,6 +128,14 @@ struct ApplicationConfig {
     /// card was the click) and a headless test client has nobody to click at all. 1 is for a leader with --fill-bots (one person is enough then; without a fill the START of one
     /// person is the can't-go cue, every second). A game started from the menus never uses it.
     uint8_t net_start_when{0};
+    /// --room-map NAME, --room-seats N, --room-teams ffa|A+B, --room-leader-start (protocol 15; any of them makes the block): the CREATE BLOCK that a join to a server's room (--room) carries in its Hello: the room
+    /// that the server makes when it has none of this code yet (a server that makes public rooms does; the room that exists ignores the block). NAME is a word of the six maps of the original ("treasure")
+    /// or a file name of the server's maps folder ("TREASURE.LVL"); the seats are 2 - 4 (4 by default); with --room-leader-start a full room waits for its leader's START (the leader can arrange the seats first). The
+    /// web page's address gives them as `roommap`, `roomseats`, `roomteams` and `roomleaderstart` (web/shell.html). Without any of them the Hello only joins a room that exists.
+    std::optional<net::CreateBlock> net_create;
+    /// --platform [browser-]windows|macos|linux|android|ios|other (protocol 15): what this game tells the room about itself (an icon beside its name; cosmetic). 0, the default: the platform that the build is for
+    /// (net::native_platform(); a web game says "another system, in a browser"); web/shell.html passes the `platform` of its address on (no page of the site writes it yet).
+    uint8_t net_platform{0};
     /// --fill-bots none|easy|medium|hard, or four of them joined by commas for the seats 0 - 3 (protocol 11; a level for each seat since 13): the bots that this player's START seats in the empty
     /// seats of its room when it can start one: the leader of a server's room (the request goes to the server, which seats them and runs them) and the host of a room on the local network
     /// (this machine runs them, as for --bot). None, the default, is the START of every earlier version. A game that is not a room ignores it. The start menu's Host panel ("Empty seats at START") sets it for the room that it makes (a Join sets none), `--start-menu --fill-bots hard` starts that panel at Hard, and the web page's address (`?fill=`, web/shell.html) gives it to the game of the room's leader.
@@ -659,6 +667,7 @@ private:
         ServerAddress server;
         int players{4};                                   // hosting: the seats of the room
         int map{0};                                       // hosting: the index of the map that the player chose (menu_map)
+        std::optional<net::CreateBlock> create;           // hosting: the room that the server makes from the first Hello (protocol 15: make_create_block of the Host panel's choices)
         double elapsed_ms{0.0};                           // how long the attempt has taken (its time limit, menu_connect_timeout_ms)
         bool rejoin{false};                               // "Rejoin your match": the join shows the key of the seat that this machine had (the room is `room`, the server is `server`, which need not be the menu's own)
         uint8_t seat{255};                                // ... that seat
@@ -688,7 +697,8 @@ private:
     void enter_start_menu(const std::string& notice = std::string());   // state StartMenu, the first panel (with a line of notice when there is one)
     void update_start_menu(float dt);                     // the menu's clock, what it asked for, its connection (once per frame, from pump_network)
     void process_menu_request(const MenuRequest& request);
-    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin = nullptr, const ServerAddress* server = nullptr);
+    void begin_menu_connection(bool hosting, const std::string& room, const std::string& name, int players, int map, const RejoinEntry* rejoin = nullptr, const ServerAddress* server = nullptr,
+                               const net::CreateBlock* create = nullptr);
     void begin_menu_rejoin(const MenuRequest& request);   // "Rejoin your match": the key of the offer's seat, from the store, joins that room on that server
     std::optional<RejoinOffer> rejoin_offer();            // the newest fresh key that the menu can use (a server of host:port: the browser's entries are for its page), or none
     void pump_menu_connection();                          // the name lookup, the join, the room: what became of them

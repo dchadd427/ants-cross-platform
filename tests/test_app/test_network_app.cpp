@@ -4194,6 +4194,96 @@ void run_room_bot_tests() {
         ASSERT_EQ(c.net_say, std::string("hello there"));
     } TEST_END();
 
+    TEST_CASE("N5.86 Command Line (Protocol 15): --room-map, --room-seats, --room-teams And --room-leader-start Make The Create Block Of A Join, --platform The Platform Byte Of Its Hello; Not Given Is No Block And No Byte (The Hello Only Joins); Anything Else Refuses To Start") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            return Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+        };
+        const std::vector<std::string> join = {"ants", "--join", "127.0.0.1:4001", "--room", "k7m2xq"};
+        const auto with = [&](std::vector<std::string> more) {
+            std::vector<std::string> all = join;
+            all.insert(all.end(), more.begin(), more.end());
+            return parse(all);
+        };
+        ApplicationConfig c = parse(join);
+        ASSERT_TRUE(!c.net_create.has_value() && c.net_platform == 0 && c.startup_error.empty());          // not given: the Hello only joins, and says the build's own platform
+        // --room-map: a plain word is the original's file of that name (any case), a name with an extension is kept as it is, and the block's other fields stay what a block has by default
+        const std::pair<const char*, const char*> maps[] = {{"treasure", "TREASURE.LVL"}, {"ISLANDS", "ISLANDS.LVL"}, {"Tiny", "TINY.LVL"}, {"my-map.lvl", "my-map.lvl"}, {"BIG MAP.LVL", "BIG MAP.LVL"}, {"x y", "X Y.LVL"}};
+        for (const auto& m : maps) {
+            c = with({"--room-map", m.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value());
+            ASSERT_EQ(c.net_create->map_name, std::string(m.second));
+            ASSERT_TRUE(c.net_create->seats == 4 && c.net_create->team_a == net::kNoTeam && c.net_create->team_b == net::kNoTeam && c.net_create->flags == 0);
+            ASSERT_TRUE(net::valid_create_block(*c.net_create));
+        }
+        for (const char* bad : {"", "a/b", "a\\b", "a:b", "a?b", "a*b", "a\"b", "a<b", "a>b", "a|b", ".hidden.lvl", "my.map", "x.txt", "caf\xC3\xA9"}) {
+            c = with({"--room-map", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-map") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-map"});                                                                           // no value
+        ASSERT_TRUE(c.startup_error.find("--room-map") != std::string::npos);
+        // --room-seats: 2, 3 or 4 and nothing else (one digit: "3x" and "2.5" are no number of seats)
+        for (const int seats : {2, 3, 4}) {
+            c = with({"--room-seats", std::to_string(seats)});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && c.net_create->seats == seats && c.net_create->map_name.empty());
+        }
+        for (const char* bad : {"1", "5", "0", "9", "-3", "3x", "2.5", "22", " 3", "three", ""}) {
+            c = with({"--room-seats", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-seats") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-seats"});
+        ASSERT_TRUE(c.startup_error.find("--room-seats") != std::string::npos);
+        // --room-teams: ffa, or two different seats of 0 to 3 (the lower one first in the block: a pair has one spelling); the room judges the pair against the seats that play
+        const std::pair<const char*, std::pair<int, int>> teams[] = {{"0+1", {0, 1}}, {"1+0", {0, 1}}, {"2+3", {2, 3}}, {"0+3", {0, 3}}, {"ffa", {255, 255}}, {"FFA", {255, 255}}};
+        for (const auto& t : teams) {
+            c = with({"--room-teams", t.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value());
+            ASSERT_TRUE(c.net_create->team_a == t.second.first && c.net_create->team_b == t.second.second);
+            ASSERT_TRUE(net::valid_create_block(*c.net_create));
+        }
+        for (const char* bad : {"0+0", "0+4", "4+0", "01", "0-1", "x+y", "0+1+2", "", "none"}) {
+            c = with({"--room-teams", bad});
+            ASSERT_TRUE(c.startup_error.find("--room-teams") != std::string::npos && !c.net_create.has_value());
+        }
+        c = with({"--room-teams"});
+        ASSERT_TRUE(c.startup_error.find("--room-teams") != std::string::npos);
+        // --room-leader-start: a flag, and the only one that a block has
+        c = with({"--room-leader-start"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && c.net_create->flags == net::kCreateLeaderStarts && c.net_create->leader_starts() && net::valid_create_block(*c.net_create));
+        // all four, in any order: one block
+        net::CreateBlock expect;
+        expect.map_name = "SMALL.LVL";
+        expect.seats = 3;
+        expect.team_a = 0;
+        expect.team_b = 1;
+        expect.flags = net::kCreateLeaderStarts;
+        c = with({"--room-leader-start", "--room-teams", "1+0", "--room-seats", "3", "--room-map", "small"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && *c.net_create == expect);
+        c = with({"--room-map", "small", "--room-seats", "3", "--room-teams", "0+1", "--room-leader-start"});
+        ASSERT_TRUE(c.startup_error.empty() && c.net_create.has_value() && *c.net_create == expect);
+        // --platform: the six systems, and "browser-" before one for a game in a page (any case)
+        const std::pair<const char*, uint8_t> platforms[] = {
+            {"windows", net::kOsWindows}, {"macos", net::kOsMacos}, {"Linux", net::kOsLinux}, {"ANDROID", net::kOsAndroid}, {"ios", net::kOsIos}, {"other", net::kOsOther},
+            {"browser-windows", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsWindows)}, {"Browser-Linux", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsLinux)},
+            {"browser-other", static_cast<uint8_t>(net::kPlatformBrowser | net::kOsOther)}};
+        for (const auto& p : platforms) {
+            c = with({"--platform", p.first});
+            ASSERT_TRUE(c.startup_error.empty() && c.net_platform == p.second && net::valid_platform(c.net_platform) && !c.net_create.has_value());
+        }
+        for (const char* bad : {"plan9", "", "browser", "browser-", "browser-plan9", "win", "windows ", "0"}) {
+            c = with({"--platform", bad});
+            ASSERT_TRUE(c.startup_error.find("--platform") != std::string::npos && c.net_platform == 0);
+        }
+        c = with({"--platform"});
+        ASSERT_TRUE(c.startup_error.find("--platform") != std::string::npos);
+        // a game that is told something wrong refuses to start, with the reason on stderr
+        c = with({"--room-seats", "7"});
+        Application refuses;
+        ASSERT_FALSE(refuses.init(c));
+    } TEST_END();
+
     TEST_CASE("N5.46 Leader With --fill-bots And --say: The Line Is Said Once When Two Players Are In The Room (The Other Player Hears It With The Leader's Name, The Leader Hears The Reply), The Leader's START Seats Bots In The Two Empty Seats (The Leader Did Not Need A Third Person), The Match Runs With Four Teams And The Two Machines Stay Identical; The Lines Of The Waiting Room Are Kept") {
         Server server;
         ASSERT_TRUE(server.make_room("FILL-APP", 4));
@@ -4602,7 +4692,7 @@ void run_room_bot_tests() {
                     for (const bool fog : {false, true}) {
                         net::RoomMsg room;
                         for (const uint8_t seat : people) room.slots[seat] = {net::SlotState::Client, "P", 10};
-                      for (const bool room_owned : {false, true}) {                                 // (the teams are this START's own choice, or the room's: its code names them)
+                      for (const bool room_owned : {false, true}) {                                 // (the teams are this START's own choice, or the room's own)
                         const std::vector<std::string> prompts = net::NetGame::start_prompt_texts(plan, t, room, fog, room_owned);
                         if (!prompts.empty()) {
                             // the shortest way of saying it fits the two lines of the classic label (293 px) and of the wide one (363 px); the longest that fits is what a screen picks
@@ -4645,7 +4735,7 @@ void run_room_bot_tests() {
         app.quit();
     } TEST_END();
 
-    TEST_CASE("N5.81 Protocol 13, The Room's Own Teams In The Application (Its Code Names Them): A Leader Is Told That They Are The Room's And Its Own --teams Is Not What The Room Makes (The Referee's, Both Games' Engines Have The Room's Alliances Before Their First Tick, The News Flash Comes Once For Each Pair); A Room Of Three Fills Up With Two Games And A Bare Machine And Starts By Itself With The Room's Teams On Every Engine, Nobody Having Pressed START") {
+    TEST_CASE("N5.81 Protocol 13, The Room's Own Teams In The Application (The Create Block That Made The Room Names Them): A Leader Is Told That They Are The Room's And Its Own --teams Is Not What The Room Makes (The Referee's, Both Games' Engines Have The Room's Alliances Before Their First Tick, The News Flash Comes Once For Each Pair); A Room Of Three Fills Up With Two Games And A Bare Machine And Starts By Itself With The Room's Teams On Every Engine, Nobody Having Pressed START") {
         using L = net::FillLevel;
         server::ServerLimits limits;
         limits.demo_rooms = 4;
@@ -4656,10 +4746,19 @@ void run_room_bot_tests() {
             for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + what.size())) ++n;
             return n;
         };
-        {   // a room of four whose code names Green + Red; the leader's own choice (--teams) is Red + Blue, and its START seats two bots
+        const auto tiny_block = [](uint8_t seats, uint8_t a, uint8_t b) {                                // (the create block of a leader whose Hello makes the room: TINY, `seats` seats, the pair a + b)
+            net::CreateBlock block;
+            block.map_name = "TINY.LVL";
+            block.seats = seats;
+            block.team_a = a;
+            block.team_b = b;
+            return block;
+        };
+        {   // a room of four that its create block gives Green + Red; the leader's own choice (--teams) is Red + Blue, and its START seats two bots
             Server server(limits);
-            const std::string code = "demo-tiny-4p-t01-abcdef";
+            const std::string code = "k7m2xq";
             ApplicationConfig lead_cfg = join_config(server, code, "Leader");
+            lead_cfg.net_create = tiny_block(4, 0, 1);
             lead_cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
             lead_cfg.teams = LocalTeams{true, 1, 2};
             Application leader;
@@ -4708,10 +4807,11 @@ void run_room_bot_tests() {
             leader.quit();
             guest.quit();
         }
-        {   // a room of three whose code names Red + Blue (1 + 2): two games and a bare machine fill it, nobody presses START: it starts by itself with the room's teams, seat 0 plays alone
+        {   // a room of three that its create block gives Red + Blue (1 + 2): two games and a bare machine fill it, nobody presses START: it starts by itself with the room's teams, seat 0 plays alone
             Server server(limits);
-            const std::string code = "demo-tiny-3p-t12-abcdef";
+            const std::string code = "m2xq9p";
             ApplicationConfig lead_cfg = join_config(server, code, "Leader");
+            lead_cfg.net_create = tiny_block(3, 1, 2);
             lead_cfg.teams = LocalTeams{true, 0, 1};                                                    // (the leader's own choice: not the room's, and nobody asks the room for it)
             Application leader;
             ASSERT_TRUE(leader.init(lead_cfg));
@@ -5608,21 +5708,17 @@ void run_room_chat_ui_tests() {
         app.quit();
     } TEST_END();
 
-    TEST_CASE("N5.76b The Refusal For A Room That The Server Cannot Make (A Code That Begins demo-, NoSuchRoom: The Cap Of Demo Rooms Is Full) Says So And What To Do, Not That There Is No Such Room, In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; Any Other Code Is Told As Before") {
+    TEST_CASE("N5.76b The Refusal For A Room That The Server Cannot Make (A Hello That Carried A Create Block, NoSuchRoom: The Cap Of Public Rooms Is Full) Says So And What To Do, Not That There Is No Such Room, In Words That Fit The Setup Screen's Status Box In Two Lines On Both Pages; A Hello Without A Block Is Told As Before") {
         using net::NetGame;
         using net::RejectReason;
-        const std::string no_place = "The server cannot make a room for this match now. Try again in a few minutes.";
+        const std::string no_place = "The server cannot make a room now: it is busy, or hosts no online matches. Try again in a few minutes.";
         const std::string no_room = "There is no such room on this server.";
         for (const bool browser : {false, true}) {
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-treasure-4p-t01-k7m2xq"), no_place);
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-x"), no_place);
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "demo-"), no_room);              // (a prefix alone is no code that a server makes a room of)
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "DEMO-1"), no_room);             // (the prefix is exactly demo-, as the server reads it)
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, "ROOM-1"), no_room);
-            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, ""), no_room);
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, true), no_place);               // (the Hello carried a create block: the server would have made the room, and cannot now)
+            ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser, false), no_room);               // (no block: the room is simply not there)
             ASSERT_EQ(NetGame::reject_text(RejectReason::NoSuchRoom, browser), no_room);
             for (const RejectReason other : {RejectReason::Full, RejectReason::MatchRunning, RejectReason::Kicked, RejectReason::BadRequest, RejectReason::Dropped, RejectReason::RejoinFailed, RejectReason::Superseded}) {
-                ASSERT_EQ(NetGame::reject_text(other, browser, "demo-treasure-4p-t01-k7m2xq"), NetGame::reject_text(other, browser));      // (nothing else changes with the code)
+                ASSERT_EQ(NetGame::reject_text(other, browser, true), NetGame::reject_text(other, browser));      // (nothing else changes with the block)
             }
         }
         Application app;
@@ -5681,12 +5777,13 @@ void run_room_chat_box_tests() {
         Peer peer;
         Hall hall{server, &app, {&peer}};
     };
-    const auto open_leader = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, bool fog, bool with_bob, float zoom_level = 1.0f, bool zoom_given = false) -> bool {
+    const auto open_leader = [&](BoxRoom& d, const std::string& code, Aspect aspect, net::FillLevel fill, bool fog, bool with_bob, float zoom_level = 1.0f, bool zoom_given = false, sim::StartTeams room_teams = {}) -> bool {
         server::RoomSpec spec;
         spec.code = code;
         spec.map = "TINY.LVL";
         spec.players = 4;
         spec.fog = fog;
+        spec.teams = room_teams;                                                             // (the room's own teams: what a create block gives a room that a Hello makes; none: the leader's START chooses)
         spec.has_seed = true;
         spec.seed = 4242;
         if (d.server.listener == nullptr || !d.server.mgr.create_room(spec, d.server.now).ok) return false;
@@ -5975,17 +6072,17 @@ void run_room_chat_box_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.82 Protocol 13, The Room's Teams On The Leader's 16:9 Screen: The Foot Of The Players' Status Box Says \"Room teams:\" And The Pair When The Room's Code Names Them (Whatever The Leader's Own --teams Is), \"Teams at START:\" For The Leader's Own Choice In A Room Whose Code Names None; A Room That Reads No Code (Made By The Control Interface) Still Gets The Code's Teams, Because The Leader's START Carries The Effective Teams") {
+    TEST_CASE("N5.82 Protocol 13, The Room's Teams On The Leader's 16:9 Screen: The Foot Of The Players' Status Box Says \"Room teams:\" And The Pair When The Room Has Its Own (Whatever The Leader's Own --teams Is), \"Teams at START:\" For The Leader's Own Choice In A Room That Has None; The Leader's START Of A Room Without Teams Of Its Own Carries The Leader's Choice, And The Referee Makes It") {
         using L = net::FillLevel;
         const auto footer = [](Application& app) { return std::vector<std::string>{app.map_select().fill_footer()[0], app.map_select().fill_footer()[1]}; };
         const net::FillPlan blue_easy_black_hard(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
-        {   // the room's code names Green + Red: the leader and Bob are in, no bots yet
+        {   // the room has Green + Red of its own: the leader and Bob are in, no bots yet
             BoxRoom d;
-            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-t01-box123", Aspect::Wide16x9, L::None, false, true));
+            ASSERT_TRUE(open_leader(d, "BOX-TEAMS-1", Aspect::Wide16x9, L::None, false, true, 1.0f, false, sim::StartTeams{true, 0, 1}));
             Application& app = d.app;
             ASSERT_TRUE(app.net()->room_teams() == sim::StartTeams({true, 0, 1}));
             ASSERT_EQ(footer(app), (std::vector<std::string>{"Room teams:", "Green + Red"}));          // (the seats that play so far: the pair alone)
-            app.set_start_teams(LocalTeams{true, 1, 2});                                               // the leader's own choice: the room's code wins, nothing of it is shown
+            app.set_start_teams(LocalTeams{true, 1, 2});                                               // the leader's own choice: the room's own teams win, nothing of it is shown
             d.hall.step(30);
             ASSERT_EQ(footer(app), (std::vector<std::string>{"Room teams:", "Green + Red"}));
             ASSERT_TRUE(app.net()->start_teams() == sim::StartTeams({true, 1, 2}) && app.net()->effective_teams() == sim::StartTeams({true, 0, 1}));
@@ -5995,9 +6092,9 @@ void run_room_chat_box_tests() {
             ASSERT_EQ(both, (std::vector<std::string>{"Bots: Blue Easy, Black Hard", "Room teams: Green + Red vs Blue + Black"}));      // (the longest way that fits the box at 12 px with the real font: "against" does not)
             app.quit();
         }
-        {   // a room whose code names none: the leader's own choice, said as a choice of START, as before
+        {   // a room that has none of its own: the leader's own choice, said as a choice of START, as before
             BoxRoom d;
-            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-box456", Aspect::Wide16x9, L::None, false, true));
+            ASSERT_TRUE(open_leader(d, "BOX-TEAMS-2", Aspect::Wide16x9, L::None, false, true));
             Application& app = d.app;
             ASSERT_FALSE(app.net()->room_teams().set);
             ASSERT_EQ(footer(app), (std::vector<std::string>{"", ""}));
@@ -6006,21 +6103,21 @@ void run_room_chat_box_tests() {
             ASSERT_EQ(footer(app), (std::vector<std::string>{"Teams at START:", "Red + Blue"}));
             app.quit();
         }
-        {   // a room that reads no code (the control interface made it, as these rooms are made): its code names Green + Red, the leader's START carries them and the room has none of its own
+        {   // a room that has none of its own (the control interface made it, as these rooms are made): the leader's START carries the leader's own choice, Red + Blue, and the referee makes it
             BoxRoom d;
-            ASSERT_TRUE(open_leader(d, "demo-tiny-4p-t01-box789", Aspect::Wide16x9, L::None, false, true));
+            ASSERT_TRUE(open_leader(d, "BOX-TEAMS-3", Aspect::Wide16x9, L::None, false, true));
             Application& app = d.app;
-            ASSERT_TRUE(d.server.status("demo-tiny-4p-t01-box789").room_teams.empty());
-            app.set_start_teams(LocalTeams{true, 1, 2});                                               // (its own choice: not what the request carries)
+            ASSERT_TRUE(d.server.status("BOX-TEAMS-3").room_teams.empty());
+            app.set_start_teams(LocalTeams{true, 1, 2});                                               // (its own choice: what the request carries, as the room has none)
             app.set_fill_bots(blue_easy_black_hard);
             d.hall.step(30);
             app.room_key_down(SDLK_s, 0, false);
             ASSERT_TRUE(d.hall.until([&]() { return app.state() == AppState::Playing && d.peer.net.phase() == net::NetGame::Phase::Playing; }, 15000));
-            const server::RoomStatus s = d.server.status("demo-tiny-4p-t01-box789");
+            const server::RoomStatus s = d.server.status("BOX-TEAMS-3");
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 2 && s.room_teams.empty());
-            ASSERT_EQ(s.teams, std::string("0+1"));                                                    // the effective teams, not the leader's own 1 + 2
-            ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[2] == 3 && s.allies[3] == 2);
-            ASSERT_TRUE(app.sim().alliance_of(0) == 1 && app.sim().alliance_of(2) == 3 && d.peer.sim.alliance_of(1) == 0);
+            ASSERT_EQ(s.teams, std::string("1+2"));                                                    // the leader's own choice: the room has none to say otherwise
+            ASSERT_TRUE(s.allies[0] == 3 && s.allies[1] == 2 && s.allies[2] == 1 && s.allies[3] == 0);   // (Red + Blue, and the two seats left over are the other team)
+            ASSERT_TRUE(app.sim().alliance_of(0) == 3 && app.sim().alliance_of(1) == 2 && d.peer.sim.alliance_of(2) == 1);
             app.quit();
         }
     } TEST_END();
@@ -6726,28 +6823,39 @@ void run_one_card_tests() {
         cfg.net_start_when = start_when;
         return cfg;
     };
+    // the create block that every link of the card's room carries (`roommap`, `roomseats`, `roomteams`): TINY, four seats, the room's teams as "A+B" or "ffa"; the server makes the room of the first Hello
+    const auto card_block = [](const std::string& teams) {
+        net::CreateBlock block;
+        block.map_name = "TINY.LVL";
+        block.seats = 4;
+        if (teams != "ffa") {
+            block.team_a = static_cast<uint8_t>(teams[0] - '0');
+            block.team_b = static_cast<uint8_t>(teams[2] - '0');
+        }
+        return block;
+    };
 
     TEST_CASE("N5.83 One Card, The Game's Arguments: --seat, --fill-bots (Four Words: A Level For A Bot Row, none For You / Friend / Nobody) And --start-when N Together; The Seat Is Any Of The Four Colours And The Plan Keeps A Bot At Green") {
-        std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "demo-treasure-4p-t12-k7m2xq", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
+        std::vector<std::string> args = {"ants", "--join-url", "wss://play.example.org/ws", "--room", "k7m2xq", "--seat", "2", "--fill-bots", "easy,medium,none,none", "--start-when", "1", "--name", "Ann", "--aspect", "16:9"};
         std::vector<char*> st;
         ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
         ASSERT_TRUE(c.startup_error.empty());
-        ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "demo-treasure-4p-t12-k7m2xq" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
+        ASSERT_TRUE(c.net_url == "wss://play.example.org/ws" && c.net_room == "k7m2xq" && c.net_seat == 2 && c.net_start_when == 1 && c.player_name == "Ann");
         ASSERT_TRUE(c.fill_bots == net::FillPlan(std::array<L, 4>{L::Easy, L::Medium, L::None, L::None}));        // (a bot at Green: the plan's seat 0 is a seat like the others)
         for (int seat = 0; seat < 4; ++seat) {                                                                   // every colour can be the person's
             const std::string text = std::to_string(seat);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--seat", text, "--start-when", "3"};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--seat", text, "--start-when", "3"};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_seat == seat && c.net_start_when == 3 && c.startup_error.empty());
         }
         for (int people = 1; people <= 4; ++people) {                                                            // You and up to three friends: one to four people to wait for
             const std::string text = std::to_string(people);
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--start-when", text};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == people && c.startup_error.empty());
         }
         for (const char* text : {"0", "5", "40", "-1", "x", ""}) {                                               // anything else is no hook (and no error: the page only ever passes 1 - 4)
-            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "demo-small-4p-abc", "--start-when", text};
+            args = {"ants", "--join-url", "ws://localhost/ws", "--room", "k7m2xq", "--start-when", text};
             c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
             ASSERT_TRUE(c.net_start_when == 0 && c.startup_error.empty());
         }
@@ -6757,21 +6865,23 @@ void run_one_card_tests() {
         struct Row {
             uint8_t seat;
             std::array<L, 4> plan;
-            const char* code;
+            const char* code;                      // (a name: the room's choices are in the create block)
             uint8_t mask;                          // the seats that play
             const char* teams;                     // "ffa" or "A+B"
             std::array<std::pair<uint8_t, const char*>, 2> bots;
         };
         const Row rows[] = {
-            {2, {L::Easy, L::Medium, L::None, L::None}, "demo-tiny-4p-t12-abcdef", 0x07, "1+2", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},        // Blue, bots at Green and Red; Red + Blue are a team, Green plays alone
-            {0, {L::None, L::None, L::Hard, L::Easy}, "demo-tiny-4p-abcdef", 0x0D, "ffa", {{{2, "Bot (Hard)"}, {3, "Bot (Easy)"}}}},                  // Green, bots at Blue and Black, Red is Nobody
-            {3, {L::Medium, L::None, L::Hard, L::None}, "demo-tiny-4p-t02-abcdef", 0x0D, "0+2", {{{0, "Bot (Medium)"}, {2, "Bot (Hard)"}}}},          // Black; Green + Blue are a team (both bots), Black plays alone, Red is Nobody
-            {2, {L::Easy, L::Medium, L::Hard, L::None}, "demo-tiny-4p-abcdef", 0x07, "ffa", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},                // a word for the leader's own seat (Hard at Blue): a person holds it, the word counts for nothing
+            {2, {L::Easy, L::Medium, L::None, L::None}, "tiny12ab", 0x07, "1+2", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},        // Blue, bots at Green and Red; Red + Blue are a team, Green plays alone
+            {0, {L::None, L::None, L::Hard, L::Easy}, "tinyffa1", 0x0D, "ffa", {{{2, "Bot (Hard)"}, {3, "Bot (Easy)"}}}},                  // Green, bots at Blue and Black, Red is Nobody
+            {3, {L::Medium, L::None, L::Hard, L::None}, "tiny02ab", 0x0D, "0+2", {{{0, "Bot (Medium)"}, {2, "Bot (Hard)"}}}},          // Black; Green + Blue are a team (both bots), Black plays alone, Red is Nobody
+            {2, {L::Easy, L::Medium, L::Hard, L::None}, "tinyffa2", 0x07, "ffa", {{{0, "Bot (Easy)"}, {1, "Bot (Medium)"}}}},                // a word for the leader's own seat (Hard at Blue): a person holds it, the word counts for nothing
         };
         for (const Row& row : rows) {
             Server server(limits);
             Application leader;
-            ASSERT_TRUE(leader.init(join_config(server, row.code, "Ann", row.seat, net::FillPlan(row.plan), 1)));
+            ApplicationConfig leader_cfg = join_config(server, row.code, "Ann", row.seat, net::FillPlan(row.plan), 1);
+            leader_cfg.net_create = card_block(row.teams);
+            ASSERT_TRUE(leader.init(leader_cfg));
             Hall hall{server, &leader, {}};
             ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing; }, 20000));                // (the hook pressed START by itself: one person and the plan's bots)
             ASSERT_EQ(leader.net()->my_seat(), row.seat);                                                        // (the room of four took the colour that was asked for, whatever it is)
@@ -6789,13 +6899,15 @@ void run_one_card_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.85 One Card, A Friend Row: The Match Starts When The Friend Is In (--start-when 2), Whichever Of The Two Connected First And So Leads: The Same Roster, The Plan's Bot, The Seat Of The Nobody Row Empty, The Code's Teams; The Game That Does Not Lead Sends Nothing (No START Of Its Own Is Heard)") {
+    TEST_CASE("N5.85 One Card, A Friend Row: The Match Starts When The Friend Is In (--start-when 2), Whichever Of The Two Connected First And So Leads: The Same Roster, The Plan's Bot, The Seat Of The Nobody Row Empty, The Room's Teams; The Game That Does Not Lead Sends Nothing (No START Of Its Own Is Heard)") {
         for (const bool host_first : {true, false}) {
             Server server(limits);
-            const std::string code = "demo-tiny-4p-t01-abcdef";                          // Green + Red are a team: Red is a bot of the plan, Green the host
+            const std::string code = "tiny01ab";                                        // Green + Red are a team (the block of every link says so): Red is a bot of the plan, Green the host
             const net::FillPlan plan(std::array<L, 4>{L::None, L::Medium, L::None, L::None});          // Red a Medium bot, Blue is Nobody, Black is the friend's (none): the host is Green (none)
-            const ApplicationConfig host_cfg = join_config(server, code, "Host", 0, plan, 2);
-            const ApplicationConfig friend_cfg = join_config(server, code, "Pal", 3, plan, 2);          // the same plan and the same number for everybody
+            ApplicationConfig host_cfg = join_config(server, code, "Host", 0, plan, 2);
+            ApplicationConfig friend_cfg = join_config(server, code, "Pal", 3, plan, 2);                // the same plan and the same number for everybody
+            host_cfg.net_create = card_block("0+1");                                                    // (and the same block: the Hello of the one who connects first makes the room, the other's is not read)
+            friend_cfg.net_create = card_block("0+1");
             Application first;
             Application second;
             ASSERT_TRUE(first.init(host_first ? host_cfg : friend_cfg));
@@ -6817,7 +6929,7 @@ void run_one_card_tests() {
             ASSERT_EQ(second.net()->my_seat(), host_first ? uint8_t{3} : uint8_t{0});
             ASSERT_EQ(s.ignored_start_requests, 0u);                                                     // the game that does not lead pressed nothing (a START of a non-leader is ignored and counted)
             ASSERT_TRUE(first.sim().roster_mask() == 0x0B && second.sim().roster_mask() == 0x0B);
-            ASSERT_EQ(s.teams, std::string("0+1"));                                                      // the code's team, made at this START
+            ASSERT_EQ(s.teams, std::string("0+1"));                                                      // the room's team, made at this START
             ASSERT_TRUE(s.allies[0] == 1 && s.allies[1] == 0 && s.allies[3] == sim::ALLIANCE_NONE);
             hall.step(kDialogMs + 1500);
             ASSERT_TRUE(hall.identical(first.sim(), second.sim()));
@@ -6836,9 +6948,14 @@ void run_one_card_tests() {
             app.map_select().handle_mouse_up(x, y, 1);
         };
         Server server(limits);
-        const std::string code = "demo-tiny-4p-abcdef";
+        const std::string code = "abcdef";
+        net::CreateBlock block;                                                                    // (this Hello makes the room: TINY, four seats)
+        block.map_name = "TINY.LVL";
+        block.seats = 4;
         Application app;
-        ASSERT_TRUE(app.init(join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::None, L::None}), 1)));       // Green, one Medium bot at Red
+        ApplicationConfig cfg = join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::None, L::None}), 1);       // Green, one Medium bot at Red
+        cfg.net_create = block;
+        ASSERT_TRUE(app.init(cfg));
         Hall hall{server, &app, {}};
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
         hall.step(kDialogMs + 500);
@@ -6865,10 +6982,15 @@ void run_one_card_tests() {
     TEST_CASE("N5.86b A Match Of A Room That Is Left On Purpose (The Browser's Menu Button, The Quit Dialog's Yes) Tells The Site Statistics Nothing, Also In The Frames That The Old Page Runs Until The New One Is There: It Is Not A Game On This Computer") {
         int told = 0;
         Server server(limits);
-        const std::string code = "demo-tiny-4p-abcdef";
+        const std::string code = "abcdef";
+        net::CreateBlock block;                                                                    // (this Hello makes the room: TINY, four seats)
+        block.map_name = "TINY.LVL";
+        block.seats = 4;
         Application app;
         app.set_on_local_match_started([&told]() { ++told; });
-        ASSERT_TRUE(app.init(join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::Medium, L::Medium}), 1)));       // Green and three Medium bots: the Yes of the dialog leaves, it does not end the match
+        ApplicationConfig cfg = join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::Medium, L::Medium}), 1);       // Green and three Medium bots: the Yes of the dialog leaves, it does not end the match
+        cfg.net_create = block;
+        ASSERT_TRUE(app.init(cfg));
         Hall hall{server, &app, {}};
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
         hall.step(kDialogMs + 500);
