@@ -874,6 +874,7 @@ Requests of the owner (2026-10-05, and 2026-10-07 for the length): the join code
 * Codes with an upper-case letter are never a visitor's: a Hello with a block for one is `NoSuchRoom` (the control interface's codes have capitals). A code that is made without one, whoever makes it first, is a visitor's, so an operator who wants a room of the control interface under a name of their own gives it a capital.
 * The block of the first Hello decides: two players who open different links of one code (an address edited by hand) get the room of the first.
 * The platform byte is the client's word. A server never checks it and no rule may use it.
+* A code is not a secret. There are about 890 million six-character codes (31 symbols, `kRoomCodeChars`), and whoever types the code of a room that waits and has a free seat joins it; the room holds nothing private and its leader sees everybody who joined. A key (which a code is not) is what keeps a seat of a running match.
 * A swap is the leader's: there is no vote, no colour picker and no kick, and a LAN or direct host, which has no leader, cannot move anybody.
 
 ### Tests
