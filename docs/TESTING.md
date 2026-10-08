@@ -1,6 +1,6 @@
 # Testing and CI
 
-How the game is tested and what CI runs for every pull request. `./run_tests.sh` runs every suite (decoders, simulation, network, server, bots, the application's screens, view fingerprints, an opaque-box E2E runner and the repository checks) and prints each result and time; GitHub Actions runs the same suites for every pull request, and also builds on Windows and builds the web and server images. Every suite keeps a 100% pass rate; the counts of tests and assertions are printed by `./run_tests.sh` and are not kept in documents ([`AGENTS.md`](../AGENTS.md), rule 2).
+How the game is tested and what CI runs for every pull request. `./run_tests.sh` runs every suite (decoders, simulation, network, server, bots, the application's screens, view fingerprints, an opaque-box E2E runner and the repository checks) and prints each result and time; GitHub Actions runs the same suites for every pull request, and also builds on Windows and builds the web and server images. Every suite keeps a 100% pass rate ([`AGENTS.md`](../AGENTS.md), rule 2); the counts of tests and assertions are printed by `./run_tests.sh` and are not kept in documents.
 
 Prerequisites and how to build: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md).
 

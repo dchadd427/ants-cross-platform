@@ -1,6 +1,6 @@
 # Replays and Watch mode: build plan
 
-Companion of `DESIGN.md` (the decisions) and `mockups/` (the pictures). Estimates are lines of C++ / JS unless said otherwise, counted from the size of the neighbouring code (the wide-pages build is the yardstick: about 450 production lines for four screens). Nothing here is started: the owner approves the pictures first (AGENTS.md rule 9), and the build starts when `start-clock`, `edge-pan` and `wide-pages` have landed. The steps are written to be given one at a time to an agent on its own branch, each ending in `./run_tests.sh --fast` and a pushed branch for CI.
+Companion of `DESIGN.md` (the decisions) and `mockups/` (the pictures). Estimates are lines of C++ / JS unless said otherwise, counted from the size of the neighbouring code (the wide-pages build is the yardstick: about 450 production lines for four screens). Nothing here is started: the owner approves the pictures first (AGENTS.md rule 7), and the build starts when `start-clock`, `edge-pan` and `wide-pages` have landed. The steps are written to be given one at a time to an agent on its own branch, each ending in `./run_tests.sh --fast` and a pushed branch for CI.
 
 ## 1. Preconditions and what waits for what
 
