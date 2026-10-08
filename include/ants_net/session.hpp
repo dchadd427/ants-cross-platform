@@ -48,7 +48,7 @@
 // the player runs them with fast_forward (nothing is drawn) and says CaughtUp with its state hash, and when the hash is the referee's the connection is the seat's again and the
 // match goes on at the next turn (after a pause of 3 s or more, after a resume countdown during which nothing is sealed); a different state is answered with a Desync to that player alone (the room does not fail). Meanwhile the others may vote
 // (Attendance: also about a seat that flaps, back and present), and the match's total pause is capped, absolutely: at the cap every seat that is not present is dropped. A key holder has budgets (a catch-up time per absence,
-// three Hellos a minute, three times the log's size in ten minutes: attendance.hpp); beyond them a Hello is refused, RejoinFailed, and the seat stays held. A returning connection is not a client of the host until it has caught up (HostSession::Rejoiner). ClientSession is the other end: a lost link with a
+// twelve Hellos a minute, three times the log's size in ten minutes: attendance.hpp); beyond them a Hello is refused, RejoinFailed, and the seat stays held. A returning connection is not a client of the host until it has caught up (HostSession::Rejoiner). ClientSession is the other end: a lost link with a
 // key is not the end of the match (Mode::Reconnecting): it asks its owner for a new link (wants_connection / attach), says the Hello when the link is open, is given the match again
 // (Mode::Rejoining, Mode::CatchingUp) and goes on; a Reject (the seat was dropped, the room is gone, a newer window took the seat) ends it for good.
 

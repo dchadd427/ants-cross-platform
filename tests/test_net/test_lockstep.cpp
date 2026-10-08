@@ -2886,7 +2886,7 @@ void run_reconnect_core_tests() {
             ASSERT_EQ(b.away_ms(3, t0 + 42999), 29999u);
             ASSERT_EQ(b.vote_subject(t0 + 42999), 255);
             ASSERT_EQ(b.vote_subject(t0 + 43000), 3);
-            Attendance::Config many;                                                 // (a seat is taken back three times a minute by default: this one is cut every 3 s, so the rule is raised to its most)
+            Attendance::Config many;                                                 // (a seat is taken back twelve times a minute by default: this one is cut every 3 s, so the rule is raised to its most)
             many.rejoin_attempts = Attendance::kMaxRejoinAttempts;
             Attendance c(many);                                                      // six losses of a second each count 5 s each: the vote opens at 30 s of loss in all ...
             c.seat_humans(0b1011, t0);
@@ -3878,29 +3878,27 @@ void run_reconnect_core_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.76 Attendance: The Rejoin Budget Of A Seat: At Most Three Hellos Are Accepted In A Minute (The Window Slides To The Millisecond), And At Most Three Times The Log's Size Is Streamed In Ten Minutes, At Least 1 MiB; A Refused Hello Changes Nothing, Counts Nothing Against The Seat And Is Counted; The Streams Are Charged As They Are Sent") {
+    TEST_CASE("N2.76 Attendance: The Rejoin Budget Of A Seat: At Most Twelve Hellos Are Accepted In A Minute (The Window Slides To The Millisecond), And At Most Three Times The Log's Size Is Streamed In Ten Minutes, At Least 1 MiB; A Refused Hello Changes Nothing, Counts Nothing Against The Seat And Is Counted; The Streams Are Charged As They Are Sent") {
         using S = Attendance::State;
         const uint32_t t0 = 900000;
-        {   // three Hellos a minute
+        {   // twelve Hellos a minute
             Attendance a;
             a.seat_humans(0b0111, t0);
-            ASSERT_TRUE(Attendance::Config{}.rejoin_attempts == 3 && Attendance::Config{}.rejoin_window_ms == 60000 && kRejoinAttempts == 3 && kRejoinWindowMs == 60000);
+            ASSERT_TRUE(Attendance::Config{}.rejoin_attempts == 12 && Attendance::Config{}.rejoin_window_ms == 60000 && kRejoinAttempts == 12 && kRejoinWindowMs == 60000);
             ASSERT_TRUE(a.lost(1, t0));
-            ASSERT_TRUE(a.returning(1, t0 + 1000));                                       // 1
-            ASSERT_TRUE(a.returning(1, t0 + 11000));                                      // 2
-            ASSERT_TRUE(a.returning(1, t0 + 21000));                                      // 3
-            ASSERT_EQ(a.rejoin_check(1, t0 + 31000), Attendance::Rejoin::TooManyAttempts);
+            for (uint32_t k = 0; k < 12; ++k) ASSERT_TRUE(a.returning(1, t0 + 1000 + k * 4000));        // 1 .. 12, the last at 45 s
+            ASSERT_EQ(a.rejoin_check(1, t0 + 49000), Attendance::Rejoin::TooManyAttempts);
             const uint8_t percent = a.percent(1);
-            ASSERT_TRUE(a.progress(1, 7, t0 + 31000));
-            ASSERT_FALSE(a.returning(1, t0 + 31000));                                     // the fourth is refused: nothing changes
+            ASSERT_TRUE(a.progress(1, 7, t0 + 49000));
+            ASSERT_FALSE(a.returning(1, t0 + 49000));                                     // the thirteenth is refused: nothing changes
             ASSERT_TRUE(a.state(1) == S::CatchingUp && a.percent(1) == 7 && percent == 0);
             ASSERT_EQ(a.rejoins_refused(), 1u);
-            ASSERT_FALSE(a.returning(1, t0 + 45000));                                     // (and a refused Hello does not count: the window is that of the three that were accepted)
+            ASSERT_FALSE(a.returning(1, t0 + 55000));                                     // (and a refused Hello does not count: the window is that of the twelve that were accepted)
             ASSERT_FALSE(a.returning(1, t0 + 60999));                                     // the first one is 59,999 ms old: it still counts
             ASSERT_EQ(a.rejoins_refused(), 3u);
             ASSERT_TRUE(a.returning(1, t0 + 61000));                                      // 60,000 ms: it is out of the minute
             ASSERT_EQ(a.rejoin_check(1, t0 + 61000), Attendance::Rejoin::TooManyAttempts);
-            ASSERT_EQ(a.rejoin_check(1, t0 + 71000), Attendance::Rejoin::Allowed);        // (the second leaves at 71 s)
+            ASSERT_EQ(a.rejoin_check(1, t0 + 65000), Attendance::Rejoin::Allowed);        // (the second leaves at 65 s)
             ASSERT_EQ(a.rejoins_refused(), 3u);
             // a seat that is dropped, or no seat, is not "refused": nothing is held for it
             ASSERT_TRUE(a.dropped(1, t0 + 62000));
@@ -3911,7 +3909,7 @@ void run_reconnect_core_tests() {
             // each seat has its own budget
             ASSERT_TRUE(a.lost(0, t0 + 65000) && a.returning(0, t0 + 65100));
         }
-        {   // the configured number: one a minute, eight a minute (the most), and a request for more or for none is clamped
+        {   // the configured number: one a minute, sixteen a minute (the most), and a request for more or for none is clamped
             Attendance::Config one;
             one.rejoin_attempts = 1;
             Attendance a(one);
@@ -3983,7 +3981,7 @@ void run_reconnect_core_tests() {
                 ASSERT_TRUE(a.returning(1, at, 100000, 100000));
                 a.charge_stream(1, at + 10, 100000);
                 ASSERT_TRUE(a.catch_up_failed(1, at + 20));
-                at += 8000;                                                                // (eight Hellos a minute are allowed here: this spacing is within it)
+                at += 8000;                                                                // (sixteen Hellos a minute are the most a Config may allow: this spacing is within it)
             }
             ASSERT_EQ(a.rejoin_check(1, at, 100000, 100000), Attendance::Rejoin::TooMuchStreamed);   // the eleventh: 1.1 MB of 1,048,576
             ASSERT_EQ(a.rejoin_check(1, at, 48576, 100000), Attendance::Rejoin::Allowed);
@@ -4011,9 +4009,8 @@ void run_reconnect_core_tests() {
                 ASSERT_TRUE(a.lost(1, start));
                 ASSERT_TRUE(a.returning(1, start + 1000, 900, 1000));
                 a.charge_stream(1, start + 1100, 2800);
-                ASSERT_TRUE(a.returning(1, start + 2000));
-                ASSERT_TRUE(a.returning(1, start + 3000));
-                ASSERT_EQ(a.rejoin_check(1, start + 4000), Attendance::Rejoin::TooManyAttempts);
+                for (uint32_t k = 2; k <= 12; ++k) ASSERT_TRUE(a.returning(1, start + k * 1000));          // the twelve of the minute
+                ASSERT_EQ(a.rejoin_check(1, start + 13000), Attendance::Rejoin::TooManyAttempts);
                 ASSERT_EQ(a.rejoin_check(1, start + 61000 - 1), Attendance::Rejoin::TooManyAttempts);
                 ASSERT_EQ(a.rejoin_check(1, start + 61000), Attendance::Rejoin::Allowed);
                 ASSERT_EQ(a.rejoin_check(1, start + 61000, 900, 1000), Attendance::Rejoin::TooMuchStreamed);     // 2800 + 900 > 3000
@@ -7915,7 +7912,7 @@ void run_reconnect_session_tests() {
             return false;
         };
         {
-            HoldOptions many;                                                               // (a seat is taken back three times a minute: this block says Hello five times in a few seconds)
+            HoldOptions many;                                                               // (a seat is taken back twelve times a minute: this block says Hello five times in a few seconds)
             many.host.attendance.rejoin_attempts = Attendance::kMaxRejoinAttempts;
             HoldMatch m(3, many);
             m.run(5000);
@@ -8547,7 +8544,7 @@ void run_reconnect_session_tests() {
         ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Absent);            // 42 s: the budget is used up, whatever progress it made: let go
         ASSERT_EQ(m.host->attendance().catch_up_expired(), 1u);
         ASSERT_EQ(m.host->attendance().rejoins(), 0u);
-        ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 1);                       // (the Hello at 36 s was the fourth in a minute)
+        ASSERT_EQ(m.host->attendance().rejoins_refused(), 0u);                          // (the four Hellos so far, at 0, 12, 24 and 36 s, were taken: they are within the twelve of a minute; the next one, at 48 s, finds the budget spent)
         ASSERT_TRUE(m.host->paused());
         m.run(2000, true, key_holder);
         ASSERT_TRUE(m.clients[0]->presence().vote_seat == 2 && m.clients[1]->presence().vote_seat == 2);      // the others may vote on it: it is away (nothing keeps it catching up)
@@ -8565,7 +8562,7 @@ void run_reconnect_session_tests() {
         ASSERT_EQ(m.host->attendance().drops_by_vote(), 0u);
         ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Dropped);
         ASSERT_EQ(m.host->attendance().rejoins(), 0u);
-        ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 6 && m.host->attendance().rejoins_refused() <= 8);       // the Hellos of 36 s to 108 s
+        ASSERT_TRUE(m.host->attendance().rejoins_refused() >= 6 && m.host->attendance().rejoins_refused() <= 8);       // the Hellos of 48 s to 108 s
         ASSERT_EQ(m.host->rejoiners(), size_t{0});
         m.run(3000);
         ASSERT_TRUE(m.sealed() > sealed_at_pause + 40);                                 // the others play on
@@ -8671,7 +8668,7 @@ void run_reconnect_session_tests() {
             ASSERT_TRUE(streamed >= 2 * uint64_t{log_bytes});
             ASSERT_TRUE(m.host->attendance().streamed_bytes() <= 3 * uint64_t{log_bytes});
             ASSERT_TRUE(m.host->attendance().streamed_bytes() > 2 * uint64_t{log_bytes});
-            ASSERT_EQ(m.host->attendance().rejoins_refused(), 7u);                      // the fourth to the tenth: the bytes (and not the eight Hellos a minute, which would have refused two)
+            ASSERT_EQ(m.host->attendance().rejoins_refused(), 7u);                      // the fourth to the tenth: the bytes (and not the Hellos a minute: ten in 20 s are within twelve)
         }
     } TEST_END();
 
@@ -8708,7 +8705,7 @@ void run_reconnect_session_tests() {
         ASSERT_TRUE(m.all_equal());
     } TEST_END();
 
-    TEST_CASE("N2.83 Hold: A Connection That Flaps Cannot Slow The Match Down For Ever (Cut Every 300 ms): Three Losses In A Minute Put The Seat To The Vote At Once, Whatever Its State; Back And Present It Is Voted Out By The Two Others (Its Link Is Closed, The Drop Is The Same Tick Everywhere, The Machine Is Told \"Dropped\"); A Seat That Is Cut Again And Again Is Refused At Its Fourth Hello Of A Minute And The Vote And The Cap Take It; The Match Is At Full Speed Afterwards") {
+    TEST_CASE("N2.83 Hold: A Connection That Flaps Cannot Slow The Match Down For Ever (Cut Every 300 ms): Three Losses In A Minute Put The Seat To The Vote At Once, Whatever Its State; Back And Present It Is Voted Out By The Two Others (Its Link Is Closed, The Drop Is The Same Tick Everywhere, The Machine Is Told \"Dropped\"); A Seat That Is Cut Again And Again Is Refused At Its Thirteenth Hello Of A Minute And The Vote And The Cap Take It; The Match Is At Full Speed Afterwards") {
         {   // three cuts, then the seat stays: it is back and Present, and the vote about it is open
             HoldMatch m(3);
             m.run(6000);
@@ -8793,16 +8790,16 @@ void run_reconnect_session_tests() {
             ASSERT_TRUE(m.host->desyncs().empty());
             ASSERT_TRUE(m.all_equal());
         }
-        {   // a seat that is cut again and again: the fourth Hello of a minute is refused, and its machine is told that there is no way back; the vote and the cap take the seat
+        {   // a seat that is cut again and again: the thirteenth Hello of a minute is refused, and its machine is told that there is no way back; the vote and the cap take the seat
             HoldOptions o;
-            o.host.attendance.max_pause_ms = 60000;
+            o.host.attendance.max_pause_ms = 120000;                                      // (twelve losses count at least 5 s each: 60 s; the cap is above them, so that the Hello budget is what ends it)
             HoldMatch m(3, o);
             m.run(6000);
             const uint32_t sealed_before_cuts = m.sealed();
             const uint32_t t_start = m.now;
             uint32_t cuts = 0;
             uint32_t last_cut = 0;
-            for (int i = 0; i < 6000 && !m.clients[2]->lost() && cuts < 12; ++i) {
+            for (int i = 0; i < 6000 && !m.clients[2]->lost() && cuts < 20; ++i) {
                 m.run(10);
                 if (m.clients[2]->mode() == ClientSession::Mode::Normal && m.host->client_present(2) && !m.host->paused() && m.now - last_cut >= 300) {
                     m.cut(2);
@@ -8811,9 +8808,9 @@ void run_reconnect_session_tests() {
                 }
             }
             ASSERT_TRUE(m.until([&]() { return m.clients[2]->lost(); }, 10000));
-            ASSERT_EQ(cuts, 4u);                                                          // the fourth cut is the last one: its Hello is the fourth of a minute
+            ASSERT_EQ(cuts, 13u);                                                         // the thirteenth cut is the last one: its Hello is the thirteenth of a minute
             ASSERT_TRUE(m.clients[2]->rejected() && m.clients[2]->reject_reason() == RejectReason::RejoinFailed);
-            ASSERT_EQ(m.host->attendance().rejoins(), 3u);
+            ASSERT_EQ(m.host->attendance().rejoins(), 12u);
             ASSERT_EQ(m.host->attendance().rejoins_refused(), 1u);
             ASSERT_EQ(m.host->attendance().state(2), Attendance::State::Absent);          // the seat is held: the vote and the cap apply
             ASSERT_TRUE(m.host->paused());

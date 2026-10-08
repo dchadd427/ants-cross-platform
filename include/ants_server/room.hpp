@@ -234,7 +234,7 @@ struct RoomStatus {
     uint32_t rejoins{0};                    // seats that came back and were verified
     uint32_t drops_by_vote{0};              // seats dropped because the players voted to go on without them
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
-    uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, three attempts a minute, three times the log's size in ten minutes)
+    uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, twelve attempts a minute, three times the log's size in ten minutes)
     uint32_t catch_up_expired{0};           // absences whose catch-up time ran out
     uint64_t streamed_bytes{0};             // the bytes of the turn log that were streamed to returning players (all seats)
     uint32_t log_turns{0};                  // the match's turn log (what a returning player is given): its turns, its bytes, and whether it can still be used

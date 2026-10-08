@@ -1903,7 +1903,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(!m.net.paused() && pi.missing.empty() && pi.resume_seconds_left == 0);
     } TEST_END();
 
-    TEST_CASE("RJ1.17 The Server's Budget Of Hellos Refuses A Machine That Comes Back Too Often (Three A Minute, The Fourth Is RejoinFailed): The Way Back Ends With \"Try Rejoin In A Minute\", The Key Stays, Nothing Tries Again By Itself, A Rejoin Within The Minute Is Refused In The Same Words, And The Rejoin After The Minute Takes The Machine Back Into The Match") {
+    TEST_CASE("RJ1.17 The Server's Budget Of Hellos Refuses A Machine That Comes Back Too Often (Twelve A Minute, The Thirteenth Is RejoinFailed): The Way Back Ends With \"Try Rejoin In A Minute\", The Key Stays, Nothing Tries Again By Itself, A Rejoin Within The Minute Is Refused In The Same Words, And The Rejoin After The Minute Takes The Machine Back Into The Match") {
         World w;
         ASSERT_TRUE(w.server.start(w.now));
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-17"), w.server_now()).ok);
@@ -1913,13 +1913,13 @@ void run_way_back_tests() {
         const net::SeatKey key = b.keys_given[0].key;
         const uint8_t seat = b.net.my_seat();
         const std::string refused_text = "The server would not take you back now. Try Rejoin in a minute.";
-        for (uint32_t i = 1; i <= 3; ++i) {                                              // three cuts within a minute: each is taken back
+        for (uint32_t i = 1; i <= 12; ++i) {                                             // twelve cuts within a minute: each is taken back
             ASSERT_TRUE(w.server.cut_newest());
             ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-17").rejoins == i && !w.status("RJ-17").paused; }, 15000));
             w.run(300);
             ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
         }
-        ASSERT_TRUE(w.server.cut_newest());                                              // the fourth Hello of the minute
+        ASSERT_TRUE(w.server.cut_newest());                                              // the thirteenth Hello of the minute
         ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Over; }, 15000));
         w.run(10);
         ASSERT_EQ(b.net.status_text(), refused_text);
@@ -1927,7 +1927,7 @@ void run_way_back_tests() {
         const uint32_t seen = w.server.accepted;
         w.run(6000);
         ASSERT_EQ(w.server.accepted, seen);                                              // nothing tries again by itself
-        ASSERT_TRUE(w.status("RJ-17").paused && w.status("RJ-17").absent.size() == 1 && w.status("RJ-17").absent[0].seat == seat && w.status("RJ-17").rejoins == 3);      // (the seat is still held)
+        ASSERT_TRUE(w.status("RJ-17").paused && w.status("RJ-17").absent.size() == 1 && w.status("RJ-17").absent[0].seat == seat && w.status("RJ-17").rejoins == 12);      // (the seat is still held)
         b.net.leave();                                                                   // the application's way back to its menu keeps the key
         ASSERT_TRUE(b.keys_forgotten.empty());
         Machine& early = w.add_machine("Bob");                                           // the player tries Rejoin at once: the same words, the key stays
@@ -1941,7 +1941,7 @@ void run_way_back_tests() {
         w.run(61000);                                                                    // the minute is over
         Machine& again = w.add_machine("Bob");
         ASSERT_TRUE(again.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-17", "", key));
-        ASSERT_TRUE(w.run_until([&]() { return again.net.phase() == NetGame::Phase::Playing && again.count(NetGame::Event::Type::Rejoined) >= 1 && w.status("RJ-17").rejoins == 4 && !w.status("RJ-17").paused; }, 30000));       // (the machine has the server's word when the room says so only where a loopback delivers within the pass)
+        ASSERT_TRUE(w.run_until([&]() { return again.net.phase() == NetGame::Phase::Playing && again.count(NetGame::Event::Type::Rejoined) >= 1 && w.status("RJ-17").rejoins == 13 && !w.status("RJ-17").paused; }, 30000));       // (the machine has the server's word when the room says so only where a loopback delivers within the pass)
         ASSERT_TRUE(again.my_seat_is(seat) && again.count(NetGame::Event::Type::Rejoined) == 1);
         w.run(3000);
         a.quit();

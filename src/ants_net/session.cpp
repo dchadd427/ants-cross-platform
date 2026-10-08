@@ -536,7 +536,7 @@ bool HostSession::accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_
     const uint32_t total = log_.turns();
     if (hello.have_turns > total) return refuse(RejectReason::BadRequest);                  // more turns than were ever sealed
     if (hello.have_turns == 0 && !have_rejoin_start_) return refuse(RejectReason::RejoinFailed);     // a machine with nothing cannot be told how to load the match
-    // The seat's budgets (attendance.hpp): the catch-up time of this absence, three accepted Hellos a minute, three times the log's size streamed in ten minutes. Past any of them the
+    // The seat's budgets (attendance.hpp): the catch-up time of this absence, twelve accepted Hellos a minute, three times the log's size streamed in ten minutes. Past any of them the
     // answer is RejoinFailed, the seat stays as it was (held: the vote and the cap apply), and nothing of an attempt that may be in progress is touched. A Hello that is accepted is the
     // attempt (a second Hello of an attempt that goes on does not give it a new stall clock).
     if (!attendance_.returning(seat, now_ms, log_.bytes_between(hello.have_turns, total), log_.bytes())) return refuse(RejectReason::RejoinFailed);
