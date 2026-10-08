@@ -593,6 +593,7 @@ public:
         uint32_t field_ticks{200};           // the walking field of the hill as it is now (MapInfo::field_now) is made again after this many ticks, and at once when a tile of the ring round the gate or of the queue row changed
         uint32_t ramp_wait_ticks{200};       // it waits this long for an own ant that stands on the ramp (a longer one is not waited for: the click is refused and the stop above takes over)
         bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits for the ramp: LevelPlan::cantgo_aware
+        uint32_t leaver_wait_ticks{0};       // the entrance click waits at most this long while an own ant without food stands on the ramp (0: it does not wait; it does not either with cantgo_aware off): LevelPlan::gate_leaver_ticks
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -659,6 +660,7 @@ private:
     std::map<uint32_t, uint64_t> clip_seen_;
     int64_t pending_free_at_{0};
     int64_t ramp_since_{-1};                      // the tick at which an own ant was first seen standing on the ramp (-1: none does)
+    int64_t leaver_since_{-1};                    // the tick at which an own ant without food was first seen on the ramp (-1: none is)
     uint32_t bite_waited_{0};
     uint32_t user_{0};
     uint64_t user_release_{0};

@@ -229,6 +229,9 @@ void run_b41_gate_tests() {
         ASSERT_TRUE(plan_for(Level::Hard).gate);
         ASSERT_FALSE(plan_for(Level::Medium).gate);
         ASSERT_FALSE(plan_for(Level::Easy).gate);
+        ASSERT_EQ(plan_for(Level::Hard).gate_leaver_ticks, 60u);                            // (the click waits at most 60 ticks for an ant that leaves over the ramp: AI10.15; the other levels do not guide)
+        ASSERT_EQ(plan_for(Level::Medium).gate_leaver_ticks, 0u);
+        ASSERT_EQ(plan_for(Level::Easy).gate_leaver_ticks, 0u);
         for (const Level level : {Level::Easy, Level::Medium}) {
             GateScene scene;
             scene.build(8);
@@ -678,7 +681,7 @@ void run_b41_gate_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI10.12 An Own Ant That Stands On The Ramp Shuts The Way To The Entrance Like One That Stands On The Entrance: The Gate Clicks Nobody Onto The Entrance While It Stands There (Before: 16 Clicks And 17 Orders In 400 Ticks, Every One Refused, \"Can't Go There.\", Then The Gate Stopped For 900 Ticks), And Clicks At Once When The Ant Has Gone; An Ant That Walks Over The Ramp Holds Nothing; An Ant That Never Goes Is Waited For 200 Ticks, Not Longer")
+    TEST_CASE("AI10.12 An Own Ant That Stands On The Ramp Shuts The Way To The Entrance Like One That Stands On The Entrance: The Gate Clicks Nobody Onto The Entrance While It Stands There (Before: 16 Clicks And 17 Orders In 400 Ticks, Every One Refused, \"Can't Go There.\", Then The Gate Stopped For 900 Ticks), And Clicks At Once When The Ant Has Gone; An Ant That Walks Over The Ramp Holds Nothing (With The Wait For The Ant That Leaves Switched Off); An Ant That Never Goes Is Waited For 200 Ticks, Not Longer")
     {
         const TileCoord hill{26, 26};
         const TileCoord ramp{hill.x + 1, hill.y};
@@ -726,12 +729,14 @@ void run_b41_gate_tests() {
             ASSERT_EQ(tally.seat(0).refused, 0u);
             ASSERT_TRUE(sim.get_player_score(0) >= 25);
         }
-        {   // (c) an own ant that walks over the ramp holds nothing: the carrier is clicked at the first look
+        {   // (c) an own ant that walks over the ramp holds nothing when the wait for the ant that leaves is off (AI10.15): the carrier is clicked at the first look
             sim::SimulationEngine sim;
             world(sim);
             const uint32_t walker = sim.spawn_unit(0, sim::AntType::Worker, ramp);
             sim.apply_command(command_of(CommandType::GroupMove, 0, {walker}, 23, 20));
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            LevelPlan no_wait = gate_plan(true);
+            no_wait.gate_leaver_ticks = 0;                                                                    // (the walker holds the click while the wait is on: AI10.15)
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(no_wait), 4, 8);
             CantGoTally tally;
             rig.count_with(&tally);
             rig.tick();                                                                                       // the first look: the walker is on the ramp and shows "walking"
@@ -955,6 +960,121 @@ void run_b41_gate_tests() {
             rig.run(900);
             ASSERT_TRUE(rig.as<WorkerBot>().harvest().rescues() >= 1);
             ASSERT_TRUE(tally.seat(0).refused >= 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI10.15 The Click Waits For The Ant That Leaves Over The Ramp (Hard: 60 Ticks At The Most): An Own Ant Without Food On The Ramp Holds The Click Until It Is Gone, One With Food Does Not, The Wait Ends After The Given Ticks Though It Still Stands There, It Starts Again With The Next Such Ant, And The Can't-Go Switch (cg=0) Takes The Wait Away")
+    {
+        const TileCoord hill{26, 26};
+        const TileCoord ramp{hill.x + 1, hill.y};
+        const auto world = [&](sim::SimulationEngine& sim) {                  // the world of AI10.12: one carrier at the doorstep, nothing else to do
+            sim.init_test_world(60, 60, 5, 14400u * sim::TICK_MS);
+            sim.grid_mut().set_anthill(0, hill);
+            sim.grid_mut().set_anthill(1, TileCoord{4, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{54, 4});
+            sim.grid_mut().set_anthill(3, TileCoord{54, 54});
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 20});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            return carrier;
+        };
+        const auto on_ramp = [&](sim::SimulationEngine& sim, uint32_t ant) { return sim.get_unit(ant).pos.x == ramp.x && sim.get_unit(ant).pos.y == ramp.y; };
+        const auto first_click_after = [&](const Rig& rig, uint64_t after) {   // the tick of the first click onto the entrance that is proposed after `after` (0: none)
+            for (const auto& e : rig.proposed) {
+                if (e.first > after && e.second.type == CommandType::GroupMove && e.second.tile_x == hill.x + 1 && e.second.tile_y == hill.y + 1) return e.first;
+            }
+            return uint64_t{0};
+        };
+        struct Leaver {
+            uint64_t click{0};            // the tick of the first click
+            bool on_ramp_then{false};     // the ant stood on the ramp at that tick
+            uint64_t left{0};             // the first tick at which it stood elsewhere
+            uint32_t refused{0};
+            int32_t score{0};
+            bool staged_first{false};     // the carrier at the doorstep was ordered at the first look (the wait holds back the click only)
+        };
+        // a carrier at the doorstep and an own ant on the ramp that walks off to the north west at once (with food or not); `wait` is the plan's gate_leaver_ticks (-1: the plan as shipped), `aware` its cantgo_aware
+        const auto play_leaver = [&](int32_t wait, bool food, bool aware = true) {
+            sim::SimulationEngine sim;
+            const uint32_t carrier = world(sim);
+            const uint32_t walker = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            if (food) sim.get_unit(walker).pick_up_food(1, 25);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {walker}, 23, 20));
+            LevelPlan plan = gate_plan(true);
+            if (wait >= 0) plan.gate_leaver_ticks = static_cast<uint32_t>(wait);
+            plan.cantgo_aware = aware;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            Leaver r;
+            std::vector<bool> on(1, false);                                           // (on[t]: at tick t)
+            for (uint64_t t = 1; t <= 300; ++t) {
+                rig.tick();
+                on.push_back(on_ramp(sim, walker));
+                if (!on.back() && r.left == 0) r.left = t;
+            }
+            r.click = first_click_after(rig, 0);
+            for (const auto& e : rig.proposed) {
+                if (e.first == 1 && e.second.type == CommandType::GroupMove && e.second.ants.size() == 1 && e.second.ants[0] == carrier) r.staged_first = true;
+            }
+            r.on_ramp_then = r.click != 0 && on[r.click];
+            r.refused = tally.seat(0).refused;
+            r.score = sim.get_player_score(0);
+            return r;
+        };
+        {   // (a) the plan as shipped: the click waits until the ant has left the ramp (and comes at the next look), and the carrier banks
+            const Leaver r = play_leaver(-1, false);
+            ASSERT_TRUE(r.left >= 3 && r.left < 60);                                  // (the premise: it stands there at the first look and goes within a few ticks)
+            ASSERT_TRUE(r.click >= r.left && r.click <= r.left + 8);
+            ASSERT_FALSE(r.on_ramp_then);
+            ASSERT_TRUE(r.staged_first);                                              // (the wait holds back the click only: the carrier is still brought to the queue row at the first look)
+            ASSERT_EQ(r.refused, 0u);
+            ASSERT_TRUE(r.score >= 25);
+        }
+        {   // (b) without the wait (0): the click is given at the first look, with the ant on the ramp, as in AI10.12 (c)
+            const Leaver r = play_leaver(0, false);
+            ASSERT_EQ(r.click, 1u);
+            ASSERT_TRUE(r.on_ramp_then);
+        }
+        {   // (c) the wait ends after the given ticks though the ant still stands there: 4 ticks from the first look (tick 1) is the look at tick 5
+            const Leaver r = play_leaver(4, false);
+            ASSERT_TRUE(r.left > 5);                                                  // (the premise: it still stands there at tick 5)
+            ASSERT_EQ(r.click, 5u);
+            ASSERT_TRUE(r.on_ramp_then);
+        }
+        {   // (d) an ant with food on the ramp is going in, not out: the click is not held for it
+            const Leaver r = play_leaver(-1, true);
+            ASSERT_EQ(r.click, 1u);
+            ASSERT_TRUE(r.on_ramp_then);                                              // (the premise: the ant with food does stand on the ramp at that look)
+        }
+        {   // (e) the can't-go switch (cg=0) takes the wait with it: the click is given at the first look, with the ant on the ramp
+            const Leaver r = play_leaver(-1, false, false);
+            ASSERT_EQ(r.click, 1u);
+            ASSERT_TRUE(r.on_ramp_then);
+        }
+        {   // (f) the wait starts again with the next ant on the ramp: the first leaver goes and its carrier banks; at tick 400 another one stands there and a second carrier waits
+            sim::SimulationEngine sim;
+            world(sim);
+            const uint32_t first = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {first}, 23, 20));
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan(true)), 4, 8);
+            CantGoTally tally;
+            rig.count_with(&tally);
+            rig.run(400);
+            ASSERT_TRUE(sim.get_player_score(0) >= 25);                                   // (the premise: the first carrier banked)
+            const uint64_t from = 400;
+            const uint32_t second = sim.spawn_unit(0, sim::AntType::Worker, ramp);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{27, 20});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {second}, 23, 20));
+            std::vector<bool> on(1, false);                                               // (on[i]: after i ticks from 400)
+            for (int i = 1; i <= 100; ++i) {
+                rig.tick();
+                on.push_back(on_ramp(sim, second));
+            }
+            const uint64_t click = first_click_after(rig, from);
+            ASSERT_TRUE(click > from + 1);                                                // (not at the first look after the second ant came: it is on the ramp)
+            ASSERT_FALSE(on[click - from]);
+            ASSERT_EQ(tally.seat(0).refused, 0u);
         }
     } TEST_END();
 }
