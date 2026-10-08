@@ -224,6 +224,7 @@ public:
     static std::string transcript_stamp(std::time_t time);
 
     bool is_running() const noexcept { return is_running_; }
+    /// The program ends; in the browser the room is left and the page goes to the site's front page (a game in a frame of another page has no menu: it returns to its setup screen)
     void quit();
 
 
@@ -409,7 +410,8 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
-    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match): the
+    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match; and the game's own
+    /// Leave: quit()): the
     /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
     /// its seat is held and its key kept, which is what lets it come back.
     void leave_network_match();
@@ -700,7 +702,7 @@ private:
     bool room_has_chosen_map() const;                     // hosting: the room that the server made is on the map that the player chose
     void show_opening_screens();                          // after the menu (or the loading screen of a game without one): the quick help when the option asks for it, else the setup screen
     void return_to_start_menu(const std::string& notice); // a network game is over (left, ended, lost): back to the menu, nothing of it stays
-    void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always
+    void leave_game();                                    // Leave of a network game's screens: back to the menu when this run has one, else the program ends as always (the browser: the front page)
     void attach_net();                                    // the tick, chat and HUD hooks of a NetGame that the application owns
     void make_rejoin_store();                             // where the keys of the seats are kept (rejoin_store.hpp)
     void hook_rejoin_store();                             // the NetGame's key callbacks write to it (before the join: a Hello that shows a key may be refused at once)

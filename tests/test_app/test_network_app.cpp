@@ -6817,6 +6817,41 @@ void run_one_card_tests() {
             second.quit();
         }
     } TEST_END();
+
+    TEST_CASE("N5.86 Leave Game On The Results Of A Room's Match, In The Browser's Order (The Room Is Left First, The Setup Screen Comes After): The Screen Is The Local Game's, Not The Room That Was Left - Its START Starts A New Game Instead Of The Can't-Go Cue") {
+        const auto click_start = [](Application& app) {
+            const int32_t x = MapSelectScreen::BTN_START_X + 5;
+            const int32_t y = MapSelectScreen::BTN_START_Y + 5;
+            app.map_select().handle_mouse_motion(x, y);
+            app.map_select().handle_mouse_down(x, y, 1);
+            app.map_select().handle_mouse_up(x, y, 1);
+        };
+        Server server(limits);
+        const std::string code = "demo-tiny-4p-abcdef";
+        Application app;
+        ASSERT_TRUE(app.init(join_config(server, code, "Ann", 0, net::FillPlan(std::array<L, 4>{L::None, L::Medium, L::None, L::None}), 1)));       // Green, one Medium bot at Red
+        Hall hall{server, &app, {}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
+        hall.step(kDialogMs + 500);
+        Command quit;                                                                              // the quit dialog's Yes with one other side left ends the match: the results are up
+        quit.type = CommandType::Quit;
+        quit.issuer = app.local_player_id();
+        ASSERT_EQ(app.net()->submit(quit).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(hall.until([&]() { return app.scorecard().is_open(); }, 8000));
+        ASSERT_TRUE(app.network_active());
+        app.leave_network_match();                                                                 // the web build's Leave: the room first (the seat is dropped at once) ...
+        ASSERT_FALSE(app.network_active());
+        app.return_to_map_select();                                                                // ... and the setup screen of a frame that has no page to go to
+        ASSERT_EQ(app.state(), AppState::MapSelect);
+        ASSERT_FALSE(app.scorecard().is_open());
+        ASSERT_FALSE(app.map_select().room().networked);                                           // a local game's screen: the room that was left is not on it
+        ASSERT_TRUE(app.map_select().can_change_setup());
+        hall.step(500);                                                                            // (the server hears the Leave)
+        click_start(app);
+        ASSERT_EQ(app.state(), AppState::Playing);                                                 // START plays a new game here, it does not ask a room that is gone
+        ASSERT_FALSE(app.network_active());
+        app.quit();
+    } TEST_END();
 }
 
 }  // namespace

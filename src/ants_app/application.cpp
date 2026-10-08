@@ -64,6 +64,20 @@ EM_JS(void, ants_report_local_game, (), {
 });
 }
 
+// Whether this game is a frame of another page (web/lobby.html's seats): it has no menu of its own, the page that holds it does
+extern "C" {
+EM_JS(int, ants_page_is_a_frame, (), {
+    try { return window.top !== window ? 1 : 0; } catch (e) { return 1; }
+});
+}
+
+// The tab goes to the front page, the site's menu: the address that the page's Menu button has too
+extern "C" {
+EM_JS(void, ants_go_to_front_page, (), {
+    window.location.assign('/');
+});
+}
+
 // The one application of the page (main() keeps it alive for as long as the page lives): the entry for ants_background_pump below
 namespace {
 ants::app::Application* g_web_app = nullptr;
@@ -1339,14 +1353,22 @@ void Application::leave_network_match() {
 
 void Application::quit() {
     if (menu_enabled_) start_menu_.flush();                    // (a name that was typed and not written yet)
-    if (net_) net_->leave();
 #if defined(__EMSCRIPTEN__)
+    // The browser leaves a game for the site's front page, where the page's Menu button goes too: a room is left at once (the seat is dropped, not held for a page that is gone). A game in a frame of
+    // another page (web/lobby.html) has no menu to go to: it is back at its setup screen (return_to_map_select leaves the room), or the frame loads again.
+    if (!ants_page_is_a_frame()) {
+        leave_network_match();
+        ants_go_to_front_page();
+        return;
+    }
     if (state_ == AppState::Playing || scorecard_.is_open()) {
         return_to_map_select();
     } else {
+        if (net_) net_->leave();
         emscripten_run_script("window.location.reload();");
     }
 #else
+    if (net_) net_->leave();
     is_running_ = false;
 #endif
 }
@@ -1389,7 +1411,7 @@ void Application::show_opening_screens() {
 
 void Application::return_to_map_select() {
     stop_bots();
-    if (network_active()) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows
+    if (network_active() || (net_ && map_select_.room().networked)) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows (a room that was left before shows no more)
     net_notice_.clear();
     enter_map_select();
     scorecard_.hide();
