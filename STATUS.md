@@ -1,6 +1,6 @@
 # Status
 
-_Updated 2026-10-08 02:08 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-08 09:16 PDT · current release **v0.11.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |

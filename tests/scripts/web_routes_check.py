@@ -69,9 +69,11 @@ def main():
         check(headers.get("content-type", "").startswith("text/html"), "%s: it is html (%s)" % (label, headers.get("content-type")))
 
     print("[web routes] the front page, the game page's addresses, the redirect of four.html")
-    lobby_paths = ["/", "/lobby.html", "/?room=demo-small-2p-x7k2", "/?room=demo-treasure-4p-abc123&fill=medium&aspect=4:3", "/?map=treasure&players=1&fill=medium", "/?map=tiny&players=4&fill=easy&play=here&aspect=4:3",
+    lobby_paths = ["/", "/lobby.html", "/?room=k7m2xq", "/?room=k7m2xq&roommap=small&roomseats=2", "/?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&roomleaderstart=1&fill=medium&aspect=4:3",
+                   "/?map=treasure&players=1&fill=medium", "/?map=tiny&players=4&fill=easy&play=here&aspect=4:3",
                    "/?aspect=4:3", "/?clear_cache=1790000000", "/?x=join&y=embed", "/?join=", "/?embed=0", "/?embed=", "/?joined=/ws", "/?map=small"]
-    game_paths = ["/index.html", "/play.html", "/play.html?map=treasure&bots=medium&name=Bob&aspect=16:9", "/play.html?map=islands", "/?join=/ws&room=demo-small-2p-x7k2",
+    game_paths = ["/index.html", "/play.html", "/play.html?map=treasure&bots=medium&name=Bob&aspect=16:9", "/play.html?map=islands", "/?join=/ws&room=k7m2xq&roommap=small&roomseats=2",
+                  "/?join=/ws&room=k7m2xq&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=browser-linux&seat=1&name=Bob&aspect=16:9",
                   "/?join=/ws&room=abc&seat=1&name=Bob&aspect=16:9&embed=1", "/?join=/ws&room=abc&fill=hard", "/?embed=1", "/?embed=1&aspect=4:3", "/?aspect=4:3&join=/ws&room=r", "/?join=%2Fws&room=r",
                   "/?room=r&join=/ws", "/?join=/ws"]
     for path in lobby_paths:
@@ -84,7 +86,7 @@ def main():
         check(bool(GAME.search(body)) and not LOBBY.search(body), "the game page at %s is the game (its stage, not the lobby's name field)" % path)
 
     print("[web routes] the old Play online address redirects for good, with its query")
-    for query in ("", "?room=abc", "?room=demo-small-2p-x7k2&fill=medium&aspect=4:3", "?map=tiny&players=2&fill=easy&play=here", "?map=treasure&players=1&fill=hard", "?name=Ann%20%26%20Bob&x=%3Cb%3E", "?"):
+    for query in ("", "?room=abc", "?room=k7m2xq&roommap=small&roomseats=2&roomteams=0%2B1&fill=medium&aspect=4:3", "?map=tiny&players=2&fill=easy&play=here", "?map=treasure&players=1&fill=hard", "?name=Ann%20%26%20Bob&x=%3Cb%3E", "?"):
         status, headers, names, body = get("/four.html" + query)
         want = "/" + (query if query != "?" else "")                    # (a "?" with nothing behind it carries no query: nginx's $args is empty)
         check(status == 301 and headers.get("location") == want, "/four.html%s answers 301 to %s (%s %s)" % (query, want, status, headers.get("location")))

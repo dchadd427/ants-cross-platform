@@ -39,7 +39,7 @@ struct StartTeamsPlan {
 };
 StartTeamsPlan plan_start_teams(const StartTeams& teams, uint8_t roster);
 
-/// The teams that a start asks for (protocol 13): the room's own, which its code names (net::room_code_teams), hold for EVERY start, the automatic start of a full room included; a leader's request
+/// The teams that a start asks for (protocol 13): the room's own, which the room has from the create block that made it (protocol 15; net::RoomMsg::teams()), hold for EVERY start, the automatic start of a full room included; a leader's request
 /// counts only when it is what starts the match (`by_leader`) and only in a room that has none of its own. What the seats that play can make of them is plan_start_teams's business.
 StartTeams start_teams_for(const StartTeams& room_own, bool by_leader, const StartTeams& asked) noexcept;
 

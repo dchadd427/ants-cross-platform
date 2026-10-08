@@ -37,14 +37,25 @@
 // starts from (the machines, the referee, a machine that comes back from nothing, a restored room): each calls sim::apply_start_teams right after init() and before its first tick, so the alliances are
 // the original's own commands applied the same way everywhere. A match without teams is byte for byte what it was.
 
-// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"). A colour is a seat, and a guest took the seat that it asked for in its Hello or the first free one: nothing moved it
-// afterwards. SeatMove (leader -> server, [31][from][to]) asks the room to put the player of seat `from` in the empty seat `to`. Only the leader of a server's room,
-// while the room is open, is heard; the room moves the guest with all that is its own (its key, its name, its place in the order of the Welcomes) and answers every guest with the Room message that
-// shows the new seats (each with its own `you`) and the player that was moved with a notice. Nothing in the match changes: the Start that follows is made from the seats as they are.
+// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A colour is a seat, and a guest took the seat that it asked for in its Hello or
+// the first free one: nothing moved it afterwards. SeatMove (leader -> server, [31][from][to][guard]) asks the room to put the player of seat `from` in seat `to`: when `to` is empty the player goes
+// there, when a guest holds it the two guests change places (a bot's seat and the host's never move). `guard` is the number that seating_hash gives for the seats as the leader's screen shows them
+// (who sits where, by state and name): the room acts only when it still seats its people so, so a press never moves or swaps a player that the leader's screen did not show in that seat (the one who
+// was meant has left and a newcomer sits there, the Room message that would have told the leader is still on its way; a newcomer of the same name in the same seat looks the same on that screen and
+// is the one who moves); a stale press is ignored and counted. Only the leader of a server's room, while the room is open, is heard; the
+// room moves the guests with all that is their own (key, name, place in the order of the Welcomes) and answers every guest with the Room message that shows the new seats (each with its own
+// `you`) and each player that was moved with a notice. Nothing in the match changes: the Start that follows is made from the seats as they are.
+
+// A room is made by its first Hello, and a Hello says what platform it comes from (protocol 15, docs/NETWORK_PORT.md "Protocol 15"). The server has no "make a room" message for the public:
+// a Hello for a code that is not a room carries a CREATE BLOCK (the map, the seats, the room's own teams, whether the leader's START is what starts the match) and makes the room; without a block
+// it is NoSuchRoom, whatever the code looks like (the choices used to travel in the code, "demo-treasure-4p-t01-k7m2xq": a code is only a name now, 6 random letters and numbers). A room that
+// exists ignores a block (the first Hello decides). The Hello, the Room message's seats and the Start's roster also carry a PLATFORM byte for each player (the operating system, and whether it
+// is a browser): it is told, never checked, and no rule depends on it (a screen may show it as an icon). The Room message names the room's own teams and flags, so every screen shows the truth.
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -61,7 +72,7 @@ namespace ants::net {
 // or in some rare sequence of orders, because peers that run different rules desynchronise in the first play where they differ, and the door checks nothing else: a Hello of another
 // number is refused ("version mismatch") by a LAN host and by a server's room, and a LAN announcement of another number is listed as another version. A release that cannot say "no
 // state hash of any play changed" raises it, and the history below says why (nothing in the wire changed in 9: the rules of the engine did; nothing in 12: when the match starts did).
-inline constexpr uint16_t kProtocolVersion = 14;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause); 11: bots fill empty seats at the leader's START, chat in the waiting room (StartRequest carries a fill level: two bytes now; the room's own notices travel as Chat with sender 255); 12: the match clock waits for the "Get ready to play!" dialog (the host seals the first turn kMatchStartDelayMs after the match begins, a client's dialog ends when its first turn executes: no message changed, but a client of 11 would count its dialog in simulation ticks and be blocked for 100 ticks of the running match after the late first turn); 13: a level for each seat of the leader's fill and teams in the start data (StartRequest is [24][fill0 .. fill3][team_a][team_b], seven bytes; Start ends with team_a and team_b; every engine makes the teams before its first tick); 14: the leader of a server's room moves a player to another colour (the message SeatMove, type 31: [31][from][to], three bytes; the room moves the guest to the empty seat and answers with the Room message)
+inline constexpr uint16_t kProtocolVersion = 15;         // 2: the Room message carries each seat's round trip (the thumbs); 3: host migration (mesh, election); 4: the Quit command (Drop moved from 11 to 12); 5: Hello carries the seat that the guest asks for; 6: map names may hold any printable character that cannot leave the maps folder (up to 64), Hello carries a room code and a token, the slot state Bot, the rejection NoSuchRoom; 7: the Room message names the room's leader (a dedicated server's room: the first player who joined), the message StartRequest (the leader asks the server to start now); 8: turns of 50 ms with one tick each (they were 100 ms with two; a client keeps a jitter buffer of 1 to 4 turns, ants_net/jitter.hpp), a state hash every 20 turns (one second, as before), and the Lag message, type 25 (a dedicated server never waits for a player that falls behind: it tells the room instead); 9: the community-map rules (default ant types, power-ups by tile, the attack clip); 10: rejoin keys, presence, votes, the catch-up stream (every seat of a server's room has a key that the Welcome hands out, and a Hello that shows it takes the seat back: Hello carries the key and the number of turns the client has, Welcome the key and flags; the rejections Dropped, RejoinFailed and Superseded; the messages Presence, Vote, CatchUp, TurnBatch and CaughtUp, types 26 - 30; Presence ends with the seconds left of the resume countdown that follows a pause); 11: bots fill empty seats at the leader's START, chat in the waiting room (StartRequest carries a fill level: two bytes now; the room's own notices travel as Chat with sender 255); 12: the match clock waits for the "Get ready to play!" dialog (the host seals the first turn kMatchStartDelayMs after the match begins, a client's dialog ends when its first turn executes: no message changed, but a client of 11 would count its dialog in simulation ticks and be blocked for 100 ticks of the running match after the late first turn); 13: a level for each seat of the leader's fill and teams in the start data (StartRequest is [24][fill0 .. fill3][team_a][team_b], seven bytes; Start ends with team_a and team_b; every engine makes the teams before its first tick); 14: the leader of a server's room moves a player to another colour (the message SeatMove, type 31: [31][from][to], three bytes; the room moves the guest to the empty seat and answers with the Room message); 15: a room is made by its first Hello's create block (map, seats, teams, leader-starts flag: a code is only a name, 6 random letters and numbers), every Hello, Room slot and Start roster carries a platform byte, the Room message names the room's teams and flags, SeatMove is [31][from][to][guard] (seven bytes: a 32-bit seating guard, never 0) and puts the player in a colour that another guest holds by changing places with that guest
 /// Protocol 12: the host seals the first turn of a match this long after the match begins (Begin sent, the sessions started): the length of the "Get ready to play!" dialog, sim::kMatchStartDialogMs.
 /// A host with a seat (a game on the local network) and a dedicated server's room both do it; the simulation does not run on any machine before that first turn.
 inline constexpr uint32_t kMatchStartDelayMs = sim::kMatchStartDialogMs;
@@ -109,7 +120,7 @@ enum class MsgType : uint8_t {
     CatchUp = 28,   // dedicated server -> a player who came back (protocol 10): the turns of the match follow, this many in all (first_turn ..)
     TurnBatch = 29, // dedicated server -> a player who came back (protocol 10): consecutive sealed turns of the match, packed (the stream that CatchUp announces)
     CaughtUp = 30,  // a player who came back -> dedicated server (protocol 10): I have executed every turn of the stream, my state hash is this
-    SeatMove = 31,  // leader -> dedicated server (protocol 14): put the player of seat `from` in the empty seat `to`; only the leader of a server's room is heard, while the room is open
+    SeatMove = 31,  // leader -> dedicated server (protocol 14; the guard is 15's): put the player of seat `from` in seat `to`, or swap it with the guest there; only the leader of a server's room is heard, while the room is open
     Last = SeatMove
 };
 
@@ -123,16 +134,62 @@ bool valid_map_name(const std::string& name) noexcept;
 inline constexpr size_t kMaxRoomCodeChars = 32;
 inline constexpr size_t kMaxTokenChars = 64;                     // an opaque credential that a lobby hands out with the room code (printable, never interpreted by the game)
 bool valid_room_code(const std::string& code) noexcept;
+/// A code that a create block can make a room of (protocol 15): a valid code of one or more characters with no upper-case letter. The pages and the start menu make such codes; the codes of the control
+/// interface have a capital (the server draws them so, and an operator who names one by hand gives it one), so a visitor's block never takes the name of a room that is yet to be made. The server's door and
+/// the clients' texts (NetGame::reject_text) use this one rule.
+bool public_room_code(const std::string& code) noexcept;
 
-/// The prefix of the codes that a server makes a room for on the first Hello when it is run with demo rooms ("demo-<map>-<n>p-<random>"); the server's choice of map and players is read from the words after it
-inline constexpr const char* kDemoRoomPrefix = "demo-";
-/// The teams that a room's own code names (protocol 13): a word `t<a><b>` of a demo room's code (two different seats 0 - 3, the lower first: `t01`, `t13`), between dashes or at the code's end, in any
-/// case, and never the first word after the prefix (that is the map's or the player count's). "demo-treasure-4p-t01-k7m2xq": seats 0 and 1 are a team (the other two too when both play). The
-/// first such word counts; no word (every code made before this: the pages' random part is six characters), no teams. The room makes them for EVERY start, the automatic start of a full room
-/// included (docs/NETWORK_PORT.md, "Protocol 13"). The server and every client read the code with this one function; whether the seats can make them is sim::plan_start_teams's business at the start.
-sim::StartTeams room_code_teams(const std::string& code) noexcept;
-/// The word for a pair, `t01`: empty for free for all and for a pair that is no word (equal or unordered seats, a seat above 3)
-std::string room_code_team_word(const sim::StartTeams& teams);
+/// "No team" in the team bytes of the create block, the Room message, StartRequest and Start (protocol 13): both bytes are kNoTeam for free for all, else they are two different seats, 0 - 3
+inline constexpr uint8_t kNoTeam = 255;
+
+/// The platform of a player (protocol 15): one byte that a client tells in its Hello and a server repeats in the Room message (each seat) and the Start (each seat of the roster). The operating
+/// system is the low four bits (kOsWindows ... kOsOther; 0, kPlatformUnknown, when it was not told) and bit 4 (kPlatformBrowser) says that the game runs in a web browser. A phone or a tablet is the
+/// operating system's business (Android, iOS). It is told and never checked: nobody can prove it and no rule depends on it, a screen may show it as an icon. A seat that holds no person (an empty
+/// one, a bot) has none.
+inline constexpr uint8_t kPlatformUnknown = 0;
+inline constexpr uint8_t kOsWindows = 1;
+inline constexpr uint8_t kOsMacos = 2;
+inline constexpr uint8_t kOsLinux = 3;
+inline constexpr uint8_t kOsAndroid = 4;
+inline constexpr uint8_t kOsIos = 5;
+inline constexpr uint8_t kOsOther = 6;
+inline constexpr uint8_t kPlatformBrowser = 0x10;
+/// True for a byte that an honest client would tell: an operating system 0 - kOsOther, with or without the browser bit
+inline constexpr bool valid_platform(uint8_t platform) noexcept { return (platform & 0xE0u) == 0 && (platform & 0x0Fu) <= kOsOther; }
+/// The platform of this build of the game (protocol 15): the operating system that it was built for; a WebAssembly build says kPlatformBrowser | kOsOther here, unless a word of its address
+/// names a system (the game's --platform argument; web/shell.html passes the `platform` of the address on, and no page of the site writes it yet)
+uint8_t native_platform() noexcept;
+/// The words of the --platform argument and of the page's address: "windows", "macos", "linux", "android", "ios" or "other", with "browser-" in front for a game in a web page ("browser-macos"),
+/// in any case. False, and `out` untouched, for any other text (kPlatformUnknown has no word: leave the argument out)
+bool parse_platform(const std::string& text, uint8_t& out);
+/// The words of a platform for a person: "Windows", "macOS", "Linux", "Android", "iOS" or "another system", and " (browser)" after them for a game in a page; "" for kPlatformUnknown and for
+/// a byte that valid_platform() refuses
+std::string platform_text(uint8_t platform);
+
+/// The choices of a room that a Hello may make (protocol 15). The room's first Hello decides them; a Hello for a room that exists ignores them. `seats` is the room's player count (2 - 4: the room
+/// starts by itself when that many people are in, unless the leader's START is what starts it), `map_name` is the map ("" or a name that the server does not offer: the server's own default map),
+/// the teams are the room's own (both kNoTeam, or two seats a < b, 0 - 3: the room starts its matches with them every time when the seats that play can make them) and `flags` (kCreateLeaderStarts: the room
+/// does not start by itself when it is full: only its leader's START starts the match, so the leader can arrange the seats first).
+inline constexpr uint8_t kCreateLeaderStarts = 1;
+struct CreateBlock {
+    std::string map_name;
+    uint8_t seats{4};
+    uint8_t team_a{kNoTeam};
+    uint8_t team_b{kNoTeam};
+    uint8_t flags{0};
+    bool leader_starts() const noexcept { return (flags & kCreateLeaderStarts) != 0; }
+    sim::StartTeams teams() const noexcept { return team_a == kNoTeam && team_b == kNoTeam ? sim::StartTeams{} : sim::StartTeams{true, team_a, team_b}; }
+    void set_teams(const sim::StartTeams& t) noexcept {              // (the lower seat first: a pair has one spelling)
+        team_a = t.set ? (t.a < t.b ? t.a : t.b) : kNoTeam;
+        team_b = t.set ? (t.a < t.b ? t.b : t.a) : kNoTeam;
+    }
+    friend bool operator==(const CreateBlock& a, const CreateBlock& b) noexcept {
+        return a.map_name == b.map_name && a.seats == b.seats && a.team_a == b.team_a && a.team_b == b.team_b && a.flags == b.flags;
+    }
+    friend bool operator!=(const CreateBlock& a, const CreateBlock& b) noexcept { return !(a == b); }
+};
+/// True for a block that an honest client would send: the map is "" or valid_map_name, 2 - 4 seats, both team bytes kNoTeam or two seats a < b (0 - 3), and no flag but kCreateLeaderStarts
+bool valid_create_block(const CreateBlock& block) noexcept;
 
 /// Dropped (protocol 10): the key is right and the seat was dropped (by the others' vote, by the cap on the pauses, by a violation): the player is told it is out ("Sorry, you
 /// have been dropped from the game", the original's own text). RejoinFailed: the key is right but the way back is closed (the server's turn log is not usable, or it cannot tell a
@@ -168,6 +225,8 @@ struct HelloMsg {
     std::string token;          // the credential that came with the room code (kMaxTokenChars printable characters; "" when none): carried, never interpreted here (protocol 6)
     SeatKey key{};              // protocol 10: the key of the seat that this client had (all zero: a new player). The server answers a key that fits a seat with that seat, whatever want_seat says
     uint32_t have_turns{0};     // protocol 10: with a key: how many turns of the match this client has executed already (0: it starts from nothing and is sent Start first). Zero without a key
+    uint8_t platform{0};        // protocol 15: what this client runs on (valid_platform; 0: not told). Cosmetic
+    std::optional<CreateBlock> create;   // protocol 15: the choices of the room that this Hello makes when the room does not exist (a server's public rooms); the end of the message, absent for a Hello that joins a room
 };
 struct WelcomeMsg {
     uint8_t player{255};        // the slot (0 .. 3) this client plays
@@ -224,6 +283,9 @@ inline LinkQuality link_quality(uint16_t rtt_ms) noexcept {
     return rtt_ms < kQualityGoodBelowMs ? LinkQuality::Good : (rtt_ms < kQualityOkBelowMs ? LinkQuality::Ok : LinkQuality::Bad);
 }
 
+/// The rule bit of RoomMsg::flags that the create block's kCreateLeaderStarts becomes
+inline constexpr uint8_t kRoomLeaderStarts = 1;
+
 /// The room's leader in a RoomMsg when the room has none (every LAN / direct room, and a server's room that does not allow an early start)
 inline constexpr uint8_t kNoLeader = 255;
 
@@ -242,6 +304,7 @@ struct RoomMsg {
         SlotState state{SlotState::Empty};
         std::string name;
         uint16_t rtt_ms{kRttUnknown};   // the host's measured round trip to this seat (0 for the host's own seat), kRttUnknown before the first answer
+        uint8_t platform{0};            // protocol 15: what the player of this seat runs on (valid_platform); 0 for a seat that holds no person (the decoder refuses another value there) and for a player who did not say
     };
     std::array<Slot, sim::MAX_PLAYERS> slots{};
     std::string map_name;         // the file name of the host's map ("" until the host has chosen one)
@@ -251,7 +314,18 @@ struct RoomMsg {
     /// player who joined (the earliest Welcome), and when the leader leaves the earliest of the players who are left. The leader may ask the server to start early (StartRequest).
     /// A leader is always a seat that a person holds as a guest (SlotState::Client): the decoder refuses anything else.
     uint8_t leader{kNoLeader};
+    /// The room's own teams (protocol 15; both kNoTeam when it has none): the room starts its matches with them every time, when the seats that play can make them. Every screen shows them as the room's.
+    uint8_t team_a{kNoTeam};
+    uint8_t team_b{kNoTeam};
+    /// The room's rules (protocol 15): kRoomLeaderStarts = the room does not start by itself when it is full, only its leader's START starts the match. No other bit is used.
+    uint8_t flags{0};
+    bool leader_starts() const noexcept { return (flags & kRoomLeaderStarts) != 0; }
+    sim::StartTeams teams() const noexcept { return team_a == kNoTeam && team_b == kNoTeam ? sim::StartTeams{} : sim::StartTeams{true, team_a, team_b}; }
 };
+/// Who sits where, as one 32-bit number, never 0 (protocol 15): the state and the name of each of the four seats of a Room message (32-bit FNV-1a, a 0 after each name; a result of 0 is 1); nothing else of the message counts (the round trips
+/// change all the time, the platforms and the teams belong to the room). The leader's screen puts it in a SeatMove as the guard, and the room compares it with its own: two machines that show
+/// the same seats compute the same number, so a SeatMove acts on exactly the seating that its sender saw.
+uint32_t seating_hash(const RoomMsg& room) noexcept;
 /// Which bots a leader's START asks the server to seat in the empty seats of its room (protocol 11). None: the match starts with the people who are there, as in protocol 7.
 enum class FillLevel : uint8_t { None = 0, Easy = 1, Medium = 2, Hard = 3 };
 inline constexpr uint8_t kFillLevelLast = 3;
@@ -297,8 +371,6 @@ std::string seat_colour_word(uint8_t seat);
 std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats);
 /// ... and in the short form of a narrow place: "Red Easy, Black Hard"
 std::string fill_seats_short(const std::vector<std::pair<uint8_t, FillLevel>>& seats);
-/// "No team" in the team bytes of StartRequest and Start (protocol 13): both bytes are kNoTeam for free for all, else they are two different seats, 0 - 3
-inline constexpr uint8_t kNoTeam = 255;
 /// The leader's request to start the match now with the players who are in the room (protocol 7, client -> server), to seat bots in the seats that are still empty (up to the room's player count)
 /// since protocol 11, with a level for each seat since protocol 13 (`fill[s]`: the bot of seat s, None: leave it empty), and to start with the teams `team_a` + `team_b` (kNoTeam both: free for all).
 /// Seven bytes on the wire: the type, the four levels (0 .. 3), the two team bytes; nothing else is a StartRequest. The decoder refuses a level above 3, a team byte that is not kNoTeam for both or
@@ -319,11 +391,14 @@ struct StartRequestMsg {
         team_b = t.set ? t.b : kNoTeam;
     }
 };
-/// The leader's request to put a player in another colour (protocol 14, client -> server): the guest that holds seat `from` goes to the empty seat `to`. Three
-/// bytes on the wire: the type and the two seats, each 0 - 3 and different; nothing else is a SeatMove (the decoder refuses a seat above 3, two equal seats, a missing or an extra byte).
+/// The leader's request to put a player in another colour (protocol 14, client -> server; the swap and the guard since 15): the guest that holds seat `from` goes to seat `to`, which it takes
+/// when it is empty and shares with the guest that holds it (the two change places) otherwise. Seven bytes on the wire: the type, the two seats (each 0 - 3, and different), and the guard, a
+/// 32-bit number (little endian) that is never 0: seating_hash of the room as the leader saw it. Nothing else is a SeatMove (the decoder refuses a seat above 3, two equal seats, a guard of 0,
+/// a missing or an extra byte).
 struct SeatMoveMsg {
     uint8_t from{255};
     uint8_t to{255};
+    uint32_t guard{0};
 };
 /// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
 struct Endpoint {
@@ -338,6 +413,7 @@ struct StartMsg {
     bool fog{false};
     uint8_t roster{0};            // bit p: seat p takes part
     std::array<std::string, sim::MAX_PLAYERS> names;
+    std::array<uint8_t, sim::MAX_PLAYERS> platforms{};   // protocol 15: what each person of the roster runs on (valid_platform), 0 for a seat that is not in the roster, a bot, or a player who did not say
     std::array<Endpoint, sim::MAX_PLAYERS> endpoints;   // guests: how the other guests reach this seat (host migration); the host's seat is empty
     uint8_t team_a{kNoTeam};      // protocol 13: the teams the match starts with: both kNoTeam (free for all) or the pair that sim::plan_start_teams accepts for `roster` (the decoder refuses anything else);
     uint8_t team_b{kNoTeam};      // every engine calls sim::apply_start_teams(teams()) right after init() and before its first tick
@@ -518,7 +594,7 @@ bool decode(const uint8_t* data, size_t size, RequestMsg& out);
 bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
 /// Exactly the type byte, four levels (0 .. 3) and two team bytes (kNoTeam both, or two different seats 0 - 3): anything else is no StartRequest
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
-/// Exactly the type byte and two different seats 0 - 3: anything else is no SeatMove
+/// Exactly the type byte, two different seats 0 - 3 and a guard that is not 0: anything else is no SeatMove
 bool decode(const uint8_t* data, size_t size, SeatMoveMsg& out);
 bool decode(const uint8_t* data, size_t size, LagMsg& out);
 bool decode(const uint8_t* data, size_t size, PresenceMsg& out);

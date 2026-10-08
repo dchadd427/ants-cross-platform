@@ -10,16 +10,18 @@ this tree (--server), a Chromium-based browser and Python 3; nothing else (the D
 itself, with the options of docker-compose.stack.yml (the site's own: the demo rooms, and NO reconnect option: what holds the seats is the default) on ports of its own, and every player is a
 browser of its own (its own profile: its own local storage, as a player's own computer has; nothing of yours is touched). Parts (--only NAME):
 
-  * reload   two players join a two-seat room by the room's links (the first one's link is a shared one with no seat in it: the game tells its page the seat that the room gave it, and the address
-             carries it from then on) and the match starts; the first reloads its page: it is back in the running match within 20 s, with NO "Get ready" dialog; the
+  * reload   two players join a two-seat room by the room's links (as the front page makes them: the room's code and its create block, which the first Hello of a code makes the room of; the first
+             one's link is a shared one with no seat in it: the game tells its page the seat that the room gave it, and the address carries it from then on) and the match starts; the first reloads
+             its page: it is back in the running match within 20 s, with NO "Get ready" dialog; the
              other player's screen said that the seat was missing and, when the pause had lasted 3 s or more (the server held the resume countdown: its status says so), "... is back: the match goes
              on in N" (the game's own words, read through ants_probe 16 and 10000 +); the match goes on and the two games' state hashes (the sync lines that every game posts every 100 ticks) agree;
              the server's status says it was paused, took a player back and is not paused any more;
   * restart  the same match; the server is stopped with SIGTERM and started again on the same folder and ports: both pages say "Connection lost. Reconnecting...", both come back by themselves,
              the room came back from its restart record (the server's clock for a pause begins at the restore: players back within 3 s of it resume at once, and a pause of 3 s or more is
              counted down on a screen), and the match goes on with equal hashes;
-  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: "Rejoin your match (CODE)" is there with its note,
-             pressing it puts the player back in its seat (the address has no key), the other player sees "... is back", the match goes on with equal hashes;
+  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: "Rejoin your match (CODE)" is there with its note
+             (the code as a screen shows it, in two groups of three), pressing it puts the player back in its seat (the address has the plain code and no key, and no create block: the room is there),
+             the other player sees "... is back", the match goes on with equal hashes;
   * leave    two players in a match; the second leaves ON PURPOSE through the page's Menu button and says yes to its question ("Leave the game and go back to the menu?"): the page goes to the front
              page, the server drops the seat at once (the room is never paused: a closed tab would have held the seat and stopped the match for the other player), the first player's screen never
              says that a connection was lost, the key is gone from the second browser's storage and the front page offers no Rejoin;
@@ -51,6 +53,17 @@ from web_hidden_check import find_browser, free_port                         # n
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 PARTS = ("reload", "restart", "rejoin", "leave", "none")
+
+# The rooms of this check have two seats on Tiny. A room's code is only a name (protocol 15: six characters of the front page's alphabet, which has no i, l, o, 0 or 1); what the room is travels in the CREATE BLOCK that
+# the first Hello of a code carries (the game's --room-map and --room-seats, which the game page reads from &roommap= and &roomseats=): a Hello for a code that no room has makes none without it ("There is no such
+# room on this server."). The front page puts the block into every link of a room that it made, right after the code, and so does game_url below.
+CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+ROOM_BLOCK = "&roommap=tiny&roomseats=2"
+
+
+def grouped(code):
+    """A room code as a screen shows it: six characters in two groups of three (web/lobby.html, codeText); any other length as it is."""
+    return code[:3] + " " + code[3:] if len(code) == 6 else code
 
 # What runs in every new document of a player's tab: the state hashes that the game posts on the broadcast channel (every 100 ticks), and an id of the document (a reload makes a new one).
 HOOK = r"""
@@ -259,8 +272,8 @@ class Player:
 
     # ---- the page
     def game_url(self, room):
-        """The room's link for this seat, as the front page makes it for a window of its own (web/lobby.html, gameUrl)."""
-        return "%s?join=/ws&room=%s%s&name=%s&aspect=16:9" % (self.web, room, "&seat=%d" % self.seat if self.link_seat else "", self.name)
+        """The room's link for this seat, as the front page makes it for a window of its own (web/lobby.html, gameUrl): the code, the room's create block, the seat, the name, the shape."""
+        return "%s?join=/ws&room=%s%s%s&name=%s&aspect=16:9" % (self.web, room, ROOM_BLOCK, "&seat=%d" % self.seat if self.link_seat else "", self.name)
 
     def address_seats(self):
         """The seat parameters of the address that this tab shows now (the game tells the page the seat that the room gave it, and the page puts it there)."""
@@ -457,7 +470,7 @@ def main():
     server = Server(args.server, args.maps, args.ws_port, work)
 
     def new_room():
-        return "demo-tiny-2p-" + secrets.token_hex(3)
+        return "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
 
     def begin_match(room, seatless=False):
         """Two players, each on a computer of their own, take the two seats of a room through the room's links; returns when the match runs for both and no dialog is open. `seatless`: the first
@@ -686,8 +699,8 @@ def main():
                 if shown:
                     info = a.ev("""(function () { var go = document.getElementById('rejoin-go'), note = document.getElementById('rejoin-note'), r = go.getBoundingClientRect(), cards = document.getElementById('cards').getBoundingClientRect();
                         return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: cards.top, enabled: !go.disabled }; })()""")
-                    check(info["button"] == "Rejoin your match (%s)" % room, "its button says \"Rejoin your match (CODE)\" with the room's code (%r)" % info["button"])
-                    check(info["note"] == "Your match in room %s is still running: go back to your seat." % room, "... and the line under it says that the match is still running (%r)" % info["note"])
+                    check(info["button"] == "Rejoin your match (%s)" % grouped(room), "its button says \"Rejoin your match (CODE)\" with the room's code in two groups of three (%r)" % info["button"])
+                    check(info["note"] == "Your match in room %s is still running: go back to your seat." % grouped(room), "... and the line under it says that the match is still running (%r)" % info["note"])
                     check(info["bottom"] <= info["cards"] and info["enabled"], "... above the card (the button ends at %.0f px, the card begins at %.0f px)" % (info["bottom"], info["cards"]))
                     a.shot(args.shots, "rejoin_button")
                     pages = lambda: len([t for t in a.browser.devtools.call("Target.getTargets")["targetInfos"] if t["type"] == "page"])
@@ -703,7 +716,7 @@ def main():
                     check(pages() == before_pages, "... in the same tab (no new tab or window: %d page(s) before and after)" % before_pages)
                     search = a.ev("location.search") or ""
                     given = wait_for(lambda: a.ev("typeof ANTS_ARGS !== 'undefined' ? ANTS_ARGS : null"), 10, 0.2) or []
-                    check(search == "?join=/ws&room=%s&seat=0&aspect=16:9" % room, "the game page's address is the room, the seat and the shape, and no key (it drops the name parameter itself, so that a copy of the address asks its owner): %s" % search)
+                    check(search == "?join=/ws&room=%s&seat=0&aspect=16:9" % room, "the game page's address is the plain code (not the two groups), the seat and the shape, and no key and no create block (it drops the name parameter itself, so that a copy of the address asks its owner): %s" % search)
                     check(["--join-url", "ws://" + web.split("//", 1)[1].rstrip("/") + "/ws", "--room", room, "--seat", "0"] == given[given.index("--join-url"):given.index("--join-url") + 6] if "--join-url" in given else False,
                           "... and the game is given the site's door, the room and the seat 0 (its arguments: %s)" % [x for x in given if x != "./this.program"])
                     back = [None]
@@ -803,8 +816,8 @@ def main():
             bad = load_front({"ants.rejoin.junk-room.0": "not json", "ants.rejoin.bad-seat.7": entry(), "ants.rejoin.a.b.0": entry(), "ants.rejoin.zero-key.2": entry(key="0" * 32),
                               "ants.rejoin.extra.1": json.dumps({"k": hexkey, "s": mine, "t": int(time.time() * 1000), "v": 2}), "ants.rejoin.ahead.3": entry(age_ms=-3600 * 1000)})
             check(bad["hidden"] and len(bad["names"]) == 6, "malformed entries, a bad seat, a room with a dot, a key of zeros, an extra member and a time an hour ahead: nothing is offered and nothing is removed (%d kept)" % len(bad["names"]))
-            good = load_front({"ants.rejoin.demo-small-2p-abc123.2": entry(), "ants.rejoin.older-room.0": entry(age_ms=600000), "ants.name": "Zed", "ants.aspect.v2": "4:3"})
-            check(not good["hidden"] and good["shown"] and good["button"] == "Rejoin your match (demo-small-2p-abc123)", "a fresh entry of this site: the button is there, for the newest of two entries (%r)" % good["button"])
+            good = load_front({"ants.rejoin.k7m2xq.2": entry(), "ants.rejoin.older-room.0": entry(age_ms=600000), "ants.name": "Zed", "ants.aspect.v2": "4:3"})
+            check(not good["hidden"] and good["shown"] and good["button"] == "Rejoin your match (k7m 2xq)", "a fresh entry of this site: the button is there, for the newest of two entries, with its code in two groups of three (%r)" % good["button"])
             check(good["gap"] > 40, "... it takes its own room above the page (%s px under the header) and the page moves down" % good["gap"])
             p.shot(args.shots, "rejoin_front_with_button")
             p.ev("document.getElementById('rejoin-go').click(); 1")
@@ -812,8 +825,8 @@ def main():
             search = p.ev("location.search") or ""
             given = wait_for(lambda: p.ev("typeof ANTS_ARGS !== 'undefined' ? ANTS_ARGS : null"), 10, 0.2) or []
             words = [x for x in given if x != "./this.program"]
-            check(search == "?join=/ws&room=demo-small-2p-abc123&seat=2&aspect=4:3" and hexkey not in search, "the button's address names the room, the seat 2 and the remembered shape (4:3), and no key: %s" % search)
-            check("--join-url" in given and given[given.index("--join-url") + 1] == mine and given[given.index("--room") + 1] == "demo-small-2p-abc123" and given[given.index("--seat") + 1] == "2" and given[given.index("--name") + 1] == "Zed",
+            check(search == "?join=/ws&room=k7m2xq&seat=2&aspect=4:3" and hexkey not in search, "the button's address names the plain code, the seat 2 and the remembered shape (4:3), and no key and no create block: %s" % search)
+            check("--join-url" in given and given[given.index("--join-url") + 1] == mine and given[given.index("--room") + 1] == "k7m2xq" and given[given.index("--seat") + 1] == "2" and given[given.index("--name") + 1] == "Zed" and "--room-map" not in given and "--room-seats" not in given,
                   "... and the game is given the site's door, the room, the seat and the remembered name (its arguments: %s)" % words)
             gone = load_front({})
             check(gone["hidden"], "with the entry gone the front page shows no Rejoin")

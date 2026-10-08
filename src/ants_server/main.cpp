@@ -17,18 +17,17 @@
 //   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in site-stats.json (without it they live in memory)
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --max-rooms N      the most rooms at a time (default 256)
-//   --demo-rooms N     for a public test page: a Hello for a not yet existing room "demo-..." makes it (4 players, the --demo-map, unless its code chooses: see --demo-maps), at most N at a time. N is 1 to
-//                      --max-rooms - 1 (255 by default); the option is left out to switch demo rooms off (the default): 0 and more than that stop the server at startup
-//   --demo-map NAME    the map of the demo rooms (a file name of the maps folder; required with --demo-rooms)
-//   --demo-maps LIST   the maps a demo room may be made on, file names of the maps folder separated by commas (blanks around a name are dropped). The code of a
-//                      demo room chooses: "demo-[<map>-][<n>p-]<anything>": <map> one of these names without its extension (any case), <n>p 2 to 4 players;
-//                      what it does not choose is 4 players on --demo-map (needs --demo-rooms). A word t01 (t and two seats 0 - 3, the lower first) after the first word names the room's
-//                      teams, which it makes for every start. A demo room waits ten minutes for its players.
+//   --demo-rooms N     for a public test page: a Hello that carries a create block (network protocol 15: the map, the seats 2 - 4, the teams and whether a full room waits for its leader's
+//                      START) for a room that does not exist makes it, at most N public rooms at a time. The code is only a name (the game makes 6 random letters and numbers). N is 1 to
+//                      --max-rooms - 1 (255 by default); the option is left out to switch public rooms off (the default): 0 and more than that stop the server at startup
+//   --demo-map NAME    the map of the public rooms whose block names none that the server offers (a file name of the maps folder; required with --demo-rooms)
+//   --demo-maps LIST   the maps a create block may choose, file names of the maps folder separated by commas (blanks around a name are dropped; the block's map is compared
+//                      with them in any case); a block that names another map (or none) gets --demo-map (needs --demo-rooms). A public room waits ten minutes for its players.
 //   --reconnect, --no-reconnect
 //                      a room holds the seat of a player whose connection is lost (protocol 10): the match is paused for everybody, the seat comes back with its key, the others
 //                      may vote to go on without it, the match's total pause is capped. ON by default (the game's own clients come back by themselves: release B); --no-reconnect turns it
 //                      off (a lost player is dropped at once and no restart record is kept). It is the default of the rooms (the control interface's "reconnect" overrides it per room;
-//                      demo rooms follow it); the last of the two options wins
+//                      public rooms follow it); the last of the two options wins
 //   --hold-vote-seconds N
 //                      the others may vote on going on without a seat once it has been away N seconds in all (5 - 3600, default 30; the control interface's "hold_vote_seconds")
 //   --max-pause-seconds N
@@ -362,22 +361,13 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--demo-maps: '%s' is not a map of the maps folder%s%s\n", name.c_str(), why.empty() ? "" : ": ", why.c_str());
                 return 2;
             }
-            // A room code holds letters, digits, '-' and '_' only, up to 32 characters ("demo-" + the name without its extension + "-" + at least one more
-            // character): a map whose name cannot be written that way can never be chosen. It does no harm: say so and go on.
-            const size_t dot = name.rfind('.');
-            const std::string stem = dot == std::string::npos ? name : name.substr(0, dot);
-            bool writable = !stem.empty() && stem.size() + std::strlen(ants::server::kDemoRoomPrefix) + 2 <= ants::net::kMaxRoomCodeChars;
-            for (const char ch : stem) {
-                if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_')) writable = false;
-            }
-            if (!writable) std::fprintf(stderr, "--demo-maps: '%s' can never be chosen by a room code (only letters, digits, '-' and '_' fit in a code, and a code has at most %zu characters)\n", name.c_str(), ants::net::kMaxRoomCodeChars);
         }
     }
     ants::server::RoomManager rooms{std::move(store), limits};
     if (o.demo_rooms > 0) {
         std::string chooseable;
         for (const std::string& name : o.demo_maps) chooseable += (chooseable.empty() ? "" : ", ") + name;
-        log("demo rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, 4 players unless the code says 2p or 3p (\"demo-[<map>-]<n>p-...\"), map " + o.demo_map + (chooseable.empty() ? std::string() : "; a code \"demo-<map>-...\" chooses one of " + chooseable));
+        log("public rooms on: up to " + std::to_string(o.demo_rooms) + " at a time, made by a Hello's create block (its seats and teams), map " + o.demo_map + (chooseable.empty() ? std::string() : " unless the block names one of " + chooseable));
     }
 
     if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run (a deploy waits for none), no name, no code, no secret
@@ -473,9 +463,9 @@ int main(int argc, char** argv) {
         rooms.update(now);
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {
-            stats.count_ended(s);                                  // (a match that ran 600 ticks counts, demo rooms too; a shorter one, or a room that never began, counts nothing)
-            const bool demo = s.code.compare(0, std::strlen(ants::server::kDemoRoomPrefix), ants::server::kDemoRoomPrefix) == 0;
-            if (demo && s.ticks == 0) continue;                    // a demo room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
+            stats.count_ended(s);                                  // (a match that ran 600 ticks counts, public rooms too; a shorter one, or a room that never began, counts nothing)
+            const bool demo = s.public_room;
+            if (demo && s.ticks == 0) continue;                    // a public room that nobody completed: no line, no file (a peer chooses these codes, nothing may pile up)
             std::string held;                                      // a room that held seats says what came of it (never a key)
             if (s.reconnect) {
                 held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
