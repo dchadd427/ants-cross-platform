@@ -374,6 +374,15 @@ struct World {
             for (auto& c : clients) c->update(now, maps_dir());
         }
     }
+    // The same in steps of `step` ms, for what a server that has run for weeks went through (a day is 144 steps of ten minutes): the links must be able to be quiet for a step (the silence limit above it)
+    void run_coarse(uint64_t ms, uint32_t step) {
+        for (uint64_t elapsed = 0; elapsed < ms; elapsed += step) {
+            now += static_cast<uint32_t>(std::min<uint64_t>(step, ms - elapsed));
+            net.set_time(now);
+            mgr.update(now);
+            for (auto& c : clients) c->update(now, maps_dir());
+        }
+    }
     RoomStatus status(const std::string& code) {
         RoomStatus s;
         mgr.status(code, s, now);
@@ -11653,6 +11662,25 @@ void run_lobby_room_tests() {
         w.run(300);
         ASSERT_TRUE(c.lobby->created());
         ASSERT_TRUE(w.status("tie00001").code.empty() && w.status("tie00002").state == RoomState::Waiting);
+    } TEST_END();
+
+    TEST_CASE("S3.159 A Lobby In Which Nothing Was Done For Longer Than The 32-Bit Clock Counts (49.7 Days) Is Still Idle: Its Age Stops Growing At A Day (Room::kMaxIdleMs), So The Clock Cannot Read It As A Young One And A Full Pool Gives Its Place Up") {
+        ServerLimits l = lobby_limits();
+        l.demo_lobbies = 1;
+        l.lobby_idle_evict_ms = 60000;
+        l.lobby_empty_close_ms = 3600u * 1000u;
+        l.lobby_silence_ms = 3600u * 1000u;                                               // (the link of the lobby's person is quiet between two steps of ten minutes)
+        World w(l);
+        Client& a = w.connect_page("A", "age00001", lobby_block_of());
+        w.run_coarse((uint64_t{1} << 32) + 20000, 10u * 60u * 1000u);                    // the clock has been round once: the age of the lobby, read without the stop, is 20 s
+        ASSERT_TRUE(a.server_end->is_open() && w.status("age00001").joined == 1);          // (its person never left: the lobby is idle, not empty)
+        w.run(100);
+        Client& b = w.connect_page("B", "age00002", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(b.lobby->created() && b.lobby->phase() == net::ClientLobby::Phase::InRoom);
+        ASSERT_TRUE(w.status("age00001").code.empty());
+        ASSERT_FALSE(a.server_end->is_open());
+        ASSERT_EQ(waiting_lobbies(w), size_t{1});
     } TEST_END();
 }
 
