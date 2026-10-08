@@ -1,40 +1,24 @@
-# A probe, on a scratch branch only: RJ1.13 of test_rejoin on hosted macOS runners with four variants of its third block, and what a TCP reset does to the bytes that the receiver has not read.
-name: macOS rejoin probe 2
+# A probe, on a scratch branch only: RJ1.13 of test_rejoin on hosted macOS runners with a trace of the room's state after the Leave of the third block.
+name: macOS rejoin probe 3
 
 on:
   push:
-    branches: [no-such-branch-this-one-runs-by-hand]
+    branches: [claude/project-thread-q475cj-probe]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  rst:
-    name: rst ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v7
-      - name: Compile and run
-        run: |
-          uname -a
-          c++ -std=c++17 -O1 -Wall -o rst_probe scratch_probe/rst_probe.cpp
-          ./rst_probe 100
-
   variants:
-    name: variant ${{ matrix.variant }} ${{ matrix.n }}
+    name: diag ${{ matrix.n }}
     runs-on: macos-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        variant: [sleep50, both50]
+        variant: [diag]
         n: [1, 2]
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -70,5 +54,3 @@ jobs:
       - name: RJ1.13 in 4 parallel loops (the load of ctest --parallel 4), 540 seconds
         run: scratch_probe/loops.sh A 4 540
 
-      - name: RJ1.13 in 12 parallel loops (heavy load), 240 seconds
-        run: scratch_probe/loops.sh B 12 240

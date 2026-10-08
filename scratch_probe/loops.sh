@@ -10,7 +10,7 @@ for l in $(seq 1 "$loops"); do
       runs=$((runs + 1))
       if ! grep -q "Failed:           0" <<< "$out"; then
         fails=$((fails + 1))
-        echo "FAIL phase=$phase loop=$l run=$runs :: $(grep -o 'Assertion failed.*' <<< "$out" | head -2 | cut -c1-210 | tr '\n' ' ')"
+        echo "FAIL phase=$phase loop=$l run=$runs :: $(grep -o 'Assertion failed.*' <<< "$out" | head -2 | cut -c1-210 | tr '\n' ' ') $(grep -o 'DIAG trace:.*' <<< "$out" | head -1 | cut -c1-600)"
       fi
     done
     echo "LOOPDONE phase=$phase loop=$l runs=$runs fails=$fails"
