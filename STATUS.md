@@ -1,11 +1,11 @@
 # Status
 
-_Updated 2026-10-07 23:31 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-08 00:06 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ██████░░░░ 57% | Thu | draft PR #34 is open; six-character room codes (asked 2026-10-07 22:54 PDT) are being added, then the five checks run once on the final head |
+| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ██████░░░░ 57% | Thu | draft PR #34 has the six-character room codes and main brought in; the five checks run on that head; browser checks, sanitizers, page mutants and pictures for the owner follow |
 | **v0.12.0** game lobby on the front page (network protocol 16) | ░░░░░░░░░░ 0% | not yet set | design approved; build plan written; the server part starts next to v0.11.0 and merges after it |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
@@ -17,13 +17,15 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions), a bot that walks over power-ups on its way (one ant takes several; noticed by the owner on the islands map on 2026-10-07)
 - Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
-- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): draft PR #34 is open; room codes become six characters (asked 2026-10-07 22:54 PDT, approved 23:18 PDT), then the five checks run once on the final head; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
+- **Bots, the gate** (no release; PR #36, draft): the gate waits for the ant that is leaving over the ramp before it sends the next carrier in, so "Can't go there." is a little rarer.
+- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): draft PR #34 has the six-character room codes (asked 2026-10-07 22:54 PDT, approved 23:18 PDT) and main merged in; the five checks run on that head, then browser checks, sanitizers, page mutants and pictures for the owner; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - **Replays**: building the server's 30-day store of finished matches (public list and download); a viewer in the web player is being drawn for approval.
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **Game lobby for the front page** (v0.12.0, network protocol 16): the design, the host-change notice and the six-character code look are approved (2026-10-07 22:50 and 23:18 PDT); the server part and the page are built in stages and merge after v0.11.0.
-- **Windows timing fix for the checks** (no release; PR #33, in review): two server timing tests read the thread's cycle counter on Windows, because one Windows runner host type charges CPU time in lumps and made the Windows 2022 check fail at random.
+- **Game lobby for the front page** (v0.12.0, network protocol 16): the design, the host-change notice and the six-character code look are approved (2026-10-07 22:50 and 23:18 PDT); the server part is under way and the page follows; both merge after v0.11.0.
+- **Lobby, server side** (in progress, v0.12.0, protocol 16): rooms made for the new lobby page wait for the players, hold a seat when a connection drops, show the host's plan to everybody and start the match when every player's game has loaded; it builds on v0.11.0 and nothing changes for players until the lobby page follows.
+- **Front page ants in the game's own team colours** (no release; PR #37, in review): the ants on the room page are drawn in the game's team colours, as in the approved lobby pictures; it merges after v0.11.0.
 
 ## On hold (not started; the owner decides when)
 - Bots, later steps: the opening trips on a few community maps, tuning and a level ladder, an automatic tuner
@@ -33,6 +35,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **Windows test clock** (no release; PR #33, merged 2026-10-07 23:36 PDT): the server CPU tests time a pass with the thread's cycle counter on Windows, so runners that post CPU time in lumps no longer fail them at random.
 - **Leave Game goes to the front page** (no release; PR #32, merged 2026-10-07 23:03 PDT): in the browser, Leave Game and the quit dialog's Yes go back to the site's front page, a game in a frame returns to a setup screen that starts a new game again, and a match left early no longer counts as a game on this computer.
 - **Faster checks** (no release; PR #30, merged 2026-10-07 21:48 PDT): The automatic checks of a pull request now finish in about 9 minutes instead of about 14: the network tests pause as briefly on Windows and macOS as on Linux, and the longest test programs start first.
 - **The test runner** no longer reports a passing suite as failed by mistake (no release; PR #29, merged 2026-10-05 22:25 PDT)
