@@ -1128,6 +1128,33 @@ int main() {
         ASSERT_EQ(store.rescan(), size_t{0});
     } TEST_END();
 
+    TEST_CASE("RS9.4 Opening A Folder That Another Program Writes To (The Bot Arena Once An Hour): A \".tmp\" That Changed Less Than settle_s Ago Is That Program's Write Under Way And Is Left Alone, An Old One Is The Rest Of A Crash And Is Deleted") {
+        Fixture f;
+        fs::create_directories(f.dir);
+        const std::vector<uint8_t> bytes = make_file();
+        const std::string fresh = "ants-FRESH-20261008-120000Z.antsrep.tmp";
+        const std::string old = "ants-OLD-20261008-110000Z.antsrep.tmp";
+        write_file(f.dir / fresh, std::vector<uint8_t>(bytes.begin(), bytes.begin() + 40));
+        write_file(f.dir / old, std::vector<uint8_t>(bytes.begin(), bytes.begin() + 40));
+        fs::last_write_time(f.dir / old, fs::file_time_type::clock::now() - std::chrono::minutes(10));
+        ReplayConfig config = f.config();
+        config.settle_s = 2;
+        ReplayStore store(config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_TRUE(fs::exists(f.dir / fresh));                                              // (the other program renames it in a moment: deleting it would cost that match)
+        ASSERT_FALSE(fs::exists(f.dir / old));
+        ASSERT_EQ(store.count(), size_t{0});
+        ASSERT_TRUE(any_line_has(store.take_notes(), "1 half-written"));
+        // with no grace (settle_s 0, the tests' own) every half-written file of the store's names goes, as before
+        Fixture g;
+        fs::create_directories(g.dir);
+        write_file(g.dir / fresh, std::vector<uint8_t>(bytes.begin(), bytes.begin() + 40));
+        ReplayStore plain(g.config());
+        ASSERT_TRUE(plain.prepare(why));
+        ASSERT_FALSE(fs::exists(g.dir / fresh));
+    });
+
     TEST_CASE("RS9.3 A File That Is Still Being Copied Is Not Listed As A Damaged One: A File (Or A Folder) That Changed Less Than settle_s Ago Waits For The Next Look, And A Known File That Could Not Be Read Or Whose Size Moved Is Read Again") {
         Fixture f;
         ReplayConfig config = f.config();

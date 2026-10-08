@@ -220,7 +220,7 @@ class TheLocations(unittest.TestCase):
             self.assertIn(variable, stack.split("services:")[0], variable)                    # the header of the stack file names them
             self.assertIn(variable, read("docs", "SERVER.md"), variable)
         dockerfile = read("Dockerfile.server")
-        entry = re.search(r"(?m)^ENTRYPOINT \[(.*)\]$", dockerfile).group(1)
+        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", dockerfile)[-1]                       # (the last stage is the server; the stage before it is the bot arena's)
         self.assertIn('"--replay-any-interface"', entry)                                      # (a published port does not reach the loopback address of a container: nginx does not either)
         self.assertNotIn("--replay-port", entry)                                              # (off in the program and in the image: the stack file gives the port)
         main = read("src", "ants_server", "main.cpp")
