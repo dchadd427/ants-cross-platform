@@ -284,15 +284,16 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         done = subprocess.run(["docker", "exec", self.front, "nginx", "-t"], capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
-    def sent(self, path):
-        return self.stub_requests(path)
+    def sent(self, path, at_least=0):
+        return self.stub_requests(path, at_least)
 
     def counts(self, *names):
         """How many requests the stand-in has been sent so far for the list and for each of the files: its log goes back to the first test of the class, so a test looks at what came after this."""
         return dict((path, len(self.sent(path))) for path in ["/replays"] + ["/replays/" + name for name in names])
 
-    def since(self, before):
-        return [one for path, count in before.items() for one in self.sent(path)[count:]]
+    def since(self, before, owed=0):
+        """What came after `before`; `owed`: how many requests each of its paths has been sent since (see logged())"""
+        return [one for path, count in before.items() for one in self.sent(path, count + owed)[count:]]
 
     def test_the_list_and_a_file_go_to_the_server_as_plain_gets(self):
         before = self.counts(*GOOD_NAMES[:3])
@@ -310,7 +311,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertEqual(self.names(headers, "content-type"), ["application/octet-stream"])
             self.assertEqual(self.names(headers, "cache-control"), ["no-store"])
             self.assertEqual(self.names(headers, "x-content-type-options"), ["nosniff"])
-        seen = self.since(before)
+        seen = self.since(before, 1)
         self.assertEqual(len(seen), 4)
         for one in seen:
             self.assertEqual((one["method"], one["args"], one["cl"], one["te"], one["up"], one["conn"], one["st"], one["host"]), ("GET", "-", "-", "-", "-", "close", "200", "127.0.0.1"))
@@ -333,7 +334,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.stub_lines(), before)                                           # none of these reached the server (not a request, not a line of its log), and none used up the allowance
         for path in ("/replays", "/replays/" + FILE):
             self.assertEqual(self.ask("GET", path + "?")[0], 200, path)                       # (a "?" with nothing behind it carries no query: nginx's $args is empty)
-        self.assertEqual(self.stub_lines() - before, 2)                                       # (and these two did reach the server: the first requests it was sent)
+        self.assertEqual(self.stub_lines(before + 2) - before, 2)                             # (and these two did reach the server: the first requests it was sent)
 
     def test_the_server_is_sent_a_host_and_a_connection_and_nothing_else_of_the_visitor(self):
         visitor = {"Cookie": "session=" + "c" * 8100, "User-Agent": "a-browser/1.0", "Authorization": "Bearer a-secret", "X-Forwarded-For": "203.0.113.9", "Referer": "https://example.org/page",
@@ -342,7 +343,8 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         before = self.counts(FILE)
         self.assertEqual(self.ask("GET", "/replays", headers=visitor)[0], 200)
         self.assertEqual(self.ask("GET", "/replays/" + FILE, headers=visitor)[0], 200)
-        listing, one_file = self.sent("/replays")[before["/replays"]:], self.sent("/replays/" + FILE)[before["/replays/" + FILE]:]
+        listing = self.sent("/replays", before["/replays"] + 1)[before["/replays"]:]
+        one_file = self.sent("/replays/" + FILE, before["/replays/" + FILE] + 1)[before["/replays/" + FILE]:]
         self.assertEqual((len(listing), len(one_file)), (1, 1))
         # the whole request that the server was sent, to the byte: the request line, a Host (the visitor's, without a port) and a Connection
         self.assertEqual(listing[0]["len"], len(LIST_REQUEST))
@@ -361,14 +363,14 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertEqual((status, body), (200, first[2]))                                 # (the same list for everybody)
             self.assertEqual(self.names(headers, "cache-control"), ["no-store"])              # (and a browser is still told to keep nothing)
             self.assertEqual(self.names(headers, "x-content-type-options"), ["nosniff"])
-        self.assertEqual(self.stub_lines() - before, 1)                                       # the server was asked once for the nine
+        self.assertEqual(self.stub_lines(before + 1) - before, 1)                             # the server was asked once for the nine
         for _ in range(3):
             self.assertEqual(self.ask("GET", "/replays/" + FILE)[0], 200)
-        self.assertEqual(self.stub_lines() - before, 4)                                       # a file is asked of it each time
+        self.assertEqual(self.stub_lines(before + 4) - before, 4)                             # a file is asked of it each time
         time.sleep(6.2)                                                                       # five seconds are over (nginx counts whole seconds: an entry made at the start of a second is good for the whole of the fifth one, so 5.5 s is not always enough): the next one asks again, the others after it are served from that
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
-        self.assertEqual(self.stub_lines() - before, 5)
+        self.assertEqual(self.stub_lines(before + 5) - before, 5)
 
     def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_files_have_an_allowance_of_their_own(self):
         before = self.stub_lines()
@@ -391,7 +393,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertTrue(set(codes) <= {200, 503}, set(codes))
         self.assertTrue(21 <= allowed <= 21 + int(10 * took) + 1, (allowed, took))            # the first request and the burst of 20, and ten a second while this goes on
         self.assertEqual(codes[:21], [200] * 21)                                              # (the refusals come after the allowance, none between)
-        self.assertEqual(self.stub_lines() - before, allowed)                                 # what was refused never reached the server
+        self.assertEqual(self.stub_lines(before + allowed) - before, allowed)                 # what was refused never reached the server
         self.assertEqual(self.ask("GET", "/replays")[0], 200)                                 # the list is another zone: a flood of files does not use its allowance
         flood_over = time.monotonic()
         time.sleep(0.8)                                                                       # ten a second: some tokens are back (not one a second, not a hundred)
