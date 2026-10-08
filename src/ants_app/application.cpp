@@ -1182,7 +1182,7 @@ void Application::enter_match(bool rejoin) {
     start_dialog_clock_ms_ = 0.0;
     scorecard_.hide();
     match_over_handled_ = false;
-    local_match_reported_ = false;                                          // (the first tick of this match tells the page: once)
+    local_match_reported_ = network_active();                               // (a game on this computer tells the page at its first tick: once; a match of a room never does, also when it is left before the page is gone)
     state_ = AppState::Playing;
     update_picture();                                                       // (the match screen replaces whatever page was up)
 
@@ -1411,7 +1411,7 @@ void Application::show_opening_screens() {
 
 void Application::return_to_map_select() {
     stop_bots();
-    if (network_active() || (net_ && map_select_.room().networked)) net_end_session(net_notice_);   // leaving a match leaves the room: the local setup screen follows (a room that was left before shows no more)
+    if (network_active() || (net_ && map_select_.room().networked)) net_end_session(net_notice_);   // the setup screen after a room is the local game's: also when the room was left first
     net_notice_.clear();
     enter_map_select();
     scorecard_.hide();

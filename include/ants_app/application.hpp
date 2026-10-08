@@ -410,8 +410,7 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
-    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match; and the game's own
-    /// Leave: quit()): the
+    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match): the
     /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
     /// its seat is held and its key kept, which is what lets it come back.
     void leave_network_match();
@@ -623,7 +622,7 @@ private:
     PendingMusic pending_music_{PendingMusic::None};       // what a background step wanted of the music, done by the next frame or when the page is shown (the last wish counts)
     std::function<uint64_t()> clock_;                      // set_clock: a virtual clock for the tests (empty: SDL's performance counter)
     std::function<void()> on_local_match_started_;         // set_on_local_match_started: told at the first tick of a game on this computer
-    bool local_match_reported_{false};                     // ... and it was told for this match (enter_match starts the next match with it false)
+    bool local_match_reported_{false};                     // ... and it was told for this match (enter_match starts a game here with it false, a match of a room with it true: that one never tells)
     uint64_t last_frame_run_{0};                           // when a frame last ran (performance counter; 0: none since the page was hidden): the wake-ups stand down while frames come
     uint64_t hidden_since_{0};                             // this hidden period: when it began (performance counter), the wake-ups that stepped in it and the ticks that ran in it
     uint32_t hidden_wakes_{0};

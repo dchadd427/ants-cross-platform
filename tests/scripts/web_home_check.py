@@ -708,7 +708,11 @@ def main():
                 that the check follows the layout) moved right by the extra width of the wide page."""
                 with open(os.path.join(REPO, "include", "ants_app", "scorecard.hpp"), encoding="utf-8") as f:
                     header = f.read()
-                x, y, w, h = (int(re.search(r"QUIT_BTN_%s\s*=\s*(\d+);" % n, header).group(1)) for n in "XYWH")
+                found = {n: re.search(r"QUIT_BTN_%s\s*=\s*(\d+);" % n, header) for n in "XYWH"}
+                missing = [n for n, m in found.items() if m is None]
+                if missing:
+                    raise RuntimeError("include/ants_app/scorecard.hpp has no QUIT_BTN_%s: this check reads the Leave Game button from it" % ", QUIT_BTN_".join(missing))
+                x, y, w, h = (int(found[n].group(1)) for n in "XYWH")
                 return x + (shape[0] - 640) + w / 2, y + h / 2
 
             def at_front_page():
