@@ -16,7 +16,7 @@ Ants is a C++17 remake of the 1998 RTS (SDL2; native on macOS, Linux and Windows
 5. **Bots are virtual clients** (library `ants_ai`). They use the public command interface of a human, read the world through a read-only view, see only what a human of their team could see (with Fog of War on, only their team's view; until that view exists, bots and fog are refused together), keep a command budget per level, exist only when asked for, are always shown as "Bot (Level)", and never change the simulation, the lock-step rules or any golden hash. The only computer behaviour inside the simulation is the original's own (the Combat Ant's auto-engage reflex).
 6. **Web and version.** `.wasm`, `.data`, `.html`, `.js` and `.css` are served with `Cache-Control: no-cache, must-revalidate`. Keep the web build in step with every game, asset or simulation change; local web images are for testing only, never pushed or deployed. The file `VERSION` is the one source of the version; every build shows its build id; the on-screen version stays beside the FPS counter at the bottom right in every state.
 7. **Screens.** Nothing on screen is built until the owner has approved a picture of it (fixes that change no look are exempt). Say "player", never "friend", in on-screen text.
-8. **Times and status.** Every date and time written for the owner is Pacific time. `STATUS.md` is the owner's one-glance view, kept by the coordinator; its "current release" must match `VERSION`.
+8. **Times.** Every date and time written for the owner is Pacific time.
 
 ## How much checking
 - Every change: the quick tier. Every pull request: CI's five checks, and for code one independent review with every finding fixed.

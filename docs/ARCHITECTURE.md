@@ -176,10 +176,10 @@ ants-cross-platform/
 │   │                                   # only)
 │   ├── changelog_to_html.py            # Turns CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md into the site's
 │   │                                   # /changelog.html and /changelog_archive.html
-│   ├── check_version_consistency.py    # Checks that VERSION, CHANGELOG.md, STATUS.md and README.md name the same
+│   ├── check_version_consistency.py    # Checks that VERSION, CHANGELOG.md and README.md name the same
 │   │                                   # release
 │   ├── release.py                      # A release in one command: VERSION, the changelog's "## Next" heading, the
-│   │                                   # README and STATUS.md (--dry-run, --open-pr)
+│   │                                   # README's version line (--dry-run, --open-pr)
 │   ├── mutate.py                       # The mutation runner of the deep tier: one change at a time, always restored,
 │   │                                   # baselines of the unmutated tree
 │   ├── deploy_filter.py                # Does a push change what the images contain or the stack file? (the deploy
@@ -230,8 +230,6 @@ ants-cross-platform/
 ├── start_game.bat                      # The same for Windows
 ├── LICENSE                             # MIT licence of the source code and the documents (the original's data is not
 │                                       # covered)
-├── STATUS.md                           # The project's status at a glance: the release schedule, the work under way,
-│                                       # what is on hold, what was done recently
 ├── THIRD_PARTY_NOTICES.md              # Third-party code and fonts in the repository or linked by the build, with
 │                                       # their licences
 ├── VERSION                             # The one place the version is written (one line, MAJOR.MINOR.PATCH); the

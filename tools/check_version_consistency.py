@@ -5,7 +5,6 @@ Usage: check_version_consistency.py [--root DIR]
 
   VERSION        one line, MAJOR.MINOR.PATCH (the only place the version is written by hand; CMake generates the C++ header from it)
   CHANGELOG.md   the top release heading ("## vX.Y.Z - YYYY-MM-DD - title", newest first) is the release in VERSION
-  STATUS.md      "current release **vX.Y.Z**" in the line under the title
   README.md      "Current version: vX.Y.Z" in the first paragraph
 
 Exit code 0: all agree. Exit code 1: at least one disagrees or is missing; every problem is printed with the file that is wrong (and the line), so
@@ -50,7 +49,6 @@ def check(root):
 
     sources = [
         ("CHANGELOG.md", r"^##\s+v(%s)\b" % SEMVER, "a release heading '## vX.Y.Z - YYYY-MM-DD - title' (the top one is the newest release)"),
-        ("STATUS.md", r"current release\s+\*\*v(%s)\*\*" % SEMVER, "the text 'current release **vX.Y.Z**' under the title"),
         ("README.md", r"Current version:\s*\*{0,2}\s*v(%s)\b" % SEMVER, "the text 'Current version: vX.Y.Z' in the first paragraph"),
     ]
     for name, pattern, what in sources:
@@ -69,7 +67,7 @@ def check(root):
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(description="Checks that CHANGELOG.md, STATUS.md and README.md name the release that the file VERSION names.")
+    parser = argparse.ArgumentParser(description="Checks that CHANGELOG.md and README.md name the release that the file VERSION names.")
     parser.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."), help="the repository's root folder (default: this script's parent)")
     args = parser.parse_args(argv[1:])
     root = os.path.abspath(args.root)
@@ -78,11 +76,11 @@ def main(argv):
         sys.stderr.write("VERSION CONSISTENCY CHECK FAILED: the release is named differently in these files:\n")
         for problem in problems:
             sys.stderr.write("  - %s\n" % problem)
-        sys.stderr.write("The version is the line of the file VERSION; the heading at the top of CHANGELOG.md, 'current release' in STATUS.md and 'Current version' in README.md must name the same release.\n")
+        sys.stderr.write("The version is the line of the file VERSION; the heading at the top of CHANGELOG.md and 'Current version' in README.md must name the same release.\n")
         return 1
     with open(os.path.join(root, "VERSION"), encoding="utf-8") as f:
         version = f.readline().strip()
-    print("version consistency: VERSION, CHANGELOG.md, STATUS.md and README.md all name v%s" % version)
+    print("version consistency: VERSION, CHANGELOG.md and README.md all name v%s" % version)
     return 0
 
 

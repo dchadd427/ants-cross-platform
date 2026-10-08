@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Makes a release in the files: VERSION, the changelog heading, the README's version line and STATUS.md (docs/WORKFLOW.md, "Releasing").
+"""Makes a release in the files: VERSION, the changelog heading and the README's version line (docs/WORKFLOW.md, "Releasing").
 
 usage: release.py X.Y.Z "title" [--date YYYY-MM-DD] [--dry-run] [--root DIR] [--open-pr [--base BRANCH] [--draft] [--try TEXT ...]]
 
   - VERSION becomes X.Y.Z (it must be higher than the version now in the file)
   - the top draft section of CHANGELOG.md, the one headed "## Next" (above the newest release; the template at the top of that file), becomes
     "## vX.Y.Z - DATE - title"; the tool refuses, with a message, when there is no such section or it is empty
-  - the README's "Current version: vX.Y.Z" and STATUS.md's "current release **vX.Y.Z**" name the new version, and STATUS.md's "_Updated YYYY-MM-DD HH:MM PDT_"
-    is stamped with the time now in Pacific time (the date of the heading is today's Pacific date unless --date says otherwise)
+  - the README's "Current version: vX.Y.Z" names the new version (the date of the heading is today's Pacific date unless --date says otherwise)
   - tools/check_version_consistency.py must be happy before the files are changed (else nothing is touched) and is run again when they are written
 
 Everything is worked out first and written only if all of it works. --dry-run prints what would change (a diff) and writes nothing. --root names another
 folder (the tests use scratch copies). --open-pr then runs `gh pr create --base BRANCH (default main) --title "vX.Y.Z - title"` with the changelog entry (and a
-"What to try" list from every --try) as the body; the branch must be committed and pushed (the coordinator's step: agents do not push). --now is for tests.
+"What to try" list from every --try) as the body; the branch must be committed and pushed first. --now is for tests.
 Exit status: 0 done, 1 the written files disagree (should not happen), 2 refused or a wrong argument.
 """
 import argparse
@@ -30,8 +29,6 @@ import check_version_consistency as consistency     # noqa: E402  (the same fold
 
 SEMVER = r"[0-9]+\.[0-9]+\.[0-9]+"
 README_RE = re.compile(r"(Current version:\s*\*{0,2}\s*v)(%s)\b" % SEMVER)
-STATUS_RELEASE_RE = re.compile(r"(current release\s+\*\*v)(%s)(\*\*)" % SEMVER)
-STATUS_STAMP_RE = re.compile(r"(_Updated )\d{4}-\d{2}-\d{2} \d{2}:\d{2} [A-Z]{3,4}")
 HEADING_RE = re.compile(r"^##\s+(.*?)\s*$")
 
 
@@ -164,7 +161,7 @@ def run(args, root):
     if not title or "\n" in title or "\r" in title:
         raise Refused("the title must be one non-empty line")
     now = utc_now(args.now)
-    today, clock, zone = pacific(now)
+    today = pacific(now)[0]
     date = args.date or today
     try:
         datetime.date.fromisoformat(date)
@@ -176,7 +173,7 @@ def run(args, root):
     problems = consistency.check(root)
     if problems:
         raise Refused("the files disagree before the release, fix that first:\n  - " + "\n  - ".join(problems))
-    old = {name: read(root, name) for name in ("VERSION", "CHANGELOG.md", "README.md", "STATUS.md")}
+    old = {name: read(root, name) for name in ("VERSION", "CHANGELOG.md", "README.md")}
     current = old["VERSION"].strip()
     if tuple(int(n) for n in version.split(".")) <= tuple(int(n) for n in current.split(".")):
         raise Refused("the version must be higher than the one in the file VERSION (%s), found %s" % (current, version))
@@ -185,8 +182,6 @@ def run(args, root):
     new["VERSION"] = version + "\n"
     new["CHANGELOG.md"], entry = convert_changelog(old["CHANGELOG.md"], version, date, title)
     new["README.md"] = replace_once(README_RE, old["README.md"], lambda m: m.group(1) + version, "README.md", "'Current version: vX.Y.Z' line")
-    status = replace_once(STATUS_RELEASE_RE, old["STATUS.md"], lambda m: m.group(1) + version + m.group(3), "STATUS.md", "'current release **vX.Y.Z**' text")
-    new["STATUS.md"] = replace_once(STATUS_STAMP_RE, status, lambda m: "%s%s %s %s" % (m.group(1), today, clock, zone), "STATUS.md", "'_Updated YYYY-MM-DD HH:MM PDT' stamp")
     if "**For players:**" not in entry:
         print('release: warning: the draft has no "**For players:**" paragraph (the template at the top of CHANGELOG.md)', file=sys.stderr)
 
@@ -210,7 +205,7 @@ def run(args, root):
                 f.write(new[name])
             os.replace(path + ".release.tmp", path)
         print("released v%s (%s): %s written" % (version, date, ", ".join(changed)))
-        print("  VERSION %s -> %s; CHANGELOG.md: '## Next' -> '## v%s - %s - %s'; STATUS.md stamped %s %s %s" % (current, version, version, date, title, today, clock, zone))
+        print("  VERSION %s -> %s; CHANGELOG.md: '## Next' -> '## v%s - %s - %s'" % (current, version, version, date, title))
         checked = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check_version_consistency.py"), "--root", root],
                                  capture_output=True, text=True)
         sys.stdout.write(checked.stdout)

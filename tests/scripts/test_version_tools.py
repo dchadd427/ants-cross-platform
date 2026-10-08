@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Tests of the version tools (run by ./run_tests.sh --fast and by the CI):
 
-  tools/check_version_consistency.py   CHANGELOG.md, STATUS.md and README.md name the release that the file VERSION names
+  tools/check_version_consistency.py   CHANGELOG.md and README.md name the release that the file VERSION names
   cmake/ants_stamp_build_id.cmake      writes the one source file that holds ants::BUILD_ID (explicit id, else the git commit, else "unknown")
   docker/resolve_build_id.sh           the build id of a Docker image build (build argument, else a clone's HEAD / refs files, else the build time)
 
-Each test fails when the code it covers is missing or wrong (the deliberately wrong CHANGELOG heading and STATUS version below are the proof for the check).
+Each test fails when the code it covers is missing or wrong (the deliberately wrong CHANGELOG heading and README version below are the proof for the check).
 """
 import os
 import re
@@ -32,12 +32,10 @@ def read(path):
         return f.read()
 
 
-def make_tree(root, version="1.2.3", changelog=None, status=None, readme=None, version_file=None):
+def make_tree(root, version="1.2.3", changelog=None, readme=None, version_file=None):
     write(os.path.join(root, "VERSION"), version_file if version_file is not None else version + "\n")
     write(os.path.join(root, "CHANGELOG.md"), changelog if changelog is not None else
           "# Changelog\n\nIntro.\n\n## Unreleased - next\n\n**For players:**\n- x\n\n## v%s - 2026-01-01 - Title\n\n**For players:**\n- y\n\n## v0.0.1 - 2025-01-01 - Old\n" % version)
-    write(os.path.join(root, "STATUS.md"), status if status is not None else
-          "# Status\n\n_Updated 2026-01-01 00:00 PDT · current release **v%s** · details: [CHANGELOG](CHANGELOG.md)_\n" % version)
     write(os.path.join(root, "README.md"), readme if readme is not None else
           "# Title\n\n**Current version: v%s** (shown on screen)\n" % version)
 
@@ -74,7 +72,6 @@ class ConsistencyCheck(unittest.TestCase):
         self.assertIn("CHANGELOG.md", result.stderr)
         self.assertIn("v1.2.2", result.stderr)
         self.assertIn("1.2.3", result.stderr)
-        self.assertNotIn("STATUS.md:", result.stderr)
         self.assertNotIn("README.md:", result.stderr)
 
     def test_only_the_top_release_heading_counts(self):
@@ -86,13 +83,12 @@ class ConsistencyCheck(unittest.TestCase):
         make_tree(self.root, changelog="# Changelog\n\n## Unreleased\n\n- x\n\n## v1.2.3 - 2026-01-01 - T\n")
         self.assertEqual(run_check(self.root).returncode, 0)
 
-    def test_a_wrong_status_version_fails_and_names_the_file(self):
-        make_tree(self.root, status="# Status\n\n_Updated 2026-01-01 00:00 PDT · current release **v1.0.0** · details_\n")
+    def test_a_status_file_is_not_read_any_more(self):
+        make_tree(self.root)
+        write(os.path.join(self.root, "STATUS.md"), "# Status\n\n_Updated 2026-01-01 00:00 PDT · current release **v1.0.0** · details_\n")
         result = run_check(self.root)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("STATUS.md", result.stderr)
-        self.assertIn("v1.0.0", result.stderr)
-        self.assertNotIn("CHANGELOG.md:", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("STATUS.md", result.stdout)
 
     def test_a_wrong_readme_version_fails_and_names_the_file(self):
         make_tree(self.root, readme="# T\n\n**Current version: v9.9.9** (shown)\n")
@@ -100,20 +96,21 @@ class ConsistencyCheck(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("README.md", result.stderr)
         self.assertIn("v9.9.9", result.stderr)
+        self.assertNotIn("CHANGELOG.md:", result.stderr)
 
     def test_every_disagreeing_file_is_named_at_once(self):
-        make_tree(self.root, changelog="## v0.0.9 - x - y\n", status="current release **v0.0.8**\n", readme="Current version: v0.0.7\n")
+        make_tree(self.root, changelog="## v0.0.9 - x - y\n", readme="Current version: v0.0.7\n")
         result = run_check(self.root)
         self.assertEqual(result.returncode, 1)
-        for name in ("CHANGELOG.md", "STATUS.md", "README.md"):
+        for name in ("CHANGELOG.md", "README.md"):
             self.assertIn(name, result.stderr)
 
     def test_a_missing_version_text_fails(self):
-        make_tree(self.root, status="# Status\n\nnothing here\n")
+        make_tree(self.root, readme="# Title\n\nnothing here\n")
         result = run_check(self.root)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("STATUS.md", result.stderr)
-        self.assertIn("current release", result.stderr)
+        self.assertIn("README.md", result.stderr)
+        self.assertIn("Current version", result.stderr)
 
     def test_a_missing_file_fails(self):
         make_tree(self.root)

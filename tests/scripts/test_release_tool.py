@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Tests of tools/release.py, the release tool (run by ./run_tests.sh --fast and by the CI).
 
-The tool runs on SCRATCH copies (--root): a small repository of the four files that a release touches (VERSION, CHANGELOG.md, README.md, STATUS.md), and a copy of the
+The tool runs on SCRATCH copies (--root): a small repository of the three files that a release touches (VERSION, CHANGELOG.md, README.md), and a copy of the
 real files with a "## Next" draft put in, so that the tool is held to the real formats. What is checked:
 
-  - the draft "## Next" (the template's HTML comment is not a draft) becomes "## vX.Y.Z - date - title"; VERSION, the README's version line and STATUS.md's
-    "current release" and Pacific time stamp follow; tools/check_version_consistency.py is happy afterwards
+  - the draft "## Next" (the template's HTML comment is not a draft) becomes "## vX.Y.Z - date - title"; VERSION and the README's version line follow;
+    tools/check_version_consistency.py is happy afterwards
   - it refuses, with a message and with nothing written: no draft, an empty draft, a draft below a release, a version that is not higher, a bad version, date or
-    title, files that already disagree, a README or STATUS.md without the line it has to change (nothing is written half way)
+    title, files that already disagree, a README without the line it has to change (nothing is written half way)
   - --dry-run writes nothing and prints the diff; the Pacific time is right in summer and in winter, also at the changes of the clock; --open-pr runs gh pr create
 """
 import datetime
@@ -52,7 +52,6 @@ Template of an entry:
 """
 DRAFT = "## Next\n\n**For players:**\n- new thing\n- another thing\n\n**Fixes:**\n- a fix\n\n"
 README = "# Title\n\n**Current version: v1.2.3** (shown on screen)\n\nMore text mentions v1.2.3 elsewhere.\n"
-STATUS = "# Status\n\n_Updated 2026-01-02 09:30 PST · current release **v1.2.3** · details: [CHANGELOG](CHANGELOG.md)_\n\n## In progress\n- x\n"
 NOW_SUMMER = "2026-10-03T21:05:00Z"          # 14:05 PDT
 NOW_WINTER = "2026-12-03T21:05:00Z"          # 13:05 PST
 
@@ -76,12 +75,12 @@ class Scratch(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def make(self, changelog, readme=README, status=STATUS, version="1.2.3\n"):
-        for name, text in (("VERSION", version), ("CHANGELOG.md", changelog), ("README.md", readme), ("STATUS.md", status)):
+    def make(self, changelog, readme=README, version="1.2.3\n"):
+        for name, text in (("VERSION", version), ("CHANGELOG.md", changelog), ("README.md", readme)):
             write(os.path.join(self.root, name), text)
 
     def snapshot(self):
-        return {n: read(os.path.join(self.root, n)) for n in ("VERSION", "CHANGELOG.md", "README.md", "STATUS.md")}
+        return {n: read(os.path.join(self.root, n)) for n in ("VERSION", "CHANGELOG.md", "README.md")}
 
     def release(self, *args, now=NOW_SUMMER):
         return subprocess.run([sys.executable, TOOL, *args, "--root", self.root, "--now", now], capture_output=True, text=True)
@@ -91,7 +90,7 @@ class Scratch(unittest.TestCase):
 
 
 class Release(Scratch):
-    def test_the_draft_becomes_the_release_and_the_four_files_agree(self):
+    def test_the_draft_becomes_the_release_and_the_three_files_agree(self):
         result = self.release("1.3.0", "The new thing")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         files = self.snapshot()
@@ -100,7 +99,7 @@ class Release(Scratch):
         self.assertNotIn("\n## Next\n\n", files["CHANGELOG.md"].split("-->")[1])        # the draft heading is gone (the template's comment keeps its own)
         self.assertIn("## v1.2.3 - 2026-01-01 - Old title", files["CHANGELOG.md"])      # the older entries stay
         self.assertEqual(files["README.md"], README.replace("**Current version: v1.2.3**", "**Current version: v1.3.0**"))   # only the version line: v1.2.3 elsewhere stays
-        self.assertEqual(files["STATUS.md"], STATUS.replace("_Updated 2026-01-02 09:30 PST", "_Updated 2026-10-03 14:05 PDT").replace("**v1.2.3**", "**v1.3.0**"))
+        self.assertEqual(sorted(os.listdir(self.root)), ["CHANGELOG.md", "README.md", "VERSION"])          # (nothing else is read or made: there is no STATUS.md any more)
         self.assertEqual(self.consistent().returncode, 0, self.consistent().stderr)
         self.assertIn("released v1.3.0", result.stdout)
         self.assertIn("version consistency", result.stdout)                             # the tool ran the check itself
@@ -154,7 +153,6 @@ class Release(Scratch):
     def test_a_date_can_be_given(self):
         self.assertEqual(self.release("1.3.0", "x", "--date", "2026-11-11").returncode, 0)
         self.assertIn("## v1.3.0 - 2026-11-11 - x", self.snapshot()["CHANGELOG.md"])
-        self.assertIn("_Updated 2026-10-03 14:05 PDT", self.snapshot()["STATUS.md"])    # the stamp is the time now, whatever the heading says
 
     def test_files_that_disagree_before_the_release_are_refused(self):
         self.make(CHANGELOG % {"draft": DRAFT}, readme=README.replace("v1.2.3**", "v1.2.1**"))
@@ -166,14 +164,12 @@ class Release(Scratch):
         self.assertEqual(self.snapshot(), before)
 
     def test_a_file_without_the_line_to_change_stops_everything_and_nothing_is_written(self):
-        for readme, status, text in ((README.replace("Current version:", "Version:"), STATUS, "README.md"),
-                                     (README, STATUS.replace("_Updated 2026-01-02 09:30 PST · ", "_"), "STATUS.md")):
-            self.make(CHANGELOG % {"draft": DRAFT}, readme=readme, status=status)
-            before = self.snapshot()
-            result = self.release("1.3.0", "x")
-            self.assertEqual(result.returncode, 2, text)
-            self.assertIn(text, result.stderr)
-            self.assertEqual(self.snapshot(), before, "a file was written although the release could not be finished")
+        self.make(CHANGELOG % {"draft": DRAFT}, readme=README.replace("Current version:", "Version:"))
+        before = self.snapshot()
+        result = self.release("1.3.0", "x")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("README.md", result.stderr)
+        self.assertEqual(self.snapshot(), before, "a file was written although the release could not be finished")
 
     def test_dry_run_writes_nothing_and_shows_the_diff(self):
         before = self.snapshot()
@@ -193,16 +189,14 @@ class Release(Scratch):
 
     def test_pacific_time_in_summer_and_in_winter(self):
         self.assertEqual(self.release("1.3.0", "x", now=NOW_WINTER).returncode, 0)
-        self.assertIn("_Updated 2026-12-03 13:05 PST", self.snapshot()["STATUS.md"])
         self.assertIn("## v1.3.0 - 2026-12-03 - x", self.snapshot()["CHANGELOG.md"])
 
     def test_the_date_is_the_pacific_date_not_the_utc_date(self):
         self.assertEqual(self.release("1.3.0", "x", now="2026-10-04T03:30:00Z").returncode, 0)       # 20:30 PDT on the 3rd
         self.assertIn("## v1.3.0 - 2026-10-03 - x", self.snapshot()["CHANGELOG.md"])
-        self.assertIn("_Updated 2026-10-03 20:30 PDT", self.snapshot()["STATUS.md"])
 
     def test_windows_line_endings_are_kept(self):
-        self.make((CHANGELOG % {"draft": DRAFT}).replace("\n", "\r\n"), readme=README.replace("\n", "\r\n"), status=STATUS.replace("\n", "\r\n"))
+        self.make((CHANGELOG % {"draft": DRAFT}).replace("\n", "\r\n"), readme=README.replace("\n", "\r\n"))
         self.assertEqual(self.release("1.3.0", "x").returncode, 0)
         changelog = self.snapshot()["CHANGELOG.md"]
         self.assertNotIn("\n", changelog.replace("\r\n", ""))
@@ -241,7 +235,7 @@ class TheRealFormats(unittest.TestCase):
 
     def test_the_real_files_with_a_draft_can_be_released_and_stay_consistent(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("VERSION", "CHANGELOG.md", "README.md", "STATUS.md"):
+            for name in ("VERSION", "CHANGELOG.md", "README.md"):
                 shutil.copyfile(os.path.join(REPO, name), os.path.join(root, name))
             changelog = read(os.path.join(root, "CHANGELOG.md"))
             at = changelog.index("\n## v", changelog.index("-->")) + 1                # the newest release, below the template's comment
@@ -254,7 +248,6 @@ class TheRealFormats(unittest.TestCase):
             self.assertEqual(checked.returncode, 0, checked.stderr)
             self.assertIn("v" + new_version, checked.stdout)
             self.assertIn("## v%s - 2026-10-03 - A test release" % new_version, read(os.path.join(root, "CHANGELOG.md")))
-            self.assertIn("_Updated 2026-10-03 14:05 PDT", read(os.path.join(root, "STATUS.md")))
         self.assertEqual(subprocess.run([sys.executable, CHECK], capture_output=True, text=True, cwd=REPO).returncode, 0, "the real repository was changed")
 
 

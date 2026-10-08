@@ -307,7 +307,7 @@ define_suites() {
     suite "4"      e2e    0 "-"                          "Opaque-Box E2E Tests (e2e_runner)"                         "E2E OPAQUE-BOX VERIFICATION SUITES"                                                './build_e2e/e2e_runner $E2E_ARGS'
 
     # 5. repository checks (python3; no build)
-    suite "5.1"    tools  1 "-"                          "Version / Changelog / Status / README Consistency"         "VERSION CONSISTENCY (the file VERSION against CHANGELOG.md, STATUS.md and README.md)" 'python3 tools/check_version_consistency.py'
+    suite "5.1"    tools  1 "-"                          "Version / Changelog / README Consistency"                  "VERSION CONSISTENCY (the file VERSION against CHANGELOG.md and README.md)" 'python3 tools/check_version_consistency.py'
     suite "5.2"    tools  1 "-"                          "Tool and Script Tests (python: tests/scripts/test_*.py)"   "TOOL AND SCRIPT TESTS (changelog pages, version tools, the generated header, this script, the release, mutation and deploy tools)" 'python3 tests/scripts/run_python_tests.py' "cost=25 weight=2"
 }
 
