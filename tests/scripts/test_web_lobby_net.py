@@ -9,6 +9,8 @@ screen: the codec of every message of the protocol and the client that keeps the
     to the server's pings, what changed between two Room messages (who joined, left, was renamed, was moved, changed places, leads now), the requests that only the leader may make and the bytes they
     put on the wire (a colour move's guard is the room's seating hash), the way back with the key after a lost link (the waits grow, a link that says nothing is given up), what each refusal means, and
     the entry that the game page reads to take the seat over;
+  - the entry that the client writes for the game page (ants.rejoin.<room>.<seat>) is read by the game page's own code (tests/scripts/web_lobby_entry_check.js runs the blocks REJOINKEY and NAMEGATE of
+    web/shell.html): the seat is held, so the game asks no name and takes the seat over with the key, on both schemes, and not for another scheme, host, room or seat, or for a key that is too old;
   - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers; the same script hands a lobby over to two real games
     (tests/scripts/web_lobby_handoff_check.js: START, the pages go, a game of each name takes its seat with the page's key, the match runs).
 The node checks need node; without it these tests are skipped and say so.
@@ -22,6 +24,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPTS = os.path.join(REPO, "tests", "scripts")
 MODULE = os.path.join(REPO, "web", "front", "lobby_net.js")
+SHELL = os.path.join(REPO, "web", "shell.html")
 GOLDEN = os.path.join(REPO, "tests", "data", "lobby_messages.txt")
 NODE = shutil.which("node")
 
@@ -53,7 +56,7 @@ class TheFiles(unittest.TestCase):
                 self.assertRegex(ln, r"^\S+ \S+ ([0-9a-f][0-9a-f])+$", ln[:60])
 
 
-@unittest.skipUnless(NODE, "node is not installed: the lobby page's codec and client were NOT run (tests/scripts/web_lobby_net_check.js, web_lobby_client_check.js)")
+@unittest.skipUnless(NODE, "node is not installed: the lobby page's codec and client were NOT run (tests/scripts/web_lobby_net_check.js, web_lobby_client_check.js, web_lobby_entry_check.js)")
 class TheChecksThatNodeRuns(unittest.TestCase):
     def test_the_codec_reads_and_writes_the_bytes_of_the_cpp_encoders(self):
         status, out = run_node(os.path.join(SCRIPTS, "web_lobby_net_check.js"), MODULE, GOLDEN)
@@ -62,6 +65,11 @@ class TheChecksThatNodeRuns(unittest.TestCase):
 
     def test_the_client_keeps_the_pages_seat_against_a_scripted_server(self):
         status, out = run_node(os.path.join(SCRIPTS, "web_lobby_client_check.js"), MODULE)
+        self.assertEqual(status, 0, out)
+        self.assertRegex(out, r"\b[1-9][0-9]* checks, 0 failed")
+
+    def test_the_entry_the_page_writes_is_the_one_the_game_page_reads(self):
+        status, out = run_node(os.path.join(SCRIPTS, "web_lobby_entry_check.js"), MODULE, SHELL)
         self.assertEqual(status, 0, out)
         self.assertRegex(out, r"\b[1-9][0-9]* checks, 0 failed")
 
