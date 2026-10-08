@@ -40,6 +40,7 @@
 // Exit code: 0 when every match was played and every check passed, 1 on a finding (a match that could not be played, a replay or repeat that differs), 2 on bad usage or when the
 // report (or the match list: too many matches) cannot be handled.
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -740,6 +741,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "expedition") return flag(p.island_expedition);
     if (key == "ferry") return flag(p.island_ferry);
     if (key == "iswim") { p.island_swimmers = static_cast<uint32_t>(v); return true; }
+    if (key == "ifly") return flag(p.island_fly_on);
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
@@ -1060,7 +1062,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers) {
+            x.orders != y.orders || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
             return false;
         }
     }
@@ -1252,7 +1254,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{4});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat)
+    j.field("format", uint64_t{5});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -1321,6 +1323,20 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             for (size_t k = 1; k < s.took.size(); ++k) j.field(kind_name(k), uint64_t{s.took[k]});
             j.end_object();
             j.field("took_at_flowers", uint64_t{s.took_at_flowers});
+            j.key("expedition");                                            // the flights over water of a standard bot (all 0 where it made none); the ticks are 0 for what never happened
+            j.begin_object();
+            j.field("planned", uint64_t{s.expedition.planned});
+            j.field("given_up", uint64_t{s.expedition.given_up});
+            j.field("planted", uint64_t{s.expedition.planted});
+            j.field("hops", uint64_t{s.expedition.hops});
+            j.field("landings", uint64_t{s.expedition.landings});
+            j.field("duds", uint64_t{s.expedition.duds});
+            j.field("taken", uint64_t{s.expedition.taken});
+            j.field("swimmers_taken", uint64_t{s.expedition.swimmers_taken});
+            j.field("first_plant", s.expedition.first_plant);
+            j.field("first_landing", s.expedition.first_landing);
+            j.field("first_swimmer", s.expedition.first_swimmer);
+            j.end_object();
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
             j.field("released", uint64_t{s.stats.released});
@@ -1467,6 +1483,49 @@ int run_tool(const Options& o, const std::function<std::unique_ptr<ai::Bot>(cons
         if (landings != 0) {
             std::fprintf(g_out, "bot_arena: flowers: %llu landings, %llu power-ups taken by the seats' ants, %llu of them at a flower (%.1f per 100 landings)\n", static_cast<unsigned long long>(landings),
                          static_cast<unsigned long long>(took), static_cast<unsigned long long>(at_flowers), 100.0 * static_cast<double>(at_flowers) / static_cast<double>(landings));
+        }
+    }
+    {
+        // the expeditions over water, per seat (docs/BOTS.md, "Islands"): the matches in which one was planned, the mean tick of the first bomb, the first landing and the first Swimmer
+        // (over the matches that got so far), the Swimmers taken a match, the attempts given up, and the duds among the bombs
+        struct Row {
+            uint64_t matches{0}, plants{0}, landings{0}, swimmers{0}, taken{0}, given_up{0}, bombs{0}, duds{0};
+            double plant_sum{0.0}, landing_sum{0.0}, swimmer_sum{0.0};
+        };
+        std::array<Row, 4> rows{};
+        for (const MatchReport& r : reports) {
+            for (const ai::ArenaSeatResult& s : r.result.seats) {
+                const ai::ExpeditionResult& e = s.expedition;
+                if (e.planned == 0 || s.spec.seat >= rows.size()) continue;
+                Row& row = rows[s.spec.seat];
+                ++row.matches;
+                row.taken += e.swimmers_taken;
+                row.given_up += e.given_up;
+                row.bombs += e.planted;
+                row.duds += e.duds;
+                if (e.first_plant != 0) {
+                    ++row.plants;
+                    row.plant_sum += static_cast<double>(e.first_plant);
+                }
+                if (e.first_landing != 0) {
+                    ++row.landings;
+                    row.landing_sum += static_cast<double>(e.first_landing);
+                }
+                if (e.first_swimmer != 0) {
+                    ++row.swimmers;
+                    row.swimmer_sum += static_cast<double>(e.first_swimmer);
+                }
+            }
+        }
+        const auto mean = [](double sum, uint64_t n) { return n == 0 ? 0.0 : sum / static_cast<double>(n); };
+        for (size_t seat = 0; seat < rows.size(); ++seat) {
+            const Row& row = rows[seat];
+            if (row.matches == 0) continue;
+            std::fprintf(g_out, "bot_arena: expedition, seat %zu: %llu match(es), first bomb at tick %.0f (%llu), first landing %.0f (%llu), first Swimmer %.0f (%llu), %.2f Swimmers taken a match, %llu given up, %llu of %llu bombs duds\n", seat,
+                         static_cast<unsigned long long>(row.matches), mean(row.plant_sum, row.plants), static_cast<unsigned long long>(row.plants), mean(row.landing_sum, row.landings),
+                         static_cast<unsigned long long>(row.landings), mean(row.swimmer_sum, row.swimmers), static_cast<unsigned long long>(row.swimmers),
+                         static_cast<double>(row.taken) / static_cast<double>(row.matches), static_cast<unsigned long long>(row.given_up), static_cast<unsigned long long>(row.duds),
+                         static_cast<unsigned long long>(row.bombs));
         }
     }
     if (report.is_open()) {
@@ -1769,6 +1828,17 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             {"refused orders", [](ai::ArenaResult& r) { ++r.seats[0].refused_orders; }},
             {"power-ups taken", [](ai::ArenaResult& r) { ++r.seats[1].took[2]; }},
             {"power-ups taken at a flower", [](ai::ArenaResult& r) { ++r.seats[0].took_at_flowers; }},
+            {"expeditions planned", [](ai::ArenaResult& r) { ++r.seats[0].expedition.planned; }},
+            {"expeditions given up", [](ai::ArenaResult& r) { ++r.seats[1].expedition.given_up; }},
+            {"bombs planted", [](ai::ArenaResult& r) { ++r.seats[0].expedition.planted; }},
+            {"hops", [](ai::ArenaResult& r) { ++r.seats[1].expedition.hops; }},
+            {"landings of the expedition", [](ai::ArenaResult& r) { ++r.seats[0].expedition.landings; }},
+            {"duds", [](ai::ArenaResult& r) { ++r.seats[1].expedition.duds; }},
+            {"tokens taken", [](ai::ArenaResult& r) { ++r.seats[0].expedition.taken; }},
+            {"Swimmers taken", [](ai::ArenaResult& r) { ++r.seats[1].expedition.swimmers_taken; }},
+            {"tick of the first bomb", [](ai::ArenaResult& r) { ++r.seats[0].expedition.first_plant; }},
+            {"tick of the first landing", [](ai::ArenaResult& r) { ++r.seats[1].expedition.first_landing; }},
+            {"tick of the first Swimmer", [](ai::ArenaResult& r) { ++r.seats[0].expedition.first_swimmer; }},
             {"landings", [](ai::ArenaResult& r) { ++r.landings; }},
             {"the kinds that landed", [](ai::ArenaResult& r) { ++r.landed[5]; }},
             {"audio events", [](ai::ArenaResult& r) { ++r.audio_events; }},
@@ -1947,7 +2017,7 @@ void selftest_tool(SelfTest& t) {
     t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
     const JsonValue* matches = tree.get("matches");
     const JsonValue* summary = tree.get("summary");
-    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 4 && matches != nullptr && matches->items.size() == 1 &&
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 5 && matches != nullptr && matches->items.size() == 1 &&
                 summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
             "the tool, the format and the summary");
     // the numbers of the report are the numbers of the match: play the same match in-process and compare every field
@@ -2012,6 +2082,44 @@ void selftest_tool(SelfTest& t) {
                      landed->get("swimmer") != nullptr && landed->get("swimmer")->u64() == flower_played.landed[5];
     }
     t.check(flowers_ok, "on SMALL the landings of the flowers are counted, and the report writes every kind under its own name (Bomber 1, Fire 2, Thief 3, Combat 4, Swimmer 5)");
+    // a map with water: a Hard bot flies a crew to a row of Swimmers, and the report carries what its expedition did (TINY has none, so every value above is 0)
+    Options islands = o;
+    islands.maps = {"ISLANDS"};
+    islands.seats = {spec_for(0, "standard", ai::Level::Hard), spec_for(2, "idle", ai::Level::Medium)};
+    islands.ticks = 2400;
+    islands.replay_check = false;
+    islands.out = dir.file("islands.json");
+    const ToolRun island_run = run_tool_quietly(islands, dir, factory);
+    JsonValue island_tree;
+    const std::string island_text = read_file(islands.out);
+    bool islands_ok = island_run.code == 0 && JsonReader(island_text).parse(island_tree) && island_tree.get("matches") != nullptr && island_tree.get("matches")->items.size() == 1;
+    if (islands_ok) {
+        const std::vector<LoadedMap> island_maps = load_maps(islands);
+        ai::ArenaSpec island_spec;
+        island_spec.level = &island_maps[0].level;
+        island_spec.seed = 1;
+        island_spec.bots = islands.seats;
+        island_spec.max_ticks = islands.ticks;
+        island_spec.latency_ticks = islands.latency;
+        island_spec.factory = factory;
+        const ai::ArenaResult island_played = ai::play_match(island_spec);
+        const JsonValue* seats = island_tree.get("matches")->items[0].get("seats");
+        islands_ok = seats != nullptr && seats->items.size() == 2 && island_played.seats.size() == 2;
+        for (size_t i = 0; islands_ok && i < 2; ++i) {
+            const JsonValue* e = seats->items[i].get("expedition");
+            const ai::ExpeditionResult& want = island_played.seats[i].expedition;
+            const auto num = [e](const char* key) { return e != nullptr && e->get(key) != nullptr ? e->get(key)->u64() : uint64_t{12345678}; };
+            islands_ok = e != nullptr && num("planned") == want.planned && num("given_up") == want.given_up && num("planted") == want.planted && num("hops") == want.hops && num("landings") == want.landings &&
+                         num("duds") == want.duds && num("taken") == want.taken && num("swimmers_taken") == want.swimmers_taken && num("first_plant") == want.first_plant &&
+                         num("first_landing") == want.first_landing && num("first_swimmer") == want.first_swimmer;
+        }
+        const ai::ExpeditionResult& flown = island_played.seats[0].expedition;
+        islands_ok = islands_ok && flown.planned >= 1 && flown.planted >= 1 && flown.hops >= 1 && flown.landings >= 1 && flown.swimmers_taken >= 1 && flown.first_plant > 0 && flown.first_plant < flown.first_landing &&
+                     flown.first_landing < flown.first_swimmer && island_played.seats[1].expedition == ai::ExpeditionResult{};
+    }
+    t.check(islands_ok, "on ISLANDS the report carries the expedition of a standard bot, every counter and tick as the match has it, and an idle seat has none");
+    t.check(island_run.out.find("expedition, seat 0: 1 match(es), first bomb at tick") != std::string::npos && island_run.out.find("expedition, seat 2") == std::string::npos,
+            "and the run's summary says what the expedition of seat 0 did, and nothing of the seat that made none");
     // the defaults of the command line mean four standard bots at medium level
     Options d;
     std::string err;
@@ -2148,6 +2256,9 @@ int selftest() {
         t.check(cg.gate_leaver_ticks == 60u && apply_tune(cg, "gatehold", 0, tune_err) && cg.gate_leaver_ticks == 0u && apply_tune(cg, "gatehold", 7, tune_err) && cg.gate_leaver_ticks == 7u &&
                     !apply_tune(cg, "gatehold", -1, tune_err) && !apply_tune(cg, "gatehold", 1001, tune_err) && cg.gate_leaver_ticks == 7u,
                 "the key gatehold sets the ticks that the gate's click waits for an ant that leaves over the ramp (60 at Hard, 0: no wait, 0 to 1000 allowed)");
+        t.check(cg.island_fly_on && ai::plan_for(ai::Level::Medium).island_fly_on && !ai::plan_for(ai::Level::Easy).island_fly_on && apply_tune(cg, "ifly", 0, tune_err) && !cg.island_fly_on &&
+                    apply_tune(cg, "ifly", 1, tune_err) && cg.island_fly_on,
+                "the key ifly switches the flying on of the expedition's Bomber (on at Medium and Hard, off at Easy)");
         ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
         const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
             const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};
