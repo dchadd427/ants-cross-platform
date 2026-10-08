@@ -1718,7 +1718,7 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
     }
     {
         const env = runLobby('', { 'ants.rejoin.old-match.0': entry(4 * 3600 * 1000), 'ants.rejoin.mid-match.1': entry(2 * 3600 * 1000) });
-        same('an entry older than three hours is not offered and is removed (as the game does); one a little younger is the offer (a code of another length than eight is shown as it is)', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-match)', ['ants.rejoin.mid-match.1']]);
+        same('an entry older than three hours is not offered and is removed (as the game does); one a little younger is the offer (a code of another length than six is shown as it is)', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-match)', ['ants.rejoin.mid-match.1']]);
     }
     {
         const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'wss://other.test/ws'), 'ants.rejoin.mine.1': entry(9000) });

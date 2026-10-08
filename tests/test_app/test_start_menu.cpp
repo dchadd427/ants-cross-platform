@@ -1799,7 +1799,9 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(room_code_display("RP-1"), std::string("RP-1"));                         // a code of another length (a room of the control interface) as it is
         ASSERT_EQ(room_code_display(""), std::string());
         ASSERT_EQ(room_code_display("abcdefghi"), std::string("abcdefghi"));
-        ASSERT_EQ(room_code_display("abcdefgh"), std::string("abcdefgh"));                 // (and so are seven or eight: only six characters are two groups of three)
+        ASSERT_EQ(room_code_display("abcdefgh"), std::string("abcdefgh"));                 // (and so are five, seven and eight: only six characters are two groups of three)
+        ASSERT_EQ(room_code_display("abcde"), std::string("abcde"));
+        ASSERT_EQ(room_code_display("abcdefg"), std::string("abcdefg"));
         ASSERT_EQ(room_code_display("abcdef"), std::string("abc def"));
     } TEST_END();
 

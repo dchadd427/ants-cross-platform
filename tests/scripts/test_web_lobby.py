@@ -233,7 +233,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertNotIn("four.html", self.page)
 
     def test_a_code_is_only_a_name_and_the_rooms_choices_are_its_create_block_that_every_link_carries(self):
-        # protocol 15: the code is eight random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
+        # protocol 15: the code is six random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
         # is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the page uses
         self.assertIn("var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';", self.page)
         self.assertIn("var buf = new Uint32Array(6);", self.page)

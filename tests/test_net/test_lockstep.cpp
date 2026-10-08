@@ -10265,7 +10265,7 @@ void run_protocol15_tests() {
                 ASSERT_FALSE(decode(with(bad, 2, 255, 255, 0), back));
             }
         }
-        // the room's code in a Hello: 1 .. 32 letters, digits, '_' and '-', as before; the 8 random characters of the game's own codes are such a code
+        // the room's code in a Hello: 1 .. 32 letters, digits, '_' and '-', as before; the 6 random characters of the game's own codes are such a code
         {
             HelloMsg back;
             for (const std::string& ok : {std::string("k7m2xq"), std::string("ROOM-1"), std::string("a"), std::string(32, 'z')}) {

@@ -1228,7 +1228,7 @@ void menu_scenarios(const assets::AssetArchive& arc) {
         key(m, SDLK_DOWN);
         key(m, SDLK_RIGHT);
         menu_frame("screen.menu.host.map_and_players", m);
-        m.show_room("k3n7pq2w", 1, 2);
+        m.show_room("k3n7pq", 1, 2);
         menu_frame("screen.menu.room.code", m);
         m.set_room_players(2, 2);
         menu_frame("screen.menu.room.full", m);
@@ -4022,8 +4022,8 @@ const Golden kGoldens[] = {
     // is shown as it is, so screen.menu.room.longest_code did not move.
     {"screen.menu.host.default", 0x18b4d4169368ccd1, 282},
     {"screen.menu.host.map_and_players", 0x3a08eeb197374920, 210},
-    {"screen.menu.room.code", 0xa44f31cda17ddc08, 150},
-    {"screen.menu.room.full", 0x5c1bec1e90ad2f5b, 150},
+    {"screen.menu.room.code", 0x007724f8d78c993d, 150},
+    {"screen.menu.room.full", 0x4acdd352530ed1be, 150},
     {"screen.menu.room.longest_code", 0x02e344112faca6ac, 150},
     {"screen.menu.room.fill_medium", 0x1544abeb764d9c2a, 150},
     {"screen.menu.host.fill_medium", 0x3a6b94fd4d05862f, 282},

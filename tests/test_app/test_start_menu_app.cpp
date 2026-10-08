@@ -676,7 +676,7 @@ int make_shots(const std::string& dir, bool wide) {
     shot(app, dir + "/17_join_old_code_selected.png");
     press(app, SDLK_ESCAPE);
     app.start_menu().set_clipboard([]() { return std::string(); }, [](const std::string&) { return false; });
-    app.start_menu().show_room("k3n7pq2x", 2, 4);
+    app.start_menu().show_room("k3n7pq", 2, 4);
     click(app, MenuId::Copy);
     shot(app, dir + "/18_room_copy_failed.png");
     app.start_menu().show_main();

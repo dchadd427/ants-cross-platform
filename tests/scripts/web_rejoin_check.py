@@ -470,7 +470,7 @@ def main():
     server = Server(args.server, args.maps, args.ws_port, work)
 
     def new_room():
-        return "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
+        return "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
 
     def begin_match(room, seatless=False):
         """Two players, each on a computer of their own, take the two seats of a room through the room's links; returns when the match runs for both and no dialog is open. `seatless`: the first

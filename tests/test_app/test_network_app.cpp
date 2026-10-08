@@ -4809,7 +4809,7 @@ void run_room_bot_tests() {
         }
         {   // a room of three that its create block gives Red + Blue (1 + 2): two games and a bare machine fill it, nobody presses START: it starts by itself with the room's teams, seat 0 plays alone
             Server server(limits);
-            const std::string code = "m2xq9p3k";
+            const std::string code = "m2xq9p";
             ApplicationConfig lead_cfg = join_config(server, code, "Leader");
             lead_cfg.net_create = tiny_block(3, 1, 2);
             lead_cfg.teams = LocalTeams{true, 0, 1};                                                    // (the leader's own choice: not the room's, and nobody asks the room for it)

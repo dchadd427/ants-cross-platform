@@ -842,7 +842,7 @@ Request of the owner (2026-10-05): "how can the host change peoples color forcef
 
 ## Protocol 15: one link makes a room, short room codes and the leader's swap (v0.11.0)
 
-Requests of the owner (2026-10-05): the join code ("the 8 digit code join") and "everybody enters on the same link, and then the host is able to rearrange the slots". What a room was lived in its code (`demo-treasure-4p-t01-k7m2xq`: the map, the players and the teams were words of it, 27 characters that nobody can say aloud), and a leader could only move a player to a free colour. No rule of the simulation, no golden hash and no lock-step rule changes: a match is made from the seats as they are at START.
+Requests of the owner (2026-10-05, and 2026-10-07 for the length): the join code ("the 8 digit code join", which became six letters and numbers in two groups of three) and "everybody enters on the same link, and then the host is able to rearrange the slots". What a room was lived in its code (`demo-treasure-4p-t01-k7m2xq`: the map, the players and the teams were words of it, 27 characters that nobody can say aloud), and a leader could only move a player to a free colour. No rule of the simulation, no golden hash and no lock-step rule changes: a match is made from the seats as they are at START.
 
 ### The change in the network
 
