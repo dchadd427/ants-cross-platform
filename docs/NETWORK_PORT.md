@@ -164,7 +164,7 @@ Firewalls: the host needs TCP 4001 open (it only sends the announcements); the m
   shows it only when it is the sender or an ally of the sender by its own alliance table (`HUD::receive_chat_message`), in the sender's team colour. `drop_player` also clears the offers to and from the dropped team.
   Tests: `N5.9` / `N5.10` of `test_network_app` (an offer from another machine reaches the application as the question, Accept makes the team on all three machines, a team message reaches only the ally, a
   refusal closes the waiting dialog, Withdraw takes the offer back everywhere, equal state hashes at the end).
-* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), Leave on the results screen of a network match ends the program as in the original (or returns to the start menu when the game came from it; the browser build returns to the local setup screen), a player has one pending team offer at a time
+* **Limits of this release**: no NAT traversal (raw TCP: a LAN, a VPN or a forwarded port), Leave on the results screen of a network match ends the program as in the original (or returns to the start menu when the game came from it; the browser build goes back to the site's front page, see [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#the-game-page-and-its-addresses)), a player has one pending team offer at a time
   (the original queues several). Since v0.0.47 the host may leave and the match goes on (see Host migration: `HostChanged` reports it, `HostLeft` only says that no
   new host could be agreed).
 
@@ -690,7 +690,7 @@ The mouse-wheel zoom (`VIEW_AND_HUD.md`, "Mouse-wheel zoom"; `view_zoom.hpp`, `A
 
 ### Measured: the server's CPU with bots
 
-Twelve rooms of one person and three bots each, one simulated client per room in the same process, **only the server's own pass (`RoomManager::update`) timed** over 30 s of play after every room had started (`test_server` S3.71, Release build, Apple silicon, the medians of three runs; the machine was shared with other builds, load average 20 - 30, and the pass was timed with the wall clock, so every figure is an upper bound; the test has since timed the thread's CPU time instead (`CLOCK_THREAD_CPUTIME_ID`, `GetThreadTimes`), which a busy machine does not inflate):
+Twelve rooms of one person and three bots each, one simulated client per room in the same process, **only the server's own pass (`RoomManager::update`) timed** over 30 s of play after every room had started (`test_server` S3.71, Release build, Apple silicon, the medians of three runs; the machine was shared with other builds, load average 20 - 30, and the pass was timed with the wall clock, so every figure is an upper bound; the test has since timed the thread's CPU time instead (`CLOCK_THREAD_CPUTIME_ID`; on Windows the thread's cycle counter, `QueryThreadCycleTime`, which a busy machine does not inflate and which, unlike `GetThreadTimes` (ticks of 15.6 ms, and on some hosted runners lumps of seconds), counts what the thread ran):
 
 | twelve rooms, one person and three bots each | the server's thread per second of play, all twelve rooms (per room) | worst single pass | worst pass while the twelve rooms started |
 |---|---|---|---|
