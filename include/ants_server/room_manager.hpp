@@ -59,8 +59,11 @@ struct ServerLimits {
     std::string demo_map;
     // Lobby rooms (protocol 16; the server's --demo-lobbies, which needs --demo-rooms, the demo maps and reconnect): see the paragraph at the top. A waiting lobby is forgotten `lobby_empty_close_ms` after the last person
     // has gone, without a word in the log; a seat whose connection ended is held `lobby_hold_ms`; a leader's START waits `lobby_start_wait_ms` for every person's game; a link that says nothing for `lobby_silence_ms` is
-    // closed. When all `demo_lobbies` are taken, the lobby that has been empty the longest is forgotten for a new one, and when none is empty the new page is told NoSuchRoom (the page tells its player to try again).
+    // closed. When all `demo_lobbies` are taken (or the server has no place for another room), the lobby that has been empty the longest is forgotten for a new one; when none is empty, the lobby in which nothing has been
+    // done for `lobby_idle_evict_ms` (the longest idle first; its people are dropped and their pages make a room again); and when there is none of those either, the new page is told NoSuchRoom (the page tells its
+    // player to try again). A lobby that is used is never given up. 0 (the default is ten minutes): idle lobbies are never given up.
     size_t demo_lobbies{0};
+    uint32_t lobby_idle_evict_ms{10u * 60u * 1000u};
     uint32_t lobby_empty_close_ms{60u * 1000u};
     uint32_t lobby_hold_ms{net::kLobbyHoldMs};
     uint32_t lobby_start_wait_ms{net::kLobbyStartWaitMs};
@@ -246,6 +249,7 @@ private:
     /// The same for a page's lobby block (protocol 16): the lobby room, when the server offers lobbies and one can be had (the pool has a free place, or the lobby that has been empty the longest gives its place up)
     bool make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
     bool evict_empty_lobby(uint32_t now_ms);
+    bool evict_idle_lobby(uint32_t now_ms);
     /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay
     size_t public_places() const;
     /// A place for one more public match, for the START of a lobby room: free, or made free by ending the public match that has been abandoned the longest (evict_abandoned_public)

@@ -10789,6 +10789,18 @@ size_t waiting_lobbies(World& w) {
     return n;
 }
 
+// Two pages whose Hellos reach the door in the same pass (links with no jitter), the first for `first_room` and the second for `second_room`, both with the lobby block; runs 300 ms
+std::pair<Client*, Client*> two_pages_at_once(World& w, const char* first_room, const char* second_room) {
+    w.next_kind = net::kClientPage;
+    w.next_create = lobby_block_of();
+    Client& first = w.connect("First", first_room, 255, {20, 0});
+    Client& second = w.connect("Second", second_room, 255, {20, 0});
+    w.next_kind = net::kClientGame;
+    w.next_create.reset();
+    w.run(300);
+    return {&first, &second};
+}
+
 }  // namespace
 
 void run_lobby_room_tests() {
@@ -11271,7 +11283,8 @@ void run_lobby_room_tests() {
             ASSERT_TRUE(json.find("\"lobby\":true") != std::string::npos && json.find("\"starting\":false") != std::string::npos);
             ASSERT_TRUE(json.find("\"plan\":\"omne 0+1\"") != std::string::npos);
             ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-plain", 2), w.now).ok);
-            ASSERT_TRUE(ctl::to_json(status_to_json(w.status("ctl-plain"))).find("\"lobby\"") == std::string::npos);
+            const std::string plain = ctl::to_json(status_to_json(w.status("ctl-plain")));
+            ASSERT_TRUE(plain.find("\"lobby\"") == std::string::npos && plain.find("\"starting\"") == std::string::npos && plain.find("\"plan\"") == std::string::npos);
         }
         {   // visitors' lobbies are off (--demo-lobbies 0): a page's block makes nothing, and the lobby that the operator made keeps its place (no room is pushed out for a visitor's)
             ServerLimits off = lobby_limits();
@@ -11285,7 +11298,7 @@ void run_lobby_room_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.153 A START That Is Cancelled (A Game That Cannot Load The Map): The Request Is Done, The Lobby Waits Again With Everybody In It, And It Does Not Fail For Any Number Of Them As A Room Of Another Kind Does After Five; A START Asked For In The Pause After A Cancel Waits It Out; The Leader's Next START Works When The Game Can Load") {
+    TEST_CASE("S3.153 A START That Is Cancelled (A Game That Cannot Load The Map): The Request Is Done, The Lobby Waits Again With Everybody In It, And It Does Not Fail For Any Number Of Them As A Room Of Another Kind Does After Five; The First Three Cancels In A Row Cost The Pause Of Two Seconds (A START Asked For In It Waits It Out), The Fourth And Every One After It A Pause Of A Minute, And A START Asked For In That Gets A Notice At Once And Does Not Stand; The Count Is Forgotten After Fifteen Minutes Without A Cancel; The Leader's Next START Works When The Game Can Load") {
         World w(lobby_limits());
         Client& pia = w.connect_page("Pia", "retr0001", lobby_block_of());
         Client& bob = w.connect_page("Bob", "retr0001", lobby_block_of());
@@ -11295,30 +11308,64 @@ void run_lobby_room_tests() {
         Client& pia_game = w.connect_game("Pia", "retr0001", pia_key);
         Client& bob_game = w.connect_game("Bob", "retr0001", bob_key, true);              // Bob's game cannot load the map: every start is cancelled
         w.run(500);                                                                       // (the first start was cancelled at once; the pause of two seconds runs)
-        {
+        const auto waits_open = [&]() {                                                   // the room waits again with everybody in it, and nothing was asked of it
             const RoomStatus s = w.status("retr0001");
-            ASSERT_TRUE(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.games == 3 && s.reason.empty());
-        }
+            return s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.games == 3 && s.reason.empty();
+        };
+        ASSERT_MSG(waits_open(), "after the first cancel");
         ASSERT_TRUE(pia_game.lobby->request_start());                                     // asked for in the pause: it stands until the pause is over, and everybody is shown that the room waits
         w.run(500);
         ASSERT_TRUE(w.status("retr0001").starting && pia_game.lobby->room().starting());
-        w.run(2500);                                                                      // the pause is over, the start is tried and cancelled again: the request is done
-        for (int round = 0; round < 6; ++round) {                                         // five cancelled starts fail a room of another kind (S3.5); a lobby goes on
-            const RoomStatus s = w.status("retr0001");
-            ASSERT_MSG(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.games == 3 && s.reason.empty(), std::to_string(round));
-            ASSERT_TRUE(pia_game.lobby->request_start());
-            w.run(3000);                                                                  // (the pause, at most two seconds, and the start that is cancelled)
-        }
-        {
-            const RoomStatus s = w.status("retr0001");
-            ASSERT_TRUE(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.reason.empty());
-            ASSERT_TRUE(said(pia_game.room_chat).empty());                                // (a cancel is no notice of the room's: the players see the Cancel message)
-        }
+        w.run(2500);                                                                      // the pause is over, the start is tried and cancelled again (the second): the request is done
+        ASSERT_MSG(waits_open(), "after the second cancel");
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(2500);                                                                      // the third (the last that costs two seconds)
+        ASSERT_MSG(waits_open(), "after the third cancel");
+        ASSERT_TRUE(said(pia_game.room_chat).empty());                                    // (a cancel is no notice of the room's: the players see the Cancel message)
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(2500);                                                                      // the fourth: the pause is a minute now
+        ASSERT_MSG(waits_open(), "after the fourth cancel");
+        ASSERT_TRUE(said(pia_game.room_chat).empty());
+        ASSERT_TRUE(pia_game.lobby->request_start());                                     // asked for in the long pause: the leader is told at once and the request does not stand
+        w.run(300);
+        ASSERT_MSG(waits_open(), "a START in the long pause");
+        ASSERT_TRUE(!pia_game.lobby->room().starting());
+        ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeStartsFailed}));
+        w.run(30000);
+        ASSERT_TRUE(pia_game.lobby->request_start());                                     // 30 s into the pause: still told, still not standing
+        w.run(300);
+        ASSERT_MSG(waits_open(), "a START 30 s into the long pause");
+        ASSERT_EQ(said(pia_game.room_chat).size(), size_t{2});
+        w.run(31000);                                                                     // the minute is over
         bob_game.fail_load = false;                                                       // the game can load now
-        w.run(2500);
         ASSERT_TRUE(pia_game.lobby->request_start());
         w.run(4000);
         ASSERT_TRUE(w.status("retr0001").state == RoomState::Running);
+        {   // the count of cancels in a row is forgotten when fifteen minutes pass without one: the next cancel costs the pause of two seconds again, a START asked for in it stands
+            World f(lobby_limits());
+            Client& ann = f.connect_page("Ann", "retr0002", lobby_block_of());
+            Client& cat = f.connect_page("Cat", "retr0002", lobby_block_of());
+            const net::SeatKey ann_key = ann.lobby->key();
+            const net::SeatKey cat_key = cat.lobby->key();
+            ASSERT_TRUE(ann.lobby->request_start());
+            Client& ann_game = f.connect_game("Ann", "retr0002", ann_key);
+            f.connect_game("Cat", "retr0002", cat_key, true);
+            f.run(500);
+            for (int round = 0; round < 3; ++round) {                                     // (the first cancel is behind us; three more are the fourth ... )
+                ASSERT_TRUE(ann_game.lobby->request_start());
+                f.run(2500);
+            }
+            ASSERT_TRUE(ann_game.lobby->request_start());
+            f.run(300);
+            ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                         // (the minute is on: it was answered)
+            f.run(15u * 60u * 1000u);                                                     // fifteen minutes without a cancel
+            ASSERT_TRUE(ann_game.lobby->request_start());
+            f.run(400);                                                                   // the start is tried and cancelled (the first of a new count): the pause is two seconds
+            ASSERT_TRUE(ann_game.lobby->request_start());
+            f.run(300);
+            ASSERT_TRUE(f.status("retr0002").starting && ann_game.lobby->room().starting());      // it stands: the pause is short
+            ASSERT_EQ(said(ann_game.room_chat).size(), size_t{1});                         // (no new notice)
+        }
     } TEST_END();
 
     TEST_CASE("S3.154 A Rename Through A Real Lobby Room (Protocol 16): A Person's New Name Is In The Status And In Every Page's Room Message, A Name That Looks Like A Bot's Is Not Taken, And The Name Goes With The Seat When The Pages' Games Take Their Seats With The Keys: It Is The Name Of The Match") {
@@ -11349,6 +11396,263 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);
         ASSERT_TRUE(s.names[0] == "Pia Lee" && s.names[1] == "Robert");
         ASSERT_TRUE(pia_game.lobby->start_info().names[0] == "Pia Lee" && bob_game.lobby->start_info().names[1] == "Robert");
+    } TEST_END();
+
+    TEST_CASE("S3.155 Two Hellos Reach The Door In One Pass (Links With No Jitter): A Visitor Who Joins The Lobby That Nobody Was In Is Not Dropped When The Next Hello Makes A Lobby In A Full Pool, Because The Lobby Is Not Empty Any More Although It Has Not Read The Hello Yet; A Lobby That No Hello Reached Still Gives Its Place Up") {
+        ServerLimits l = lobby_limits();
+        l.demo_lobbies = 2;
+        l.lobby_empty_close_ms = 600000;
+        const auto two_hellos = two_pages_at_once;                                                     // (the second one asks for a lobby of its own)
+        {   // the first Hello is for the lobby that nobody is in (the room saw it empty in its last pass)
+            World w(l);
+            Client& a = w.connect_page("A", "same0001", lobby_block_of());
+            w.connect_page("X", "same0002", lobby_block_of());                            // (the pool of two is full now)
+            a.lobby->leave();
+            w.run(1000);
+            ASSERT_EQ(w.mgr.list(w.now).size(), size_t{2});
+            const auto pair = two_hellos(w, "same0001", "same0003");
+            ASSERT_TRUE(pair.first->lobby->phase() == net::ClientLobby::Phase::InRoom && !pair.first->lobby->created());
+            ASSERT_EQ(pair.second->lobby->phase(), net::ClientLobby::Phase::Rejected);
+            ASSERT_EQ(pair.second->lobby->reject_reason(), net::RejectReason::NoSuchRoom);          // (the pool is full of lobbies with a person in them)
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+            ASSERT_EQ(w.status("same0001").joined, size_t{1});
+        }
+        {   // no Hello reached the empty lobby: it gives its place up to the Hello that makes a new one, as ever
+            World w(l);
+            Client& a = w.connect_page("A", "same0011", lobby_block_of());
+            w.connect_page("X", "same0012", lobby_block_of());
+            a.lobby->leave();
+            w.run(1000);
+            const auto pair = two_hellos(w, "same0012", "same0013");
+            ASSERT_TRUE(pair.second->lobby->phase() == net::ClientLobby::Phase::InRoom && pair.second->lobby->created());
+            ASSERT_TRUE(w.status("same0011").code.empty() && w.status("same0013").state == RoomState::Waiting);
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.156 A Lobby Room Does Not Care Where The Server's 32-Bit Clock Is: Just Before The Signed Flip, Just After It, Across The Wrap; Names, Plan, START, The Back-Off Of Cancelled Starts, The Close Of An Empty Lobby; And A Lobby That Was Made At Time 0 And Is Read For The First Time Past The Signed Half Starts Its Match") {
+        for (const uint32_t origin : {0x7FFFFE00u, 0x80000100u, 0xFFFFFC18u}) {
+            const std::string at = " at origin " + std::to_string(origin);
+            {   // names, plan (a bot in the last colour), START, the match
+                World w(lobby_limits());
+                w.now = origin;
+                Client& pia = w.connect_page("Pia", "clk00001", lobby_block_of());
+                Client& bob = w.connect_page("Bob", "clk00001", lobby_block_of());
+                const net::SeatKey pia_key = pia.lobby->key();
+                const net::SeatKey bob_key = bob.lobby->key();
+                ASSERT_TRUE(bob.lobby->request_name("Robert"));
+                ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Open, K::Open, K::Easy})));
+                w.run(300);
+                ASSERT_MSG(w.status("clk00001").names[1] == "Robert", "the rename" + at);
+                ASSERT_TRUE(pia.lobby->request_start());
+                w.run(300);
+                w.connect_game("Pia", "clk00001", pia_key);
+                w.connect_game("Bob", "clk00001", bob_key);
+                w.run(4000);
+                ASSERT_MSG(w.status("clk00001").state == RoomState::Running, "the match starts" + at);
+            }
+            {   // a game that cannot load: four cancels in a row, the pause of a minute, then it can
+                World w(lobby_limits());
+                w.now = origin;
+                Client& pia = w.connect_page("Pia", "clk00002", lobby_block_of());
+                Client& bob = w.connect_page("Bob", "clk00002", lobby_block_of());
+                const net::SeatKey pia_key = pia.lobby->key();
+                const net::SeatKey bob_key = bob.lobby->key();
+                ASSERT_TRUE(pia.lobby->request_start());
+                Client& pia_game = w.connect_game("Pia", "clk00002", pia_key);
+                Client& bob_game = w.connect_game("Bob", "clk00002", bob_key, true);
+                w.run(500);
+                for (int round = 0; round < 3; ++round) {
+                    ASSERT_TRUE(pia_game.lobby->request_start());
+                    w.run(2500);
+                }
+                ASSERT_TRUE(pia_game.lobby->request_start());
+                w.run(300);
+                ASSERT_MSG(said(pia_game.room_chat) == (std::vector<std::string>{std::string("255||") + net::kNoticeStartsFailed}), "the notice of the long pause" + at);
+                w.run(62000);
+                bob_game.fail_load = false;
+                ASSERT_TRUE(pia_game.lobby->request_start());
+                w.run(4000);
+                ASSERT_MSG(w.status("clk00002").state == RoomState::Running, "the match starts after the long pause" + at);
+            }
+            {   // the last person leaves: the lobby closes a minute later (five seconds here)
+                ServerLimits l = lobby_limits();
+                l.lobby_empty_close_ms = 5000;
+                World w(l);
+                w.now = origin;
+                Client& pia = w.connect_page("Pia", "clk00003", lobby_block_of());
+                w.run(500);
+                pia.lobby->leave();
+                w.run(4500);
+                ASSERT_MSG(w.mgr.room_count() == 1, "the lobby waits" + at);
+                w.run(1500);
+                ASSERT_MSG(w.mgr.room_count() == 0, "the lobby closes" + at);
+            }
+        }
+        {   // a lobby that the operator made at time 0 and that is read for the first time past the signed half of the clock (the pause after a cancel is not an old time that reads as a time to come)
+            World w(lobby_limits());
+            w.now = 0;
+            RoomSpec spec = spec_of("clk00010", 4);
+            spec.lobby = true;
+            spec.early_start = true;
+            spec.leader_starts = true;
+            spec.reconnect = true;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.now = 0x80000100u;
+            Client& pia = w.connect_page("Pia", "clk00010", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "clk00010", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            w.connect_game("Pia", "clk00010", pia_key);
+            w.connect_game("Bob", "clk00010", bob_key);
+            w.run(4000);
+            ASSERT_TRUE(w.status("clk00010").state == RoomState::Running);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.157 A Full Pool Of Lobbies Gives The Place Of An Idle One Up: When No Lobby Is Empty, The One In Which Nothing Has Been Done For Ten Minutes (One Minute Here), The Longest Idle First And On A Tie The First Code; Pings Are Not Use, A Line Of Chat Is; A Lobby Whose Only Person Is A Held Seat Is Idle Too; An Idle Lobby That A Hello Has Just Reached Is Not; The Same When The Server Has No Place For Another Room; And A Lobby That Is Used Is Never Given Up") {
+        ServerLimits l = lobby_limits();
+        l.demo_lobbies = 2;
+        l.lobby_empty_close_ms = 600000;
+        l.lobby_idle_evict_ms = 60000;
+        {   // the longest idle goes; a line of chat is use, and a lobby that was used a minute ago is not idle for a minute yet
+            World w(l);
+            Client& a = w.connect_page("A", "idle0001", lobby_block_of());
+            Client& b = w.connect_page("B", "idle0002", lobby_block_of());
+            w.run(20000);
+            ASSERT_TRUE(a.lobby->chat("anybody here?"));
+            w.run(30000);                                                                 // idle0002 has done nothing for 50 s, idle0001 for 30
+            Client& early = w.connect_page("Early", "idle0003", lobby_block_of());
+            ASSERT_EQ(answer_of(w, early), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+            ASSERT_TRUE(a.server_end->is_open() && b.server_end->is_open());
+            w.run(20000);                                                                 // 70 s and 50 s
+            Client& c = w.connect_page("C", "idle0003", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(c.lobby->created() && c.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(w.status("idle0002").code.empty());                               // the idle lobby is gone, its person is dropped
+            ASSERT_FALSE(b.server_end->is_open());
+            ASSERT_TRUE(w.status("idle0001").state == RoomState::Waiting && a.server_end->is_open());
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+            ASSERT_TRUE(w.mgr.take_ended(w.now).empty());                                 // (no word of it: it never ended)
+        }
+        {   // both idle: the one that has been idle the longest
+            World w(l);
+            Client& a = w.connect_page("A", "idle0011", lobby_block_of());
+            w.run(5000);
+            w.connect_page("B", "idle0012", lobby_block_of());
+            w.run(70000);
+            Client& c = w.connect_page("C", "idle0013", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(c.lobby->created());
+            ASSERT_TRUE(w.status("idle0011").code.empty() && w.status("idle0012").state == RoomState::Waiting);
+            ASSERT_FALSE(a.server_end->is_open());
+        }
+        {   // two lobbies that have been idle for the same time (made in one pass): the first code goes, whichever was made first
+            World w(l);
+            w.next_kind = net::kClientPage;
+            w.next_create = lobby_block_of();
+            w.connect("A", "idle0022", 255, {20, 0});
+            w.connect("B", "idle0021", 255, {20, 0});
+            w.next_kind = net::kClientGame;
+            w.next_create.reset();
+            w.run(70000);
+            Client& c = w.connect_page("C", "idle0023", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(c.lobby->created());
+            ASSERT_TRUE(w.status("idle0021").code.empty() && w.status("idle0022").state == RoomState::Waiting);
+        }
+        {   // a lobby whose only person is a held seat (the link ended, the seat waits for its key for up to an hour) holds its place no longer than any other idle one
+            ServerLimits held = l;
+            held.lobby_hold_ms = 3600u * 1000u;
+            World w(held);
+            Client& a = w.connect_page("A", "idle0031", lobby_block_of());
+            Client& b = w.connect_page("B", "idle0032", lobby_block_of());
+            a.end->close();
+            w.run(40000);
+            ASSERT_TRUE(b.lobby->chat("still here"));
+            w.run(30000);
+            ASSERT_TRUE(w.status("idle0031").joined == 1);                                // (held: a person still)
+            Client& c = w.connect_page("C", "idle0033", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(c.lobby->created());
+            ASSERT_TRUE(w.status("idle0031").code.empty() && w.status("idle0032").state == RoomState::Waiting);
+        }
+        {   // a server that has no place for another room (--max-rooms) while its pool is not full: the idle lobby gives its place up, the lobby that is used does not
+            ServerLimits full = l;
+            full.max_rooms = 3;
+            full.demo_lobbies = 3;
+            for (const bool used : {false, true}) {
+                World w(full);
+                ASSERT_TRUE(w.mgr.create_room(spec_of("plain-1", 2), w.now).ok);
+                ASSERT_TRUE(w.mgr.create_room(spec_of("plain-2", 2), w.now).ok);
+                Client& a = w.connect_page("A", "idle0041", lobby_block_of());
+                ASSERT_EQ(w.mgr.room_count(), size_t{3});
+                w.run(used ? 40000 : 70000);
+                if (used) {
+                    ASSERT_TRUE(a.lobby->chat("we are here"));
+                    w.run(30000);
+                }
+                Client& b = w.connect_page("B", "idle0042", lobby_block_of());
+                w.run(300);
+                if (used) {
+                    ASSERT_EQ(b.lobby->phase(), net::ClientLobby::Phase::Rejected);
+                    ASSERT_TRUE(w.status("idle0041").state == RoomState::Waiting && w.mgr.room_count() == size_t{3});
+                } else {
+                    ASSERT_TRUE(b.lobby->created());
+                    ASSERT_TRUE(w.status("idle0041").code.empty() && w.status("idle0042").state == RoomState::Waiting && w.mgr.room_count() == size_t{3});
+                }
+            }
+        }
+        {   // an idle lobby that a Hello has just reached (the room reads the Hello in its next pass) is not given up to the Hello that makes a lobby in the same pass: nobody is dropped, and the one that wanted a lobby is
+            // told NoSuchRoom, because the other lobby is used
+            World w(l);
+            w.connect_page("A", "idle0061", lobby_block_of());
+            Client& b = w.connect_page("B", "idle0062", lobby_block_of());
+            w.run(65000);
+            ASSERT_TRUE(b.lobby->chat("busy"));
+            w.run(5000);                                                                  // idle0061 has been idle for 70 s, idle0062 for 5
+            const auto pair = two_pages_at_once(w, "idle0061", "idle0063");
+            ASSERT_TRUE(pair.first->lobby->phase() == net::ClientLobby::Phase::InRoom && !pair.first->lobby->created());
+            ASSERT_EQ(pair.second->lobby->phase(), net::ClientLobby::Phase::Rejected);
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+            ASSERT_EQ(w.status("idle0061").joined, size_t{2});
+        }
+        {   // idle lobbies are kept when the server is told so (0)
+            ServerLimits keep = l;
+            keep.lobby_idle_evict_ms = 0;
+            World w(keep);
+            w.connect_page("A", "idle0051", lobby_block_of());
+            w.connect_page("B", "idle0052", lobby_block_of());
+            w.run(3600u * 1000u);
+            Client& c = w.connect_page("C", "idle0053", lobby_block_of());
+            ASSERT_EQ(answer_of(w, c), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(waiting_lobbies(w), size_t{2});
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.158 Two Empty Lobbies That Have Been Empty For The Same Time (Their Last People Left In One Pass): A Full Pool Gives The First Code Up, Whichever Was Made First") {
+        ServerLimits l = lobby_limits();
+        l.demo_lobbies = 2;
+        l.lobby_empty_close_ms = 600000;
+        World w(l);
+        w.next_kind = net::kClientPage;
+        w.next_create = lobby_block_of();
+        Client& a = w.connect("A", "tie00002", 255, {20, 0});
+        Client& b = w.connect("B", "tie00001", 255, {20, 0});
+        w.next_kind = net::kClientGame;
+        w.next_create.reset();
+        w.run(500);
+        a.lobby->leave();
+        b.lobby->leave();
+        w.run(3000);
+        ASSERT_EQ(waiting_lobbies(w), size_t{2});
+        Client& c = w.connect_page("C", "tie00003", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(c.lobby->created());
+        ASSERT_TRUE(w.status("tie00001").code.empty() && w.status("tie00002").state == RoomState::Waiting);
     } TEST_END();
 }
 

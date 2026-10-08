@@ -499,6 +499,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].key = key;
     guests_[seat].kind = hello.client_kind;
     guests_[seat].heard_ms = now_ms;
+    guests_[seat].forgive_at_ms = now_ms + cfg_.forgive_ms;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
     room_.slots[seat].platform = hello.platform;
@@ -683,6 +684,7 @@ void HostLobby::update(uint32_t now_ms) {
             continue;
         }
         Guest& g = guests_[s];
+        if (cfg_.lobby_room) forgive(g, now_ms);
         if (g.conn->is_open() && (g.ping_nonce == 0 || time_reached(now_ms, g.next_ping_ms))) {        // measure the round trip: the thumb beside the name
             PingMsg ping;
             ping.nonce = ++g.ping_nonce;
@@ -741,6 +743,15 @@ void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
     room_.slots[seat].rtt_ms = kRttUnknown;
     ++holds_;
     broadcast_room();
+}
+
+// A lobby room lives as long as its people stay: every forgive_ms a guest is forgiven one violation and one ignored request of each kind (it is called in every pass for a guest whose link is up)
+void HostLobby::forgive(Guest& g, uint32_t now_ms) const noexcept {
+    if (cfg_.forgive_ms == 0 || !time_reached(now_ms, g.forgive_at_ms)) return;
+    g.forgive_at_ms = now_ms + cfg_.forgive_ms;
+    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names}) {
+        if (*count > 0) --*count;
+    }
 }
 
 // The colour a joiner takes: the one it asked for when nobody holds it and the plan calls it Open, else the lowest such colour; 255 when there is none (the room is Full for it)
@@ -808,6 +819,7 @@ void HostLobby::apply_plan(const PlanMsg& plan) {
 
 // The leader asked to start: the request stands until every person is a game, and everybody is shown that the room waits (RoomMsg flag kRoomStarting)
 void HostLobby::arm_start(uint8_t seat, uint32_t now_ms) {
+    ++start_arms_;
     starting_.active = true;
     starting_.leader_order = guests_[seat].join_order;
     starting_.since_ms = now_ms;

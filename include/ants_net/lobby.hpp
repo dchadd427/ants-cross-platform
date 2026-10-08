@@ -69,6 +69,8 @@ inline constexpr uint32_t kLobbyHoldMs = 60u * 1000u;
 inline constexpr uint32_t kLobbyStartWaitMs = 90u * 1000u;
 /// ... and a connection of a lobby room from which nothing has come for this long is closed (HostLobby::Config::silence_ms): a client that is alive answers a ping every second
 inline constexpr uint32_t kLobbySilenceMs = 30u * 1000u;
+/// ... and a guest of a lobby room is forgiven one violation and one ignored request of each kind this often (HostLobby::Config::forgive_ms): a lobby lives as long as its people stay
+inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
 
 /// One line of the waiting room's chat (protocol 11). `seat` is the sender's seat, kRoomSender (255) for a line that the room itself said (a notice); `name` is the sender's name as the
 /// room showed it when the line arrived ("" for a notice).
@@ -128,6 +130,9 @@ public:
         /// A lobby room closes the connection of a guest from which nothing has come for this long while the room is open (its seat is held then, as for any connection that ends): no TCP or proxy tells a server that a
         /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
         uint32_t silence_ms{kLobbySilenceMs};
+        /// A lobby room lives as long as its people stay, so what a person got wrong is not held against them for ever: every `forgive_ms` each guest's violations, and each of its counts of ignored requests (START,
+        /// colour moves, plans, renames), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
+        uint32_t forgive_ms{kLobbyForgiveMs};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
@@ -264,6 +269,10 @@ public:
     uint32_t hold_expiries() const noexcept { return hold_expiries_; }
     /// Connections that were closed for their silence (silence_ms)
     uint32_t silences() const noexcept { return silences_; }
+    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a colour moves, the plan or a name changes, a line of chat is said, a START is asked for (a ping, a link that
+    /// comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
+    /// the place of such a room up when it needs it.
+    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + start_arms_ + chat_.total()); }
 
     std::vector<Event> take_events();
 
@@ -294,6 +303,7 @@ private:
         uint32_t ignored_plans{0};               // ... and those that were ignored (the first kIgnoredPlansAllowed are free)
         ChatBudget names;                        // the NameMsgs of this guest that could be heard (flood.hpp: a burst of kNameBurst, then kNamesPerSecond a second)
         uint32_t ignored_names{0};               // ... and those that were ignored (the first kIgnoredNamesAllowed are free)
+        uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
         bool active{false};
@@ -327,6 +337,7 @@ private:
     /// A guest sits in the seat: connected or held
     bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held; }
     void hold_guest(uint8_t seat, uint32_t now_ms);
+    void forgive(Guest& g, uint32_t now_ms) const noexcept;
     void apply_plan(const PlanMsg& plan);
     void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
     uint8_t joiner_seat(uint8_t want) const noexcept;
@@ -360,6 +371,7 @@ private:
     uint32_t holds_{0};
     uint32_t hold_expiries_{0};
     uint32_t silences_{0};
+    uint32_t start_arms_{0};                 // the STARTs that were asked for and stood (arm_start)
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
     std::function<std::string(const std::string&)> map_choice_;

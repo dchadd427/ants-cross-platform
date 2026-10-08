@@ -89,7 +89,7 @@ private:
 Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget)
     : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)), log_budget_(log_budget) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
-    retry_at_ms_ = now_ms;                                       // (not 0: the server's clock is its uptime, and a signed comparison against a stale 0 breaks after 24.8 days)
+    active_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
     lobby_.set_before_start([this](const net::StartMsg&, uint32_t now) { record_open(now); });      // the match is fixed (the start message, the keys): its record is made before the Start is sent to anybody
@@ -154,6 +154,7 @@ bool Room::add_connection(std::unique_ptr<net::Connection>& connection, const st
     if (connections_.size() >= spec_.max_connections) return false;
     connections_.push_back(std::move(connection));
     lobby_.add_connection(connections_.back().get(), now_ms, address, hello, created);
+    if (spec_.lobby) arrived_ = true;                            // (the manager must not take this room's place for another before the room has read the Hello)
     return true;
 }
 
@@ -354,11 +355,33 @@ bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::p
     return false;
 }
 
+// The pause after a cancelled start is over (or there was none). A flag and a time, not a time alone: a lobby room waits for ever, and a time that is older than 24.8 days reads as one to come in a signed comparison.
+bool Room::retry_open(uint32_t now_ms) noexcept {
+    if (retry_pending_ && net::time_reached(now_ms, retry_at_ms_)) retry_pending_ = false;
+    return !retry_pending_;
+}
+
+// A lobby room's start was cancelled now: how long the room waits before it tries again (the first kFreeCancels in a row cost kRetryMs, every one after them kLongPauseMs)
+uint32_t Room::lobby_pause_ms(uint32_t now_ms) noexcept {
+    ++cancels_;
+    last_cancel_ms_ = now_ms;
+    return cancels_ <= kFreeCancels ? kRetryMs : kLongPauseMs;
+}
+
 // A lobby room that waits (protocol 16). Two things happen here, and neither is the full room's. The room is forgotten when nobody has been in it for empty_close_ms (a person who is held counts as in it). And the
 // leader's START, which the lobby keeps as a request until every person is a game and then gives to the owner in every pass, is carried out with what the PLAN says: the map is loaded now (the leader may change
 // its mind many times, and each map is read when it is wanted), the empty colours get the bots of the plan, the plan's teams are the match's, and the server is asked for a place. What cannot be done ends the
-// request with a notice for the leader (HostLobby::end_start) and the room goes on waiting: nothing here fails the room. The pause after a cancelled start holds, as in any room, and the request stands through it.
+// request with a notice for the leader (HostLobby::end_start) and the room goes on waiting: nothing here fails the room; a start that the lobby refuses at the last moment (the room changed in this very pass) ends it
+// quietly, and the leader asks again. The pause after a cancelled start holds, as in any room: a short one the request stands through, a long one (kLongPauseMs) it does not, and its leader is told.
 void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::array<net::FillLevel, sim::MAX_PLAYERS>& asked_fill, const sim::StartTeams& asked_teams) {
+    arrived_ = false;                                        // (the lobby has read the Hellos that came since the last pass: humans() counts them)
+    if (lobby_.activity() != seen_activity_) {
+        seen_activity_ = lobby_.activity();
+        active_ms_ = now_ms;
+    } else if (now_ms - active_ms_ > kMaxIdleMs) {
+        active_ms_ = now_ms - kMaxIdleMs;                    // (the idle time stops growing: the 32-bit clock would read a much longer one as a short one)
+    }
+    if (cancels_ != 0 && now_ms - last_cancel_ms_ >= kCancelsForgottenMs) cancels_ = 0;       // (starts that failed long ago are forgotten)
     if (lobby_.humans() > 0) {
         empty_ = false;
     } else if (!empty_) {
@@ -367,7 +390,11 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     } else if (now_ms - empty_since_ms_ >= spec_.empty_close_ms) {
         return forget(now_ms);
     }
-    if (asked_by == net::kNoLeader || lobby_.leader() != asked_by || !net::time_reached(now_ms, retry_at_ms_)) return;
+    if (asked_by == net::kNoLeader || lobby_.leader() != asked_by) return;
+    if (!retry_open(now_ms)) {
+        if (static_cast<int32_t>(retry_at_ms_ - now_ms) > static_cast<int32_t>(kStandMs)) lobby_.end_start(net::kNoticeStartsFailed);       // (a long pause: the request does not stand through it)
+        return;
+    }
     if (lobby_.map_name() != map_.name) {                    // the plan's map (the room's map, as the lobby shows it): the server's own copy is loaded for the match
         MapEntry entry;
         assets::LevelData level;
@@ -406,7 +433,8 @@ void Room::update(uint32_t now_ms) {
             if (state_ == RoomState::Loading && !spec_.lobby && ++cancels_ >= kMaxFailedStarts) return fail("the start failed too many times (a player could not load the map or left)", now_ms);
             if (state_ == RoomState::Loading) {
                 state_ = RoomState::Waiting;
-                retry_at_ms_ = now_ms + kRetryMs;
+                retry_at_ms_ = now_ms + (spec_.lobby ? lobby_pause_ms(now_ms) : kRetryMs);
+                retry_pending_ = true;
                 unseat_fill();                                       // the room is as it was before the START: the bots that it seated go again
                 record_discard();                                    // (and it has no match to bring back)
             }
@@ -444,8 +472,8 @@ void Room::update(uint32_t now_ms) {
             if (!check.playable) {
                 if (full) return fail("the map cannot be played by these seats: " + check.reason(), now_ms);
                 // (an early start for seats that the map cannot be played by: nothing happens, the room waits for the others, it does not fail; the leader who asked for bots is told)
-                if (!fill_seats.empty() && net::time_reached(now_ms, retry_at_ms_)) lobby_.notify(asked_by, net::kNoticeFillMap);
-            } else if (net::time_reached(now_ms, retry_at_ms_)) {
+                if (!fill_seats.empty() && retry_open(now_ms)) lobby_.notify(asked_by, net::kNoticeFillMap);
+            } else if (retry_open(now_ms)) {
                 // The teams: the room's own (its create block's) for every start, else the leader's choice when its request is what starts the match (sim::start_teams_for); they count when the seats that play
                 // can make them (one rule for every engine: sim::plan_start_teams). When they cannot, the match starts without teams and everybody in the room is told why, once it has started.
                 start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, early, asked_teams));
@@ -808,7 +836,6 @@ bool Room::begin_restored(uint32_t now_ms, std::string& why) {
     const uint32_t ran_ms = net::kMatchStartDelayMs + replay_turns_ * net::kTurnMs;
     started_ms_ = now_ms - ran_ms;
     created_ms_ = started_ms_;
-    retry_at_ms_ = now_ms;
     // the record goes on being written (a torn tail is cut off); when it cannot be opened the room is restored all the same, and says that a second restart would end it
     std::string open_why;
     record_ = restart_store_->reopen(replay_path_, replay_good_bytes_, replay_turns_, open_why);

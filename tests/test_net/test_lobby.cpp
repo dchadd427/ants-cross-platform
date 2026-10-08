@@ -58,6 +58,15 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     } while (0)
 #define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 #define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
+#define ASSERT_MSG(cond, msg) \
+    do { \
+        ++g_assert_count; \
+        if (!(cond)) { \
+            std::cout << "FAILED!\n    Assertion failed: " #cond " (" << (msg) << ") at " << __FILE__ << ":" << __LINE__ << "\n"; \
+            ++g_test_failures; \
+            return; \
+        } \
+    } while (0)
 
 namespace {
 
@@ -4661,6 +4670,148 @@ int main() {
             ASSERT_EQ(room.host.renames(), 0u);
             ASSERT_EQ(room.host.room().slots[room.guests[bob].lobby->my_seat()].name, std::string("Bob"));
             ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()));
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.35 A Flood Of STARTs In A Lobby Room (Protocol 16): Those That Cannot Be Honoured Are Free Up To 16 Per Guest (The Leader's Second One While The First Stands, A Guest's That Does Not Lead), The 17th Is A Violation And The 24th Throws The Guest Out; Honoured Ones Count For Nothing") {
+        {   // a guest that does not lead
+            Room room(lobby_room_config(97));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[bob].client_end->send(wish);
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            for (int i = 0; i < 7; ++i) room.guests[bob].client_end->send(wish);          // the 17th to the 23rd: violations one to seven
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed + 7u);
+            ASSERT_TRUE(room.host.occupied(bob_seat));
+            room.guests[bob].client_end->send(wish);                                     // the 24th: the eighth
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(bob_seat));
+        }
+        {   // the leader: one START stands (it is not ignored), every one while it stands is
+            HostLobby::Config hc = lobby_room_config(98);
+            hc.start_wait_ms = 3600u * 1000u;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            join_with(room, page_config("Pia"));
+            room.run(100);
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const std::vector<uint8_t> wish = encode(StartRequestMsg{});
+            room.guests[ann].client_end->send(wish);                                     // the one that stands (a page is no game: it waits)
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_EQ(room.host.ignored_start_requests(), 0u);
+            for (uint32_t i = 0; i < kIgnoredStartRequestsAllowed; ++i) room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_EQ(room.host.ignored_start_requests(), kIgnoredStartRequestsAllowed);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            room.guests[ann].client_end->send(wish);
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(ann_seat));                                  // the leader is thrown out like anybody (the lead goes to the next)
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Colour Move, Plan, Rename); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
+        ASSERT_EQ(HostLobby::Config{}.forgive_ms, kLobbyForgiveMs);
+        ASSERT_EQ(kLobbyForgiveMs, 60000u);
+        // `wish` is a message that this guest may send but the room ignores (counted, free up to 16, then a violation each): the room has no use for it from this sender now
+        const auto send = [](Room& room, size_t who, const std::vector<uint8_t>& wish, unsigned times) {
+            for (unsigned i = 0; i < times; ++i) room.guests[who].client_end->send(wish);
+            room.run(10);
+        };
+        const auto case_of = [&send](const char* what, Room& room, size_t who, const std::vector<uint8_t>& wish, bool forgives) {
+            const uint8_t seat = room.guests[who].lobby->my_seat();
+            send(room, who, wish, 16);                                                        // the free allowance, used up
+            send(room, who, wish, 3);                                                         // three violations
+            ASSERT_MSG(room.host.occupied(seat), what);
+            room.run(3 * 60000);                                                              // three minutes: three of each count are forgiven (the fourth is 59.9 s away)
+            send(room, who, wish, 5);                                                         // a lobby room: the counts are 16 and 0 again, so these are five violations. Another room: 19 and 3, and the fifth of these is the eighth.
+            ASSERT_MSG(room.host.occupied(seat) == forgives, what);
+            if (forgives) {
+                send(room, who, wish, 2);                                                     // seven violations
+                ASSERT_MSG(room.host.occupied(seat), what);
+                send(room, who, wish, 1);                                                     // the eighth
+                ASSERT_MSG(!room.host.occupied(seat), what);
+            }
+        };
+        const std::vector<uint8_t> start_wish = encode(StartRequestMsg{});
+        const std::vector<uint8_t> plan_wish = encode(PlanMsg{});
+        {   // a guest that is not the leader: its START, its colour move and its plan are ignored
+            Room room(lobby_room_config(90));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("START", room, bob, start_wish, true);
+        }
+        {
+            Room room(lobby_room_config(91));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("colour move", room, bob, encode(SeatMoveMsg{2, 3, seating_hash(room.host.room())}), true);
+        }
+        {
+            Room room(lobby_room_config(92));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("plan", room, bob, plan_wish, true);
+        }
+        {   // a rename while the leader's START waits for a page's game (the wait is longer than the test)
+            HostLobby::Config hc = lobby_room_config(93);
+            hc.start_wait_ms = 3600u * 1000u;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t pia = join_with(room, page_config("Pia"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            case_of("rename", room, pia, encode(NameMsg{"Pia Two"}), true);
+        }
+        {   // a room that is no lobby room forgives nothing, whatever its setting says
+            HostLobby::Config hc = lobby_room_config(94);
+            hc.lobby_room = false;
+            hc.forgive_ms = 1000;
+            Room room(hc);
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("a room that is no lobby room", room, bob, start_wish, false);
+        }
+        {   // 0 switches it off
+            HostLobby::Config hc = lobby_room_config(95);
+            hc.forgive_ms = 0;
+            Room room(hc);
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            case_of("forgive_ms 0", room, bob, start_wish, false);
+        }
+        {   // a flood that is faster than the forgiving is thrown out as ever: ten a second against one forgiven a second
+            HostLobby::Config hc = lobby_room_config(96);
+            hc.forgive_ms = 1000;
+            Room room(hc);
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
+            for (int i = 0; i < 100 && room.host.occupied(bob_seat); ++i) {
+                room.guests[bob].client_end->send(start_wish);
+                room.run(100);
+            }
+            ASSERT_FALSE(room.host.occupied(bob_seat));
+            // ... and one that is slower than it is never thrown out: two a second against one forgiven a second would be thrown out, one every two seconds is not
+            Room slow(hc);
+            slow.join_seat("Ann");
+            const size_t cat = slow.join_seat("Cat");
+            const uint8_t cat_seat = slow.guests[cat].lobby->my_seat();
+            for (int i = 0; i < 400; ++i) {
+                slow.guests[cat].client_end->send(start_wish);
+                slow.run(2000);
+            }
+            ASSERT_TRUE(slow.host.occupied(cat_seat));
         }
     } TEST_END();
 

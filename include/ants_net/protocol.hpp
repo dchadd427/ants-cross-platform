@@ -330,12 +330,14 @@ inline constexpr const char* kNoticeFillMap = "This map cannot be played by ever
 /// as the match starts without teams; at most kMaxChatChars (the reasons are written to fit).
 inline constexpr const char* kNoticeNoTeams = "No teams: ";
 /// The notices of a lobby room's START (protocol 16; to its leader, each at most kMaxChatChars): a player's game that did not come in time ("Priya's game did not come in time.", for several "These games
-/// did not come in time: Priya, Sam."), a map that cannot be loaded, a map that the colours cannot play, and a server that has no place for another match
+/// did not come in time: Priya, Sam."), a map that cannot be loaded, a map that the colours cannot play, a server that has no place for another match, and a match that could not start several times in a row
+/// (the room asks for a pause then)
 inline constexpr const char* kNoticeGameLate = "'s game did not come in time.";
 inline constexpr const char* kNoticeGamesLate = "These games did not come in time: ";
 inline constexpr const char* kNoticeMapLost = "This map could not be loaded: choose another map.";
 inline constexpr const char* kNoticeMapColours = "This map cannot be played with these colours.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
+inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
 
 struct RoomMsg {
     struct Slot {
@@ -355,7 +357,8 @@ struct RoomMsg {
     /// The room's own teams (protocol 15; both kNoTeam when it has none): the room starts its matches with them every time, when the seats that play can make them. Every screen shows them as the room's.
     uint8_t team_a{kNoTeam};
     uint8_t team_b{kNoTeam};
-    /// The room's rules (protocol 15): kRoomLeaderStarts = the room does not start by itself when it is full, only its leader's START starts the match. No other bit is used.
+    /// The room's rules (protocol 15): kRoomLeaderStarts = the room does not start by itself when it is full, only its leader's START starts the match. Protocol 16 adds kRoomLobby and kRoomStarting (a lobby room
+    /// only). No other bit is used.
     uint8_t flags{0};
     /// Protocol 16 (a lobby room only: PlanKind::Open everywhere and 0 in any other room, which the decoder insists on): what the leader made each colour (PlanMsg), and which seats a game holds (bit s: the person of
     /// seat s runs a game, not a lobby page; a bit only for a seat that a person holds). The teams of a lobby room (team_a, team_b) are the leader's plan too, and change with it.

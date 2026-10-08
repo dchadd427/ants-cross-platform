@@ -219,11 +219,14 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     // Lobbies need the server's public rooms (a match that a lobby begins is one of them), a map, and keys (a seat is held for its key). The code is a visitor's, as for a public room.
     if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
-    size_t waiting = 0;
-    for (const auto& kv : rooms_) waiting += kv.second->lobby_waiting() ? 1u : 0u;
-    while (waiting >= limits_.demo_lobbies) {                       // the pool is full: the lobby that nobody is in gives its place up (never a lobby with a person in it)
-        if (!evict_empty_lobby(now_ms)) return false;
-        --waiting;
+    const auto waiting = [this]() {
+        size_t n = 0;
+        for (const auto& kv : rooms_) n += kv.second->lobby_waiting() ? 1u : 0u;
+        return n;
+    };
+    // The pool is full, or the server has no place for another room: the lobby that nobody is in gives its place up; when there is none, the one in which nothing has been done for a long time (never a lobby that is used)
+    while (waiting() >= limits_.demo_lobbies || rooms_.size() + restoring_.size() >= limits_.max_rooms) {
+        if (!evict_empty_lobby(now_ms) && !evict_idle_lobby(now_ms)) return false;
     }
     RoomSpec spec = default_spec();
     spec.code = code;
@@ -256,6 +259,25 @@ bool RoomManager::evict_empty_lobby(uint32_t now_ms) {
     }
     if (best == rooms_.end()) return false;
     best->second->forget(now_ms);                                   // (its clients are dropped; no word in the log: no match was begun)
+    rooms_.erase(best);
+    return true;
+}
+
+bool RoomManager::evict_idle_lobby(uint32_t now_ms) {
+    if (limits_.lobby_idle_evict_ms == 0) return false;
+    auto best = rooms_.end();
+    uint32_t best_ms = 0;
+    for (auto it = rooms_.begin(); it != rooms_.end(); ++it) {
+        if (!it->second->lobby_waiting()) continue;
+        const uint32_t idle = it->second->idle_ms(now_ms);
+        if (idle < limits_.lobby_idle_evict_ms) continue;
+        if (best == rooms_.end() || idle > best_ms) {              // (on a tie the first code in the map's order: the same room every time)
+            best = it;
+            best_ms = idle;
+        }
+    }
+    if (best == rooms_.end()) return false;
+    best->second->forget(now_ms);                                   // (its people are dropped; no word in the log: no match was begun)
     rooms_.erase(best);
     return true;
 }

@@ -258,6 +258,14 @@ class Room {
 public:
     static constexpr size_t kMaxConnections = 32;           // RoomSpec::max_connections of a room that says nothing: everything that ever said Hello to it (rejected ones included): a flood is refused beyond this
     static constexpr uint32_t kRetryMs = 2000;              // the pause after a cancelled start
+    // A lobby room (protocol 16) does not fail for cancelled starts as the other rooms do (kMaxFailedStarts), so a game that never loads would make the whole room load and cancel every two seconds for ever.
+    // It backs off instead: the first kFreeCancels cancels in a row cost kRetryMs each, every one after them kLongPauseMs, and the count is forgotten after kCancelsForgottenMs without one. A START that is asked
+    // for in a pause longer than kStandMs does not wait it out as it does a short one: its leader is told (kNoticeStartsFailed) and the room is open for its plan again.
+    static constexpr uint32_t kFreeCancels = 3;
+    static constexpr uint32_t kLongPauseMs = 60u * 1000u;
+    static constexpr uint32_t kStandMs = 10u * 1000u;
+    static constexpr uint32_t kCancelsForgottenMs = 15u * 60u * 1000u;
+    static constexpr uint32_t kMaxIdleMs = 24u * 3600u * 1000u;     // idle_ms() stops here (a 32-bit clock reads an age of 49.7 days as a short one)
     static constexpr uint32_t kGraceMs = 15000;             // after the end of the match the connections stay open at least this long (a client that is level finds the results in peace) ...
     static constexpr uint32_t kEndWaitMs = 30000;           // ... and until every player that is still connected has acknowledged the last turn, at the most this long: a player that was
                                                             // 60 s behind when the match ended (the most a seat may be) needs 15 s at 4x to run what is left, and is answered (pings,
@@ -308,9 +316,13 @@ public:
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
     bool lobby_waiting() const noexcept { return spec_.lobby && state_ == RoomState::Waiting; }
-    /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody), and for how long (0 for every other room)
-    bool empty_lobby() const noexcept { return lobby_waiting() && empty_; }
+    /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody) and that no Hello has reached since (the room reads it in its next pass: a lobby that a visitor was just
+    /// sent to is not empty, whatever the room's last pass saw), and for how long (0 for every other room)
+    bool empty_lobby() const noexcept { return lobby_waiting() && empty_ && !arrived_; }
     uint32_t empty_ms(uint32_t now_ms) const noexcept { return empty_lobby() ? now_ms - empty_since_ms_ : 0u; }
+    /// How long nothing has been done in a waiting lobby room (HostLobby::activity: a ping that is answered is nothing), 0 for every other room and for one that a Hello has reached since its last pass. The manager gives
+    /// the place of an idle lobby up when it needs it (never otherwise: a person may sit in a lobby for as long as they like). It stops growing at kMaxIdleMs.
+    uint32_t idle_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - active_ms_ : 0u; }
     /// The owner forgets the room at once, without a word in the log or a result file (the server needs the place of a lobby that nobody is in): its clients are dropped
     void forget(uint32_t now_ms);
     RoomState state() const noexcept { return state_; }
@@ -370,6 +382,8 @@ private:
     uint8_t roster_with(const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats) const;
     bool start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats, const sim::StartTeams& wanted);
     void lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::array<net::FillLevel, sim::MAX_PLAYERS>& asked_fill, const sim::StartTeams& asked_teams);
+    bool retry_open(uint32_t now_ms) noexcept;               // the pause after a cancelled start is over (or there was none)
+    uint32_t lobby_pause_ms(uint32_t now_ms) noexcept;       // a lobby room's start was cancelled now: how long the room waits before it tries again (kFreeCancels, kLongPauseMs)
 
     RoomSpec spec_;
     MapEntry map_;
@@ -381,11 +395,16 @@ private:
     std::string reason_;
     uint32_t cancels_{0};
     uint32_t started_ms_{0};                 // when the match began (run_ms)
-    uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop)
+    uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop): until here, while retry_pending_
+    bool retry_pending_{false};              // (a flag and not an old time: a lobby room waits for ever, and a time that is older than 24.8 days reads as a time to come in a signed comparison)
+    uint32_t last_cancel_ms_{0};             // a lobby room: when its start was last cancelled (cancels_ counts those in a row)
 
     net::HostLobby lobby_;
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
     bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
+    bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)
+    uint32_t seen_activity_{0};              // a lobby room: HostLobby::activity() at the last pass, and since when it is what it is
+    uint32_t active_ms_{0};
     uint32_t empty_since_ms_{0};
     bool forgotten_{false};                  // the owner forgot the room (forget): it is expired at once
     std::vector<ai::BotSpec> bot_specs_;     // the bots that sit in the room now, by seat (the specification's and the fill's)
