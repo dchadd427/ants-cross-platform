@@ -92,6 +92,19 @@ struct PowerUpView {
     uint32_t standing_ant{0};
 };
 
+/// About how many ticks a droplet is drawn: the power-up lies on the drop tile after that
+inline constexpr uint32_t kFlowerFallTicks = 16;
+
+/// A flower dropper as the screen draws it: the plant (a daisy), the tile its drops land on, and the droplet while it falls (about 16 ticks; its picture says which kind is coming). The interval and
+/// the draw of the kind are NOT here (a bot that wants the cadence or the mix counts the landings it has seen: Memory::flower). Only droppers that drop are listed (TREASURE's middle daisy does nothing).
+struct FlowerView {
+    sim::TileCoord plant{};
+    sim::TileCoord drop{};               // the plant's tile one row down: where the power-up lands
+    bool falling{false};                 // a droplet falls now
+    sim::AntType kind{sim::AntType::Bomber};   // the kind of the falling droplet (Bomber, Fire, Thief, Combat or Swimmer); meaningless when nothing falls
+    uint32_t age{0};                     // ticks since the droplet began to fall, 0 when nothing falls
+};
+
 /// A food pile (or a lunchbox: a pile of one unit) with units left. A person sees the pile's picture; the view gives the exact units (a documented, harmless deviation: a
 /// person counts the bites, and this is the one place to coarsen it if that is ever wanted).
 struct PileView {
@@ -149,8 +162,12 @@ public:
     const std::vector<PileView>& piles() const noexcept { return piles_; }
     /// The power-ups that lie on the map now, in reading order (row by row, left to right), a COPY made at every look (the start list of MapInfo::powerups() is a hint that goes
     /// stale at the first pick-up: a taken power-up stays on it and a dropped one never appears). The map's power-ups are tile ids 62 .. 66, so a community dictionary that calls them
-    /// "." changes nothing (the engine's cells decide); a power-up that a flower dropper has not yet landed is not here (a person sees the droplet falling, which this view does not).
+    /// "." changes nothing (the engine's cells decide); a power-up that a flower dropper has not yet landed is not here: flowers() shows the droplet that falls.
     const std::vector<PowerUpView>& powerups() const noexcept { return powerups_; }
+    /// The flower droppers of the map (the plants that drop; the same list at every look) and what each is doing now, in the order of the engine's table. Empty on a map without one (TINY, TREASURE).
+    const std::vector<FlowerView>& flowers() const noexcept { return flowers_; }
+    /// The flower whose drop tile is `tile`, null when none is (works on a COPY of a view too)
+    const FlowerView* flower_at(sim::TileCoord tile) const noexcept;
     /// The bombs on the map now (in reading order) with their owners, and the fire walls (tiles only): copies made at every look, like the power-ups
     const std::vector<BombView>& bombs() const noexcept { return bombs_; }
     const std::vector<FireWallView>& fire_walls() const noexcept { return fire_walls_; }
@@ -210,6 +227,7 @@ private:
     std::vector<AntView> others_;
     std::vector<PileView> piles_;
     std::vector<PowerUpView> powerups_;
+    std::vector<FlowerView> flowers_;
     std::vector<BombView> bombs_;
     std::vector<FireWallView> fire_walls_;
     std::vector<sim::TileCoord> dying_;              // the tiles of the ants in their death clip (not in mine_ or others_)
