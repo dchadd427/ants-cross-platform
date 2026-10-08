@@ -50,6 +50,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <realtimeapiset.h>
 #include <process.h>
 #endif
 #ifndef _WIN32
@@ -445,11 +446,39 @@ double peak_memory_mb() {
 }
 #endif
 
+#ifdef _WIN32
+// How many cycles the cycle counter of a thread counts in a millisecond, measured once against the wall clock: the quickest of eight spins of 6 ms (a spin that another program interrupted reads
+// too few cycles for its time). 0 when the system has no such counter.
+double thread_cycles_per_ms() {
+    static const double rate = []() {
+        double best = 0.0;
+        for (int i = 0; i < 8; ++i) {
+            ULONG64 begin = 0;
+            ULONG64 end = 0;
+            const auto t0 = std::chrono::steady_clock::now();
+            if (!QueryThreadCycleTime(GetCurrentThread(), &begin)) return 0.0;
+            volatile uint64_t spin = 0;
+            while (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(6)) spin = spin + 1;
+            if (!QueryThreadCycleTime(GetCurrentThread(), &end)) return 0.0;
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            best = std::max(best, static_cast<double>(end - begin) / ms);
+        }
+        return best;
+    }();
+    return rate;
+}
+#endif
+
 // The CPU time (user and system, milliseconds) that the calling thread has used so far; -1 when the system cannot say. It does not run while the thread waits for the machine or sleeps, so the
-// difference of two readings is the thread's own work, however busy the machine of the test is (a wall clock around a call counts the time that other programs took, too).
+// difference of two readings is the thread's own work, however busy the machine of the test is (a wall clock around a call counts the time that other programs took, too). On Windows it is the
+// thread's cycle counter, which counts what the thread ran: GetThreadTimes counts in clock ticks of 15.6 ms and, on some of the hosted runners (Windows Server 2022 on AMD EPYC 9V45 hosts, October 2026),
+// posts what a thread used in lumps of up to seconds to whichever pass is running at the time, so that a pass of a tenth of a millisecond read as 300 ms (the total over a second is right).
 double thread_cpu_ms() {
 #ifdef _WIN32
-    FILETIME created, exited, kernel, user;
+    const double cycles_per_ms = thread_cycles_per_ms();
+    ULONG64 cycles = 0;
+    if (cycles_per_ms > 0.0 && QueryThreadCycleTime(GetCurrentThread(), &cycles)) return static_cast<double>(cycles) / cycles_per_ms;
+    FILETIME created, exited, kernel, user;                                // (no cycle counter: the clock ticks)
     if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) return -1.0;
     const auto hundred_ns = [](const FILETIME& t) { return static_cast<double>((static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime); };
     return (hundred_ns(kernel) + hundred_ns(user)) / 10000.0;
@@ -5495,6 +5524,20 @@ void run_bot_tests() {
         while (thread_cpu_ms() - cpu_start < 30.0 && std::chrono::steady_clock::now() < give_up) spin = spin + 1;
         static_cast<void>(spin);
         ASSERT_TRUE(thread_cpu_ms() - cpu_start >= 30.0);
+        // ... and it moves in steps that are smaller than a pass: a clock that counts in ticks of 15.6 ms, or that posts what the thread used in lumps, cannot time a pass of a tenth of a millisecond
+        // (the smallest of the next twenty steps that it takes while the thread works is less than a millisecond)
+        double finest_step_ms = 1.0e9;
+        int steps = 0;
+        const auto give_up_steps = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        for (double before = thread_cpu_ms(); steps < 20 && std::chrono::steady_clock::now() < give_up_steps;) {
+            const double now = thread_cpu_ms();
+            if (now > before) {
+                finest_step_ms = std::min(finest_step_ms, now - before);
+                before = now;
+                ++steps;
+            }
+        }
+        ASSERT_TRUE(steps == 20 && finest_step_ms < 1.0);
         struct Result {
             double ms_per_second{0};
             double worst_pass_ms{0};
