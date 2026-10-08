@@ -681,12 +681,36 @@ bool decode(const uint8_t* data, size_t size, StartRequestMsg& out) {
     return true;
 }
 
-std::vector<uint8_t> encode(const SeatMoveMsg& m) { return {static_cast<uint8_t>(MsgType::SeatMove), m.from, m.to}; }
+uint32_t seating_hash(const RoomMsg& room) noexcept {
+    uint32_t h = 2166136261u;                                                          // FNV-1a over the state and the name of each seat, a 0 after each name
+    const auto put = [&h](uint8_t byte) { h = (h ^ static_cast<uint32_t>(byte)) * 16777619u; };
+    for (const RoomMsg::Slot& slot : room.slots) {
+        put(static_cast<uint8_t>(slot.state));
+        for (const char c : slot.name) put(static_cast<uint8_t>(c));
+        put(0);
+    }
+    return h != 0 ? h : 1u;                                                            // (0 never travels: a guard is always a number that was computed)
+}
+
+std::vector<uint8_t> encode(const SeatMoveMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::SeatMove));
+    w.u8(m.from);
+    w.u8(m.to);
+    w.u32(m.guard);
+    return out;
+}
 bool decode(const uint8_t* data, size_t size, SeatMoveMsg& out) {
-    if (data == nullptr || size != 3 || data[0] != static_cast<uint8_t>(MsgType::SeatMove)) return false;          // exactly the type and two seats
-    if (data[1] >= sim::MAX_PLAYERS || data[2] >= sim::MAX_PLAYERS || data[1] == data[2]) return false;            // seats of the room, two of them: a player cannot be moved to where it is
-    out.from = data[1];
-    out.to = data[2];
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::SeatMove, r, storage)) return false;
+    SeatMoveMsg m;
+    m.from = r->u8();
+    m.to = r->u8();
+    m.guard = r->u32();
+    if (!r->done() || m.from >= sim::MAX_PLAYERS || m.to >= sim::MAX_PLAYERS || m.from == m.to || m.guard == 0) return false;     // two seats of the room (a player cannot be moved to where it is) and a guard that was computed
+    out = m;
     return true;
 }
 

@@ -1,6 +1,7 @@
-// Runs the page's own code that validates ?fill=, ?teams= and ?start= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's antsFillArg / antsFillPlanArg / antsTeamsArg /
-// antsStartArg (what may reach the game's arguments as --fill-bots, --teams and --start-when) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut out of the pages between their marker
-// comments and run as they are.
+// Runs the page's own code that validates ?fill=, ?teams=, ?start=, ?roommap=, ?roomseats=, ?roomleaderstart= and ?platform= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's
+// antsFillArg / antsFillPlanArg / antsTeamsArg / antsStartArg / antsRoomMapArg / antsRoomSeatsArg / antsRoomLeaderStartArg / antsPlatformArg (what may reach the game's arguments as --fill-bots, --teams, --start-when,
+// --room-map, --room-seats, --room-leader-start and --platform; ?roomteams= is read by antsTeamsArg, like ?teams=) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut
+// out of the pages between their marker comments and run as they are.
 // usage: node web_fill_check.js web/shell.html web/lobby.html     (exit 0: every row of the table holds; the first differing row is printed)
 'use strict';
 const fs = require('fs');
@@ -55,6 +56,41 @@ const teamsTable = [
     ['0+1&teams=ffa', ''], ['0+1;ls', ''], ['0+1\n--name x', ''], ['0+1,2+3', ''], ['a+b', ''], ['0+one', ''], ['0+\u0967', ''], ['0+\uff11', ''], ['-1+2', ''], ['0-1', ''], ['0/1', ''], ['0+1\u0000', ''],
     ['constructor', ''], ['__proto__', ''], ['0+1'.repeat(2000), ''],
 ];
+// the map of a room's create block (protocol 15): one of the six keys in any case, as the tested lower case key; "" for anything else (never a file name, a path or a word of the address)
+const roomMapTable = [
+    ['tiny', 'tiny'], ['small', 'small'], ['medium', 'medium'], ['gauntlet', 'gauntlet'], ['treasure', 'treasure'], ['islands', 'islands'],
+    ['TINY', 'tiny'], ['Small', 'small'], ['MEDIUM', 'medium'], ['Gauntlet', 'gauntlet'], ['tReAsUrE', 'treasure'], ['ISLANDS', 'islands'],
+    ['', ''], [null, ''], [undefined, ''], [42, ''], [{}, ''], [['tiny'], ''], [{ toString() { return 'tiny'; } }, ''],
+    ['TINY.LVL', ''], ['tiny.lvl', ''], ['tin', ''], ['tinyy', ''], ['tiny ', ''], [' tiny', ''], ['tiny\n', ''], ['\ntiny', ''], ['tiny\0', ''], ['tiny small', ''], ['tiny,small', ''], ['tiny;--room x', ''], ['tiny&roomseats=2', ''], ['--room-map', ''],
+    ['../tiny', ''], ['/tiny', ''], ['Original-Ants/Maps/TINY.LVL', ''], ['nowhere', ''], ['any', ''], ['constructor', ''], ['__proto__', ''], ['toString', ''], ['hasOwnProperty', ''],
+    ['ｔｉｎｙ', ''], ['tіny', ''], ['İslands', ''], ['treasure'.repeat(2000), ''],
+];
+// the seats of a room's create block: one digit 2 - 4 (the tested digit comes back)
+const roomSeatsTable = [
+    ['2', '2'], ['3', '3'], ['4', '4'],
+    ['', ''], [null, ''], [undefined, ''], [2, ''], [4, ''], [{}, ''], [['3'], ''], [{ toString() { return '3'; } }, ''],
+    ['0', ''], ['1', ''], ['5', ''], ['9', ''], ['10', ''], ['12', ''], ['02', ''], ['03', ''], ['-2', ''], ['+2', ''], ['2.0', ''], ['2.5', ''], ['1e1', ''], ['0x2', ''],
+    [' 2', ''], ['2 ', ''], ['2\n', ''], ['\n2', ''], ['2\t', ''], ['2\0', ''], ['2,3', ''], ['2;ls', ''], ['2&seat=1', ''], ['2 --room x', ''], ['two', ''], ['٢', ''], ['２', ''], ['constructor', ''],
+    ['2'.repeat(2000), ''],
+];
+// the flag of a full room that waits for its leader's START (the game's --room-leader-start takes no value): true for exactly "1", false for everything else
+const roomLeaderStartTable = [
+    ['1', true],
+    ['', false], ['0', false], ['2', false], ['true', false], ['yes', false], ['on', false], ['11', false], ['01', false], ['1 ', false], [' 1', false], ['1\n', false], ['\n1', false], ['1\0', false], ['1,1', false], ['one', false], ['١', false], ['１', false],
+    ['1&seat=1', false], ['1;ls', false], [null, false], [undefined, false], [1, false], [true, false], [{}, false], [['1'], false], [{ toString() { return '1'; } }, false], ['1'.repeat(2000), false],
+];
+// what the game tells the room about itself (the game's --platform): [browser-]windows, macos, linux, android, ios or other in any case, as the tested lower case word; "" for anything else
+const platformTable = [];
+for (const os of ['windows', 'macos', 'linux', 'android', 'ios', 'other']) {
+    platformTable.push([os, os], ['browser-' + os, 'browser-' + os], [os.toUpperCase(), os], ['BROWSER-' + os.toUpperCase(), 'browser-' + os], ['Browser-' + os.charAt(0).toUpperCase() + os.slice(1), 'browser-' + os], [os.charAt(0).toUpperCase() + os.slice(1), os]);
+    platformTable.push([os + ' ', ''], [' ' + os, ''], [os + '\n', ''], ['\n' + os, ''], [os + '\0', ''], [os + 'x', ''], ['x' + os, ''], ['browser' + os, ''], ['browser-' + os + '-', ''], ['browser--' + os, ''], ['browser_' + os, ''], ['browser ' + os, ''], ['browser-browser-' + os, ''], [os + ',' + os, ''], [os + ';ls', ''], [os + '&x=1', ''], [os + ' --name x', '']);
+}
+platformTable.push(
+    ['', ''], [null, ''], [undefined, ''], [42, ''], [{}, ''], [['linux'], ''], [{ toString() { return 'linux'; } }, ''],
+    ['browser', ''], ['browser-', ''], ['win', ''], ['windows10', ''], ['window', ''], ['mac', ''], ['macosx', ''], ['darwin', ''], ['ubuntu', ''], ['chromeos', ''], ['unknown', ''], ['--platform', ''], ['constructor', ''], ['__proto__', ''],
+    ['freebsd', ''], ['openbsd', ''], ['plan9', ''], ['win32', ''], ['ipados', ''], ['iphone', ''], ['android-x86', ''], ['browser-chromeos', ''], ['browser-unknown', ''], ['browser-freebsd', ''], ['x11', ''], ['linux2', ''],
+    ['İOS', ''], ['ＩＯＳ', ''], ['ıos', ''], ['windows'.repeat(2000), ''],
+);
 
 let failed = 0;
 const run = (label, fn, rows) => {
@@ -64,15 +100,22 @@ const run = (label, fn, rows) => {
         if (got !== want) { console.log('FAIL ' + label + '(' + JSON.stringify(value).slice(0, 40) + ') = ' + JSON.stringify(got) + ', wanted ' + JSON.stringify(want)); failed++; }
     }
 };
-for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
+let functionCount = 0;
+for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg', 'antsRoomMapArg', 'antsRoomSeatsArg', 'antsRoomLeaderStartArg', 'antsPlatformArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
     if (!path) { console.log('usage: web_fill_check.js shell.html lobby.html'); process.exit(2); }
     let fns;
     try { fns = extract(path, begin, end, names); } catch (e) { console.log('FAIL ' + e.message); failed++; continue; }
+    functionCount += names.length;
     // (the first of the names is the one level; its table has a few more rows with lists, which are no level)
     run(names[0], fns[names[0]], table.concat([['none,none,easy,hard', ''], ['easy,hard', ''], ['easy,easy,easy,easy', '']]));
     run(names[1], fns[names[1]], planTable);
     if (names[2]) run(names[2], fns[names[2]], teamsTable);
     if (names[3]) run(names[3], fns[names[3]], startTable);
+    if (names[4]) run(names[4], fns[names[4]], roomMapTable);
+    if (names[5]) run(names[5], fns[names[5]], roomSeatsTable);
+    if (names[6]) run(names[6], fns[names[6]], roomLeaderStartTable);
+    if (names[7]) run(names[7], fns[names[7]], platformTable);
+    // (the room's teams are read by the one function of ?teams=: the same table, whatever the parameter is called)
 }
 // The meeting of ?fill= and the mouse-wheel zoom in one page (web/shell.html carries both): the page cancels the wheel and Safari's pinch over the game's CANVAS only (nothing on window,
 // document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/four.html (the games' frames) has no wheel
@@ -112,5 +155,5 @@ for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]
     }
 }
 
-console.log(failed === 0 ? 'ok: ' + (table.length + planTable.length + teamsTable.length + startTable.length) + ' values, six functions, the wheel handlers of the pages' : failed + ' rows differ');
+console.log(failed === 0 ? 'ok: ' + (table.length + planTable.length + teamsTable.length + startTable.length + roomMapTable.length + roomSeatsTable.length + roomLeaderStartTable.length + platformTable.length) + ' values, ' + functionCount + ' functions, the wheel handlers of the pages' : failed + ' rows differ');
 process.exit(failed === 0 ? 0 : 1);

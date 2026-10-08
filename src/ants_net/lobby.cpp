@@ -249,36 +249,41 @@ void HostLobby::kick(uint8_t seat) {
 }
 
 // Protocol 14. A guest and its slot are one thing that changes seats: the whole Guest goes (its connection, key, thumb, place in the order of the Welcomes, violations, budgets), so a key still
-// finds its guest and the leader is still the earliest guest. The seat that it goes to must be empty: a colour that anyone holds (a guest, a bot, the host) is not taken from them, so a press that
-// crossed a newcomer's Hello on the wire cannot push the newcomer out of its colour, and two players change places in three moves through the empty colour (a room that waits for players has one:
-// it starts when the fourth comes). A press names a seat, not a person: when the player that it meant has left and a newcomer sits in that seat, the newcomer is the one that moves.
+// finds its guest and the leader is still the earliest guest. The seat that it goes to is empty (the guest goes there) or a guest's (the two guests change places: protocol 15, so that a full room can be
+// arranged); a colour that a bot or the host holds is not taken from them. A press that crossed a newcomer's Hello on the wire cannot push the newcomer out of its colour or swap it by mistake: the
+// SeatMove carries the guard of the seats as the leader saw them (seating_hash), and the room acts only when they are still so.
 bool HostLobby::can_move_seat(uint8_t from, uint8_t to) const noexcept {
-    return phase_ == Phase::Room && from < sim::MAX_PLAYERS && to < sim::MAX_PLAYERS
+    return phase_ == Phase::Room && from < sim::MAX_PLAYERS && to < sim::MAX_PLAYERS && from != to
         && room_.slots[from].state == SlotState::Client                                                   // (an empty seat, the host's and a bot's do not move)
-        && room_.slots[to].state == SlotState::Empty;                                                     // (the colour has to be free: so it is not the player's own)
+        && (room_.slots[to].state == SlotState::Empty || room_.slots[to].state == SlotState::Client);     // (a free colour, or a guest's: a bot's and the host's stay)
 }
 
 bool HostLobby::move_seat(uint8_t from, uint8_t to) {
     if (!can_move_seat(from, to)) return false;
+    const bool swapped = room_.slots[to].state == SlotState::Client;                                      // (two guests change places)
     std::swap(guests_[from], guests_[to]);                                                                // (an empty seat is a Guest{} and a Slot{}: the swap is the move)
     std::swap(room_.slots[from], room_.slots[to]);
     ++seat_moves_;
-    // A START that was heard earlier in this pass was made for the room as it was: its plan of bots is by colour, so the bot that was to fill the colour that the player takes fills the colour that
-    // the player left, and its sender, the leader, is where it sits now (the owner compares the seat with leader()): the lead goes with the guest, not with the seat.
+    // A START that was heard earlier in this pass was made for the room as it was: its plan of bots is by colour, so when a player takes an empty colour the bot that was to fill that colour fills the
+    // colour that the player left (a swap leaves the same colours empty: the plan stays), and its sender, the leader, is where it sits now (the owner compares the seat with leader()): the lead goes
+    // with the guest, not with the seat.
     for (Event& ev : events_) {
         if (ev.type != Event::Type::LeaderStart) continue;
-        std::swap(ev.fill[from], ev.fill[to]);
+        if (!swapped) std::swap(ev.fill[from], ev.fill[to]);
         if (ev.seat == from) ev.seat = to;
+        else if (swapped && ev.seat == to) ev.seat = from;
     }
-    elect_leader();                                                                                       // (the leader is a guest like the others: its seat may be this one)
+    elect_leader();                                                                                       // (the leader is a guest like the others: its seat may be one of these)
     broadcast_room();
-    if (to != room_.leader) {                                                                             // the player is told by the room (the leader sees its own move)
+    for (const uint8_t seat : {to, from}) {                                                               // the players are told by the room (the leader sees its own move); the one who went to `to` first
+        if (seat == from && !swapped) continue;                                                           // (the seat that was left is empty: nobody to tell)
+        if (seat == room_.leader) continue;
         std::string who = "The room";                                                                     // (a host that holds a seat has no leader: the owner of the lobby moved the guest)
         if (room_.leader < sim::MAX_PLAYERS) {
             const std::string& name = room_.slots[room_.leader].name;                                     // (a guest may have no name: "Player 2", the word that the application uses for a seat without one)
             who = name.empty() ? "Player " + std::to_string(static_cast<unsigned>(room_.leader) + 1u) : name;
         }
-        notify(to, who + " moved you to " + seat_colour_word(to) + ".");
+        notify(seat, who + " moved you to " + seat_colour_word(seat) + ".");
     }
     return true;
 }
@@ -505,11 +510,12 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         }
         case MsgType::SeatMove: {                                         // (protocol 14) the leader puts a player in another colour
             SeatMoveMsg m;
-            if (!decode(msg, m)) return violation(seat);                  // exactly the type and two different seats 0 - 3: anything else is garbage
+            if (!decode(msg, m)) return violation(seat);                  // exactly the type, two different seats 0 - 3 and a guard that is not 0: anything else is garbage
             // Only the leader of a server's room is heard, and only while the room is open. A request that cannot be done is no offence at first (the leader's press crossed the Start; the player that it
-            // meant has left meanwhile; a guest was told that it leads, and the lead has moved on): it is ignored and counted, and every one after kIgnoredSeatMovesAllowed is a violation. One that can be
-            // done is shown to the whole room, so it has the budget of a person's presses: one beyond it is dropped, and a connection that goes on beyond it is flooding.
-            if (seat == room_.leader && can_move_seat(m.from, m.to)) {
+            // meant has left meanwhile; a guest was told that it leads, and the lead has moved on; the seats are not the ones that the leader's guard was made for): it is ignored and counted, and every
+            // one after kIgnoredSeatMovesAllowed is a violation. One that can be done is shown to the whole room, so it has the budget of a person's presses: one beyond it is dropped, and a
+            // connection that goes on beyond it is flooding.
+            if (seat == room_.leader && m.guard == seating_hash(room_) && can_move_seat(m.from, m.to)) {
                 switch (guests_[seat].moves.take(now_ms, kSeatMoveBurst, kSeatMovesPerSecond, kSeatMoveExcessBurst)) {
                     case ChatBudget::Verdict::Relay: move_seat(m.from, m.to); return;     // (the guests may have changed seats: nothing of the sender's is touched after this)
                     case ChatBudget::Verdict::Drop: return;
@@ -641,7 +647,7 @@ bool ClientLobby::request_start(FillLevel level) {
 bool ClientLobby::request_seat_move(uint8_t from, uint8_t to) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !conn_->is_open()) return false;
     if (from >= sim::MAX_PLAYERS || to >= sim::MAX_PLAYERS || from == to) return false;
-    return conn_->send(encode(SeatMoveMsg{from, to}));
+    return conn_->send(encode(SeatMoveMsg{from, to, seating_hash(room_)}));            // (the guard: the seats as this machine shows them)
 }
 
 bool ClientLobby::chat(const std::string& text) {

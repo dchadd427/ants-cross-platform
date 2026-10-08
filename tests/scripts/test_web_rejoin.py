@@ -7,7 +7,8 @@ site's game server. The key is a secret and is never read out of the storage int
 
   - the block REJOIN of web/lobby.html is RUN (node, when it is installed: tests/scripts/web_rejoin_block_check.js): which storage entries count (exactly the game's JSON, a room by the page's own rule,
     a seat 0 - 3), this site's server (the game page's own join, on both schemes), the age (three hours to the millisecond: older is removed, as the game does; a minute ahead: not offered, not removed),
-    another server's entry (kept, not offered), the newest of several, a storage that throws, the words, the address, the game page reading that address, and no key anywhere;
+    another server's entry (kept, not offered), the newest of several, a storage that throws, the words (the code in two groups of four), the address (the plain code, no key and no create block),
+    the game page reading that address, and no key anywhere;
   - the page as a whole is run in the fake browser of tests/scripts/web_name_check.js (when the button is there, what it says, where it goes, the return from the browser's memory);
   - what needs no browser is read from the files: the markup (hidden, above the cards, no text of its own), the style (the page's teal button, a note of one line, the whole width on a phone), the
     block (its markers, no DOM and no storage of its own, the page's own room-code rule, the game's own constants), the wiring (the plain front page only, text only, this tab, no write to the storage);
@@ -133,9 +134,11 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertNotIn("remember('ants.rejoin", self.page)
 
     def test_the_words_are_the_ones_the_plan_gave(self):
-        self.assertIn("button: 'Rejoin your match (' + offer.room + ')'", self.block)
-        self.assertIn("note: 'Your match in room ' + offer.room + ' is still running: go back to your seat.'", self.block)
-        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9')", self.block)
+        self.assertIn("var code = codeText(offer.room);", self.block)                                                    # (the code as a screen shows it, in two groups of four: the LOBBY block's codeText)
+        self.assertIn("button: 'Rejoin your match (' + code + ')'", self.block)
+        self.assertIn("note: 'Your match in room ' + code + ' is still running: go back to your seat.'", self.block)
+        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9')", self.block)       # (the address keeps the plain code and has no create block: the room is there)
+        self.assertNotIn("roomBlockQuery", self.block)
 
 
 class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
@@ -257,8 +260,8 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         lobby = read("web", "lobby.html")
         self.assertIn("**\"Rejoin your match (CODE)\"**", doc)
         self.assertIn("**\"Your match in room CODE is still running: go back to your seat.\"**", doc)
-        self.assertIn("'Rejoin your match (' + offer.room + ')'", lobby)
-        self.assertIn("'Your match in room ' + offer.room + ' is still running: go back to your seat.'", lobby)
+        self.assertIn("'Rejoin your match (' + code + ')'", lobby)                                                      # (code: the room's code as a screen shows it, "k7m2 xq9p")
+        self.assertIn("'Your match in room ' + code + ' is still running: go back to your seat.'", lobby)
 
     def test_no_document_says_that_the_switch_is_off_or_that_the_front_pages_button_is_still_to_come(self):
         for parts in (("README.md",), ("docs", "PLAY_IN_BROWSER.md"), ("docs", "SERVER.md"), ("docs", "NETWORK_PORT.md"), ("docs", "audit", "persist_notes.md")):

@@ -1186,7 +1186,8 @@
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
-        //   joinArguments the arguments of ?join= &room= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link; badDownload whether a download is not the game data
+        //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of four);
+        //   badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
             var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
@@ -1385,17 +1386,44 @@
             function antsStartArg(value) {
                 return typeof value === 'string' && /^[1-4]$/.test(value) ? value : '';
             }
+            // The room's create block, from the address (protocol 15: the first Hello of a code that has no room makes the room out of it; the game's --room-map, --room-seats, --room-teams and --room-leader-start).
+            // Each reading gives back the text that was tested, never the text of the address, and '' (false for the flag) for anything else. The map is one of the six by key, in any case (the game turns the key
+            // into the map's file: treasure is TREASURE.LVL; a file name is never taken from an address) ...
+            function antsRoomMapArg(value) {
+                var word = typeof value === 'string' ? value.toLowerCase() : '';
+                return /^(tiny|small|medium|gauntlet|treasure|islands)$/.test(word) ? word : '';
+            }
+            // ... the seats are one digit 2 - 4 (the teams are read as ?teams= is: antsTeamsArg) ...
+            function antsRoomSeatsArg(value) {
+                return typeof value === 'string' && /^[2-4]$/.test(value) ? value : '';
+            }
+            // ... and a full room that waits for its leader's START instead of starting by itself says "1", exactly (the game's --room-leader-start takes no value).
+            function antsRoomLeaderStartArg(value) {
+                return value === '1';
+            }
+            // What this game tells the room about itself (the game's --platform; the room only shows it): [browser-]windows, macos, linux, android, ios or other, in any case, as the lower case word that was tested.
+            // The page does not look at the browser to find it out: it is the address's word or none.
+            function antsPlatformArg(value) {
+                var word = typeof value === 'string' ? value.toLowerCase() : '';
+                return /^(browser-)?(windows|macos|linux|android|ios|other)$/.test(word) ? word : '';
+            }
             // ANTS_FILL_END
 
             // What the address says about joining a game server (docs/NETWORK_PORT.md): the arguments to give the game and whether the page is a frame of another page. `search` is the
-            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, a seat, a fill level, the teams,
-            // the number of people to wait for (start) and a name that do not fit their rule are left out (the game checks them too). Without a valid join nothing about a room goes to the game.
+            // address's query, `secure` says https (wss), `host` is the site's host. Only a door on THIS site counts: /ws or a path below it, no //, no ..; a room code, the room's create block (map, seats,
+            // teams, leader starts), the platform word, a seat, a fill level, the teams, the number of people to wait for (start) and a name that do not fit their rule are left out (the game checks them too).
+            // Without a valid join nothing about a room goes to the game. The arguments come in this order: the door, the room, the create block, the platform, the seat, the fill, the teams, the start, the name.
             function joinArguments(search, secure, host) {
                 var out = { embed: false, args: [] };
                 var q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var join = q.get('join');
                 var room = q.get('room');
+                var roomMap = antsRoomMapArg(q.get('roommap'));
+                var roomSeats = antsRoomSeatsArg(q.get('roomseats'));
+                var roomTeams = antsTeamsArg(q.get('roomteams'));
+                var roomLeaderStart = antsRoomLeaderStartArg(q.get('roomleaderstart'));
+                var platform = antsPlatformArg(q.get('platform'));
                 var seat = q.get('seat');
                 var name = q.get('name');
                 var fill = antsFillPlanArg(q.get('fill'));
@@ -1406,6 +1434,11 @@
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
                     out.args.push('--join-url', (secure ? 'wss://' : 'ws://') + host + join);
                     if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) out.args.push('--room', room);
+                    if (roomMap) out.args.push('--room-map', roomMap);
+                    if (roomSeats) out.args.push('--room-seats', roomSeats);
+                    if (roomTeams) out.args.push('--room-teams', roomTeams);
+                    if (roomLeaderStart) out.args.push('--room-leader-start');
+                    if (platform) out.args.push('--platform', platform);
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);
                     if (teams) out.args.push('--teams', teams);
@@ -1479,6 +1512,12 @@
                 if (!(room && /^[A-Za-z0-9_-]{1,32}$/.test(room))) return false;
                 return q.get('embed') !== '1' && !q.has('name');
             }
+            // A room code as a screen shows it: eight characters in two groups of four, "k7m2xq9p" as "k7m2 xq9p" (easier to read out and to copy by eye), any other length as it is. The front page's codeText
+            // (web/lobby.html: the room panel, the Rejoin button, the name step of a room link) says the same. Only a screen shows a code so: addresses, fields and the game's arguments keep the plain code.
+            function codeText(code) {
+                var text = typeof code === 'string' ? code : '';
+                return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;
+            }
             // The address without its `name` parameter: a game that was given a name by the page that opened it must not hand that name on to whoever is sent the address from its address bar
             // (the person that opens the copy is asked, like for any shared link).
             function withoutName(search) {
@@ -1548,17 +1587,25 @@
             }
 
             return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
-        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>&seat=<0-3>&name=<name>[&fill=<plan>][&teams=A+B][&start=<1-4>][&embed=1] (ANTS_PAGE.joinArguments reads it)
+        // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>[&roommap=<key>][&roomseats=<2-4>][&roomteams=A+B][&roomleaderstart=1][&platform=<word>]&seat=<0-3>&name=<name>[&fill=<plan>]
+        //                                                                         [&teams=A+B][&start=<1-4>][&embed=1] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
-        //   room   the room code (letters, digits, _ and -, up to 32); seat 0 green, 1 red, 2 blue, 3 black; name: printable ASCII, up to 32 characters
+        //   room   the room code, a name and nothing more (letters, digits, _ and -, up to 32; the front page makes eight characters of its own: k7m2xq9p); seat 0 green, 1 red, 2 blue, 3 black;
+        //          name: printable ASCII, up to 32 characters
+        //   roommap, roomseats, roomteams, roomleaderstart   the room's create block (protocol 15): what the server makes the room of when it has none of this code, so every link of a room made by the
+        //          front page carries it; only the first Hello of a code is read, and a code that has a room keeps its own. The map by its key (tiny, small, medium, gauntlet, treasure or islands, any case:
+        //          the game's --room-map), the seats (2, 3 or 4: --room-seats), the teams that every start of the room has (two different seats 0 - 3 as A+B: --room-teams) and 1 for a full room that waits for its
+        //          leader's START (--room-leader-start). With none of them a Hello of a room that does not exist is answered "There is no such room on this server."; harmless when the room exists
+        //   platform  what this browser runs on, for the room to show next to the player (the game's --platform: [browser-]windows, macos, linux, android, ios or other, any case); only a word of the address, this page
+        //          does not look for it
         //   fill   the bots that this player's START seats in the empty seats of the room when this player is its leader (the first to connect): easy, medium or hard (any case) for every seat, or four words
         //          for the seats 0 - 3 (none,none,easy,hard): the game's --fill-bots; harmless for everybody else
-        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too, and ignored by a room whose own code names teams (a team
-        //          word, demo-treasure-4p-t01-k7m2xq: the game reads the code itself)
+        //   teams  the teams that the leader's START makes: two different seats 0 - 3 as A+B: the game's --teams; harmless for everybody else too, and ignored by a room whose create block names teams of its own
+        //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
@@ -1750,7 +1797,7 @@
                 show: function () {
                     var room = '';
                     try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
-                    document.getElementById('name-step-title').textContent = 'Join the match ' + room;      // (text: the room code passed asksForName's rule)
+                    document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);      // (text: the room code passed asksForName's rule; shown in two groups of four)
                     card.hidden = false;
                     try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
                 },

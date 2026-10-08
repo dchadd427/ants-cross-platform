@@ -9,7 +9,7 @@ Every option of the game program `ants`, and the environment variables that it a
 
 ## How the options are read
 
-- **Refused.** A wrong or missing value for `--aspect`, `--zoom`, `--prediction`, `--window-size`, `--server`, `--fill-bots`, `--bot` or `--teams`, a `--bot` that cannot play, and `--start-menu` together with an option that starts a match or a room stop the game at the start. It prints `[Application]` and the reason on stderr, then `Failed to initialize Ants Application`, opens no window and exits with status 1. Only the first problem is reported.
+- **Refused.** A wrong or missing value for `--aspect`, `--zoom`, `--prediction`, `--window-size`, `--server`, `--fill-bots`, `--bot`, `--teams`, `--room-map`, `--room-seats`, `--room-teams` or `--platform`, a `--bot` that cannot play, and `--start-menu` together with an option that starts a match or a room stop the game at the start. It prints `[Application]` and the reason on stderr, then `Failed to initialize Ants Application`, opens no window and exits with status 1. Only the first problem is reported.
 - **Ignored without a word.** An argument that the game does not know (there is no `--help`), an option that needs a value when it is the last word, and a value that does not fit for `--room` (not a valid code), `--seat` (a number that is not 0 to 3; a word counts as 0), `--start-when` (not 1 to 4), `--grid` (not `CxR`), `--window-pos` (not `X,Y`), and a team that is not 0 to 3 in `-N` and `--team-name` (a word counts as 0 for `--team-name`).
 - **Not checked.** A word where a whole number is needed (`--seed abc`, and the same for `--frames`, `--select-ant`, `--select-base`, `--player`, `--port`, `--lan-port` and the port of `--join HOST:abc`) gets no message: the program aborts with an uncaught C++ exception (`std::invalid_argument`, exit status 134). A number with too many digits does the same (`std::out_of_range`), also for `--host N`. With `--lan-list` a word for `--lan-port` counts as 0, and the system picks the port.
 - **Looked for first.** `--version` and `--lan-list` are found before any other option is read. They need no window and no assets (native builds).
@@ -52,7 +52,7 @@ Every option of the game program `ants`, and the environment variables that it a
 - The first seat invites and the second accepts, with the original's own commands ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.11), before the first tick. So "... are a team now!" is in the chat log, no dialog opens, and the standard bot never breaks the team.
 - When a seat does not play, or the pair would be the whole match (it would be over as soon as the pair's score is above 0), the game says so and starts without teams.
 - With `--join`, `--join-url` or `--host` it is this machine's choice for a room's START that it leads (network protocol 13: every machine and the server make the same team before the first tick; a guest's is ignored). Teams that the seats which play cannot make are told to everybody in the room ("No teams: ..."), and the match starts without.
-- A room whose own code names teams (`demo-treasure-4p-t01-k7m2xq`: the word `t01` is the pair 0 + 1) makes those, for every start (the room that fills up included), and ignores `--teams`.
+- A room that has teams of its own (its create block named them: `--room-teams`, below) makes those, for every start (the room that fills up included), and ignores `--teams`.
 - The start menu's Teams rows (Single player, and the Host panel for three or four players) and the Teams select of the web page's card choose the same thing.
 - More: [`BOTS.md`](BOTS.md#alliances).
 
@@ -68,13 +68,18 @@ How network play works (a room on the local network, a server's room, bots): [`M
 | `--room` | `CODE` | none | Join: the room of a server (letters, digits, `_` and `-`, up to 32; a code that does not fit is ignored). Without it the host is a LAN or direct host. |
 | `--token` | `T` | none | Join: the credential that came with the room code (carried to the server, never interpreted by the game). |
 | `--seat` | `N`, 0 to 3 | any free seat | When joining: ask for seat N (0 green, 1 red, 2 blue, 3 black). A seat that is taken gives the first free one. |
+| `--room-map` | `treasure`, `tiny`, ..., or `FILE.LVL` | the server's own map | Join: the **create block** of the Hello (network protocol 15): the map of the room that a server with public rooms makes when it has none of the `--room` code. A plain word is the original's map of that name; a name with an extension is a file of the server's maps (the server offers only the maps that it lists, any other gets its own default). Refused when it is no map name. |
+| `--room-seats` | `2`, `3` or `4` | `4` | Join: the create block's seats (the room starts by itself when that many people are in). Refused for any other value. |
+| `--room-teams` | `ffa` or `A+B` | `ffa` | Join: the create block's teams (the room's own: it makes them for every start). Refused when the pair cannot be made. |
+| `--room-leader-start` | none | off | Join: the create block's flag that a full room waits for its leader's START (so that the leader can arrange the colours first) in place of starting by itself. |
+| `--platform` | `windows`, `macos`, `linux`, `android`, `ios` or `other`, with `browser-` in front for a game in a web page | this build's own system | What the Hello tells the room about this game (any case; cosmetic: nothing depends on it). The web page passes its own word. Refused for any other value. |
 | `--server` | `HOST[:PORT]` | `beta.playants.org:4001` | The game server of the start menu's Join and Host; it overrides the settings key `server`. Refused at the start, with the reason, when it is not a host name, an IPv4 address or an `[IPv6]` address with an optional port (1 to 65535). |
 | `--fill-bots` | `none`, `easy`, `medium` or `hard`, or four of them: `none,none,easy,hard` | `none` | The bots that this player's START seats in the empty seats of its room. One word is every seat's level; four words, joined by commas, are the levels of the seats 0 to 3. Any case; anything else, or no value, is refused. |
 | `--port` | `N` | `4001` | The TCP port for `--host` and `--join`. |
 | `--loopback` | none | off | With `--host`: accept only this machine (two copies on one computer). The room's announcement stays on this machine too. |
 | `--lan-port` | `N` | `4001` | The UDP port on which an open room announces itself to the local network. Both machines must use the same one. `--lan-list` listens on it too. |
 | `--no-lan` | none | off | Do not announce the room on the local network (guests then need the address). |
-| `--start-when` | `N`, 1 to 4 | off | The leader of a server's room presses START itself once N players are in it. The web front page's card gives it to the game of a match, and a headless test client uses it. |
+| `--start-when` | `N`, 1 to 4 | off | The leader of a server's room presses START itself once N players are in it (also when the room's create block asked for a full room to wait for its leader). The web front page's card gives it to the game of a match, and a headless test client uses it. |
 | `--say` | `TEXT` | none | A test hook for headless clients: says the line once in the waiting room. |
 
 ### `--fill-bots`, `--start-when` and `--say` in detail

@@ -30,9 +30,11 @@
 // and start (Event::LeaderStart carries the levels and the teams; HostLobby::can_start_filled says whether the room could start with them: one person is enough), and start() puts the teams into the
 // Start message that every machine starts its match from.
 //
-// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"). A SeatMove of the leader of a server's room, while the room is open, puts the guest of seat `from` in the empty seat `to`
-// (HostLobby::move_seat). Everything that is a guest's own goes with it (its key, its name, its place in the order of the Welcomes, so that the leader stays the leader, its violations and its budgets);
-// every guest is sent the Room message (each with its own `you`), and a guest whose colour changed is told so with a notice of the room ("Ann moved you to Red.").
+// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A SeatMove of the leader of a server's room, while the room is open, puts the
+// guest of seat `from` in seat `to` (HostLobby::move_seat): in an empty seat it goes there, and the guest that holds the seat changes places with it (two guests swap; a bot's seat and the host's never
+// move). It is heard only when its guard, the seating_hash of the room as the leader saw it, is the room's own: a press that was made for other seats than these is ignored and counted. Everything that
+// is a guest's own goes with it (its key, its name, its place in the order of the Welcomes, so that the leader stays the leader, its violations and its budgets); every guest is sent the Room message
+// (each with its own `you`), and a guest whose colour changed is told so with a notice of the room ("Ann moved you to Red.").
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -133,16 +135,17 @@ public:
     /// than kIgnoredStartRequestsAllowed of them: each one after those is a violation. A malformed one is a violation at once.
     uint32_t ignored_start_requests() const noexcept { return ignored_start_requests_; }
     /// How many SeatMove messages were heard and not acted on (protocol 14): from a guest that is not the leader (every guest of a host that holds a seat), after the room started loading, for a
-    /// player that is not there or a seat that anyone holds. No offence as long as a guest does not send more than kIgnoredSeatMovesAllowed of them: each one after those is a
-    /// violation. A malformed one is a violation at once; one beyond the budget of a leader's presses (kSeatMoveBurst ...) is dropped and counted by nobody.
+    /// player that is not there, for a seat of a bot or of the host, or with a guard that is not the room's own (protocol 15: the press was made for other seats than these). No offence as long
+    /// as a guest does not send more than kIgnoredSeatMovesAllowed of them: each one after those is a violation. A malformed one is a violation at once; one beyond the budget of a leader's presses
+    /// (kSeatMoveBurst ...) is dropped and counted by nobody.
     uint32_t ignored_seat_moves() const noexcept { return ignored_seat_moves_; }
-    /// How many colour moves were made (move_seat that returned true)
+    /// How many colour moves were made (move_seat that returned true; a swap of two guests is one)
     uint32_t seat_moves() const noexcept { return seat_moves_; }
-    /// The colour of a guest changes (protocol 14): the guest of seat `from` takes the empty seat `to`. Everything that is a guest's own goes with it (its connection, key, name, thumb, place in the
-    /// order of the Welcomes, violations and budgets); the leader is elected again (it is a guest, whose seat may have been this one), the Room message goes to everybody and the guest, unless it is
-    /// the leader, gets the room's notice "<leader's name> moved you to <colour>.". False (nothing changes) unless the room is open (Phase::Room), both seats are 0 - 3 and different, the seat `from`
-    /// holds a guest and the seat `to` is empty (a colour that a guest, a bot or the host holds is not taken from them). This is the rule; who may ask for it is the lobby's business (the leader's
-    /// SeatMove) and a host that holds a seat has no leader to ask.
+    /// The colour of a guest changes (protocol 14): the guest of seat `from` takes seat `to`; when a guest holds `to` the two change places (protocol 15). Everything that is a guest's own goes with it
+    /// (its connection, key, name, thumb, place in the order of the Welcomes, violations and budgets); the leader is elected again (it is a guest, whose seat may have been one of these), the Room
+    /// message goes to everybody and each guest that moved, unless it is the leader, gets the room's notice "<leader's name> moved you to <colour>.". False (nothing changes) unless the room is open
+    /// (Phase::Room), both seats are 0 - 3 and different, the seat `from` holds a guest and the seat `to` is empty or holds a guest (a colour that a bot or the host holds does not move). This is the
+    /// rule; who may ask for it, and with what guard, is the lobby's business (the leader's SeatMove) and a host that holds a seat has no leader to ask.
     bool move_seat(uint8_t from, uint8_t to);
 
     /// A connection that the listener accepted; it becomes a seat when its Hello is accepted. `address` is where the connection came from (the host
@@ -251,7 +254,7 @@ private:
     bool leads() const noexcept { return cfg_.host_seat >= sim::MAX_PLAYERS && cfg_.early_start; }
     /// The leader is the guest with the earliest Welcome among those who are here (recomputed whenever somebody joins or leaves, before the room is broadcast)
     void elect_leader();
-    /// Whether move_seat would move a guest now (the rule alone, no budget): the room is open, both are seats, `from` holds a guest and `to` is empty (so the two are different)
+    /// Whether move_seat would move a guest now (the rule alone, no guard, no budget): the room is open, both are different seats, `from` holds a guest and `to` is empty or holds a guest
     bool can_move_seat(uint8_t from, uint8_t to) const noexcept;
 
     Config cfg_;

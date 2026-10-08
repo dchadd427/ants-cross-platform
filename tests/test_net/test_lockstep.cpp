@@ -20,6 +20,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -928,7 +929,7 @@ struct LoneSession {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 14);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes)
+        ASSERT_EQ(kProtocolVersion, 15);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::SeatMove));
@@ -1236,7 +1237,7 @@ void run_protocol_tests() {
                                                          encode(ResumeMsg{1, 2, 500}), encode(RequestMsg{40}), encode(PeerHelloMsg{3}),
                                                          encode(server_room_of(0)), encode(server_room_of(255)), encode(StartRequestMsg{}), encode(LagMsg{2, 7000}), seed_hello,
                                                          seed_welcome, encode(RejectMsg{RejectReason::Superseded}), seed_presence, encode(VoteMsg{2, true}), encode(CatchUpMsg{100, 4000}),
-                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13, encode(SeatMoveMsg{1, 3})};
+                                                         seed_batch, encode(CaughtUpMsg{4000, {1, 2, 3, 4, 5, 6, 7, 8}}), seed_request13, seed_start13, encode(SeatMoveMsg{1, 3, 5})};
         size_t accepted = 0;
         for (int i = 0; i < 400000; ++i) {
             std::vector<uint8_t> buf;
@@ -1316,9 +1317,9 @@ void run_protocol_tests() {
                 for (const FillLevel level : sreq.fill) ASSERT_TRUE(static_cast<uint8_t>(level) <= kFillLevelLast);
                 ASSERT_TRUE((sreq.team_a == kNoTeam && sreq.team_b == kNoTeam) || (sreq.team_a < sim::MAX_PLAYERS && sreq.team_b < sim::MAX_PLAYERS && sreq.team_a != sreq.team_b));
             }
-            if (decode(buf, smove)) {                  // (protocol 14: the type and two different seats of the room)
+            if (decode(buf, smove)) {                  // (protocol 14: the type and two different seats of the room; 15: and the guard that is not 0)
                 ++accepted;
-                ASSERT_TRUE(encode(smove) == buf && buf.size() == 3 && smove.from < sim::MAX_PLAYERS && smove.to < sim::MAX_PLAYERS && smove.from != smove.to);
+                ASSERT_TRUE(encode(smove) == buf && buf.size() == 7 && smove.from < sim::MAX_PLAYERS && smove.to < sim::MAX_PLAYERS && smove.from != smove.to && smove.guard != 0);
             }
             if (decode(buf, smsg)) {                   // a Start that gets through has teams that its own roster can make, and encodes back to the same bytes
                 ++accepted;
@@ -1332,14 +1333,15 @@ void run_protocol_tests() {
     TEST_CASE("N2.3b Protocol 7: The Room Names Its Leader (Every Value; Only The Seat Of A Guest Or Nobody), StartRequest Is The Type, A Fill Level 0 .. 3 For Each Seat And The Two Team Bytes (Seven Bytes Since Protocol 13, Two Before, One Before That) And Nothing Else, The Layout Of Protocol 6 Is Refused") {
         ASSERT_TRUE(kProtocolVersion >= 7);                                // protocol 7 grew the Room message by a byte and added a message type (8 to 11 keep both): a client of protocol 6 cannot play with it
         ASSERT_EQ(kNoLeader, 255);
-        // every value of the leader: nobody, and each seat that a guest holds; the byte is the last of the message, the receiver's own seat ("you") the one before it
+        // every value of the leader: nobody, and each seat that a guest holds; the byte is the fourth from the end of the message (the room's two team bytes and its rules follow, protocol 15), the receiver's own seat
+        // ("you") the one before it
         for (const uint8_t leader : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
             RoomMsg r = server_room_of(leader);
             for (const uint8_t you : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                     // (the receiver may or may not be the leader)
                 r.you = you;
                 const std::vector<uint8_t> bytes = encode(r);
-                ASSERT_EQ(bytes[bytes.size() - 1], leader);
-                ASSERT_EQ(bytes[bytes.size() - 2], you);
+                ASSERT_EQ(bytes[bytes.size() - 4], leader);
+                ASSERT_EQ(bytes[bytes.size() - 5], you);
                 RoomMsg back;
                 ASSERT_TRUE(decode(bytes, back) && back.leader == leader && back.you == you);
                 ASSERT_TRUE(encode(back) == bytes);
@@ -1360,7 +1362,7 @@ void run_protocol_tests() {
         RoomMsg out;
         for (unsigned value = 0; value < 256; ++value) {                   // every byte value in the leader's place
             std::vector<uint8_t> bytes = base;
-            bytes.back() = static_cast<uint8_t>(value);
+            bytes[bytes.size() - 4] = static_cast<uint8_t>(value);
             const bool should = value == 255 || value == 0 || value == 1 || value == 3;      // seats 0, 1 and 3 hold guests, seat 2 is empty
             ASSERT_EQ(decode(bytes, out), should);
         }
@@ -1375,7 +1377,7 @@ void run_protocol_tests() {
             r.slots[2] = {SlotState::Client, "Dan", 10};
             ASSERT_TRUE(decode(encode(r), out) && out.leader == 2);        // a guest does
         }
-        {   // the layout of protocol 6 (no leader byte) is no Room message of this protocol, and neither is one byte too many
+        {   // a message that is one byte short (the layout of protocol 6 had no leader byte at all: N2.103 has the layout of protocol 14) is no Room message of this protocol, and neither is one byte too many
             std::vector<uint8_t> v6 = base;
             v6.pop_back();
             ASSERT_FALSE(decode(v6, out));
@@ -1418,8 +1420,8 @@ void run_protocol_tests() {
         for (int i = 0; i < 20000; ++i) {
             std::vector<uint8_t> bytes = encode(server_room_of(static_cast<uint8_t>(i % 2 == 0 ? 0 : 255)));
             const uint32_t pick = rng.below(12);                                                                 // the leader's byte: mostly a seat number or nobody, sometimes any byte
-            bytes[bytes.size() - 1] = pick < 8 ? static_cast<uint8_t>(pick) : (pick == 8 ? uint8_t{255} : static_cast<uint8_t>(rng.below(256)));
-            if (rng.below(3) == 0) bytes[bytes.size() - 2] = static_cast<uint8_t>(rng.below(256));               // and the receiver's own seat
+            bytes[bytes.size() - 4] = pick < 8 ? static_cast<uint8_t>(pick) : (pick == 8 ? uint8_t{255} : static_cast<uint8_t>(rng.below(256)));
+            if (rng.below(3) == 0) bytes[bytes.size() - 5] = static_cast<uint8_t>(rng.below(256));               // and the receiver's own seat
             if (rng.below(7) == 0) bytes.resize(rng.below(static_cast<uint32_t>(bytes.size()) + 2));
             RoomMsg room;
             if (decode(bytes, room)) {
@@ -1434,7 +1436,7 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 14);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 14: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove)
+        ASSERT_EQ(kProtocolVersion, 15);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 15: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, which this test does not read)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
                     static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 31);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
@@ -1466,7 +1468,7 @@ void run_protocol_tests() {
             }
         }
 
-        // ---- Hello: the layout (v6 fields, then the key and the turns), the rules ----
+        // ---- Hello: the layout (v6 fields, then the key and the turns, then the platform byte of protocol 15: N2.102 has its create block), the rules ----
         {
             HelloMsg h;
             h.name = "Ann";
@@ -1477,11 +1479,11 @@ void run_protocol_tests() {
             h.key = key_with(5);
             h.have_turns = 0x01020304;
             const std::vector<uint8_t> bytes = encode(h);
-            ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4});     // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns
+            ASSERT_EQ(bytes.size(), size_t{1 + 2 + 4 + 2 + 1 + 7 + 4 + 16 + 4 + 1}); // type, version, "Ann", port, seat, "ROOM-7", "tok", key, turns, platform
             ASSERT_TRUE(bytes[0] == 1 && bytes[1] == (kProtocolVersion & 0xFF) && bytes[2] == (kProtocolVersion >> 8));      // (the version is whatever this protocol is: 10 here until protocol 11)
             const SeatKey key5 = key_with(5);
-            ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 20)));       // the key: 16 bytes
-            ASSERT_TRUE(bytes[bytes.size() - 4] == 4 && bytes[bytes.size() - 3] == 3 && bytes[bytes.size() - 2] == 2 && bytes[bytes.size() - 1] == 1);   // the turns, little endian
+            ASSERT_TRUE(std::equal(key5.begin(), key5.end(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() - 21)));       // the key: 16 bytes
+            ASSERT_TRUE(bytes[bytes.size() - 5] == 4 && bytes[bytes.size() - 4] == 3 && bytes[bytes.size() - 3] == 2 && bytes[bytes.size() - 2] == 1 && bytes[bytes.size() - 1] == 0);   // the turns, little endian, and the platform byte (not told)
             HelloMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.version == kProtocolVersion && back.name == "Ann" && back.listen_port == 0x1234 && back.want_seat == 2 && back.room == "ROOM-7" && back.token == "tok" &&
                         back.key == key_with(5) && back.have_turns == 0x01020304);
@@ -1498,7 +1500,7 @@ void run_protocol_tests() {
             ASSERT_FALSE(decode(encode(orphan), back));
             // a key that is cut short: every length between the end of the token and the end of the message
             const std::vector<uint8_t> core = encode(h);
-            for (size_t keep = core.size() - 20; keep < core.size(); ++keep) {
+            for (size_t keep = core.size() - 21; keep < core.size(); ++keep) {
                 const std::vector<uint8_t> shorter(core.begin(), core.begin() + static_cast<std::ptrdiff_t>(keep));
                 ASSERT_FALSE(decode(shorter, back));
                 ASSERT_FALSE(any_decodes(shorter));
@@ -4660,17 +4662,18 @@ void run_failure_tests() {
         {
             ServerMatch m(1, 3, {20, 5});
             m.run(1000);
-            for (uint32_t i = 0; i < kIgnoredSeatMovesAllowed; ++i) m.client_ends[0]->send(encode(SeatMoveMsg{1, 3}));              // sixteen late presses: more than the eight violations that throw a client out
+            for (uint32_t i = 0; i < kIgnoredSeatMovesAllowed; ++i) m.client_ends[0]->send(encode(SeatMoveMsg{1, 3, 7}));           // sixteen late presses: more than the eight violations that throw a client out
             m.run(500);
             ASSERT_TRUE(m.host->client_present(0));
             ASSERT_EQ(m.host->violations(0), 0u);
             ASSERT_EQ(m.host->ignored_seat_moves(), kIgnoredSeatMovesAllowed);
             ASSERT_EQ(m.host->ignored_start_requests(), 0u);                                         // (each message has its own count)
-            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 2, 2});                // the same seat twice: garbage like any other
-            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0, 4});                // a seat that no room has
-            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0});                   // a byte short
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 2, 2, 7, 0, 0, 0});    // the same seat twice: garbage like any other
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0, 4, 7, 0, 0, 0});    // a seat that no room has
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0, 1, 0, 0, 0, 0});    // a guard of 0 (protocol 15: a number that was computed)
+            m.client_ends[1]->send({static_cast<uint8_t>(MsgType::SeatMove), 0, 1});                // the three bytes of protocol 14
             m.run(300);
-            ASSERT_EQ(m.host->violations(1), 3u);
+            ASSERT_EQ(m.host->violations(1), 4u);
             ASSERT_TRUE(m.host->client_present(1));
             ASSERT_EQ(m.host->ignored_seat_moves(), kIgnoredSeatMovesAllowed);                       // (garbage is no request: it is not counted as one)
             m.settle();
@@ -4680,10 +4683,10 @@ void run_failure_tests() {
         {   // a host that plays a seat: nobody in its room leads, so the message is a violation like any other that a guest may not send
             Match m(1, 3, {20, 0});
             m.run(1000);
-            m.client_ends[2]->send(encode(SeatMoveMsg{1, 2}));
+            m.client_ends[2]->send(encode(SeatMoveMsg{1, 2, 7}));
             m.run(300);
             ASSERT_EQ(m.host->violations(2), 1u);
-            for (int i = 0; i < 10; ++i) m.client_ends[2]->send(encode(SeatMoveMsg{1, 2}));
+            for (int i = 0; i < 10; ++i) m.client_ends[2]->send(encode(SeatMoveMsg{1, 2, 7}));
             m.run(300);
             ASSERT_FALSE(m.host->client_present(2));                                                 // thrown out after eight
             ASSERT_TRUE(m.host->client_present(1));
@@ -4705,7 +4708,7 @@ void run_failure_tests() {
                 c.text = "spam";
                 return encode(c);
             }
-            if (kind == "seatmove") return encode(SeatMoveMsg{1, 2});                   // (protocol 14: a leader's press that crossed the Start, repeated)
+            if (kind == "seatmove") return encode(SeatMoveMsg{1, 2, 7});                // (protocol 14: a leader's press that crossed the Start, repeated)
             return encode(StartRequestMsg{});                                           // "startreq"
         };
         for (const std::string kind : {"ack", "hash", "ping", "chat", "startreq", "seatmove"}) {
@@ -9187,7 +9190,7 @@ void run_reconnect_session_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 14);                                 // (the Chat of protocol 11 is the Chat of protocol 14; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 15);                                 // (the Chat of protocol 11 is the Chat of protocol 15; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -9802,7 +9805,7 @@ StartMsg start_of_hold(const HoldMatch& m) {
 
 void run_protocol13_tests() {
     TEST_CASE("N2.100 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
-        ASSERT_EQ(kProtocolVersion, 14);                                                       // (the messages of protocol 13 are the messages of protocol 14: 14 added the SeatMove, N2.101)
+        ASSERT_EQ(kProtocolVersion, 15);                                                       // (the messages of protocol 13 are the messages of protocols 14 and 15 too: 14 added the SeatMove, N2.101; 15 the platform and the create block, N2.102 - N2.104)
         ASSERT_TRUE(kNoTeam == 255 && kFillLevelLast == 3);
         StartRequestMsg out;
         // the layout, byte by byte: the type, the levels of seats 0 to 3, team_a, team_b
@@ -9892,7 +9895,7 @@ void run_protocol13_tests() {
         ASSERT_FALSE(decode(std::vector<uint8_t>{24, 2}, out));                                // protocol 11's two bytes: one level for all
         ASSERT_FALSE(decode(std::vector<uint8_t>{24, 0, 0, 0, 0}, out));                       // the levels without the teams
 
-        // ---- the Start message: the two team bytes at the end, and the decoder's rule ----
+        // ---- the Start message: the two team bytes, then the four platform bytes of protocol 15 (N2.103), and the decoder's rule ----
         const auto start_with = [](uint8_t roster, uint8_t a, uint8_t b) {
             StartMsg st;
             st.seed = 77;
@@ -9909,16 +9912,19 @@ void run_protocol13_tests() {
         {
             const StartMsg st = start_with(0x0F, 0, 3);
             const std::vector<uint8_t> bytes = encode(st);
-            ASSERT_TRUE(bytes.size() >= 3 && bytes[bytes.size() - 2] == 0 && bytes[bytes.size() - 1] == 3);       // appended to the layout: the last two bytes
+            ASSERT_TRUE(bytes.size() >= 7 && bytes[bytes.size() - 6] == 0 && bytes[bytes.size() - 5] == 3);       // appended to the layout: the two bytes before the four platform bytes
             StartMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.team_a == 0 && back.team_b == 3 && back.roster == 0x0F && back.seed == 77 && back.names[2] == "P2" && encode(back) == bytes);
             const std::vector<uint8_t> ffa = encode(start_with(0x0F, kNoTeam, kNoTeam));
             ASSERT_EQ(ffa.size(), bytes.size());
-            ASSERT_TRUE(ffa[ffa.size() - 2] == 255 && ffa[ffa.size() - 1] == 255);
+            ASSERT_TRUE(ffa[ffa.size() - 6] == 255 && ffa[ffa.size() - 5] == 255);
             ASSERT_TRUE(decode(ffa, back) && back.team_a == kNoTeam && back.team_b == kNoTeam && !back.teams().set);
-            std::vector<uint8_t> old_layout = ffa;                                                                // protocol 12's Start has no team bytes: it is no Start
-            old_layout.resize(old_layout.size() - 2);
+            std::vector<uint8_t> old_layout = ffa;                                                                // protocol 12's Start has no team bytes and no platform bytes: it is no Start
+            old_layout.resize(old_layout.size() - 6);
             ASSERT_FALSE(decode(old_layout, back));
+            std::vector<uint8_t> v14 = ffa;                                                                       // protocols 13 and 14's Start has no platform bytes: it is no Start of 15
+            v14.resize(v14.size() - 4);
+            ASSERT_FALSE(decode(v14, back));
             std::vector<uint8_t> one_short = ffa;
             one_short.pop_back();
             ASSERT_FALSE(decode(one_short, back));
@@ -9981,35 +9987,46 @@ void run_protocol13_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.101 Protocol 14, The Message: SeatMove Is The Type 31 And Two Different Seats 0 .. 3, Three Bytes And Nothing Else; Every Other Pair Of Bytes, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, And No Other Message Is Taken For It") {
-        ASSERT_EQ(kProtocolVersion, 14);
+    TEST_CASE("N2.101 Protocol 14 And 15, The Message: SeatMove Is The Type 31, Two Different Seats 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Seven Bytes And Nothing Else; Every Other Pair Of Seats, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, The Layout Of Protocol 14 Is Refused, And No Other Message Is Taken For It; The Guard Is The Seating Hash: The State And The Name Of Each Seat, Nothing Else Of The Room Message") {
+        ASSERT_EQ(kProtocolVersion, 15);
         ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 31);
-        // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes
-        ASSERT_TRUE(encode(SeatMoveMsg{0, 1}) == (std::vector<uint8_t>{31, 0, 1}));
-        ASSERT_TRUE(encode(SeatMoveMsg{3, 2}) == (std::vector<uint8_t>{31, 3, 2}));
-        ASSERT_EQ(peek_type(encode(SeatMoveMsg{2, 0})), MsgType::SeatMove);
+        // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes, the guard
+        ASSERT_TRUE(encode(SeatMoveMsg{0, 1, 0x04030201u}) == (std::vector<uint8_t>{31, 0, 1, 1, 2, 3, 4}));
+        ASSERT_TRUE(encode(SeatMoveMsg{3, 2, 0xFFFFFFFFu}) == (std::vector<uint8_t>{31, 3, 2, 255, 255, 255, 255}));
+        ASSERT_EQ(peek_type(encode(SeatMoveMsg{2, 0, 7})), MsgType::SeatMove);
         SeatMoveMsg out;
-        ASSERT_TRUE(decode(std::vector<uint8_t>{31, 2, 0}, out) && out.from == 2 && out.to == 0);
+        ASSERT_TRUE(decode(std::vector<uint8_t>{31, 2, 0, 9, 0, 0, 0}, out) && out.from == 2 && out.to == 0 && out.guard == 9);
         // every pair of byte values: the 12 ordered pairs of two different seats of the room are messages, nothing else
         size_t accepted = 0;
         for (unsigned from = 0; from < 256; ++from) {
             for (unsigned to = 0; to < 256; ++to) {
-                const std::vector<uint8_t> bytes = {31, static_cast<uint8_t>(from), static_cast<uint8_t>(to)};
-                SeatMoveMsg keep{7, 9};
+                const std::vector<uint8_t> bytes = {31, static_cast<uint8_t>(from), static_cast<uint8_t>(to), 0x78, 0x56, 0x34, 0x12};
+                SeatMoveMsg keep{7, 9, 5};
                 const bool should = from < 4 && to < 4 && from != to;
                 const bool ok = decode(bytes, keep);
                 ASSERT_EQ(ok, should);
                 if (ok) {
-                    ASSERT_TRUE(keep.from == from && keep.to == to && encode(keep) == bytes);
+                    ASSERT_TRUE(keep.from == from && keep.to == to && keep.guard == 0x12345678u && encode(keep) == bytes);
                     ++accepted;
                 } else {
-                    ASSERT_TRUE(keep.from == 7 && keep.to == 9);                                     // (the target is left alone)
+                    ASSERT_TRUE(keep.from == 7 && keep.to == 9 && keep.guard == 5);                  // (the target is left alone)
                 }
             }
         }
         ASSERT_EQ(accepted, size_t{12});
+        // the guard: any number but 0 (an honest client sends the seating hash, which is never 0)
+        for (const uint32_t guard : {1u, 2u, 255u, 256u, 0x10000u, 0x01000000u, 0x80000000u, 0xFFFFFFFEu, 0xFFFFFFFFu}) {
+            SeatMoveMsg got;
+            ASSERT_TRUE(decode(encode(SeatMoveMsg{1, 3, guard}), got) && got.guard == guard);
+        }
+        {
+            SeatMoveMsg keep{7, 9, 5};
+            ASSERT_FALSE(decode(std::vector<uint8_t>{31, 1, 2, 0, 0, 0, 0}, keep));
+            ASSERT_TRUE(keep.from == 7 && keep.to == 9 && keep.guard == 5);
+        }
         // every strict prefix and every extra byte of a message is refused; no other type byte takes it, and no pointer without bytes
-        const std::vector<uint8_t> full = encode(SeatMoveMsg{1, 3});
+        const std::vector<uint8_t> full = encode(SeatMoveMsg{1, 3, 0xA1B2C3D4u});
+        ASSERT_EQ(full.size(), size_t{7});
         for (size_t cut = 0; cut < full.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(full.begin(), full.begin() + static_cast<std::ptrdiff_t>(cut)), out));
         for (unsigned extra = 0; extra < 256; ++extra) {
             std::vector<uint8_t> longer = full;
@@ -10022,8 +10039,9 @@ void run_protocol13_tests() {
             other[0] = static_cast<uint8_t>(type);
             ASSERT_FALSE(decode(other, out));
         }
-        ASSERT_FALSE(decode(static_cast<const uint8_t*>(nullptr), 3, out));
-        // no other message is a SeatMove, and a SeatMove is no other message (the three bytes of a Vote are the nearest, and a Pong, a Lag or a StartRequest have a shape of their own)
+        ASSERT_FALSE(decode(static_cast<const uint8_t*>(nullptr), 7, out));
+        ASSERT_FALSE(decode(std::vector<uint8_t>{31, 1, 2}, out));                                  // protocol 14's three bytes: no guard, no message
+        // no other message is a SeatMove, and a SeatMove is no other message
         {
             VoteMsg vote;
             ChatMsg chat;
@@ -10034,8 +10052,471 @@ void run_protocol13_tests() {
             ASSERT_FALSE(decode(encode(StartRequestMsg{}), out));
             ASSERT_FALSE(decode(encode(ChatMsg{1, true, "hi"}), out));
             ASSERT_FALSE(decode(encode(LagMsg{2, 7000}), out));
-            const std::vector<uint8_t> move = encode(SeatMoveMsg{1, 2});
+            const std::vector<uint8_t> move = encode(SeatMoveMsg{1, 2, 77});
             ASSERT_FALSE(decode(move, vote) || decode(move, chat) || decode(move, request) || decode(move, lag) || decode(move, ask));
+        }
+        // the guard is the seating hash: never 0, the same for the same seats (the leader's screen and the room compute it from the same Room message, each from its own copy), and different when a
+        // seat's state or name is different; the round trip times, the platforms, the map, the fog, the teams and the rules are not who sits where and do not count
+        {
+            RoomMsg room;
+            room.slots[0] = {SlotState::Client, "Ann", 30, 0};
+            room.slots[1] = {SlotState::Client, "Bob", 40, 0};
+            room.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+            room.leader = 0;
+            room.map_name = "TINY.LVL";
+            const uint32_t base = seating_hash(room);
+            ASSERT_TRUE(base != 0);
+            RoomMsg copy;
+            ASSERT_TRUE(decode(encode(room), copy));
+            ASSERT_EQ(seating_hash(copy), base);                                                    // (what travelled is what was hashed)
+            RoomMsg other = room;
+            other.slots[0].rtt_ms = 900;
+            other.slots[1].platform = static_cast<uint8_t>(kOsLinux | kPlatformBrowser);
+            other.map_name = "SMALL.LVL";
+            other.fog = true;
+            other.you = 1;
+            other.team_a = 0;
+            other.team_b = 2;
+            other.flags = kRoomLeaderStarts;
+            ASSERT_EQ(seating_hash(other), base);
+            other = room;
+            std::swap(other.slots[0], other.slots[1]);                                              // two guests that changed places
+            ASSERT_TRUE(seating_hash(other) != base);
+            other = room;
+            other.slots[0].name = "Anna";
+            ASSERT_TRUE(seating_hash(other) != base);
+            other = room;
+            other.slots[3] = {SlotState::Client, "Cat", 20, 0};                                     // somebody sits in a free colour
+            ASSERT_TRUE(seating_hash(other) != base);
+            other = room;
+            other.slots[1].state = SlotState::Host;                                                 // the state counts as well as the name
+            ASSERT_TRUE(seating_hash(other) != base);
+            other = room;
+            other.slots[2].name = "Bot (Hard)";
+            ASSERT_TRUE(seating_hash(other) != base);
+            ASSERT_TRUE(seating_hash(RoomMsg{}) != 0);
+            // the names cannot slide from one seat into the next: "Ann" + "" and "An" + "n" differ (a 0 ends each name)
+            RoomMsg a;
+            a.slots[0] = {SlotState::Client, "Ann", 1, 0};
+            a.slots[1] = {SlotState::Client, "", 1, 0};
+            RoomMsg b;
+            b.slots[0] = {SlotState::Client, "An", 1, 0};
+            b.slots[1] = {SlotState::Client, "n", 1, 0};
+            ASSERT_TRUE(seating_hash(a) != seating_hash(b));
+            // every state in every seat gives a different number than the others (4^4 seatings with one name): no two of the 256 agree
+            std::set<uint32_t> seen;
+            for (unsigned code = 0; code < 256; ++code) {
+                RoomMsg r;
+                for (unsigned seat = 0; seat < 4; ++seat) r.slots[seat].state = static_cast<SlotState>((code >> (2 * seat)) & 3u);
+                seen.insert(seating_hash(r));
+            }
+            ASSERT_EQ(seen.size(), size_t{256});
+        }
+    } TEST_END();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Protocol 15: a room is made by its first Hello's create block, and the platform of each person is told
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+void run_protocol15_tests() {
+    // the bytes of a Hello as protocol 15 writes it: the fields of protocol 10, then the platform byte, then (when the Hello makes a room) the create block
+    const auto key_bytes = []() {
+        SeatKey key{};
+        for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<uint8_t>(0xA0 + i);
+        return key;
+    };
+    const auto hello_prefix = [&](const std::string& room) {
+        std::vector<uint8_t> bytes = {1, 15, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
+        bytes.insert(bytes.end(), room.begin(), room.end());
+        const std::vector<uint8_t> token = {3, 't', 'o', 'k'};
+        bytes.insert(bytes.end(), token.begin(), token.end());
+        const SeatKey key = key_bytes();
+        bytes.insert(bytes.end(), key.begin(), key.end());
+        const std::vector<uint8_t> turns = {5, 0, 0, 0};                                      // (little endian)
+        bytes.insert(bytes.end(), turns.begin(), turns.end());
+        return bytes;
+    };
+    const auto hello_of = [&](const std::string& room, uint8_t platform) {
+        HelloMsg h;
+        h.name = "Ann";
+        h.listen_port = 0x1234;
+        h.want_seat = 2;
+        h.room = room;
+        h.token = "tok";
+        h.key = key_bytes();
+        h.have_turns = 5;
+        h.platform = platform;
+        return h;
+    };
+
+    TEST_CASE("N2.102 Protocol 15, The Hello: The Platform Byte Follows The Turns, A Create Block (A Map Name, The Seats, The Two Team Bytes And The Rule Flags) Ends The Message When The Hello Makes A Room; The Decoder Reads The Block Strictly, Refuses Every Value An Honest Client Does Not Send, Every Truncation Of The Block And Every Extra Byte; The Layout Of Protocol 14 Is No Hello Of This Protocol But Its Version And Name Are Read") {
+        ASSERT_EQ(kProtocolVersion, 15);
+        ASSERT_TRUE(kCreateLeaderStarts == 1 && kRoomLeaderStarts == kCreateLeaderStarts && kNoTeam == 255);
+        // the layout, byte by byte, without a block: the platform byte is the last one (Linux in a browser: 3 + 0x10)
+        {
+            HelloMsg h = hello_of("k7m2xq9p", static_cast<uint8_t>(kOsLinux | kPlatformBrowser));
+            std::vector<uint8_t> want = hello_prefix("k7m2xq9p");
+            want.push_back(0x13);
+            ASSERT_TRUE(encode(h) == want);
+            HelloMsg back;
+            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq9p" && back.name == "Ann" && back.have_turns == 5 && back.version == 15);
+            ASSERT_TRUE(encode(back) == want);
+        }
+        // with a block: the map's name, the seats, team_a, team_b, the flags
+        {
+            HelloMsg h = hello_of("k7m2xq9p", kOsWindows);
+            CreateBlock block;
+            block.map_name = "TREASURE.LVL";
+            block.seats = 3;
+            block.team_a = 0;
+            block.team_b = 2;
+            block.flags = kCreateLeaderStarts;
+            h.create = block;
+            std::vector<uint8_t> want = hello_prefix("k7m2xq9p");
+            want.push_back(1);
+            want.push_back(12);
+            for (const char c : std::string("TREASURE.LVL")) want.push_back(static_cast<uint8_t>(c));
+            for (const uint8_t b : {uint8_t{3}, uint8_t{0}, uint8_t{2}, uint8_t{1}}) want.push_back(b);
+            ASSERT_TRUE(encode(h) == want);
+            HelloMsg back;
+            ASSERT_TRUE(decode(want, back) && back.create && *back.create == block && back.platform == kOsWindows);
+            ASSERT_TRUE(encode(back) == want);
+            ASSERT_TRUE(back.create->leader_starts() && back.create->teams() == sim::StartTeams({true, 0, 2}));
+            // every strict prefix of the whole message is refused except the one that ends after the platform byte (a Hello without a block); one byte more is refused
+            const size_t without_block = hello_prefix("k7m2xq9p").size() + 1;
+            for (size_t cut = 0; cut < want.size(); ++cut) {
+                HelloMsg keep;
+                keep.name = "keep";
+                const bool ok = decode(std::vector<uint8_t>(want.begin(), want.begin() + static_cast<std::ptrdiff_t>(cut)), keep);
+                ASSERT_EQ(ok, cut == without_block);
+                if (!ok) ASSERT_TRUE(keep.name == "keep" && !keep.create);                                        // (the target is left alone)
+            }
+            for (unsigned extra = 0; extra < 256; ++extra) {
+                std::vector<uint8_t> longer = want;
+                longer.push_back(static_cast<uint8_t>(extra));
+                ASSERT_FALSE(decode(longer, back));
+            }
+        }
+        // the platform byte: of the 256 values, the 14 that an honest client tells (an operating system 0 .. 6, with the browser bit or without) are a Hello
+        {
+            size_t accepted = 0;
+            for (unsigned value = 0; value < 256; ++value) {
+                std::vector<uint8_t> bytes = hello_prefix("ROOM-1");
+                bytes.push_back(static_cast<uint8_t>(value));
+                HelloMsg back;
+                const bool ok = decode(bytes, back);
+                ASSERT_EQ(ok, valid_platform(static_cast<uint8_t>(value)));
+                if (ok) {
+                    ASSERT_TRUE(back.platform == value && encode(back) == bytes);
+                    ++accepted;
+                }
+            }
+            ASSERT_EQ(accepted, size_t{14});
+            ASSERT_TRUE(valid_platform(0) && valid_platform(kPlatformBrowser) && valid_platform(kOsOther) && valid_platform(static_cast<uint8_t>(kOsOther | kPlatformBrowser)));
+            ASSERT_FALSE(valid_platform(7) || valid_platform(0x0F) || valid_platform(0x20) || valid_platform(0x80) || valid_platform(0xFF) || valid_platform(0x17));
+        }
+        // the block's values, one at a time: what is refused and what is taken (the block is `valid_create_block`'s: the decoder reads it with the same rule)
+        {
+            const auto with = [&](const std::string& map, uint8_t seats, uint8_t a, uint8_t b, uint8_t flags) {
+                std::vector<uint8_t> bytes = hello_prefix("ROOM-1");
+                bytes.push_back(0);
+                bytes.push_back(static_cast<uint8_t>(map.size()));
+                bytes.insert(bytes.end(), map.begin(), map.end());
+                for (const uint8_t v : {seats, a, b, flags}) bytes.push_back(v);
+                return bytes;
+            };
+            HelloMsg back;
+            for (unsigned seats = 0; seats < 256; ++seats) {
+                const bool ok = decode(with("", static_cast<uint8_t>(seats), 255, 255, 0), back);
+                ASSERT_EQ(ok, seats >= 2 && seats <= 4);
+            }
+            size_t pairs = 0;
+            for (unsigned a = 0; a < 256; ++a) {
+                for (unsigned b = 0; b < 256; ++b) {
+                    const bool ok = decode(with("", 4, static_cast<uint8_t>(a), static_cast<uint8_t>(b), 0), back);
+                    const bool should = (a == 255 && b == 255) || (a < b && b < 4);                              // free for all, or two seats and the lower one first
+                    ASSERT_EQ(ok, should);
+                    if (ok) {
+                        ASSERT_TRUE(back.create->team_a == a && back.create->team_b == b);
+                        pairs += a == 255 ? 0u : 1u;
+                    }
+                }
+            }
+            ASSERT_EQ(pairs, size_t{6});                                                                         // 4 seats: six pairs, each in the one spelling that the decoder takes
+            for (unsigned flags = 0; flags < 256; ++flags) ASSERT_EQ(decode(with("", 4, 255, 255, static_cast<uint8_t>(flags)), back), flags <= 1);
+            // the map's name: "" (the server's own choice), a map's file name, the longest one, and not a name that could name a path
+            ASSERT_TRUE(decode(with("", 2, 255, 255, 0), back) && back.create->map_name.empty());
+            ASSERT_TRUE(decode(with("TINY.LVL", 2, 255, 255, 0), back) && back.create->map_name == "TINY.LVL");
+            ASSERT_TRUE(decode(with(std::string(kMaxMapNameChars - 4, 'x') + ".LVL", 2, 255, 255, 0), back));
+            for (const std::string& bad : {std::string("tiny.txt"), std::string("a/b.LVL"), std::string("..\\x.LVL"), std::string(".hidden.LVL"), std::string(kMaxMapNameChars - 3, 'x') + ".LVL", std::string("x.LVL\x01"), std::string("c:x.LVL")}) {
+                ASSERT_FALSE(decode(with(bad, 2, 255, 255, 0), back));
+            }
+        }
+        // the room's code in a Hello: 1 .. 32 letters, digits, '_' and '-', as before; the 8 random characters of the game's own codes are such a code
+        {
+            HelloMsg back;
+            for (const std::string& ok : {std::string("k7m2xq9p"), std::string("ROOM-1"), std::string("a"), std::string(32, 'z')}) {
+                std::vector<uint8_t> bytes = hello_prefix(ok);
+                bytes.push_back(0);
+                ASSERT_TRUE(decode(bytes, back) && back.room == ok);
+            }
+            for (const std::string& bad : {std::string("k7m2 xq9p"), std::string("k7m2.xq9p"), std::string(33, 'z'), std::string("k7m2/xq9p")}) {
+                std::vector<uint8_t> bytes = hello_prefix(bad);
+                bytes.push_back(0);
+                ASSERT_FALSE(decode(bytes, back));
+            }
+        }
+        // the layout of protocol 14 (no platform byte) is no Hello of this protocol, whatever the version byte says, but its version and its name are read, so that a server can tell the player
+        {
+            std::vector<uint8_t> old_layout = hello_prefix("k7m2xq9p");
+            old_layout[1] = 14;
+            HelloMsg back;
+            ASSERT_FALSE(decode(old_layout, back));
+            HelloMsg prefix;
+            ASSERT_TRUE(decode_hello_prefix(old_layout.data(), old_layout.size(), prefix) && prefix.version == 14 && prefix.name == "Ann");
+            std::vector<uint8_t> as_15 = old_layout;
+            as_15[1] = 15;
+            ASSERT_FALSE(decode(as_15, back));                                                                   // (the number of the protocol does not make it a Hello of 15: the byte is missing)
+        }
+        // no other message is a Hello of this protocol and the Hello is no other message
+        {
+            HelloMsg h = hello_of("ROOM-1", 0);
+            const std::vector<uint8_t> bytes = encode(h);
+            WelcomeMsg welcome;
+            RejectMsg reject;
+            ASSERT_FALSE(decode(bytes, welcome) || decode(bytes, reject));
+            for (unsigned type = 0; type < 256; ++type) {
+                if (type == 1) continue;
+                std::vector<uint8_t> other = bytes;
+                other[0] = static_cast<uint8_t>(type);
+                HelloMsg back;
+                ASSERT_FALSE(decode(other, back));
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.103 Protocol 15, The Room And The Start: Each Seat Of The Room Message Ends With A Platform Byte, The Message Ends With The Room's Two Team Bytes And Its Rule Flags; The Start Ends With The Platform Of Each Seat; The Decoders Refuse A Platform That No Honest Server Writes (One For An Empty Seat Or A Bot, A Value Outside The Table), Teams That Are Not A Pair Of Seats, A Rule Bit That Nobody Knows, And The Layouts Of Protocol 14") {
+        RoomMsg room;
+        room.slots[0] = {SlotState::Client, "Ann", 30, static_cast<uint8_t>(kOsWindows)};
+        room.slots[1] = {SlotState::Client, "Bob", 40, static_cast<uint8_t>(kOsAndroid | kPlatformBrowser)};
+        room.slots[2] = {SlotState::Bot, "Bot (Easy)", 0, 0};
+        room.map_name = "TINY.LVL";
+        room.fog = true;
+        room.you = 1;
+        room.leader = 0;
+        room.team_a = 0;
+        room.team_b = 1;
+        room.flags = kRoomLeaderStarts;
+        const std::vector<uint8_t> bytes = encode(room);
+        // the layout of the first seat, and the end of the message: the platform byte after the round trip time, then ... map, fog, you, leader, team_a, team_b, flags
+        ASSERT_TRUE(bytes.size() > 20 && bytes[0] == 12);
+        ASSERT_TRUE(bytes[1] == 2 && bytes[2] == 3 && bytes[3] == 'A' && bytes[4] == 'n' && bytes[5] == 'n' && bytes[6] == 30 && bytes[7] == 0 && bytes[8] == kOsWindows);
+        const size_t end = bytes.size();
+        ASSERT_TRUE(bytes[end - 6] == 1 && bytes[end - 5] == 1 && bytes[end - 4] == 0 && bytes[end - 3] == 0 && bytes[end - 2] == 1 && bytes[end - 1] == 1);        // fog, you, leader, team_a, team_b, flags
+        RoomMsg back;
+        ASSERT_TRUE(decode(bytes, back));
+        ASSERT_TRUE(back.slots[0].platform == kOsWindows && back.slots[1].platform == (kOsAndroid | kPlatformBrowser) && back.slots[2].platform == 0 && back.slots[3].platform == 0);
+        ASSERT_TRUE(back.team_a == 0 && back.team_b == 1 && back.flags == kRoomLeaderStarts && back.leader_starts() && back.teams() == sim::StartTeams({true, 0, 1}));
+        ASSERT_TRUE(encode(back) == bytes);
+        ASSERT_FALSE(RoomMsg{}.leader_starts() || RoomMsg{}.teams().set);
+        // the teams: every pair of byte values (free for all, or two seats and the lower one first), every flag byte (0 or 1)
+        {
+            size_t pairs = 0;
+            for (unsigned a = 0; a < 256; ++a) {
+                for (unsigned b = 0; b < 256; ++b) {
+                    std::vector<uint8_t> one = bytes;
+                    one[end - 3] = static_cast<uint8_t>(a);
+                    one[end - 2] = static_cast<uint8_t>(b);
+                    RoomMsg got;
+                    const bool ok = decode(one, got);
+                    ASSERT_EQ(ok, (a == 255 && b == 255) || (a < b && b < 4));
+                    if (ok) {
+                        ASSERT_TRUE(got.team_a == a && got.team_b == b && encode(got) == one);
+                        pairs += a == 255 ? 0u : 1u;
+                    }
+                }
+            }
+            ASSERT_EQ(pairs, size_t{6});
+            for (unsigned flags = 0; flags < 256; ++flags) {
+                std::vector<uint8_t> one = bytes;
+                one[end - 1] = static_cast<uint8_t>(flags);
+                RoomMsg got;
+                ASSERT_EQ(decode(one, got), flags <= 1);
+            }
+        }
+        // the platform of a seat: a person (the host or a guest) tells an operating system or nothing; an empty seat and a bot tell nothing; a byte outside the table is no message
+        {
+            for (const SlotState state : {SlotState::Empty, SlotState::Host, SlotState::Client, SlotState::Bot}) {
+                for (unsigned value = 0; value < 256; ++value) {
+                    RoomMsg one;
+                    one.slots[0] = {SlotState::Client, "Ann", 30, 0};
+                    one.slots[1] = {state, state == SlotState::Empty ? "" : "Seat", 30, static_cast<uint8_t>(value)};
+                    one.map_name = "TINY.LVL";
+                    std::vector<uint8_t> raw = encode(one);                                              // (the encoder writes what it is given: the decoder is the rule)
+                    RoomMsg got;
+                    const bool person = state == SlotState::Host || state == SlotState::Client;
+                    ASSERT_EQ(decode(raw, got), valid_platform(static_cast<uint8_t>(value)) && (person || value == 0));
+                }
+            }
+        }
+        // every strict prefix and every extra byte is refused; the layout of protocol 14 (no platform bytes, no teams and flags) is no Room message
+        for (size_t cut = 0; cut < bytes.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(cut)), back));
+        for (unsigned extra = 0; extra < 256; ++extra) {
+            std::vector<uint8_t> longer = bytes;
+            longer.push_back(static_cast<uint8_t>(extra));
+            ASSERT_FALSE(decode(longer, back));
+        }
+        {
+            std::vector<uint8_t> old_layout = {12};
+            for (const RoomMsg::Slot& slot : room.slots) {
+                old_layout.push_back(static_cast<uint8_t>(slot.state));
+                old_layout.push_back(static_cast<uint8_t>(slot.name.size()));
+                for (const char c : slot.name) old_layout.push_back(static_cast<uint8_t>(c));
+                old_layout.push_back(static_cast<uint8_t>(slot.rtt_ms & 0xFF));
+                old_layout.push_back(static_cast<uint8_t>(slot.rtt_ms >> 8));
+            }
+            old_layout.push_back(8);
+            for (const char c : std::string("TINY.LVL")) old_layout.push_back(static_cast<uint8_t>(c));
+            for (const uint8_t b : {uint8_t{1}, uint8_t{1}, uint8_t{0}}) old_layout.push_back(b);
+            ASSERT_FALSE(decode(old_layout, back));
+        }
+        // the leader of the room is still a person that holds a seat as a guest, whatever the new fields say
+        {
+            std::vector<uint8_t> one = bytes;
+            one[end - 4] = 2;                                                                            // the leader's seat 2 is a bot
+            ASSERT_FALSE(decode(one, back));
+        }
+
+        // ---- the Start: the platforms of the seats are its last four bytes ----
+        StartMsg start;
+        start.seed = 77;
+        start.map_name = "TINY.LVL";
+        start.map_hash = 0x0102030405060708ull;
+        start.roster = 0x07;
+        start.names = {"Ann", "Bob", "Bot (Easy)", ""};
+        start.platforms = {static_cast<uint8_t>(kOsMacos), static_cast<uint8_t>(kOsIos | kPlatformBrowser), 0, 0};
+        start.set_teams(sim::StartTeams{true, 0, 1});
+        const std::vector<uint8_t> sbytes = encode(start);
+        const size_t send = sbytes.size();
+        ASSERT_TRUE(sbytes[0] == 13 && sbytes[send - 6] == 0 && sbytes[send - 5] == 1 && sbytes[send - 4] == kOsMacos && sbytes[send - 3] == (kOsIos | kPlatformBrowser) && sbytes[send - 2] == 0 && sbytes[send - 1] == 0);
+        StartMsg sback;
+        ASSERT_TRUE(decode(sbytes, sback) && sback.platforms == start.platforms && sback.teams() == sim::StartTeams({true, 0, 1}) && encode(sback) == sbytes);
+        for (unsigned seat = 0; seat < 4; ++seat) {
+            for (unsigned value = 0; value < 256; ++value) {
+                std::vector<uint8_t> one = sbytes;
+                one[send - 4 + seat] = static_cast<uint8_t>(value);
+                StartMsg got;
+                const bool plays = (start.roster >> seat) & 1;
+                ASSERT_EQ(decode(one, got), valid_platform(static_cast<uint8_t>(value)) && (plays || value == 0));       // (a seat that does not play says nothing; one that plays says an operating system or nothing)
+            }
+        }
+        for (size_t cut = 0; cut < sbytes.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(sbytes.begin(), sbytes.begin() + static_cast<std::ptrdiff_t>(cut)), sback));
+        {
+            std::vector<uint8_t> old_layout(sbytes.begin(), sbytes.end() - 4);                           // protocol 14's Start: the same message without the four platform bytes
+            ASSERT_FALSE(decode(old_layout, sback));
+            std::vector<uint8_t> longer = sbytes;
+            longer.push_back(0);
+            ASSERT_FALSE(decode(longer, sback));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.104 Protocol 15, The Platform Byte And The Create Block As Values: The Words Of --platform And Of The Page's Address (windows, macos, linux, android, ios, other, And browser- In Front), What A Person Is Told (Windows, macOS, Linux, Android, iOS, Another System, And (Browser)), The Build's Own Platform, And The Block's Teams As A Pair In One Spelling") {
+        struct Word {
+            const char* text;
+            uint8_t value;
+        };
+        const Word words[] = {{"windows", kOsWindows}, {"macos", kOsMacos}, {"linux", kOsLinux}, {"android", kOsAndroid}, {"ios", kOsIos}, {"other", kOsOther}};
+        for (const Word& w : words) {
+            uint8_t out = 0xEE;
+            ASSERT_TRUE(parse_platform(w.text, out) && out == w.value);
+            std::string upper = w.text;
+            for (char& c : upper) c = static_cast<char>(c - 'a' + 'A');
+            ASSERT_TRUE(parse_platform(upper, out) && out == w.value);                                  // (in any case)
+            ASSERT_TRUE(parse_platform(std::string("browser-") + w.text, out) && out == (w.value | kPlatformBrowser));
+            ASSERT_TRUE(parse_platform(std::string("Browser-") + upper, out) && out == (w.value | kPlatformBrowser));
+            ASSERT_TRUE(valid_platform(out));
+        }
+        for (const std::string& bad : {std::string(), std::string("browser"), std::string("browser-"), std::string("browser-browser-linux"), std::string("win"), std::string("windows "), std::string(" windows"),
+                                       std::string("windows,linux"), std::string("unknown"), std::string("0"), std::string("browser_linux"), std::string("browser linux"), std::string("windowsx"),
+                                       std::string("--platform"), std::string("linux\n")}) {
+            uint8_t out = 0xEE;
+            ASSERT_FALSE(parse_platform(bad, out));
+            ASSERT_EQ(out, 0xEE);                                                                         // (untouched)
+        }
+        // what a person reads: the system, and "(browser)" for a game in a page; nothing when the system was not told or the byte is not one
+        ASSERT_EQ(platform_text(kOsWindows), std::string("Windows"));
+        ASSERT_EQ(platform_text(kOsMacos), std::string("macOS"));
+        ASSERT_EQ(platform_text(kOsLinux), std::string("Linux"));
+        ASSERT_EQ(platform_text(kOsAndroid), std::string("Android"));
+        ASSERT_EQ(platform_text(kOsIos), std::string("iOS"));
+        ASSERT_EQ(platform_text(kOsOther), std::string("another system"));
+        ASSERT_EQ(platform_text(static_cast<uint8_t>(kOsMacos | kPlatformBrowser)), std::string("macOS (browser)"));
+        ASSERT_EQ(platform_text(static_cast<uint8_t>(kOsOther | kPlatformBrowser)), std::string("another system (browser)"));
+        ASSERT_TRUE(platform_text(kPlatformUnknown).empty() && platform_text(kPlatformBrowser).empty());
+        for (unsigned value = 0; value < 256; ++value) {
+            if (!valid_platform(static_cast<uint8_t>(value))) ASSERT_TRUE(platform_text(static_cast<uint8_t>(value)).empty());
+        }
+        // every word that parses reads back as the text of its platform
+        for (const Word& w : words) {
+            uint8_t out = 0;
+            ASSERT_TRUE(parse_platform(w.text, out));
+            ASSERT_FALSE(platform_text(out).empty());
+        }
+        // this build says what it was built for (a browser build leaves the operating system to the page: kOsOther here)
+        {
+            const uint8_t own = native_platform();
+            ASSERT_TRUE(valid_platform(own) && (own & 0x0Fu) != kPlatformUnknown);
+#if defined(__EMSCRIPTEN__)
+            ASSERT_EQ(own, static_cast<uint8_t>(kPlatformBrowser | kOsOther));
+#else
+            ASSERT_TRUE((own & kPlatformBrowser) == 0);
+#endif
+        }
+        // the block as values: the pair is told in one spelling (the lower seat first), free for all is both bytes kNoTeam
+        {
+            CreateBlock block;
+            ASSERT_TRUE(block.seats == 4 && block.team_a == kNoTeam && block.team_b == kNoTeam && block.flags == 0 && block.map_name.empty() && !block.teams().set && !block.leader_starts());
+            ASSERT_TRUE(valid_create_block(block));
+            for (uint8_t a = 0; a < 4; ++a) {
+                for (uint8_t b = 0; b < 4; ++b) {
+                    if (a == b) continue;
+                    CreateBlock pair;
+                    pair.set_teams(sim::StartTeams{true, a, b});
+                    ASSERT_TRUE(pair.team_a == (a < b ? a : b) && pair.team_b == (a < b ? b : a) && pair.teams() == sim::StartTeams({true, pair.team_a, pair.team_b}));
+                    ASSERT_TRUE(valid_create_block(pair));
+                }
+            }
+            block.set_teams(sim::StartTeams{true, 3, 1});
+            block.set_teams(sim::StartTeams{});
+            ASSERT_TRUE(block.team_a == kNoTeam && block.team_b == kNoTeam && !block.teams().set);
+            CreateBlock other = block;
+            ASSERT_TRUE(other == block);
+            other.flags = kCreateLeaderStarts;
+            ASSERT_TRUE(other != block && other.leader_starts() && valid_create_block(other));
+            for (const uint8_t seats : {uint8_t{0}, uint8_t{1}, uint8_t{5}, uint8_t{255}}) {
+                CreateBlock bad;
+                bad.seats = seats;
+                ASSERT_FALSE(valid_create_block(bad));
+            }
+            for (const uint8_t flags : {uint8_t{2}, uint8_t{0x80}, uint8_t{0xFF}}) {
+                CreateBlock bad;
+                bad.flags = flags;
+                ASSERT_FALSE(valid_create_block(bad));
+            }
+            CreateBlock lopsided;
+            lopsided.team_a = 1;                                                                          // one team byte only
+            ASSERT_FALSE(valid_create_block(lopsided));
+            lopsided.team_b = 0;                                                                          // the higher seat first
+            ASSERT_FALSE(valid_create_block(lopsided));
+            lopsided.team_a = 0;
+            lopsided.team_b = 4;                                                                          // a seat that the room cannot have
+            ASSERT_FALSE(valid_create_block(lopsided));
+            CreateBlock named;
+            named.map_name = "TREASURE.LVL";
+            ASSERT_TRUE(valid_create_block(named));
+            named.map_name = "../x.LVL";
+            ASSERT_FALSE(valid_create_block(named));
         }
     } TEST_END();
 }
@@ -10449,6 +10930,7 @@ int main() {
     run_team_chat_tests();
     run_protocol12_tests();
     run_protocol13_tests();
+    run_protocol15_tests();
     run_restart_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

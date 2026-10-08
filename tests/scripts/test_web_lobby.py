@@ -4,9 +4,9 @@ right there. We don't need separate AI and online. Only do online." The page (we
 (exactly one is You, every other is a Friend, a bot of a level or Nobody), the teams, an invitation for each Friend and START!, which takes this tab into a match on the game server; the game page
 (web/shell.html) has a Menu button that goes back to it in the same tab and passes the card's &seat=, &fill= and &start= to the game.
 
-  - the pages' own rules are RUN (node, when it is installed): what the card means (who plays, the plan, the room's code and the addresses of START and of an invitation, what is remembered and what a
-    first visit takes from the earlier pages' keys), the game page's whitelist (the six maps by key, the levels, the teams, a cleaned name: never the text of the address) and the two pages agreeing
-    (tests/scripts/web_lobby_check.js);
+  - the pages' own rules are RUN (node, when it is installed): what the card means (who plays, the plan, the room's code, which is only a name, and its create block, and the addresses of START and of
+    an invitation, what is remembered and what a first visit takes from the earlier pages' keys), the game page's whitelist (the six maps by key, the levels, the teams, the room's block, a cleaned
+    name: never the text of the address) and the two pages agreeing (tests/scripts/web_lobby_check.js);
   - what needs no browser is read from the files: the card's markup (the four rows with their buttons, the Teams, the invitations, START, "Have a code?"), the header links and the footer of the front
     page, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game
     page's second path, the CI's page check, and the documents.
@@ -104,7 +104,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"\.startbtn \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
 
     def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
-        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="demo-small-2p-x7k2" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
+        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="k7m2 xq9p" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
         self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
         card = self.page[self.page.index('<section class="card match"'):]
         self.assertIn('class="havecode"', card[:card.index("</section>")])
@@ -169,14 +169,44 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("var query = cardQuery(card, code, card.you, youName(), aspect);", self.page)
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)                  # an old address that asks for a game on this computer
         self.assertIn("var LOCAL_PAGE = 'play.html';", self.page)
-        self.assertIn("window.location.assign(joinUrl(room, checked.name, fill, teamsInCode ? '' : roomTeams));", self.page)       # (the teams that the room's code names travel in the code)
-        self.assertIn("window.location.assign(joinUrl(code, checked.name, '', ''));", self.page)
+        self.assertIn("window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));", self.page)       # (Play in this tab: the room's block goes with it, and the teams that the block names travel in the block)
+        self.assertIn("window.location.assign(joinUrl(code, null, checked.name, '', ''));", self.page)                                    # (a Join of a typed code: a room that somebody else made, so no block)
 
     def test_the_old_address_and_its_state_addresses_still_work_at_the_front_page(self):
         for needle in ("params.get('room')", "params.get('map')", "params.get('players')", "validFillPlan(params.get('fill'))", "validRoomTeams(params.get('teams'))", "params.get('play') === 'here'", "new URLSearchParams(window.location.search).get('aspect')"):
             self.assertIn(needle, self.page, needle)
         self.assertIn("var wantedPlayers = playersChoice(wantedPlayersText, 4);", self.page)         # (an address that names no players hosts 4, as before; players=1 plays on this computer)
         self.assertNotIn("four.html", self.page)
+
+    def test_a_code_is_only_a_name_and_the_rooms_choices_are_its_create_block_that_every_link_carries(self):
+        # protocol 15: the code is eight random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
+        # is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the page uses
+        self.assertIn("var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';", self.page)
+        self.assertIn("var buf = new Uint32Array(8);", self.page)
+        self.assertIn("for (var i = 0; i < 8; i++) out += chars.charAt(buf[i] % chars.length);", self.page)
+        self.assertIn("return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;", self.page)                       # (codeText: the screens' two groups of four; links, fields and arguments keep the plain code)
+        self.assertIn("return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');", self.page)
+        self.assertEqual(len(re.findall(r"roomBlockQuery\(", self.page)), 5)                       # the definition and the four makers of an address: the card's START and invitations, the room's links, the room's own address, Play in this tab
+        for maker in ("'?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(cardBlock(state)) + '&seat=' + seat",                   # cardQuery
+                      "var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);",                                   # gameUrl
+                      "'?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '')",                            # startRoom: the address of the page
+                      "var q = '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fillPlan ? '&fill=' + fillPlan : '')"):  # joinUrl
+            self.assertIn(maker, self.page, maker)
+        self.assertIn("function cardBlock(state) { return { map: state.map, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false }; }", self.page)      # (the card's room: four seats and its teams)
+        self.assertIn("startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');", self.page)   # (an address that hosts a match)
+        self.assertIn("var wantedBlock = roomBlockOf(window.location.search);", self.page)                       # (?room=<code> with block parameters is a room that this page made, with none a room that was made some other way)
+        self.assertIn("cardRoom = { code: randomCode(), map: card.map, teams: card.teams, used: cardRoom ? cardRoom.used : {} };", self.page)       # (the tab's kept room: a name, and the choices that its links carry)
+        for gone in ("roomTeamWord", "codeTeams", "describeCode", "cardCode", "teamsInCode", "'demo-'", "demo-small", "demo-treasure"):                 # (a code names nothing any more, and no code is converted)
+            self.assertNotIn(gone, self.page, gone)
+
+    def test_a_code_is_shown_in_two_groups_of_four_and_typed_as_it_is_shown(self):
+        self.assertIn("$('room-code').textContent = codeText(room);", self.page)                                 # (the room panel)
+        self.assertIn("var code = codeText(offer.room);", self.page)                                              # (the Rejoin button's words)
+        self.assertIn("'Join the match ' + codeText(wanted)", self.page)                                         # (the name step of a shared link)
+        self.assertIn("var code = $('join-code').value.replace(/\\s+/g, '');", self.page)                         # (the blank of "k7m2 xq9p" goes before the code is tested; the code is tested as it was)
+        self.assertIn("hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m2 xq9p.';", self.page)
+        self.assertIn("if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {", self.page)
+        self.assertIn("return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{8}$/.test(room.code) && room.map === state.map && room.teams === state.teams;", self.page)       # (cardRoomFits: a kept room of the old kind does not fit)
 
     def test_the_frames_note_is_shown_only_where_games_run(self):
         self.found(self.page, r'<p id="frames-note" class="frames-note" hidden>')
@@ -242,6 +272,33 @@ class TheGamePage(PageCase):
         self.assertEqual(len(re.findall(r"LOCAL_MAPS\s*=\s*\{", self.page)), 1)
         self.assertIn("localArguments: localArguments", self.page)
 
+    def test_the_rooms_create_block_and_the_platform_reach_the_game_through_their_own_whitelists_in_one_order(self):
+        # protocol 15: the address's &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= are the game's --room-map, --room-seats, --room-teams, --room-leader-start and --platform, each read through
+        # its own test (tests/scripts/web_fill_check.js runs them), only with a valid join, and in this order (tests/scripts/web_aspect_key_check.js runs the whole of it on a table of addresses)
+        fill = self.page[self.page.index("ANTS_FILL_BEGIN"):self.page.index("// ANTS_FILL_END")]
+        for name in ("antsRoomMapArg", "antsRoomSeatsArg", "antsRoomLeaderStartArg", "antsPlatformArg", "antsTeamsArg"):
+            self.assertEqual(len(re.findall(r"function %s\(value\) \{" % name, fill)), 1, name)                 # (inside the block that node runs)
+        self.assertIn("/^(tiny|small|medium|gauntlet|treasure|islands)$/.test(word)", fill)
+        self.assertIn("/^[2-4]$/.test(value)", fill)
+        self.assertIn("return value === '1';", fill)
+        self.assertIn("/^(browser-)?(windows|macos|linux|android|ios|other)$/.test(word)", fill)
+        join = self.page[self.page.index("function joinArguments(search, secure, host) {"):]
+        join = join[:join.index("return out;", join.index("if (join && "))]                                     # (the first "return out;" is the one of an address that cannot be read)
+        self.assertEqual(re.findall(r"out\.args\.push\('(--[a-z-]+)'", join),
+                         ["--audio-focus", "--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
+        self.assertIn("var roomTeams = antsTeamsArg(q.get('roomteams'));", join)
+        self.assertIn("var platform = antsPlatformArg(q.get('platform'));", join)
+        self.assertNotIn("navigator", join)                                                                    # (the page does not look for the platform: it is the address's word or none)
+        for name in ("--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform"):
+            self.assertGreater(join.index("'%s'" % name), join.index("if (join && "), name + " only after a valid join is checked")
+
+    def test_the_name_step_names_the_room_by_its_code_in_two_groups_of_four_as_the_front_page_does(self):
+        # (the same function on both pages: tests/scripts/web_lobby_check.js runs the two on a table of texts and they must agree)
+        self.assertIn("function codeText(code) {", self.page[self.page.index("ANTS_PAGE_BEGIN"):self.page.index("// ANTS_PAGE_END")])
+        self.assertIn("return text.length === 8 ? text.slice(0, 4) + ' ' + text.slice(4) : text;", self.page)
+        self.assertIn("asksForName: asksForName, codeText: codeText, withoutName: withoutName", self.page)
+        self.assertIn("document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);", self.page)
+
     def test_the_guide_no_longer_says_that_there_are_no_computer_opponents(self):
         self.assertNotIn("there are no computer opponents", self.page)
         self.assertIn("<strong>Opponents:</strong>", self.page)
@@ -285,6 +342,22 @@ class TheDocuments(unittest.TestCase):
         self.assertNotIn("web/four.html", readme + page)
         for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):         # (the pages that the card replaced)
             self.assertNotIn(stale, readme + page + notes, stale)
+
+    def test_the_browser_page_says_what_a_code_is_and_what_the_create_block_and_its_parameters_are(self):
+        # protocol 15: a code is only a name (eight characters, shown in two groups of four) and the room's choices are the create block that every link carries
+        page = read("docs", "PLAY_IN_BROWSER.md")
+        for needle in ("### The room's code and its create block", "(#the-rooms-code-and-its-create-block)", "is **only a name**", "`abcdefghjkmnpqrstuvwxyz23456789`", "`k7m2 xq9p`", "`k7m2xq9p`",
+                       "There is no such room on this server.", "**every link of a room that this page made carries the block, right after the code**", "**with none it is a room that was made some other way**",
+                       "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`&roomteams=0%2B1`"):
+            self.assertIn(needle, page, needle)
+        table = page[page.index("| Parameter | Value | The game's argument |"):]
+        table = table[:table.index("\n\n")]
+        rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in table.splitlines()[2:]]
+        self.assertEqual([(row[0], row[2]) for row in rows], [("`roommap`", "`--room-map <key>`"), ("`roomseats`", "`--room-seats <n>`"), ("`roomteams`", "`--room-teams <A+B>`"),
+                                                              ("`roomleaderstart`", "`--room-leader-start`"), ("`platform`", "`--platform <word>`")])
+        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
+        for stale in ("`demo-<map>-4p-", "a word of the room's code", "demo-treasure-4p-", "is a word of the code itself", "a word of the code itself"):                 # (the old codes named the map, the seats and the teams)
+            self.assertNotIn(stale, page, stale)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the front page's rules were NOT run (tests/scripts/web_lobby_check.js)")

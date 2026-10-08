@@ -37,10 +37,13 @@
 // starts from (the machines, the referee, a machine that comes back from nothing, a restored room): each calls sim::apply_start_teams right after init() and before its first tick, so the alliances are
 // the original's own commands applied the same way everywhere. A match without teams is byte for byte what it was.
 
-// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"). A colour is a seat, and a guest took the seat that it asked for in its Hello or the first free one: nothing moved it
-// afterwards. SeatMove (leader -> server, [31][from][to]) asks the room to put the player of seat `from` in the empty seat `to`. Only the leader of a server's room,
-// while the room is open, is heard; the room moves the guest with all that is its own (its key, its name, its place in the order of the Welcomes) and answers every guest with the Room message that
-// shows the new seats (each with its own `you`) and the player that was moved with a notice. Nothing in the match changes: the Start that follows is made from the seats as they are.
+// The leader moves the colours (protocol 14, docs/NETWORK_PORT.md "Protocol 14"; the swap and the guard are protocol 15's). A colour is a seat, and a guest took the seat that it asked for in its Hello or
+// the first free one: nothing moved it afterwards. SeatMove (leader -> server, [31][from][to][guard]) asks the room to put the player of seat `from` in seat `to`: when `to` is empty the player goes
+// there, when a guest holds it the two guests change places (a bot's seat and the host's never move). `guard` is the number that seating_hash gives for the seats as the leader's screen shows them
+// (who sits where): the room acts only when it still seats its people exactly so, so a press can never move or swap a player that it did not mean (the one who meant to be moved has left and a newcomer
+// sits there, the Room message that would have told the leader is still on its way); a stale press is ignored and counted. Only the leader of a server's room, while the room is open, is heard; the
+// room moves the guests with all that is their own (key, name, place in the order of the Welcomes) and answers every guest with the Room message that shows the new seats (each with its own
+// `you`) and each player that was moved with a notice. Nothing in the match changes: the Start that follows is made from the seats as they are.
 
 // A room is made by its first Hello, and a Hello says what platform it comes from (protocol 15, docs/NETWORK_PORT.md "Protocol 15"). The server has no "make a room" message for the public:
 // a Hello for a code that is not a room carries a CREATE BLOCK (the map, the seats, the room's own teams, whether the leader's START is what starts the match) and makes the room; without a block
@@ -116,7 +119,7 @@ enum class MsgType : uint8_t {
     CatchUp = 28,   // dedicated server -> a player who came back (protocol 10): the turns of the match follow, this many in all (first_turn ..)
     TurnBatch = 29, // dedicated server -> a player who came back (protocol 10): consecutive sealed turns of the match, packed (the stream that CatchUp announces)
     CaughtUp = 30,  // a player who came back -> dedicated server (protocol 10): I have executed every turn of the stream, my state hash is this
-    SeatMove = 31,  // leader -> dedicated server (protocol 14): put the player of seat `from` in the empty seat `to`; only the leader of a server's room is heard, while the room is open
+    SeatMove = 31,  // leader -> dedicated server (protocol 14; the guard is 15's): put the player of seat `from` in seat `to`, or swap it with the guest there; only the leader of a server's room is heard, while the room is open
     Last = SeatMove
 };
 
@@ -314,6 +317,10 @@ struct RoomMsg {
     bool leader_starts() const noexcept { return (flags & kRoomLeaderStarts) != 0; }
     sim::StartTeams teams() const noexcept { return team_a == kNoTeam && team_b == kNoTeam ? sim::StartTeams{} : sim::StartTeams{true, team_a, team_b}; }
 };
+/// Who sits where, as one 32-bit number, never 0 (protocol 15): the state and the name of each of the four seats of a Room message (FNV-1a, folded); nothing else of the message counts (the round trips
+/// change all the time, the platforms and the teams belong to the room). The leader's screen puts it in a SeatMove as the guard, and the room compares it with its own: two machines that show
+/// the same seats compute the same number, so a SeatMove acts on exactly the seating that its sender saw.
+uint32_t seating_hash(const RoomMsg& room) noexcept;
 /// Which bots a leader's START asks the server to seat in the empty seats of its room (protocol 11). None: the match starts with the people who are there, as in protocol 7.
 enum class FillLevel : uint8_t { None = 0, Easy = 1, Medium = 2, Hard = 3 };
 inline constexpr uint8_t kFillLevelLast = 3;
@@ -379,11 +386,14 @@ struct StartRequestMsg {
         team_b = t.set ? t.b : kNoTeam;
     }
 };
-/// The leader's request to put a player in another colour (protocol 14, client -> server): the guest that holds seat `from` goes to the empty seat `to`. Three
-/// bytes on the wire: the type and the two seats, each 0 - 3 and different; nothing else is a SeatMove (the decoder refuses a seat above 3, two equal seats, a missing or an extra byte).
+/// The leader's request to put a player in another colour (protocol 14, client -> server; the swap and the guard since 15): the guest that holds seat `from` goes to seat `to`, which it takes
+/// when it is empty and shares with the guest that holds it (the two change places) otherwise. Seven bytes on the wire: the type, the two seats (each 0 - 3, and different), and the guard, a
+/// 32-bit number (little endian) that is never 0: seating_hash of the room as the leader saw it. Nothing else is a SeatMove (the decoder refuses a seat above 3, two equal seats, a guard of 0,
+/// a missing or an extra byte).
 struct SeatMoveMsg {
     uint8_t from{255};
     uint8_t to{255};
+    uint32_t guard{0};
 };
 /// Where a guest accepts connections from the other guests (the host fills it from the address it saw and the port the guest announced)
 struct Endpoint {
@@ -579,7 +589,7 @@ bool decode(const uint8_t* data, size_t size, RequestMsg& out);
 bool decode(const uint8_t* data, size_t size, PeerHelloMsg& out);
 /// Exactly the type byte, four levels (0 .. 3) and two team bytes (kNoTeam both, or two different seats 0 - 3): anything else is no StartRequest
 bool decode(const uint8_t* data, size_t size, StartRequestMsg& out);
-/// Exactly the type byte and two different seats 0 - 3: anything else is no SeatMove
+/// Exactly the type byte, two different seats 0 - 3 and a guard that is not 0: anything else is no SeatMove
 bool decode(const uint8_t* data, size_t size, SeatMoveMsg& out);
 bool decode(const uint8_t* data, size_t size, LagMsg& out);
 bool decode(const uint8_t* data, size_t size, PresenceMsg& out);

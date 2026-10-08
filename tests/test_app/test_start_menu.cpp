@@ -234,7 +234,7 @@ struct Variant {
 };
 
 std::string long_message() {
-    return "This is a very long message that goes on and on, much longer than any box of the screen could hold, with a room code like demo-gauntlet-4p-abcdef and a server "
+    return "This is a very long message that goes on and on, much longer than any box of the screen could hold, with a room code like k7m2xq9p and a server "
            "like a-host-with-a-very-long-name.example.org:4001 in it, so that the cut has something to cut. It does not stop here either, and neither does this sentence.";
 }
 
@@ -337,18 +337,18 @@ std::vector<Variant> all_variants() {
         r.click(MenuId::HostSeat3);
         r.click(MenuId::HostSeat3);
         r.click(MenuId::HostTeams);
-        r.menu.show_room("demo-small-4p-abcdef", 1, 4);
+        r.menu.show_room("k7m2xq9p", 1, 4);
     }});
     v.push_back({"connecting, a long server", [](Rig& r) {
         r.menu.set_server(ServerAddress{std::string(60, 'h') + ".example.org", 4001});
         r.to_panel(MenuId::JoinWithCode);
         r.key(SDLK_RETURN);
     }});
-    v.push_back({"the room's code", [](Rig& r) { r.menu.show_room("demo-small-4p-abcdef", 1, 4); }});
+    v.push_back({"the room's code", [](Rig& r) { r.menu.show_room("k7m2xq9p", 1, 4); }});
     v.push_back({"the room's longest code", [](Rig& r) { r.menu.show_room(std::string(32, 'W'), 4, 4); }});
     v.push_back({"the room, copy failed", [](Rig& r) {
         r.clipboard.writable = false;
-        r.menu.show_room("demo-small-4p-abcdef", 2, 4);
+        r.menu.show_room("k7m2xq9p", 2, 4);
         r.key(SDLK_c, KMOD_GUI);
     }});
     return v;
@@ -1016,7 +1016,7 @@ int main(int argc, char* argv[]) {
         blank.key(SDLK_RETURN);
         ASSERT_FALSE(blank.menu.has_request());                                            // a name of blanks is no name
         // the code
-        const std::vector<std::string> bad_codes = {"", "  ", "has space", "bad!", "a/b", "\xc3\xbc\xc3\xaf", "dot.dot", "q?"};
+        const std::vector<std::string> bad_codes = {"", "  ", "bad!", "a/b", "\xc3\xbc\xc3\xaf", "dot.dot", "q?", "has space!"};
         for (const std::string& code : bad_codes) {
             Rig r;
             r.to_panel(MenuId::JoinWithCode);
@@ -1028,6 +1028,20 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(r.menu.message().empty());
             ASSERT_EQ(r.menu.selected(), MenuId::Code);
             ASSERT_EQ(r.sounds.count(sim::SoundID::CantGo), 1);
+        }
+        {   // the code as the screens show it (two groups of four) is typed or pasted with its blank, and is read without it (protocol 15); the blank is the only thing that is dropped
+            Rig r;
+            r.to_panel(MenuId::JoinWithCode);
+            r.key(SDLK_UP);
+            r.type("Ann");
+            r.key(SDLK_TAB);
+            r.type(" k7m2 xq9p ");
+            r.key(SDLK_RETURN);
+            ASSERT_TRUE(r.menu.has_request());
+            const MenuRequest request = r.take();
+            ASSERT_TRUE(request.type == MenuRequest::Type::Join);
+            ASSERT_EQ(request.room, std::string("k7m2xq9p"));
+            ASSERT_EQ(request.name, std::string("Ann"));
         }
     } TEST_END();
 
@@ -1081,7 +1095,7 @@ int main(int argc, char* argv[]) {
         e.key(SDLK_UP);
         e.type("Dave");
         e.key(SDLK_TAB);
-        e.type("demo-1");
+        e.type("k7m2 xq9p");                                                               // (the code as the screens show it, in two groups of four)
         e.key(SDLK_UP);                                                                    // back to the name, with a code written already
         ASSERT_EQ(e.menu.selected(), MenuId::Name);
         e.key(SDLK_RETURN);
@@ -1090,7 +1104,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(e.menu.panel(), MenuPanel::Join);
         e.key(SDLK_RETURN);
         const MenuRequest joined = e.take();
-        ASSERT_TRUE(joined.type == MenuRequest::Type::Join && joined.room == "demo-1" && joined.name == "Dave");
+        ASSERT_TRUE(joined.type == MenuRequest::Type::Join && joined.room == "k7m2xq9p" && joined.name == "Dave");
     } TEST_END();
 
     TEST_CASE("M4.1 Host: the map goes round the six maps of the original game in the page's order and the players round 2, 3, 4 (Left, Right, Enter, click); the request carries the map, the players and the cleaned name") {
@@ -1163,9 +1177,9 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("M4.2 Host: the room's panel shows the code in large letters and the players that are in; Copy puts the code on the clipboard (the call is checked) and says Copied! for two seconds; Ctrl+C / Cmd+C copies too; a clipboard that fails says so and shows the code to write down") {
         Rig r;
-        r.menu.show_room("demo-small-3p-abc234", 1, 3);
+        r.menu.show_room("k7m2xq9p", 1, 3);
         ASSERT_EQ(r.menu.panel(), MenuPanel::Room);
-        ASSERT_EQ(element_text(r.menu.elements(), MenuKind::Code), std::string("demo-small-3p-abc234"));
+        ASSERT_EQ(element_text(r.menu.elements(), MenuKind::Code), std::string("k7m2 xq9p"));                // (in two groups of four: it is read out and typed)
         ASSERT_TRUE(has_text(r.menu.elements(), "Your room:"));
         ASSERT_TRUE(has_text(r.menu.elements(), "Players in the room: 1 of 3"));
         r.menu.set_room_players(2, 3);
@@ -1175,7 +1189,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(control_ids(r.menu) == expected);
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copy"));
         r.click(MenuId::Copy);
-        ASSERT_TRUE(r.clipboard.writes.size() == 1 && r.clipboard.writes[0] == "demo-small-3p-abc234");
+        ASSERT_TRUE(r.clipboard.writes.size() == 1 && r.clipboard.writes[0] == "k7m2xq9p");                  // (the plain code is what is copied)
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copied!"));
         r.menu.update(1.0f);
         ASSERT_EQ(r.element(MenuId::Copy).text, std::string("Copied!"));
@@ -1202,16 +1216,16 @@ int main(int argc, char* argv[]) {
         // a clipboard that cannot be written
         Rig bad;
         bad.clipboard.writable = false;
-        bad.menu.show_room("demo-tiny-2p-qqqqqq", 1, 2);
+        bad.menu.show_room("qqqq7777", 1, 2);
         bad.click(MenuId::Copy);
         ASSERT_EQ(bad.clipboard.writes.size(), static_cast<size_t>(1));
         ASSERT_FALSE(bad.menu.copied());
-        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed") && element_text(bad.menu.elements(), MenuKind::Code) == "demo-tiny-2p-qqqqqq");   // (the code stands in full in its box)
+        ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed") && element_text(bad.menu.elements(), MenuKind::Code) == "qqqq 7777");   // (the code stands in full in its box)
         bad.clipboard.writable = true;                                                      // the clipboard comes back: the failure line goes with the next copy that works
         bad.click(MenuId::Copy);
         ASSERT_TRUE(bad.menu.copied());
         ASSERT_FALSE(has_text(bad.menu.elements(), "Copy failed"));
-        bad.menu.show_room("demo-tiny-2p-rrrrrr", 1, 2);                                    // a new room: "Copied!" of the old one is not carried over
+        bad.menu.show_room("rrrr7777", 1, 2);                                               // a new room: "Copied!" of the old one is not carried over
         ASSERT_FALSE(bad.menu.copied());
         ASSERT_EQ(bad.element(MenuId::Copy).text, std::string("Copy"));
         // no clipboard at all
@@ -1331,10 +1345,10 @@ int main(int argc, char* argv[]) {
         r.click(MenuId::HostPlayers);                                                      // back to 4: the Black seat's choice was kept all along
         ASSERT_EQ(r.element(MenuId::HostSeat3).value, std::string("Easy bot"));
         // the room's panel says what START will do
-        r.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        r.menu.show_room("k7m2xq9p", 1, 4);
         ASSERT_TRUE(has_text(r.menu.elements(), "At START: Red Medium, Blue Hard, Black Easy."));
         ASSERT_FALSE(has_text(r.menu.elements(), "Empty seats stay empty."));
-        r.menu.show_room("demo-tiny-2p-abc234", 1, 2);
+        r.menu.show_room("k7m2xq9p", 1, 2);
         ASSERT_TRUE(has_text(r.menu.elements(), "Empty seats will be Medium bots."));      // (the room of two has the Red seat only)
         Rig uniform;
         uniform.to_panel(MenuId::HostOnline);
@@ -1342,10 +1356,10 @@ int main(int argc, char* argv[]) {
             uniform.click(id);
             uniform.click(id);
         }
-        uniform.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        uniform.menu.show_room("k7m2xq9p", 1, 4);
         ASSERT_TRUE(has_text(uniform.menu.elements(), "Empty seats will be Medium bots."));
         Rig none;
-        none.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        none.menu.show_room("k7m2xq9p", 1, 4);
         ASSERT_TRUE(has_text(none.menu.elements(), "Empty seats stay empty.") && !has_text(none.menu.elements(), "bots."));
         // the settings file: written under `host_fill` (one word when every seat is the same, else four), read back; an old file's one word is every seat after the leader's; anything else is the default
         {
@@ -1390,7 +1404,7 @@ int main(int argc, char* argv[]) {
                     if (g.exists(id)) g.click(id);
                 }
                 if (g.exists(MenuId::HostTeams)) g.click(MenuId::HostTeams);
-                if (panel == MenuPanel::Room) g.menu.show_room("demo-tiny-4p-abc234", 1, players);
+                if (panel == MenuPanel::Room) g.menu.show_room("k7m2xq9p", 1, players);
                 const std::vector<MenuElement> all = g.menu.elements();
                 for (size_t i = 0; i < all.size(); ++i) {
                     ASSERT_TRUE(all[i].rect.x >= 16 && all[i].rect.y >= 16 && all[i].rect.x + all[i].rect.w <= 624 && all[i].rect.y + all[i].rect.h <= 464);
@@ -1446,7 +1460,7 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(caption_drawn);
         }
         Rig room_panel;
-        room_panel.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        room_panel.menu.show_room("k7m2xq9p", 1, 4);
         ASSERT_FALSE(has_text(room_panel.menu.elements(), fill_choice_caption()));                                                       // (only the panel that has the choice)
     } TEST_END();
 
@@ -1524,17 +1538,17 @@ int main(int argc, char* argv[]) {
         room.to_panel(MenuId::HostOnline);
         room.click(MenuId::HostTeams);
         room.click(MenuId::HostTeams);                                                         // Green + Blue against Red + Black
-        room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        room.menu.show_room("k7m2xq9p", 1, 4);
         const size_t with_teams = room.menu.elements().size();
         ASSERT_TRUE(has_text(room.menu.elements(), "Room teams: Green + Blue against Red + Black."));
-        room.menu.show_room("demo-tiny-2p-abc234", 1, 2);                                      // (a room of two has no teams)
+        room.menu.show_room("k7m2xq9p", 1, 2);                                      // (a room of two has no teams)
         ASSERT_FALSE(has_text(room.menu.elements(), "Room teams:"));
         ASSERT_EQ(room.menu.elements().size() + 1, with_teams);
         Rig plain;
-        plain.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        plain.menu.show_room("k7m2xq9p", 1, 4);
         ASSERT_EQ(plain.menu.elements().size() + 1, with_teams);                               // free for all: the panel is what it was
         room.clipboard.writable = false;
-        room.menu.show_room("demo-tiny-4p-abc234", 1, 4);
+        room.menu.show_room("k7m2xq9p", 1, 4);
         room.key(SDLK_c, KMOD_GUI);
         ASSERT_TRUE(has_text(room.menu.elements(), "Copy failed") && !has_text(room.menu.elements(), "Room teams:"));
         // the settings file: written under `host_teams` (ffa or the pair), read back, anything else is free for all
@@ -1579,49 +1593,38 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(stale.take().teams == ffa);
     } TEST_END();
 
-    TEST_CASE("M4.6 Host: the Teams row's choice is a word of the room's code (demo-<map>-<n>p-t01-<six characters>: the room makes the teams for every start, the one when it fills up too): every map and every choice of a room of three or four, nothing for free for all, for a room of two and for a choice that the room does not offer; the code is what the server and every game read (net::room_code_teams), valid and within the 32 characters; the Host button's request carries the choice and the code made from it names it") {
-        const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
-        const auto counter = []() {
-            auto n = std::make_shared<uint32_t>(0);
-            return std::function<uint32_t()>([n]() { return *n += 977u; });
-        };
-        size_t words = 0;
+    TEST_CASE("M4.6 Host: the Teams row's choice goes into the create block of the Host button (protocol 15: the room makes the teams for every start, the one when it fills up too): every map and every choice of a room of three or four, nothing for free for all, for a room of two and for a choice that the room does not offer; the block is one that a server reads (net::valid_create_block); the Host button's request carries the choice and the block made from it names it") {
+        const char* files[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
+        size_t pairs = 0;
         for (size_t m = 0; m < kMenuMapCount; ++m) {
             for (int players = 2; players <= 4; ++players) {
                 for (const sim::StartTeams& choice : sim::room_team_choices(static_cast<uint8_t>(players))) {
-                    const std::string plain = make_room_code(menu_map(m), players, counter());                       // (what the code was before: the same random characters)
-                    const std::string code = make_room_code(menu_map(m), players, counter(), choice);
-                    ASSERT_TRUE(net::valid_room_code(code) && code.size() <= 27 && code.size() <= net::kMaxRoomCodeChars);
-                    ASSERT_TRUE(net::room_code_teams(code) == choice);
-                    if (!choice.set) {
-                        ASSERT_EQ(code, plain);                                                                         // free for all: the code is what it was
-                        continue;
-                    }
-                    ++words;
-                    const std::string word = std::string("t") + static_cast<char>('0' + choice.a) + static_cast<char>('0' + choice.b);
-                    const std::string head = std::string("demo-") + keys[m] + "-" + std::to_string(players) + "p-";
-                    ASSERT_EQ(code, head + word + "-" + plain.substr(head.size()));                                     // the word between the player count and the six characters, nothing else changed
-                    ASSERT_EQ(code.size(), plain.size() + 4);
+                    const net::CreateBlock block = make_create_block(menu_map(m), players, choice);
+                    ASSERT_TRUE(net::valid_create_block(block));
+                    ASSERT_EQ(block.map_name, std::string(files[m]));                                                   // the map's file: the key in capitals and ".LVL"
+                    ASSERT_EQ(static_cast<int>(block.seats), players);
+                    ASSERT_TRUE(block.teams() == choice);
+                    ASSERT_FALSE(block.leader_starts());                                                                // (the flag is the one-link card's: the Host button does not set it)
+                    pairs += choice.set ? 1u : 0u;
                 }
             }
         }
-        ASSERT_EQ(words, kMenuMapCount * 6);                                                                           // three choices for three players, three for four, on each of the six maps
-        // a choice that the room does not offer is no word: a room of two, a seat that the room does not have, the same team written from the other end
+        ASSERT_EQ(pairs, kMenuMapCount * 6);                                                                           // three choices for three players, three for four, on each of the six maps
+        // a choice that the room does not offer is left out of the block: a room of two, a seat that the room does not have, the same team written from the other end
         const LocalTeams green_red{true, 0, 1};
         const std::vector<std::pair<int, LocalTeams>> not_offered = {
             {2, green_red}, {3, LocalTeams{true, 0, 3}}, {3, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 2}}, {4, LocalTeams{true, 2, 3}}, {4, LocalTeams{true, 1, 0}},
             {4, LocalTeams{true, 0, 0}}, {0, green_red},                                                               // (0 players is a room of two)
         };
         for (const auto& c : not_offered) {
-            const std::string plain = make_room_code(menu_map(4), c.first, counter());
-            const std::string code = make_room_code(menu_map(4), c.first, counter(), c.second);
-            ASSERT_EQ(code, plain);
-            ASSERT_FALSE(net::room_code_teams(code).set);
+            const net::CreateBlock block = make_create_block(menu_map(4), c.first, c.second);
+            ASSERT_TRUE(net::valid_create_block(block) && !block.teams().set && block.team_a == net::kNoTeam && block.team_b == net::kNoTeam);
         }
-        ASSERT_EQ(make_room_code(menu_map(4), 9, counter(), green_red), make_room_code(menu_map(4), 4, counter(), green_red));      // (the players are clamped to 2 .. 4 first: nine is four)
-        ASSERT_EQ(make_room_code(menu_map(4), 4, []() { return 0u; }, LocalTeams{true, 0, 3}), std::string("demo-treasure-4p-t03-aaaaaa"));      // the form of the code, by name
-        ASSERT_EQ(make_room_code(menu_map(1), 3, []() { return 0u; }, LocalTeams{true, 1, 2}), std::string("demo-small-3p-t12-aaaaaa"));
-        // the Host button: the request carries the choice, and the code made from it names it
+        ASSERT_TRUE(make_create_block(menu_map(4), 9, green_red).seats == 4 && make_create_block(menu_map(4), 9, green_red).teams() == green_red);      // (the players are clamped to 2 .. 4 first: nine is four)
+        ASSERT_EQ(make_create_block(menu_map(4), 0, green_red).seats, 2);
+        const net::CreateBlock one_link = make_create_block(menu_map(1), 3, LocalTeams{true, 1, 2}, true);                // the leader-starts flag, for the one-link card
+        ASSERT_TRUE(one_link.leader_starts() && one_link.map_name == "SMALL.LVL" && one_link.seats == 3 && one_link.team_a == 1 && one_link.team_b == 2 && net::valid_create_block(one_link));
+        // the Host button: the request carries the choice, and the block made from it names it
         Rig r;
         r.to_panel(MenuId::HostOnline);
         r.click(MenuId::HostTeams);
@@ -1631,18 +1634,17 @@ int main(int argc, char* argv[]) {
         r.click(MenuId::Host);
         const MenuRequest request = r.take();
         ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.teams == LocalTeams({true, 0, 3}) && request.players == 4);
-        const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, []() { return 0u; }, request.teams);
-        ASSERT_EQ(code, std::string("demo-treasure-4p-t03-aaaaaa"));
-        ASSERT_TRUE(net::room_code_teams(code) == LocalTeams({true, 0, 3}));
+        const net::CreateBlock block = make_create_block(menu_map(static_cast<size_t>(request.map)), request.players, request.teams);
+        ASSERT_TRUE(block.map_name == "TREASURE.LVL" && block.seats == 4 && block.team_a == 0 && block.team_b == 3 && block.teams() == LocalTeams({true, 0, 3}));
         r.menu.connection_failed("The server is busy.");
-        r.click(MenuId::HostPlayers);                                                                                  // 4 -> 2: the choice is gone from the request, so from the code
+        r.click(MenuId::HostPlayers);                                                                                  // 4 -> 2: the choice is gone from the request, so from the block
         r.click(MenuId::Host);
         const MenuRequest two = r.take();
         ASSERT_TRUE(two.players == 2 && !two.teams.set);
-        ASSERT_FALSE(net::room_code_teams(make_room_code(menu_map(static_cast<size_t>(two.map)), two.players, []() { return 0u; }, two.teams)).set);
+        ASSERT_FALSE(make_create_block(menu_map(static_cast<size_t>(two.map)), two.players, two.teams).teams().set);
     } TEST_END();
 
-    TEST_CASE("M4.4 Host: the map is Treasure until a choice is stored (the list keeps the page's order, so Tiny, its first entry, is not the default) and a stored choice wins: a new menu, an empty store, a store with a word that is no map, a store with each of the six (any case); the panel shows it, the request carries it, the room's code names it, a change is stored") {
+    TEST_CASE("M4.4 Host: the map is Treasure until a choice is stored (the list keeps the page's order, so Tiny, its first entry, is not the default) and a stored choice wins: a new menu, an empty store, a store with a word that is no map, a store with each of the six (any case); the panel shows it, the request carries it, the room's create block names it, a change is stored") {
         // the default is Treasure, the fifth of the six; the list is the page's (by size), so the first entry is Tiny
         ASSERT_EQ(kDefaultMenuMap, 4);
         ASSERT_EQ(std::string(menu_map(static_cast<size_t>(kDefaultMenuMap)).key), std::string("treasure"));
@@ -1670,8 +1672,8 @@ int main(int argc, char* argv[]) {
             const MenuRequest request = r.take();
             ASSERT_TRUE(request.type == MenuRequest::Type::Host && request.map == 4 && request.players == 4);
             ASSERT_EQ(std::string(menu_map(static_cast<size_t>(request.map)).key), std::string("treasure"));
-            const std::string code = make_room_code(menu_map(static_cast<size_t>(request.map)), request.players, []() { return 0u; });
-            ASSERT_EQ(code, std::string("demo-treasure-4p-aaaaaa"));                       // a room whose code names Treasure: the server makes it on TREASURE.LVL
+            const net::CreateBlock block = make_create_block(menu_map(static_cast<size_t>(request.map)), request.players);
+            ASSERT_TRUE(block.map_name == "TREASURE.LVL" && block.seats == 4 && !block.teams().set);       // a block that names Treasure: the server makes the room on TREASURE.LVL
             r.menu.connection_failed("The server is busy.");
             ASSERT_EQ(r.element(MenuId::HostMap).value, std::string("Treasure"));          // (and a failed attempt keeps it)
             TempDir temp;
@@ -1756,7 +1758,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("blank") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("M5.2 Room codes of a hosted match: demo-<map>-<n>p-<six characters> from the page's alphabet (read from web/lobby.html), at most 23 characters, a valid room code for every map and size, different every time") {
+    TEST_CASE("M5.2 Room codes of a hosted match (protocol 15): eight characters of the page's alphabet (read from web/lobby.html), no map, no seats and no teams in them, a valid room code every time, different every time; the screens show them in two groups of four and a code of another length as it is") {
         std::string page_alphabet;
         {
             std::ifstream page(std::string(ANTS_SOURCE_DIR) + "/web/lobby.html");           // (by the source folder, not the working directory: it is read wherever the test is run from)
@@ -1771,31 +1773,32 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(page_alphabet.empty());
         ASSERT_EQ(page_alphabet, std::string(kRoomCodeAlphabet));                          // the same alphabet as web/lobby.html (the page is in the repository)
         ASSERT_EQ(std::string(kRoomCodeAlphabet).size(), static_cast<size_t>(31));
-        ASSERT_EQ(kRoomCodeRandomChars, static_cast<size_t>(6));
-        const char* keys[] = {"tiny", "small", "medium", "gauntlet", "treasure", "islands"};
-        uint32_t counter = 0;
-        const std::function<uint32_t()> next = [&counter]() { return counter += 977u; };
+        ASSERT_EQ(kRoomCodeChars, static_cast<size_t>(8));
+        for (const char look_alike : {'i', 'l', 'o', '0', '1'}) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(look_alike) == std::string::npos);      // (nothing to mistake when it is read out)
+        uint32_t counter = 12345u;
+        const std::function<uint32_t()> next = [&counter]() {                              // (a linear congruential generator: a counter that steps by a constant makes a code that repeats after 31 of them)
+            counter = counter * 1664525u + 1013904223u;
+            return counter >> 8;
+        };
         std::vector<std::string> seen;
-        for (size_t m = 0; m < kMenuMapCount; ++m) {
-            ASSERT_EQ(std::string(menu_map(m).key), std::string(keys[m]));
-            for (int players = 2; players <= 4; ++players) {
-                const std::string code = make_room_code(menu_map(m), players, next);
-                ASSERT_TRUE(code.rfind(std::string("demo-") + keys[m] + "-" + std::to_string(players) + "p-", 0) == 0);
-                ASSERT_TRUE(net::valid_room_code(code));
-                ASSERT_TRUE(code.size() <= 23);
-                const std::string tail = code.substr(code.size() - 6);
-                for (char c : tail) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(c) != std::string::npos);
-                ASSERT_TRUE(std::find(seen.begin(), seen.end(), code) == seen.end());
-                seen.push_back(code);
-            }
+        for (int i = 0; i < 200; ++i) {
+            const std::string code = make_room_code(next);
+            ASSERT_EQ(code.size(), kRoomCodeChars);
+            ASSERT_TRUE(net::valid_room_code(code));
+            for (char c : code) ASSERT_TRUE(std::string(kRoomCodeAlphabet).find(c) != std::string::npos);
+            ASSERT_TRUE(std::find(seen.begin(), seen.end(), code) == seen.end());
+            seen.push_back(code);
         }
-        ASSERT_EQ(make_room_code(menu_map(1), 9, next).substr(0, 14), std::string("demo-small-4p-"));   // the players are clamped to 2 .. 4
-        ASSERT_EQ(make_room_code(menu_map(1), 0, next).substr(0, 14), std::string("demo-small-2p-"));
         // the map index of a key, any case
         ASSERT_TRUE(menu_map_index("ISLANDS") == 5 && menu_map_index("tiny") == 0 && menu_map_index("nope") == -1);
         // random bits that are all ones and all zeros: the first and the last character of the alphabet, never one beyond
-        ASSERT_EQ(make_room_code(menu_map(0), 2, []() { return 0u; }).substr(13), std::string("aaaaaa"));
-        ASSERT_EQ(make_room_code(menu_map(0), 2, []() { return 0xFFFFFFFFu; }).back(), kRoomCodeAlphabet[0xFFFFFFFFu % 31u]);
+        ASSERT_EQ(make_room_code([]() { return 0u; }), std::string("aaaaaaaa"));
+        ASSERT_EQ(make_room_code([]() { return 0xFFFFFFFFu; }).back(), kRoomCodeAlphabet[0xFFFFFFFFu % 31u]);
+        // what the screens show: two groups of four (read out, typed); the code that is copied is the plain one
+        ASSERT_EQ(room_code_display("k7m2xq9p"), std::string("k7m2 xq9p"));
+        ASSERT_EQ(room_code_display("RP-1"), std::string("RP-1"));                         // a code of another length (a room of the control interface) as it is
+        ASSERT_EQ(room_code_display(""), std::string());
+        ASSERT_EQ(room_code_display("abcdefghi"), std::string("abcdefghi"));
     } TEST_END();
 
     TEST_CASE("M5.3 Names and codes: a name is cleaned (blanks at both ends, printable ASCII, 32 characters) and refused when empty or when it looks like a bot's; a code is cleaned and refused when empty, too long or not letters, digits, - and _; the case of a code is never touched") {
@@ -1819,9 +1822,12 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(why.find("at most 32") != std::string::npos);                          // the reason names the limit, not the alphabet
         ASSERT_FALSE(check_room_code("", clean, why));
         ASSERT_TRUE(why.find("code") != std::string::npos);
-        ASSERT_FALSE(check_room_code("a b", clean, why));
-        ASSERT_TRUE(why.find("letters, digits") != std::string::npos);
+        ASSERT_TRUE(check_room_code("k7m2 xq9p", clean, why) && clean == "k7m2xq9p");       // the grouped form that the screens show comes back as the plain code
+        ASSERT_TRUE(check_room_code(" k7m2  xq9p ", clean, why) && clean == "k7m2xq9p");
+        ASSERT_FALSE(check_room_code("   ", clean, why));
+        ASSERT_TRUE(why.find("code") != std::string::npos);
         ASSERT_FALSE(check_room_code("a.b", clean, why));
+        ASSERT_TRUE(why.find("letters, digits") != std::string::npos);
         ASSERT_FALSE(check_room_code("\xc3\xa9", clean, why));
         ASSERT_EQ(StartMenu::kNameMax, net::kMaxNameChars);
         ASSERT_EQ(StartMenu::kCodeMax, net::kMaxRoomCodeChars);
@@ -2046,12 +2052,12 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("M8.2 Drawing: the code of a room is drawn in the largest size that fits its box (35 px for the page's codes, smaller for the longest ones), the buttons carry their words, the selected one is lit, the title is the panel's") {
         Rig r;
-        r.menu.show_room("demo-small-4p-abcdef", 1, 4);
+        r.menu.show_room("k7m2xq9p", 1, 4);
         Recorder a;
         render_start_menu(a, archive(), r.menu);
         bool big = false;
         for (const Recorder::Text& t : a.texts) {
-            if (t.text == "demo-small-4p-abcdef") big = t.size == FontSize::Px35;
+            if (t.text == "k7m2 xq9p") big = t.size == FontSize::Px35;
         }
         ASSERT_TRUE(big);
         r.menu.show_room(std::string(32, 'W'), 1, 4);
@@ -2419,7 +2425,7 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(r.menu.has_request());                                            // (no new attempt)
             r.key(SDLK_RETURN);
             ASSERT_TRUE(r.take().type == MenuRequest::Type::Join);
-            r.menu.show_room("demo-tiny-2p-abcdef", 1, 2);
+            r.menu.show_room("k7m2xq9p", 1, 2);
             r.quick_key(SDLK_RETURN);
             ASSERT_FALSE(r.menu.has_request());
             r.key(SDLK_RETURN);
@@ -2537,10 +2543,10 @@ int main(int argc, char* argv[]) {
         r.type("\x01");                                                                    // a control character is refused as well
         ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
         // a paste: an accent in the clipboard says it, a line end or a tab does not
-        r.clipboard.text = "demo-ti\xC3\xA9ny";
+        r.clipboard.text = "k7m2\xC3\xA9xq9p";
         r.key(SDLK_a, KMOD_CTRL);
         r.key(SDLK_v, KMOD_CTRL);
-        ASSERT_EQ(r.menu.code(), std::string("demo-tiny"));
+        ASSERT_EQ(r.menu.code(), std::string("k7m2xq9p"));
         ASSERT_EQ(r.menu.message(), std::string(StartMenu::kRefusedCharsText));
         r.clipboard.text = "room-9\r\n";
         r.key(SDLK_a, KMOD_CTRL);
@@ -2612,17 +2618,17 @@ int main(int argc, char* argv[]) {
         // the copy failure: one line that says what to do, the code stands in full in its own box above it, and neither is cut
         Rig bad;
         bad.clipboard.writable = false;
-        bad.menu.show_room("demo-gauntlet-4p-abcdef", 1, 4);
+        bad.menu.show_room("friends-on-gauntlet-night-2026", 1, 4);
         bad.click(MenuId::Copy);
         ASSERT_TRUE(has_text(bad.menu.elements(), "Copy failed. Write down the code above."));
-        ASSERT_EQ(element_text(bad.menu.elements(), MenuKind::Code), std::string("demo-gauntlet-4p-abcdef"));
+        ASSERT_EQ(element_text(bad.menu.elements(), MenuKind::Code), std::string("friends-on-gauntlet-night-2026"));
         Recorder rc;
         render_start_menu(rc, archive(), bad.menu);
         bool line_whole = false;
         bool code_whole = false;
         for (const Recorder::Text& t : rc.texts) {
             line_whole = line_whole || t.text == "Copy failed. Write down the code above.";
-            code_whole = code_whole || t.text == "demo-gauntlet-4p-abcdef";
+            code_whole = code_whole || t.text == "friends-on-gauntlet-night-2026";
         }
         ASSERT_TRUE(line_whole && code_whole);
     } TEST_END();
@@ -2634,7 +2640,7 @@ int main(int argc, char* argv[]) {
         const int32_t y = quit.rect.y + quit.rect.h / 2;
         r.menu.on_mouse_move(x, y);
         ASSERT_TRUE(r.menu.on_mouse_down(x, y, SDL_BUTTON_LEFT));
-        r.menu.show_room("demo-tiny-2p-abcdef", 1, 2);                                    // the room appears while the button is down ...
+        r.menu.show_room("k7m2xq9p", 1, 2);                                    // the room appears while the button is down ...
         MenuElement copy;
         ASSERT_TRUE(r.menu.find_element(MenuId::Copy, copy) && copy.rect.contains(x, y));  // ... and its Copy button lies where Quit was
         ASSERT_FALSE(r.element(MenuId::Copy).pressed);

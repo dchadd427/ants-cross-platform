@@ -202,11 +202,14 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     if (start_bytes == nullptr) return bad("the head of the record is cut short");
     if (!net::decode(start_bytes, start_len, h.start)) {
         // the Start of an older protocol lacks what later ones added at its end (protocol 13: the two team bytes, 15: four platform bytes): with them added as "no teams" and "not told" it reads,
-        // and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why)
+        // and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why). Only the layouts that a release wrote are read, each for its own protocols: the
+        // Start of protocol 12 has neither, the Start of protocols 13 and 14 has the team bytes only
         bool read = false;
-        if (h.identity.protocol <= kLastProtocolWithoutStartPlatforms) {
+        const uint16_t protocol = h.identity.protocol;
+        const bool lacks_teams = protocol == kLastProtocolWithoutStartTeams;
+        if (lacks_teams || (protocol > kLastProtocolWithoutStartTeams && protocol <= kLastProtocolWithoutStartPlatforms)) {
             std::vector<uint8_t> widened(start_bytes, start_bytes + start_len);
-            if (h.identity.protocol <= kLastProtocolWithoutStartTeams) {
+            if (lacks_teams) {
                 widened.push_back(net::kNoTeam);
                 widened.push_back(net::kNoTeam);
             }

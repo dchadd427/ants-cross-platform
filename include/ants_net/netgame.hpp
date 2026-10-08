@@ -251,15 +251,20 @@ public:
     /// True means the request was sent, not that the server will start: it starts at once when it can, otherwise nothing happens. It is also false while a SeatMove of this machine has not been
     /// answered (a second at most): the plan of bots follows the room's answer, so a START that went out before it would be for the colours as they were, with the player already moved.
     bool request_start();
-    /// The leader of a server's room puts the player of `seat` in another colour (protocol 14, SeatMove): the next colour that nobody holds (green, red, blue, black, round again; a person goes
-    /// on round with every press, so every arrangement of the people can be had: the colour that is free moves with them). The leader may move itself. One request goes out and the next waits: half a
-    /// second at least (a double click is one press; its second one would move the player that the rows close up to), and until the room shows the change or a second has passed. The plan of bots of
-    /// set_fill_bots follows what the room shows (follow_moved_player): when a person has taken a free colour the levels of the two seats trade places, so the match that START makes has the same people
-    /// and the same bots as the leader saw (request_start waits for the room's answer). False (nothing is sent) unless this machine leads an open room, the seat holds a person and there is a free
-    /// colour for it, no request went out less than half a second ago and none is still waiting for the room's answer.
+    /// The leader of a server's room puts the player of seat `from` in seat `to` (protocol 14, SeatMove; the swap is protocol 15's): an empty seat takes the player, and the guest that holds the seat
+    /// changes places with it (the room acts only when it still seats its people as this machine shows them: the request carries the seating's guard). The leader may move itself. One request goes
+    /// out and the next waits: half a second at least (a double click is one press; its second one would act on the rows as the first left them), and until the room shows the change or a second
+    /// has passed. The plan of bots of set_fill_bots follows what the room shows (follow_moved_player): when a person has taken a free colour the levels of the two seats trade places, so the match
+    /// that START makes has the same people and the same bots as the leader saw (request_start waits for the room's answer); a swap leaves the plan alone. False (nothing is sent) unless this machine
+    /// leads an open room, `from` holds a guest (a person that is not the host: the host's seat and a bot's do not move), `to` is another seat that is empty or holds a guest, no request went out less
+    /// than half a second ago and none is still waiting for the room's answer.
+    bool request_move_seat(uint8_t from, uint8_t to);
+    /// The tap on a player's row: the player of `seat` goes to the next colour (green, red, blue, black, round again): the next colour that nobody holds, else the next guest's, so that the two change
+    /// places; a person goes on round with every press, so every arrangement of the people can be had, in a full room too. The same conditions as request_move_seat(from, to) for the colour that
+    /// seat_move_target names.
     bool request_move_seat(uint8_t seat);
-    /// The colour that request_move_seat(seat) asks for: the first seat after `seat` (3 is followed by 0) that nobody holds; 255 when `seat` holds no person or every colour is taken (a room of four
-    /// starts when the fourth player comes: a room that waits has a colour free)
+    /// The colour that request_move_seat(seat) asks for: the first seat after `seat` (3 is followed by 0) that nobody holds, else the first after it that a guest holds; 255 when `seat` holds no
+    /// person (a guest) or there is neither a free colour nor another guest (the others are bots and the host)
     static uint8_t seat_move_target(const RoomMsg& room, uint8_t seat) noexcept;
     /// The bots that this machine's START asks for when it leads a server's room: a level for each seat (protocol 13; one level for all in protocol 11). None everywhere (the default) is the START
     /// of protocol 7. With a level somewhere, request_start() also works with one player in the room (the server seats a bot of the seat's level in each empty seat that has one, and starts);
@@ -468,7 +473,7 @@ private:
     /// Takes the new lines of the lobby (the room's chat), shows the latest on the status line and queues them for take_pregame_chat()
     void collect_room_chat();
     /// The leader's plan of bots follows a player that the room moved: given the room as it was (room_ is the room as it is now: one Room message later), the levels of the two seats trade places when
-    /// a person's colour is empty now and an empty colour is a person's, and nothing else changed
+    /// a person's colour is empty now and an empty colour is a person's, and nothing else changed (two guests that changed places leave the same colours empty: nothing trades)
     void follow_moved_player(const RoomMsg& before);
     /// A SeatMove went out less than a second ago and the room still seats its people as it did
     bool move_unanswered() const noexcept;
@@ -543,7 +548,7 @@ private:
     std::vector<std::string> prompts_;      // the START prompt of the leader / host in its ways of saying it, longest first (prompt_texts()); empty when the original's prompt stands
     std::vector<ChatLine> pending_chat_;    // the waiting room's lines that take_pregame_chat() has not handed out
     bool chat_status_mirror_{true};         // the lines of the room are shown on the status line too (set_chat_status_mirror)
-    uint64_t move_pending_{0};              // the leader: the last SeatMove was sent when the people sat like this (a hash of the seats' people), 0 when none was sent
+    uint32_t move_pending_{0};              // the leader: the last SeatMove was sent when the people sat like this (seating_hash of the room), 0 when none was sent
     uint32_t move_sent_ms_{0};              // ... and when it went out (the next press waits half a second, and for the room's answer: a request that the room cannot do is not answered at all, a second at most)
     bool move_hint_given_{false};           // the leader's status line has said that a tap on a player moves it (once, when the second person is in the room)
 

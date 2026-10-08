@@ -9,10 +9,11 @@
 //   * the newest of several (by time; on a tie the lower seat, then the room), whatever the order of the storage; a good entry among bad ones is found; and the same question for one room and one seat
 //     (the game page asks it: does this browser hold the key of this very seat?), which leaves the entries of other rooms and seats where they are and still removes the old ones;
 //   * a storage that refuses (a call that throws: the browser's private window, a blocked storage) offers nothing or what it can, and never throws;
-//   * the words of the button and of the note, the query that the button opens (the page's other join links: /ws, the room, the seat, the name always there, the shape) and the game page reading that
+//   * the words of the button and of the note (the room's code as a screen shows it: eight characters in two groups of four, "k7m2 xq9p", any other length as it is), the query that the button opens (the page's
+//     other join links: /ws, the plain room code, the seat, the name always there, the shape; no create block: the room exists, and a Hello with a key of a seat never makes one) and the game page reading that
 //     query as a join of this room and seat that asks for no name;
 //   * THE KEY IS IN NOTHING THAT COMES OUT: not the offer (exactly room, seat, t), not the words, not the query; nothing is written to the storage.
-// tests/scripts/test_web_rejoin.py runs this with node (the quick tier). usage: node web_rejoin_block_check.js web/lobby.html web/shell.html     (exit 0: every check holds; failures are printed)
+// tests/scripts/test_web_rejoin.py runs this with node (the quick tier). The words use codeText of the block LOBBY_BEGIN .. LOBBY_END, which is loaded before the others. usage: node web_rejoin_block_check.js web/lobby.html web/shell.html     (exit 0: every check holds; failures are printed)
 'use strict';
 const fs = require('fs');
 
@@ -44,7 +45,8 @@ const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const keyBlock = between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath);
 const block = between(lobbyText, 'REJOIN_BEGIN', 'REJOIN_END', lobbyPath);
-const R = new Function(keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery };')();
+const lobbyBlock = between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath);          // (rejoinWords shows the code as codeText does; nothing else of the block is called here)
+const R = new Function(lobbyBlock + '\n' + keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery, codeText: codeText };')();
 
 // the game page's own ANTS_PAGE (the same fakes as tests/scripts/web_lobby_check.js: it reads the address, the storage and two elements while it runs)
 function loadShell() {
@@ -93,7 +95,7 @@ same('the server of an https page is wss://<host>/ws, of an http page ws://<host
 {
     const P = loadShell();
     for (const [secure, host] of [[true, 'beta.playants.org'], [false, '127.0.0.1:8080'], [true, 'play.test:8443'], [false, 'localhost']]) {
-        const joined = P.joinArguments('?join=/ws&room=demo-small-2p-x7k2&seat=1&name=Ann', secure, host).args;
+        const joined = P.joinArguments('?join=/ws&room=k7m2xq9p&seat=1&name=Ann', secure, host).args;
         check('the server of an entry is the game page\'s own join of this origin (' + (secure ? 'https' : 'http') + ', ' + host + ')', joined[joined.indexOf('--join-url') + 1] === R.rejoinServer(secure, host), joined.join(' '));
     }
 }
@@ -101,10 +103,10 @@ same('the server of an https page is wss://<host>/ws, of an http page ws://<host
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // what an entry is
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-same('an entry as the game page writes it', R.rejoinParse(nameOf('demo-small-2p-x7k2', 1), entryText(NOW - 5000)), { room: 'demo-small-2p-x7k2', seat: 1, server: SERVER, t: NOW - 5000 });
+same('an entry as the game page writes it', R.rejoinParse(nameOf('k7m2xq9p', 1), entryText(NOW - 5000)), { room: 'k7m2xq9p', seat: 1, server: SERVER, t: NOW - 5000 });
 same('the parts that are read: the room, the seat 0 .. 3, the server and the time (never the key)', Object.keys(R.rejoinParse(nameOf('r', 0), entryText(5))).sort(), ['room', 'seat', 'server', 't']);
 for (const seat of [0, 1, 2, 3]) check('seat ' + seat + ' is a seat', R.rejoinParse(nameOf('r', seat), entryText(5)) !== null && R.rejoinParse(nameOf('r', seat), entryText(5)).seat === seat);
-for (const room of ['a', 'A', '_', '-', 'demo-tiny-2p-abc', 'x'.repeat(32), 'Room_1-B', '0']) check('the room code ' + JSON.stringify(room) + ' is one by the page\'s own rule', R.rejoinParse(nameOf(room, 0), entryText(5)) !== null);
+for (const room of ['a', 'A', '_', '-', 'k7m2xq9p', 'k7m2-xq9p', 'x'.repeat(32), 'Room_1-B', '0']) check('the room code ' + JSON.stringify(room) + ' is one by the page\'s own rule', R.rejoinParse(nameOf(room, 0), entryText(5)) !== null);
 const BAD_NAMES = ['ants.rejoin.r.4', 'ants.rejoin.r.-1', 'ants.rejoin.r.01', 'ants.rejoin.r.10', 'ants.rejoin.r.', 'ants.rejoin.r', 'ants.rejoin..0', 'ants.rejoin.a.b.0', 'ants.rejoin.' + 'x'.repeat(33) + '.0', 'ants.rejoin.r s.0', 'ants.rejoin.r/s.0',
                    'ants.rejoin.é.0', 'ants.rejoin.r.0 ', ' ants.rejoin.r.0', 'ants.rejoin.r.0.0', 'ants.rejoin.r.a', 'ants.rejoin.r.٠', 'Ants.rejoin.r.0', 'ants.rejoin2.r.0', 'ants.name', 'ants.rejoin.r.0\n', '', 'rejoin.r.0', null, undefined, 5, {}];
 for (const name of BAD_NAMES) check('the storage name ' + JSON.stringify(name) + ' is no entry of the game', R.rejoinParse(name, entryText(5)) === null);
@@ -133,8 +135,8 @@ same('a server with an escaped quote and backslash is read as the text it holds'
 // which match is offered
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const one = offer({ [nameOf('demo-tiny-2p-abc', 1)]: entryText(NOW - 2000) });
-    same('one fresh entry of this site is offered: room, seat and time', one.got, { room: 'demo-tiny-2p-abc', seat: 1, t: NOW - 2000 });
+    const one = offer({ [nameOf('k7m2xq9p', 1)]: entryText(NOW - 2000) });
+    same('one fresh entry of this site is offered: room, seat and time', one.got, { room: 'k7m2xq9p', seat: 1, t: NOW - 2000 });
     same('... and exactly these three things (no key)', Object.keys(one.got).sort(), ['room', 'seat', 't']);
     check('... and nothing was written, removed or changed', one.storage.calls.setItem.length === 0 && one.storage.calls.removeItem.length === 0 && one.storage.data.size === 1);
 }
@@ -231,13 +233,17 @@ check('a storage with only other items offers nothing (the settings, the name, t
 }
 
 // the words and the address
-same('the button says Rejoin your match and the room', R.rejoinWords({ room: 'demo-tiny-2p-abc', seat: 1, t: 1 }).button, 'Rejoin your match (demo-tiny-2p-abc)');
-same('the note under it is one line that says the match still runs and what to do', R.rejoinWords({ room: 'demo-tiny-2p-abc', seat: 1, t: 1 }).note, 'Your match in room demo-tiny-2p-abc is still running: go back to your seat.');
-for (const room of ['a', 'Room_1-B', 'x'.repeat(32)]) {
+same('the button says Rejoin your match and the room, the code in two groups of four as a screen shows it', R.rejoinWords({ room: 'k7m2xq9p', seat: 1, t: 1 }).button, 'Rejoin your match (k7m2 xq9p)');
+same('the note under it is one line that says the match still runs and what to do', R.rejoinWords({ room: 'k7m2xq9p', seat: 1, t: 1 }).note, 'Your match in room k7m2 xq9p is still running: go back to your seat.');
+same('a code of another length is shown as it is (a room that was made some other way)', [R.rejoinWords({ room: 'tiny-2p-abc', seat: 1, t: 1 }).button, R.rejoinWords({ room: 'k7m2xq9', seat: 1, t: 1 }).button, R.rejoinWords({ room: 'k7m2xq9pz', seat: 1, t: 1 }).note],
+     ['Rejoin your match (tiny-2p-abc)', 'Rejoin your match (k7m2xq9)', 'Your match in room k7m2xq9pz is still running: go back to your seat.']);
+check('the words show the code as codeText does (the same blank, nothing else added), whatever the room', ['a', 'Room_1-B', 'x'.repeat(32), 'k7m2xq9p', 'abcdefgh'].every((room) => R.rejoinWords({ room, seat: 0, t: 1 }).button === 'Rejoin your match (' + R.codeText(room) + ')' && R.rejoinWords({ room, seat: 0, t: 1 }).note === 'Your match in room ' + R.codeText(room) + ' is still running: go back to your seat.'));
+for (const room of ['a', 'Room_1-B', 'x'.repeat(32), 'k7m2xq9p']) {
     const w = R.rejoinWords({ room, seat: 0, t: 1 });
-    check('the words for the room ' + room + ' hold the room and no markup', w.button.indexOf(room) !== -1 && w.note.indexOf(room) !== -1 && !/[<>&"]/.test(w.button + w.note));
+    check('the words for the room ' + room + ' hold the room (as codeText shows it) and no markup', w.button.indexOf(R.codeText(room)) !== -1 && w.note.indexOf(R.codeText(room)) !== -1 && !/[<>&"]/.test(w.button + w.note));
 }
-same('the query: the door, the room, the seat, the name and the shape', R.rejoinQuery({ room: 'demo-tiny-2p-abc', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=demo-tiny-2p-abc&seat=1&name=Ann&aspect=16:9');
+same('the query: the door, the room, the seat, the name and the shape (the plain code, and no create block)', R.rejoinQuery({ room: 'k7m2xq9p', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=k7m2xq9p&seat=1&name=Ann&aspect=16:9');
+check('the query keeps the plain code whatever the words show (no blank in it)', ['k7m2xq9p', 'abcdefgh', 'Room_1-B'].every((room) => R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9').indexOf('room=' + room + '&') !== -1 && R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9').indexOf('%20') === -1 && !/roommap|roomseats|roomteams|roomleaderstart/.test(R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9'))));
 same('the query: the name is encoded, whatever it holds', R.rejoinQuery({ room: 'r', seat: 3, t: 1 }, 'A&B=c d#e', '4:3'), '?join=/ws&room=r&seat=3&name=A%26B%3Dc%20d%23e&aspect=4:3');
 same('the query: the room is encoded too, whatever the function is given (the page only offers rooms that need no encoding)', R.rejoinQuery({ room: 'a b&c=d#e', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=a%20b%26c%3Dd%23e&seat=1&name=Ann&aspect=16:9');
 same('the query: no name is a name that was chosen (empty), so the game page does not ask for one', R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '16:9'), '?join=/ws&room=r&seat=0&name=&aspect=16:9');
@@ -245,11 +251,11 @@ same('the query: a shape that is not 4:3 is 16:9', [R.rejoinQuery({ room: 'r', s
 {
     const P = loadShell();
     for (const [name, shape] of [['Ann', '16:9'], ['', '4:3'], ['Maria Elena', '16:9'], ['A&B=c', '4:3']]) {
-        const q = R.rejoinQuery({ room: 'demo-small-2p-x7k2', seat: 2, t: 1 }, name, shape);
+        const q = R.rejoinQuery({ room: 'k7m2xq9p', seat: 2, t: 1 }, name, shape);
         const got = P.joinArguments(q, true, 'play.test');
         const args = got.args;
         const at = (flag) => args[args.indexOf(flag) + 1];
-        check('the game page reads the query as a join of this room and seat (' + JSON.stringify(name) + ', ' + shape + ')', at('--join-url') === SERVER && at('--room') === 'demo-small-2p-x7k2' && at('--seat') === '2' && (name ? at('--name') === name : args.indexOf('--name') === -1), args.join(' '));
+        check('the game page reads the query as a join of this room and seat (' + JSON.stringify(name) + ', ' + shape + ')', at('--join-url') === SERVER && at('--room') === 'k7m2xq9p' && at('--seat') === '2' && args.indexOf('--room-map') === -1 && args.indexOf('--room-seats') === -1 && (name ? at('--name') === name : args.indexOf('--name') === -1), args.join(' '));
         check('... that asks for no name (the page chose it, empty or not)', P.asksForName(q) === false);
         check('... and carries the shape (the game page reads ?aspect=)', new URLSearchParams(q).get('aspect') === shape);
     }
@@ -259,7 +265,7 @@ same('the query: a shape that is not 4:3 is 16:9', [R.rejoinQuery({ room: 'r', s
 {
     const keys = ['00112233445566778899aabbccddeeff', 'f0e1d2c3b4a5968778695a4b3c2d1e0f', 'abcdefabcdefabcdefabcdefabcdef01'];
     for (const key of keys) {
-        const st = makeStorage({ [nameOf('demo-tiny-2p-abc', 1)]: entryText(NOW - 1000, SERVER, key) });
+        const st = makeStorage({ [nameOf('k7m2xq9p', 1)]: entryText(NOW - 1000, SERVER, key) });
         const got = R.rejoinOffer(st, NOW, SERVER);
         const words = R.rejoinWords(got);
         const query = R.rejoinQuery(got, 'Ann', '16:9');
