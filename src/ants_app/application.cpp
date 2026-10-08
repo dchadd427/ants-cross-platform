@@ -1743,9 +1743,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
 }
 
-// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button, the footer's Menu link, once the player has said yes): the game tells the server (Leave:
-// the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab, a reload and the picture selector's reload do not call it: the
-// seat is held and the key kept, so that the player comes back to the same match. The page calls it only once the game runs (isReadyToPlay).
+// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button, the footer's Menu link, the picture selector's "Leave the match to change the picture?" once
+// the player has said yes): the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
+// reload do not call it: the seat is held and the key kept, so that the player can come back. The page calls it only once the game runs (isReadyToPlay).
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
     if (g_web_app != nullptr) g_web_app->leave_network_match();
 }
