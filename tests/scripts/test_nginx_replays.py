@@ -365,7 +365,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         for _ in range(3):
             self.assertEqual(self.ask("GET", "/replays/" + FILE)[0], 200)
         self.assertEqual(self.stub_lines() - before, 4)                                       # a file is asked of it each time
-        time.sleep(5.5)                                                                       # five seconds are over: the next one asks again, the others after it are served from that
+        time.sleep(6.2)                                                                       # five seconds are over (nginx counts whole seconds: an entry made at the start of a second is good for the whole of the fifth one, so 5.5 s is not always enough): the next one asks again, the others after it are served from that
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
         self.assertEqual(self.stub_lines() - before, 5)
