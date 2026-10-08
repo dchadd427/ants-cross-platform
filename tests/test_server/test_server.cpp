@@ -8892,6 +8892,7 @@ void real_process_scenario(const char* tag, int stop_signal, bool control_room) 
     w.port = game_port;
     w.maps = maps_dir();
     RClient& a = w.connect("Ann", code, control_room ? std::nullopt : std::optional<net::CreateBlock>(block_of("", 2)));        // (a public room: Ann's Hello carries the block that makes it)
+    ASSERT_TRUE(w.until([&]() { return a.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 15000));       // (Ann is in before Bob connects: two Hellos over two sockets can be read in either order, and Bob's finds no room if it comes first)
     RClient& b = w.connect("Bob", code);
     ASSERT_TRUE(w.until([&]() { return a.session != nullptr && b.session != nullptr && a.session->runner().next_turn_expected() >= 130 && b.session->runner().next_turn_expected() >= 130; }, 40000));
     // the record is there, for its owner only, and the control interface says so
