@@ -1750,7 +1750,10 @@ void run_seat_move_tests() {
                     if (!server) server = listener->accept();
                     ants_test::short_pause();
                 }
-                return cond();
+                return ants_test::real_time_tail(cond, [&]() {                      // (real time for a late kernel, the game clock standing still: see run_until above)
+                    net.update(now);
+                    if (!server) server = listener->accept();
+                });
             };
             const auto shows = [&](const std::string& kinds) {                         // the room that this machine shows is the one that the script said
                 for (size_t seat = 0; seat < 4; ++seat) {

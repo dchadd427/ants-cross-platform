@@ -314,6 +314,7 @@ bool start_three(Peer& host, Peer& bob, Application& app, const std::string& app
         bob.update();
         ants_test::short_pause();
     }
+    ants_test::real_time_tail([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, [&]() { host.update(); bob.update(); });
     if (bob.net.phase() != net::NetGame::Phase::Room || bob.net.my_seat() != 1) return false;
     ApplicationConfig cfg = headless_config();
     cfg.net_role = ApplicationConfig::NetRole::Join;
@@ -1601,6 +1602,7 @@ void run_guest_tests() {
             bob.update();
             ants_test::short_pause();
         }
+        ants_test::real_time_tail([&]() { return bob.net.phase() == net::NetGame::Phase::Room; }, [&]() { host.update(); bob.update(); });
         ASSERT_TRUE(bob.net.phase() == net::NetGame::Phase::Room && bob.net.my_seat() == 1);
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Join;
@@ -3341,7 +3343,7 @@ struct HiddenDuo {
             if (cond()) return true;
             step(10);
         }
-        return cond();
+        return ants_test::real_time_tail(cond, [&]() { peer.update(); app.background_pump_after(0.0f); });       // (real time for a late kernel, the clocks standing still: see Duo)
     }
 };
 
@@ -3854,6 +3856,7 @@ void run_hidden_page_tests() {
             ASSERT_EQ(app.state(), AppState::Playing);
             server.reset();                                                               // the server goes away under the hidden page: its connection closes
             for (int i = 0; i < 300 && app.state() != AppState::MapSelect; ++i) hidden_step(10);
+            ants_test::real_time_tail([&]() { return app.state() == AppState::MapSelect; }, [&]() { bob.update(); app.background_pump_after(0.0f); });
             ASSERT_EQ(app.state(), AppState::MapSelect);                                  // the step noticed it: the setup screen is back ...
             ASSERT_EQ(app.audio_mixer().music_filepath(), piece);                         // ... and no music was started: the piece of the match plays on
             app.set_page_hidden(false);
@@ -4312,13 +4315,17 @@ void run_room_bot_tests() {
             net::HelloMsg hello;
             hello.name = "Mute";
             bool sent = false;
-            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Client; ++i) {
-                app.pump_network(0.010f);
+            const auto pass = [&](float dt) {
+                app.pump_network(dt);
                 std::vector<uint8_t> unread;
                 mute->poll(unread);                                                          // (it reads the host's pings and never answers them)
                 if (!sent && mute->is_open()) sent = mute->send(net::encode(hello));
+            };
+            for (int i = 0; i < 800 && app.net()->room().slots[1].state != net::SlotState::Client; ++i) {
+                pass(0.010f);
                 ants_test::short_pause();
             }
+            ants_test::real_time_tail([&]() { return app.net()->room().slots[1].state == net::SlotState::Client; }, [&]() { pass(0.0f); });
             ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms == net::kRttUnknown);
             const size_t channels = app.audio_mixer().active_channel_count();
             app.map_select().handle_key_down(SDLK_RETURN);
@@ -4331,6 +4338,7 @@ void run_room_bot_tests() {
                 app.pump_network(0.010f);
                 ants_test::short_pause();
             }
+            ants_test::real_time_tail([&]() { return app.net()->room().slots[1].state == net::SlotState::Empty; }, [&]() { app.pump_network(0.0f); });
             ASSERT_TRUE(app.net()->room().slots[1].state == net::SlotState::Empty);
         }
         Peer bob;

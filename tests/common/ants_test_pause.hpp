@@ -83,4 +83,15 @@ inline void short_pause(std::chrono::microseconds d = std::chrono::microseconds(
 #endif
 }
 
+// The end of a wait for something that the sockets decide, after the steps of game time that it was given (a step lasts as long as its pause, so they pass in a fraction of a second and a late kernel can
+// outlast them): up to two more seconds of real time with the game clock standing still (`pass` is one pass over the machines that does not move it). A wait that succeeds never gets here.
+template <typename Done, typename Pass>
+bool real_time_tail(Done&& done, Pass&& pass) {
+    for (int i = 0; i < 2000 && !done(); ++i) {
+        pass();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return done();
+}
+
 }  // namespace ants_test
