@@ -2508,12 +2508,17 @@
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
                     if (value === ANTS_ASPECT) { remember(value); return; }           // (the same picture: nothing to restart; the choice is remembered)
-                    // The game restarts to change its picture (it is made when the game starts): a match in a room (joined from the address, even before it starts: yes leaves it for good, Leave is
-                    // sent and the seat is dropped) or a match that is being played here (the game says so: ants_match_running) asks first
+                    // The game restarts to change its picture (it is made when the game starts). A browser that holds the key of its seat in the room (the match began: holdsThisSeat) takes a plain reload: nothing
+                    // is asked, the game is not told to leave (Leave drops the seat and lets go of the key, and the page would come back as a stranger in another match), the seat is held and the page takes it
+                    // again in the SAME match. Otherwise the restart loses something and asks first: a room that is still waiting (no key yet: a reload there is a new visit, and the seat that Leave frees at once
+                    // is the one that the address asks for) or a match that is being played here (the game says so: ants_match_running); yes leaves for good.
                     var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
+                    var keyed = false;
+                    try { keyed = joined && typeof holdsThisSeat === 'function' && holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now()); } catch (e) { /* no storage: no key to rely on */ }
                     var playing = false;
                     try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (e) { /* the game does not answer: it is not running a match */ }
-                    if ((joined || playing) && !window.confirm('Leave the match to change the picture?')) return;
+                    var loses = !keyed && (joined || playing);
+                    if (loses && !window.confirm('Leave the match to change the picture?')) return;
                     remember(value);
                     var url;
                     try {
@@ -2521,7 +2526,7 @@
                         url.searchParams.set('aspect', value);
                         url.search = url.search.replace('aspect=' + encodeURIComponent(value), 'aspect=' + value);       // (the colon needs no escape in a query)
                     } catch (e) { return; }
-                    if (joined || playing) antsLeaveMatch();                          // (the player said yes: the seat is dropped now, not held for a page that is gone)
+                    if (loses) antsLeaveMatch();                                      // (the player said yes: the seat is dropped now, not held for a page that is gone)
                     window.location.assign(url.href);
                 });
             });

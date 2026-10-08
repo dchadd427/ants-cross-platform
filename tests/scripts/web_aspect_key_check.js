@@ -99,10 +99,14 @@ function runShell(path, search, stored, options) {
     // the game that the page talks to: `ready` is the page's isReadyToPlay, `module` makes the Module of the program (given the window, so that it can look at where the page has gone by then)
     const ready = !!(options && options.ready);
     const fake = options && options.module ? options.module(win) : undefined;
-    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule;\n' + page + '\n' + selector + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, embed: ANTS_EMBED, key: ANTS_ASPECT_KEY };';
-    const result = new Function('window', 'document', 'fakeModule', code)(win, doc, fake);
+    // holdsThisSeat is the name gate's (outside these blocks): `holds` says whether this browser holds the key of its seat (or throws, if it is a function); its arguments are recorded
+    const holdsCalls = [];
+    const holdsFn = options && options.holds !== undefined ? function (search, args, storage, now) { holdsCalls.push([search, args.indexOf('--join-url') !== -1, storage === win.localStorage, typeof now]); return typeof options.holds === 'function' ? options.holds() : options.holds; } : undefined;
+    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule; var holdsThisSeat = fakeHolds;\n' + page + '\n' + selector + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, embed: ANTS_EMBED, key: ANTS_ASPECT_KEY };';
+    const result = new Function('window', 'document', 'fakeModule', 'fakeHolds', code)(win, doc, fake, holdsFn);
     result.storage = storage;
     result.win = win;
+    result.holdsCalls = holdsCalls;
     result.stage = stage;
     result.buttons = buttons;
     result.checked = buttons.map((b) => b.attributes['data-aspect'] + '=' + b.attributes['aria-checked']).join(' ');
@@ -227,6 +231,36 @@ try {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, decline: true, module: (win) => ({ _ants_leave_match() { calls.push('left'); } }) });
         r.buttons[1].listeners.click();
         expect('shell.html selector in a room, answered No: the game is not told, nothing moves', calls.length + ' ' + r.win.assigned.length, '0 0');
+    }
+    // A BROWSER THAT HOLDS THE KEY OF ITS SEAT (the match began) SWITCHES BY A PLAIN RELOAD (the owner: switching 16:9 and 4:3 lost the game and joined another match): nothing is asked, the game is not told to
+    // leave (Leave drops the seat and lets go of the key; the page would come back as a stranger), and the address keeps the room and the seat, so the page takes the same seat with its key
+    for (const [what, search] of [['a seat in the address', '?join=/ws&room=abc&seat=1'], ['no seat in the address yet', '?join=/ws&room=abc']]) {
+        for (const decline of [false, true]) {                                       // (a question that is never asked cannot be answered: the answer changes nothing)
+            const r = runShell(shellPath, search, {}, { ready: true, decline, holds: true, module: (win) => ({ _ants_match_running() { return 1; }, _ants_leave_match() { win.left = true; } }) });
+            r.buttons[1].listeners.click();
+            const label = 'shell.html selector, a room with the key held, ' + what + (decline ? ' (No ready)' : '');
+            expect(label + ': nothing is asked, the game is not told to leave', r.win.asked.length + ' ' + (r.win.left === true), '0 false');
+            expect(label + ': the page reloads with the room' + (search.indexOf('seat') === -1 ? '' : ' and the seat') + ' kept and the new shape',
+                   r.win.assigned.length === 1 && /[?&]aspect=4:3(&|$)/.test(r.win.assigned[0]) && r.win.assigned[0].indexOf('join=%2Fws') !== -1
+                       && r.win.assigned[0].indexOf('room=abc') !== -1 && (search.indexOf('seat=1') === -1 || r.win.assigned[0].indexOf('seat=1') !== -1), true);
+            expect(label + ': the choice is remembered', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
+            expect(label + ': holdsThisSeat is asked with the address, the arguments and the storage', JSON.stringify(r.holdsCalls), JSON.stringify([[search, true, true, 'number']]));
+        }
+    }
+    {
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, holds: false, module: (win) => ({ _ants_match_running() { return 0; }, _ants_leave_match() { win.left = true; } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector, a room with no key yet (still waiting): it asks and a yes leaves', r.win.asked.length + ' ' + (r.win.left === true) + ' ' + r.win.assigned.length, '1 true 1');
+    }
+    {
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, holds: () => { throw new Error('storage is blocked'); }, module: (win) => ({ _ants_leave_match() { win.left = true; } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector, a room, the key lookup throws: it asks, and a yes leaves', r.win.asked.length + ' ' + (r.win.left === true) + ' ' + r.win.assigned.length, '1 true 1');
+    }
+    {
+        const r = runShell(shellPath, '', {}, { ready: true, holds: true, module: () => ({ _ants_match_running() { return 1; } }) });
+        r.buttons[1].listeners.click();
+        expect('shell.html selector, a match of this computer is never kept by a key: it asks', r.win.asked.length + ' ' + r.holdsCalls.length, '1 0');
     }
     {
         const calls = [];

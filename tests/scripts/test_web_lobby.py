@@ -303,8 +303,11 @@ class TheGamePage(PageCase):
         selector = self.page[self.page.index("ANTS_SELECTOR_BEGIN"):self.page.index("// ANTS_SELECTOR_END")]
         self.assertIn("function antsLeaveMatch() {", selector)                                                    # (inside the block that node runs)
         self.assertIn("if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match();", selector)
-        self.assertIn("if (joined || playing) antsLeaveMatch();", selector)
-        self.assertLess(selector.index("window.confirm('Leave the match to change the picture?')"), selector.index("antsLeaveMatch();                          //"))
+        # (the picture selector leaves only where a reload would lose something: a browser that holds the key of its seat in the room reloads, keeps the seat and comes back to the same match)
+        self.assertIn("var loses = !keyed && (joined || playing);", selector)
+        self.assertIn("keyed = joined && typeof holdsThisSeat === 'function' && holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now());", selector)
+        self.assertIn("if (loses) antsLeaveMatch();", selector)
+        self.assertLess(selector.index("window.confirm('Leave the match to change the picture?')"), selector.index("if (loses) antsLeaveMatch();"))
         self.assertEqual(len(re.findall(r"Module\._ants_leave_match\(\)", self.page)), 1)                         # (the one place that calls it: nothing on unload, pagehide or visibilitychange)
         app = read("src", "ants_app", "application.cpp")
         self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {', app)
