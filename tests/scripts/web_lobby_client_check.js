@@ -159,6 +159,29 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     same('a line of a player is chat', events(c, 'chat'), [{ sender: 1, team: false, text: 'hi' }]);
 }
 
+{   // the guard of a request on the screen that the leader saw: kept when the row is picked up or the question opens (guardNow), given back with the request; a seating that changed meanwhile sends nothing
+    const w = world();
+    const c = client(w);
+    check('before any room there is no guard', c.guardNow() === 0);
+    c.connect();
+    w.last().open();
+    w.last().receive(welcome(0, seq(0x30), 2));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [C, 'Tess'], [E, '']], { you: 0, leader: 0 }));
+    const seen = c.guardNow();
+    check('guardNow is the seating hash of the room as it is shown', seen !== 0 && seen === N.seatingHash(c.room));
+    const base = w.last().sent.length;
+    check('a removal with the guard of the screen is sent, with that guard', c.remove(1, seen) && hex(w.last().sent[base]) === hex(N.encodeRemove(1, seen)));
+    check('a move with the guard of the screen is sent, with that guard', c.move(1, 3, seen) && hex(w.last().sent[base + 1]) === hex(N.encodeSeatMove(1, 3, seen)));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sammy'], [C, 'Tess'], [E, '']], { you: 0, leader: 0 }));      // (the player of colour 2 goes by another name now)
+    const after = c.guardNow();
+    check('a changed seating is another guard', after !== 0 && after !== seen);
+    check('the old guard sends nothing: no removal and no move', c.remove(1, seen) === false && c.move(1, 3, seen) === false && w.last().sent.length === base + 2);
+    check('the new guard is sent as it is', c.remove(1, after) && hex(w.last().sent[base + 2]) === hex(N.encodeRemove(1, after)));
+    check('a guard that is not the seating\'s sends nothing (0, a number, a string)', c.remove(1, 0) === false && c.remove(1, 12345) === false && c.move(1, 3, '1') === false && w.last().sent.length === base + 3);
+    check('without a guard the room as it is now counts (as before)', c.remove(2) && hex(w.last().sent[base + 3]) === hex(N.encodeRemove(2, after)));
+    check('a guard does not make a request possible that is not: the leader cannot be removed', c.remove(0, after) === false && w.last().sent.length === base + 4);
+}
+
 // ---- a page that is not the leader ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 {

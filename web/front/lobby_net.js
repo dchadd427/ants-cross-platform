@@ -264,9 +264,11 @@
     //   'chat' ({ sender, team, text })
     //   'gone'                      the room of our key does not exist any more (everybody left, a restart): the client makes the room again, without the key, and says 'welcome' with created set
     //   'refused' ({ reason })      the room does not take us (Full, MatchRunning, VersionMismatch, BadRequest, NoSuchRoom when the server has no place for a lobby, ...); reason 0 with an `error` text: no socket could be made
-    //   'removed'                   the leader took us out of the room (Kicked; also what a flood is answered): the page forgets the key and makes a room of its own with a new code
+    //   'removed'                   the leader took us out of the room (Kicked, which nothing else is answered with: a flood is BadRequest): the page forgets the key and makes a room of its own with a new code
     //   'superseded'                another window of this browser took the seat
     // Requests (move, setPlan, rename, remove, start, leave) return false when they cannot be made now (not connected, not the leader, a START waits, the arguments do not fit), and send nothing.
+    // move and remove act on the person that the leader's screen showed in that colour: the page takes guardNow() when the leader picks the row up or opens the question and gives it back as the last
+    // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -426,11 +428,15 @@
     };
     LobbyClient.prototype.isLeader = function () { return this.room !== null && this.room.you !== 255 && this.room.leader === this.room.you; };
     LobbyClient.prototype.canAct = function () { return this.status === 'online' && this.room !== null && this.room.lobby; };
-    LobbyClient.prototype.move = function (from, to) {
+    // The guard of the room as it is shown now (the Room message last heard), 0 before there is one: what the page keeps while the leader decides, and passes to move and remove
+    LobbyClient.prototype.guardNow = function () { return this.room === null ? 0 : seatingHash(this.room); };
+    LobbyClient.prototype.move = function (from, to, guard) {
         var r = this.room;
         if (!this.canAct() || !this.isLeader() || r.starting || from === to || !(from >= 0 && from < PLAYERS && to >= 0 && to < PLAYERS)) return false;
         if (r.slots[from].state !== SLOT.Client || (r.slots[to].state !== SLOT.Empty && r.slots[to].state !== SLOT.Client)) return false;
-        return this.sendBytes(encodeSeatMove(from, to, seatingHash(r)));
+        var now = seatingHash(r);
+        if (guard !== undefined && guard !== now) return false;
+        return this.sendBytes(encodeSeatMove(from, to, now));
     };
     // The plan as the leader wants it: { map ('' keeps the room's), kinds [4] (PLAN.*), teamA, teamB }
     LobbyClient.prototype.setPlan = function (plan) {
@@ -445,10 +451,12 @@
         if (!this.canAct() || this.room.starting || !validPersonName(name)) return false;
         return this.sendBytes(encodeName(name));
     };
-    LobbyClient.prototype.remove = function (seat) {
+    LobbyClient.prototype.remove = function (seat, guard) {
         var r = this.room;
         if (!this.canAct() || !this.isLeader() || !(seat >= 0 && seat < PLAYERS) || seat === r.you || r.slots[seat].state !== SLOT.Client) return false;
-        return this.sendBytes(encodeRemove(seat, seatingHash(r)));
+        var now = seatingHash(r);
+        if (guard !== undefined && guard !== now) return false;
+        return this.sendBytes(encodeRemove(seat, now));
     };
     LobbyClient.prototype.start = function () {
         var r = this.room;
