@@ -1,11 +1,12 @@
 # Status
 
-_Updated 2026-10-07 23:06 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-07 23:31 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ██████░░░░ 57% | Thu | draft PR #34 is open; review findings fixed; five checks and second-round reviews running |
+| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ██████░░░░ 57% | Thu | draft PR #34 is open; six-character room codes (asked 2026-10-07 22:54 PDT) are being added, then the five checks run once on the final head |
+| **v0.12.0** game lobby on the front page (network protocol 16) | ░░░░░░░░░░ 0% | not yet set | design approved; build plan written; the server part starts next to v0.11.0 and merges after it |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
@@ -16,12 +17,12 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions), a bot that walks over power-ups on its way (one ant takes several; noticed by the owner on the islands map on 2026-10-07)
 - Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
-- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): draft PR #34 is open; review findings fixed; five checks and second-round reviews running; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
+- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): draft PR #34 is open; room codes become six characters (asked 2026-10-07 22:54 PDT, approved 23:18 PDT), then the five checks run once on the final head; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
 - **Replays**: building the server's 30-day store of finished matches (public list and download); a viewer in the web player is being drawn for approval.
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **Game lobby for the front page** (no release yet): the redrawn design was approved on 2026-10-07 22:50 PDT; it is being built next to v0.11.0 and merges after it.
+- **Game lobby for the front page** (v0.12.0, network protocol 16): the design, the host-change notice and the six-character code look are approved (2026-10-07 22:50 and 23:18 PDT); the server part and the page are built in stages and merge after v0.11.0.
 - **Windows timing fix for the checks** (no release; PR #33, in review): two server timing tests read the thread's cycle counter on Windows, because one Windows runner host type charges CPU time in lumps and made the Windows 2022 check fail at random.
 
 ## On hold (not started; the owner decides when)
