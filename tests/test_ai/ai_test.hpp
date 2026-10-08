@@ -226,3 +226,4 @@ void run_island_ferry_tests();
 void run_island_small_tests();
 void run_merge_tests();
 void run_cantgo_tests();
+void run_flower_tests();

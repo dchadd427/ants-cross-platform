@@ -49,6 +49,17 @@ sim::UnitState seen_state(const sim::AntSnapshot& a, const sim::Grid& grid) {
     return sim::UnitState::Idle;
 }
 
+// The kind of ant that a flower dropper's droplet makes: the engine numbers the draws 0 Bomber, 1 Combat, 2 Thief, 3 Swimmer, 4 Fire (FlowerDropperSnapshot::powerup_type)
+sim::AntType droplet_kind(uint8_t draw) noexcept {
+    switch (draw) {
+        case 0: return sim::AntType::Bomber;
+        case 1: return sim::AntType::Combat;
+        case 2: return sim::AntType::Thief;
+        case 3: return sim::AntType::Swimmer;
+        default: return sim::AntType::Fire;
+    }
+}
+
 }  // namespace
 
 BotView::BotView(const BotView& other)
@@ -69,6 +80,7 @@ BotView::BotView(const BotView& other)
       others_(other.others_),
       piles_(other.piles_),
       powerups_(other.powerups_),
+      flowers_(other.flowers_),
       bombs_(other.bombs_),
       fire_walls_(other.fire_walls_),
       dying_(other.dying_) {}
@@ -117,6 +129,13 @@ bool BotView::dying_at(sim::TileCoord tile) const noexcept {
 const PowerUpView* BotView::powerup_at(sim::TileCoord tile) const noexcept {
     const auto it = std::lower_bound(powerups_.begin(), powerups_.end(), tile, [](const PowerUpView& p, sim::TileCoord t) { return p.tile.y != t.y ? p.tile.y < t.y : p.tile.x < t.x; });
     return it != powerups_.end() && it->tile == tile ? &*it : nullptr;
+}
+
+const FlowerView* BotView::flower_at(sim::TileCoord tile) const noexcept {
+    for (const FlowerView& f : flowers_) {
+        if (f.drop == tile) return &f;
+    }
+    return nullptr;
 }
 
 bool BotView::standing(const AntView& ant) const noexcept {
@@ -210,6 +229,18 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
                 }
             }
         }
+    }
+    // the flower droppers: where they stand and the droplet that falls (what the screen draws; the dropper's clock is not on it)
+    for (const sim::FlowerDropperSnapshot& d : ws.flower_droppers) {
+        FlowerView f;
+        f.plant = sim::TileCoord{d.x, d.y};
+        f.drop = sim::TileCoord{d.drop_x, d.drop_y};
+        f.falling = d.is_dropping;
+        if (d.is_dropping) {
+            f.kind = droplet_kind(d.powerup_type);
+            f.age = d.drop_elapsed_ms / sim::TICK_MS;
+        }
+        v.flowers_.push_back(f);
     }
     const std::vector<sim::FoodObject>& objects = sim.grid().food_objects();
     for (size_t i = 0; i < objects.size(); ++i) {

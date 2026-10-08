@@ -54,7 +54,7 @@ Method: `bot_arena` of the release build, the arena's sink latency of 3 ticks, t
 | TREASURE | 2780 / 2779 (100.1%) | 2924 / 2953 (99.0%) | 3651 / 2975 (122.7%) |
 | ISLANDS | 0 / 0 | 0 / 0 | 0 / 0 |
 
-**A2, two standard against two worker bots of the level**: acceptance, Medium and Hard higher than the worker on every one of the five maps, Easy at least 97 percent: **met, except that Medium ties on TINY and SMALL** (12 seeds: 100.4 and 100.0 percent; with 48 seeds 100.2 and 100.0, group wins 50.0 and 50.2). The reason is the economy: at Medium on those two maps there is no power-up to walk to and no fight, so the standard bot has nothing to do that the worker does not, and its only economic edge, the gate, loses there in two against two (below). Before the opening's minimum of six ants Medium was **99.1 and 98.8 percent** there (the contest of the middle cost a team of three or four ants 4 percent; the group win rate was 48.8 and 39.6): that was a real loss, now removed, not noise.
+**A2, two standard against two worker bots of the level**: acceptance, Medium and Hard higher than the worker on every one of the five maps, Easy at least 97 percent: **met, except that Medium ties on TINY and SMALL** (12 seeds: 100.4 and 100.0 percent; with 48 seeds 100.2 and 100.0, group wins 50.0 and 50.2). The reason is the economy: at Medium on those two maps there is no power-up to walk to (Medium takes no flower drop) and no fight, so the standard bot has nothing to do that the worker does not, and its only economic edge, the gate, loses there in two against two (below). Before the opening's minimum of six ants Medium was **99.1 and 98.8 percent** there (the contest of the middle cost a team of three or four ants 4 percent; the group win rate was 48.8 and 39.6): that was a real loss, now removed, not noise.
 
 | Map | Easy: standard / worker (group wins) | Medium | Hard |
 |---|---|---|---|
@@ -178,7 +178,7 @@ The rule (project rule 8): a bot reads what a person of its seat sees and clicks
 
 | New | What it exposes | Why it is fair |
 |---|---|---|
-| `BotView::powerups()`, `powerup_at()` | every power-up on the map now (tile, kind, the team and ant that STANDS on it) | power-ups are drawn on every screen; a standing ant is an ant on a power-up that is not walking (visible); the dropper's clock is not exposed (a droplet that has not landed is not in the list) |
+| `BotView::powerups()`, `powerup_at()` | every power-up on the map now (tile, kind, the team and ant that STANDS on it) | power-ups are drawn on every screen; a standing ant is an ant on a power-up that is not walking (visible); the dropper's clock is not exposed (a droplet that has not landed is not in the list; it is in `BotView::flowers()`, as the screen draws it) |
 | `BotView::standing()` | whether an ant is immune | derived from the drawn state and the tile |
 | `BotView::bombs()` | every bomb with the team whose colour it is drawn in | the renderer draws every bomb, an enemy's too, in the owner's colour (a render test pins that every viewer sees every owner's bomb); with Fog of War a bomb on an unexplored tile is hidden, and bots are refused with fog |
 | `BotView::fire_walls()` | tiles only | a fire wall is drawn alike for every owner; who lit it and how long it still burns are on no screen and are not in the list (`grid()` still lends them: the accepted deviation of `docs/BOTS.md`) |

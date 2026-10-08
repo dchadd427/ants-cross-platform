@@ -80,11 +80,20 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
+    uint8_t present = 0;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
     if (plan.secure_side) {                                       // the power-ups of the own side are taken early: an enemy that steals the Fire can wall the piles in, the Bomber can mine the base, the Thief can raid twice
-        uint8_t present = 0;
-        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (view.rows()[t].present ? 1u << t : 0u));
         for (const PowerUpView& p : view.powerups()) {
             if (((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && power_up_side(*map, p.tile, present) == seat_) tactics_.wants[static_cast<size_t>(p.kind)] = 1;
+        }
+    }
+    if (plan.flower_sides || plan.flower_fire) {                  // the drops of the flowers (docs/BOTS.md, "The flowers"): a landed drop has a side like a power-up of the start, and a bot without a Fire Ant wants the Fire that lands
+        for (const PowerUpView& p : view.powerups()) {
+            const FlowerInfo* flower = map->flower_at(p.tile);
+            if (flower == nullptr) continue;
+            uint8_t& want = tactics_.wants[static_cast<size_t>(p.kind)];
+            if (plan.flower_sides && plan.secure_side && ((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && drop_side(*map, p.tile, present) == seat_) want = std::max<uint8_t>(want, 1);
+            if (plan.flower_fire && p.kind == sim::AntType::Fire && flower->approach[seat_].reachable()) want = std::max<uint8_t>(want, 1);
         }
     }
     bool enemy_plays = false;
