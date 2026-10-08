@@ -1638,8 +1638,9 @@ void run_way_back_tests() {
             ASSERT_EQ(c.net.phase(), NetGame::Phase::Off);
             ASSERT_TRUE(c.keys_forgotten.size() == 1 && c.count(NetGame::Event::Type::Rejoined) == 0);
             // Cat's CaughtUp went out in the frame in which it began to catch up (the stream is short) and the Leave follows at once, so the server has to read both in one pass: the Leave then ends the attempt before the states are
-            // compared. A Mac's loopback is handled by a kernel thread (see World::run) and the server can read the CaughtUp alone, a pass before the Leave: it compares the states and gives the seat back, and the Leave that comes
-            // after does not drop it (the seat is held as lost and the room waits for it up to the cap of the pause: the wait below fails). So the kernel gets a moment of real time, the game clock standing still.
+            // compared. A Mac's loopback is handled by a kernel thread (see World::run) and the server can read the CaughtUp alone, a pass before the Leave: it compares the states and gives the seat back, and then mostly the seat is
+            // held as lost and the room waits for it up to the cap of the pause (the wait below fails), or the Leave drops it a pass later but one rejoin has been counted (the last check fails). So the kernel gets a moment of real
+            // time, the game clock standing still.
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-13C").paused; }, 20000));      // the seat is dropped, so nobody waits for it
             w.run(500);
