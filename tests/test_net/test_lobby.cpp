@@ -258,6 +258,12 @@ struct Screen {
         if (done) std::swap(shown.slots[from], shown.slots[to]);
         return bytes;
     }
+    // The same for the leader's press on a person's Remove (protocol 16): the seat is empty on the screen once the room does it
+    std::vector<uint8_t> remove(uint8_t seat, bool done = true) {
+        const std::vector<uint8_t> bytes = encode(RemoveMsg{seat, seating_hash(shown)});
+        if (done) shown.slots[seat] = RoomMsg::Slot{};
+        return bytes;
+    }
 };
 
 // A connection that counts the messages that are taken from it: what a host polls in one update
@@ -4673,7 +4679,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Colour Move, Plan, Rename); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
+    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Colour Move, Plan, Rename, Removal); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
         ASSERT_EQ(HostLobby::Config{}.forgive_ms, kLobbyForgiveMs);
         ASSERT_EQ(kLobbyForgiveMs, 60000u);
         // `wish` is a message that this guest may send but the room ignores (counted, free up to 16, then a violation each): the room has no use for it from this sender now
@@ -4735,6 +4741,15 @@ int main() {
             const size_t cat = room.join_seat("Cat");
             case_of("plan", room, bob, plan_wish, true);
             allowance_of("plan", room, cat, plan_wish);
+        }
+        {   // a removal from a guest that is not the leader
+            Room room(lobby_room_config(97));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            const std::vector<uint8_t> remove_wish = encode(RemoveMsg{2, seating_hash(room.host.room())});
+            case_of("removal", room, bob, remove_wish, true);
+            allowance_of("removal", room, cat, remove_wish);
         }
         {   // a rename while the leader's START waits for a page's game (the wait is longer than the test)
             HostLobby::Config hc = lobby_room_config(93);
@@ -4844,7 +4859,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.36 The Activity Of A Lobby Room (Protocol 16): activity() Counts What The People Do With The Room (A Welcome, A Colour Move, A Plan Or A Name That Changed, A Line Of Chat, A START That Stands) And Nothing Else: Not A Ping, A Request That Was Ignored Or Changed Nothing, A Link That Ends, Comes Back Or Gives Up") {
+    TEST_CASE("N4.36 The Activity Of A Lobby Room (Protocol 16): activity() Counts What The People Do With The Room (A Welcome, A Colour Move, A Plan Or A Name That Changed, A Removal, A Line Of Chat, A START That Stands) And Nothing Else: Not A Ping, A Request That Was Ignored Or Changed Nothing, A Link That Ends, Comes Back Or Gives Up") {
         {
             HostLobby::Config hc = lobby_room_config(99);
             hc.hold_ms = 5000;
@@ -4925,6 +4940,330 @@ int main() {
             room.run(100);
             ASSERT_EQ(room.host.ignored_start_requests(), 1u);
             ASSERT_EQ(room.host.activity(), seated + 5u);
+        }
+        {   // a person that the leader removes (protocol 16) is something that a person does with the room; a removal that was ignored (a guest that does not lead) is not
+            Room room(lobby_room_config(110));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.join_seat("Cat");
+            const uint32_t seated = room.host.activity();
+            ASSERT_EQ(seated, 3u);
+            room.guests[bob].client_end->send(encode(RemoveMsg{2, seating_hash(room.host.room())}));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_removes(), 1u);
+            ASSERT_EQ(room.host.activity(), seated);
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(2));
+            room.run(100);
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.activity(), seated + 1u);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.37 The Removal (Protocol 16): The Leader Of An Open Lobby Room Takes Another Person Out, Held Or Not, Also While The START Waits For The Games; The Person Is Told (Kicked), The Colour Is Free At Once, The Key Is Forgotten And Nobody Is Sent A Notice; It Acts Only On The Seating That The Leader Saw, Never On The Leader, A Bot Or An Empty Seat; Everything Else Is Ignored And Counted, And Removals Have A Budget Of Their Own") {
+        using K = PlanKind;
+        {   // what a removal does: the person is told and their link closed, the colour is free for everybody at once, nothing else of the room changes (the plan, the teams, the lead), nobody is sent a notice
+            Room room(lobby_room_config(100));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            const SeatKey bob_key = room.guests[bob].lobby->key();
+            ASSERT_FALSE(key_is_zero(bob_key));
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Hard}, 0, 1)));
+            room.run(100);
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));
+            const uint32_t activity = room.host.activity();
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_FALSE(room.host.occupied(1));
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+            ASSERT_EQ(room.host.activity(), activity + 1u);
+            ASSERT_EQ(room.guests[bob].lobby->phase(), ClientLobby::Phase::Rejected);
+            ASSERT_EQ(room.guests[bob].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_FALSE(room.guests[bob].client_end->is_open());
+            for (const size_t g : {ann, cat}) ASSERT_EQ(layout(room.guests[g].lobby->room()), std::string("Ann@0 Cat@2"));
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2"));
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));                      // (the colour keeps what the plan calls it, the teams stay as they were)
+            ASSERT_EQ(room.host.leader(), 0);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.guests[cat].lobby->is_leader());
+            ASSERT_TRUE(room.guests[ann].lobby->chat_log().empty() && room.guests[cat].lobby->chat_log().empty());       // (the room says nothing to anybody)
+            // the key of the person who was removed fits no seat: whoever shows it is a new player, in the lowest colour that is free, and not a guest who takes a seat back
+            const size_t bob2 = join_keyed(room, "Bob", bob_key);
+            room.run(300);
+            ASSERT_EQ(room.guests[bob2].lobby->my_seat(), 1);
+            ASSERT_FALSE(room.guests[bob2].lobby->rejoined());
+            ASSERT_EQ(room.host.takeovers(), 0u);
+            ASSERT_TRUE(room.guests[bob2].lobby->key() != bob_key && !key_is_zero(room.guests[bob2].lobby->key()));
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Cat@2"));
+            ASSERT_EQ(room.host.leader(), 0);
+        }
+        {   // a person whose link has ended and whose seat is held can be removed (the leader need not wait for the minute), and a page is removed as a game is
+            Room room(lobby_room_config(101));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t pia = join_with(room, page_config("Pia"));
+            room.run(100);
+            room.guests[bob].client_end->close();
+            room.run(100);
+            ASSERT_TRUE(room.host.held(1));
+            ASSERT_EQ(layout(room.guests[ann].lobby->room()), std::string("Ann@0 Bob@1 Pia@2"));        // (the leader's screen still shows Bob)
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_FALSE(room.host.occupied(1));
+            ASSERT_FALSE(room.host.held(1));
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.holds(), 1u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(2));
+            room.run(100);
+            ASSERT_EQ(room.guests[pia].lobby->phase(), ClientLobby::Phase::Rejected);
+            ASSERT_EQ(room.guests[pia].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_EQ(room.host.removals(), 2u);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+            room.run(61000);                                                                              // (a hold that was ended by a removal does not run out later)
+            ASSERT_EQ(room.host.hold_expiries(), 0u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+        }
+        {   // what is ignored and counted (free up to 16 per guest): a guest that does not lead, the leader on itself, an empty seat, a bot's seat, a screen that is not the seating any more
+            Room room(lobby_room_config(102));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            const auto press = [&room](size_t who, uint8_t seat, uint32_t guard) { room.guests[who].client_end->send(encode(RemoveMsg{seat, guard})); };
+            const auto expect = [&room](uint32_t ignored, const char* what) {
+                room.run(100);
+                ASSERT_MSG(room.host.ignored_removes() == ignored, what);
+                ASSERT_MSG(room.host.removals() == 0 && room.host.players() >= 3, what);
+            };
+            press(cat, 1, seating_hash(room.host.room()));                                               // Cat does not lead
+            expect(1, "a guest that does not lead");
+            press(bob, 1, seating_hash(room.host.room()));                                               // not even for oneself
+            expect(2, "a guest on itself");
+            press(ann, 0, seating_hash(room.host.room()));                                               // the leader does not take itself out (it leaves)
+            expect(3, "the leader on itself");
+            press(ann, 3, seating_hash(room.host.room()));                                               // nobody in the colour
+            expect(4, "an empty seat");
+            ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
+            room.run(100);
+            press(ann, 3, seating_hash(room.host.room()));                                               // a computer player is no person
+            expect(5, "a bot");
+            const uint32_t stale = seating_hash(room.host.room());
+            ASSERT_TRUE(room.guests[bob].lobby->request_name("Robert"));                                  // the seating is another one now (a name is part of it)
+            room.run(100);
+            ASSERT_TRUE(seating_hash(room.host.room()) != stale);
+            press(ann, 1, stale);                                                                        // pressed on "Bob", who is "Robert" now
+            expect(6, "a stale screen");
+            press(ann, 1, seating_hash(room.host.room()) + 1u);                                          // a number that is no seating's
+            expect(7, "a guard that is not the seating's");
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Robert@1 Cat@2 Bot (Easy)@3"));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));                                      // the right one is done
+            room.run(100);
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.ignored_removes(), 7u);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2 Bot (Easy)@3"));
+            ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()) && room.host.occupied(room.guests[cat].lobby->my_seat()));
+        }
+        {   // the guard keeps a press on the person it was made for: the screen showed Bob in the second colour, Bob went, Dan took the colour, and the press arrives: Dan stays
+            Room room(lobby_room_config(103));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            room.guests[ann].frozen = true;                                                              // (the leader's page shows the room as it was)
+            room.guests[bob].lobby->leave();
+            room.run(100);
+            const size_t dan = room.join_seat("Dan");
+            ASSERT_EQ(room.guests[dan].lobby->my_seat(), 1);
+            ASSERT_EQ(layout(room.guests[ann].lobby->room()), std::string("Ann@0 Bob@1"));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Dan@1"));
+            ASSERT_EQ(room.guests[dan].lobby->phase(), ClientLobby::Phase::InRoom);
+            ASSERT_EQ(room.host.ignored_removes(), 1u);
+            ASSERT_EQ(room.host.removals(), 0u);
+            room.guests[ann].frozen = false;                                                             // the page sees Dan now, and the press on Dan is done
+            room.run(100);
+            ASSERT_EQ(layout(room.guests[ann].lobby->room()), std::string("Ann@0 Dan@1"));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+            ASSERT_EQ(room.guests[dan].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.ignored_removes(), 1u);
+        }
+        {   // a match that loads hears no removal: the client does not send one, and a stray one is counted without offence
+            Room room(lobby_room_config(104));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.run(100);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Loading);
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(1));
+            room.guests[ann].client_end->send(encode(RemoveMsg{1, seating_hash(room.host.room())}));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_removes(), 1u);
+            ASSERT_EQ(room.host.removals(), 0u);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1"));
+        }
+        {   // while the leader's START waits for the games the leader can still take a person out: this is how a person whose game never opens goes, and the START goes on without them when the others are games
+            HostLobby::Config hc = lobby_room_config(105);
+            hc.start_wait_ms = 20000;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t pia = join_with(room, page_config("Pia"));
+            const size_t pat = join_with(room, page_config("Pat"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last colour: one person is enough for the match)
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_TRUE(leader_starts(room.host).empty());
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));                                          // Pia's page
+            room.run(100);
+            ASSERT_EQ(room.guests[pia].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Pat@2"));
+            ASSERT_TRUE(room.host.starting() && room.guests[ann].lobby->room().starting());                  // (Pat's game has not come: the wait goes on)
+            ASSERT_TRUE(leader_starts(room.host).empty());
+            ASSERT_EQ(room.host.removals(), 1u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(2));                                          // Pat's page
+            room.run(100);
+            ASSERT_EQ(room.guests[pat].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_FALSE(leader_starts(room.host).empty());                                                  // every person who is left is a game: the owner is given the START
+            ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));                                                 // (the owner seats the plan's bot and starts)
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            room.run(100);
+            ASSERT_EQ(room.guests[ann].lobby->phase(), ClientLobby::Phase::Loading);
+            ASSERT_EQ(room.host.removals(), 2u);
+        }
+        {   // ... and a START that cannot go on without the person who was removed (no bot in the plan, one person is not a match) ends quietly: nobody is told, and the leader may ask again when somebody has joined
+            HostLobby::Config hc = lobby_room_config(111);
+            hc.start_wait_ms = 20000;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t pia = join_with(room, page_config("Pia"));
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_TRUE(room.host.starting());
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(room.guests[pia].lobby->reject_reason(), RejectReason::Kicked);
+            ASSERT_FALSE(room.host.starting() || room.guests[ann].lobby->room().starting());
+            ASSERT_TRUE(leader_starts(room.host).empty());
+            ASSERT_TRUE(notices_of(*room.guests[ann].lobby).empty());
+            const size_t bob = room.join_seat("Bob");                                                        // (the room takes newcomers again)
+            ASSERT_EQ(room.guests[bob].lobby->my_seat(), 1);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(100);
+            ASSERT_FALSE(leader_starts(room.host).empty());
+        }
+        {   // the budget: a burst of kRemoveBurst removals, then one a second. One beyond it is dropped (the person stays, nobody is told, nothing is counted as ignored), and a second after the burst was spent it is done
+            Room room(lobby_room_config(106));
+            const size_t ann = room.join_seat("Ann");
+            for (const char* name : {"Bob", "Cat", "Dan"}) room.join_seat(name);
+            Screen screen{room.host.room()};
+            for (const uint8_t seat : {uint8_t{1}, uint8_t{2}, uint8_t{3}}) room.guests[ann].client_end->send(screen.remove(seat));        // (each one is made for the screen as the one before it left it)
+            room.run(10);
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+            for (const char* name : {"Eve", "Fay", "Gus"}) room.join_seat(name);                               // (three newcomers: 300 ms, no whole removal has been refilled)
+            ASSERT_EQ(layout(room.guests[ann].lobby->room()), std::string("Ann@0 Eve@1 Fay@2 Gus@3"));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Eve@1 Fay@2 Gus@3"));
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+            room.run(1000);
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Fay@2 Gus@3"));
+            ASSERT_EQ(room.host.removals(), kRemoveBurst + 1u);
+            ASSERT_TRUE(room.host.occupied(0));
+        }
+        {   // ... and a leader that goes on beyond the budget is flooding: kRemoveExcessBurst more are dropped, every one after that is a violation (the eighth throws the leader out)
+            Room room(lobby_room_config(107));
+            const size_t ann = room.join_seat("Ann");
+            for (const char* name : {"Bob", "Cat", "Dan"}) room.join_seat(name);
+            Screen screen{room.host.room()};
+            for (const uint8_t seat : {uint8_t{1}, uint8_t{2}, uint8_t{3}}) room.guests[ann].client_end->send(screen.remove(seat));
+            room.run(10);
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
+            for (const char* name : {"Eve", "Fay", "Gus"}) room.join_seat(name);
+            const std::vector<uint8_t> press = encode(RemoveMsg{1, seating_hash(room.host.room())});
+            for (unsigned i = 0; i < kRemoveExcessBurst; ++i) room.guests[ann].client_end->send(press);
+            room.run(10);
+            ASSERT_TRUE(room.host.occupied(0) && room.host.occupied(1));
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);                                                        // (a dropped press is counted by nobody)
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(press);                               // the excess is used up: each one is an offence
+            room.run(10);
+            ASSERT_TRUE(room.host.occupied(0));
+            room.guests[ann].client_end->send(press);
+            room.run(10);
+            ASSERT_FALSE(room.host.occupied(0));                                                              // the eighth throws the leader out, as it does for any guest
+            ASSERT_TRUE(room.host.occupied(1));
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
+        }
+        {   // a room that is no lobby room has no removals: the message is garbage there (eight of them throw the sender out), and a client does not send it
+            HostLobby::Config hc = lobby_room_config(108);
+            hc.lobby_room = false;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(1));
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(encode(RemoveMsg{1, seating_hash(room.host.room())}));
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            room.guests[ann].client_end->send(encode(RemoveMsg{1, seating_hash(room.host.room())}));
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));
+            ASSERT_EQ(room.host.removals(), 0u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);                                                        // (garbage is no removal)
+            ASSERT_TRUE(room.host.occupied(1));
+        }
+        {   // a message that is no RemoveMsg (a seat that no room has, a guard of 0, a missing or an extra byte) is garbage whoever sends it: a violation at once (eight throw the sender out), and no removal
+            Room room(lobby_room_config(112));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            const std::vector<std::vector<uint8_t>> garbage = {
+                {34}, {34, 1}, {34, 1, 7, 0, 0}, {34, 9, 7, 0, 0, 0}, {34, 1, 0, 0, 0, 0}, {34, 1, 7, 0, 0, 0, 0}, {34, 255, 7, 0, 0, 0}, {34, 1, 7, 0, 0, 0, 0, 0},
+            };
+            for (size_t i = 0; i + 1 < garbage.size(); ++i) room.guests[ann].client_end->send(garbage[i]);
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(ann_seat));                                                       // seven violations are not enough
+            room.guests[ann].client_end->send(garbage.back());
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));                                                      // the eighth
+            ASSERT_EQ(room.host.removals(), 0u);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);
+            ASSERT_TRUE(room.host.occupied(1));
+        }
+        {   // the client: only the leader of an open lobby room asks, and only for a seat that shows another person
+            Room room(lobby_room_config(109));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_FALSE(room.guests[bob].lobby->request_remove(0));                                          // a guest that does not lead
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(0));                                          // the leader's own colour
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(2));                                          // a colour that nobody holds
+            ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
+            room.run(100);
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(3));                                          // a computer player
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(4));                                          // no colour
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(255));
+            Room::Guest& fresh = room.join("Fay");                                                           // a machine that has not been welcomed yet
+            ASSERT_FALSE(fresh.lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(room.host.ignored_removes(), 0u);                                                       // (nothing of it was sent)
+            ASSERT_EQ(room.host.removals(), 0u);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Fay@2 Bot (Easy)@3"));
+            room.guests[bob].lobby->leave();                                                                  // a machine that has left sends nothing either
+            room.run(100);
+            ASSERT_FALSE(room.guests[bob].lobby->request_remove(2));
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(2));                                           // (Fay is a person: the leader's screen shows her)
+            room.run(100);
+            ASSERT_EQ(room.host.removals(), 1u);
         }
     } TEST_END();
 

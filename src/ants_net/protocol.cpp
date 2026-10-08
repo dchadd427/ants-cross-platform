@@ -787,6 +787,26 @@ bool decode(const uint8_t* data, size_t size, NameMsg& out) {
     return true;
 }
 
+std::vector<uint8_t> encode(const RemoveMsg& m) {
+    std::vector<uint8_t> out;
+    ByteWriter w(out);
+    w.u8(static_cast<uint8_t>(MsgType::Remove));
+    w.u8(m.seat);
+    w.u32(m.guard);
+    return out;
+}
+bool decode(const uint8_t* data, size_t size, RemoveMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Remove, r, storage)) return false;
+    RemoveMsg m;
+    m.seat = r->u8();
+    m.guard = r->u32();
+    if (!r->done() || m.seat >= sim::MAX_PLAYERS || m.guard == 0) return false;       // a seat of the room and a guard that was computed
+    out = m;
+    return true;
+}
+
 const char* fill_level_name(FillLevel level) noexcept {
     switch (level) {
         case FillLevel::None: return "none";

@@ -45,7 +45,8 @@
 // all has come for `silence_ms` has ended too (a live client answers the room's ping every second; a link that died without a word is closed, and its seat is held). (5) The START: the leader's
 // StartRequest is kept as a request (RoomMsg flag kRoomStarting) until every person is a GAME (a Hello of kClientGame holds the seat: the pages go to the game and take their seats over), and then the owner is
 // given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
-// while the request waits.
+// while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
+// that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -131,7 +132,7 @@ public:
         /// browser which went to sleep is gone, and a room that lives while a person is in it must not live for ever on a link that died.
         uint32_t silence_ms{kLobbySilenceMs};
         /// A lobby room lives as long as its people stay, so what a person got wrong is not held against them for ever: every `forgive_ms` each guest's violations, and each of its counts of ignored requests (START,
-        /// colour moves, plans, renames), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
+        /// colour moves, plans, renames, removals), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
         uint32_t forgive_ms{kLobbyForgiveMs};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
@@ -263,16 +264,21 @@ public:
     uint32_t ignored_names() const noexcept { return ignored_names_; }
     /// Names that changed (a NameMsg that gave a person a name that was not theirs already)
     uint32_t renames() const noexcept { return renames_; }
+    /// RemoveMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room, the seating is not the one the guard was made for, the seat holds nobody to remove or the leader):
+    /// no offence up to kIgnoredRemovesAllowed per guest, a violation each after those
+    uint32_t ignored_removes() const noexcept { return ignored_removes_; }
+    /// People that the leader removed (a RemoveMsg that was done)
+    uint32_t removals() const noexcept { return removals_; }
     /// Plans that changed the room (a map, a kind, a team), seats that were held after their connection ended, and holds that ran out
     uint32_t plan_changes() const noexcept { return plan_changes_; }
     uint32_t holds() const noexcept { return holds_; }
     uint32_t hold_expiries() const noexcept { return hold_expiries_; }
     /// Connections that were closed for their silence (silence_ms)
     uint32_t silences() const noexcept { return silences_; }
-    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a colour moves, the plan or a name changes, a line of chat is said, a START is asked for (a ping, a link that
-    /// comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
+    /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a colour moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
+    /// (a ping, a link that comes back, a seat that is held or gives up are not). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the owner may give
     /// the place of such a room up when it needs it.
-    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + start_arms_ + chat_.total()); }
+    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
     std::vector<Event> take_events();
 
@@ -303,6 +309,8 @@ private:
         uint32_t ignored_plans{0};               // ... and those that were ignored (the first kIgnoredPlansAllowed are free)
         ChatBudget names;                        // the NameMsgs of this guest that could be heard (flood.hpp: a burst of kNameBurst, then kNamesPerSecond a second)
         uint32_t ignored_names{0};               // ... and those that were ignored (the first kIgnoredNamesAllowed are free)
+        ChatBudget removes;                      // the RemoveMsgs of this guest that could be done (flood.hpp: a burst of kRemoveBurst, then kRemovesPerSecond a second)
+        uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
@@ -333,6 +341,9 @@ private:
     void elect_leader();
     /// Whether move_seat would move a guest now (the rule alone, no guard, no budget): the room is open, both are different seats, `from` holds a guest and `to` is empty or holds a guest
     bool can_move_seat(uint8_t from, uint8_t to) const noexcept;
+    /// Whether the leader could take the person of `target` out of the room now (the rule alone, no guard, no budget): the room is open (a START that waits does not forbid it), and the seat holds a person
+    /// who is not the leader (an empty seat and a bot's hold nobody)
+    bool can_remove(uint8_t target) const noexcept;
     // The lobby room (protocol 16)
     /// A guest sits in the seat: connected or held
     bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held; }
@@ -367,6 +378,8 @@ private:
     uint32_t ignored_plans_{0};
     uint32_t ignored_names_{0};
     uint32_t renames_{0};
+    uint32_t ignored_removes_{0};
+    uint32_t removals_{0};
     uint32_t plan_changes_{0};
     uint32_t holds_{0};
     uint32_t hold_expiries_{0};
@@ -435,6 +448,10 @@ public:
     /// otherwise written name is cut or cleaned by the same rule as the Hello's, and an empty one sends nothing). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as
     /// a lobby room. True means the request was sent, not that the server did it: the Room message shows the name that the room has (it says nothing to a name that it cannot hear).
     bool request_name(const std::string& name);
+    /// The leader of a lobby room (protocol 16) asks the server to take the person of `seat` out of the room (RemoveMsg, with the guard of the seating as this machine shows it). False (nothing is sent) unless
+    /// this machine leads an open room that the last Room message shows as a lobby room and the seat holds a person who is not this machine's own (a bot's and an empty seat hold nobody). True means the request
+    /// was sent, not that the server did it: the Room message shows the seat free when it did (it says nothing to a request that it cannot honour: the seating has changed, a match loads).
+    bool request_remove(uint8_t seat);
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
     /// (a longer line is cut), not empty. The room relays it to everybody, this machine included: the line comes back through take_chat(). False when nothing was sent.
     bool chat(const std::string& text);

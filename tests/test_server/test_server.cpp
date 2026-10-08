@@ -11412,6 +11412,64 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia_game.lobby->start_info().names[0] == "Pia Lee" && bob_game.lobby->start_info().names[1] == "Robert");
     } TEST_END();
 
+    TEST_CASE("S3.162 A Removal Through A Real Lobby Room (Protocol 16): The Leader's Press Takes A Person Out: Their Page Is Told (Kicked) And Its Link Is Closed, The Status Shows The Colour Free, A Newcomer Takes It, And The Removed Person's Key Fits No Seat Any More; A START That Waits For A Game That Never Opens Goes On Without That Person When The Leader Removes Them") {
+        {   // before a START
+            World w(lobby_limits());
+            Client& pia = w.connect_page("Pia", "rem00001", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "rem00001", lobby_block_of());
+            Client& cat = w.connect_page("Cat", "rem00001", lobby_block_of());
+            const net::SeatKey bob_key = bob.lobby->key();
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->request_remove(1));
+            ASSERT_FALSE(bob.lobby->request_remove(2));                                       // (only the leader asks)
+            w.run(300);
+            ASSERT_EQ(bob.lobby->phase(), net::ClientLobby::Phase::Rejected);
+            ASSERT_EQ(bob.lobby->reject_reason(), net::RejectReason::Kicked);
+            ASSERT_FALSE(bob.server_end->is_open());
+            RoomStatus s = w.status("rem00001");
+            ASSERT_TRUE(s.names[0] == "Pia" && s.names[1].empty() && s.names[2] == "Cat");
+            ASSERT_EQ(s.joined, size_t{2});
+            for (const Client* c : {&pia, &cat}) ASSERT_TRUE(c->lobby->room().slots[1].state == net::SlotState::Empty && c->lobby->room().slots[0].name == "Pia");
+            ASSERT_TRUE(pia.lobby->is_leader() && pia.lobby->phase() == net::ClientLobby::Phase::InRoom && cat.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(pia.lobby->chat_log().empty() && cat.lobby->chat_log().empty());     // (nobody is told by the room)
+            Client& dan = w.connect_page("Dan", "rem00001", lobby_block_of());               // the colour is free for a newcomer at once
+            w.run(300);
+            ASSERT_EQ(dan.lobby->my_seat(), 1);
+            w.next_key = bob_key;                                                             // the removed person opens the link again, with the key they had
+            Client& bob2 = w.connect_page("Bob", "rem00001", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(bob2.lobby->phase() == net::ClientLobby::Phase::InRoom && bob2.lobby->my_seat() == 3 && !bob2.lobby->rejoined());       // a new player in the colour that was left
+            ASSERT_TRUE(bob2.lobby->key() != bob_key && !net::key_is_zero(bob2.lobby->key()));
+            s = w.status("rem00001");
+            ASSERT_TRUE(s.names[0] == "Pia" && s.names[1] == "Dan" && s.names[2] == "Cat" && s.names[3] == "Bob");
+            ASSERT_EQ(s.leader, 0);
+        }
+        {   // the leader's START waits for Bob's game, which never opens: the leader's game removes Bob, and the match starts with the games that are there
+            World w(lobby_limits());
+            Client& pia = w.connect_page("Pia", "rem00002", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "rem00002", lobby_block_of());
+            Client& cat = w.connect_page("Cat", "rem00002", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey cat_key = cat.lobby->key();
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            Client& pia_game = w.connect_game("Pia", "rem00002", pia_key);
+            w.connect_game("Cat", "rem00002", cat_key);
+            w.run(2000);
+            RoomStatus s = w.status("rem00002");
+            ASSERT_TRUE(s.state == RoomState::Waiting && s.starting);                         // (Bob's page has not gone to the game page)
+            ASSERT_TRUE(pia_game.lobby->room().starting() && pia_game.lobby->is_leader());
+            ASSERT_TRUE(pia_game.lobby->request_remove(1));
+            w.run(4000);
+            ASSERT_EQ(bob.lobby->reject_reason(), net::RejectReason::Kicked);
+            s = w.status("rem00002");
+            ASSERT_TRUE(s.state == RoomState::Running);                                       // the match went on without the person who was removed
+            ASSERT_TRUE(s.names[0] == "Pia" && s.names[1].empty() && s.names[2] == "Cat");
+            ASSERT_EQ(s.joined, size_t{2});
+        }
+    } TEST_END();
+
     TEST_CASE("S3.155 Two Hellos Reach The Door In One Pass (Links With No Jitter): A Visitor Who Joins The Lobby That Nobody Was In Is Not Dropped When The Next Hello Makes A Lobby In A Full Pool, Because The Lobby Is Not Empty Any More Although It Has Not Read The Hello Yet; A Lobby That No Hello Reached Still Gives Its Place Up") {
         ServerLimits l = lobby_limits();
         l.demo_lobbies = 2;

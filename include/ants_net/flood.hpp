@@ -50,6 +50,15 @@ inline constexpr uint32_t kNameBurst = 3;
 inline constexpr uint32_t kNamesPerSecond = 1;
 inline constexpr uint32_t kNameExcessBurst = 6;
 
+/// The removals of a lobby room's leader (protocol 16, RemoveMsg), with the same two rules: one that cannot be done (the sender does not lead, the seating is not the one the guard was made for, the seat holds nobody
+/// to remove or the leader, a match is loading) is no offence at first, up to kIgnoredRemovesAllowed per connection, each one after those is a violation; one that can be done is shown to the whole room, so it has a
+/// budget of its own (a burst of kRemoveBurst, then kRemovesPerSecond a second: a leader takes a person out once in a long while, and three at most from a full room), and one beyond it is dropped,
+/// kRemoveExcessBurst more are tolerated and every one after that is a violation.
+inline constexpr uint32_t kIgnoredRemovesAllowed = 16;
+inline constexpr uint32_t kRemoveBurst = 3;
+inline constexpr uint32_t kRemovesPerSecond = 1;
+inline constexpr uint32_t kRemoveExcessBurst = 6;
+
 /// The lines of chat that one connection may say (a remake protection: the original has no limit, but nobody types more than a line a second for long). A line is relayed to everybody, so
 /// a flood of them is a flood for the whole room: a burst of kChatBurst lines, then kChatPerSecond a second. A line beyond that is DROPPED (not relayed, not logged, no answer): a person
 /// who pastes six lines loses the sixth. It costs nothing at first, but a connection that goes on saying more than the budget allows is flooding: kChatExcessBurst lines beyond it are tolerated and that allowance

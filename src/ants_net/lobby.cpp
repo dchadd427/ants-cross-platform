@@ -293,6 +293,12 @@ bool HostLobby::can_move_seat(uint8_t from, uint8_t to) const noexcept {
         && (room_.slots[to].state == SlotState::Empty || room_.slots[to].state == SlotState::Client);     // (a free colour, or a guest's: a bot's and the host's stay)
 }
 
+// Protocol 16. The leader takes another person out of a lobby room (RemoveMsg). The rule alone: the room is open, whether or not the leader's START waits for the games (the person whose game never opens is the
+// one to remove), and the seat holds a person who is not the leader (a guest whose seat is held counts; an empty seat and a bot's hold nobody). The guard and the budget are the handler's business.
+bool HostLobby::can_remove(uint8_t target) const noexcept {
+    return phase_ == Phase::Room && target < sim::MAX_PLAYERS && target != room_.leader && room_.slots[target].state == SlotState::Client;
+}
+
 bool HostLobby::move_seat(uint8_t from, uint8_t to) {
     if (!can_move_seat(from, to)) return false;
     const bool swapped = room_.slots[to].state == SlotState::Client;                                      // (two guests change places)
@@ -625,6 +631,27 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (++guests_[seat].ignored_names > kIgnoredNamesAllowed) violation(seat);
             return;
         }
+        case MsgType::Remove: {                                           // (protocol 16) the leader takes another person out of a lobby room
+            RemoveMsg m;
+            if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no removals: the message is garbage there)
+            // Only the leader is heard, while the room is open (a START that waits does not matter: this is how a person whose game never opens goes), for a person who is not the leader, and only for the seating
+            // that the leader's guard was made for (the person that the leader pressed on is the person who goes, not a newcomer who took the colour meanwhile). As for the colour moves: one that cannot be done is
+            // no offence at first, every one after kIgnoredRemovesAllowed is a violation; one that can be done is shown to the whole room, so it has the budget of a leader's presses: one beyond it is dropped,
+            // and a connection that goes on beyond it is flooding.
+            if (seat == room_.leader && m.guard == seating_hash(room_) && can_remove(m.seat)) {
+                switch (guests_[seat].removes.take(now_ms, kRemoveBurst, kRemovesPerSecond, kRemoveExcessBurst)) {
+                    case ChatBudget::Verdict::Relay:
+                        ++removals_;
+                        remove_guest(m.seat, true, RejectReason::Kicked);              // (the person is told, their key is forgotten, their colour is free; nothing of the sender's is touched)
+                        return;
+                    case ChatBudget::Verdict::Drop: return;
+                    case ChatBudget::Verdict::Offence: return violation(seat);
+                }
+            }
+            ++ignored_removes_;
+            if (++guests_[seat].ignored_removes > kIgnoredRemovesAllowed) violation(seat);
+            return;
+        }
         case MsgType::Chat: {                                             // (protocol 11) a line for the room: in the waiting room and while the map loads
             ChatMsg m;
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
@@ -749,7 +776,7 @@ void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
 void HostLobby::forgive(Guest& g, uint32_t now_ms) const noexcept {
     if (cfg_.forgive_ms == 0 || !time_reached(now_ms, g.forgive_at_ms)) return;
     g.forgive_at_ms = now_ms + cfg_.forgive_ms;
-    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names}) {
+    for (uint32_t* count : {&g.violations, &g.ignored_start_requests, &g.ignored_seat_moves, &g.ignored_plans, &g.ignored_names, &g.ignored_removes}) {
         if (*count > 0) --*count;
     }
 }
@@ -913,6 +940,12 @@ bool ClientLobby::request_name(const std::string& name) {
     m.name = trimmed(printable(name, kMaxNameChars));
     if (m.name.empty()) return false;
     return conn_->send(encode(m));
+}
+
+bool ClientLobby::request_remove(uint8_t seat) {
+    if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
+    if (seat >= sim::MAX_PLAYERS || seat == seat_ || room_.slots[seat].state != SlotState::Client) return false;       // (a person other than this machine's own: a bot's and an empty colour hold nobody)
+    return conn_->send(encode(RemoveMsg{seat, seating_hash(room_)}));                                                // (the guard: the seats as this machine shows them)
 }
 
 bool ClientLobby::chat(const std::string& text) {
