@@ -689,7 +689,7 @@ The mouse-wheel zoom (`VIEW_AND_HUD.md`, "Mouse-wheel zoom"; `view_zoom.hpp`, `A
 
 ### Measured: the server's CPU with bots
 
-Twelve rooms of one person and three bots each, one simulated client per room in the same process, **only the server's own pass (`RoomManager::update`) timed** over 30 s of play after every room had started (`test_server` S3.71, Release build, Apple silicon, the medians of three runs; the machine was shared with other builds, load average 20 - 30, and the pass was timed with the wall clock, so every figure is an upper bound; the test has since timed the thread's CPU time instead (`CLOCK_THREAD_CPUTIME_ID`; on Windows the thread's cycle counter, `QueryThreadCycleTime`, which a busy machine does not inflate and which, unlike `GetThreadTimes`, does not post a thread's time in lumps):
+Twelve rooms of one person and three bots each, one simulated client per room in the same process, **only the server's own pass (`RoomManager::update`) timed** over 30 s of play after every room had started (`test_server` S3.71, Release build, Apple silicon, the medians of three runs; the machine was shared with other builds, load average 20 - 30, and the pass was timed with the wall clock, so every figure is an upper bound; the test has since timed the thread's CPU time instead (`CLOCK_THREAD_CPUTIME_ID`; on Windows the thread's cycle counter, `QueryThreadCycleTime`, which a busy machine does not inflate and which, unlike `GetThreadTimes` (ticks of 15.6 ms, and on some hosted runners lumps of seconds), counts what the thread ran):
 
 | twelve rooms, one person and three bots each | the server's thread per second of play, all twelve rooms (per room) | worst single pass | worst pass while the twelve rooms started |
 |---|---|---|---|

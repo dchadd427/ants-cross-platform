@@ -471,7 +471,7 @@ double thread_cycles_per_ms() {
 
 // The CPU time (user and system, milliseconds) that the calling thread has used so far; -1 when the system cannot say. It does not run while the thread waits for the machine or sleeps, so the
 // difference of two readings is the thread's own work, however busy the machine of the test is (a wall clock around a call counts the time that other programs took, too). On Windows it is the
-// thread's cycle counter, which counts what the thread ran: GetThreadTimes counts in clock ticks of 15.6 ms and, on some of the hosted runners (Windows Server 2022 on AMD EPYC 9V45 hosts, October 2026),
+// thread's cycle counter, which counts what the thread ran: GetThreadTimes counts in clock ticks of 15.6 ms and, on some of the hosted runners (seen on Windows Server 2022 hosts with AMD EPYC 9V45 processors, October 2026),
 // posts what a thread used in lumps of up to seconds to whichever pass is running at the time, so that a pass of a tenth of a millisecond read as 300 ms (the total over a second is right).
 double thread_cpu_ms() {
 #ifdef _WIN32
@@ -5524,7 +5524,7 @@ void run_bot_tests() {
         while (thread_cpu_ms() - cpu_start < 30.0 && std::chrono::steady_clock::now() < give_up) spin = spin + 1;
         static_cast<void>(spin);
         ASSERT_TRUE(thread_cpu_ms() - cpu_start >= 30.0);
-        // ... and it moves in steps that are smaller than a pass: a clock that counts in ticks of 15.6 ms, or that posts what the thread used in lumps, cannot time a pass of a tenth of a millisecond
+        // ... and it moves in steps of under a millisecond: a clock that counts in ticks of 15.6 ms, or that posts what the thread used in lumps, cannot time a pass of a tenth of a millisecond
         // (the smallest of the next twenty steps that it takes while the thread works is less than a millisecond)
         double finest_step_ms = 1.0e9;
         int steps = 0;
@@ -5537,7 +5537,7 @@ void run_bot_tests() {
                 ++steps;
             }
         }
-        ASSERT_TRUE(steps == 20 && finest_step_ms < 1.0);
+        ASSERT_MSG(steps == 20 && finest_step_ms < 1.0, "the thread clock cannot time a pass: its finest step is " + std::to_string(finest_step_ms) + " ms (" + std::to_string(steps) + " of 20 steps seen)");
         struct Result {
             double ms_per_second{0};
             double worst_pass_ms{0};
