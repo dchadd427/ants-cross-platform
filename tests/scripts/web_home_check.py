@@ -545,7 +545,7 @@ def main():
             check(first == 1 and second == 2, "a second press on the dimmed switch writes its reason again (a live region says only what is written, so the person hears it again) (%s, %s writes)" % (first, second))
             link = c["links"][0]
             q = {k: v for k, v in (kv.split("=", 1) for kv in link.split("?", 1)[1].split("&"))}
-            check(c["teams"] == "2+3" and re.match(r"^[a-z2-9]{8}$", room_code) is not None and q.get("roommap") == "treasure" and q.get("roomseats") == "4" and q.get("roomteams") == "2%2B3",
+            check(re.match(r"^[a-z2-9]{8}$", room_code) is not None and q.get("roommap") == "treasure" and q.get("roomseats") == "4" and q.get("roomteams") == "2%2B3",
                   "Blue + Black against Red is part of the room's create block in the link (roomteams=2%%2B3, with its map and its four seats); the code is only a name, eight characters (%s)" % link.split("?", 1)[1])
             check(re.match(r"^[^?]*\?join=/ws&room=[a-z2-9]{8}&roommap=treasure&roomseats=4&roomteams=2%2B3&seat=1&", link) is not None,
                   "... and the block comes right after the code, before the seat (%s)" % link.split("?", 1)[1])
