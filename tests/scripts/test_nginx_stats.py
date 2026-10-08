@@ -26,6 +26,7 @@ import tempfile
 import time
 import unittest
 import uuid
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 IMAGE = "nginx:alpine"
@@ -360,8 +361,23 @@ class Rig:
         status, headers, body = self.ask(method, path, **kw)
         return status, headers, body, time.monotonic() - started
 
-    def stub_requests(self, path):
-        """What the stand-in server was sent for `path`, in order: dicts of the logged fields (the lengths as numbers)"""
+    LOG_WAIT = 10.0                                                                       # (seconds that a test waits for a line of the stand-in's log that is on its way)
+
+    def logged(self, read, at_least):
+        """read() again until it holds `at_least` entries (all of them so far, for LOG_WAIT seconds at most), then what it holds: the stand-in logs a request a moment after it answered and the line
+        reaches `docker logs` later still, so on a busy runner a count taken at once is one short."""
+        deadline = time.monotonic() + self.LOG_WAIT
+        found = read()
+        while len(found) < at_least and time.monotonic() < deadline:
+            time.sleep(0.05)
+            found = read()
+        return found
+
+    def stub_requests(self, path, at_least=0):
+        """What the stand-in server was sent for `path`, in order: dicts of the logged fields (the lengths as numbers). `at_least`: see logged()."""
+        return self.logged(lambda: self.read_stub_requests(path), at_least)
+
+    def read_stub_requests(self, path):
         out = subprocess.run(["docker", "logs", self.stub], capture_output=True, text=True).stdout
         found = []
         for line in out.splitlines():
@@ -374,10 +390,14 @@ class Rig:
                 found.append(one)
         return found
 
-    def stub_lines(self):
-        """How many lines the stand-in has written so far, whatever they are (a request that reached it is at least one): a test that says "nothing reached the server" compares two of these"""
+    def stub_lines(self, at_least=0):
+        """How many lines the stand-in has written so far, whatever they are (a request that reached it is at least one): a test that says "nothing reached the server" compares two of these.
+        `at_least`: see logged()."""
+        return len(self.logged(self.read_stub_lines, at_least))
+
+    def read_stub_lines(self):
         done = subprocess.run(["docker", "logs", self.stub], capture_output=True, text=True)
-        return len(done.stdout.splitlines()) + len(done.stderr.splitlines())
+        return done.stdout.splitlines() + done.stderr.splitlines()
 
     def names(self, headers, name):
         return [v for k, v in headers if k == name]
@@ -405,6 +425,72 @@ class Rig:
 
     def sleep_until(self, started, seconds):
         time.sleep(max(0.0, started + seconds - time.monotonic()))
+
+
+class TheLogIsAwaited(unittest.TestCase):
+    """The rig's counts of the stand-in's log wait for a line that is on its way (a stand-in for `docker logs` here, so this runs on every machine)."""
+
+    def rig(self, wait=5.0):
+        rig = Rig()
+        rig.stub = "a-stand-in"
+        rig.LOG_WAIT = wait
+        return rig
+
+    def line(self, path):
+        return "|".join(["GET", path, "-", "127.0.0.1"] + ["%s=%s" % (key, "70" if key == "len" else "-") for key in LOG_FIELDS[4:]])
+
+    def docker_logs(self, arrivals):
+        """(a stand-in for subprocess.run, the list of its calls): the n-th `docker logs` shows the lines of arrivals[n], the last of them from then on"""
+        calls = []
+
+        def run(command, **kw):
+            self.assertEqual(command[:2], ["docker", "logs"])
+            calls.append(command)
+            lines = arrivals[min(len(calls), len(arrivals)) - 1]
+            return subprocess.CompletedProcess(command, 0, stdout="".join(l + "\n" for l in lines), stderr="")
+        return run, calls
+
+    def test_a_count_that_is_there_is_read_once(self):
+        run, calls = self.docker_logs([["a", "b"]])
+        with mock.patch.object(subprocess, "run", run):
+            self.assertEqual(self.rig().stub_lines(2), 2)
+        self.assertEqual(len(calls), 1)
+
+    def test_nothing_is_awaited_when_nothing_is_owed(self):
+        run, calls = self.docker_logs([[]])
+        with mock.patch.object(subprocess, "run", run):
+            self.assertEqual(self.rig().stub_lines(), 0)
+            self.assertEqual(self.rig().stub_requests("/stats"), [])
+        self.assertEqual(len(calls), 2)
+
+    def test_a_line_that_is_late_is_awaited(self):
+        run, calls = self.docker_logs([[], ["a"], ["a", "b"], ["a", "b", "c"]])
+        with mock.patch.object(subprocess, "run", run):
+            self.assertEqual(self.rig().stub_lines(2), 2)
+        self.assertEqual(len(calls), 3)
+
+    def test_the_requests_of_a_path_are_awaited_and_read(self):
+        late = [self.line("/stats")]
+        run, calls = self.docker_logs([[], [self.line("/other")], late, late + [self.line("/stats")]])
+        with mock.patch.object(subprocess, "run", run):
+            found = self.rig().stub_requests("/stats", 1)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([(one["method"], one["path"], one["len"], one["st"]) for one in found], [("GET", "/stats", 70, "-")])
+
+    def test_more_than_is_owed_is_returned_for_the_assertion_to_count(self):
+        run, calls = self.docker_logs([["a", "b", "c"]])
+        with mock.patch.object(subprocess, "run", run):
+            self.assertEqual(self.rig().stub_lines(1), 3)
+        self.assertEqual(len(calls), 1)
+
+    def test_the_wait_ends_and_the_caller_gets_what_there_is(self):
+        run, calls = self.docker_logs([["a"]])
+        started = time.monotonic()
+        with mock.patch.object(subprocess, "run", run):
+            self.assertEqual(self.rig(wait=0.3).stub_lines(2), 1)                             # (the test's own assertion shows the shortfall)
+        self.assertGreaterEqual(time.monotonic() - started, 0.3)
+        self.assertLess(time.monotonic() - started, 5.0)
+        self.assertGreater(len(calls), 1)
 
 
 @unittest.skipUnless(shutil.which("docker"), "docker is not installed: the blocks of docker/nginx.conf for /stats and /stats/local were NOT run (tests/scripts/test_nginx_stats.py)")
@@ -436,7 +522,7 @@ class TheBlocksRun(Rig, unittest.TestCase):
         for query in ("/stats?x=1", "/stats?busy", "/stats?x"):
             self.assertEqual(self.ask("GET", query)[0], 404, query)                            # a query is no request for the numbers
         self.assertEqual(self.ask("GET", "/stats?")[0], 200)                                  # (a "?" with nothing behind it carries no query: nginx's $args is empty)
-        seen = self.stub_requests("/stats")[before:]
+        seen = self.stub_requests("/stats", before + 1)[before:]
         self.assertEqual(len(seen), 1)                                                        # the first GET: the refusals never reached the server, and the one with a bare "?" was the cache's
         for one in seen:
             self.assertEqual((one["method"], one["args"], one["cl"], one["te"], one["up"], one["conn"], one["st"]), ("GET", "-", "-", "-", "-", "close", "200"))
@@ -461,7 +547,7 @@ class TheBlocksRun(Rig, unittest.TestCase):
         # a report with a body (100 bytes, then a chunked one): the server is given an empty POST, the same bytes as for the first
         self.assertEqual(self.ask("POST", "/stats/local", body=b"b" * 100)[0], 204)
         self.assertEqual(self.ask("POST", "/stats/local", body=iter([b"hello", b" world"]), headers={"Transfer-Encoding": "chunked"}, chunked=True)[0], 204)
-        seen = self.stub_requests("/stats/local")[before:]
+        seen = self.stub_requests("/stats/local", before + 3)[before:]
         self.assertEqual(len(seen), 3)
         for one in seen:
             self.assertEqual((one["method"], one["args"], one["cl"], one["te"], one["up"], one["conn"]), ("POST", "-", "0", "-", "-", "close"))
@@ -480,7 +566,7 @@ class TheBlocksRun(Rig, unittest.TestCase):
         for value in ("same-origin", "same-site", "none", "Cross-Origin", ""):                # what a page of the site says, and anything else: a report
             self.assertEqual(self.ask("POST", "/stats/local", headers={"Sec-Fetch-Site": value})[0], 204, value)
         self.assertEqual(self.ask("POST", "/stats/local")[0], 204)                            # (a script or an old browser says nothing)
-        self.assertEqual(len(self.stub_requests("/stats/local")[before:]), 6)
+        self.assertEqual(len(self.stub_requests("/stats/local", before + 6)[before:]), 6)
         self.assertEqual(self.ask("GET", "/stats", headers={"Sec-Fetch-Site": "cross-site"})[0], 200)   # the numbers are for everybody
 
     def test_the_server_is_sent_a_host_and_a_connection_and_nothing_else_of_the_visitor(self):
@@ -490,10 +576,10 @@ class TheBlocksRun(Rig, unittest.TestCase):
         before = len(self.stub_requests("/stats"))
         before_post = len(self.stub_requests("/stats/local"))
         self.assertEqual(self.ask("GET", "/stats", headers=visitor)[0], 200)
-        get = self.stub_requests("/stats")[before:]
+        get = self.stub_requests("/stats", before + 1)[before:]
         self.assertEqual(len(get), 1)
         self.assertEqual(self.ask("POST", "/stats/local", headers=visitor)[0], 204)
-        post = self.stub_requests("/stats/local")[before_post:]
+        post = self.stub_requests("/stats/local", before_post + 1)[before_post:]
         self.assertEqual(len(post), 1)
         # the whole request that the server was sent, to the byte: the request line, a Host (the visitor's, without a port), a Connection, and for the POST a Content-Length of 0
         self.assertEqual(get[0]["len"], len("GET /stats HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"))
@@ -539,11 +625,11 @@ class TheBlocksRun(Rig, unittest.TestCase):
         self.assertLess(took, 8.0, took)                                                       # (forty requests in one go: refused at once, not queued to be let through at the rate)
         self.assertTrue(21 <= allowed <= 21 + int(took) + 1, (allowed, took))                  # the first request and the burst of 20, and a token a second while this goes on
         self.assertEqual(codes[:allowed], [204] * allowed)                                     # (the refusals come after the allowance, none between)
-        self.assertEqual(len(self.stub_requests("/stats/local")) - before, allowed)            # what was refused never reached the server
+        self.assertEqual(len(self.stub_requests("/stats/local", before + allowed)) - before, allowed)  # what was refused never reached the server
         time.sleep(1.2)                                                                        # sixty a minute: a token in a second (six a minute would need ten, ten a second a dozen)
         again = [self.ask("POST", "/stats/local")[0] for _ in range(6)]
         self.assertTrue(1 <= again.count(204) <= 3, again)
-        self.assertEqual(len(self.stub_requests("/stats/local")) - before, allowed + again.count(204))
+        self.assertEqual(len(self.stub_requests("/stats/local", before + allowed + again.count(204))) - before, allowed + again.count(204))
 
     def test_the_neighbours_of_the_two_addresses_are_the_game_page_and_nothing_is_passed_on(self):
         for path in ("/stats/", "/stats/local/", "/stats/x", "/statsx", "/stat"):
@@ -586,8 +672,8 @@ class TheCacheRuns(Rig, unittest.TestCase):
         elif os.path.exists(path):
             os.remove(path)
 
-    def asked(self):
-        return len(self.stub_requests("/stats"))
+    def asked(self, at_least=0):
+        return len(self.stub_requests("/stats", at_least))
 
     def tearDown(self):
         if not self.why:
@@ -601,7 +687,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         filled = time.monotonic()
         self.assertEqual(status, 200)
         self.assertIn(b'"stub":1', first)
-        self.assertEqual(self.asked(), asked + 1)
+        self.assertEqual(self.asked(asked + 1), asked + 1)
         self.numbers(2)                                                                        # (the server's numbers change: only a request that reaches it can say so)
         status, again_headers, second = self.ask("GET", "/stats")
         self.assertEqual((status, second), (200, first))                                       # the same answer, and the server was not asked
@@ -633,7 +719,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         self.assertEqual(fresh[0], 200)
         self.assertIn(b'"stub":2', fresh[2])                                                   # the one that the server gave: it was asked (once) when the five seconds were over
         self.assertGreater(fresh[3], 2.0, fresh[3])
-        self.assertEqual(self.asked(), asked + 3)                                              # the first answer, the error, and the new numbers (once, whatever the visitors were)
+        self.assertEqual(self.asked(asked + 3), asked + 3)                                     # the first answer, the error, and the new numbers (once, whatever the visitors were)
 
     def test_a_crowd_that_comes_at_once_is_one_request_to_the_server(self):
         asked = self.asked()
@@ -645,7 +731,7 @@ class TheCacheRuns(Rig, unittest.TestCase):
         self.assertGreater(took, 2.0)                                                          # (the stand-in is slow on purpose: a stand-in that was not would prove nothing)
         self.assertEqual({a[0] for a in answers}, {200})
         self.assertEqual(len({a[2] for a in answers}), 1)
-        self.assertEqual(self.asked(), asked + 1)                                              # twenty waited for the one
+        self.assertEqual(self.asked(asked + 1), asked + 1)                                     # twenty waited for the one
 
     def stub_up(self):
         return subprocess.run(["docker", "exec", self.stub, "wget", "-q", "-O", "/dev/null", "-T", "2", "http://127.0.0.1:4002/ready"], capture_output=True).returncode == 0
