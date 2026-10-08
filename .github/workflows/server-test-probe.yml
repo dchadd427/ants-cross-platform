@@ -1,0 +1,78 @@
+# A probe, on a scratch branch only: S3.71 and S3.115 of test_server with the cycle-counter clock of the pull request, run on many hosted Windows runners.
+name: Server test probe
+
+on:
+  push:
+    branches: [claude/project-thread-q475cj-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: server ${{ matrix.os }} ${{ matrix.n }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 600M
+    steps:
+      - uses: actions/checkout@v7
+
+      # restore only: the probe must not push the caches of the real checks out of the repository's quota
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .sccache
+          key: sccache-probe-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.os }}-
+
+      - name: Install sccache 0.14.0
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $version = '0.14.0'
+          $sha256 = '74a3ffd4207e8e0e62af7747bd03b42deab0f6dabc7ef0a8cdd950f83f1037c8'
+          $zip = Join-Path $env:RUNNER_TEMP "sccache-v$version.zip"
+          Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v$version/sccache-v$version-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          if ((Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower() -ne $sha256) { throw 'sccache: the checksum of the download is not the pinned one' }
+          $folder = Join-Path $env:RUNNER_TEMP 'sccache'
+          Expand-Archive -Path $zip -DestinationPath $folder
+          $exe = Get-ChildItem -Path $folder -Recurse -Filter sccache.exe | Select-Object -First 1
+          Add-Content -Path $env:GITHUB_PATH -Value $exe.DirectoryName
+          & $exe.FullName --version
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+
+      - name: The host
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_Processor | ForEach-Object { "CPU: $($_.Name), $($_.NumberOfCores) cores, $($_.NumberOfLogicalProcessors) logical" }
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build test_server
+        run: cmake --build build --target test_server
+
+      - name: S3.71 and S3.115, three times each
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter test_server.exe | Select-Object -First 1
+          "exe: $($exe.FullName)"
+          foreach ($round in 1..3) {
+            foreach ($name in 'S3.71', 'S3.115') {
+              "ROUND $round $name"
+              $env:ANTS_TEST_FILTER = $name
+              & $exe.FullName 2>&1 | Out-String -Stream | Where-Object { $_ -match 'TINY|TREASURE|restore in slices|PASS|FAIL|Assertion|Total Test' }
+              "EXIT $LASTEXITCODE"
+            }
+          }

@@ -3,7 +3,7 @@ name: Thread time probe
 
 on:
   push:
-    branches: [claude/project-thread-q475cj-probe]
+    branches: [no-such-branch-this-one-runs-by-hand]
   workflow_dispatch:
 
 permissions:
