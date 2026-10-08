@@ -13,6 +13,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/session.hpp"
+#include "../common/ants_test_pause.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -307,7 +308,7 @@ struct Table {
             now += 10;
             pump();
             if (each) each(now);
-            std::this_thread::sleep_for(std::chrono::microseconds(300));
+            ants_test::short_pause();
         }
     }
     bool run_until(const std::function<bool()>& cond, uint32_t max_ms) {

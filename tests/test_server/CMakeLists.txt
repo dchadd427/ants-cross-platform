@@ -27,6 +27,8 @@ if(NOT WIN32)
 endif()
 
 add_test(NAME test_server COMMAND test_server)
+# COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
+set_tests_properties(test_server PROPERTIES COST 150)
 
 # The way back of the game's NetGame (docs/NETWORK_PORT.md "Reconnect"): real NetGames over loopback sockets against a real RoomManager, so it needs the server's library as test_server does
 add_executable(test_rejoin
@@ -43,3 +45,4 @@ target_include_directories(test_rejoin PRIVATE
 )
 
 add_test(NAME test_rejoin COMMAND test_rejoin)
+set_tests_properties(test_rejoin PROPERTIES COST 25)
