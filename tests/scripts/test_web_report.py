@@ -59,7 +59,7 @@ class TheGameSide(unittest.TestCase):
         self.assertLess(tick - place, 200)                                                  # ... in the branch that runs a local game's ticks
         enter = self.app[re.search(r"void Application::enter_match\([^)]*\) \{", self.app).start():]       # (enter_match(bool rejoin) since the way back: the signature is not the point)
         enter = enter[:enter.index("\n}\n")]
-        self.assertIn("local_match_reported_ = false;", enter)                              # every match starts with it not told
+        self.assertIn("local_match_reported_ = network_active();", enter)                   # a match of a room starts with it told (it is left early, the page runs frames: it still tells nothing), a game here with it not told
 
     def test_the_header_says_it_is_for_a_game_on_this_computer(self):
         self.assertRegex(self.header, r"void set_on_local_match_started\(std::function<void\(\)> hook\)")
