@@ -534,6 +534,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     same('a platform that fits is kept', sent({ platform: N.PLATFORM_BROWSER | N.OS.Linux }).hello, hello({ platform: N.PLATFORM_BROWSER | N.OS.Linux }));
     for (const key of [seq(1).slice(0, 15), new Uint8Array(17), new Uint8Array(16), 'abcdefghijklmnop', 5, {}]) {
         same('a key that is no key (' + (key.length === undefined ? JSON.stringify(key) : key.length + ' entries') + ') is no key: the Hello is a new player\'s', sent({ key }).hello, hello({}));
+        check('... and the client holds none (it has no entry for a game page, and a Hello that gets no Welcome is followed by a Leave)', client(world(), { key }).key === null && client(world(), { key }).rejoinEntry() === null);
     }
     {
         const w = world();
@@ -577,6 +578,14 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     w2.last().open();
     w2.last().receive(reject(N.REJECT.NoSuchRoom));
     check('a handler that throws on "gone" does not stop the room from being made again', w2.sockets.length === 2 && d.status === 'connecting' && d.key === null);
+    // an onError that throws is no reason to stop the client either
+    const w4 = world();
+    const f4 = client(w4, { onError: () => { throw new Error('boom onError'); } });
+    const heard4 = [];
+    f4.on('status', () => { throw new Error('boom first'); });
+    f4.on('status', (s) => heard4.push(s));
+    const r4 = attempt(() => f4.connect());
+    check('an onError that throws does not stop the client either: the socket is made and the next handler hears the status', !r4.threw && w4.sockets.length === 1 && heard4.join() === 'connecting', JSON.stringify(r4) + ' ' + heard4.join());
     // without onError the error is written to the console, not thrown
     const w3 = world();
     const e = client(w3);
@@ -611,6 +620,8 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('after 20 seconds it is given up and closed', c.status === 'offline' && w.sockets[0].closed);
     w.advance(500);
     check('and the way back is tried', w.sockets.length === 2 && c.status === 'connecting');
+    w.sockets[0].open();                                                 // (a socket that was given up and opens all the same is nobody's now)
+    check('a socket that was given up and opens all the same is ignored: it says nothing, and the new socket is not touched', w.sockets[0].sent.length === 0 && w.sockets.length === 2 && !w.sockets[1].closed && c.status === 'connecting');
     w.advance(14000);
     w.last().open();
     w.advance(7999);
