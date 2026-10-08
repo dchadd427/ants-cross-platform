@@ -1,11 +1,11 @@
 # Status
 
-_Updated 2026-10-07 21:10 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-07 21:14 PDT · current release **v0.10.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ░░░░░░░░░░ 0% | Tue | started: the room codes and the leader-starts flag first, then swapping colours, in one change; platform icons, documents and a rename follow as a separate small change |
+| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | █░░░░░░░░░ 14% | Thu | pages are in and the branch is pushed; next: tests, sanitizers, mutation checks, browser checks, three reviews and the five checks; platform icons, documents and a rename follow as a separate small change |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
@@ -13,8 +13,8 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 
 ## In progress
 - Work was paused from 2026-10-05 22:40 PDT to 2026-10-07 21:00 PDT and has resumed.
-- Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come); next: a bot walks over power-ups on its way (one ant takes several), noticed by the owner on the islands map on 2026-10-07
-- Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions)
+- Bots: the flower play (the random power-up droppers on Small, Medium and Gauntlet) is in progress: the bot sees the flowers and what falls, takes the drops on its own side and gets its Fire Ant at home (864 whole matches at Hard: more power-ups taken, scores unchanged within noise); the waiting ant, the learning of the drop rhythm and the recall of a wrong kind are being built and measured (draft PR to come)
+- Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions), a bot that walks over power-ups on its way (one ant takes several; noticed by the owner on the islands map on 2026-10-07)
 - Bots: the gate sometimes sends the next ant into the hill while the last one is still leaving, and the game answers "Can't go there." (the owner heard it); a small fix with no version number is being measured, then its own PR
 - **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15): started; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number.
 - Recordings of finished online matches, with the players' names, to tune the bots (after the bot fixes)
