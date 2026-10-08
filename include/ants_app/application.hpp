@@ -252,7 +252,7 @@ public:
 
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
     /// The replay of the match that ended (or was left) last (docs/REPLAYS.md): the bytes of a .antsrep file, empty until a match has ended that could be recorded. Every match is recorded as it is played; the
-    /// web page offers the file as a download (its "Download replay" button), the desktop game writes it into the `replays` folder beside its settings file, and the file is kept here too.
+    /// desktop game writes the file into the `replays` folder beside its settings file and keeps it here too. The web build records nothing (the game server records the matches of its rooms).
     const std::vector<uint8_t>& last_replay() const noexcept { return last_replay_; }
     /// What that file is called when it is saved or downloaded ("ants-TREASURE-20261006-143209.antsrep")
     const std::string& last_replay_name() const noexcept { return last_replay_name_; }
@@ -760,8 +760,8 @@ private:
     void begin_net_recording();                                        // the Start of a network match was loaded (net_load_match)
     void begin_recording(replay::Header head);                         // the recording of the match that begins (what was not finished of an earlier one is dropped), and the offer of the last file goes
     void finish_recording();                                           // the match is over or left: the file is made, kept in last_replay_ and handed on (offer_replay); a match left at once leaves none
-    void offer_replay();                                               // last_replay_: the web page's Download replay button gets it; the desktop game writes it beside its settings
-    void withdraw_replay();                                            // a match begins: the page's button goes away
+    void offer_replay();                                               // last_replay_: the desktop game writes it beside its settings (the web build has no recording to offer)
+    void withdraw_replay();                                            // a match begins: the last file is let go
 
     bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
     bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)

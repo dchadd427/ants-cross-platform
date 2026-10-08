@@ -92,10 +92,6 @@ The changelog pages (`/changelog.html` and `/changelog_archive.html`) and Sprite
 - **It is off by default**: other players' ants still hop about a dozen pixels, a tile at most, when their orders arrive. `?prediction=on` on the address of a network game (a `?join=...` link; the front page does not pass it on) turns it on, as the game's `--prediction on`; a game on one computer never predicts. Once on, it switches itself off for a while (ten seconds, twice as long each time) when its work takes too long on a slow device, and it is off in a hidden tab, in a pause and while the "Get ready" dialog is up.
 - More: [`MULTIPLAYER.md`](MULTIPLAYER.md), "Prediction of your own orders"; the design and the measurements: [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 
-## A finished match can be saved as a replay
-
-When a match is over, the bar under the game shows **Download replay** with the size of the file; it saves the match as one small file that `replay_tool` lists order by order. What the file holds, where the desktop game keeps its own and the tool are in [`REPLAYS.md`](REPLAYS.md).
-
 ## Authentic 1998 Asset Pipeline
 
 The page downloads one data package, `index.data` (14.7 MB: the whole `Original-Ants/` folder), and packs it into the browser's in-memory file system, where the game reads it as it is. It holds the original `ants.chd` (8.4 MB: the sprites, sounds and animations), the six maps, the four pieces of music as MP3 and MIDI files, and the bundled font (Libre Franklin and its licence).
