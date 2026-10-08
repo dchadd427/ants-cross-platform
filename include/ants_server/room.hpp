@@ -166,7 +166,7 @@ struct RoomStatus {
     bool early_start{true};                 // the room allows the leader's early start
     bool public_room{false};                // made by a visitor's create block (protocol 15): for the tests, not shown by the control interface
     bool leader_starts{false};              // the full room waits for its leader's START (protocol 15): for the tests, not shown by the control interface
-    bool lobby{false};                      // a lobby room (protocol 16): for the tests, not shown by the control interface
+    bool lobby{false};                      // a lobby room (protocol 16): the control interface shows lobby rooms as such
     bool starting{false};                   // ... whose leader's START waits for the games
     uint8_t games{0};                       // ... the seats (bit s) that hold a game: a page, a seat that is held and an empty seat do not
     std::string plan;                       // ... the plan: the kind of each colour as a letter (o open, e easy, m medium, h hard, n nobody) and the team pair ("oehn 0+3", "-" for none)

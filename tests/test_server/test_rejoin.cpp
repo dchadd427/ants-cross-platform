@@ -602,6 +602,20 @@ bool hashes_agree(const Machine& a, const Machine& b) {
     return compared > 0;
 }
 
+// The front page's lobby (protocol 16) on a real link: a ClientLobby that says "page" (it cannot play a match), stepped by the test's clock (World::between)
+struct Page {
+    std::unique_ptr<net::TcpConnection> link;
+    std::unique_ptr<net::ClientLobby> lobby;
+    Page(uint16_t port, const std::string& name, const std::string& room, const std::optional<net::CreateBlock>& create) : link(net::TcpConnection::connect("127.0.0.1", port)) {
+        net::ClientLobby::Config cc;
+        cc.name = name;
+        cc.room = room;
+        cc.client_kind = net::kClientPage;
+        cc.create = create;
+        lobby = std::make_unique<net::ClientLobby>(link.get(), cc);
+    }
+};
+
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -2458,6 +2472,72 @@ void run_way_back_tests() {
         ASSERT_FALSE(plain.net.room_teams().set);
         ASSERT_TRUE(plain.net.effective_teams() == sim::StartTeams({true, 1, 2}));            // a room without teams of its own: the leader's choice
         ASSERT_TRUE(w.status("teams002").room_teams.empty());
+    } TEST_END();
+
+    TEST_CASE("RJ1.27 Protocol 16, The Pages Of A Lobby Room Are Taken Over By Real Games (A NetGame With The Key Of The Page's Seat): The Leader's START Waits For The Last Page To Be A Game, The Pages Are Told Superseded, The Plan (A Bot, Teams) Is The Match That Both Games Play, And Both Machines And The Referee End In The Same State") {
+        ServerLimits limits;
+        limits.demo_rooms = 4;
+        limits.demo_lobbies = 3;
+        limits.demo_map = "TINY.LVL";
+        limits.demo_maps = {"TINY.LVL", "SMALL.LVL"};
+        World w(nullptr, limits);
+        ASSERT_TRUE(w.server.start(w.now));
+        std::vector<Page*> pages;
+        w.between = [&]() { for (Page* p : pages) p->lobby->update(w.now); };
+        net::CreateBlock lobby_block = block_of("", 4);
+        lobby_block.flags = static_cast<uint8_t>(net::kCreateLeaderStarts | net::kCreateLobby);
+        Page ann(w.server.port(), "Ann", "lob27001", lobby_block);                          // the first page makes the room with its Hello
+        pages.push_back(&ann);
+        ASSERT_TRUE(w.run_until([&]() { return ann.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 4000));
+        ASSERT_TRUE(ann.lobby->created() && ann.lobby->is_leader() && ann.lobby->room().lobby() && ann.lobby->my_seat() == 0);
+        Page bob(w.server.port(), "Bob", "lob27001", std::nullopt);                         // the second is seated in it
+        pages.push_back(&bob);
+        ASSERT_TRUE(w.run_until([&]() { return bob.lobby->phase() == net::ClientLobby::Phase::InRoom && ann.lobby->room().slots[1].state == net::SlotState::Client; }, 4000));
+        ASSERT_TRUE(!bob.lobby->created() && bob.lobby->my_seat() == 1 && !net::key_is_zero(bob.lobby->key()) && !net::key_matches(ann.lobby->key(), bob.lobby->key()));
+        net::PlanMsg plan;                                                                   // the leader's plan: the two of them allied, an easy bot on the black seat, nobody on blue
+        plan.map_name = "TINY.LVL";
+        plan.plan = {net::PlanKind::Open, net::PlanKind::Open, net::PlanKind::Nobody, net::PlanKind::Easy};
+        plan.team_a = 0;
+        plan.team_b = 1;
+        ASSERT_TRUE(ann.lobby->request_plan(plan));
+        ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().plan[3] == net::PlanKind::Easy && bob.lobby->room().team_a == 0 && bob.lobby->room().team_b == 1; }, 3000));
+        ASSERT_TRUE(ann.lobby->request_start());                                             // the START of a page: it waits until both are games
+        ASSERT_TRUE(w.run_until([&]() { return bob.lobby->room().starting(); }, 3000));
+        RoomStatus s = w.status("lob27001");
+        ASSERT_TRUE(s.lobby && s.starting && s.state == RoomState::Waiting && s.games == 0u);
+        Machine& ga = w.add_machine("Ann");                                                  // Ann's game takes her seat over with the key of her page
+        ASSERT_TRUE(ga.net.join("127.0.0.1", w.server.port(), "Ann", 0, "lob27001", "", ann.lobby->key()));
+        ASSERT_TRUE(w.run_until([&]() { return ga.net.my_seat() == 0 && ann.lobby->phase() == net::ClientLobby::Phase::Rejected && bob.lobby->room().seat_in_game(0); }, 4000));
+        ASSERT_TRUE(ann.lobby->reject_reason() == net::RejectReason::Superseded);            // the page is told that the game replaced it (it must not come back)
+        ASSERT_TRUE(ga.net.is_leader() && ga.net.room().starting() && !bob.lobby->room().seat_in_game(1));
+        w.run(1500);
+        s = w.status("lob27001");
+        ASSERT_TRUE(s.state == RoomState::Waiting && s.starting && s.games == 1u && s.joined == 2);          // one page is left: the START waits
+        ASSERT_EQ(ga.loads, 0u);
+        Machine& gb = w.add_machine("Bob");
+        ASSERT_TRUE(gb.net.join("127.0.0.1", w.server.port(), "Bob", 1, "lob27001", "", bob.lobby->key()));
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&ga, &gb}); }, 12000 + kPre));
+        ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::Rejected && bob.lobby->reject_reason() == net::RejectReason::Superseded);
+        ASSERT_TRUE(ga.net.my_seat() == 0 && gb.net.my_seat() == 1 && ga.loads == 1 && gb.loads == 1);
+        ASSERT_TRUE(ga.net.start_info().teams() == sim::StartTeams({true, 0, 1}) && gb.net.start_info().teams() == sim::StartTeams({true, 0, 1}));      // the plan's teams are the match's
+        ASSERT_TRUE(ga.net.start_info().names[0] == "Ann" && ga.net.start_info().names[1] == "Bob" && ga.net.start_info().names[2].empty() && ga.net.start_info().names[3] == "Bot (Easy)");
+        s = w.status("lob27001");
+        ASSERT_TRUE(s.lobby && s.state == RoomState::Running && !s.starting && s.joined == 3 && s.plan == "oone 0+1");         // (the seat of the bot counts in the room that runs)
+        ASSERT_TRUE(ga.keys_given.size() == 1 && gb.keys_given.size() == 1 && net::key_matches(ga.keys_given[0].key, ann.lobby->key()) && net::key_matches(gb.keys_given[0].key, bob.lobby->key()));      // the games keep the keys the pages had
+        w.run(6000);
+        ASSERT_FALSE(ga.net.desynced() || gb.net.desynced());
+        ASSERT_TRUE(w.status("lob27001").ticks > 100 && hashes_agree(ga, gb));
+        ga.quit();                                                                           // both leave the match: the bot's side is the only one left
+        gb.quit();
+        ASSERT_TRUE(w.run_until([&]() { return w.finished("lob27001") && ga.sim.is_match_over() && gb.sim.is_match_over(); }, 20000));
+        w.run(2000);
+        const RoomStatus end = w.status("lob27001");
+        ASSERT_TRUE(end.state == RoomState::Finished && end.referee_hash != 0 && end.lobby);
+        ASSERT_TRUE(all_equal({&ga, &gb}) && ga.sim.state_hash().total == end.referee_hash);              // the referee's state and both machines': one
+        ASSERT_TRUE(ga.hash_at.count(end.ticks) == 1 && ga.hash_at[end.ticks] == end.referee_hash && gb.hash_at.count(end.ticks) == 1 && gb.hash_at[end.ticks] == end.referee_hash);
+        ASSERT_TRUE(hashes_agree(ga, gb));
+        ASSERT_FALSE(ga.net.desynced() || gb.net.desynced());
+        w.between = nullptr;
     } TEST_END();
 }
 

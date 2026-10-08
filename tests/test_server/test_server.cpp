@@ -312,6 +312,7 @@ struct World {
     uint8_t next_platform{0};                                               // the platform byte that the next connect() puts in its Hello (0: not told); it stays until it is set again
     uint8_t next_kind{net::kClientGame};                                    // the client kind of the next connect()'s Hello (protocol 16), and the key it shows: connect_page and connect_game set them for one call
     net::SeatKey next_key{};
+    bool next_fail_load{false};                                             // the next connect()'s machine cannot load the map (connect_game sets it for one call)
 
     Client& connect(const std::string& name, const std::string& room, uint8_t seat = 255, net::LoopbackNetwork::Link link = {20, 10}, Throttled** throttle = nullptr) {
         auto ends = net.connect(link);
@@ -325,6 +326,7 @@ struct World {
         c.platform = next_platform;
         c.kind = next_kind;
         c.key = next_key;
+        c.fail_load = next_fail_load;
         c.server_end = ends.first;
         net::Connection* end = ends.second;
         if (throttle != nullptr) {
@@ -355,10 +357,12 @@ struct World {
         return c;
     }
     // A game that takes the seat of a page over (or of a game whose link was lost) with the seat's key, as the page's own game does
-    Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key) {
+    Client& connect_game(const std::string& name, const std::string& room, const net::SeatKey& key, bool cannot_load = false) {
         next_key = key;
+        next_fail_load = cannot_load;                                        // (a machine that cannot load the map: it must say so to the very first Start, which the 100 ms below can bring)
         Client& c = connect(name, room);
         next_key = net::SeatKey{};
+        next_fail_load = false;
         run(100);
         return c;
     }
@@ -11214,7 +11218,7 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(reported);
     } TEST_END();
 
-    TEST_CASE("S3.140 A Lobby Room From The Control Interface's Door (create_room): Only With What A Lobby Needs, And Its Numbers In Range; It Is Served Like Any Other: A Page Is Seated In It And Its Plan Chooses The Server's Maps") {
+    TEST_CASE("S3.152 A Lobby Room From The Control Interface's Door (create_room): Only With What A Lobby Needs, And Its Numbers In Range; It Is Served Like Any Other: A Page Is Seated In It And Its Plan Chooses The Server's Maps") {
         World w(lobby_limits());
         const auto lobby_spec = [](const std::string& code) {
             RoomSpec s = spec_of(code, 4);
@@ -11249,6 +11253,51 @@ void run_lobby_room_tests() {
         w.run(300);
         ASSERT_EQ(w.status("ctl-l012").map, std::string("GAUNTLET.LVL"));                 // (the server's maps: its services are installed)
         ASSERT_TRUE(w.status("ctl-l012").lobby && !w.status("ctl-l012").public_room);
+        {   // the control interface shows a lobby room as one, with its plan; the status of any other room has no such key
+            ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Easy}, 0, 1)));
+            w.run(300);
+            const std::string json = ctl::to_json(status_to_json(w.status("ctl-l012")));
+            ASSERT_TRUE(json.find("\"lobby\":true") != std::string::npos && json.find("\"starting\":false") != std::string::npos);
+            ASSERT_TRUE(json.find("\"plan\":\"omne 0+1\"") != std::string::npos);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-plain", 2), w.now).ok);
+            ASSERT_TRUE(ctl::to_json(status_to_json(w.status("ctl-plain"))).find("\"lobby\"") == std::string::npos);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.153 A START That Is Cancelled (A Game That Cannot Load The Map): The Request Is Done, The Lobby Waits Again With Everybody In It, And It Does Not Fail For Any Number Of Them As A Room Of Another Kind Does After Five; A START Asked For In The Pause After A Cancel Waits It Out; The Leader's Next START Works When The Game Can Load") {
+        World w(lobby_limits());
+        Client& pia = w.connect_page("Pia", "retr0001", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "retr0001", lobby_block_of());
+        const net::SeatKey pia_key = pia.lobby->key();
+        const net::SeatKey bob_key = bob.lobby->key();
+        ASSERT_TRUE(pia.lobby->request_start());
+        Client& pia_game = w.connect_game("Pia", "retr0001", pia_key);
+        Client& bob_game = w.connect_game("Bob", "retr0001", bob_key, true);              // Bob's game cannot load the map: every start is cancelled
+        w.run(500);                                                                       // (the first start was cancelled at once; the pause of two seconds runs)
+        {
+            const RoomStatus s = w.status("retr0001");
+            ASSERT_TRUE(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.games == 3 && s.reason.empty());
+        }
+        ASSERT_TRUE(pia_game.lobby->request_start());                                     // asked for in the pause: it stands until the pause is over, and everybody is shown that the room waits
+        w.run(500);
+        ASSERT_TRUE(w.status("retr0001").starting && pia_game.lobby->room().starting());
+        w.run(2500);                                                                      // the pause is over, the start is tried and cancelled again: the request is done
+        for (int round = 0; round < 6; ++round) {                                         // five cancelled starts fail a room of another kind (S3.5); a lobby goes on
+            const RoomStatus s = w.status("retr0001");
+            ASSERT_MSG(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.games == 3 && s.reason.empty(), std::to_string(round));
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            w.run(3000);                                                                  // (the pause, at most two seconds, and the start that is cancelled)
+        }
+        {
+            const RoomStatus s = w.status("retr0001");
+            ASSERT_TRUE(s.state == RoomState::Waiting && !s.starting && s.joined == 2 && s.reason.empty());
+            ASSERT_TRUE(said(pia_game.room_chat).empty());                                // (a cancel is no notice of the room's: the players see the Cancel message)
+        }
+        bob_game.fail_load = false;                                                       // the game can load now
+        w.run(2500);
+        ASSERT_TRUE(pia_game.lobby->request_start());
+        w.run(4000);
+        ASSERT_TRUE(w.status("retr0001").state == RoomState::Running);
     } TEST_END();
 }
 

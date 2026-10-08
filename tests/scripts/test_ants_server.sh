@@ -174,6 +174,23 @@ check "--demo-maps with a map that is not in the folder is refused" "$([ "$(exit
 check "--demo-maps with an empty name is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,,SMALL.LVL)" = "2" ]; echo $?)"
 check "--demo-maps with a good list starts the server (the alarm ends it: status 142)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL)" = "142" ]; echo $?)"
 check "--demo-maps drops blanks around the names (\"TINY.LVL, SMALL.LVL\" starts the server)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-maps 'TINY.LVL, SMALL.LVL ')" = "142" ]; echo $?)"
+# lobby rooms (protocol 16, docs/SERVER.md "Lobby rooms"): --demo-lobbies N needs the public rooms and reconnect and leaves a place for the control interface; without it a server with public rooms offers 200 (fewer where --max-rooms leaves no more room)
+log_of() { { perl -e 'alarm 3; exec @ARGV' env ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" "$@" 2>&1; } 2> /dev/null; }       # (the server's log; the shell's notice of the alarm is not shown)
+check "--demo-lobbies without --demo-rooms is refused" "$([ "$(exit_of --demo-lobbies 5)" = "2" ]; echo $?)"
+check "--demo-lobbies that is no number is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-lobbies many)" = "2" ]; echo $?)"
+check "--demo-lobbies below 0 is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-lobbies -1)" = "2" ]; echo $?)"
+check "--demo-lobbies with --no-reconnect is refused (a lobby holds the seat of a link that dropped)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --no-reconnect --demo-lobbies 5)" = "2" ]; echo $?)"
+check "--demo-rooms and --demo-lobbies together as many as --max-rooms are refused (rooms of the control interface keep their places)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-lobbies 3 --max-rooms 5)" = "2" ]; echo $?)"
+check "... one fewer starts the server (the alarm ends it: status 142)" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-lobbies 2 --max-rooms 5)" = "142" ]; echo $?)"
+check "--demo-lobbies 0 needs no public rooms and no reconnect (it switches lobby rooms off)" "$([ "$(exit_of --no-reconnect --demo-lobbies 0)" = "142" ]; echo $?)"
+check "--demo-lobbies without a value is refused" "$([ "$(exit_of --demo-rooms 2 --demo-map TINY.LVL --demo-lobbies)" = "2" ]; echo $?)"
+check "public rooms alone offer 200 lobby rooms (the log says so)" "$(log_of --demo-rooms 5 --demo-map TINY.LVL | grep -q 'lobby rooms on: up to 200 waiting'; echo $?)"
+check "... fewer where --max-rooms leaves no more room (10 rooms, 5 public: 4 lobbies, one place for the control interface)" "$(log_of --demo-rooms 5 --demo-map TINY.LVL --max-rooms 10 | grep -q 'lobby rooms on: up to 4 waiting'; echo $?)"
+check "... none where it leaves none, and the log says why" "$(log_of --demo-rooms 9 --demo-map TINY.LVL --max-rooms 10 | grep -q 'lobby rooms off (--max-rooms leaves no place for them beside --demo-rooms)'; echo $?)"
+check "... none with --no-reconnect, and the log says why" "$(log_of --demo-rooms 5 --demo-map TINY.LVL --no-reconnect | grep -q 'lobby rooms off (--no-reconnect)'; echo $?)"
+check "--demo-lobbies N is the number of the log" "$(log_of --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 7 | grep -q 'lobby rooms on: up to 7 waiting'; echo $?)"
+check "--demo-lobbies 0 switches them off, and the log says so" "$(log_of --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 | grep -q 'lobby rooms off (--demo-lobbies 0)'; echo $?)"
+check "--help names --demo-lobbies" "$("$SERVER" --help 2>&1 | grep -q -- '--demo-lobbies N'; echo $?)"
 check "--hold-vote-seconds below 5 is refused" "$([ "$(exit_of --hold-vote-seconds 4)" = "2" ]; echo $?)"
 check "--hold-vote-seconds above 3600 is refused" "$([ "$(exit_of --hold-vote-seconds 3601)" = "2" ]; echo $?)"
 check "--hold-vote-seconds that is no number is refused" "$([ "$(exit_of --hold-vote-seconds soon)" = "2" ]; echo $?)"
@@ -775,6 +792,129 @@ for _ in $(seq 1 100); do kill -0 "$PICK_NOBODY_PID" 2> /dev/null || break; slee
 check "a Hello with no create block makes no room (the code is only a name: the control interface has no such room, 404)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
 check "... and the server refused that game, and no other (the control interface counts one refused connection)" "$([ "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/stats" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("refused", ""))' 2> /dev/null)" = "1" ]; echo $?)"
 for p in $PICK_PIDS $PICK_NOBODY_PID; do kill "$p" 2> /dev/null; done
+stop_server
+
+# lobby rooms (protocol 16) with a real server: a page's Hello with a lobby block makes a lobby room, a game's Hello with a plain block still makes a public room, a page never makes the one and a game never the other, the pool holds
+# --demo-lobbies waiting lobbies, and a lobby is no match for GET /busy. No page speaks the protocol yet: the raw client below says what one will
+PROTOCOL16="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"
+LOBBY_PY="$WORK/lobby_raw.py"
+cat > "$LOBBY_PY" <<'PY'
+import json, socket, struct, sys, time, urllib.request
+port, ws, ctl, secret, protocol = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], int(sys.argv[5])
+def frame(p): return struct.pack('<I', len(p)) + p
+def str8(t):
+    b = t.encode()
+    return bytes([len(b)]) + b
+LOBBY, PLAIN = ('', 4, 255, 255, 3), ('', 4, 255, 255, 1)       # (map, seats, team_a, team_b, flags: bit 0 the leader starts, bit 1 a lobby room)
+def hello(name, room, kind, block, key):
+    m = bytes([1]) + struct.pack('<H', protocol) + str8(name) + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + key + struct.pack('<I', 0) + bytes([0, kind])
+    return m + (str8(block[0]) + bytes(block[1:]) if block else b'')
+class Peer:
+    def __init__(self, name, room, kind, block, key=bytes(16)):
+        self.sock = socket.create_connection(('127.0.0.1', port), timeout=3)
+        self.sock.settimeout(0.2)
+        self.buf, self.msgs = b'', []
+        self.sock.sendall(frame(hello(name, room, kind, block, key)))
+    def wait_for(self, types, secs):                                               # the first message of one of the types (a number each), or None when the time is up or the link closed
+        end = time.time() + secs
+        while True:
+            for m in self.msgs:
+                if m[0] in types:
+                    return m
+            if time.time() >= end:
+                return None
+            try:
+                data = self.sock.recv(65536)
+                if not data:
+                    return None
+                self.buf += data
+            except socket.timeout:
+                pass
+            except OSError:
+                return None
+            while len(self.buf) >= 4 and len(self.buf) - 4 >= struct.unpack_from('<I', self.buf)[0]:
+                n = struct.unpack_from('<I', self.buf)[0]
+                self.msgs.append(self.buf[4:4 + n])
+                self.buf = self.buf[4 + n:]
+    def answer(self):                                                              # the server's answer to the Hello: its Welcome (2) or its Reject (3)
+        return self.wait_for((2, 3), 3.0)
+def welcomed(peer):
+    m = peer.answer()
+    return m if m is not None and m[0] == 2 else None
+def answer_text(peer):
+    m = peer.answer()
+    return 'none' if m is None else 'welcome' if m[0] == 2 else 'reject-%d' % m[1]
+def created(m): return m is not None and (m[19] & 2) != 0                          # (the Welcome: type, player, players, the key, the flags)
+def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes and the games
+    m = peer.wait_for((12,), 3.0)
+    return m is not None and (m[-6] & 2) != 0
+out = {}
+a = Peer('Ada', 'lob00001', 1, LOBBY); wa = welcomed(a)
+out['page_makes_lobby'] = 'yes' if wa is not None and created(wa) and wa[1] == 0 and wa[3:19] != bytes(16) else 'no'
+out['room_says_lobby'] = 'yes' if lobby_room(a) else 'no'
+b = Peer('Bea', 'lob00001', 1, None); wb = welcomed(b)
+out['second_page_joins'] = 'yes' if wb is not None and not created(wb) and wb[1] == 1 else 'no'
+c = Peer('Cy', 'lob00002', 1, LOBBY); wc = welcomed(c)
+out['second_lobby'] = 'yes' if created(wc) else 'no'
+d = Peer('Dee', 'lob00003', 1, LOBBY)
+out['pool_full'] = answer_text(d)                                                  # every lobby has a person in it: NoSuchRoom (6)
+g = Peer('Gus', 'pub00001', 0, PLAIN); wg = welcomed(g)
+out['game_makes_public_room'] = 'yes' if created(wg) else 'no'
+e = Peer('Eve', 'pub00002', 1, PLAIN)
+out['page_plain_block'] = answer_text(e)                                            # BadRequest (5)
+f = Peer('Fay', 'lob00004', 0, LOBBY)
+out['game_lobby_block'] = answer_text(f)                                            # BadRequest (5)
+h = Peer('Hal', 'lob00005', 1, LOBBY, bytes(range(1, 17)))
+out['page_key_no_room'] = answer_text(h)                                           # a Hello with a key never makes a room: NoSuchRoom (6)
+i = Peer('Ian', 'Lob00006', 1, LOBBY)
+out['capital_letter'] = answer_text(i)                                             # a code with a capital is never a visitor's: NoSuchRoom (6)
+try:
+    request = urllib.request.Request('http://127.0.0.1:%d/rooms/lob00001' % ctl, headers={'Authorization': 'Bearer ' + secret})
+    room = json.load(urllib.request.urlopen(request, timeout=3))
+    out['status'] = '%s/%s/%s' % (room.get('state'), room.get('map'), room.get('expected'))
+    out['joined'] = str(room.get('joined'))
+except Exception as error:
+    out['status'] = 'error:%s' % error
+try:
+    busy = json.load(urllib.request.urlopen('http://127.0.0.1:%d/busy' % ws, timeout=3))
+    out['busy'] = '%d/%d' % (busy['matches'], busy['players'])
+except Exception as error:
+    out['busy'] = 'error:%s' % error
+for key in sorted(out):
+    print('%s=%s' % (key, out[key]))
+PY
+lobby_value() { echo "$LOBBY_OUT" | sed -n "s/^$1=//p"; }
+LOBBY_PORT="$(free_port)"
+LOBBY_WS="$(free_port)"
+LOBBY_CTL="$(free_port)"
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 2 > "$WORK/lobby.log" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+check "a lobby page's Hello with a lobby block makes a lobby room (the Welcome says it made it and gives a key)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ]; echo $?)"
+check "the Room message of that room says it is a lobby room" "$([ "$(lobby_value room_says_lobby)" = "yes" ]; echo $?)"
+check "a second page finds the room (seat 1, not created)" "$([ "$(lobby_value second_page_joins)" = "yes" ]; echo $?)"
+check "a second lobby is made while the pool (2) has a place" "$([ "$(lobby_value second_lobby)" = "yes" ]; echo $?)"
+check "a third is told NoSuchRoom when every lobby of the pool has a person in it" "$([ "$(lobby_value pool_full)" = "reject-6" ]; echo $?)"
+check "a game's Hello with a plain block still makes a public room" "$([ "$(lobby_value game_makes_public_room)" = "yes" ]; echo $?)"
+check "a page with a plain block makes no room (BadRequest)" "$([ "$(lobby_value page_plain_block)" = "reject-5" ]; echo $?)"
+check "a game with a lobby block makes no room (BadRequest)" "$([ "$(lobby_value game_lobby_block)" = "reject-5" ]; echo $?)"
+check "a Hello with a key makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value page_key_no_room)" = "reject-6" ]; echo $?)"
+check "a code with an upper-case letter makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value capital_letter)" = "reject-6" ]; echo $?)"
+check "the control interface sees the lobby: waiting, on the server's map, for four, with its two pages" "$([ "$(lobby_value status)" = "waiting/TINY.LVL/4" ] && [ "$(lobby_value joined)" = "2" ]; echo $?)"
+check "GET /busy counts the people of the lobbies as players and no match (a lobby never holds a deploy back)" "$([ "$(lobby_value busy)" = "0/4" ]; echo $?)"
+stop_server
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+check "with --demo-lobbies 0 a lobby page is told NoSuchRoom, and a game still makes its public room" "$([ "$(lobby_value page_makes_lobby)" = "no" ] && [ "$(lobby_value game_makes_public_room)" = "yes" ]; echo $?)"
+stop_server
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL > "$WORK/lobbyd.log" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+check "without the option a server with public rooms makes lobby rooms (the default pool has a place for the third lobby that the pool of two refused)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ] && [ "$(lobby_value pool_full)" = "welcome" ]; echo $?)"
 stop_server
 
 # the stack's own defaults: docker-compose.stack.yml, read as the stack starts it with nothing set in its environment (tests/scripts/stack_command.py), gives the demo options of the

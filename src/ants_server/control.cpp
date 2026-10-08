@@ -35,6 +35,11 @@ JsonValue status_to_json(const RoomStatus& s) {
     o.set("early_start", JsonValue::make_bool(s.early_start));
     o.set("leader", s.leader < 4 ? JsonValue::make_int(s.leader) : JsonValue::make_null());
     o.set("ignored_start_requests", JsonValue::make_int(s.ignored_start_requests));
+    if (s.lobby) {                                                  // a lobby room (protocol 16): the keys exist for lobby rooms only, so the status of every other room is what it was
+        o.set("lobby", JsonValue::make_bool(true));
+        o.set("starting", JsonValue::make_bool(s.starting));        // the leader's START waits for every person's game
+        o.set("plan", JsonValue::make_string(s.plan));              // the leader's plan: a letter for each colour and the teams ("omne 0+1")
+    }
     o.set("seat_moves", JsonValue::make_int(s.seat_moves));
     o.set("ignored_seat_moves", JsonValue::make_int(s.ignored_seat_moves));
     JsonValue players = JsonValue::make_array();
