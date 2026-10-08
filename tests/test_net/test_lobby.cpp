@@ -5173,6 +5173,11 @@ int main() {
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Eve@1 Fay@2 Gus@3"));
             ASSERT_EQ(room.host.removals(), kRemoveBurst);
             ASSERT_EQ(room.host.ignored_removes(), 0u);
+            room.run(400);                                                                                      // (0.7 seconds after the burst was spent: not a whole removal at one a second, nearly two at two a second)
+            ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
+            room.run(100);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Eve@1 Fay@2 Gus@3"));
+            ASSERT_EQ(room.host.removals(), kRemoveBurst);
             room.run(1000);
             ASSERT_TRUE(room.guests[ann].lobby->request_remove(1));
             room.run(100);
@@ -5180,7 +5185,7 @@ int main() {
             ASSERT_EQ(room.host.removals(), kRemoveBurst + 1u);
             ASSERT_TRUE(room.host.occupied(0));
         }
-        {   // ... and a leader that goes on beyond the budget is flooding: kRemoveExcessBurst more are dropped, every one after that is a violation (the eighth throws the leader out)
+        {   // ... and a leader that goes on beyond the budget is flooding: kRemoveExcessBurst (6) more are dropped, every one after that is a violation (the eighth throws the leader out)
             Room room(lobby_room_config(107));
             const size_t ann = room.join_seat("Ann");
             for (const char* name : {"Bob", "Cat", "Dan"}) room.join_seat(name);
@@ -5190,7 +5195,7 @@ int main() {
             ASSERT_EQ(room.host.removals(), kRemoveBurst);
             for (const char* name : {"Eve", "Fay", "Gus"}) room.join_seat(name);
             const std::vector<uint8_t> press = encode(RemoveMsg{1, seating_hash(room.host.room())});
-            for (unsigned i = 0; i < kRemoveExcessBurst; ++i) room.guests[ann].client_end->send(press);
+            for (unsigned i = 0; i < 6; ++i) room.guests[ann].client_end->send(press);                         // (the excess that is tolerated: 6 more)
             room.run(10);
             ASSERT_TRUE(room.host.occupied(0) && room.host.occupied(1));
             ASSERT_EQ(room.host.removals(), kRemoveBurst);
