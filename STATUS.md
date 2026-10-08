@@ -1,12 +1,11 @@
 # Status
 
-_Updated 2026-10-08 09:16 PDT · current release **v0.11.0** · details: [CHANGELOG](CHANGELOG.md)_
+_Updated 2026-10-08 09:18 PDT · current release **v0.11.0** · details: [CHANGELOG](CHANGELOG.md)_
 
 ## Release schedule (the next releases in order; targets in Pacific time)
 | Release | Progress | Target | Now |
 |---|---|---|---|
-| **v0.11.0** short room codes, the leader starts a full room, and swapping colours (network protocol 15) | ███████░░░ 71% | Thu | five checks green on the release head; waits for the owner's look at the new room code |
-| **v0.12.0** game lobby on the front page (network protocol 16) | ░░░░░░░░░░ 0% | not yet set | the server part is written on a branch and opens as a pull request once v0.11.0 has merged; the page and the screens after a match follow, each with a picture for the owner first |
+| **v0.12.0** game lobby on the front page (network protocol 16) | ██████░░░░ 57% | Thursday | its pull request opens next |
 
 Small fixes merge as soon as their five checks are green and carry no version number of their own; a later patch release collects them (the owner's choice on 2026-10-05).
 
@@ -14,11 +13,11 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 
 ## In progress
 - Bots next: swimmers on Treasure, the fire-in ring of 8 with more walls when the enemy has no Fire Ant, mines on the enemy's food path, harassment (the owner has answered five design questions), a bot that walks over power-ups on its way (one ant takes several; noticed by the owner on the islands map on 2026-10-07)
-- **Short room codes, the leader starts a full room, swapping colours** (v0.11.0, network protocol 15, so an older game cannot join): PR #34 is out of draft and has the six-character room codes in two groups of three, one link that makes the room and the leader's colour swap; the mutation runs passed, the release commit is in and all five checks are green on the release head, and the merge waits only for the owner's tap on the code look; the platform and operating system icons, documents and the rename of the demo-room names follow as a separate small change with no version number (the leader-starts rule and the colour swap are in the game, but no page turns them on yet; the lobby page will).
+- **Bots on ISLANDS fly the Bomber over with the crew** (no release; PR #39, draft): a computer player's crew now takes its own Bomber across the water when it is needed, so the crew gets its Swimmers over sooner and loses fewer ants (the team on the far side of the map used to get about two of its three Swimmers and now almost always gets all three); on ISLANDS two bots with the change beat two without it by 33 points a match at Easy, 71 at Medium and 83 at Hard (whole matches, 720 a level)
 - Your own orders at once in online matches (prediction): smoothing the other players' ants, then on by default
-- **Replays** (PR #31, open and not a draft): the server will keep every online match of 30 seconds or more for 30 days, with a public list, download and the players' typed names (the names were missing from the files and a fix is being added, so its checks run again); the PR will not merge until that is in and green, the owner has answered one question about a notice line, and the beta is idle; the viewer for watching a replay on the website follows as a separate pull request, and its pictures wait for the owner's yes
+- **Replays** (PR #31, open and not a draft): the server will keep every online match of 30 seconds or more for 30 days, with a public list, download and the players' typed names (letters outside plain ASCII show as ??); the names are in and all five checks were green before v0.11.0 landed, so main is being merged in and the checks run again; the PR will not merge until that is green, the owner has answered one question about a notice line, and the beta is idle; the viewer for watching a replay on the website follows as a separate pull request, and its pictures wait for the owner's yes
 - Watching bots play (1v1v1v1, 1v1, 2v2): designed, the owner approved the pictures
-- **Game lobby for the front page** (v0.12.0, network protocol 16): the design, the host-change notice and the six-character code look are approved (2026-10-07 22:50 and 23:18 PDT); the server part is being written on a branch stacked on v0.11.0: rooms made for the new lobby page wait for the players, hold a seat when a connection drops, show the host's plan to everybody, pass the host's role to the player who has been in the room longest, start the match when every player's game has loaded and close about a minute after the last player leaves; the page follows and nothing changes for players until it does; both merge after v0.11.0.
+- **Lobby on the server** (network protocol 16, v0.12.0): the rooms' server side is built, tested and reviewed, including the host removing a player; its pull request opens next; no page uses it yet
 - **Front page ants in the game's own team colours** (no release; PR #37, in review): the ants on the room page are drawn in the game's team colours, as in the approved lobby pictures; it merges after v0.11.0.
 
 ## On hold (not started; the owner decides when)
@@ -29,6 +28,7 @@ A release has seven steps, each a seventh of its bar: built, tested here, review
 - Dead-code cleanup, trimming the other big documents (the README is done), Docker hardening, match API, an option to match the monitor's aspect
 
 ## Recently done
+- **v0.11.0** Six-character room codes and one link that makes the room (network protocol 15; the swap of two players' colours is in the game but no page uses it yet, the lobby page will) (PR #34, merged 2026-10-08 09:05 PDT, live 09:09 PDT)
 - **The Hard bots watch the flowers** (no release; PR #38, merged 2026-10-08 01:57 PDT, live 02:01 PDT): the Hard bots see the flower droppers on Small, Medium and Gauntlet, know whose drop a landing is, take the Fire, Bomber and Thief power-ups that land on their side, repair a pick-up trip that went wrong and keep one ant beside the drop tile to take the landing; in 3,240 whole matches of Hard bots against Hard bots, a bot with the rules scores about 33 points more a match than one without (the gain is on the Medium map); Medium and Easy bots play none of it
 - **Rejoin test steadied** (no release; PR #35, merged 2026-10-08 01:14 PDT): a Mac's checks no longer fail at random when a player leaves while catching up.
 - **The bots' gate waits for the ant that is leaving** (no release; PR #36, merged 2026-10-08 00:26 PDT, live 00:31 PDT): the Hard bots no longer send the next carrier into the hill while one of their ants without food is still leaving over the ramp (they wait 60 ticks at the most), so the "Can't go there." that this click caused is a little rarer (0.71 refused clicks a match before, 0.58 now, in 240 test matches of four Hard bots); their strength is unchanged within noise.
