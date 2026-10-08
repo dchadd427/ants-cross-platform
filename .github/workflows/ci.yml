@@ -361,6 +361,15 @@ jobs:
           docker build -f Dockerfile.server -t ants-server .
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
 
+      # The bot arena's image (Dockerfile.server, stage arena; the stack's service ants-arena): it must build, and one match (a fixed seed: the same map, bots and match every time)
+      # must come out as a replay file in a folder, written by the unprivileged user of the image.
+      - name: Build the bot arena image and play one match into a folder
+        run: |
+          docker build -f Dockerfile.server --target arena -t ants-arena .
+          mkdir -p arena-out && chmod 777 arena-out
+          docker run --rm -e ANTS_ARENA_ONCE=1 -e ANTS_ARENA_SEED=1 -e ANTS_ARENA_DIR=/out -v "$PWD/arena-out:/out" ants-arena
+          test "$(ls arena-out/*.antsrep | wc -l)" = 1
+
       # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
       # title and the footer of the pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
       - name: Check the stack files and the staging label of the pages

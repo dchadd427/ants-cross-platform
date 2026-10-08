@@ -40,6 +40,29 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
     /src/build/src/ants_server/ants_server --version
 
 # =============================================================================
+# The bot arena (docker-compose.stack.yml, service ants-arena): `docker build -f Dockerfile.server --target arena -t ants-arena .`
+# It plays a match of computer players now and then and keeps it as a replay in the game server's folder (docker/arena_loop.sh, docs/BOTS.md "On the game server").
+# These two stages stand BEFORE the runtime image on purpose: a build without --target makes the LAST stage, which must stay the server, and BuildKit builds a stage
+# only when the target needs it, so the server image (and the CI's build of it) neither compiles the arena nor carries it.
+# =============================================================================
+FROM builder AS arena-builder
+# (the arena's source includes tests/common/ants_test_paths.hpp, which names the checkout's folders for its default map folder and its self-test; the tests folder is not in the
+# build context, and the image passes --maps-dir and has no self-test, so a stand-in with the same three names is enough: CMake's other parts are not touched)
+RUN mkdir -p tests/common && printf '%s\n' '#pragma once' '#define ORIGINAL_ASSETS_DIR "/nonexistent"' '#define TEST_DATA_DIR "/nonexistent"' '#define ANTS_SOURCE_DIR "/nonexistent"' > tests/common/ants_test_paths.hpp && \
+    cmake --build build -j"$(nproc)" --target bot_arena
+
+FROM debian:12-slim AS arena
+# (the same user as the runtime image below: the two containers share the volume ants-server-results, and the files of the one must be writable for the other)
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin ants && \
+    mkdir -p /maps /results && chown ants /results
+COPY Original-Ants/Maps/ /maps/
+COPY --from=arena-builder /src/build/bot_arena /usr/local/bin/bot_arena
+COPY docker/arena_loop.sh /usr/local/bin/arena_loop.sh
+USER ants
+WORKDIR /results
+ENTRYPOINT ["/usr/local/bin/arena_loop.sh"]
+
+# =============================================================================
 # The runtime image: the program and nothing else, run by an unprivileged user
 # =============================================================================
 FROM debian:12-slim AS runner

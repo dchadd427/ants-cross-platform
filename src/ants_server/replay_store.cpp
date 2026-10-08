@@ -268,6 +268,16 @@ int64_t ReplayStore::folder_stamp() const {
     return ec ? 0 : static_cast<int64_t>(stamp.time_since_epoch().count());
 }
 
+namespace {
+// True when the file was written less than `settle_s` seconds ago (0: never): a write that is not finished yet, or one that may change again unseen.
+bool changed_within(const fs::path& path, uint32_t settle_s) {
+    if (settle_s == 0) return false;
+    std::error_code ec;
+    const auto when = fs::last_write_time(path, ec);
+    return !ec && fs::file_time_type::clock::now() - when < std::chrono::seconds(settle_s);
+}
+}  // namespace
+
 bool ReplayStore::prepare(std::string& why) {
     ready_ = false;
     entries_.clear();
@@ -299,8 +309,10 @@ bool ReplayStore::prepare(std::string& why) {
         const std::string name = it->path().filename().string();
         const std::string temp_ext = kTempExtension;
         if (name.size() > temp_ext.size() && name.compare(name.size() - temp_ext.size(), temp_ext.size(), temp_ext) == 0 && valid_file_name(name.substr(0, name.size() - temp_ext.size()))) {
-            fs::remove(it->path(), entry_ec);                                        // the file of a write that a crash interrupted
-            ++temps;
+            if (!changed_within(it->path(), cfg_.settle_s)) {                        // (one that changed a moment ago is the write of another program in this folder, the bot arena's, that is not done yet)
+                fs::remove(it->path(), entry_ec);                                    // the file of a write that a crash interrupted
+                ++temps;
+            }
             continue;
         }
         ParsedName parsed;
