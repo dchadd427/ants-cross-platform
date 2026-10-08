@@ -1,7 +1,7 @@
 // Runs the front page's OWN rules without a browser (the owner, on a phone: "I don't see a way to change colors or send an invite to another person should all be right there. We don't need separate
 // AI and online. Only do online."): the page has one card, "New match", for every game, and an invitation for each friend in it.
 //   * web/lobby.html, the block CARD_BEGIN .. CARD_END: the card's rules. Four seats, exactly one of them You, every other seat Friend, Easy, Medium, Hard or Nobody; who plays and how many people to wait
-//     for; the Teams that the playing seats allow (cardTeamChoices / cardTeam); what is remembered (cardParse / cardText) and what the first visit takes from the keys of the earlier pages (cardFromOld);
+//     for; the Team 1 and Team 2 switches of the seats that play (a team is two seats on the same switch: cardSide, cardShownSides, cardSideOpen, cardTeamOf); what is remembered (cardParse / cardText) and what the first visit takes from the keys of the earlier pages (cardFromOld);
 //     Sit here (cardSit); the room's create block (cardBlock: the card's map, four seats, the card's teams) and when the room that the tab kept still fits the choices (cardRoomFits: its code is eight characters of the page's alphabet,
 //     its map and teams are the card's); the plan (cardFill) and the addresses of START and of an invitation (cardQuery, which carries the block); who is alone (cardAlone: START then plays a game for one on this computer) and the
 //     line under START (cardNote). Every state of the card is checked, and every address that it can make is read by the game page (web/shell.html, ANTS_PAGE.joinArguments) as the same seat, the same plan, the same number of people,
@@ -65,7 +65,7 @@ const lobbyCode = [
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath),
     between(lobbyText, 'CARD_BEGIN', 'CARD_END', lobbyPath),
-    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, codeText: codeText, roomBlockQuery: roomBlockQuery, roomBlockOf: roomBlockOf, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardTeamChoices: cardTeamChoices, cardTeam: cardTeam, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardTeams: cardTeams, cardFill: cardFill, cardBlock: cardBlock, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
+    'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, hostPlayers: hostPlayers, soloBots: soloBots, soloSeats: soloSeats, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, codeText: codeText, roomBlockQuery: roomBlockQuery, roomBlockOf: roomBlockOf, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle, CARD_KEY: CARD_KEY, CARD_ROOM_KEY: CARD_ROOM_KEY, CARD_WORDS: CARD_WORDS, cardPlaying: cardPlaying, cardFriends: cardFriends, cardPeople: cardPeople, cardSidesFix: cardSidesFix, cardSidesOf: cardSidesOf, cardPair: cardPair, cardTeamOf: cardTeamOf, cardShownSides: cardShownSides, cardSideOpen: cardSideOpen, cardRefusal: cardRefusal, cardSide: cardSide, cardTeamsText: cardTeamsText, cardFix: cardFix, cardNew: cardNew, cardParse: cardParse, cardText: cardText, cardFromOld: cardFromOld, cardSit: cardSit, cardSet: cardSet, cardMap: cardMap, cardFill: cardFill, cardBlock: cardBlock, cardRoomFits: cardRoomFits, cardQuery: cardQuery, cardAlone: cardAlone, cardNote: cardNote };',
 ].join('\n');
 const L = new Function(lobbyCode)();
 
@@ -172,7 +172,7 @@ try {
     const local = (search, remembered) => P.localArguments(search, remembered).args;
     same('the whole of Play: the map, the setup screen\'s own start, the bots of the other three bases, the name', local('?map=treasure&bots=medium&name=Bob&aspect=16:9'),
          ['--map', 'Original-Ants/Maps/TREASURE.LVL', '--play', ...bots('medium'), '--name', 'Bob']);
-    same('alone (no bots): the map, the start and the name; no --bot at all (the original\'s single player)', local('?map=islands&name=Bob'), ['--map', 'Original-Ants/Maps/ISLANDS.LVL', '--play', '--name', 'Bob']);
+    same('alone (no bots): the map, the start, --alone (a game for one: no colony but the player\'s) and the name; no --bot at all', local('?map=islands&name=Bob'), ['--map', 'Original-Ants/Maps/ISLANDS.LVL', '--play', '--alone', '--name', 'Bob']);
     for (const [key, file] of Object.entries(FILES)) {
         same('the map ' + key + ' is ' + file, local('?map=' + key).slice(0, 3), ['--map', 'Original-Ants/Maps/' + file, '--play']);
         check('... and that file is in the repository (the game will find it in its data)', fs.existsSync(path.join(repo, 'Original-Ants', 'Maps', file)), file);
@@ -186,7 +186,7 @@ try {
     const botArgs = (levels) => levels.flatMap((l, i) => (l ? ['--bot', (i + 1) + ':' + l] : []));
     for (const [text, levels] of [['easy,medium,hard', ['easy', 'medium', 'hard']], ['hard,none,easy', ['hard', '', 'easy']], ['none,none,hard', ['', '', 'hard']], ['none,easy,none', ['', 'easy', '']], ['EASY,Medium,HARD', ['easy', 'medium', 'hard']],
                                   ['medium,medium,medium', ['medium', 'medium', 'medium']], ['None,NONE,none', ['', '', '']], ['easy,none,none', ['easy', '', '']]]) {
-        same('bots=' + text + ': each base has its own bot (seat 1 Red, 2 Blue, 3 Black), and no --bot for a none', local('?map=small&bots=' + text).slice(3), botArgs(levels));
+        same('bots=' + text + ': each base has its own bot (seat 1 Red, 2 Blue, 3 Black), and no --bot for a none (all none: a game for one)', local('?map=small&bots=' + text).slice(3), levels.some(Boolean) ? botArgs(levels) : ['--alone']);
     }
     same('three words and no map: the setup screen with those bots', local('?bots=easy,none,hard'), botArgs(['easy', '', 'hard']));
     same('what the page keeps of the bots, for whoever reads it: one word when all three are alike, else the three words, empty for none',
@@ -194,7 +194,7 @@ try {
     // all or nothing: a text that is not one level word or exactly three words of the four is no bots at all (not the words that happen to be right)
     for (const bad of ['easy,medium', 'easy,medium,hard,easy', 'easy,,hard', ',,', ',easy,medium', 'easy,medium,', 'easy,extreme,hard', 'easy, medium,hard', 'easy,medium ,hard', 'easy;medium;hard', 'easy|medium|hard', 'easy medium hard', 'easy,medium,hard\n',
                       'none', 'none,none', 'none,easy', 'easy,hard,constructor', 'easy,medium,__proto__', 'easy,medium,hard,', 'EASY,MEDIUM,HARD,', ',', 'easy,medium,hard,none', '--bot 1:easy', 'easy,medium,hard --name x']) {
-        same('bots=' + JSON.stringify(bad) + ' is no bots at all', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play']);
+        same('bots=' + JSON.stringify(bad) + ' is no bots at all: a game for one', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play', '--alone']);
     }
 
     // the teams: ffa (the game's default) says nothing; 0+N says --teams 0+N when seat N has a bot (the + comes as a blank unless it is %2B); anything else is ignored
@@ -205,7 +205,7 @@ try {
     same('what the page keeps of the teams', ['?bots=easy,medium,hard&teams=0%2B2', '?bots=easy,medium,hard&teams=0+3', '?bots=easy,medium,hard&teams=ffa', '?bots=easy,medium,none&teams=0%2B3', '?teams=0%2B1'].map((t) => P.localArguments(t, '').teams), ['0+2', '0+3', '', '', '']);
     for (const text of ['ffa', 'FFA', 'Ffa']) same('teams=' + text + ' is free for all: no --teams', local('?map=small&bots=easy,medium,hard&teams=' + text).slice(3), botArgs(['easy', 'medium', 'hard']));
     same('teams for a seat with no bot is ignored (the game would be told about a seat that is empty)', [local('?map=small&bots=easy,medium,none&teams=0%2B3').slice(3), local('?map=small&bots=none,none,hard&teams=0%2B1').slice(3)], [botArgs(['easy', 'medium', '']), botArgs(['', '', 'hard'])]);
-    same('teams with no bots at all (or with bots that are no bots) is ignored', [local('?map=small&teams=0%2B1').slice(3), local('?map=small&bots=junk&teams=0%2B1').slice(3), local('?map=small&bots=easy,medium&teams=0%2B1').slice(3)], [[], [], []]);
+    same('teams with no bots at all (or with bots that are no bots) is ignored: a game for one, no --teams', [local('?map=small&teams=0%2B1').slice(3), local('?map=small&bots=junk&teams=0%2B1').slice(3), local('?map=small&bots=easy,medium&teams=0%2B1').slice(3)], [['--alone'], ['--alone'], ['--alone']]);
     for (const bad of ['', '0', '0+', '+1', '0+0', '0+4', '0+9', '1+2', '2+3', '1+0', '00+1', '0+11', '0++1', '0+1+2', ' 0+1', '0+1 ', '0 +1', '0+ 1', '0\t1', '0+1\n', '0+1\n--name x', '0+1;ls', '0+1&teams=ffa', 'a+b', '0+one', '0+\u0967', 'constructor', '__proto__', 'none', 'true']) {
         same('teams=' + JSON.stringify(bad.slice(0, 20)) + ' is no team: no --teams', local('?map=small&bots=easy,medium,hard&teams=' + encodeURIComponent(bad)).slice(3), botArgs(['easy', 'medium', 'hard']));
     }
@@ -216,7 +216,7 @@ try {
                       'valueOf', 'treasure\n--name x', 'treаsure', 'treasure'.repeat(500), '0', 'Original-Ants/Maps/TREASURE.LVL', '/etc/passwd', 'http://evil/x', 'null', 'undefined'];
     for (const bad of NOT_MAPS) same('a map "' + bad.slice(0, 24) + '" is no map: no --map, no --play', local('?map=' + encodeURIComponent(bad)), []);
     const NOT_LEVELS = ['', 'none', 'extreme', 'medium ', ' medium', 'medium\n', 'medium\n--name x', 'easy,hard', 'medium;--map x', 'medium --name x', 'mediu', 'mediumm', 'constructor', '__proto__', '1', '0', 'true', 'medium'.repeat(300)];
-    for (const bad of NOT_LEVELS) same('a level "' + bad.slice(0, 24).replace(/\n/g, '\\n') + '" is no level: no --bot', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play']);
+    for (const bad of NOT_LEVELS) same('a level "' + bad.slice(0, 24).replace(/\n/g, '\\n') + '" is no level: no --bot, a game for one', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play', '--alone']);
     same('a repeated map parameter: the first one', local('?map=tiny&map=small')[1], 'Original-Ants/Maps/TINY.LVL');
     same('a map that is no text at all (an array in the query) is nothing', local('?map[]=tiny'), []);
     same('an address with no local parameter at all: nothing is given to the game (today\'s front page: the setup screen), whatever the browser remembered', [local('', 'Bob'), local('?aspect=4:3', 'Bob'), local('?x=1&y=2', 'Bob')], [[], [], []]);
@@ -226,7 +226,7 @@ try {
     same('the name of the address', local('?map=tiny&name=Bob').slice(-2), ['--name', 'Bob']);
     same('the name is cut like the game\'s own: printable ASCII only, the blanks at both ends gone, 32 characters at most', [local('?map=tiny&name=' + encodeURIComponent('  Zoë Ann  ')).slice(-2), local('?map=tiny&name=' + 'x'.repeat(40)).slice(-2), local('?map=tiny&name=' + encodeURIComponent('a\tb\nc')).slice(-2)],
          [['--name', 'Zo Ann'], ['--name', 'x'.repeat(32)], ['--name', 'abc']]);
-    same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play']]);
+    same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']]);
     same('with no name in the address the name that this browser remembered is used (a reload keeps it: the page strips the name from its address bar)', local('?map=tiny&bots=easy', 'Maya').slice(-2), ['--name', 'Maya']);
     same('the address\'s name beats the remembered one, an empty address name (a name that was chosen: none) beats it too', [local('?map=tiny&name=Bob', 'Maya').slice(-2), local('?map=tiny&name=', 'Maya').indexOf('--name')], [['--name', 'Bob'], -1]);
     same('a remembered name is cleaned the same way', local('?map=tiny', 'Mäya   ').slice(-2), ['--name', 'Mya']);
@@ -243,7 +243,7 @@ try {
                       'easy,none,hard', 'none,medium,none', 'None,NONE,Easy', 'easy,medium', ',,', '0+1', '0 2', '0+3', '0+9', 'ffa', '--teams', 'none'];
         let seed = 7;
         const rnd = (n) => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n; };       // (xorshift32: the product of the old multiplier lost its low bits in a double, and the table was hardly visited)
-        const allowed = new Set(['--map', '--play', '--bot', '--teams', '--name', ...Object.values(FILES).map((f) => 'Original-Ants/Maps/' + f), '1:easy', '2:easy', '3:easy', '1:medium', '2:medium', '3:medium', '1:hard', '2:hard', '3:hard', '0+1', '0+2', '0+3']);
+        const allowed = new Set(['--map', '--play', '--alone', '--bot', '--teams', '--name', ...Object.values(FILES).map((f) => 'Original-Ants/Maps/' + f), '1:easy', '2:easy', '3:easy', '1:medium', '2:medium', '3:medium', '1:hard', '2:hard', '3:hard', '0+1', '0+2', '0+3']);
         for (let i = 0; i < 20000; i++) {
             const parts = [];
             for (const key of ['map', 'bots', 'teams', 'name', 'join', 'room', 'fill', 'x']) if (rnd(3) !== 0) parts.push(key + '=' + encodeURIComponent(pool[rnd(pool.length)] + (rnd(4) === 0 ? pool[rnd(pool.length)] : '')));
@@ -257,14 +257,19 @@ try {
             // the rules between the arguments: a seat has at most one bot, in the order of the seats; --teams comes once, with a seat that has a bot
             const seats = [];
             const teams = [];
+            let alones = 0;
+            let mapped = false;
             for (let k = 0; k < got.length; k++) {
                 if (got[k] === '--name') k++;                                                  // (a name is whatever the rules above allow, even a word that looks like a flag)
                 else if (got[k] === '--bot') seats.push(Number(got[++k][0]));
                 else if (got[k] === '--teams') teams.push(got[++k]);
+                else if (got[k] === '--alone') alones++;
+                else if (got[k] === '--map') mapped = true;
             }
             const ordered = seats.every((n, k) => k === 0 || n > seats[k - 1]);
             const teamsOk = teams.length === 0 || (teams.length === 1 && /^0\+[1-3]$/.test(teams[0]) && seats.indexOf(Number(teams[0][2])) !== -1);
-            if (!ordered || !teamsOk) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(got); }
+            const aloneOk = alones === (mapped && seats.length === 0 ? 1 : 0);                 // a game for one is a game of a map that has no bot, and only that
+            if (!ordered || !teamsOk || !aloneOk) { wrong++; if (!sample) sample = search + ' -> ' + JSON.stringify(got); }
             if (teams.length) teamed++;
             if (seats.length && seats.length < 3 || (seats.length === 3 && new Set(got.filter((a) => /^\d:/.test(a)).map((a) => a.slice(2))).size > 1)) listed++;
         }
@@ -285,7 +290,7 @@ try {
                     for (const shape of ['16:9', '4:3']) {
                         const query = L.localGameQuery(m.key, level, name, shape);
                         const args = local(query);
-                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(level ? bots(level) : []), '--name', name || 'Player'];
+                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(level ? bots(level) : ['--alone']), '--name', name || 'Player'];
                         if (JSON.stringify(args) !== JSON.stringify(want)) { wrong++; if (!sample) sample = query + ' -> ' + JSON.stringify(args); }
                         if (new URLSearchParams(query).get('aspect') !== shape) { wrong++; if (!sample) sample = query; }
                     }
@@ -306,7 +311,7 @@ try {
                     for (const shape of ['16:9', '4:3']) {
                         const query = L.localGameQuery(m.key, levels, name, shape);
                         const args = local(query);
-                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...botArgs(levels), '--name', name || 'Player'];
+                        const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(levels.some(Boolean) ? botArgs(levels) : ['--alone']), '--name', name || 'Player'];
                         made++;
                         if (JSON.stringify(args) !== JSON.stringify(want)) { wrong++; if (!sample) sample = query + ' -> ' + JSON.stringify(args); }
                         if (new URLSearchParams(query).get('aspect') !== shape) { wrong++; if (!sample) sample = query; }
@@ -422,7 +427,7 @@ try {
                 if (leaderStart) flagged++;
                 if (JSON.stringify(args) !== JSON.stringify(want)) wrong += ' ' + address + ' -> ' + JSON.stringify(args);
                 if (JSON.stringify(L.roomBlockOf(address)) !== JSON.stringify(block)) wrong += ' (not read back) ' + address;
-                if (L.hostTeam(teams || 'ffa', seats) !== (teams || 'ffa') || query.indexOf('+') !== -1) wrong += ' (not a block of the Teams select) ' + address;
+                if (L.hostTeam(teams || 'ffa', seats) !== (teams || 'ffa') || query.indexOf('+') !== -1) wrong += ' (not a block that the card can make) ' + address;
             }
             check('every create block that the page can put into a link (' + blocks + ': ' + withTeams + ' with teams, ' + flagged + ' that wait for the leader) is read by the game page as the same --room-map, --room-seats, --room-teams and --room-leader-start, and by the page as the same block:' + wrong,
                   wrong === '' && blocks === 6 * 9 * 2 && withTeams === 6 * 6 * 2 && flagged === 6 * 9);
@@ -573,12 +578,22 @@ try {
     // the card, "New match" (the block CARD): four seats, one of them You, a choice for each of the others
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     {
-        const st = (you, seats, teams, map) => ({ map: map || 'treasure', you, seats, teams: teams || 'ffa' });
+        // a state of the card as the rules make it: `teams` is one that the seats allow (a pair of seats that play, three or four of them playing); the two seats of it are on Team 1 unless `sides` says otherwise
+        const sidesOf = (you, seats, teams) => {
+            const playing = [0, 1, 2, 3].filter((x) => x === you || seats[x] !== 'nobody');
+            const out = [0, 0, 0, 0];
+            if (teams && teams !== 'ffa' && playing.length >= 3) for (const x of teams.split('+').map(Number)) out[x] = 1;
+            return out;
+        };
+        const st = (you, seats, teams, map, sides) => ({ map: map || 'treasure', you, seats, sides: sides || sidesOf(you, seats, teams), teams: teams || 'ffa' });
         const M4 = ['medium', 'medium', 'medium', 'medium'];
         const F4 = ['friend', 'friend', 'friend', 'friend'];          // (a first visit: a Friend in every seat)
         const COLOURS = ['Green', 'Red', 'Blue', 'Black'];
-        const FOUR = [FFA, { value: '0+1', text: 'Green + Red against Blue + Black' }, { value: '0+2', text: 'Green + Blue against Red + Black' }, { value: '0+3', text: 'Green + Black against Red + Blue' }];
+        // every team that the switches can make for the seats that play, as an independent list: free for all, the three pairs of three seats, Green with each of the others when four play
+        const teamsOf = (state) => { const p = L.cardPlaying(state); return p.length === 4 ? ['ffa', '0+1', '0+2', '0+3'] : p.length === 3 ? ['ffa', p[0] + '+' + p[1], p[0] + '+' + p[2], p[1] + '+' + p[2]] : ['ffa']; };
         const frozen = (state) => JSON.stringify(state);
+        // a state with the two seats of a team word on Team 1 (the page keeps the switches; only an older save has a team and no switches, and cardFix makes those)
+        const withTeams = (state, team) => L.cardFix(Object.assign({}, state, { sides: L.cardSidesOf(team, L.cardPlaying(state)) }));
 
         same('the card has five choices for a seat, in the order of its buttons, and keeps its choices under ants-match', [L.CARD_WORDS, L.CARD_KEY, L.CARD_ROOM_KEY], [['friend', 'easy', 'medium', 'hard', 'nobody'], 'ants-match', 'ants-match-room']);
         same('cardNew: Treasure, You at Green, a Friend in every seat (the seat of You keeps its choice for later), free for all; a map that is none of the six is Treasure', [L.cardNew('treasure'), L.cardNew('islands').map, L.cardNew(undefined).map, L.cardNew('nowhere').map, L.cardNew('Treasure').map],
@@ -591,39 +606,160 @@ try {
         same('cardFriends and cardPeople: the seats with Friend (not the seat that is You), and You with them', [L.cardFriends(st(2, ['friend', 'friend', 'friend', 'friend'])), L.cardFriends(st(0, ['friend', 'easy', 'nobody', 'friend'])), L.cardFriends(st(1, M4)), L.cardPeople(st(2, ['friend', 'friend', 'friend', 'friend'])), L.cardPeople(st(0, ['friend', 'easy', 'nobody', 'friend'])), L.cardPeople(st(1, M4))],
              [[0, 1, 3], [3], [], 4, 2, 1]);
 
-        // the Teams: only the pairs that the playing seats allow
-        same('cardTeamChoices: four seats play: free for all and Green with Red, Blue or Black (the other two are the other team)', L.cardTeamChoices(st(0, M4)), FOUR);
-        same('cardTeamChoices: three seats play: the three pairs of them, the third plays alone (Green, Blue and Black play: Green + Blue, Green + Black, Blue + Black)', L.cardTeamChoices(st(0, ['medium', 'nobody', 'friend', 'hard'])),
-             [FFA, { value: '0+2', text: 'Green + Blue against Black' }, { value: '0+3', text: 'Green + Black against Blue' }, { value: '2+3', text: 'Blue + Black against Green' }]);
-        same('... whichever seats they are, and a seat that is You plays (Red, Blue and Black play, You at Red)', L.cardTeamChoices(st(1, ['nobody', 'nobody', 'easy', 'friend'])),
-             [FFA, { value: '1+2', text: 'Red + Blue against Black' }, { value: '1+3', text: 'Red + Black against Blue' }, { value: '2+3', text: 'Blue + Black against Red' }]);
-        same('cardTeamChoices: two seats or one play: free for all only (a team of them would end the match at once)', [L.cardTeamChoices(st(0, ['medium', 'easy', 'nobody', 'nobody'])), L.cardTeamChoices(st(2, ['nobody', 'nobody', 'friend', 'nobody'])), L.cardTeamChoices(st(3, ['nobody', 'nobody', 'nobody', 'nobody']))], [[FFA], [FFA], [FFA]]);
+        // the Teams: a Team 1 and a Team 2 switch on each seat that plays (three or four of them play); a team is two seats on the same switch
+        const sideState = (you, seats, sides) => L.cardFix({ map: 'treasure', you, seats, sides, teams: 'ffa' });
+        const ONE = ['medium', 'medium', 'medium', 'nobody'];            // (Green, Red and Blue play: three)
+        same('cardSidesFix: only the seats that play have a switch on, from three seats on (two would be the whole match); what is no 1 or 2 is neither; a list that puts three seats on a switch is no list',
+             [L.cardSidesFix([1, 1, 2, 2], [0, 1, 2, 3]), L.cardSidesFix([1, 1, 2, 2], [0, 1, 3]), L.cardSidesFix([1, 1, 2, 2], [0, 1]), L.cardSidesFix([1, 1, 1, 0], [0, 1, 2, 3]), L.cardSidesFix([2, 2, 2, 0], [0, 1, 2]), L.cardSidesFix([3, '1', null, 2], [0, 1, 2, 3]), L.cardSidesFix(undefined, [0, 1, 2, 3]), L.cardSidesFix('1122', [0, 1, 2, 3]), L.cardSidesFix([1, 1, 2, 2], [0, 1, 2, 3])],
+             [[1, 1, 2, 2], [1, 1, 0, 2], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 2], [0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 2, 2]]);
+        same('cardSidesOf: a team value puts its two seats on Team 1 (free for all, a pair with a seat that does not play, a pair of two seats only, the higher seat first and anything else are no switch)',
+             [L.cardSidesOf('0+1', [0, 1, 2, 3]), L.cardSidesOf('1+3', [1, 2, 3]), L.cardSidesOf('ffa', [0, 1, 2, 3]), L.cardSidesOf('0+1', [0, 2, 3]), L.cardSidesOf('0+1', [0, 1]), L.cardSidesOf('1+0', [0, 1, 2, 3]), L.cardSidesOf('0+0', [0, 1, 2, 3]), L.cardSidesOf('0+4', [0, 1, 2, 3]), L.cardSidesOf(null, [0, 1, 2, 3]), L.cardSidesOf(['0+1'], [0, 1, 2, 3])],
+             [[1, 1, 0, 0], [0, 1, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]);
+        same('cardPair: the two seats that are on the same switch, the lower first; none when no switch has exactly two seats on it',
+             [L.cardPair([1, 1, 0, 0], [0, 1, 2, 3]), L.cardPair([0, 2, 0, 2], [0, 1, 2, 3]), L.cardPair([1, 2, 0, 0], [0, 1, 2, 3]), L.cardPair([0, 0, 0, 0], [0, 1, 2, 3]), L.cardPair([2, 1, 1, 0], [0, 1, 2, 3]), L.cardPair([2, 2, 1, 1], [0, 1, 2, 3]), L.cardPair([1, 0, 0, 0], [0, 1, 2])],
+             [[0, 1], [1, 3], null, null, [1, 2], [2, 3], null]);
+        same('cardTeamOf: what the switches make: the pair when three play; when four play the team that Green is in (two on one switch are Green with the other two when they are not Green, and the other pair is a team too); free for all when no switch has exactly two seats',
+             [L.cardTeamOf([1, 1, 0, 0], [0, 1, 2, 3]), L.cardTeamOf([0, 1, 1, 0], [0, 1, 2, 3]), L.cardTeamOf([2, 2, 1, 1], [0, 1, 2, 3]), L.cardTeamOf([0, 1, 1, 0], [1, 2, 3]), L.cardTeamOf([0, 1, 0, 1], [1, 2, 3]), L.cardTeamOf([0, 1, 2, 0], [0, 1, 2, 3]), L.cardTeamOf([0, 0, 0, 0], [0, 1, 2, 3]), L.cardTeamOf([0, 0, 2, 2], [0, 1, 2, 3])],
+             ['0+1', '0+3', '0+1', '1+2', '1+3', 'ffa', 'ffa', '0+1']);
+        same('cardShownSides: what the switches show: each seat\'s own, and with four players and a pair on one switch the other two seats on the other one (nobody pressed those); with three players the third shows what it has',
+             [L.cardShownSides(sideState(0, M4, [1, 1, 0, 0])), L.cardShownSides(sideState(0, M4, [0, 2, 2, 0])), L.cardShownSides(sideState(0, M4, [1, 1, 0, 2])), L.cardShownSides(sideState(0, M4, [1, 0, 0, 2])), L.cardShownSides(sideState(0, ONE, [1, 1, 0, 0])), L.cardShownSides(sideState(0, ONE, [1, 1, 2, 0])), L.cardShownSides(sideState(0, M4, [0, 0, 0, 0]))],
+             [[1, 1, 2, 2], [1, 2, 2, 1], [1, 1, 2, 2], [1, 0, 0, 2], [1, 1, 0, 0], [1, 1, 2, 0], [0, 0, 0, 0]]);
+        same('cardTeamsText: the line under the switches says what they make: free for all and how to make a team, or the teams in words (the other seats that play are the other team)',
+             [L.cardTeamsText(st(0, M4)), L.cardTeamsText(sideState(0, M4, [1, 2, 0, 0])), L.cardTeamsText(st(0, M4, '0+1')), L.cardTeamsText(st(0, M4, '0+3')), L.cardTeamsText(sideState(0, M4, [0, 1, 1, 0])), L.cardTeamsText(st(0, ONE, '1+2')), L.cardTeamsText(st(1, ['nobody', 'easy', 'hard', 'friend'], '2+3'))],
+             ['Free for all. For a team, put two colours on the same team.', 'Free for all. For a team, put two colours on the same team.', 'Teams: Green + Red against Blue + Black.', 'Teams: Green + Black against Red + Blue.', 'Teams: Green + Black against Red + Blue.', 'Teams: Red + Blue against Green.', 'Teams: Blue + Black against Red.']);
+
+        // pressing a switch: one that is off goes on, unless its team has two other seats (then nothing happens); one that is lit goes off, unless the other seats keep it lit (the other team of a pair, or a press that
+        // a pair has made useless): then the teams go away, so that a press that is accepted always shows
         {
-            let wrong = '';
-            for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) for (const c of L.CARD_WORDS) for (const d of L.CARD_WORDS) {
-                const state = st(you, [a, b, c, d]);
+            const free = L.cardNew('treasure');
+            const g1 = L.cardSide(free, 0, 1);
+            const g1r1 = L.cardSide(g1, 1, 1);
+            same('cardSide: Team 1 on Green (a team of one seat is no team), then on Red: Green + Red against Blue + Black, and Blue and Black show Team 2 although nobody pressed it',
+                 [g1.sides, g1.teams, g1r1.sides, g1r1.teams, L.cardShownSides(g1r1)], [[1, 0, 0, 0], 'ffa', [1, 1, 0, 0], '0+1', [1, 1, 2, 2]]);
+            same('... Team 1 is full: nobody else can press it (nothing happens; Team 2 of Green and Red is full the same way), while Blue and Black can press the Team 2 that they show (that makes it theirs)',
+                 [L.cardSideOpen(g1r1, 2, 1), L.cardSideOpen(g1r1, 3, 1), L.cardSideOpen(g1r1, 0, 2), L.cardSideOpen(g1r1, 1, 2), L.cardSideOpen(g1r1, 2, 2), L.cardSideOpen(g1r1, 3, 2), L.cardSideOpen(g1r1, 0, 1), L.cardSideOpen(g1r1, 1, 1)],
+                 [false, false, false, false, true, true, true, true]);
+            same('... pressing a full switch changes nothing', [L.cardSide(g1r1, 2, 1), L.cardSide(g1r1, 3, 1), L.cardSide(g1r1, 0, 2), L.cardSide(g1r1, 1, 2)], Array(4).fill(g1r1));
+            same('... pressing Team 1 on Green again takes Green off it (Red alone on Team 1 is no team: free for all, nothing shown for Blue and Black)', [L.cardSide(g1r1, 0, 1).sides, L.cardSide(g1r1, 0, 1).teams, L.cardShownSides(L.cardSide(g1r1, 0, 1))], [[0, 1, 0, 0], 'ffa', [0, 1, 0, 0]]);
+            same('... pressing the Team 2 that Blue shows takes the teams away: every switch is off (free for all)', [L.cardSide(g1r1, 2, 2).sides, L.cardSide(g1r1, 3, 2).sides, L.cardSide(g1r1, 3, 2).teams], [[0, 0, 0, 0], [0, 0, 0, 0], 'ffa']);
+            const moved = L.cardSide(L.cardSide(g1r1, 1, 1), 2, 1);
+            same('... to put Blue with Green instead: Red off Team 1, then Blue on Team 1 (Green + Blue against Red + Black, Red and Black show Team 2)', [moved.sides, moved.teams, L.cardShownSides(moved)], [[1, 0, 1, 0], '0+2', [1, 2, 1, 2]]);
+            const two = L.cardSide(L.cardSide(free, 1, 2), 2, 2);
+            same('Team 2 makes a team as well (Red and Blue on Team 2: Red + Blue against Green + Black, which is Green + Black as the team of Green)', [two.sides, two.teams, L.cardShownSides(two)], [[0, 2, 2, 0], '0+3', [1, 2, 2, 1]]);
+            const apart = L.cardSide(L.cardSide(free, 0, 1), 1, 2);
+            same('one seat on each switch is no team (free for all, nothing is shown for the other two)', [apart.sides, apart.teams, L.cardShownSides(apart)], [[1, 2, 0, 0], 'ffa', [1, 2, 0, 0]]);
+            const three = L.cardSide(L.cardSide(L.cardNew('treasure'), 0, 'x'), 0, 3);
+            same('a switch that is none of the two (1 and 2) and a seat that is none of the four change nothing', [three, L.cardSide(free, 4, 1), L.cardSide(free, -1, 1), L.cardSide(free, '0', 1), L.cardSide(free, 0, 0), L.cardSide(free, 0, '1'), L.cardSide(free, undefined, 1)], Array(7).fill(free));
+            const t3 = L.cardSide(L.cardSide(sideState(0, ONE, [0, 0, 0, 0]), 0, 1), 2, 1);
+            same('three seats play: Team 1 on Green and Blue is Green + Blue against Red (Red plays alone and shows nothing); the third seat cannot press that switch; Red may press Team 2, which makes no difference to the teams',
+                 [t3.sides, t3.teams, L.cardShownSides(t3), L.cardSideOpen(t3, 1, 1), L.cardSideOpen(t3, 1, 2), L.cardSide(t3, 1, 2).teams, L.cardTeamsText(t3)], [[1, 0, 1, 0], '0+2', [1, 0, 1, 0], false, true, '0+2', 'Teams: Green + Blue against Red.']);
+            same('a seat that does not play has no switch (Black is Nobody): pressing it changes nothing, and with two seats playing nothing can be pressed', [L.cardSide(t3, 3, 1), L.cardSide(st(0, ['medium', 'easy', 'nobody', 'nobody']), 0, 1), L.cardSideOpen(t3, 3, 1), L.cardSideOpen(st(0, ['medium', 'easy', 'nobody', 'nobody']), 1, 2)], [t3, st(0, ['medium', 'easy', 'nobody', 'nobody']), false, false]);
+            // a press that the other seats hold: Team 1 on Green, then Team 2 on Red and on Blue make Green + Black against Red + Blue, and Green's own press is useless now (Black shows the same lit switch):
+            // pressing either of them does the same, it takes the teams away (a press that is accepted shows)
+            const held = L.cardSide(L.cardSide(L.cardSide(free, 0, 1), 1, 2), 2, 2);
+            same('Team 1 on Green, then Team 2 on Red and on Blue: Green + Black against Red + Blue, Black shows Team 1 and Green\'s own press is held by the other two now', [held.sides, held.teams, L.cardShownSides(held)], [[1, 2, 2, 0], '0+3', [1, 2, 2, 1]]);
+            same('... pressing Team 1 on Green and pressing it on Black do the same: every switch goes off (free for all), while Red\'s Team 2 (held by nothing else) goes off alone',
+                 [L.cardSide(held, 0, 1).sides, L.cardSide(held, 3, 1).sides, L.cardSide(held, 0, 1).teams, L.cardSide(held, 1, 2).sides, L.cardSide(held, 1, 2).teams], [[0, 0, 0, 0], [0, 0, 0, 0], 'ffa', [1, 0, 2, 0], 'ffa']);
+            // why a press does nothing: the line under the switches says it. Two colours that were pressed on the switch: take one off. The two that a pair leaves to it: press a lit switch (the teams go)
+            same('cardRefusal: a press that may be made has no reason; a switch of a team that two colours pressed says to take one of them off; the team that a pair leaves to the other two says to clear the teams; a seat with no switch has none',
+                 [L.cardRefusal(g1r1, 0, 1), L.cardRefusal(g1r1, 2, 2), L.cardRefusal(g1r1, 2, 1), L.cardRefusal(g1r1, 0, 2), L.cardRefusal(held, 3, 2), L.cardRefusal(held, 0, 2), L.cardRefusal(st(0, ['medium', 'easy', 'nobody', 'nobody']), 1, 1), L.cardRefusal(sideState(0, ONE, [0, 0, 0, 0]), 3, 1), L.cardRefusal(g1r1, 0, 3)],
+                 ['', '', 'Team 1 has two colours already. Press one of them to take it off first.', 'Team 2 is the other two colours already. Press a lit switch to clear the teams first.', 'Team 2 has two colours already. Press one of them to take it off first.', 'Team 2 has two colours already. Press one of them to take it off first.', '', '', '']);
+            const before = frozen(g1r1);
+            L.cardSide(g1r1, 2, 2); L.cardSide(g1r1, 0, 1); L.cardShownSides(g1r1);
+            check('... and the state that was given is left as it was (cardSide makes a new state)', frozen(g1r1) === before);
+        }
+        {   // every state of the card with any switches: pressing is closed (the result is a valid state), moves only the switch that was pressed, and never makes a team of three; the teams are what the switches make
+            const W3 = ['friend', 'easy', 'nobody'];
+            let states = 0;
+            let presses = 0;
+            let bad = '';
+            const note = (what) => { if (bad.length < 400) bad += ' ' + what; };
+            const oracle = (state) => {           // (what the switches make, written again: the pair is the two seats that are on one switch; with four the team that Green is in)
+                const p = L.cardPlaying(state);
+                if (p.length < 3) return 'ffa';
+                for (const k of [1, 2]) {
+                    const on = p.filter((x) => state.sides[x] === k);
+                    if (on.length !== 2) continue;
+                    const rest = p.filter((x) => on.indexOf(x) === -1);
+                    return (p.length === 4 && on[0] !== 0 ? rest : on).join('+');
+                }
+                return 'ffa';
+            };
+            for (let you = 0; you < 4; you++) for (const a of W3) for (const b of W3) for (const c of W3) for (const d of W3) for (let code = 0; code < 81; code++) {
+                const sides = [code % 3, Math.floor(code / 3) % 3, Math.floor(code / 9) % 3, Math.floor(code / 27) % 3];
+                const state = L.cardFix({ map: 'treasure', you, seats: [a, b, c, d], sides, teams: 'ffa' });
+                states++;
                 const playing = L.cardPlaying(state);
-                for (const choice of L.cardTeamChoices(state)) {
-                    if (choice.value === 'ffa') continue;
-                    const [x, y] = choice.value.split('+').map(Number);
-                    if (!(x < y && playing.indexOf(x) !== -1 && playing.indexOf(y) !== -1 && playing.length >= 3 && L.validRoomTeams(choice.value) === choice.value)) wrong += ' ' + frozen(state) + ' ' + choice.value;
+                if (frozen(L.cardFix(state)) !== frozen(state)) note('fix ' + frozen(state));
+                if (state.teams !== oracle(state)) note('teams ' + frozen(state));
+                if (state.sides.some((v, x) => v !== 0 && (playing.indexOf(x) === -1 || playing.length < 3)) || [1, 2].some((k) => state.sides.filter((v) => v === k).length > 2)) note('sides ' + frozen(state));
+                if (state.teams !== 'ffa' && (L.validRoomTeams(state.teams) !== state.teams || state.teams.split('+').some((x) => playing.indexOf(Number(x)) === -1) || (playing.length === 4 && state.teams.charAt(0) !== '0'))) note('team ' + frozen(state));
+                const shown = L.cardShownSides(state);
+                if (playing.some((x) => shown[x] === 0 && state.teams !== 'ffa' && playing.length === 4)) note('shown ' + frozen(state));
+                for (let seat = 0; seat < 4; seat++) for (const side of [1, 2]) {
+                    presses++;
+                    const out = L.cardSide(state, seat, side);
+                    const open = L.cardSideOpen(state, seat, side);
+                    const others = playing.filter((x) => x !== seat && shown[x] === side).length;
+                    const want = playing.length >= 3 && playing.indexOf(seat) !== -1 && (shown[seat] === side || others < 2);
+                    if (open !== want) note('open ' + frozen(state) + ' ' + seat + side);
+                    if (frozen(L.cardFix(out)) !== frozen(out)) note('closed ' + frozen(state) + ' ' + seat + side);
+                    if (out.map !== state.map || out.you !== state.you || frozen(out.seats) !== frozen(state.seats)) note('other parts ' + frozen(state));
+                    const why = L.cardRefusal(state, seat, side);
+                    if (open !== (why === '') && playing.length >= 3 && playing.indexOf(seat) !== -1) note('reason ' + frozen(state) + ' ' + seat + side + ' ' + why);
+                    if (!open && playing.length >= 3 && playing.indexOf(seat) !== -1) {
+                        const pressed = playing.filter((x) => state.sides[x] === side).length;                       // (the colours that were pressed on that switch, not the ones that a pair leaves to it)
+                        if (why !== (pressed === 2 ? 'Team ' + side + ' has two colours already. Press one of them to take it off first.' : 'Team ' + side + ' is the other two colours already. Press a lit switch to clear the teams first.')) note('which reason ' + frozen(state) + ' ' + seat + side + ' ' + why);
+                    }
+                    if (!open) { if (frozen(out) !== frozen(state)) note('closed press moved ' + frozen(state) + ' ' + seat + side); continue; }
+                    const expected = state.sides.slice();
+                    if (shown[seat] !== side) expected[seat] = side;                                    // a switch that is off goes on
+                    else {                                                                             // one that is lit goes off, unless the other seats keep it lit: then the teams go away
+                        expected[seat] = 0;
+                        if (L.cardShownSides(L.cardFix({ map: state.map, you: state.you, seats: state.seats, sides: expected, teams: 'ffa' }))[seat] === side) expected.fill(0);
+                    }
+                    if (frozen(out.sides) !== frozen(expected)) note('press ' + frozen(state) + ' ' + seat + side + ' -> ' + frozen(out.sides));
+                    const after = L.cardShownSides(out);
+                    if (frozen(after) === frozen(shown)) note('no change ' + frozen(state) + ' ' + seat + side);               // (a press that is accepted always shows: some switch goes on or off)
+                    if (after[seat] !== (shown[seat] === side ? 0 : side)) note('the switch ' + frozen(state) + ' ' + seat + side + ' is not ' + (shown[seat] === side ? 'off' : 'on') + ' after its press');
+                    if ([1, 2].some((k) => playing.filter((x) => after[x] === k).length > 2)) note('three ' + frozen(out));
                 }
             }
-            check('every pair that the card offers (all 2500 states) is two different seats that play, the lower first, with three or four seats playing, and is a team that a create block and an address can say (roomteams):' + wrong.slice(0, 200), wrong === '');
+            check('every state of the card with any switches (' + states + ' of them, ' + presses + ' presses): the teams are what the switches make (the pair; with four the team of Green; a value that a create block can say), a press is allowed exactly when the seat plays and its team has fewer than two other seats, an allowed press always shows (an off switch goes on; a lit one goes off, or takes every switch off when the other seats keep it lit), a refused one changes nothing and says why, the result is a valid state, and no team ever has three seats:' + bad, bad === '' && states === 4 * 81 * 81);
         }
-        same('cardTeam: a choice that is still one of the choices stays', [L.cardTeam('0+1', st(0, M4)), L.cardTeam('0+3', st(0, M4)), L.cardTeam('2+3', st(0, ['medium', 'nobody', 'friend', 'hard'])), L.cardTeam('ffa', st(0, M4))], ['0+1', '0+3', '2+3', 'ffa']);
-        same('... a choice that the seats no longer allow (a seat that does not play, two seats only, a pair of four seats that does not hold Green) and anything that is no choice is free for all',
-             [L.cardTeam('0+1', st(0, ['medium', 'nobody', 'friend', 'hard'])), L.cardTeam('0+2', st(0, ['medium', 'easy', 'nobody', 'nobody'])), L.cardTeam('1+2', st(0, M4)), L.cardTeam('2+3', st(0, M4)), L.cardTeam('', st(0, M4)), L.cardTeam(null, st(0, M4)), L.cardTeam('0 1', st(0, M4)), L.cardTeam('1+0', st(0, M4)), L.cardTeam('constructor', st(0, M4)), L.cardTeam(['0+1'], st(0, M4))],
-             Array(10).fill('ffa'));
+        {   // the way in and the way out: any two seats make a team with two presses, and any state comes back to free for all by pressing the lit switches
+            let bad = '';
+            let reached = 0;
+            for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) for (const c of L.CARD_WORDS) for (const d of L.CARD_WORDS) {
+                const state = L.cardFix(st(you, [a, b, c, d]));
+                const playing = L.cardPlaying(state);
+                if (playing.length < 3) { if (L.cardSide(L.cardSide(state, playing[0], 1), playing[1] === undefined ? 0 : playing[1], 1).teams !== 'ffa') bad += ' two ' + frozen(state); continue; }
+                for (const x of playing) for (const y of playing) for (const side of [1, 2]) {
+                    if (x >= y) continue;
+                    const out = L.cardSide(L.cardSide(state, x, side), y, side);
+                    const rest = playing.filter((z) => z !== x && z !== y);
+                    const want = playing.length === 4 && x !== 0 ? rest.join('+') : x + '+' + y;
+                    reached++;
+                    if (out.teams !== want) bad += ' make ' + frozen(state) + ' ' + x + y + side + ' -> ' + out.teams;
+                    let now = out;
+                    for (let n = 0; n < 5 && now.sides.some((v) => v !== 0); n++) now = L.cardSide(now, now.sides.findIndex((v) => v !== 0), now.sides[now.sides.findIndex((v) => v !== 0)]);
+                    if (now.teams !== 'ffa' || now.sides.some((v) => v !== 0)) bad += ' undo ' + frozen(out);
+                }
+            }
+            check('two presses make any team of the seats that play (' + reached + ' ways), and pressing the switches that are on, one by one, ends in free for all with no switch on:' + bad.slice(0, 300), bad === '' && reached > 10000);
+        }
 
         // a state that is repaired: every part of it is valid
-        same('cardFix: a map that is none of the six is Treasure, You is a seat, a word that is none of the five is Friend, a team that the seats do not allow is free for all, a short list is filled up with Friend',
+        same('cardFix: a map that is none of the six is Treasure, You is a seat, a word that is none of the five is Friend, a team that the seats do not allow is free for all, a short list is filled up with Friend (a state of the first versions of the card has only its team: the two seats of it go on Team 1)',
              [L.cardFix({ map: 'nowhere', you: 7, seats: ['easy', 'x', 'HARD', null], teams: '0+1' }), L.cardFix({ map: 'small', you: 2, seats: ['easy'], teams: 'junk' }), L.cardFix({ map: 'tiny', you: 3, seats: ['friend', 'friend', 'friend', 'friend'], teams: '0+3' }),
               L.cardFix({ map: 'small', you: 0, seats: ['easy', 'nobody', 'nobody', 'nobody'], teams: '0+1' }), L.cardFix({ map: 'small', you: 0, seats: ['easy', 'nobody', 'friend', 'hard'], teams: '1+2' })],
              [st(0, ['easy', 'friend', 'friend', 'friend'], '0+1'), st(2, ['easy', 'friend', 'friend', 'friend'], 'ffa', 'small'), st(3, ['friend', 'friend', 'friend', 'friend'], '0+3', 'tiny'),
               st(0, ['easy', 'nobody', 'nobody', 'nobody'], 'ffa', 'small'), st(0, ['easy', 'nobody', 'friend', 'hard'], 'ffa', 'small')]);
+        same('... the switches rule when a state has them (the team that it says is not read), and are read when they are four numbers from 0 to 2 only: a pair of Red and Blue with four players is Green + Black as a team (the team that Green is in); three seats on a switch are none',
+             [L.cardFix({ map: 'small', you: 0, seats: F4, sides: [1, 1, 0, 0], teams: '0+2' }).teams, L.cardFix({ map: 'small', you: 0, seats: F4, sides: [0, 1, 1, 0], teams: 'ffa' }), L.cardFix({ map: 'small', you: 0, seats: F4, sides: [1, 1, 1, 0], teams: '0+1' }), L.cardFix({ map: 'small', you: 0, seats: F4, teams: '1+2' }), L.cardFix({ map: 'small', you: 0, seats: F4, sides: 'x', teams: '1+2' }).sides],
+             ['0+1', st(0, F4, '0+3', 'small', [0, 1, 1, 0]), st(0, F4, 'ffa', 'small', [0, 0, 0, 0]), st(0, F4, '0+3', 'small', [0, 1, 1, 0]), [0, 1, 1, 0]]);
         {
-            const before = { map: 'small', you: 1, seats: ['easy', 'x', 'x', 'x'], teams: '9' };
+            const before = { map: 'small', you: 1, seats: ['easy', 'x', 'x', 'x'], sides: [1, 2, 1, 2], teams: '9' };
             const text = frozen(before);
             L.cardFix(before);
             check('... and the state that it was given is left as it was (the rules make new states)', frozen(before) === text);
@@ -635,15 +771,22 @@ try {
             let made = 0;
             for (const map of L.MAPS) for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) {
                 const state = L.cardFix(st(you, [a, b, 'friend', 'hard'], 'ffa', map.key));
-                for (const choice of L.cardTeamChoices(state)) {
-                    const full = L.cardFix(Object.assign({}, state, { teams: choice.value }));
+                for (const team of teamsOf(state)) {
+                    const full = withTeams(state, team);
                     made++;
                     if (frozen(L.cardParse(L.cardText(full))) !== frozen(full)) bad += ' ' + L.cardText(full);
+                    // (and with the switches pressed by hand: Team 2 for the pair, or one switch on its own)
+                    for (const x of L.cardPlaying(full)) {
+                        const pressed = L.cardSide(full, x, 2);
+                        made++;
+                        if (frozen(L.cardParse(L.cardText(pressed))) !== frozen(pressed)) bad += ' ' + L.cardText(pressed);
+                    }
                 }
             }
-            check('cardParse reads back what cardText wrote for ' + made + ' states (every map, every You, every team that is a choice):' + bad.slice(0, 200), bad === '' && made > 500);
+            check('cardParse reads back what cardText wrote for ' + made + ' states (every map, every You, every team and the switches pressed by hand):' + bad.slice(0, 200), bad === '' && made > 500);
         }
-        same('cardText is JSON with the four parts (what the browser holds under ants-match)', JSON.parse(L.cardText(st(2, ['easy', 'friend', 'nobody', 'hard'], '0+1', 'islands'))), { map: 'islands', you: 2, seats: ['easy', 'friend', 'nobody', 'hard'], teams: '0+1' });
+        same('cardText is JSON with the five parts (what the browser holds under ants-match): the map, You, the seats, the team that the switches make (for an older page of the card) and the switches', JSON.parse(L.cardText(st(2, ['easy', 'friend', 'nobody', 'hard'], '0+1', 'islands'))), { map: 'islands', you: 2, seats: ['easy', 'friend', 'nobody', 'hard'], teams: '0+1', sides: [1, 1, 0, 0] });
+        same('... in this order, so that the text is the same whenever the same choices were made', L.cardText(st(2, ['easy', 'friend', 'nobody', 'hard'], '0+1', 'islands')), '{"map":"islands","you":2,"seats":["easy","friend","nobody","hard"],"teams":"0+1","sides":[1,1,0,0]}');
         for (const junk of [null, undefined, '', 'junk', '[]', '{}', 'null', '5', '"x"', '{"map":"treasure"}', '{"map":"Treasure","you":0,"seats":["medium","medium","medium","medium"],"teams":"ffa"}', '{"map":"nowhere","you":0,"seats":["medium","medium","medium","medium"],"teams":"ffa"}',
                             '{"map":"treasure","you":"0","seats":["medium","medium","medium","medium"],"teams":"ffa"}', '{"map":"treasure","you":4,"seats":["medium","medium","medium","medium"],"teams":"ffa"}', '{"map":"treasure","you":-1,"seats":["medium","medium","medium","medium"],"teams":"ffa"}',
                             '{"map":"treasure","you":0,"seats":["medium","medium","medium"],"teams":"ffa"}', '{"map":"treasure","you":0,"seats":["medium","medium","medium","medium","medium"],"teams":"ffa"}', '{"map":"treasure","you":0,"seats":["medium","medium","medium","HARD"],"teams":"ffa"}',
@@ -652,6 +795,13 @@ try {
             same('cardParse: ' + String(JSON.stringify(junk)).slice(0, 60) + ' is no state', L.cardParse(junk), null);
         }
         same('cardParse: a team that is none of the choices of those seats is free for all (the state is still read), and a missing team is free for all', [L.cardParse('{"map":"treasure","you":0,"seats":["medium","nobody","friend","nobody"],"teams":"0+1"}').teams, L.cardParse('{"map":"treasure","you":0,"seats":["medium","medium","friend","hard"]}').teams, L.cardParse('{"map":"treasure","you":0,"seats":["medium","medium","friend","hard"],"teams":7}').teams], ['ffa', 'ffa', 'ffa']);
+        {
+            const seats = '["medium","medium","friend","hard"]';
+            const read = (extra) => L.cardParse('{"map":"treasure","you":0,"seats":' + seats + extra + '}');
+            same('cardParse: a state of the first versions of the card (a team and no switches) puts the two seats of the team on Team 1; the switches are read when there are four numbers from 0 to 2, and then the team that is written is not looked at',
+                 [read(',"teams":"0+3"'), read(',"teams":"1+2"').sides, read(',"teams":"0+3","sides":[2,2,0,0]'), read(',"teams":"0+3","sides":[1,1,1,0]').sides, read(',"teams":"0+3","sides":[1,1,0]').sides, read(',"teams":"0+3","sides":"1100"').sides, read(',"teams":"0+3","sides":[1,1,0,3]').sides, read(',"sides":[1,"1",0,0]').sides, read(',"sides":[0,0,0,0],"teams":"0+3"').teams],
+                 [st(0, ['medium', 'medium', 'friend', 'hard'], '0+3'), [0, 1, 1, 0], st(0, ['medium', 'medium', 'friend', 'hard'], '0+1', 'treasure', [2, 2, 0, 0]), [0, 0, 0, 0], [1, 0, 0, 1], [1, 0, 0, 1], [1, 0, 0, 1], [0, 0, 0, 0], 'ffa']);
+        }
 
         // the first visit, from what the earlier pages left in the browser (read, never written)
         const OLD = (o) => Object.assign({ solo: null, legacy: null, soloTeams: null, map: null, players: null, fill: null, teams: null }, o);
@@ -684,7 +834,7 @@ try {
             same('cardSet: a choice for a seat (the others stay); a word that is none of the five, a seat that is none of the four change nothing; the team goes when the seats no longer allow it',
                  [L.cardSet(base, 2, 'hard'), L.cardSet(base, 3, 'friend'), L.cardSet(base, 2, 'HARD'), L.cardSet(base, 2, 'none'), L.cardSet(base, 5, 'hard'), L.cardSet(base, 1, 'nobody').teams, L.cardSet(st(0, M4, '0+3'), 3, 'nobody').teams],
                  [st(0, ['hard', 'easy', 'hard', 'nobody'], '0+1'), st(0, ['hard', 'easy', 'friend', 'friend'], '0+1'), base, base, base, 'ffa', 'ffa']);
-            same('cardMap and cardTeams: the map (one of the six), the team (one of the choices of the seats that play: Black is Nobody here, so 0+3 is not one; else free for all)', [L.cardMap(base, 'small').map, L.cardMap(base, 'nowhere').map, L.cardMap(base, 'Small').map, L.cardTeams(base, '0+2').teams, L.cardTeams(base, '0+3').teams, L.cardTeams(st(0, M4), '0+3').teams, L.cardTeams(base, 'junk').teams, L.cardTeams(base, 'ffa').teams],
+            same('cardMap, and the switches that a team word makes: the map (one of the six), the team (one of the choices of the seats that play: Black is Nobody here, so 0+3 is not one; else free for all)', [L.cardMap(base, 'small').map, L.cardMap(base, 'nowhere').map, L.cardMap(base, 'Small').map, withTeams(base, '0+2').teams, withTeams(base, '0+3').teams, withTeams(st(0, M4), '0+3').teams, withTeams(base, 'junk').teams, withTeams(base, 'ffa').teams],
                  ['small', 'treasure', 'treasure', '0+2', 'ffa', '0+3', 'ffa', 'ffa']);
             check('... and none of them changed the state that it was given', frozen(base) === before);
         }
@@ -701,8 +851,8 @@ try {
             let bad = '';
             let withTeams = 0;
             let made = 0;
-            for (const map of L.MAPS) for (const you of [0, 1, 2, 3]) for (const choice of L.cardTeamChoices(L.cardNew(map.key))) {
-                const state = L.cardFix(st(you, M4, choice.value, map.key));
+            for (const map of L.MAPS) for (const you of [0, 1, 2, 3]) for (const team of ['ffa', '0+1', '0+2', '0+3']) {
+                const state = L.cardFix(st(you, M4, team, map.key));
                 const block = L.cardBlock(state);
                 const query = L.roomBlockQuery(block);
                 const want = { map: map.key, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false };
@@ -762,8 +912,8 @@ try {
             const note = (what) => { if (wrong.length < 400) wrong += ' ' + what; };
             for (const mapKey of ['treasure', 'tiny']) for (let you = 0; you < 4; you++) for (const a of L.CARD_WORDS) for (const b of L.CARD_WORDS) for (const c of L.CARD_WORDS) for (const d of L.CARD_WORDS) {
                 const base = L.cardFix(st(you, [a, b, c, d], 'ffa', mapKey));
-                for (const choice of L.cardTeamChoices(base)) {
-                    const state = L.cardFix(Object.assign({}, base, { teams: choice.value }));
+                for (const team of teamsOf(base)) {
+                    const state = withTeams(base, team);
                     states++;
                     const code = 'k7m2xq9p';
                     const roomPart = ['--room-map', state.map, '--room-seats', '4', ...(state.teams === 'ffa' ? [] : ['--room-teams', state.teams])];          // (the create block of the card's room: its map, four seats, its teams)

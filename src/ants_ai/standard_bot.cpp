@@ -212,7 +212,9 @@ void StandardBot::begin_fallback(uint64_t now) {
     fallback_until_ = now + span;
     progress_tick_ = now;                                                        // the clock of the next stall starts here
     ledger_.release_all(kRaids);                                                 // a thief that was kept for a raid goes back to the economy
-    harvest_.set_params(HarvestTask::Params{});                                  // the worker's harvest: no contested piles, no typed ants, the rescue on
+    HarvestTask::Params plain;                                                   // the worker's harvest: no contested piles, no typed ants, the rescue on
+    plain.cantgo_aware = plan.cantgo_aware;                                      // (and still no carrier sent into a hill that no walk joins: the fixes of "The can't-go loop" stay on)
+    harvest_.set_params(plain);
 }
 
 void StandardBot::end_fallback() {

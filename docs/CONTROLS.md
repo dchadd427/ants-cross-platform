@@ -90,8 +90,8 @@ After a network match the game is back **at the start menu** instead of ending t
 ### Which command lines show the menu
 
 - None of these starts a match, a room, a test run or a screenshot, so a plain `ants`, `ants --name Bob`, `ants --server play.example.org` and `./start_game.sh` (or `./start_game.sh --single`) show it.
-- These options choose a mode and **skip the menu**: `--map`, `--map-select`, `--play`, `--host`, `--join`, `--join-url`, `--room`, `--token`, `--seat`, `--bot`, `--headless`, `--screenshot`, `--player` / `-pnum`, `--select-ant`, `--select-base`, `--open-options`, `--scorecard`.
-- **`--start-menu` forces it**, also with `--headless` and `--screenshot` (for the tests and the screenshots). Combined with `--map`, `--open-options`, `--scorecard`, `--host`, `--join` or `--join-url` it is refused: they start a match or a room at once.
+- These options choose a mode and **skip the menu**: `--map`, `--map-select`, `--play`, `--alone`, `--host`, `--join`, `--join-url`, `--room`, `--token`, `--seat`, `--bot`, `--headless`, `--screenshot`, `--player` / `-pnum`, `--select-ant`, `--select-base`, `--open-options`, `--scorecard`.
+- **`--start-menu` forces it**, also with `--headless` and `--screenshot` (for the tests and the screenshots). Combined with `--map`, `--open-options`, `--scorecard`, `--host`, `--join` or `--join-url` it is refused: they start a match or a room at once. So it is with `--alone`: the menu's Single player chooses who plays.
 - `--map-select` starts on the setup screen, without the menu.
 - The four windows of the `./start_game.sh --players 4` test rig each have `--host` or `--join` and never show it.
 

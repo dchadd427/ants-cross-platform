@@ -51,27 +51,32 @@ class TheFrontPageMarkup(PageCase):
 
     def test_the_card_has_four_seats_with_a_group_of_five_buttons_and_sit_here_the_teams_the_invitations_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 1)                  # one card: the two of the earlier pages (play against the computer, play online) are gone
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 2)                               # the map and the teams
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the map's (the teams are two switches on each seat, no select)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match', 'Opponents</span>'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
         self.found(self.page, r'<h2 class="banner" id="h-match">New match</h2>')
         self.found(self.page, r'<div class="sel"><select id="map-pick"></select></div>')
-        # four seats in the order of the room's (0 Green, 1 Red, 2 Blue, 3 Black), each with its ant, its colour, the marker and the name of You (hidden until the script says), Sit here and one group of five buttons
+        # four seats in the order of the room's (0 Green, 1 Red, 2 Blue, 3 Black), each with its ant, its colour, the marker and the name of You (hidden until the script says), the two team switches, Sit here and one group of
+        # five buttons: in the order that a person reads them and Tab goes through them (the page's grid puts them so on every width)
         seats = self.page[self.page.index('<ul class="roster seats4" id="seats"'):]
         seats = seats[:seats.index("</ul>")]
         rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
-                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset>\s*<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button></li>', seats, re.S)
+                          r'<span class="teamset" id="team-set-(\d)" role="group" aria-label="(\w+)\'s team" hidden><button type="button" class="tbtn" id="team-(\d)-1" aria-label="Team 1 for (\w+)" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-(\d)-2" aria-label="Team 2 for (\w+)" aria-pressed="false">Team 2</button></span>\s*'
+                          r'<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button>\s*'
+                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset></li>', seats, re.S)
         self.assertEqual([(r[0], r[2], r[3]) for r in rows], [("0", "green", "Green"), ("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
-        for n, same, _, name, you, nm, fieldset, legend, body, sit, sit_name in rows:
-            self.assertEqual({n, same, you, nm, sit, fieldset}, {n}, name)                              # (every id of a row is the row's own seat; the buttons come before Sit here, as they stand on a wide page: Tab goes the way the eye does)
-            self.assertEqual({name, sit_name, legend}, {name}, name)
+        for n, same, _, name, you, nm, teamset, team_name, one, one_name, two, two_name, sit, sit_name, fieldset, legend, body in rows:
+            self.assertEqual({n, same, you, nm, sit, fieldset, teamset, one, two}, {n}, name)           # (every id of a row is the row's own seat; the two switches and Sit here come before the five buttons, as they stand on every width: Tab goes the way the eye does)
+            self.assertEqual({name, sit_name, legend, team_name, one_name, two_name}, {name}, name)       # (a button's own name says its colour: a list of the page's buttons shows no group)
             buttons = re.findall(r'<input type="radio" name="seat-%s" id="seat-%s-(\w+)" value="(\w+)"( checked)?><label for="seat-%s-\1">(\w+)</label>' % (n, n, n), body)
             self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("friend", "friend", "Friend"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard"), ("nobody", "nobody", "Nobody")], name)
             self.assertEqual([word for word, _, checked, _ in buttons if checked], ["friend"], name + ": the markup starts as a first visit does, with a Friend (the script shows the seat of You instead)")
         # what the five words mean, said once under the rows
         self.found(self.page, r'<p class="hint" id="seats-hint">Friend: a seat for a person you invite\. Easy, Medium, Hard: a bot of that level\. Nobody: the seat stays out\.</p>')
-        # the Teams: a line that the script shows when there is a choice, and a select that it fills (the choices depend on the seats that play)
-        self.found(self.page, r'<div class="teamrow" id="teams-line" hidden>\s*<label class="lab" for="teams">Teams</label>\s*<div class="sel"><select id="teams"></select></div>\s*</div>')
+        # the Teams: the two switches of each seat (Team 1, Team 2: shown when three or four seats play, a team is two seats on the same one) and a line that says what they make, with the reason when a press is refused
+        self.found(self.page, r'<p class="hint teamrow" id="teams-line" aria-live="polite" hidden></p>')
+        self.assertNotIn('id="teams"', self.page)
+        self.assertNotIn('<label class="lab" for="teams">', self.page)
         self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
         # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
         self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
@@ -103,6 +108,55 @@ class TheFrontPageMarkup(PageCase):
         phone_block = self.page[at:self.page.index("@media", at + 1)]
         self.assertEqual(len(re.findall(r"\.startbtn \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
 
+    def test_the_team_switches_have_their_look_a_hidden_rule_and_a_place_on_every_width(self):
+        # Team 1 and Team 2 are two buttons that show only when three or four seats play (the script un-hides them): the page's one `[hidden]` rule has `!important`, so it wins over the flex box of their group (no
+        # rule of the group's own is needed), and a pressed switch must look different from a loose one in more than colour (it is pushed in: moved and darker, like the seat buttons)
+        self.found(self.page, r'\[hidden\] \{ display: none !important; \}')
+        self.found(self.page, r'\.seats4 \.teamset \{[^}]*display: flex;')
+        self.not_found(self.page, r'\.teamset\[hidden\]')
+        pressed = re.search(r'\.tbtn\[aria-pressed="true"\] \{([^}]*)\}', self.page)
+        self.assertIsNotNone(pressed, "a pressed switch has a rule")
+        self.assertIn("transform: translate(", pressed.group(1))
+        # a switch that a third seat may not press is dimmed but stays a button (it says why when pressed): drawn flat with a dashed edge and softer letters, never faded with `opacity` (a faded face
+        # and letters had 2.8 : 1 against the page's 4.5 : 1), and every look of a switch keeps its letters at 4.5 : 1 on its face
+        dimmed = re.search(r'\.tbtn\[aria-disabled="true"\] \{([^}]*)\}', self.page)
+        self.assertIsNotNone(dimmed, "a dimmed switch has a rule")
+        self.not_found(dimmed.group(1), r'opacity', "a dimmed switch is not faded: " + dimmed.group(1))
+        self.assertIn("dashed", dimmed.group(1))
+        self.found(self.page, r'\.tbtn:focus-visible \{ outline: 3px solid var\(--gold\);')
+        tokens = dict(re.findall(r'(--[\w-]+): (#[0-9a-fA-F]{6});', self.page[:self.page.index("</style>")]))
+
+        def colour(text):
+            found = re.search(r'#[0-9a-fA-F]{6}|var\((--[\w-]+)\)', text)
+            return tokens[found.group(1)] if found.group(1) else found.group(0)
+
+        def luminance(hexed):
+            def part(v):
+                v = int(v, 16) / 255
+                return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+            return 0.2126 * part(hexed[1:3]) + 0.7152 * part(hexed[3:5]) + 0.0722 * part(hexed[5:7])
+
+        def ratio(a, b):
+            high, low = sorted((luminance(a), luminance(b)), reverse=True)
+            return (high + 0.05) / (low + 0.05)
+        base = re.search(r'\.tbtn \{([^}]*)\}', self.page).group(1)
+        looks = {"loose": (re.search(r'(?<![-\w])color: ([^;]+);', base).group(1), re.search(r'background: (var\(--[\w-]+\)|#[0-9a-fA-F]{6})', base).group(1)),
+                 "pressed": (re.search(r'(?<![-\w])color: ([^;]+);', pressed.group(1)).group(1), re.search(r'background: (#[0-9a-fA-F]{6})', pressed.group(1)).group(1)),
+                 "dimmed": (re.search(r'(?<![-\w])color: ([^;]+);', dimmed.group(1)).group(1), re.search(r'background: (var\(--[\w-]+\)|#[0-9a-fA-F]{6})', dimmed.group(1)).group(1))}
+        for look, (letters, face) in looks.items():
+            self.assertGreaterEqual(ratio(colour(letters), colour(face)), 4.5, "a %s switch: %s on %s" % (look, letters, face))
+        # a place in the row for the switches and Sit here, for a wide page, a phone, a narrower phone and the narrowest: the grid areas name them in the order of the markup (team, sit, pick) on each
+        wide = self.page[:self.page.index("@media (max-width: 700px)")]
+        self.found(wide, r'\.seats4 li \{[^}]*grid-template-areas: "ant who sit pick";')
+        self.found(wide, r'\.seats4\.with-teams li \{ grid-template-areas: "ant who who pick" "ant team sit pick"; \}')
+        at = self.page.index("@media (max-width: 700px)")
+        phone = self.page[at:self.page.index("@media (max-width: 480px)", at)]
+        self.found(phone, r'\.seats4 li \{[^}]*grid-template-areas: "ant who sit" "pick pick pick";')
+        self.found(phone, r'\.seats4\.with-teams li \{[^}]*grid-template-areas: "ant who team sit" "pick pick pick pick"')
+        narrow = self.page[self.page.index("@media (max-width: 374px)"):]
+        self.found(narrow, r'\.seats4\.with-teams li \{[^}]*grid-template-areas: "ant who who" "team team sit" "pick pick pick"')
+        self.assertIn('with-teams', self.page[self.page.index("function showTeams"):])                  # (the script puts the class on the list when the switches show)
+
     def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
         self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="k7m2 xq9p" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
         self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
@@ -115,7 +169,7 @@ class TheFrontPageMarkup(PageCase):
         steps = self.page[self.page.index('<div class="steps">'):]
         steps = steps[:steps.index("</div>")]
         self.assertEqual(re.findall(r"<h4>(.*?)</h4>", steps), ["New match", "Have a code?", "On the map"])
-        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Teams</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
+        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Team 1</b>", "<b>Team 2</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
             self.assertIn(word, steps, word)
         self.assertNotIn("Play vs the computer", steps)
         self.assertIn("You, your friends and the bots are 1 to 4 players.", steps)                 # (a game for one is a game: START is never off)
@@ -125,7 +179,7 @@ class TheFrontPageMarkup(PageCase):
 
     def test_a_first_visit_is_treasure_you_at_green_a_friend_in_the_other_seats_and_the_choices_are_the_cards_own(self):
         self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
-        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], teams: 'ffa' }); }", self.page)
+        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], sides: [0, 0, 0, 0], teams: 'ffa' }); }", self.page)
         self.assertIn("var CARD_KEY = 'ants-match';", self.page)
         self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                  # (a state of the card's own wins; the earlier pages' keys are for a first visit)
         self.assertIn("remember(CARD_KEY, cardText(card));", self.page)
@@ -332,7 +386,7 @@ class TheImageAndTheCi(PageCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
+        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")

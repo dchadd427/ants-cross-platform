@@ -164,19 +164,34 @@
         .roster img { image-rendering: pixelated; width: 23px; height: 40px; margin: 0 auto; }
         .roster .nm { font-size: 16px; line-height: 1.15; }
         .roster .nm small { display: block; font-size: 13px; color: #8fb3a6; }
-        /* the four seats: the ant, its colour (the seat that is yours also says You, with your name under it), Sit here for every other seat, and one group of five buttons for it (Friend, Easy, Medium, Hard, Nobody) */
-        .seats4 li { grid-template-columns: 30px 140px minmax(0, 1fr) auto; grid-template-areas: "ant who pick sit"; gap: 4px 10px; padding: 5px 8px; }
+        /* the four seats: the ant, its colour (the seat that is yours also says You, with your name under it), the Team 1 and Team 2 switches and Sit here for every other seat, and one group of five buttons for it
+           (Friend, Easy, Medium, Hard, Nobody). The markup has them in the order that a person reads them and Tab goes through them (the switches, Sit here, the five buttons), on every width: see the areas below */
+        .seats4 li { grid-template-columns: 30px 140px auto minmax(0, 1fr); grid-template-areas: "ant who sit pick"; gap: 4px 10px; padding: 5px 8px; }
         .seats4 li > img { grid-area: ant; }
         .seats4 .nm { grid-area: who; font-size: 17px; overflow-wrap: anywhere; }
         .seats4 .you { color: var(--gold); }
         .seats4 .seatset { grid-area: pick; border: 0; min-width: 0; }
         .seats4 .seatset .pair { display: flex; flex-wrap: wrap; gap: 4px; }
         .seats4 .sit { grid-area: sit; min-height: 34px; padding: 4px 10px; font-size: 14px; }
+        /* the Team 1 and Team 2 switches (three or four play): under the colour with Sit here beside them, and the five choices to the right of both, over the two lines; on a phone beside the colour (see below) */
+        .seats4 .teamset { grid-area: team; display: flex; gap: 4px; min-width: 0; }
+        .seats4.with-teams li { grid-template-areas: "ant who who pick" "ant team sit pick"; }
+        .seats4.with-teams .nm { align-self: end; }
+        .seats4.with-teams .teamset, .seats4.with-teams .sit { align-self: start; }
+        .tbtn {
+            flex: 0 0 auto; min-height: 34px; padding: 5px 7px; cursor: pointer; font: inherit; font-size: 14px; line-height: 1.1; color: var(--cream);
+            background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 1px 2px 0 #02100c;
+        }
+        .tbtn:hover { background-color: var(--teal-hi); }
+        .tbtn[aria-pressed="true"] { background: #102b25; color: #f6dc86; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16; }
+        .tbtn[aria-disabled="true"] { background: var(--teal-lo); color: #b9cfc5; border: 2px dashed #5f8f80; box-shadow: none; cursor: default; }
+        .tbtn[aria-disabled="true"]:hover { background-color: var(--teal-lo); }
+        .tbtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         .seats4 li.is-you { background: rgba(246, 208, 88, .09); }
         #seats-hint { margin: 8px 0 16px; }
         .roster .pair label { flex: none; min-height: 34px; padding: 5px 7px; font-size: 14px; box-shadow: var(--bevel-sm), 1px 2px 0 #02100c; }
         .roster .pair input:checked + label { box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16; }
-        .teamrow { margin-bottom: 24px; }
+        .teamrow { margin: 0 0 20px; }
         .playrow { display: flex; align-items: center; gap: 14px 20px; flex-wrap: wrap; }
         /* START!: the menus' bevelled teal button as a real button, so its letters and edges are drawn at the screen's own resolution (the original's 98 x 27 picture, blown up three times, broke up) */
         .startbtn { min-width: 210px; min-height: 58px; padding: 10px 34px; font-size: 26px; letter-spacing: .05em; text-shadow: 0 2px 0 var(--teal-lo); }
@@ -329,7 +344,7 @@
             .card > .banner { font-size: 22px; padding: 7px 12px; }
             .roster li { grid-template-columns: 26px minmax(0, 1fr); gap: 6px; padding: 3px 6px; }
             .roster { margin-bottom: 14px; }
-            .teamrow { margin-bottom: 16px; }
+            .teamrow { margin-bottom: 14px; }
             .match-grid { gap: 14px; }
             .match-grid .left { grid-template-columns: minmax(0, 1fr) 112px; gap: 0 18px; }
             .preview figcaption { display: none; }
@@ -337,6 +352,10 @@
             .seats4 li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ant who sit" "pick pick pick"; gap: 4px 6px; padding: 5px 6px; }
             .seats4 .nm { font-size: 16px; }
             .seats4 .seatset .pair { gap: 3px; }
+            .seats4.with-teams li { grid-template-columns: 26px 104px auto minmax(0, 1fr); grid-template-areas: "ant who team sit" "pick pick pick pick"; }
+            .seats4.with-teams .nm, .seats4.with-teams .teamset { align-self: center; }
+            .seats4.with-teams .sit { justify-self: end; }
+            .seats4 .tbtn { padding: 5px 7px; font-size: 13px; }
             .roster.seats4 .pair label { flex: 0 0 auto; min-width: 0; padding: 5px 4px; font-size: 13px; }
             #seats-hint { margin: 6px 0 12px; font-size: 13.5px; line-height: 1.3; }
             .invite .who { flex: 1 0 100%; }
@@ -360,6 +379,12 @@
         }
         @media (max-width: 480px) {
             .roster.seats4 .pair label { flex: 1 1 auto; }                  /* on a phone the five buttons of a seat share the row */
+            .seats4.with-teams li { grid-template-columns: 26px minmax(0, 1fr) auto 76px; }      /* ... and the two switches sit beside Sit here */
+            .seats4 .tbtn { padding: 5px 5px; }
+        }
+        @media (max-width: 374px) {                                         /* the narrowest phones: the colour has a line, the switches and Sit here the next, the five buttons the last (the order of the markup) */
+            .seats4.with-teams li { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-areas: "ant who who" "team team sit" "pick pick pick"; }
+            .seats4 .tbtn { flex: 1 1 0; }
         }
         @media (max-width: 360px) {                                         /* ... and on the narrowest ones they are a little smaller, to stay on one line (320 px) */
             .roster.seats4 .pair label { padding: 5px 2px; font-size: 12.5px; }
@@ -429,50 +454,51 @@
                         <ul class="roster seats4" id="seats" aria-labelledby="seats-label">
                             <li id="seat-row-0" data-seat="0"><img src="front/ant_green.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Green</span><span class="you" id="seat-you-0" hidden> &middot; You</span><small class="seat-name" id="seat-name-0" hidden></small></span>
+                                <span class="teamset" id="team-set-0" role="group" aria-label="Green's team" hidden><button type="button" class="tbtn" id="team-0-1" aria-label="Team 1 for Green" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-0-2" aria-label="Team 2 for Green" aria-pressed="false">Team 2</button></span>
+                                <button type="button" class="btn sm sit" id="sit-0" aria-label="Sit here as Green">Sit here</button>
                                 <fieldset class="seatset" id="seat-set-0"><legend class="sr">Green</legend><span class="pair">
                                     <input type="radio" name="seat-0" id="seat-0-friend" value="friend" checked><label for="seat-0-friend">Friend</label>
                                     <input type="radio" name="seat-0" id="seat-0-easy" value="easy"><label for="seat-0-easy">Easy</label>
                                     <input type="radio" name="seat-0" id="seat-0-medium" value="medium"><label for="seat-0-medium">Medium</label>
                                     <input type="radio" name="seat-0" id="seat-0-hard" value="hard"><label for="seat-0-hard">Hard</label>
                                     <input type="radio" name="seat-0" id="seat-0-nobody" value="nobody"><label for="seat-0-nobody">Nobody</label>
-                                </span></fieldset>
-                                <button type="button" class="btn sm sit" id="sit-0" aria-label="Sit here as Green">Sit here</button></li>
+                                </span></fieldset></li>
                             <li id="seat-row-1" data-seat="1"><img src="front/ant_red.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Red</span><span class="you" id="seat-you-1" hidden> &middot; You</span><small class="seat-name" id="seat-name-1" hidden></small></span>
+                                <span class="teamset" id="team-set-1" role="group" aria-label="Red's team" hidden><button type="button" class="tbtn" id="team-1-1" aria-label="Team 1 for Red" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-1-2" aria-label="Team 2 for Red" aria-pressed="false">Team 2</button></span>
+                                <button type="button" class="btn sm sit" id="sit-1" aria-label="Sit here as Red">Sit here</button>
                                 <fieldset class="seatset" id="seat-set-1"><legend class="sr">Red</legend><span class="pair">
                                     <input type="radio" name="seat-1" id="seat-1-friend" value="friend" checked><label for="seat-1-friend">Friend</label>
                                     <input type="radio" name="seat-1" id="seat-1-easy" value="easy"><label for="seat-1-easy">Easy</label>
                                     <input type="radio" name="seat-1" id="seat-1-medium" value="medium"><label for="seat-1-medium">Medium</label>
                                     <input type="radio" name="seat-1" id="seat-1-hard" value="hard"><label for="seat-1-hard">Hard</label>
                                     <input type="radio" name="seat-1" id="seat-1-nobody" value="nobody"><label for="seat-1-nobody">Nobody</label>
-                                </span></fieldset>
-                                <button type="button" class="btn sm sit" id="sit-1" aria-label="Sit here as Red">Sit here</button></li>
+                                </span></fieldset></li>
                             <li id="seat-row-2" data-seat="2"><img src="front/ant_blue.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Blue</span><span class="you" id="seat-you-2" hidden> &middot; You</span><small class="seat-name" id="seat-name-2" hidden></small></span>
+                                <span class="teamset" id="team-set-2" role="group" aria-label="Blue's team" hidden><button type="button" class="tbtn" id="team-2-1" aria-label="Team 1 for Blue" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-2-2" aria-label="Team 2 for Blue" aria-pressed="false">Team 2</button></span>
+                                <button type="button" class="btn sm sit" id="sit-2" aria-label="Sit here as Blue">Sit here</button>
                                 <fieldset class="seatset" id="seat-set-2"><legend class="sr">Blue</legend><span class="pair">
                                     <input type="radio" name="seat-2" id="seat-2-friend" value="friend" checked><label for="seat-2-friend">Friend</label>
                                     <input type="radio" name="seat-2" id="seat-2-easy" value="easy"><label for="seat-2-easy">Easy</label>
                                     <input type="radio" name="seat-2" id="seat-2-medium" value="medium"><label for="seat-2-medium">Medium</label>
                                     <input type="radio" name="seat-2" id="seat-2-hard" value="hard"><label for="seat-2-hard">Hard</label>
                                     <input type="radio" name="seat-2" id="seat-2-nobody" value="nobody"><label for="seat-2-nobody">Nobody</label>
-                                </span></fieldset>
-                                <button type="button" class="btn sm sit" id="sit-2" aria-label="Sit here as Blue">Sit here</button></li>
+                                </span></fieldset></li>
                             <li id="seat-row-3" data-seat="3"><img src="front/ant_black.png" alt="" width="23" height="40">
                                 <span class="nm"><span class="colour">Black</span><span class="you" id="seat-you-3" hidden> &middot; You</span><small class="seat-name" id="seat-name-3" hidden></small></span>
+                                <span class="teamset" id="team-set-3" role="group" aria-label="Black's team" hidden><button type="button" class="tbtn" id="team-3-1" aria-label="Team 1 for Black" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-3-2" aria-label="Team 2 for Black" aria-pressed="false">Team 2</button></span>
+                                <button type="button" class="btn sm sit" id="sit-3" aria-label="Sit here as Black">Sit here</button>
                                 <fieldset class="seatset" id="seat-set-3"><legend class="sr">Black</legend><span class="pair">
                                     <input type="radio" name="seat-3" id="seat-3-friend" value="friend" checked><label for="seat-3-friend">Friend</label>
                                     <input type="radio" name="seat-3" id="seat-3-easy" value="easy"><label for="seat-3-easy">Easy</label>
                                     <input type="radio" name="seat-3" id="seat-3-medium" value="medium"><label for="seat-3-medium">Medium</label>
                                     <input type="radio" name="seat-3" id="seat-3-hard" value="hard"><label for="seat-3-hard">Hard</label>
                                     <input type="radio" name="seat-3" id="seat-3-nobody" value="nobody"><label for="seat-3-nobody">Nobody</label>
-                                </span></fieldset>
-                                <button type="button" class="btn sm sit" id="sit-3" aria-label="Sit here as Black">Sit here</button></li>
+                                </span></fieldset></li>
                         </ul>
                         <p class="hint" id="seats-hint">Friend: a seat for a person you invite. Easy, Medium, Hard: a bot of that level. Nobody: the seat stays out.</p>
-                        <div class="teamrow" id="teams-line" hidden>
-                            <label class="lab" for="teams">Teams</label>
-                            <div class="sel"><select id="teams"></select></div>
-                        </div>
+                        <p class="hint teamrow" id="teams-line" aria-live="polite" hidden></p>
                         <div class="invites" id="invites" hidden>
                             <span class="lab" id="invites-label">Invite your friends: a link for each seat</span>
                             <div id="invite-list" role="group" aria-labelledby="invites-label"></div>
@@ -524,8 +550,8 @@
                 <div class="steps">
                     <h4>New match</h4>
                     <p>Four seats: Green, Red, Blue and Black. One is <b>You</b>; press <b>Sit here</b> on another colour to play from there. Every other seat is a <b>Friend</b> (a seat for a person you invite), a bot (<b>Easy</b>, <b>Medium</b> or <b>Hard</b>) or <b>Nobody</b> (the seat stays out). You, your friends and the bots are 1 to 4 players.</p>
-                    <p>With three or four players you can pick <b>Teams</b>: two players start allied.</p>
-                    <p><b>START!</b> takes this tab into the match. With bots only it starts at once, and with every other seat on <b>Nobody</b> it is a game for one on this computer, as in the original. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
+                    <p>With three or four players every colour has a <b>Team 1</b> and a <b>Team 2</b> switch: put two colours on the same team and they start allied (with four players the other two are the other team).</p>
+                    <p><b>START!</b> takes this tab into the match. With bots only it starts at once, and with every other seat on <b>Nobody</b> it is a game for one on this computer: only your colony is on the map. With <b>Friend</b> seats it opens the room and waits: send each friend the link under <b>Invite your friends</b> (<b>Copy link</b>, or <b>Share</b> on a phone). The match starts when they are all in. Until then the first player in the room can start it with START in the waiting room, with the players who are in (that is you, unless a friend connected first); a Friend seat that is still empty then stays empty. Changing the map, the teams or the seats makes new links.</p>
                     <h4>Have a code?</h4>
                     <p>Type or paste the code of a match that somebody else made, as it is shown (<code>k7m2 xq9p</code>), and press <b>Join</b>: you take the first free seat in this tab. A code works once somebody is in the room; the match's link works at any time. The first player in the room can start the match early with START once at least 2 players are in.</p>
                     <h4>On the map</h4>
@@ -753,7 +779,7 @@ their music and their sound: only the window you are in is heard). The match is 
             return SEAT_COLOURS[pair[0]] + ' + ' + SEAT_COLOURS[pair[1]] + ' against ' + rest.map(function (s) { return SEAT_COLOURS[s]; }).join(' + ');
         }
         function hostTeamText(pair, players) { return teamTitle(pair, [0, 1, 2, 3].filter(function (s) { return s < players; })); }
-        // The choices of the Teams select of a room of `players` (the game's room_team_choices): free for all; three players: Green + Red, Green + Blue or Red + Blue as a team; four: Green with Red, Blue or Black.
+        // The teams that a room of `players` can have (the game's room_team_choices): free for all; three players: Green + Red, Green + Blue or Red + Blue as a team; four: Green with Red, Blue or Black.
         // The value is what the address and the game's --teams take: ffa or A+B (seats 0 - 3).
         function hostTeamChoices(players) {
             var out = [{ value: 'ffa', text: 'Free for all' }];
@@ -820,53 +846,120 @@ their music and their sound: only the window you are in is heard). The match is 
         // CARD_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
         // THE CARD, "New match": the four seats of a room, Green, Red, Blue and Black (seats 0 - 3). Exactly one is YOU (state.you). Every other seat has one choice: Friend (a seat for a person that you invite), Easy,
         // Medium or Hard (a bot of that level) or Nobody (the seat stays out of the match); the seat that is You keeps its choice for the day that You sits somewhere else. The state is
-        // { map, you, seats: [four words], teams } (teams: ffa, or A+B for two of the seats that play) and is what the browser remembers (CARD_KEY, as JSON). The room is always one of four seats, so that any colour
-        // can be taken, and its create block (cardBlock) holds the map and the teams, so that the teams hold whether the room starts by itself or by START. Nothing here touches the page: these are plain functions.
+        // { map, you, seats: [four words], sides: [four numbers], teams } and is what the browser remembers (CARD_KEY, as JSON). sides is what the Team 1 and Team 2 switches say (see below) and teams is what they
+        // make (ffa, or A+B for two of the seats that play). The room is always one of four seats, so that any colour can be taken, and its create block (cardBlock) holds the map and the teams, so that the teams
+        // hold whether the room starts by itself or by START. Nothing here touches the page: these are plain functions.
         var CARD_KEY = 'ants-match';
         var CARD_ROOM_KEY = 'ants-match-room';                 // (the room that the links and START use: { code, map, teams, used }, kept by the tab until START, so that a reload does not change the links that were sent)
         var CARD_WORDS = ['friend', 'easy', 'medium', 'hard', 'nobody'];
-        function cardCopy(state) { return { map: state.map, you: state.you, seats: state.seats.slice(), teams: state.teams }; }
+        function cardCopy(state) { return { map: state.map, you: state.you, seats: state.seats.slice(), sides: Array.isArray(state.sides) ? state.sides.slice() : undefined, teams: state.teams }; }
         // The seats that play: You and every seat that is not Nobody
         function cardPlaying(state) { return [0, 1, 2, 3].filter(function (s) { return s === state.you || state.seats[s] !== 'nobody'; }); }
         // The seats that are for people that you invite, and how many people must be in the room before the leader's game presses START by itself (You and the Friends)
         function cardFriends(state) { return [0, 1, 2, 3].filter(function (s) { return s !== state.you && state.seats[s] === 'friend'; }); }
         function cardPeople(state) { return 1 + cardFriends(state).length; }
-        // The choices of the Teams select, as {value, text}: free for all; with three seats that play the three pairs of them (the third plays alone); with four Green with Red, Blue or Black (the other two are a team too).
-        // Two seats make no team (it would be the whole match, which the original ends at once). The value is what the room's create block (roomteams) and the game's --teams take: ffa or A+B, the lower seat first.
-        function cardTeamChoices(state) {
-            var playing = cardPlaying(state);
-            var out = [{ value: 'ffa', text: 'Free for all' }];
-            var pairs = playing.length === 4 ? [[0, 1], [0, 2], [0, 3]] : playing.length === 3 ? [[playing[0], playing[1]], [playing[0], playing[2]], [playing[1], playing[2]]] : [];
-            pairs.forEach(function (pair) { out.push({ value: pair[0] + '+' + pair[1], text: teamTitle(pair, playing) }); });
+        // THE TEAMS. Every seat that plays has two switches, Team 1 and Team 2 (state.sides: a number for each seat, 0 for neither, 1 for Team 1, 2 for Team 2) when three or four seats play (two would be the whole
+        // match, which the original ends at once). A team is two seats on the same switch (the original's alliances are pairs): with three players the third plays alone, with four the other two seats are the other
+        // team and the page shows their switch on although nobody pressed it. A seat that does not play has neither switch on, and a third seat on one switch is not made (a team is two seats at most).
+        // state.teams is what the switches make, the value that the room's create block (roomteams) and the game's --teams take: ffa, or A+B, the lower seat first (with four players the team that Green is in).
+        // `playing` is the seats that play (cardPlaying); `sides` is any list: what is no 1 or 2 is neither, a list that crowds a switch is no list.
+        function cardSidesFix(sides, playing) {
+            var out = [0, 0, 0, 0];
+            if (playing.length < 3 || !Array.isArray(sides)) return out;
+            playing.forEach(function (s) { out[s] = sides[s] === 1 || sides[s] === 2 ? sides[s] : 0; });
+            var crowded = [1, 2].some(function (k) { return out.filter(function (v) { return v === k; }).length > 2; });
+            return crowded ? [0, 0, 0, 0] : out;
+        }
+        // The switches of a team value (ffa, or A+B: two different seats that play, the lower first): both on Team 1
+        function cardSidesOf(teams, playing) {
+            var m = typeof teams === 'string' ? /^([0-3])\+([0-3])$/.exec(teams) : null;
+            var out = [0, 0, 0, 0];
+            if (m && Number(m[1]) < Number(m[2]) && playing.length >= 3 && playing.indexOf(Number(m[1])) !== -1 && playing.indexOf(Number(m[2])) !== -1) { out[Number(m[1])] = 1; out[Number(m[2])] = 1; }
             return out;
         }
-        // The team that is chosen: `wanted` when it is one of the choices for the seats that play, else free for all
-        function cardTeam(wanted, state) {
-            var choices = cardTeamChoices(state);
-            for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
-            return 'ffa';
+        // The two seats that are on the same switch ([a, b], a < b), or null
+        function cardPair(sides, playing) {
+            for (var k = 1; k <= 2; k++) {
+                var on = playing.filter(function (s) { return sides[s] === k; });
+                if (on.length === 2) return on;
+            }
+            return null;
         }
-        // The state with every part valid: a map that is none of the six is the default, You is a seat, a choice that is none of the five words is Friend (the first visit's), a team that the seats no longer allow is free for all
+        // What the switches make: ffa, or A+B
+        function cardTeamOf(sides, playing) {
+            var pair = cardPair(sides, playing);
+            if (!pair) return 'ffa';
+            if (playing.length === 4 && pair[0] !== 0) pair = playing.filter(function (s) { return pair.indexOf(s) === -1; });
+            return pair[0] + '+' + pair[1];
+        }
+        // What the switches show: each seat's own, and with four players and two seats on one switch the other two seats on the other one
+        function cardShownSides(state) {
+            var playing = cardPlaying(state);
+            var shown = state.sides.slice();
+            var pair = playing.length === 4 ? cardPair(state.sides, playing) : null;
+            if (pair) playing.forEach(function (s) { if (pair.indexOf(s) === -1) shown[s] = state.sides[pair[0]] === 1 ? 2 : 1; });
+            return shown;
+        }
+        // May `seat` have switch `side` on? It may when that switch is on for it (shown) already, or when fewer than two other seats have it on
+        function cardSideOpen(state, seat, side) {
+            var playing = cardPlaying(state);
+            if (playing.length < 3 || playing.indexOf(seat) === -1 || (side !== 1 && side !== 2)) return false;
+            var shown = cardShownSides(state);
+            return shown[seat] === side || playing.filter(function (s) { return s !== seat && shown[s] === side; }).length < 2;
+        }
+        // A press of switch `side` of `seat`: one that is off goes on if the seat may have it, else nothing happens; one that is lit goes off, unless the other seats keep it lit (the other team of a pair, or a press that
+        // a pair has made useless: Green on Team 1 and Red and Blue on Team 2 show Black on Team 1 as well): then the teams go away. What is lit is what a person sees, so a press that is accepted always shows.
+        function cardSide(state, seat, side) {
+            var out = cardCopy(state);
+            if (cardSideOpen(state, seat, side)) {
+                if (cardShownSides(state)[seat] !== side) out.sides[seat] = side;
+                else {
+                    out.sides[seat] = 0;
+                    if (cardShownSides(cardFix(out))[seat] === side) out.sides = [0, 0, 0, 0];
+                }
+            }
+            return cardFix(out);
+        }
+        // Why a press does nothing (the line under the switches says it), '' when it may be made: the colours that were pressed on the switch are two (take one of them off), or the switch is the one that a pair
+        // leaves to the other two seats (a lit switch takes the teams away)
+        function cardRefusal(state, seat, side) {
+            var playing = cardPlaying(state);
+            if (playing.length < 3 || playing.indexOf(seat) === -1 || (side !== 1 && side !== 2) || cardSideOpen(state, seat, side)) return '';
+            var pressed = playing.filter(function (s) { return state.sides[s] === side; }).length;
+            if (pressed === 2) return 'Team ' + side + ' has two colours already. Press one of them to take it off first.';
+            return 'Team ' + side + ' is the other two colours already. Press a lit switch to clear the teams first.';
+        }
+        // The line under the switches (three or four seats play): what the match will be
+        function cardTeamsText(state) {
+            if (state.teams === 'ffa') return 'Free for all. For a team, put two colours on the same team.';
+            return 'Teams: ' + teamTitle([Number(state.teams.charAt(0)), Number(state.teams.charAt(2))], cardPlaying(state)) + '.';
+        }
+        // The state with every part valid: a map that is none of the six is the default, You is a seat, a choice that is none of the five words is Friend (the first visit's), the switches are the ones that the seats
+        // allow (those of an older page's state, which had only teams, come from its team) and the teams are what they make
         function cardFix(state) {
             var out = cardCopy(state);
             out.map = (mapByKey(out.map) || mapByKey(DEFAULT_MAP_KEY)).key;
             out.you = out.you === 0 || out.you === 1 || out.you === 2 || out.you === 3 ? out.you : 0;
             out.seats = [0, 1, 2, 3].map(function (s) { return CARD_WORDS.indexOf(out.seats[s]) !== -1 ? out.seats[s] : 'friend'; });
-            out.teams = cardTeam(out.teams, out);
+            var playing = cardPlaying(out);
+            out.sides = cardSidesFix(out.sides || cardSidesOf(out.teams, playing), playing);
+            out.teams = cardTeamOf(out.sides, playing);
             return out;
         }
         // A first visit: the map (Treasure unless one is asked), You at Green, a Friend in the other three seats (START opens the room and waits for the people that you invite), free for all
-        function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], teams: 'ffa' }); }
-        // What the browser remembered (the text that cardText wrote): the state, or null for anything else (nothing remembered, another shape, a word that is not one of the five, a map that is none of the six)
+        function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], sides: [0, 0, 0, 0], teams: 'ffa' }); }
+        // What the browser remembered (the text that cardText wrote): the state, or null for anything else (nothing remembered, another shape, a word that is not one of the five, a map that is none of the six).
+        // The switches are read when they are four numbers from 0 to 2, else the team is (the first versions of the card remembered only that).
         function cardParse(text) {
             var v;
             try { v = JSON.parse(text); } catch (e) { return null; }
             if (!v || typeof v !== 'object' || Array.isArray(v) || typeof v.map !== 'string' || !mapByKey(v.map)) return null;
             if (v.you !== 0 && v.you !== 1 && v.you !== 2 && v.you !== 3) return null;
             if (!Array.isArray(v.seats) || v.seats.length !== 4 || !v.seats.every(function (w) { return typeof w === 'string' && CARD_WORDS.indexOf(w) !== -1; })) return null;
-            return cardFix({ map: v.map, you: v.you, seats: v.seats, teams: typeof v.teams === 'string' ? v.teams : 'ffa' });
+            var sides = Array.isArray(v.sides) && v.sides.length === 4 && v.sides.every(function (n) { return n === 0 || n === 1 || n === 2; }) ? v.sides : undefined;
+            return cardFix({ map: v.map, you: v.you, seats: v.seats, sides: sides, teams: typeof v.teams === 'string' ? v.teams : 'ffa' });
         }
-        function cardText(state) { var f = cardFix(state); return JSON.stringify({ map: f.map, you: f.you, seats: f.seats, teams: f.teams }); }
+        function cardText(state) { var f = cardFix(state); return JSON.stringify({ map: f.map, you: f.you, seats: f.seats, teams: f.teams, sides: f.sides }); }
         // The state of a browser that has none of its own yet, from what the earlier pages left there (read once, never written): `old` is { solo, legacy, soloTeams, map, players, fill, teams }, the values of
         // ants-solo-seats, ants-solo-bots, ants-solo-teams, ants-four-map, ants-four-players, ants-four-fill and ants-four-teams (null where there is none). A browser that played a game on this computer gets
         // those opponents (a level for Red, Blue and Black, None is Nobody) and team; else one that hosted a room gets that room (the players it had: a seat of it with no bot is a Friend, a seat beyond it is Nobody);
@@ -883,10 +976,10 @@ their music and their sound: only the window you are in is heard). The match is 
                 hostSeats(o.fill).forEach(function (level, i) { state.seats[i + 1] = i + 1 < players ? (level || 'friend') : 'nobody'; });
                 team = o.teams;
             }
-            state.teams = typeof team === 'string' ? team : 'ffa';
+            state.sides = cardSidesOf(team, cardPlaying(state));
             return cardFix(state);
         }
-        // You sit at `seat` (the seat that you left shows its own choice again); a choice for `seat`; the map; the team: each gives the new state and leaves the old one as it was
+        // You sit at `seat` (the seat that you left shows its own choice again); a choice for `seat`; the map: each gives the new state and leaves the old one as it was
         function cardSit(state, seat) { var out = cardCopy(state); if (seat === 0 || seat === 1 || seat === 2 || seat === 3) out.you = seat; return cardFix(out); }
         function cardSet(state, seat, word) {
             var out = cardCopy(state);
@@ -894,7 +987,6 @@ their music and their sound: only the window you are in is heard). The match is 
             return cardFix(out);
         }
         function cardMap(state, mapKey) { var out = cardCopy(state); if (mapByKey(mapKey)) out.map = mapKey; return cardFix(out); }
-        function cardTeams(state, wanted) { var out = cardCopy(state); out.teams = wanted; return cardFix(out); }
         // What the leader's START asks of the room (the game's --fill-bots): four words for the seats 0 - 3, the level of a bot's seat and none for You, a Friend and Nobody; '' when no seat has a bot
         function cardFill(state) {
             var words = [0, 1, 2, 3].map(function (s) { var w = state.seats[s]; return s !== state.you && (w === 'easy' || w === 'medium' || w === 'hard') ? w : 'none'; });
@@ -1337,7 +1429,6 @@ their music and their sound: only the window you are in is heard). The match is 
         });
         var card = cardParse(recall(CARD_KEY)) || cardFromOld({ solo: recall('ants-solo-seats'), legacy: recall('ants-solo-bots'), soloTeams: recall('ants-solo-teams'), map: recall('ants-four-map'),
                                                               players: recall('ants-four-players'), fill: recall('ants-four-fill'), teams: recall('ants-four-teams') });
-        var teamsSelect = $('teams');
         // The name under You: the typed name, else a random one (the field says so: "Leave it empty for a random name")
         function youName() { var checked = nameCheck(nameInput.value); return checked.ok && checked.name ? checked.name : names[0]; }
         // The room that the invitations and START use, made when the page first needs one (a Friend seat, or START) and kept while the map and the teams stay, since its create block holds them: another map or other
@@ -1412,17 +1503,27 @@ their music and their sound: only the window you are in is heard). The match is 
             }
             showYouName();
         }
-        // The Teams select has the choices that the seats which play allow, and is there when there is a choice
-        function showTeams() {
-            var choices = cardTeamChoices(card);
-            while (teamsSelect.firstChild) teamsSelect.removeChild(teamsSelect.firstChild);
-            choices.forEach(function (choice) {
-                var o = document.createElement('option');
-                o.value = choice.value; o.textContent = choice.text;
-                teamsSelect.appendChild(o);
-            });
-            teamsSelect.value = card.teams;
-            $('teams-line').hidden = choices.length < 2;
+        // The Team 1 and Team 2 switches are on the seats that play, when three or four do, and the line under the seats says what they make. A switch is lit when it is on (also the one that a pair leaves to the
+        // other two seats) and is dimmed when its team has two other seats already: pressing it says so in that line (the switch stays a button, so that the keyboard and a screen reader find it and the reason too).
+        var teamsRefusal = '';
+        function showTeams(again) {
+            var playing = cardPlaying(card);
+            var on = playing.length >= 3;
+            var shown = cardShownSides(card);
+            $('seats').classList.toggle('with-teams', on);
+            for (var s = 0; s < 4; s++) {
+                var here = on && playing.indexOf(s) !== -1;
+                $('team-set-' + s).hidden = !here;
+                [1, 2].forEach(function (side) {
+                    var b = $('team-' + s + '-' + side);
+                    var lit = here && shown[s] === side;
+                    b.setAttribute('aria-pressed', lit ? 'true' : 'false');
+                    if (here && !cardSideOpen(card, s, side)) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
+                });
+            }
+            $('teams-line').hidden = !on;
+            var text = on ? teamsRefusal || cardTeamsText(card) : '';
+            if (again || $('teams-line').textContent !== text) $('teams-line').textContent = text;         // (a live region says its text again whenever it is written: a line that changed is, and a refusal that is pressed again, since the person asks again)
         }
         // A link for each Friend seat: its colour, the link in a field (to select where copying does not work), Copy link and, where the browser can, Share. No key anywhere: a seat has none yet.
         // What comes back is the row and the link.
@@ -1482,15 +1583,22 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // A choice was made: it is remembered, and everything that depends on it is shown again
         function cardChanged() {
+            teamsRefusal = '';
             remember(CARD_KEY, cardText(card));
             showCard();
         }
         mapPick.addEventListener('change', function () { card = cardMap(card, mapPick.value); cardChanged(); });
-        teamsSelect.addEventListener('change', function () { card = cardTeams(card, teamsSelect.value); cardChanged(); });
         [0, 1, 2, 3].forEach(function (seat) {
             CARD_WORDS.forEach(function (word) {
                 var radio = $('seat-' + seat + '-' + word);
                 radio.addEventListener('change', function () { if (radio.checked) { card = cardSet(card, seat, word); cardChanged(); } });
+            });
+            [1, 2].forEach(function (side) {
+                $('team-' + seat + '-' + side).addEventListener('click', function () {
+                    if (!cardSideOpen(card, seat, side)) { teamsRefusal = cardRefusal(card, seat, side); showTeams(true); return; }
+                    card = cardSide(card, seat, side);
+                    cardChanged();
+                });
             });
             $('sit-' + seat).addEventListener('click', function () {
                 var left = card.you;
