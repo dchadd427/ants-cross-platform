@@ -5,7 +5,7 @@
 //               [--resume-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
-//               [--bot-match-every-min N]
+//               [--history-dir DIR | --no-history] [--bot-match-every-min N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -61,6 +61,10 @@
 //   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match that ran 30 seconds or more is over, its .antsrep file is kept
 //                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
+//   --history-dir DIR  where the server keeps the MATCH HISTORY (history_store.hpp, docs/REPLAYS.md "The match history"): one small JSON file for every match that the replay store keeps, with who won, the scores, the kills and
+//                      losses and the names that were typed. It is kept for good: the recording is deleted after --replays-days, the history never is. Default: the folder "history" in --results-dir; without a results folder
+//                      the server keeps none. The matches are counted from their recordings (played again, with no screen) while no match runs, so it needs the replays to add to it
+//   --no-history       keep no match history, whatever --results-dir says
 //   --bot-match-every-min N
 //                      the server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none, the default): two to four standard bots, Medium or Hard, on random seats of one of the original's six
 //                      maps, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER.md "Matches of computer players"). Needs the replays (without them nothing is
@@ -69,8 +73,9 @@
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
 //                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
-//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays and for the matches that run now (GET /replays, GET /replays/<file>, GET /live, GET /live/<id>; no secret, nothing
-//                      else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the four paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
+//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays, the match history and the matches that run now (GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live,
+//                      GET /live/<id>; no secret, nothing else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the paths to it (docker/nginx.conf). The control interface lists and gives
+//                      the files and the history too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
 //   --version, --help
@@ -143,6 +148,8 @@ struct Options {
     long restart_budget_mb{256};
     std::string replays_dir;                   // --replays-dir (empty: the folder "replays" in the results folder, when there is one)
     bool no_replays{false};
+    std::string history_dir;                   // --history-dir (empty: the folder "history" in the results folder, when there is one)
+    bool no_history{false};
     bool replay_demo{false};                   // --replay-demo: the matches of the demo rooms are kept too
     long replays_days{30};
     long replays_max_mb{100};
@@ -160,7 +167,7 @@ void usage(FILE* to) {
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
-                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440]\n"
+                 "                    [--history-dir DIR | --no-history] [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -236,6 +243,14 @@ int main(int argc, char** argv) {
             o.replays_dir = value("--replays-dir");
             if (o.replays_dir.empty()) {
                 std::fprintf(stderr, "--replays-dir takes a folder\n");
+                return 2;
+            }
+        } else if (a == "--no-history") {
+            o.no_history = true;
+        } else if (a == "--history-dir") {
+            o.history_dir = value("--history-dir");
+            if (o.history_dir.empty()) {
+                std::fprintf(stderr, "--history-dir takes a folder\n");
                 return 2;
             }
         } else if (a == "--results-dir") {
@@ -347,6 +362,10 @@ int main(int argc, char** argv) {
     }
     if (o.no_replays && !o.replays_dir.empty()) {
         std::fprintf(stderr, "--replays-dir and --no-replays exclude each other\n");
+        return 2;
+    }
+    if (o.no_history && !o.history_dir.empty()) {
+        std::fprintf(stderr, "--history-dir and --no-history exclude each other\n");
         return 2;
     }
     std::error_code ec;
@@ -556,6 +575,28 @@ int main(int argc, char** argv) {
         } else if (rc.dir.empty()) {
             log("replays are off: no --results-dir or --replays-dir to keep them in");
         }
+        // The match history (history_store.hpp): in --history-dir, else in the folder "history" of the results folder, unless switched off. It is made after the replay store, whose files it counts.
+        ants::server::HistoryConfig hc;
+        if (!o.no_history) {
+            if (!o.history_dir.empty()) hc.dir = o.history_dir;
+            else if (!o.results_dir.empty()) hc.dir = (std::filesystem::path(o.results_dir) / "history").string();
+        }
+        std::string history_why;
+        if (!hc.dir.empty() && !rooms.enable_history(hc, history_why)) {
+            if (!o.history_dir.empty()) {
+                std::fprintf(stderr, "%s\n", history_why.c_str());
+                return 1;
+            }
+            log("the match history is off: " + history_why);
+        }
+        for (const std::string& line : rooms.take_notices()) log(line);                 // (what the history found in its folder)
+        if (rooms.history_store() != nullptr) {
+            log("match history kept for good in " + rooms.history_store()->config().dir + (rooms.replay_store() != nullptr ? std::string("; the matches of the replay store are counted while no match runs") : std::string("; the server keeps no replays, so nothing is added")));
+        } else if (o.no_history) {
+            log("the match history is off (--no-history)");
+        } else if (hc.dir.empty()) {
+            log("the match history is off: no --results-dir or --history-dir to keep it in");
+        }
         if (o.bot_match_every_min > 0) {
             if (rooms.replay_store() != nullptr) {
                 rooms.enable_bot_matches(static_cast<uint32_t>(o.bot_match_every_min), now_ms());
@@ -577,7 +618,7 @@ int main(int argc, char** argv) {
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
-            ": GET /replays, GET /replays/<file>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
     }
     if (http) {
         using ants::server::SecretSource;

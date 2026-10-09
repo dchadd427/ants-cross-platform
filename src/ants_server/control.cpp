@@ -1,6 +1,8 @@
 #include "ants_server/control.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <set>
 
 #include "ants_replay/replay.hpp"
 
@@ -380,6 +382,204 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
 
 namespace {
 
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The match history (history_store.hpp): GET /history and GET /history/<id> on both doors, DELETE /history/<id> on the control door only
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+constexpr size_t kMaxHistoryList = 100;              // the records that one answer holds at the most (the list's own "limit")
+constexpr size_t kDefaultHistoryList = 50;
+constexpr size_t kMaxHistoryOffset = 1000000;
+constexpr size_t kMaxHistoryText = 40;               // the search text, decoded
+
+Recording recording_of(const ReplayStore* replays, const std::string& id) {
+    const ReplayEntry* e = replays != nullptr ? replays->find(history_recording_file(id)) : nullptr;
+    if (e == nullptr || !e->readable) return Recording::Removed;
+    return e->sim_rules == replay::kSimRules ? Recording::Watch : Recording::Old;
+}
+
+bool all_digits_up_to(const std::string& text, size_t max_chars) { return !text.empty() && text.size() <= max_chars && text.find_first_not_of("0123456789") == std::string::npos; }
+
+// A value of the query as the browser sent it: percent escapes and '+' for a space. False for an escape that is not one or a character that no search text holds (the names are printable ASCII).
+bool decode_query_value(const std::string& raw, std::string& out) {
+    out.clear();
+    for (size_t i = 0; i < raw.size(); ++i) {
+        char c = raw[i];
+        if (c == '%') {
+            if (i + 2 >= raw.size()) return false;
+            const auto hex = [](char h) { return h >= '0' && h <= '9' ? h - '0' : h >= 'a' && h <= 'f' ? h - 'a' + 10 : h >= 'A' && h <= 'F' ? h - 'A' + 10 : -1; };
+            const int hi = hex(raw[i + 1]);
+            const int lo = hex(raw[i + 2]);
+            if (hi < 0 || lo < 0) return false;
+            c = static_cast<char>(hi * 16 + lo);
+            i += 2;
+        } else if (c == '+') {
+            c = ' ';
+        }
+        if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7E) return false;
+        out.push_back(c);
+    }
+    return true;
+}
+
+// The query of GET /history: limit (1 - 100, default 50), offset, sort, format, result, who, rec, colour, q. Every key once, every value one of its words; anything else is an error that names the key.
+bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& error) {
+    q = HistoryQuery();
+    q.limit = kDefaultHistoryList;
+    std::set<std::string> seen;
+    size_t at = 0;
+    while (at < raw.size()) {
+        const size_t amp = raw.find('&', at);
+        const std::string pair = raw.substr(at, amp == std::string::npos ? std::string::npos : amp - at);
+        at = amp == std::string::npos ? raw.size() : amp + 1;
+        if (pair.empty()) continue;
+        const size_t eq = pair.find('=');
+        const std::string key = pair.substr(0, eq);
+        std::string value;
+        if (eq == std::string::npos || !decode_query_value(pair.substr(eq + 1), value)) {
+            error = "\"" + key + "\" must be written key=value, with the value as a browser writes it";
+            return false;
+        }
+        if (!seen.insert(key).second) {
+            error = "\"" + key + "\" is given twice";
+            return false;
+        }
+        const auto bad = [&](const std::string& what) {
+            error = "\"" + key + "\" must be " + what;
+            return false;
+        };
+        if (key == "limit") {
+            if (!all_digits_up_to(value, 4) || std::stoul(value) < 1 || std::stoul(value) > kMaxHistoryList) return bad("1 to " + std::to_string(kMaxHistoryList));
+            q.limit = std::stoul(value);
+        } else if (key == "offset") {
+            if (!all_digits_up_to(value, 7) || std::stoul(value) > kMaxHistoryOffset) return bad("0 to " + std::to_string(kMaxHistoryOffset));
+            q.offset = std::stoul(value);
+        } else if (key == "sort") {
+            if (value == "new") q.sort = HistoryQuery::Sort::New;
+            else if (value == "old") q.sort = HistoryQuery::Sort::Old;
+            else if (value == "score") q.sort = HistoryQuery::Sort::Score;
+            else if (value == "kills") q.sort = HistoryQuery::Sort::Kills;
+            else if (value == "hatched") q.sort = HistoryQuery::Sort::Hatched;
+            else if (value == "long") q.sort = HistoryQuery::Sort::Long;
+            else if (value == "short") q.sort = HistoryQuery::Sort::Short;
+            else return bad("new, old, score, kills, hatched, long or short");
+        } else if (key == "format") {
+            if (value == "all") q.format = HistoryQuery::Format::All;
+            else if (value == "1v1") q.format = HistoryQuery::Format::OneVsOne;
+            else if (value == "team") q.format = HistoryQuery::Format::Teams;
+            else if (value == "ffa") q.format = HistoryQuery::Format::Free;
+            else return bad("all, 1v1, team or ffa");
+        } else if (key == "result") {
+            if (value == "all") q.result = HistoryQuery::Result::All;
+            else if (value == "decided") q.result = HistoryQuery::Result::Decided;
+            else if (value == "draw") q.result = HistoryQuery::Result::Draw;
+            else if (value == "cut") q.result = HistoryQuery::Result::Cut;
+            else return bad("all, decided, draw or cut");
+        } else if (key == "who") {
+            if (value == "all") q.who = HistoryQuery::Who::Anyone;
+            else if (value == "people") q.who = HistoryQuery::Who::People;
+            else if (value == "computers") q.who = HistoryQuery::Who::Computers;
+            else return bad("all, people or computers");
+        } else if (key == "rec") {
+            if (value == "all") q.rec = HistoryQuery::Rec::All;
+            else if (value == "watch") q.rec = HistoryQuery::Rec::Watch;
+            else if (value == "removed") q.rec = HistoryQuery::Rec::Removed;
+            else if (value == "old") q.rec = HistoryQuery::Rec::Old;
+            else return bad("all, watch, removed or old");
+        } else if (key == "colour") {
+            std::string word = value;
+            std::transform(word.begin(), word.end(), word.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+            if (word == "all" || word == "any") q.colour = -1;
+            else if (word == "green") q.colour = 0;
+            else if (word == "red") q.colour = 1;
+            else if (word == "blue") q.colour = 2;
+            else if (word == "black") q.colour = 3;
+            else return bad("all, green, red, blue or black");
+        } else if (key == "q") {
+            if (value.size() > kMaxHistoryText) return bad("at most " + std::to_string(kMaxHistoryText) + " characters");
+            q.text = value;
+        } else {
+            error = "unknown parameter \"" + key + "\"; they are limit, offset, sort, format, result, who, rec, colour and q";
+            return false;
+        }
+    }
+    return true;
+}
+
+ctl::HttpResponse history_list_response(const HistoryStore& history, const ReplayStore* replays, const ctl::HttpRequest& request) {
+    HistoryQuery q;
+    std::string error;
+    if (!parse_history_query(request.query, q, error)) return error_response(400, error);
+    const HistoryPage page = history.query(q, [replays](const std::string& id) { return recording_of(replays, id); });
+    JsonValue list = JsonValue::make_array();
+    for (const HistoryRecord* r : page.items) {
+        JsonValue e = history_record_to_json(*r, false);
+        const Recording state = recording_of(replays, r->id);
+        e.set("recording", JsonValue::make_string(recording_name(state)));
+        if (state != Recording::Removed) e.set("file", JsonValue::make_string(history_recording_file(r->id)));
+        list.push_back(std::move(e));
+    }
+    JsonValue o = JsonValue::make_object();
+    o.set("history", std::move(list));
+    o.set("count", JsonValue::make_int(static_cast<int64_t>(page.count)));
+    o.set("total", JsonValue::make_int(static_cast<int64_t>(history.count())));
+    o.set("offset", JsonValue::make_int(static_cast<int64_t>(q.offset)));
+    o.set("limit", JsonValue::make_int(static_cast<int64_t>(q.limit)));
+    o.set("keep_days", JsonValue::make_int(replays != nullptr ? replays->config().keep_days : 0));
+    o.set("sim_rules", JsonValue::make_int(replay::kSimRules));
+    return json_response(200, o);
+}
+
+ctl::HttpResponse history_item_response(const HistoryStore& history, const ReplayStore* replays, const std::string& id) {
+    const HistoryRecord* record = valid_history_id(id) ? history.find(id) : nullptr;
+    if (record == nullptr) return error_response(404, "no such match");
+    JsonValue o;
+    std::string text;
+    if (!history.read_file(id, text) || !ctl::parse_json(text, o, nullptr, history_file_limits()) || !o.is_object()) o = history_record_to_json(*record, true);       // (the file is the record, with whatever it holds beyond the numbers)
+    const Recording state = recording_of(replays, id);
+    o.set("recording", JsonValue::make_string(recording_name(state)));
+    if (state != Recording::Removed) o.set("file", JsonValue::make_string(history_recording_file(id)));
+    o.set("keep_days", JsonValue::make_int(replays != nullptr ? replays->config().keep_days : 0));
+    return json_response(200, o);
+}
+
+// GET /history[?query] and GET /history/<id>, on both doors (`owner`: the control door, which also says 405 where the public one says 404)
+ctl::HttpResponse history_read(const RoomManager& rooms, const ctl::HttpRequest& request, bool owner) {
+    const HistoryStore* history = rooms.history_store();
+    const ReplayStore* replays = rooms.replay_store();
+    if (history == nullptr) return error_response(404, "this server keeps no match history");
+    if (request.path == "/history") {
+        if (request.method != "GET") return error_response(owner ? 405 : 404, owner ? "method not allowed" : "not found");
+        return history_list_response(*history, replays, request);
+    }
+    static const std::string kPrefix = "/history/";
+    if (request.path.compare(0, kPrefix.size(), kPrefix) != 0) return error_response(404, "not found");
+    const std::string id = request.path.substr(kPrefix.size());
+    if (!request.query.empty() || !valid_history_id(id)) return error_response(404, "no such match");     // (a name that cannot be an id is 404 before anything is looked up)
+    if (request.method == "GET") return history_item_response(*history, replays, id);
+    return error_response(owner ? 405 : 404, owner ? "method not allowed" : "not found");
+}
+
+}  // namespace
+
+// GET /history[?query], GET /history/<id> and DELETE /history/<id> of the control interface (the secret is checked before this is called)
+ctl::HttpResponse handle_history(RoomManager& rooms, const ctl::HttpRequest& request) {
+    static const std::string kPrefix = "/history/";
+    if (request.method != "DELETE" || request.path.compare(0, kPrefix.size(), kPrefix) != 0) return history_read(rooms, request, true);
+    HistoryStore* history = rooms.history_store();
+    if (history == nullptr) return error_response(404, "this server keeps no match history");
+    const std::string id = request.path.substr(kPrefix.size());
+    if (!request.query.empty() || !valid_history_id(id) || history->find(id) == nullptr) return error_response(404, "no such match");
+    const ReplayStore* replays = rooms.replay_store();
+    const bool recording_kept = replays != nullptr && replays->find(history_recording_file(id)) != nullptr;      // (a match whose recording is still there would be counted again: the file stays as a marker)
+    std::string why;
+    if (!history->remove(id, recording_kept, why)) return error_response(500, why.empty() ? std::string("the record could not be deleted") : why);
+    JsonValue o = JsonValue::make_object();
+    o.set("deleted", JsonValue::make_string(id));
+    return json_response(200, o);
+}
+
+namespace {
+
 // GET /live/<id> that has no match to give: the page reads `ended` and `replay` to tell a match that is over (and, when it was kept, the file to fetch) from one that never was (or is forgotten)
 ctl::HttpResponse live_missing(bool ended, const std::string& replay_file) {
     JsonValue o = JsonValue::make_object();
@@ -435,6 +635,7 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
 // The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
 // players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
+    if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return history_read(rooms, request, false);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
     const ReplayStore* store = rooms.replay_store();
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
@@ -481,6 +682,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
         return error_response(405, "method not allowed");
     }
     if (path == "/replays" || path.compare(0, 9, "/replays/") == 0) return handle_replays(rooms, request);
+    if (path == "/history" || path.compare(0, 9, "/history/") == 0) return handle_history(rooms, request);
     if (path == "/stats") {
         if (request.method != "GET") return error_response(405, "method not allowed");
         JsonValue o = JsonValue::make_object();

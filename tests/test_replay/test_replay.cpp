@@ -1020,6 +1020,60 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("RP2.11 The Outcome Holds What The Match's Results Screen Is Built From: The Engine's Own Result (Each Seat's Counted Numbers, The Rows, The Quitter, The Seats That Were There At The End) And The Seats That Dropped Out On The Way") {
+        // four seats to the end: all four have a row, nobody quit or dropped, and the score of a row's seat is the score box that the match showed
+        const Played four = play_scripted(tiny, 31, 450);
+        Outcome o = play(four.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok && o.dropped_mask == 0 && o.result.is_over && o.result.present_mask == 0x0F && o.result.quitter == sim::NO_QUITTER);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) ASSERT_EQ(o.result.final_scores[seat], o.scores[seat]);
+        ASSERT_EQ(o.result.rows(sim::PLAYER_NEUTRAL).size(), size_t{4});
+        // two seats of four: only they have a row, the two that were never there count nothing
+        const Played pair = play_scripted(tiny, 31, 450, 0x05);
+        o = play(pair.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.dropped_mask == 0 && o.result.present_mask == 0x05 && o.result.rows(sim::PLAYER_NEUTRAL).size() == 2);
+        ASSERT_TRUE(o.result.stats[1].score == 0 && o.result.stats[3].score == 0 && o.scores[1] == 0 && o.scores[3] == 0);
+        // a Quit that ends a match of two: the quitter is named and his row is last, however he stood
+        sim::SimulationEngine engine;
+        engine.init(tiny.level, 31, 0x03);
+        Recorder rec(head_for(tiny, "TINY", 31, 0x03));
+        for (uint32_t turn = 0; turn < 200; ++turn) {
+            engine.tick();
+            engine.clear_news_events();
+            engine.clear_audio_events();
+            rec.on_tick(engine);
+        }
+        const Command quit = make_command(CommandType::Quit, 0, 0, 0, {});
+        engine.apply_command(quit);
+        rec.on_command(quit);
+        std::string error;
+        const Decoded ended = decoded(rec.finish(engine, error));
+        ASSERT_TRUE(ended.ok);
+        o = play(ended.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.match_over && o.result.quitter == 0);
+        const std::vector<sim::ResultRow> rows = o.result.rows(sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(rows.size() == 2 && rows.back().first == 0 && rows.front().first == 1);
+        // a seat that is dropped out of a match of three (the system's command: the room sends it for a machine that left) has no row, and the other two go on
+        sim::SimulationEngine three;
+        three.init(tiny.level, 31, 0x07);
+        Recorder rec3(head_for(tiny, "TINY", 31, 0x07));
+        for (uint32_t turn = 0; turn < 150; ++turn) {
+            if (turn == 100) {
+                const Command drop = make_command(CommandType::Drop, 2, 0, 0, {});
+                three.apply_command(drop);
+                rec3.on_command(drop);
+            }
+            three.tick();
+            three.clear_news_events();
+            three.clear_audio_events();
+            rec3.on_tick(three);
+        }
+        const Decoded dropped = decoded(rec3.finish(three, error));
+        ASSERT_TRUE(dropped.ok);
+        o = play(dropped.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok);
+        ASSERT_TRUE(o.dropped_mask == 0x04 && o.result.present_mask == 0x03 && o.result.rows(sim::PLAYER_NEUTRAL).size() == 2);
+    } TEST_END();
+
     TEST_CASE("RP3.1 Four Computer Players Make A Real Match (Hundreds Of Commands Of Every Kind): Their Log, Recorded, Plays Out To The Arena's Own State Hash") {
         const ArenaRecording recording = record_arena_match(tiny, 5, 3000);
         const ai::ArenaResult& match = recording.match;

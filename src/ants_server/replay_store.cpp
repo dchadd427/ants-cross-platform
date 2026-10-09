@@ -337,6 +337,7 @@ bool ReplayStore::prepare(std::string& why) {
         return false;
     }
     std::sort(entries_.begin(), entries_.end(), older);
+    ++revision_;
     ready_ = true;
     next_purge_s_ = now_s() + kPurgeEveryS;
     next_rescan_s_ = now_s() + kRescanEveryS;
@@ -382,6 +383,7 @@ size_t ReplayStore::trim(uint64_t incoming) {
         ++kept;
     }
     entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(kept), entries_.end());
+    if (deleted > 0) ++revision_;
     if (failed > 1) note("replays: " + std::to_string(failed - 1) + " more file(s) could not be deleted either");
     return deleted;
 }
@@ -484,6 +486,7 @@ size_t ReplayStore::rescan() {
         ++added;
     }
     if (added > 0 || changed > 0) {
+        ++revision_;
         note("replays: " + std::to_string(added) + " file(s) found in " + cfg_.dir + " that the store did not know" + (changed > 0 ? ", " + std::to_string(changed) + " that are not there any more" : std::string()) + "; " +
              std::to_string(entries_.size()) + " listed, " + std::to_string(total_ / 1024) + " KiB");
         purge();                                                                     // (the limits hold for files that came from outside too: a file older than keep_days that is put here is deleted again)
@@ -563,6 +566,7 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
     total_ += entry.bytes;
     ++readable_;                                                                 // (summarize() accepted it)
     entries_.insert(std::upper_bound(entries_.begin(), entries_.end(), entry, older), entry);
+    ++revision_;
     saved_at_.push_back(now);
     result.kept = true;
     result.file = name;
@@ -598,6 +602,7 @@ bool ReplayStore::remove(const std::string& file) {
     total_ -= entries_[i].bytes;
     if (entries_[i].readable) --readable_;
     entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(i));
+    ++revision_;
     return true;
 }
 

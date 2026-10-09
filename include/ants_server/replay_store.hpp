@@ -118,6 +118,8 @@ public:
 
     size_t count() const noexcept { return entries_.size(); }
     uint64_t total_bytes() const noexcept { return total_; }
+    /// A number that moves every time the index changes (a file kept, found, forgotten, deleted): a reader that works through the files, the match history's feeder, looks at it to know when to look again
+    uint64_t revision() const noexcept { return revision_; }
     /// Lines for the server's log, once each: what prepare() found, files that were purged, a file that was refused or could not be written. A repeat of the last line is counted, not repeated: the count
     /// comes as one line when another line follows, every kRepeatReportEveryS (update()) and when the server stops (report_repeats()).
     std::vector<std::string> take_notes();
@@ -150,6 +152,7 @@ private:
     std::vector<ReplayEntry> entries_;               // oldest first
     uint64_t total_{0};
     size_t readable_{0};
+    uint64_t revision_{0};                           // moves with every change of entries_ (revision())
     std::vector<int64_t> saved_at_;                  // when the last files were kept (the hour's budget)
     int64_t next_purge_s_{0};
     int64_t next_rescan_s_{0};
