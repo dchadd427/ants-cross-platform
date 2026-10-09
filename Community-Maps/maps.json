@@ -1852,16 +1852,6 @@
    "description": "!FIGHT                  ..."
   },
   {
-   "file": "FOOD.lvl",
-   "size": 19312,
-   "hash": "3fe6ff9598ba9da2",
-   "width": 31,
-   "height": 31,
-   "minutes": 6,
-   "players": 4,
-   "description": "Tiny map with no PowerUps"
-  },
-  {
    "file": "Famine.lvl",
    "size": 19144,
    "hash": "33017ff830f6aa28",

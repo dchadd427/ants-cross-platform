@@ -5,7 +5,7 @@
 # Integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
-# application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
+# application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
@@ -86,12 +86,12 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Tool self-tests (map_sweep, bot_arena, replay_tool)
+      - name: Tool self-tests (map_sweep, bot_arena, replay_tool) and the community maps
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
           build/map_sweep --selftest || status=1
-          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { tail -40 build/community_sweep.log; status=1; }
+          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { grep -q '^Findings$' build/community_sweep.log && sed -n '/^Findings$/,$p' build/community_sweep.log || tail -40 build/community_sweep.log; status=1; }
           python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1
@@ -194,12 +194,12 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Tool self-tests (map_sweep, bot_arena, replay_tool)
+      - name: Tool self-tests (map_sweep, bot_arena, replay_tool) and the community maps
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
           build/map_sweep --selftest || status=1
-          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { tail -40 build/community_sweep.log; status=1; }
+          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { grep -q '^Findings$' build/community_sweep.log && sed -n '/^Findings$/,$p' build/community_sweep.log || tail -40 build/community_sweep.log; status=1; }
           python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1

@@ -221,13 +221,14 @@ run_worker_bot_suite() {
     fi
 }
 
-# The players' maps (Community-Maps/): every one loads, plays every roster it can host and is deterministic (the sweep's own verdict), and every one passes the rule that took it in
-# (tools/community_maps.py verify reads the sweep's report; docs/TESTING.md). Under ASan + UBSan (unoptimised) a play of 100 ticks is enough to meet the memory the sweep touches.
+# The players' maps (Community-Maps/): every one loads and is played with the roster of all four teams (and green and black alone where it has both) without a crash, a hang or an
+# error, deterministically (the sweep's own verdict), and every one passes the rule that took it in (tools/community_maps.py verify reads the sweep's report; docs/TESTING.md).
+# Under ASan + UBSan (unoptimised) a play of 100 ticks is enough to meet the memory the sweep touches. A failing sweep shows all its findings (the log before them is a table of every play).
 run_community_maps_suite() {
     local report="$BUILD_DIR/community_sweep.json" log="$BUILD_DIR/community_sweep.log" ticks=600
     [ "$RUN_ASAN" -eq 1 ] && ticks=100
     if ! "./$BUILD_DIR/map_sweep" Community-Maps --ticks "$ticks" --jobs 2 --out "$report" > "$log" 2>&1; then
-        tail -40 "$log"
+        grep -q '^Findings$' "$log" && sed -n '/^Findings$/,$p' "$log" || tail -40 "$log"
         return 1
     fi
     python3 tools/community_maps.py verify Community-Maps "$report"
