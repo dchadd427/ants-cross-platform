@@ -572,6 +572,16 @@ void Grid::clear_powerup(int32_t x, int32_t y) noexcept {
     cell.interactive_id = TILE_EMPTY;
 }
 
+void Grid::strip_pickups() noexcept {
+    for (const FoodObject& o : food_objects_) set_food_tile(TileCoord{static_cast<int32_t>(o.col), static_cast<int32_t>(o.row)}, 0x7FFEu);
+    food_objects_.clear();
+    for (uint32_t y = 0; y < height_; ++y) {
+        for (uint32_t x = 0; x < width_; ++x) {
+            if (get_cell(x, y).is_powerup) clear_powerup(static_cast<int32_t>(x), static_cast<int32_t>(y));
+        }
+    }
+}
+
 void Grid::place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept {
     if (!in_bounds(x, y)) return;
     auto& cell = get_cell_mut(static_cast<uint32_t>(x), static_cast<uint32_t>(y));

@@ -236,3 +236,20 @@ target_link_libraries(test_engine_copy PRIVATE ants_test_paths)
 add_test(NAME test_engine_copy COMMAND test_engine_copy --all)
 # COST (seconds of a CI run): ctest starts the dearest tests first, so that the longest one does not start last and run alone at the end
 set_tests_properties(test_engine_copy PROPERTIES COST 50)
+
+add_executable(test_game_mode
+    test_game_mode.cpp
+)
+
+target_link_libraries(test_game_mode PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_game_mode PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_game_mode PRIVATE ants_test_paths)
+
+add_test(NAME test_game_mode COMMAND test_game_mode)

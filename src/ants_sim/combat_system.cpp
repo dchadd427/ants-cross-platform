@@ -549,7 +549,11 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     post_news(255, drowned ? strings::kAntDrowned : strings::kAntDead);
     if (a.player_id < MAX_PLAYERS) {
         stats_.get_player_stats_mut(a.player_id).friendly_lost++;
-        if (killer != kNoKiller && killer != a.player_id) stats_.get_player_stats_mut(killer).enemy_killed++;
+        if (killer != kNoKiller && killer != a.player_id) {
+            PlayerMatchStats& k = stats_.get_player_stats_mut(killer);
+            k.enemy_killed++;
+            if (game_mode_ == GameMode::Kills187) k.score++;          // 187: the score is the number of kills (no bubble and no cue: a fight has many)
+        }
     }
     const TileCoord tile = pixel_tile(a);
     occ_move(a, TileCoord{-1, -1});

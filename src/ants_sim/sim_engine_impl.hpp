@@ -88,6 +88,7 @@ public:
     MatchState match_state_{MatchState::NotStarted};
     uint8_t roster_mask_{0x0F};             // bit p: team p takes part (a team without a player is NULL in the original's team table: no hill, ants or eggs)
     uint8_t dropped_mask_{0};               // bit p: team p dropped out of the match (team +0x64, FUN_0100d03b)
+    GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
     uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
 
     uint64_t current_tick_{0};
@@ -114,6 +115,12 @@ public:
     /// FUN_0100c5b1: how many sides remain when `team` leaves: every other team that has not dropped, an alliance counted once, the team's own ally counted
     uint32_t other_sides(uint8_t team) const;
     MatchResult make_match_result() const;
+    /// 187: the sides that are still alive (a team that has an ant, an egg or a hatch and has not dropped; two allied teams that are both alive are one side)
+    uint32_t alive_sides() const;
+    /// 187: the end rule of the mode, for every team in the match: nobody has anything left, or (with two or more teams in the match) one side is left
+    bool end_rule_187() const;
+    /// 187: the team that is the last one standing (the lowest-numbered alive team of the one side that is left), else PLAYER_NEUTRAL
+    uint8_t last_standing_187() const;
     std::array<std::string, MAX_PLAYERS> player_names_{};
     std::string player_display_name(uint8_t p) const;    // the set name, else the colour word
     std::string player_colour_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black

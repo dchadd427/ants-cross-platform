@@ -76,6 +76,7 @@ struct ResultRow {
     int32_t friendly_lost{0};
     int32_t enemy_killed{0};
     int32_t new_hatched{0};
+    int32_t ants_left{0};              // the living ants of the row's teams at the end (the 187 results page; 0 in every other mode)
     bool has_second() const noexcept { return second != PLAYER_NEUTRAL; }
 };
 
@@ -92,6 +93,10 @@ struct MatchResult {
     uint8_t present_mask{0x0F};               // the teams that have a row: in the match and not dropped (the builder skips NULL and dropped teams)
     std::array<uint8_t, MAX_PLAYERS> ally{ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE};   // each team's ally field (team +0x68)
     uint16_t quitter{NO_QUITTER};             // the team whose quit ended the match: its row goes last; NO_QUITTER when the clock or the rules ended it
+    /// 187 only: the team that is the last one standing when the match ends (every other side has no ant left, no egg and no hatch). Its row, or the row of the
+    /// alliance it belongs to, goes first whatever the scores are (a kill count only ranks the sides that are not the last ones standing). PLAYER_NEUTRAL otherwise.
+    uint8_t standing{PLAYER_NEUTRAL};
+    std::array<uint32_t, MAX_PLAYERS> ants_left{};   // the living ants of each team at the end (filled in 187; 0 in the other modes)
 
     /// The alliances that both sides confirm: before the rows are built the screen clears every alliance that the other side does not return,
     /// team by team (FUN_010155ac, 0x1015609 - 0x1015645)
@@ -108,7 +113,7 @@ struct MatchResult {
 
     /// The rows of the results screen of team `local` (FUN_01015136): one row per present team, an alliance (both sides confirmed) in one row that the
     /// lower-numbered team makes; then the exchange sort of 0x1015316: a row moves in front of an earlier row when the earlier one belongs to the quitter,
-    /// or has a lower score, or an equal score while the moving row is made by the local team (a row the quitter made never moves forward).
+    /// or (187 only) the moving row is the one of the last team standing, or has a lower score, or an equal score while the moving row is made by the local team (a row the quitter made never moves forward).
     std::vector<ResultRow> rows(uint8_t local) const {
         const std::array<uint8_t, MAX_PLAYERS> al = mutual_allies();
         std::vector<ResultRow> out;
@@ -129,12 +134,15 @@ struct MatchResult {
             row->friendly_lost += static_cast<int32_t>(stats[k].friendly_lost);
             row->enemy_killed += static_cast<int32_t>(stats[k].enemy_killed);
             row->new_hatched += static_cast<int32_t>(stats[k].new_hatched);
+            row->ants_left += static_cast<int32_t>(ants_left[k]);
         }
+        auto stands = [this](const ResultRow& r) { return standing != PLAYER_NEUTRAL && (r.first == standing || r.second == standing); };
         for (size_t i = 0; i < out.size(); ++i) {
             for (size_t j = 0; j < i; ++j) {
                 bool move_up;
                 if (out[i].first == quitter) move_up = false;
                 else if (out[j].first == quitter) move_up = true;
+                else if (stands(out[i]) != stands(out[j])) move_up = stands(out[i]);
                 else if (out[i].score != out[j].score) move_up = out[i].score > out[j].score;
                 else move_up = out[i].first == local;
                 if (move_up) std::swap(out[i], out[j]);

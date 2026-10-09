@@ -182,6 +182,9 @@ StateHash SimulationEngine::state_hash() const {
         h.u8(static_cast<uint8_t>(e.match_state_));
         h.u8(e.roster_mask_);
         h.u8(e.dropped_mask_);
+        // the rules of the match decide every later tick, so a mode other than the original's is state; it is mixed in only then, so that every match of
+        // the original's rules keeps the hash that it always had
+        if (e.game_mode_ != GameMode::HighestScore) h.u8(static_cast<uint8_t>(e.game_mode_));
         h.u32(e.quitter_);
         h.u64(e.current_tick_);
         h.u32(e.match_limit_ms_);
