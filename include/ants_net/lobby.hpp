@@ -122,6 +122,8 @@ public:
         /// starts it (the owner does that too; it needs a leader, so it is for a server's room that allows an early start).
         sim::StartTeams room_teams{};
         bool leader_starts{false};
+        /// A dedicated server's own match of computer players alone (RoomSpec::bots_only): can_start() does not ask for a person. Nothing on the wire changes: the room has no guests, so there is nobody to tell.
+        bool no_persons{false};
         /// Protocol 16: the room is a LOBBY ROOM (see the paragraph above). It needs a server's host that has a leader and waits for it to start (host_seat = kNoSeat, early_start and leader_starts), all four colours
         /// (max_players) and keys (make_key), or no seat could be held: without any of them this is taken for false. `hold_ms`: a guest whose connection ends keeps its seat this long; `start_wait_ms`: the
         /// leader's START waits this long for every person's game.
@@ -195,10 +197,10 @@ public:
     size_t humans() const noexcept;
     bool occupied(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state != SlotState::Empty; }
     /// A match starts when enough seats are taken, a map is chosen, and at least one of the players is a person (a room of bots alone has nobody to play for)
-    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && humans() >= 1 && !room_.map_name.empty(); }
+    bool can_start() const noexcept { return phase_ == Phase::Room && players() >= cfg_.min_players && (humans() >= 1 || cfg_.no_persons) && !room_.map_name.empty(); }
     /// The same once every empty seat up to max_players has a bot (a leader's START with a fill level): one person is enough, because the bots make up the rest. Fog of War is not looked at
     /// here: the owner refuses the fill itself (add_bot and start refuse a room with fog and a bot) and tells the leader why.
-    bool can_start_filled() const noexcept { return phase_ == Phase::Room && humans() >= 1 && !room_.map_name.empty() && cfg_.max_players >= cfg_.min_players; }
+    bool can_start_filled() const noexcept { return phase_ == Phase::Room && (humans() >= 1 || cfg_.no_persons) && !room_.map_name.empty() && cfg_.max_players >= cfg_.min_players; }
     /// The room's chat (protocol 11): every line that was said (a guest's, relayed to everybody; the host's own, see chat()), kept for the match's log, and the new ones for the owner
     const std::vector<ChatLine>& chat_log() const noexcept { return chat_.lines(); }
     std::vector<ChatLine> take_chat() { return chat_.take(); }

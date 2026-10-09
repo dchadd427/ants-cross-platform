@@ -40,6 +40,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.leader_starts = spec.leader_starts && spec.early_start;      // (the lead is what starts such a room: a room without a leader never would)
     cfg.load_timeout_ms = spec.load_ms;
     cfg.lobby_room = spec.lobby;                                     // (protocol 16: the lobby checks that the room can be one, see HostLobby::Config)
+    cfg.no_persons = spec.bots_only;                                 // (a match of computer players alone starts with nobody in the room)
     cfg.hold_ms = spec.hold_ms;
     cfg.start_wait_ms = spec.start_wait_ms;
     cfg.silence_ms = spec.silence_ms;
@@ -541,7 +542,7 @@ void Room::update(uint32_t now_ms) {
         // somebody is there when a player is connected or a seat is held for a player who may come back: a room whose players all lost their connection waits for them (until the cap)
         bool anybody = false;
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) anybody = anybody || session_->client_present(seat) || session_->seat_held(seat);
-        if (!anybody) finish("everybody left", now_ms);
+        if (!anybody && !spec_.bots_only) finish("everybody left", now_ms);          // (a match of computer players alone has nobody to leave: the rules, or the room's time limit, end it)
     }
 }
 

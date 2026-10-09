@@ -127,6 +127,9 @@ struct RoomSpec {
     size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
     bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
+    /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
+    /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
+    bool bots_only{false};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -335,6 +338,8 @@ public:
     const std::string& code() const noexcept { return spec_.code; }
     /// Made by a visitor's create block (protocol 15): one of the server's public rooms
     bool public_room() const noexcept { return spec_.public_room; }
+    /// The server's own match of computer players alone (RoomSpec::bots_only)
+    bool bots_only() const noexcept { return spec_.bots_only; }
     /// A lobby room (protocol 16) ...
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms

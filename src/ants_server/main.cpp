@@ -5,6 +5,7 @@
 //               [--resume-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
+//               [--bot-match-every-min N]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -60,6 +61,10 @@
 //   --replays-dir DIR  where the server keeps the REPLAYS of the matches that are played in its rooms (replay_store.hpp, docs/REPLAYS.md "On the game server"): when a match that ran 30 seconds or more is over, its .antsrep file is kept
 //                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
+//   --bot-match-every-min N
+//                      the server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none, the default): two to four standard bots, Medium or Hard, on random seats of one of the original's six
+//                      maps, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER.md "Matches of computer players"). Needs the replays (without them nothing is
+//                      played): the first match begins a minute after the start, the next ones N minutes after the one before began, and none while the last is still going.
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
@@ -143,6 +148,7 @@ struct Options {
     long replays_max_mb{100};
     uint16_t replay_port{0};                   // --replay-port: the public read-only door of the replays (0: none)
     bool replay_any_interface{false};
+    long bot_match_every_min{0};             // --bot-match-every-min (0: none)
 };
 
 void usage(FILE* to) {
@@ -154,7 +160,7 @@ void usage(FILE* to) {
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
-                 "                    [--replay-port N] [--replay-any-interface]\n"
+                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -293,6 +299,15 @@ int main(int argc, char** argv) {
                 return 2;
             }
             *target = n;
+        } else if (a == "--bot-match-every-min") {
+            const char* text = value("--bot-match-every-min");
+            char* end = nullptr;
+            const long n = std::strtol(text, &end, 10);
+            if (end == text || *end != '\0' || n < 0 || n > 1440 || (n != 0 && n < 5)) {
+                std::fprintf(stderr, "--bot-match-every-min takes 0 (none) or a whole number of minutes from 5 to 1440\n");
+                return 2;
+            }
+            o.bot_match_every_min = n;
         } else if (a == "--demo-map") {
             o.demo_map = value("--demo-map");
         } else if (a == "--demo-maps") {
@@ -540,6 +555,14 @@ int main(int argc, char** argv) {
             log("replays are off (--no-replays): no match is kept");
         } else if (rc.dir.empty()) {
             log("replays are off: no --results-dir or --replays-dir to keep them in");
+        }
+        if (o.bot_match_every_min > 0) {
+            if (rooms.replay_store() != nullptr) {
+                rooms.enable_bot_matches(static_cast<uint32_t>(o.bot_match_every_min), now_ms());
+                log("the server plays a match of computer players every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute (--bot-match-every-min)");
+            } else {
+                log("--bot-match-every-min is ignored: the server keeps no replays, and a match that nobody could look at again is not played");
+            }
         }
     }
     if (o.reconnect) {

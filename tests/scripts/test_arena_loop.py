@@ -255,6 +255,13 @@ class BuiltFromTheRepository(unittest.TestCase):
     def test_the_variable_is_documented_in_the_header_of_the_stack(self):
         self.assertRegex(self.stack, r"(?m)^#   ANTS_ARENA_EVERY_MIN=60 ")
 
+    def test_the_arena_is_not_started_by_default_because_the_server_plays_its_own_matches(self):
+        # the headless arena plays its match in a second and nobody can watch it live: the game server's own match (--bot-match-every-min) replaces it, and the service waits behind a profile
+        self.assertIn('profiles: ["arena"]', self.service())
+        self.assertRegex(self.stack, r'"--bot-match-every-min", "\$\{ANTS_BOT_MATCH_EVERY_MIN:-60\}"')
+        self.assertRegex(self.stack, r"(?m)^#   ANTS_BOT_MATCH_EVERY_MIN=60 ")
+        self.assertIn("`ANTS_BOT_MATCH_EVERY_MIN`", read("docs", "SERVER.md"))
+
     def test_the_ci_builds_the_stage_and_plays_one_match_with_it(self):
         for needle in ("docker build -f Dockerfile.server --target arena -t ants-arena .", "ANTS_ARENA_ONCE=1", "ANTS_ARENA_SEED=1", "*.antsrep"):
             self.assertIn(needle, self.ci)
