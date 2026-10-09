@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""The front page (run by ./run_tests.sh --fast and by the CI). The owner, looking at the front page on a phone: "I don't see a way to change colors or send an invite to another person should all be
-right there. We don't need separate AI and online. Only do online." The page (web/lobby.html, once web/four.html) is the front page at "/" and has ONE card, "New match", for every game: four seats
-(exactly one is You, every other is a Friend, a bot of a level or Nobody), the teams, an invitation for each Friend and START!, which takes this tab into a match on the game server; the game page
-(web/shell.html) has a Menu button that goes back to it in the same tab and passes the card's &seat=, &fill= and &start= to the game.
+"""The front page (run by ./run_tests.sh --fast and by the CI). The front page (web/lobby.html, at "/") is a LOBBY: a room that lives on the game server (network protocol 16). A plain visit makes a room and
+seats you in its first colour; the page shows the room's code and a link to send (Copy link, Share), the four colours (Black top left, Green top right, Red bottom left, Blue bottom right) where the host drags a
+player onto another colour, sets a colour to Open, a bot of a level or Nobody, and presses Team 1 / Team 2, the map and START!; a link to somebody's room asks for a name first, "Have a code?" takes a typed code,
+and START sends every page to the game page (web/shell.html) in the same tab with the key of its seat (a match for one is the game page's own single player). The game page has a Menu button back.
 
-  - the pages' own rules are RUN (node, when it is installed): what the card means (who plays, the plan, the room's code, which is only a name, and its create block, and the addresses of START and of
-    an invitation, what is remembered and what a first visit takes from the earlier pages' keys), the game page's whitelist (the six maps by key, the levels, the teams, the room's block, a cleaned
-    name: never the text of the address) and the two pages agreeing (tests/scripts/web_lobby_check.js);
-  - what needs no browser is read from the files: the card's markup (the four rows with their buttons, the Teams, the invitations, START, "Have a code?"), the header links and the footer of the front
-    page, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link on both pages, the Dockerfile that copies the lobby and the game
-    page's second path, the CI's page check, and the documents.
+  - what needs no browser and no markup is RUN (node, when it is installed): the old addresses' rules that are still in the page (the test room: the create block, the plan, the teams, a game on this computer),
+    the game page's whitelist (the six maps by key, the levels, the teams, the room's block, a cleaned name: never the text of the address), the two pages agreeing, and that everything the page reads from
+    its two scripts is there (tests/scripts/web_lobby_check.js). The rules of the lobby itself (front/lobby_rules.js) are run by tests/scripts/web_lobby_rules_check.js, its client of the game server
+    (front/lobby_net.js) by tests/scripts/web_lobby_net_check.js and web_lobby_client_check.js;
+  - what the PAGE is is read from the file: the markup (the room, the four colours, the invitation, "Have a code?", the map and START, How it works, the name card, the footer), the wiring of the script to it (the
+    ids, the attributes the cards are made with and the listeners find, which element shows the code and the link), the looks that carry a rule (START, the team buttons: 4.5 : 1 in every state), the room-code and
+    create-block wiring of the links, that START and the old addresses go to this tab, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link
+    on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's page check, and the documents.
 The routes of nginx are run in tests/scripts/test_nginx_routes.py; the game page's look (the front page's) is read in tests/scripts/test_web_game.py; the whole flow in a real browser is
 tests/scripts/web_home_check.py (opt-in).
 """
@@ -43,91 +45,130 @@ class PageCase(unittest.TestCase):
 class TheFrontPageMarkup(PageCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
+        self.markup = self.page[:self.page.index("<script")]                                             # the style and the body: what the browser has before any script runs
+        self.style = re.sub(r"/\*.*?\*/", "", self.page[:self.page.index("</style>")], flags=re.S)       # (the rules, with their comments taken out)
+        self.wide = self.style[:self.style.index("@media (min-width: 1041px)")]                               # (the rules of a wide page: the media queries of the narrower windows come after them)
+        self.script = self.page[self.page.index('<script src="front/lobby_rules.js">'):]
+        self.rules = read("web", "front", "lobby_rules.js")
+
+    def rule(self, selector, text=None):
+        """the body of the one rule `selector { ... }` of the text (the wide page's rules by default), failing when there is not exactly one"""
+        found = re.findall(r"(?:^|[};])\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", text if text is not None else self.wide)
+        self.assertEqual(len(found), 1, "%d rules for %s" % (len(found), selector))
+        return found[0]
 
     def test_it_is_titled_ants_1998_and_has_the_placeholders_once(self):
         self.assertIn("<title>Ants (1998)@@SITE_TITLE@@</title>", self.page)
         for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 
-    def test_the_card_has_four_seats_with_a_group_of_five_buttons_and_sit_here_the_teams_the_invitations_and_start(self):
-        self.assertEqual(len(re.findall(r'<section class="card', self.page)), 1)                  # one card: the two of the earlier pages (play against the computer, play online) are gone
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the map's (the teams are two switches on each seat, no select)
-        for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match', 'Opponents</span>'):
+    def test_the_page_is_one_lobby_the_room_with_its_four_colours_and_the_match_with_its_map_and_start(self):
+        self.assertEqual(len(re.findall(r'<section class="card', self.page)), 0)                  # the one card of the earlier front page (New match: Friend seats, Sit here, START) is gone: the page is a room
+        self.assertEqual(self.markup.count('<div class="grid" id="lobby">'), 1)
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the map's (the drop-down of a colour is made by the script, for the colours that the host can set)
+        for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
+                     'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
-        self.found(self.page, r'<h2 class="banner" id="h-match">New match</h2>')
-        self.found(self.page, r'<div class="sel"><select id="map-pick"></select></div>')
-        # four seats in the order of the room's (0 Green, 1 Red, 2 Blue, 3 Black), each with its ant, its colour, the marker and the name of You (hidden until the script says), the two team switches, Sit here and one group of
-        # five buttons: in the order that a person reads them and Tab goes through them (the page's grid puts them so on every width)
-        seats = self.page[self.page.index('<ul class="roster seats4" id="seats"'):]
-        seats = seats[:seats.index("</ul>")]
-        rows = re.findall(r'<li id="seat-row-(\d)" data-seat="(\d)"><img src="front/ant_(\w+)\.png\?v=[0-9a-f]{8}" alt="" width="23" height="40">\s*<span class="nm"><span class="colour">(\w+)</span><span class="you" id="seat-you-(\d)" hidden> &middot; You</span><small class="seat-name" id="seat-name-(\d)" hidden></small></span>\s*'
-                          r'<span class="teamset" id="team-set-(\d)" role="group" aria-label="(\w+)\'s team" hidden><button type="button" class="tbtn" id="team-(\d)-1" aria-label="Team 1 for (\w+)" aria-pressed="false">Team 1</button><button type="button" class="tbtn" id="team-(\d)-2" aria-label="Team 2 for (\w+)" aria-pressed="false">Team 2</button></span>\s*'
-                          r'<button type="button" class="btn sm sit" id="sit-(\d)" aria-label="Sit here as (\w+)">Sit here</button>\s*'
-                          r'<fieldset class="seatset" id="seat-set-(\d)"><legend class="sr">(\w+)</legend><span class="pair">(.*?)</span></fieldset></li>', seats, re.S)
-        self.assertEqual([(r[0], r[2], r[3]) for r in rows], [("0", "green", "Green"), ("1", "red", "Red"), ("2", "blue", "Blue"), ("3", "black", "Black")])
-        for n, same, _, name, you, nm, teamset, team_name, one, one_name, two, two_name, sit, sit_name, fieldset, legend, body in rows:
-            self.assertEqual({n, same, you, nm, sit, fieldset, teamset, one, two}, {n}, name)           # (every id of a row is the row's own seat; the two switches and Sit here come before the five buttons, as they stand on every width: Tab goes the way the eye does)
-            self.assertEqual({name, sit_name, legend, team_name, one_name, two_name}, {name}, name)       # (a button's own name says its colour: a list of the page's buttons shows no group)
-            buttons = re.findall(r'<input type="radio" name="seat-%s" id="seat-%s-(\w+)" value="(\w+)"( checked)?><label for="seat-%s-\1">(\w+)</label>' % (n, n, n), body)
-            self.assertEqual([(word, value, text) for word, value, _, text in buttons], [("friend", "friend", "Friend"), ("easy", "easy", "Easy"), ("medium", "medium", "Medium"), ("hard", "hard", "Hard"), ("nobody", "nobody", "Nobody")], name)
-            self.assertEqual([word for word, _, checked, _ in buttons if checked], ["friend"], name + ": the markup starts as a first visit does, with a Friend (the script shows the seat of You instead)")
-        # what the five words mean, said once under the rows
-        self.found(self.page, r'<p class="hint" id="seats-hint">Friend: a seat for a person you invite\. Easy, Medium, Hard: a bot of that level\. Nobody: the seat stays out\.</p>')
-        # the Teams: the two switches of each seat (Team 1, Team 2: shown when three or four seats play, a team is two seats on the same one) and a line that says what they make, with the reason when a press is refused
-        self.found(self.page, r'<p class="hint teamrow" id="teams-line" aria-live="polite" hidden></p>')
-        self.assertNotIn('id="teams"', self.page)
-        self.assertNotIn('<label class="lab" for="teams">', self.page)
-        self.found(self.page, r'\.roster li\[hidden\] \{ display: none; \}')                          # (a row is a grid: hidden still hides it)
-        # the invitations: a box that the script shows for the Friend seats and fills with a row for each (no markup is made of text), a note about changed links
-        self.found(self.page, r'<div class="invites" id="invites" hidden>\s*<span class="lab" id="invites-label">Invite your friends: a link for each seat</span>\s*<div id="invite-list" role="group" aria-labelledby="invites-label"></div>\s*<p class="hint" id="links-note" role="status" hidden>')
-        # START: the page's own teal button (its text names it for a screen reader; it is always on: a game for one is a game too), the line under it
-        self.found(self.page, r'<button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!</button>')
-        self.found(self.page, r'<p class="note" id="start-note" aria-live="polite"></p>')
-        self.not_found(self.page, r'\.startbtn:disabled')                                              # (START is never off: nothing to style)
+        self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (AGENTS.md rule 7)")
+        # the room: its heading and code, the invitation, the colours; the match: the map, the line about it and START
+        self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><h2 id="room-h">Your room</h2><span class="code">Room code <b id="code"></b></span></div>', self.markup)
+        self.assertIn('<ul class="slots" id="slots" aria-label="The four colours"></ul>', self.markup)
+        self.assertIn('<p class="slots-note" id="slots-note" role="status"></p>\n            <p class="slots-note teams-note" id="teams-note" role="status"></p>', self.markup)
+        self.assertIn('<aside class="side" aria-label="The match">', self.markup)
+        self.assertIn('<div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"></select>'
+                      '<button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>', self.markup)
+        self.assertIn('<p class="info" id="info" aria-live="polite"></p>', self.markup)
+        self.assertIn('<button class="btn big" type="button" id="start">START!</button>', self.markup)
+        self.assertEqual(self.markup.count('id="start"'), 1)
+        self.assertIn('<p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>', self.markup)
+        # the map: the page shows the default map until the room says another (the picture of the first paint), and has a picture for each map that the script lists
+        keys = re.findall(r"\{ key: '(\w+)', name: '\w+', file: '\w+\.LVL'", self.rules)
+        default = re.search(r"var DEFAULT_MAP_KEY = '(\w+)';", self.rules).group(1)
+        self.assertEqual(len(keys), 6)
+        self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s" width="300" height="300">' % (default, default.capitalize()), self.markup)
+        self.assertIn("$('preview').src = 'front/preview_' + side.mapKey + '.png';", self.script)
+        for key in keys:
+            self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
+        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.script)       # (the list of the drop-down is the rules' list, in its order)
+
+    def test_the_four_colours_are_built_in_reading_order_by_the_script_and_every_control_of_a_colour_is_named(self):
+        script = self.script
+        # the cards lie Black, Green, Red, Blue (the four hills of the maps) and are BUILT in that order from the rules' GRID, with no CSS order, so that Tab and a screen reader follow what is on screen
+        self.assertIn("var GRID = Rules.GRID;", script)
+        self.assertIn("GRID.forEach(function (seat) { var li = el('li'); li.setAttribute('data-i', String(seat)); lis[seat] = li; $('slots').appendChild(li); });", script)
+        self.assertIn("GRID.forEach(function (seat) { paintCard(v.cards[seat], m); });", script)
+        for selector, body in re.findall(r"([^{};]+)\{([^{}]*)\}", self.style):
+            if ".slot" in selector:
+                self.not_found(body, r"(?<![-\w])order\s*:", "a colour card is placed by the order of the markup, never by a CSS order: " + selector.strip())
+        self.found(self.style, r"\.slots \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);")             # two columns on a wide page ...
+        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
+        self.found(phone, r"\.slots \{ grid-template-columns: minmax\(0, 1fr\);")                                         # ... one column on a phone, in the same order
+        # the seats of the test room are the server's: Green 0, Red 1, Blue 2, Black 3; its games lie by colour like the cards (a CSS order there: a frame that is moved loads its game again)
+        self.assertEqual(re.findall(r"\{ name: '(\w+)', css: '(\w+)' \}", script), [("Green", "green"), ("Red", "red"), ("Blue", "blue"), ("Black", "black")])
+        self.assertEqual(re.findall(r'\.cell\[data-seat="(\d)"\] \{ order: (\d); \}', self.style), [("3", "0"), ("0", "1"), ("1", "2"), ("2", "3")])
+        # what a card is made of: text and attributes, never markup (a name is whatever a person typed), each control named for a screen reader and found again by the listeners through the same attributes
+        for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
+            self.assertNotIn(banned, self.page)
+        for needle in ("li.setAttribute('role', 'group');", "li.setAttribute('aria-label', card.label);", "grip.setAttribute('aria-label', 'Move ' + Rules.nameOf(m, seat) + ' to another colour');",
+                       "select.setAttribute('aria-label', c.name + ' is');", "pencil.setAttribute('aria-label', 'Change your name');", "rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');",
+                       "ask.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room?');", "set.setAttribute('aria-label', 'Team of ' + c.name);", "b.setAttribute('aria-pressed', String(t.pressed));",
+                       "if (t.disabled) b.setAttribute('aria-disabled', 'true');", "b.setAttribute('aria-label', 'Team ' + t.side + ' for ' + c.name);"):
+            self.assertIn(needle, script, needle)
+        for attribute in ("data-grip", "data-mode", "data-edit", "data-remove", "data-remove-yes", "data-remove-no", "data-side", "data-seat"):
+            self.assertIn("setAttribute('%s'" % attribute, script, attribute + " is made on the card")
+            self.assertTrue(("[%s]" % attribute) in script or ("getAttribute('%s')" % attribute) in script, attribute + " is looked for by a listener")
+        # the drop-down of a colour offers the plan's five words, the ones that the rules' planWith takes
+        kinds = re.findall(r"'(\w+)'", re.search(r"var KINDS = \[(.*?)\];", self.rules).group(1))
+        options = re.search(r"\[\['open', 'Open'\].*?\]\]\.forEach", script).group(0)
+        self.assertEqual(re.findall(r"\['(\w+)', '[A-Za-z ]+'\]", options), kinds)
+        self.assertEqual(re.findall(r"\['\w+', '([A-Za-z ]+)'\]", options), ["Open", "Easy bot", "Medium bot", "Hard bot", "Nobody"])
+        self.assertIn("if (s) setMode(+s.getAttribute('data-mode'), s.value);", script)
 
     def test_start_is_the_pages_own_button_drawn_by_the_browser_at_a_modest_size(self):
-        # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size (294 x 81 pixels, 196 x 54 on a phone) with image-rendering: pixelated, so its letters and edges were
-        # blocky and it was bigger than the rows above it. It is text on the page's own bevel (.btn) now: the browser draws it at the screen's resolution, and its size is a minimum that the text may outgrow.
-        self.not_found(self.page, r'btn_start')
-        rules = re.findall(r'(?m)^\s*\.startbtn \{([^}]*)\}', self.page)
+        # v0.8.0 showed the original's 98 x 27 picture as the button's background at three times its size with image-rendering: pixelated, so its letters and edges were blocky and it was bigger than the rows
+        # above it. START is text on the page's own bevel (.btn) now: the browser draws it at the screen's resolution, and its size is a minimum that the text may outgrow.
+        self.not_found(self.page, r"btn_start")
+        rules = re.findall(r"(?m)^\s*\.btn\.big \{([^}]*)\}", self.style)
         self.assertEqual(len(rules), 2, "one rule for a wide page and one for a phone")
         for rule in rules:
-            self.not_found(rule, r'background|image-rendering|(?<![-\w])(width|height):', "the size is a minimum of the text's button, never a picture or a fixed box: " + rule)
+            self.not_found(rule, r"background|image-rendering|(?<![-\w])(width|height):", "the size is a minimum of the text's button, never a picture or a fixed box: " + rule)
 
         def px(rule, prop):
             found = re.search(r"(?<![-\w])%s: (\d+)px" % prop, rule)
             self.assertIsNotNone(found, "%s is a number of px in: %s" % (prop, rule))
             return int(found.group(1))
         wide, phone = rules
-        for prop, wide_most, phone_most in (("min-width", 240, 200), ("min-height", 64, 58), ("font-size", 30, 28)):         # (one assert each: a tuple would compare its first number alone)
+        for prop, wide_most, phone_most in (("min-height", 64, 58), ("font-size", 30, 28)):                # (one assert each: a tuple would compare its first number alone)
             self.assertLessEqual(px(wide, prop), wide_most, "wide " + prop)
             self.assertLessEqual(px(phone, prop), phone_most, "phone " + prop)
         self.assertGreaterEqual(px(phone, "min-height"), 44)                                             # (a finger's target: the base .btn is 44 px high at the least)
-        self.assertEqual(self.page.count('class="btn startbtn"'), 1)
-        at = self.page.index("@media (max-width: 700px)")
-        phone_block = self.page[at:self.page.index("@media", at + 1)]
-        self.assertEqual(len(re.findall(r"\.startbtn \{", phone_block)), 1, "the phone's rule is the one in the 700 px block")
+        self.assertGreaterEqual(px(self.rule(".btn"), "min-height"), 44)
+        self.assertEqual(self.markup.count('class="btn big"'), 1)
+        at = self.style.index("@media (max-width: 720px)")
+        phone_block = self.style[at:self.style.index("@media", at + 1)]
+        self.assertEqual(len(re.findall(r"\.btn\.big \{", phone_block)), 1, "the phone's rule is the one in the 720 px block")
+        self.assertEqual(len(re.findall(r"\.btn\.big \{", self.style[:at])), 1)
+        self.found(phone_block, r"\.go \{ position: sticky; bottom: 0;")                                 # (on a phone START stays in view at the bottom of the screen)
 
-    def test_the_team_switches_have_their_look_a_hidden_rule_and_a_place_on_every_width(self):
-        # Team 1 and Team 2 are two buttons that show only when three or four seats play (the script un-hides them): the page's one `[hidden]` rule has `!important`, so it wins over the flex box of their group (no
-        # rule of the group's own is needed), and a pressed switch must look different from a loose one in more than colour (it is pushed in: moved and darker, like the seat buttons)
-        self.found(self.page, r'\[hidden\] \{ display: none !important; \}')
-        self.found(self.page, r'\.seats4 \.teamset \{[^}]*display: flex;')
-        self.not_found(self.page, r'\.teamset\[hidden\]')
-        pressed = re.search(r'\.tbtn\[aria-pressed="true"\] \{([^}]*)\}', self.page)
-        self.assertIsNotNone(pressed, "a pressed switch has a rule")
-        self.assertIn("transform: translate(", pressed.group(1))
-        # a switch that a third seat may not press is dimmed but stays a button (it says why when pressed): drawn flat with a dashed edge and softer letters, never faded with `opacity` (a faded face
-        # and letters had 2.8 : 1 against the page's 4.5 : 1), and every look of a switch keeps its letters at 4.5 : 1 on its face
-        dimmed = re.search(r'\.tbtn\[aria-disabled="true"\] \{([^}]*)\}', self.page)
-        self.assertIsNotNone(dimmed, "a dimmed switch has a rule")
-        self.not_found(dimmed.group(1), r'opacity', "a dimmed switch is not faded: " + dimmed.group(1))
-        self.assertIn("dashed", dimmed.group(1))
-        self.found(self.page, r'\.tbtn:focus-visible \{ outline: 3px solid var\(--gold\);')
-        tokens = dict(re.findall(r'(--[\w-]+): (#[0-9a-fA-F]{6});', self.page[:self.page.index("</style>")]))
+    def test_the_team_buttons_have_their_look_a_hidden_rule_and_a_place_on_every_width(self):
+        # Team 1 and Team 2 are two buttons on each colour that plays, when three or four play (the script builds them: Rules.viewOf says which colours have them): the page's one `[hidden]` rule has `!important`,
+        # a pressed button must look different from a loose one in more than hue, and a button that a third colour may not press is dimmed but stays a button (it says why when pressed): drawn flat with a dashed
+        # edge and softer letters, never faded with `opacity` (a faded face and letters would fall under 4.5 : 1), and every look of a button keeps its letters at 4.5 : 1 on its face
+        self.found(self.style, r"\[hidden\] \{ display: none !important; \}")
+        self.found(self.style, r"\.teamset \{[^}]*display: flex;")
+        base = self.rule(".teamset button")
+        hover = self.rule(".teamset button:hover")
+        pressed = self.rule('.teamset button[aria-pressed="true"]')
+        dimmed = self.rule('.teamset button[aria-disabled="true"]')
+        self.not_found(dimmed, r"opacity", "a dimmed button is not faded: " + dimmed)
+        self.assertIn("dashed", dimmed)
+        self.assertNotIn("dashed", base + pressed)
+        self.found(self.style, r"(?m)^\s*:focus-visible \{ outline: 3px solid var\(--gold\); outline-offset: 3px; \}")      # (every button, link and field shows where it is on the keyboard)
+        self.not_found(self.style, r"outline:\s*(none|0)\b", "no rule takes the outline away")
+        tokens = dict(re.findall(r"(--[\w-]+): (#[0-9a-fA-F]{6});", self.style[:self.style.index("* { box-sizing")]))
 
         def colour(text):
-            found = re.search(r'#[0-9a-fA-F]{6}|var\((--[\w-]+)\)', text)
+            found = re.search(r"#[0-9a-fA-F]{6}|var\((--[\w-]+)\)", text)
             return tokens[found.group(1)] if found.group(1) else found.group(0)
 
         def luminance(hexed):
@@ -139,76 +180,184 @@ class TheFrontPageMarkup(PageCase):
         def ratio(a, b):
             high, low = sorted((luminance(a), luminance(b)), reverse=True)
             return (high + 0.05) / (low + 0.05)
-        base = re.search(r'\.tbtn \{([^}]*)\}', self.page).group(1)
-        looks = {"loose": (re.search(r'(?<![-\w])color: ([^;]+);', base).group(1), re.search(r'background: (var\(--[\w-]+\)|#[0-9a-fA-F]{6})', base).group(1)),
-                 "pressed": (re.search(r'(?<![-\w])color: ([^;]+);', pressed.group(1)).group(1), re.search(r'background: (#[0-9a-fA-F]{6})', pressed.group(1)).group(1)),
-                 "dimmed": (re.search(r'(?<![-\w])color: ([^;]+);', dimmed.group(1)).group(1), re.search(r'background: (var\(--[\w-]+\)|#[0-9a-fA-F]{6})', dimmed.group(1)).group(1))}
-        for look, (letters, face) in looks.items():
-            self.assertGreaterEqual(ratio(colour(letters), colour(face)), 4.5, "a %s switch: %s on %s" % (look, letters, face))
-        # a place in the row for the switches and Sit here, for a wide page, a phone, a narrower phone and the narrowest: the grid areas name them in the order of the markup (team, sit, pick) on each
-        wide = self.page[:self.page.index("@media (max-width: 700px)")]
-        self.found(wide, r'\.seats4 li \{[^}]*grid-template-areas: "ant who sit pick";')
-        self.found(wide, r'\.seats4\.with-teams li \{ grid-template-areas: "ant who who pick" "ant team sit pick"; \}')
-        at = self.page.index("@media (max-width: 700px)")
-        phone = self.page[at:self.page.index("@media (max-width: 480px)", at)]
-        self.found(phone, r'\.seats4 li \{[^}]*grid-template-areas: "ant who sit" "pick pick pick";')
-        self.found(phone, r'\.seats4\.with-teams li \{[^}]*grid-template-areas: "ant who team sit" "pick pick pick pick"')
-        narrow = self.page[self.page.index("@media (max-width: 374px)"):]
-        self.found(narrow, r'\.seats4\.with-teams li \{[^}]*grid-template-areas: "ant who who" "team team sit" "pick pick pick"')
-        self.assertIn('with-teams', self.page[self.page.index("function showTeams"):])                  # (the script puts the class on the list when the switches show)
 
-    def test_the_card_has_a_line_to_join_a_match_that_somebody_else_made_with_the_old_ids(self):
-        self.found(self.page, r'<div class="havecode">\s*<label class="lab" for="join-code">Have a code\?</label>\s*<input type="text" id="join-code" placeholder="k7m 2xq" maxlength="32"[^>]*>\s*<button id="join-go" type="button" class="btn">Join</button>\s*<p class="hint" id="join-hint"></p>\s*</div>')
-        self.assertLess(self.page.index('id="start-note"'), self.page.index('class="havecode"'))          # under the card's match, inside the card
-        card = self.page[self.page.index('<section class="card match"'):]
-        self.assertIn('class="havecode"', card[:card.index("</section>")])
+        def letters(rule):
+            return re.search(r"(?<![-\w])color: ([^;]+);", rule).group(1)
 
-    def test_the_card_has_one_line_of_help_and_the_rest_is_behind_how_it_works(self):
-        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 1)                      # the line under START (the others are hints: the seats', the invitations', the code's)
-        self.found(self.page, r'<details class="how" id="how" hidden>\s*<summary><span class="btn">How it works</span></summary>')
-        steps = self.page[self.page.index('<div class="steps">'):]
-        steps = steps[:steps.index("</div>")]
-        self.assertEqual(re.findall(r"<h4>(.*?)</h4>", steps), ["New match", "Have a code?", "On the map"])
-        for word in ("<b>You</b>", "<b>Sit here</b>", "<b>Friend</b>", "<b>Easy</b>", "<b>Nobody</b>", "<b>Team 1</b>", "<b>Team 2</b>", "<b>START!</b>", "<b>Invite your friends</b>", "<b>Copy link</b>", "<b>Share</b>", "<b>Join</b>"):
-            self.assertIn(word, steps, word)
-        self.assertNotIn("Play vs the computer", steps)
-        self.assertIn("You, your friends and the bots are 1 to 4 players.", steps)                 # (a game for one is a game: START is never off)
-        self.assertNotIn("are 2 to 4 players", steps)
-        self.assertIn("with every other seat on <b>Nobody</b> it is a game for one on this computer", steps)
-        self.assertNotIn("setup-hint", self.page)                                              # (the long hints of the old form are in "How it works" and the room panel)
+        def face(rule):
+            return re.search(r"(?<![-\w])background: (var\(--[\w-]+\)|#[0-9a-fA-F]{6})", rule).group(1)
 
-    def test_a_first_visit_is_treasure_you_at_green_a_friend_in_the_other_seats_and_the_choices_are_the_cards_own(self):
-        self.assertIn("var DEFAULT_MAP_KEY = 'treasure';", self.page)
-        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0, seats: ['friend', 'friend', 'friend', 'friend'], sides: [0, 0, 0, 0], teams: 'ffa' }); }", self.page)
-        self.assertIn("var CARD_KEY = 'ants-match';", self.page)
-        self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                  # (a state of the card's own wins; the earlier pages' keys are for a first visit)
-        self.assertIn("remember(CARD_KEY, cardText(card));", self.page)
-        self.assertEqual(len(re.findall(r"\bremember\(CARD_KEY", self.page)), 1)                         # (the one place that writes it: a choice was made)
+        def edge(rule):
+            return re.search(r"(?<![-\w])border(?:-color)?: (?:\d+px solid )?(var\(--[\w-]+\)|#[0-9a-fA-F]{6})", rule).group(1)
+        looks = {"loose": (letters(base), face(base)), "pressed": (letters(pressed), face(pressed)), "dimmed": (letters(dimmed), face(dimmed)), "hovered": (letters(hover), face(base))}
+        for look, (ink, ground) in looks.items():
+            self.assertGreaterEqual(ratio(colour(ink), colour(ground)), 4.5, "a %s button: %s on %s" % (look, ink, ground))
+        # a pressed button is told from a loose one by more than its hue: its edge is far lighter than the loose edge (3 : 1 is the least that a state needs against what it is told from)
+        self.assertGreaterEqual(ratio(colour(edge(pressed)), colour(edge(base))), 3.0, "the edge of a pressed button against the edge of a loose one")
+        # a place for them on every width: 36 px high on a wide page, 40 on a phone, and a narrower phone only makes the letters and the room around them smaller
+        self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 36)
+        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
+        self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 40px; \}")
+        narrow = self.style[self.style.index("@media (max-width: 374px)"):]
+        self.found(narrow, r"\.teamset button \{ padding: 3px 4px; font-size: 14px; \}")
+        # the script puts the buttons in a group of their own, named for the colour, inside the text of the card (so they follow the name and the status in the reading order)
+        self.assertIn("var set = el('div', 'teamset');", self.script)
+        self.assertIn("txt.appendChild(set);", self.script)
+        self.assertLess(self.script.index("txt.appendChild(set);"), self.script.index("li.appendChild(txt);"))
 
-    def test_the_old_keys_are_read_for_a_first_visit_and_never_written(self):
-        for key in ("ants-solo-seats", "ants-solo-bots", "ants-solo-teams", "ants-four-map", "ants-four-players", "ants-four-fill", "ants-four-teams"):
-            self.assertEqual(len(re.findall(r"recall\('%s'\)" % key, self.page)), 1, key)             # read once, for the first visit
-        self.assertNotRegex(self.page, r"remember\('ants-(solo|four)")                                  # ... and written by nothing: the card has its own key
-        self.assertNotIn("hostSeatsText", self.page)
+    def test_the_room_has_its_code_its_link_with_copy_link_and_share_and_the_link_carries_the_plain_code_only(self):
+        # which element shows what: the code in two groups of three beside the heading, the link in a read-only field (a phone hides the field and Copy link takes the width), Copy link, Share where the browser has it
+        self.assertIn('<input id="link" type="text" readonly value="" aria-label="Invitation link">', self.markup)
+        self.assertIn('<button class="btn" type="button" id="copy">Copy link</button>', self.markup)
+        self.assertIn('<button class="btn share" type="button" id="share" hidden>Share</button>', self.markup)
+        self.assertIn('<span id="invite-line">Players who open this link take the next free colour.</span>', self.markup)
+        script = self.script
+        self.assertIn("setText($('code'), client ? Rules.codeText(client.code) : '');", script)
+        self.assertIn("if ($('link').value !== roomLink()) $('link').value = roomLink();", script)
+        self.assertIn(r"function roomLink() { return window.location.origin + window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(client ? client.code : ''); }", script)
+        self.assertNotIn("roomBlockQuery", re.search(r"function roomLink\(\)[^\n]*", script).group(0))            # (the lobby's link is the room's code and nothing else: the server made the room from the Hello; a create block is for the test room's links)
+        self.assertIn("copyButton($('copy'), roomLink);", script)
+        self.assertIn("btn.textContent = ok ? 'Copied!' : 'Press Ctrl+C';", script)
+        self.assertIn("$('link').addEventListener('focus', function () { $('link').select(); });", script)
+        self.assertIn("if (typeof navigator.share === 'function') {", script)
+        self.assertIn("$('share').hidden = false;", script)
+        self.assertIn("navigator.share({ url: roomLink() })", script)
+        self.found(self.style, r"@media \(min-width: 721px\) \{ \.share \{ display: none; \} \}")                 # (Share is a phone's button; the field and Copy link are a wide page's)
+        phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
+        self.found(phone, r"\.invite input \{ display: none; \}")
+        self.found(phone, r"\.share \{ display: inline-flex; \}")
+        self.found(phone, r"\.invite #copy \{ width: 100%; \}")
+
+    def test_have_a_code_opens_a_line_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
+        self.assertIn('<span class="rt"><button type="button" id="havecode">Have a code?</button><button type="button" id="more">More ways to play</button></span>', self.markup)
+        self.assertIn('<div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" '
+                      'autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>', self.markup)
+        self.assertIn('<p class="hint" id="joinhint" role="status"></p>', self.markup)
+        self.assertLess(self.markup.index('id="joinbox"'), self.markup.index('id="joinhint"'))
+        self.assertLess(self.markup.index('id="invite-line"'), self.markup.index('id="havecode"'))                  # (under the invitation, inside the room's panel)
+        panel = self.markup[self.markup.index('<section class="panel" aria-labelledby="room-h">'):]
+        self.assertIn('id="havecode"', panel[:panel.index("</section>")])
+        script = self.script
+        # the line: a press opens it or closes it, clears an old hint and puts the cursor in the field; typing clears the hint; Enter and Join do the same
+        self.assertIn("$('joinbox').hidden = !$('joinbox').hidden;", script)
+        self.assertIn("if (!$('joinbox').hidden) $('joincode').focus();", script)
+        self.assertIn("$('joincode').addEventListener('input', function () { $('joinhint').textContent = ''; });", script)
+        self.assertIn("$('joincode').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinTyped(); });", script)
+        self.assertIn("$('joingo').addEventListener('click', joinTyped);", script)
+        # the code: blanks and capitals do not matter (Rules.typedCode), a code that is none is explained under the field, this page's own room is not left for itself, and the name card comes first
+        self.assertIn("var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');", script)
+        self.assertIn("if (!typed.ok) { hint.textContent = typed.why; return; }", script)
+        self.assertIn("if (client && typed.code === client.code) { hint.textContent = ownRoom ? Rules.HINT.own : Rules.HINT.same; return; }", script)
+        self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)
+        self.assertIn("done: function (name) { probe(typed.code, name); },", script)
+        self.assertIn("back: function () { /* the page's own room stays */ }", script)
+        # the look at the room: a client of its own that must find the room (join: true makes none), and this page's room is let go of only when that room has welcomed it
+        probe = script[script.index("function probe(code, name) {"):]
+        probe = probe[:probe.index("p.connect();")]
+        self.assertIn("p = makeClient({ code: code, name: name, join: true })", probe)
+        self.assertIn("join: !!p.join", script)
+        self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
+        self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
+        self.assertIn("if (e.reason === R.Full) failed(Rules.HINT.full);", probe)
+        self.assertIn("else if (e.reason === R.MatchRunning) failed(Rules.HINT.running);", probe)
+        self.assertIn("else if (e.reason === R.VersionMismatch) showBanner('version');", probe)
+        self.assertIn("else failed(Rules.TEXT.noroom());", probe)
+        self.assertEqual(len(re.findall(r"joinUrl\(", script)), 2)                  # the definition and the test room's "Play in this tab": a typed code never makes an address of the game page
+        # More ways to play: the two buttons of the test mode, shown and hidden by one line
+        self.assertIn("$('more').addEventListener('click', function () { $('morebox').hidden = !$('morebox').hidden; });", script)
+        self.assertIn('<div class="morebox" id="morebox" hidden><span>For testing:</span><button class="btn sm" type="button" id="more-here">Play every colour myself, in this page</button>'
+                      '<button class="btn sm" type="button" id="more-windows">Play every colour in separate windows</button></div>', self.markup)
+
+    def test_how_it_works_is_a_dialog_behind_a_footer_button_with_its_steps_and_the_two_sheets(self):
+        self.assertIn('<button class="lnk" type="button" id="how-open">How it works</button>', self.markup)
+        self.found(self.markup, r'<div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">\s*<div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>')
+        how = self.markup[self.markup.index('<div class="how" id="how" hidden>'):]
+        how = how[:how.index("<div class=\"name-modal\"")]
+        self.assertEqual(re.findall(r"<h3>(.*?)</h3>", how), ["The room", "The other colours", "Removing a player", "Teams", "START!", "When the host leaves"])
+        for words in ("Black top left, Green top right, Red bottom left, Blue bottom right", "drags a player onto another colour", "tap a player's dots and then the colour", "Easy, Medium or Hard", "set to Nobody",
+                      "the Remove button on their colour", "It asks first", "press Team 1 or Team 2 under a player", "Press a lit button again to take it off", "An open colour stays empty",
+                      "the player who has been in the room longest becomes the host", "closes about a minute later"):
+            self.assertIn(words, how, words)
+        self.assertNotIn("Play vs the computer", how)
+        for sheet in ("front/qh_quickhelp.png", "front/qh_power.png"):
+            self.assertIn('<img src="%s"' % sheet, how)
+            self.assertTrue(os.path.isfile(os.path.join(REPO, "web", sheet)), sheet)
+        script = self.script
+        self.assertIn("function openHow() { howOpener = document.activeElement; $('how').hidden = false; $('how-close').focus(); }", script)       # (the focus goes into the dialog and comes back to what opened it)
+        self.assertIn("function closeHow() { $('how').hidden = true; if (howOpener && howOpener.focus) howOpener.focus(); }", script)
+        self.assertIn("$('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });", script)
+        self.assertIn("if (!$('how').hidden) { closeHow(); return; }", script)                                      # (Escape)
+        self.assertIn("$('how-open').addEventListener('click', openHow);", script)
+        self.assertIn("$('how-close').addEventListener('click', closeHow);", script)
+
+    def test_a_plain_visit_makes_a_room_on_treasure_with_a_new_code_a_reload_takes_the_seat_back_and_a_link_asks_for_a_name_first(self):
+        script = self.script
+        self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", script)
+        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()", script)      # (the Hello of a new room asks for the default map)
+        run = script[script.index("function runLobby() {"):script.index("var room = '';")]
+        self.assertIn("connect({ code: newCode(), name: myName(), own: true });", run)                            # a plain visit: a room of a new code
+        self.assertIn("} else if (stored) {", run)
+        self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run)       # a reload: the same room and the key of the seat
+        self.assertIn("if (wantedCode && !(stored && stored.code === wantedCode)) {", run)                        # a link: the name card first, unless this tab holds that room already
+        self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',", run)
+        self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false }); },", run)
+        self.assertIn("offline = 'join';", run)                                                                   # (the page behind the card waits with no names and no map)
+        self.assertIn("var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';", run)      # (a room code is lower case: a link that came in capitals leads to the same room)
+        # this tab's room and the seat's key live in the tab's session storage, a seat that a game holds in the browser's local storage; a stored room is believed only when it is shaped as the page writes it
+        self.assertIn("var LOBBY_KEY = 'ants.lobby';", script)
+        self.assertEqual(sorted(set(re.findall(r"window\.sessionStorage\.\w+\(LOBBY_KEY", script))), ["window.sessionStorage.getItem(LOBBY_KEY", "window.sessionStorage.removeItem(LOBBY_KEY", "window.sessionStorage.setItem(LOBBY_KEY"])
+        self.assertIn("if (!v || typeof v !== 'object' || !Net.publicRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;", script)
+        self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", script)       # (Back from a match: the room is the match's now, this page makes another)
+        self.assertIn("forgetSession();                           // (Back from the match makes a room again: this one is the match's now)", script)
+        # which page this is: an address that asks for the test room (a map, or a room with a create block or play=here) is the test room, everything else the lobby
+        self.assertIn("if (asksMap || (asksRoom && (wantedBlock !== null || params.get('play') === 'here'))) {", script)
+        self.assertIn("runLobby();", script)
+
+    def test_the_keys_in_this_browser_are_the_name_the_shape_and_the_seat_entry_and_none_of_the_old_cards(self):
+        for key in ("ants-match", "ants-solo-seats", "ants-solo-bots", "ants-solo-teams", "ants-four-map", "ants-four-players", "ants-four-fill", "ants-four-teams"):
+            self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem|removeItem)\(\s*'%s" % key, key + " is neither read nor written by the lobby")
+        for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
+            self.assertNotIn(gone, self.page, gone)
         written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
-        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY", "CARD_KEY"})                           # (the definition, the name, the picture's shape and the card: no other key is written)
-
-    def test_the_header_links_the_footer_the_name_the_aspect_choice_and_the_room_buttons_are_there(self):
-        for needle in ('href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"', 'href="https://github.com/dchadd427/ants-cross-platform/issues"'):
-            self.assertGreaterEqual(self.page.count(needle), 1, needle)
-        for place in ('<nav class="links" aria-label="More about the game">', '<nav aria-label="Footer links">'):         # (the four links are in the header and in the footer)
-            nav = self.page[self.page.index(place):]
-            nav = nav[:nav.index("</nav>")]
-            self.assertEqual(re.findall(r">(Sprites and sounds|Changelog|GitHub|Feedback)</a>", nav), ["Sprites and sounds", "Changelog", "GitHub", "Feedback"], place)
-        self.assertIn('id="game-version"', self.page)
-        self.assertIn('id="game-build-id"', self.page)
-        self.assertEqual(len(re.findall(r'<input[^>]*id="player-name"', self.page)), 1)
+        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY"})                                  # (the definition, the name, the picture's shape: no other key is written to the local storage by name)
+        self.assertEqual(sorted(re.findall(r"localStorage\.setItem\(([^,]+),", self.page)), ["entry.name", "key"])       # (the one definition of remember, and the entry of a seat that the game page reads: ants.rejoin.<room>.<seat>)
         self.assertIn("var NAME_KEY = 'ants.name';", self.page)
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
-        self.found(self.page, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>')      # (the picture's shape: a pair of buttons)
-        self.found(self.page, r'<input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">Classic 4:3</label>')
-        for ident in ("play-tab", "all-here", "all-windows", "new-room", "any-link", "seat-rows"):
-            self.assertIn('id="%s"' % ident, self.page)
+        self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
+
+    def test_the_footer_links_the_name_card_the_aspect_choice_and_the_test_room_buttons_are_there(self):
+        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo and nothing else: the links are in the footer")
+        self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
+        nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
+        nav = nav[:nav.index("</nav>")]
+        self.assertEqual(re.findall(r">(How it works|Watch live|Watch replays|Sprites and sounds|Changelog|GitHub|Feedback)</(?:a|button)>", nav),
+                         ["How it works", "Watch live", "Watch replays", "Sprites and sounds", "Changelog", "GitHub", "Feedback"])
+        for needle in ('href="/watch.html" id="live-link"', 'href="/watch.html" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+                       'href="https://github.com/dchadd427/ants-cross-platform/issues"'):
+            self.assertIn(needle, nav, needle)
+        self.assertIn('id="game-version"', self.page)
+        self.assertIn('id="game-build-id"', self.page)
+        self.assertIn('<p class="notice" id="footer-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</p>', self.markup)
+        self.found(self.markup, r'<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>')
+        # the name: asked on a card (a link, a code that was typed, an old address) and changed with the pencil on the player's own colour; the field of the card takes the name rules of the game page
+        self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', self.markup)), 1)
+        self.found(self.markup, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')
+        self.found(self.markup, r'<input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg name-step-hint">')
+        self.found(self.markup, r'<button type="button" id="name-step-go" class="btn">Join</button>')
+        self.found(self.markup, r'<button type="button" class="btn sm name-step-back" id="name-step-own">Start a room of my own instead</button>')
+        self.found(self.markup, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')
+        self.assertIn("runNameStep(ui, { recall: recall, remember: remember }, function (name) { o.done(name || suggestion); });", self.script)       # (an empty name is the suggestion that the field's placeholder shows)
+        self.assertIn("ui.input.placeholder = suggestion;", self.script)
+        self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 3, "the name card is asked for by a typed code, a link to a room and the test room's old addresses")
+        self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
+        self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
+        # the picture's shape: a pair of buttons of the footer, 16:9 first and checked until the page reads another
+        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>')
+        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">4:3</label>')
+        # the test room (the old addresses and "Play every colour myself"): its panel, hidden until an address or those buttons open it
+        self.assertIn('<section id="room-panel" class="room" hidden>', self.markup)
+        for ident in ("play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint"):
+            self.assertEqual(self.markup.count('id="%s"' % ident), 1, ident)
 
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
         anchors = re.findall(r"<a [^>]*>", self.page)
@@ -219,12 +368,32 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("function openWindow(seat)", self.page)
 
     def test_start_goes_to_this_tab_and_so_do_the_old_addresses_and_the_room_panel(self):
-        self.assertIn("window.location.assign(new URL('./' + query, window.location.href).href);", self.page)           # START of the card: the game page with the room, in this tab
-        self.assertIn("var query = cardQuery(card, code, card.you, youName(), aspect);", self.page)
-        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(", self.page)                  # an old address that asks for a game on this computer
-        self.assertIn("var LOCAL_PAGE = 'play.html';", self.page)
-        self.assertIn("window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));", self.page)       # (Play in this tab: the room's block goes with it, and the teams that the block names travel in the block)
-        self.assertIn("window.location.assign(joinUrl(code, null, checked.name, '', ''));", self.page)                                    # (a Join of a typed code: a room that somebody else made, so no block)
+        script = self.script
+        # START of the lobby: when the room heard that it starts, this page puts the entry of its seat where the game page looks, then goes to the game page in THIS tab (the game page asks no name, the seat's key is there)
+        start = script[script.index("function onStarting() {"):script.index("function shownTeam(seat) {")]
+        self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); }", start)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", start)
+        self.assertLess(start.index("window.localStorage.setItem(entry.name, entry.text)"), start.index("window.location.assign("))
+        self.assertLess(start.index("forgetSession();"), start.index("window.location.assign("))                 # (Back from the match makes another room)
+        self.assertIn("c.on('starting', mine(onStarting));", script)
+        # the Rejoin button of the strip at the top does the same for a match that still runs
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", script)
+        # START with nobody else in the match: the game page's own single player, on this computer, in this tab (a room of the game server needs two); the room is let go of first
+        self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)
+        alone = script[script.index("function startAlone() {"):script.index("function pressTeam(seat, side) {")]
+        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);", alone)
+        self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
+        self.assertIn("var LOCAL_PAGE = 'play.html';", script)
+        self.assertIn("client.start();", script)
+        # an old address that asks for a game on this computer, "Play every colour myself", and Play in this tab of the test room: all in this tab
+        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);", script)
+        self.assertIn("window.location.assign(new URL('./?map=' + key + query, window.location.href).href);", script)
+        self.assertIn("$('more-here').addEventListener('click', function () { testRoom('&play=here'); });", script)
+        self.assertIn("$('more-windows').addEventListener('click', function () { testRoom(''); });", script)
+        self.assertIn("window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));", script)       # (Play in this tab: the room's block goes with it, and the teams that the block names travel in the block)
+        self.assertIn("window.location.assign(window.location.origin + window.location.pathname.replace(/^\\/+/, '/'));", script)             # (New match and Back to the front page: the lobby again, from this page's own origin)
+        # the selector of the picture's shape changes the lobby's next game at once, and asks only where games run on the page
+        self.assertIn("if (!room) {                         // the lobby has no game open: the next game is the new shape", script)
 
     def test_the_old_address_and_its_state_addresses_still_work_at_the_front_page(self):
         for needle in ("params.get('room')", "params.get('map')", "params.get('players')", "validFillPlan(params.get('fill'))", "validRoomTeams(params.get('teams'))", "params.get('play') === 'here'", "new URLSearchParams(window.location.search).get('aspect')"):
@@ -232,35 +401,60 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("var wantedPlayers = playersChoice(wantedPlayersText, 4);", self.page)         # (an address that names no players hosts 4, as before; players=1 plays on this computer)
         self.assertNotIn("four.html", self.page)
 
-    def test_a_code_is_only_a_name_and_the_rooms_choices_are_its_create_block_that_every_link_carries(self):
-        # protocol 15: the code is six random characters of an alphabet without look-alikes (tests/test_app/test_start_menu.cpp reads the alphabet from the page); what the room is (its map, its seats, its teams)
-        # is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the page uses
-        self.assertIn("var chars = 'abcdefghjkmnpqrstuvwxyz23456789', out = '';", self.page)
-        self.assertIn("var buf = new Uint32Array(6);", self.page)
-        self.assertIn("for (var i = 0; i < 6; i++) out += chars.charAt(buf[i] % chars.length);", self.page)
-        self.assertIn("return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;", self.page)                       # (codeText: the screens' two groups of three; links, fields and arguments keep the plain code)
-        self.assertIn("return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');", self.page)
-        self.assertEqual(len(re.findall(r"roomBlockQuery\(", self.page)), 5)                       # the definition and the four makers of an address: the card's START and invitations, the room's links, the room's own address, Play in this tab
-        for maker in ("'?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(cardBlock(state)) + '&seat=' + seat",                   # cardQuery
-                      "var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);",                                   # gameUrl
+    def test_a_code_is_only_a_name_and_the_test_rooms_choices_are_its_create_block_that_every_link_of_it_carries(self):
+        # protocol 15: the code is six random characters of an alphabet without look-alikes (front/lobby_rules.js makeCode; tests/scripts/web_lobby_rules_check.js holds the alphabet); what a TEST room is (its map, its
+        # seats, its teams) is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the test room uses. The lobby's
+        # own rooms are made by the game server from the Hello, so their link is the code alone.
+        script = self.script
+        newcode = script[script.index("function newCode() {"):]
+        newcode = newcode[:newcode.index("function platform()")]
+        self.assertIn("var buf = new Uint32Array(6);", newcode)                                           # six random numbers from the browser's generator ...
+        self.assertIn("(window.crypto || window.msCrypto).getRandomValues(buf);", newcode)
+        self.assertIn("return Rules.makeCode(buf);", newcode)                                              # ... made into the code by the rules
+        self.assertNotIn("Math.random", newcode)
+        self.assertIn("function roomBlockQuery(block) {", script)
+        self.assertIn("return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');", script)
+        self.assertEqual(len(re.findall(r"roomBlockQuery\(", script)), 4)                       # the definition and the three makers of an address of the test room: its links, its own address, Play in this tab
+        for maker in ("var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);",                                      # gameUrl
                       "'?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '')",                            # startRoom: the address of the page
                       "var q = '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fillPlan ? '&fill=' + fillPlan : '')"):  # joinUrl
-            self.assertIn(maker, self.page, maker)
-        self.assertIn("function cardBlock(state) { return { map: state.map, seats: 4, teams: state.teams === 'ffa' ? '' : state.teams, leaderStart: false }; }", self.page)      # (the card's room: four seats and its teams)
-        self.assertIn("startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');", self.page)   # (an address that hosts a match)
-        self.assertIn("var wantedBlock = roomBlockOf(window.location.search);", self.page)                       # (?room=<code> with block parameters is a room that this page made, with none a room that was made some other way)
-        self.assertIn("cardRoom = { code: randomCode(), map: card.map, teams: card.teams, used: cardRoom ? cardRoom.used : {} };", self.page)       # (the tab's kept room: a name, and the choices that its links carry)
-        for gone in ("roomTeamWord", "codeTeams", "describeCode", "cardCode", "teamsInCode", "'demo-'", "demo-small", "demo-treasure"):                 # (a code names nothing any more, and no code is converted)
+            self.assertIn(maker, script, maker)
+        self.assertIn("startRoom(newCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');", script)   # (an address that hosts a match)
+        self.assertIn("var wantedBlock = roomBlockOf(window.location.search);", script)                       # (?room=<code> with block parameters is a room that this page made, with none a room that was made some other way)
+        for gone in ("roomTeamWord", "codeTeams", "describeCode", "cardCode", "teamsInCode", "'demo-'", "demo-small", "demo-treasure", "randomCode", "cardBlock", "cardRoom"):                 # (a code names nothing, and no code is converted)
             self.assertNotIn(gone, self.page, gone)
 
-    def test_a_code_is_shown_in_two_groups_of_four_and_typed_as_it_is_shown(self):
-        self.assertIn("$('room-code').textContent = codeText(room);", self.page)                                 # (the room panel)
-        self.assertIn("var code = codeText(offer.room);", self.page)                                              # (the Rejoin button's words)
-        self.assertIn("'Join the match ' + codeText(wanted)", self.page)                                         # (the name step of a shared link)
-        self.assertIn("var code = $('join-code').value.replace(/\\s+/g, '');", self.page)                         # (the blank of "k7m 2xq" goes before the code is tested; the code is tested as it was)
-        self.assertIn("hint.textContent = 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.';", self.page)
-        self.assertIn("if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {", self.page)
-        self.assertIn("return !!room && typeof room === 'object' && typeof room.code === 'string' && /^[a-z2-9]{6}$/.test(room.code) && room.map === state.map && room.teams === state.teams;", self.page)       # (cardRoomFits: a kept room of the old kind does not fit)
+    def test_a_code_is_shown_in_two_groups_of_three_and_typed_as_it_is_shown(self):
+        script = self.script
+        self.assertIn("var codeText = Rules.codeText;", script)
+        self.assertIn("setText($('code'), client ? Rules.codeText(client.code) : '');", script)                 # (the room's heading: the lobby)
+        self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',", script)           # (the name card of a link)
+        self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)           # (the name card of a typed code)
+        self.assertIn("var code = codeText(offer.room);", script)                                                 # (the Rejoin button's words)
+        self.assertIn("$('room-code').textContent = codeText(room);", script)                                    # (the test room's panel)
+        self.assertIn("'Join the match ' + codeText(wanted)", script)                                            # (the test room's name card)
+        # typed: Rules.typedCode takes blanks and capitals; a link's code must be 1 - 32 letters, digits, - and _ (the older eight-character codes work), in the three places that read one
+        self.assertIn("var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');", script)
+        self.assertEqual(script.count("/^[A-Za-z0-9_-]{1,32}$/.test(wanted)"), 3)
+        self.assertIn('placeholder="6 letters and numbers, like k7m 2xq"', self.markup)
+        self.assertIn('autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">', self.markup)
+
+    def test_every_element_that_the_script_asks_for_is_in_the_markup_once_and_the_two_scripts_are_loaded_before_it(self):
+        ids = re.findall(r'\sid="([^"]+)"', self.markup)
+        self.assertEqual(sorted(i for i in set(ids) if ids.count(i) > 1), [], "an id that is used twice")
+        asked = set(re.findall(r"\$\('([\w-]+)'\)", self.script)) | set(re.findall(r"getElementById\('([\w-]+)'\)", self.script)) | set(re.findall(r"freshNode\('([\w-]+)'\)", self.script))
+        asked |= {"aspect-16-9", "aspect-4-3"}                                                              # (asked for through a condition and through a list)
+        self.assertEqual(sorted(asked - set(ids)), [], "the script asks for an element that is not in the page")
+        for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
+            for target in ref.split():
+                self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js"):
+            self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
+        self.assertIn("root.AntsLobbyRules = api", self.rules)
+        self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        if (!Rules || !Net) {", self.script)
+        self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
     def test_the_frames_note_is_shown_only_where_games_run(self):
         self.found(self.page, r'<p id="frames-note" class="frames-note" hidden>')
@@ -351,7 +545,7 @@ class TheGamePage(PageCase):
             self.assertGreater(join.index("'%s'" % name), join.index("if (join && "), name + " only after a valid join is checked")
 
     def test_the_name_step_names_the_room_by_its_code_in_two_groups_of_four_as_the_front_page_does(self):
-        # (the same function on both pages: tests/scripts/web_lobby_check.js runs the two on a table of texts and they must agree)
+        # (the same function on both pages: tests/scripts/web_lobby_check.js runs the game page's and the rules script's (front/lobby_rules.js) on a table of texts and they must agree)
         self.assertIn("function codeText(code) {", self.page[self.page.index("ANTS_PAGE_BEGIN"):self.page.index("// ANTS_PAGE_END")])
         self.assertIn("return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;", self.page)
         self.assertIn("asksForName: asksForName, codeText: codeText, withoutName: withoutName", self.page)
@@ -388,25 +582,29 @@ class TheImageAndTheCi(PageCase):
 
 
 class TheDocuments(unittest.TestCase):
-    def test_the_browser_page_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
+    def test_the_browser_page_and_the_notes_say_where_the_lobby_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
-                       "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
+        for needle in ("`/play.html?map=", "## The front page: a room that is ready when the page opens", "### Your room", "### START!", "### The notices", "### The old test room", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
+                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "**More ways to play**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
+                       "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The card**", "**Invitations**", "**The leader's game starts the match**", "`ants-match`", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
         readme = read("README.md")
         self.assertNotIn("web/four.html", readme + page)
-        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):         # (the pages that the card replaced)
-            self.assertNotIn(stale, readme + page + notes, stale)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card",                       # (the pages that the earlier card replaced)
+                      "one card for every game", "**Sit here**", "**Friend**", "**The card", "New match**", "Invitations**", "`ants-match`"):                                                              # (the earlier front page's card: the lobby replaced it)
+            self.assertNotIn(stale, readme + page, stale)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):
+            self.assertNotIn(stale, notes, stale)
 
     def test_the_browser_page_says_what_a_code_is_and_what_the_create_block_and_its_parameters_are(self):
         # protocol 15: a code is only a name (six characters, shown in two groups of three) and the room's choices are the create block that every link carries
         page = read("docs", "PLAY_IN_BROWSER.md")
         for needle in ("### The room's code and its create block", "(#the-rooms-code-and-its-create-block)", "is **only a name**", "`abcdefghjkmnpqrstuvwxyz23456789`", "`k7m 2xq`", "`k7m2xq`",
-                       "There is no such room on this server.", "**every link of a room that this page made carries the block, right after the code**", "**with none it is a room that was made some other way**",
-                       "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`&roomteams=0%2B1`"):
+                       "There is no such room on this server.", "a code that was made some other way", "A typed or pasted code ignores blanks and capital letters",
+                       "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`0%2B1`"):
             self.assertIn(needle, page, needle)
         table = page[page.index("| Parameter | Value | The game's argument |"):]
         table = table[:table.index("\n\n")]

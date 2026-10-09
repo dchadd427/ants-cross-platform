@@ -232,10 +232,23 @@ class TheLocations(unittest.TestCase):
 
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
         # the owner chose "Add the line" (2026-10-08): the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
-        # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so)
+        # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so). The two pages word the second sentence differently:
+        # the front page as the owner's lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
-        for page in ("lobby.html", "shell.html"):
-            self.assertIn("Online matches are recorded and kept for %s days. Anybody can watch them, live or later, and they show the players&rsquo; names." % days, read("web", page), page)
+        lobby = read("web", "lobby.html")
+        shell = read("web", "shell.html")
+        for page, text, second in (("lobby.html", lobby, "The recordings are public and show the players&rsquo; names."),
+                                   ("shell.html", shell, "Anybody can watch them, live or later, and they show the players&rsquo; names.")):
+            self.assertIn("Online matches are recorded and kept for %s days. %s" % (days, second), text, page)
+        # the front page shows it in two places, both with the stack's number: the footer (for a visitor who is not asked for a name) and under the name field of the card of a link that somebody sent
+        # (the element who-notice, which docs/SERVER.md names); the game page shows it once, under its name field
+        words = "Online matches are recorded and kept for %s days. The recordings are public and show the players&rsquo; names." % days
+        self.assertEqual(lobby.count(words), 2)
+        self.assertIn('<p class="notice" id="footer-notice">' + words + "</p>", lobby)
+        self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + words + "</div>", lobby)
+        self.assertEqual(len(re.findall(r"Online matches are recorded and kept for \d+ days\.", lobby)), 2)       # (no page says another number)
+        self.assertEqual(len(re.findall(r"Online matches are recorded and kept for \d+ days\.", shell)), 1)
+        self.assertNotIn("Anybody can watch them", lobby)                                       # (the old second sentence is the game page's only)
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 

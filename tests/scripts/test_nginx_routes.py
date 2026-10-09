@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The routes of docker/nginx.conf, run for real (run by ./run_tests.sh --fast and by the CI where docker works).
 
-The front page and the game page share the address "/" (the owner: the Play online page is the front page, with one card for every game; every address that the game
+The front page and the game page share the address "/" (the owner: the Play online page is the front page, which is the lobby now; every address that the game
 page ever had keeps opening it): "/" is the lobby unless the query has join=... or embed=1, /four.html is a permanent redirect to "/" with the same query, /play.html is the game page. The
 rules cannot be seen by reading the file (what a `rewrite` or an `if` does with a query string, which headers an answer ends with), so this starts the real nginx of the image's own base
 (nginx:alpine) with the repository's docker/nginx.conf and two stand-in pages that carry the markers of the real ones, and asks it, with tests/scripts/web_routes_check.py (which the CI also
@@ -24,7 +24,7 @@ CONF = os.path.join(REPO, "docker", "nginx.conf")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_routes_check.py")
 IMAGE = "nginx:alpine"
 
-LOBBY_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body><input type="text" id="player-name"><p>the stand-in lobby</p></body></html>\n'
+LOBBY_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body><main id="lobby"></main><p>the stand-in lobby</p></body></html>\n'
 CLASSIC_PAGE = '<!DOCTYPE html><html><head><title>a stand-in page</title><link rel="stylesheet" href="/front/classic.css"></head><body><p>a stand-in page of the site</p></body></html>\n'
 WATCH_PAGE = '<!DOCTYPE html><html><head><title>Watch replays - stand-in</title></head><body><div id="list-body"></div></body></html>\n'
 GAME_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998) - game</title></head><body><div id="game-stage" data-aspect="16:9"></div><p>the stand-in game page</p></body></html>\n'

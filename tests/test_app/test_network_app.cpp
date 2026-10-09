@@ -6803,7 +6803,7 @@ void run_room_chat_box_tests() {
     } TEST_END();
 }
 
-// The front page's one card (web/lobby.html: "New match") sends every player to the game page of a room of four seats with the card's plan, and the game starts the match by itself: `--seat` (the colour
+// The earlier front page's one card ("New match"; today's old test-room addresses of web/lobby.html make the same links) sends every player to the game page of a room of four seats with the card's plan, and the game starts the match by itself: `--seat` (the colour
 // of the person: any of the four), `--fill-bots` (four words: a bot row is its level, You, Friend and Nobody are none) and `--start-when N` (1 + the Friend rows: the leader's game presses START once N
 // people are in). The same plan and the same N are in every link of the room, because whoever connects first leads and only the leader's game starts the match.
 void run_one_card_tests() {

@@ -9,13 +9,15 @@
 //   * the newest of several (by time; on a tie the lower seat, then the room), whatever the order of the storage; a good entry among bad ones is found; and the same question for one room and one seat
 //     (the game page asks it: does this browser hold the key of this very seat?), which leaves the entries of other rooms and seats where they are and still removes the old ones;
 //   * a storage that refuses (a call that throws: the browser's private window, a blocked storage) offers nothing or what it can, and never throws;
-//   * the words of the button and of the note (the room's code as a screen shows it: six characters in two groups of three, "k7m 2xq", any other length as it is), the query that the button opens (the page's
+//   * the words of the strip: the button says "Rejoin it" and the note names the room (its code as a screen shows it: six characters in two groups of three, "k7m 2xq", any other length as it is), the query that the button opens (the page's
 //     other join links: /ws, the plain room code, the seat, the name always there, the shape; no create block: the room exists, and a Hello with a key of a seat never makes one) and the game page reading that
 //     query as a join of this room and seat that asks for no name;
 //   * THE KEY IS IN NOTHING THAT COMES OUT: not the offer (exactly room, seat, t), not the words, not the query; nothing is written to the storage.
-// tests/scripts/test_web_rejoin.py runs this with node (the quick tier). The words use codeText of the block LOBBY_BEGIN .. LOBBY_END, which is loaded before the others. usage: node web_rejoin_block_check.js web/lobby.html web/shell.html     (exit 0: every check holds; failures are printed)
+// tests/scripts/test_web_rejoin.py runs this with node (the quick tier). The words use codeText, which the page takes from front/lobby_rules.js (`var codeText = Rules.codeText;`, outside the blocks): this check loads
+// that file the same way and hands the block its codeText. usage: node web_rejoin_block_check.js web/lobby.html web/shell.html     (exit 0: every check holds; failures are printed)
 'use strict';
 const fs = require('fs');
+const path = require('path');
 
 const lobbyPath = process.argv[2];
 const shellPath = process.argv[3];
@@ -45,8 +47,11 @@ const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const keyBlock = between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath);
 const block = between(lobbyText, 'REJOIN_BEGIN', 'REJOIN_END', lobbyPath);
-const lobbyBlock = between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath);          // (rejoinWords shows the code as codeText does; nothing else of the block is called here)
-const R = new Function(lobbyBlock + '\n' + keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery, codeText: codeText };')();
+// rejoinWords shows the code as the page's codeText does: the page has `var codeText = Rules.codeText;` (the line below the two scripts' globals, outside every block) and lobby_rules.js is the real file
+const rulesFile = path.join(path.dirname(path.resolve(lobbyPath)), 'front', 'lobby_rules.js');
+const Rules = (() => { const root = {}; new Function('self', fs.readFileSync(rulesFile, 'utf8'))(root); return root.AntsLobbyRules; })();
+check('the page takes codeText from the rules script, once, outside the blocks (the REJOIN block uses it as a free name)', typeof Rules.codeText === 'function' && lobbyText.split('var codeText = Rules.codeText;').length === 2 && block.indexOf('codeText') !== -1 && block.indexOf('var codeText') === -1 && keyBlock.indexOf('codeText') === -1);
+const R = new Function('codeText', keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery, codeText: codeText };')(Rules.codeText);
 
 // the game page's own ANTS_PAGE (the same fakes as tests/scripts/web_lobby_check.js: it reads the address, the storage and two elements while it runs)
 function loadShell() {
@@ -233,14 +238,15 @@ check('a storage with only other items offers nothing (the settings, the name, t
 }
 
 // the words and the address
-same('the button says Rejoin your match and the room, the code in two groups of three as a screen shows it', R.rejoinWords({ room: 'k7m2xq', seat: 1, t: 1 }).button, 'Rejoin your match (k7m 2xq)');
-same('the note under it is one line that says the match still runs and what to do', R.rejoinWords({ room: 'k7m2xq', seat: 1, t: 1 }).note, 'Your match in room k7m 2xq is still running: go back to your seat.');
-same('a code of another length is shown as it is (a room that was made some other way)', [R.rejoinWords({ room: 'tiny-2p-abc', seat: 1, t: 1 }).button, R.rejoinWords({ room: 'k7m2xq9', seat: 1, t: 1 }).button, R.rejoinWords({ room: 'k7m2xq9pz', seat: 1, t: 1 }).note],
-     ['Rejoin your match (tiny-2p-abc)', 'Rejoin your match (k7m2xq9)', 'Your match in room k7m2xq9pz is still running: go back to your seat.']);
-check('the words show the code as codeText does (the same blank, nothing else added), whatever the room', ['a', 'Room_1-B', 'x'.repeat(32), 'k7m2xq', 'abcdefgh'].every((room) => R.rejoinWords({ room, seat: 0, t: 1 }).button === 'Rejoin your match (' + R.codeText(room) + ')' && R.rejoinWords({ room, seat: 0, t: 1 }).note === 'Your match in room ' + R.codeText(room) + ' is still running: go back to your seat.'));
+same('the button says Rejoin it, whatever the room (the room is named in the note beside it)', ['k7m2xq', 'tiny-2p-abc', 'a', 'x'.repeat(32)].map((room) => R.rejoinWords({ room, seat: 1, t: 1 }).button), ['Rejoin it', 'Rejoin it', 'Rejoin it', 'Rejoin it']);
+same('the note beside it is one line that says the match still runs, in which room (the code in two groups of three as a screen shows it) and what to do', R.rejoinWords({ room: 'k7m2xq', seat: 1, t: 1 }).note, 'Your match in room k7m 2xq is still running: go back to your seat.');
+same('a code of another length is shown as it is (a room that was made some other way)', [R.rejoinWords({ room: 'tiny-2p-abc', seat: 1, t: 1 }).note, R.rejoinWords({ room: 'k7m2xq9', seat: 1, t: 1 }).note, R.rejoinWords({ room: 'k7m2xq9pz', seat: 1, t: 1 }).note],
+     ['Your match in room tiny-2p-abc is still running: go back to your seat.', 'Your match in room k7m2xq9 is still running: go back to your seat.', 'Your match in room k7m2xq9pz is still running: go back to your seat.']);
+same('the words are exactly a button and a note (nothing else is made)', Object.keys(R.rejoinWords({ room: 'k7m2xq', seat: 1, t: 1 })).sort(), ['button', 'note']);
+check('the note shows the code as codeText does (the same blank, nothing else added), whatever the room', ['a', 'Room_1-B', 'x'.repeat(32), 'k7m2xq', 'abcdefgh'].every((room) => R.rejoinWords({ room, seat: 0, t: 1 }).note === 'Your match in room ' + R.codeText(room) + ' is still running: go back to your seat.'));
 for (const room of ['a', 'Room_1-B', 'x'.repeat(32), 'k7m2xq']) {
     const w = R.rejoinWords({ room, seat: 0, t: 1 });
-    check('the words for the room ' + room + ' hold the room (as codeText shows it) and no markup', w.button.indexOf(R.codeText(room)) !== -1 && w.note.indexOf(R.codeText(room)) !== -1 && !/[<>&"]/.test(w.button + w.note));
+    check('the words for the room ' + room + ' hold the room (as codeText shows it) in the note, none on the button, and no markup', w.note.indexOf(R.codeText(room)) !== -1 && w.button.indexOf(R.codeText(room)) === -1 && !/[<>&"]/.test(w.button + w.note));
 }
 same('the query: the door, the room, the seat, the name and the shape (the plain code, and no create block)', R.rejoinQuery({ room: 'k7m2xq', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=16:9');
 check('the query keeps the plain code whatever the words show (no blank in it)', ['k7m2xq', 'abcdefgh', 'Room_1-B'].every((room) => R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9').indexOf('room=' + room + '&') !== -1 && R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9').indexOf('%20') === -1 && !/roommap|roomseats|roomteams|roomleaderstart/.test(R.rejoinQuery({ room, seat: 0, t: 1 }, '', '16:9'))));

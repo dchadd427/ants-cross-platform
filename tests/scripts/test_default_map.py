@@ -7,8 +7,9 @@ test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What n
     say what the default is; the commented example of docker-compose.server.yml. (A real server started with these options makes a Treasure room for a create block that names no map:
     tests/scripts/test_ants_server.sh.) An ANTS_DEMO_MAP set in the environment of a stack replaces the default; the file's own default is what is read here. The number of
     demo rooms and the size of a room's turn log are read too: their product stays under the budget that all the logs share.
-  - web/lobby.html (the front page): the map of its card is preselected on Treasure until a choice is remembered, the order of its list is unchanged (it does not choose the default),
-    a remembered choice and ?map= still win, and every place that falls back to a map falls back to the default.
+  - web/front/lobby_rules.js and web/lobby.html (the front page, a lobby room on the game server): the list of maps (MAPS) and the default (DEFAULT_MAP_KEY) are the rules script's and the page takes both from
+    it (it defines none of its own); a new room asks the server for Treasure, the order of the list is unchanged (it does not choose the default), a room that is kept keeps the map it has, ?map= still
+    wins for the old addresses, and every place of the page that falls back to a map falls back to the default.
   - the defaults of the program and of the page name the same map.
 """
 import json
@@ -80,24 +81,38 @@ class StackFile(unittest.TestCase):
 class PlayOnlinePage(unittest.TestCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
+        self.rules = read("web", "front", "lobby_rules.js")
 
     def maps_of_the_list(self):
-        block = re.search(r"var MAPS = \[(.*?)\];", self.page, re.DOTALL)
+        """(key, file) of each map of the rules script's list, in its order: the order of the drop-down and of the arrows of the page"""
+        block = re.search(r"var MAPS = \[(.*?)\];", self.rules, re.DOTALL)
         self.assertIsNotNone(block)
-        return re.findall(r"\{ key: '([a-z]+)', name: '[A-Za-z]+' \}", block.group(1))
+        return re.findall(r"\{ key: '([a-z]+)', name: '[A-Za-z]+', file: '([A-Z]+\.LVL)', info: ", block.group(1))
 
     def test_the_list_keeps_its_order_and_the_default_is_treasure(self):
-        self.assertEqual(self.maps_of_the_list(), PAGE_ORDER)                # by size: the order of the list is not what chooses the default
-        match = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", self.page)
-        self.assertIsNotNone(match, "the page names no default map")
+        maps = self.maps_of_the_list()
+        self.assertEqual([key for key, _ in maps], PAGE_ORDER)                # by size: the order of the list is not what chooses the default
+        self.assertEqual([name for _, name in maps], SIX_MAPS)               # (and each key is the file the server names)
+        match = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", self.rules)
+        self.assertIsNotNone(match, "the rules script names no default map")
         self.assertEqual(match.group(1), "treasure")
+        # the page takes the list and the default from the rules script and has none of its own (two defaults could disagree); its drop-down is filled from the list, in its order
+        self.assertIn("var MAPS = Rules.MAPS;", self.page)
+        self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", self.page)
+        self.assertIn("var mapByKey = Rules.mapByKey;", self.page)
+        self.assertNotRegex(self.page, r"var MAPS = \[")
+        self.assertNotRegex(self.page, r"DEFAULT_MAP_KEY = '")
+        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.page)
 
-    def test_the_card_opens_on_treasure_and_a_remembered_choice_wins(self):
-        self.assertIn("function cardNew(mapKey) { return cardFix({ map: mapKey, you: 0,", self.page)                                    # (a first visit)
-        self.assertIn("var state = cardNew(typeof o.map === 'string' && mapByKey(o.map) ? o.map : DEFAULT_MAP_KEY);", self.page)       # (the map that the earlier pages remembered, else the default)
-        self.assertEqual(len(re.findall(r"recall\('ants-four-map'\)", self.page)), 1)
-        self.assertIn("var card = cardParse(recall(CARD_KEY)) || cardFromOld({", self.page)                                              # (a choice of the card's own beats both)
-        self.assertIn("out.map = (mapByKey(out.map) || mapByKey(DEFAULT_MAP_KEY)).key;", self.page)                                     # (a map that is none of the six is the default)
+    def test_a_new_room_opens_on_treasure_and_a_room_that_is_kept_keeps_its_map(self):
+        # a plain visit makes a room of a new code whose Hello asks for the default map; the page before the first message of the room shows it too
+        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()", self.page)
+        self.assertEqual(len(re.findall(r"Rules\.mapByKey\(Rules\.DEFAULT_MAP_KEY\)\.file", self.page)), 2)            # (the Hello, and the blank model of the page before the room speaks)
+        self.assertIn("connect({ code: newCode(), name: myName(), own: true });", self.page)
+        # the map is the room's, not the page's: a reload takes the seat back in the room it kept, with the map that the room has, and the page remembers no map of its own
+        self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", self.page)
+        self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem)\(\s*'ants[-.](four-map|map)")
+        self.assertIn("if (!sendPlan({ map: key })) render();", self.page)                              # (a choice of the leader goes to the room, which tells everybody)
 
     def test_an_address_still_chooses_the_map(self):
         self.assertIn("var wantedMap = params.get('map');", self.page)
@@ -106,7 +121,11 @@ class PlayOnlinePage(unittest.TestCase):
 
     def test_every_fallback_to_a_map_is_the_default(self):
         self.assertNotIn("MAPS[0]", self.page)                                # (the first of the list is Tiny)
-        self.assertIn("var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)
+        self.assertIn("var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)                                  # (an old address that hosts a match)
+        self.assertIn("var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)                                # (the address of a game on this computer)
+        self.assertIn("var key = model.map || Rules.DEFAULT_MAP_KEY, name = myName();", self.page)                           # (START with nobody else)
+        self.assertIn("var key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)                       # (Play every colour myself)
+        self.assertIn("var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)    # (the arrows before the room has said its map)
 
 
 class OneDefaultEverywhere(unittest.TestCase):
@@ -114,11 +133,15 @@ class OneDefaultEverywhere(unittest.TestCase):
 
     def test_the_page_the_stack_the_setup_screen_and_the_host_panel_agree(self):
         stack = stack_command.demo_options(stack_command.server_command(read("docker-compose.stack.yml")))["--demo-map"]
-        page = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", read("web", "lobby.html")).group(1)
+        rules = read("web", "front", "lobby_rules.js")                          # (the front page takes its default and its list of maps from this script)
+        page = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", rules).group(1)
+        listed = re.findall(r"\{ key: '([a-z]+)', name: '[A-Za-z]+', file: '([A-Z]+\.LVL)', info: ", re.search(r"var MAPS = \[(.*?)\];", rules, re.DOTALL).group(1))
         screen = re.search(r'DEFAULT_MAP_FILE = "([A-Za-z0-9_.]+)";', read("include", "ants_app", "map_select.hpp")).group(1)
         index = int(re.search(r"kDefaultMenuMap = (\d+);", read("include", "ants_app", "start_menu.hpp")).group(1))
         keys = re.findall(r'\{"([a-z]+)", "[A-Za-z]+"\}', re.search(r"constexpr MenuMap kMaps\[kMenuMapCount\] = \{(.*?)\};", read("src", "ants_app", "start_menu.cpp"), re.DOTALL).group(1))
         self.assertEqual(keys, PAGE_ORDER)                                    # the start menu's list is the page's list
+        self.assertEqual([key for key, _ in listed], keys)                    # (the page's list, the rules script's, in the same order and with the files of the stack's six)
+        self.assertEqual([name for _, name in listed], SIX_MAPS)
         self.assertEqual(stack, "TREASURE.LVL")
         self.assertEqual(page.upper() + ".LVL", stack)
         self.assertEqual(screen.upper(), stack)

@@ -148,7 +148,7 @@ ants-cross-platform/
 │   │   ├── test_web_edge.sh            # The pointer of a fullscreen page (the bars, the pointer lock), the margin of
 │   │   │                               # a windowed one
 │   │   ├── test_web_hidden.sh          # The game in a hidden browser tab
-│   │   ├── test_web_home.sh            # The front page: Play, the Menu, the old addresses
+│   │   ├── test_web_home.sh            # The front page: the lobby, START, the Menu, the old addresses
 │   │   ├── test_web_live.sh            # Watching a live match: the list's box, the player, its cards (a fake door)
 │   │   ├── test_web_prediction.sh      # The prediction of one's own orders, on and off, in two windows of a real
 │   │   │                               # browser
@@ -195,9 +195,9 @@ ants-cross-platform/
 ├── web/                                # The web build's page files
 │   ├── shell.html                      # The game page in the front page's look (WebAssembly shell: loading screen,
 │   │                                   # hidden-tab timer, sound unlock, the picture's box, touch guards)
-│   ├── lobby.html                      # The front page: one card (the seats, the invitations and START), a code
-│   │                                   # to join, rejoin a running match
-│   ├── front/                          # The front page's pictures (made by tools/front_page_art), its font Libre
+│   ├── lobby.html                      # The front page: the lobby, a room on the game server (four colours,
+│   │                                   # a code and link, the map, START), a code to join, rejoin a running match
+│   ├── front/                          # The front page's pictures and rules (lobby_rules.js, lobby_net.js; art made by tools/front_page_art), its font Libre
 │   │                                   # Franklin (SIL Open Font License, licence beside it) and classic.css, the
 │   │                                   # look that the other pages link
 │   ├── favicon.ico                     # Site icon

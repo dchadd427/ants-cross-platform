@@ -3,9 +3,12 @@
 the game instead of random", and "when joining a link from somebody else, it should ask you first what you want your name to be".
 
   - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
-    is chosen, and the whole of web/lobby.html with a small fake of the browser's DOM: the shared field is remembered and filled in, its name goes to the seat that this person plays, bad
-    names start nothing, a name with < > & is only ever text, an empty field falls back to the random names, a shared link asks first (tests/scripts/web_name_check.js);
-  - what needs no browser is read from the files: the old join-only field is gone, the one field is there, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
+    is chosen, and the whole of web/lobby.html (the lobby: a room on the game server) with a small fake of the browser's DOM, its real scripts and a scripted server: a plain visit makes a room
+    under the remembered or picked name, the pencil renames the host, a shared link, a typed code and an address of the test room ask for a name first and start nothing before it, bad names
+    start nothing, a name with < > & is only ever text, a link made for somebody else carries no name, START hands the seat over with the key in the storage (tests/scripts/web_name_check.js);
+  - what needs no browser is read from the files: the name card is the front page's only name field, the page makes no markup from text, the recording notice is in the footer and in the
+    card, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
+  What the fake DOM cannot say (the look, the phone widths, the pointer, the real focus, the real WebSocket) is the job of the browser checks.
 """
 import os
 import re
@@ -25,19 +28,24 @@ def read(path):
 
 
 class TheMarkup(unittest.TestCase):
-    def test_the_front_page_has_one_name_field_for_starting_inviting_and_joining(self):
+    def test_the_front_page_has_one_name_card_and_no_other_field_for_a_name(self):
         page = read(LOBBY)
-        self.assertEqual(len(re.findall(r'<input[^>]*id="player-name"', page)), 1)
-        self.assertNotIn('id="join-name"', page)                                           # (the field that only the Join form had)
-        self.assertNotIn("ants-four-name", page)
-        self.assertRegex(page, r'<section id="who"[^>]*>')
-        field = re.search(r'<input[^>]*id="player-name"[^>]*>', page).group(0)
+        self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', page)), 1)
+        for gone in ('id="player-name"', 'id="join-name"', 'id="who"', "ants-four-name"):         # (the one-card page's field, the Join form's own field, its section and its key)
+            self.assertNotIn(gone, page)
+        self.assertEqual(len([t for t in re.findall(r"<input[^>]*>", page) if re.search(r'\bid="[^"]*name[^"]*"|placeholder="[^"]*name', t, re.I)]), 1)
+        field = re.search(r'<input[^>]*id="name-step-input"[^>]*>', page).group(0)
         self.assertIn('maxlength="32"', field)
         self.assertIn('placeholder="Player"', field)
-        self.assertLess(page.index('id="who"'), page.index('id="cards"'))                   # near the top: before the card (a match with its seats, its invitations and START) and the line of a join
-        self.assertLess(page.index('id="who"'), page.index('id="join-code"'))
-        self.assertLess(page.index('id="who"'), page.index('id="map-pick"'))
-        self.assertRegex(page, r'<label class="lab" for="player-name">Your name</label>')      # (the field has a visible label)
+        self.assertIn('autocomplete="off"', field)
+        self.assertRegex(page, r'<label for="name-step-input">Your name</label>')                # (the field has a visible label)
+        self.assertRegex(page, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')      # (a card over the page, hidden until a link, a code or a test-room address asks)
+        for part in ("name-step-title", "name-step-go", "name-step-msg", "name-step-hint", "who-notice", "name-step-own"):
+            self.assertEqual(page.count('id="%s"' % part), 1, part)
+        self.assertRegex(page, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')      # (a bad name is explained there, and said aloud)
+        self.assertLess(page.index('id="name-step-title"'), page.index('id="name-step-input"'))
+        self.assertLess(page.index('id="name-step-input"'), page.index('id="name-step-go"'))
+        self.assertLess(page.index('id="name-step-go"'), page.index('id="name-step-own"'))         # (and the way out is the last thing on the card)
 
     def test_the_page_makes_no_markup_from_text(self):
         page = read(LOBBY)
@@ -52,12 +60,21 @@ class TheMarkup(unittest.TestCase):
         self.assertEqual(len(re.findall(r"\bstartGame\(\)", page)), 1)                      # only the definition: function startGame()
 
     def test_both_name_screens_say_that_online_matches_are_recorded(self):
-        words = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names."      # (live watching changed its second sentence)
-        self.assertEqual(read(LOBBY).count(words), 1)
-        self.assertEqual(read(SHELL).count(words), 1)
-        self.assertIn('<span class="notice" id="who-notice">' + words + "</span>", read(LOBBY))     # (under the hint of the field; only the step of a game on this computer hides it, by script)
-        self.assertIn('<div class="name-step-hint name-step-notice">' + words + "</div>", read(SHELL))
-        self.assertIn(words.replace("&rsquo;", "'"), read(os.path.join(REPO, "docs", "SERVER.md")))      # (the one document that quotes it: it also says when the line is true)
+        # The game page's card has the older words (live watching changed its second sentence); the front page, as the owner's lobby picture draws it, says "The recordings are public and ..." in two places:
+        # in the footer, for a visitor who is not asked for a name, and in the name card (under the hint; only the step of a game on this computer hides it, by script).
+        first = "Online matches are recorded and kept for 30 days."
+        game = first + " Anybody can watch them, live or later, and they show the players&rsquo; names."
+        front = first + " The recordings are public and show the players&rsquo; names."
+        self.assertEqual(read(LOBBY).count(front), 2)
+        self.assertEqual(read(SHELL).count(game), 1)
+        self.assertIn('<p class="notice" id="footer-notice">' + front + "</p>", read(LOBBY))
+        self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + front + "</div>", read(LOBBY))
+        self.assertIn('<div class="name-step-hint name-step-notice">' + game + "</div>", read(SHELL))
+        self.assertNotIn("Anybody can watch them", read(LOBBY))                                     # (the older second sentence is the game page's only)
+        self.assertNotIn("The recordings are public", read(SHELL))
+        docs = read(os.path.join(REPO, "docs", "SERVER.md"))                                       # (the one document that quotes them: it also says when the line is true)
+        self.assertIn(front.replace("&rsquo;", "'"), docs)
+        self.assertIn(game.replace("&rsquo;", "'"), docs)
 
 
 class TheDocuments(unittest.TestCase):
@@ -65,7 +82,7 @@ class TheDocuments(unittest.TestCase):
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
         self.assertIn("`ants.name`", page)
         self.assertIn("asks for your name first, every time", page)
-        self.assertIn("A line under the field says what the server does with an online match", page)      # (the notice of both name screens, and the step that has none)
+        self.assertIn("A line says what the server does with an online match", page)      # (the notice of the lobby's footer and of both name cards, and the step that has none)
         self.assertIn("not in the step of a game on this computer", page)
         self.assertIn("`who-notice`", read(os.path.join(REPO, "docs", "SERVER.md")))      # (what an operator who changes the line must leave where it is)
         notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))

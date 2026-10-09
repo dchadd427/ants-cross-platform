@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""The front page's Rejoin button (run by ./run_tests.sh --fast and by the CI). The owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back".
+"""The front page's Rejoin strip (run by ./run_tests.sh --fast and by the CI). The owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back".
 
 The server holds the seat of a player whose connection is lost and the game page comes back to its seat by itself (a reload, a restart of the server). The front page is the last door: a player who
-closed the tab, or whose browser crashed, opens the site's front page and finds ONE button, "Rejoin your match (CODE)", with a line under it, while this browser holds a fresh key of a seat on this
-site's game server. The key is a secret and is never read out of the storage into an address, a text or a log: the game page finds it itself.
+closed the tab, or whose browser crashed, opens the site's front page and finds a strip at the top of the page, "Your match in room CODE is still running: go back to your seat." with ONE button,
+"Rejoin it", while this browser holds a fresh key of a seat on this site's game server. The key is a secret and is never read out of the storage into an address, a text or a log: the game page finds it
+itself. The lobby's START uses the same entry the other way round: it writes ants.rejoin.<room>.<seat> for the game page and never calls leave().
 
   - the block REJOIN of web/lobby.html is RUN (node, when it is installed: tests/scripts/web_rejoin_block_check.js): which storage entries count (exactly the game's JSON, a room by the page's own rule,
     a seat 0 - 3), this site's server (the game page's own join, on both schemes), the age (three hours to the millisecond: older is removed, as the game does; a minute ahead: not offered, not removed),
-    another server's entry (kept, not offered), the newest of several, a storage that throws, the words (the code in two groups of three), the address (the plain code, no key and no create block),
-    the game page reading that address, and no key anywhere;
-  - the page as a whole is run in the fake browser of tests/scripts/web_name_check.js (when the button is there, what it says, where it goes, the return from the browser's memory);
-  - what needs no browser is read from the files: the markup (hidden, above the cards, no text of its own), the style (the page's teal button, a note of one line, the whole width on a phone), the
-    block (its markers, no DOM and no storage of its own, the page's own room-code rule, the game's own constants), the wiring (the plain front page only, text only, this tab, no write to the storage);
+    another server's entry (kept, not offered), the newest of several, a storage that throws, the words (the code in two groups of three, in the note), the address (the plain code, no key and no create
+    block), the game page reading that address, and no key anywhere;
+  - the page as a whole is run in the fake browser of tests/scripts/web_name_check.js (when the strip is there, what it says, where the button goes, the return from the browser's memory, the storage
+    events, the START hand-over);
+  - what needs no browser is read from the files: the markup (hidden, below the banner and above the header, the note with no text of its own), the style (flex row that wraps, gold frame, the page's
+    focus outline), the block (its markers, no DOM and no storage of its own, the page's own room-code rule, the game's own constants), the wiring (the lobby only, text only, this tab, no write to the
+    storage), the START hand-over (the entry is written once, no leave());
   - what it is checked against is pinned too: the game page's way of building the join address, and the application's way of naming the server in a key.
-  - the documents say what the files do (the two texts of the button, no "the switch is still off", the parts of the check).
+  - the documents say what the files do (the two texts of the strip, where it sits, how START hands the seat over, no "the switch is still off", the parts of the check).
 The way back in a real browser (a reload, a restart of the server, the button) is tests/scripts/web_rejoin_check.py (opt-in).
 """
 import os
@@ -38,30 +41,26 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.page = read("web", "lobby.html")
         self.style = self.page[:self.page.index("</style>")]
 
-    def test_the_block_is_hidden_in_the_markup_above_the_page_with_the_cards_and_has_no_text_of_its_own(self):
-        markup = '<section id="rejoin" class="rejoin" aria-label="Your running match" hidden>\n        <button id="rejoin-go" type="button" class="btn big"></button>\n        <p class="rejoin-note" id="rejoin-note"></p>\n    </section>'
+    def test_the_strip_is_hidden_in_the_markup_below_the_banner_and_above_the_header_and_its_note_has_no_text_of_its_own(self):
+        markup = '<div class="rejoin" id="rejoin" hidden><span id="rejoin-note"></span><button class="btn sm" type="button" id="rejoin-go">Rejoin it</button></div>'
         self.assertEqual(self.page.count(markup), 1)
-        self.assertLess(self.page.index("</header>"), self.page.index('<section id="rejoin"'))
-        self.assertLess(self.page.index('<section id="rejoin"'), self.page.index('<main class="page">'))
+        self.assertLess(self.page.index('id="banner"'), self.page.index('<div class="rejoin" id="rejoin"'))
+        self.assertLess(self.page.index('<div class="rejoin" id="rejoin"'), self.page.index('<header class="mast">'))
+        self.assertLess(self.page.index('<div class="rejoin" id="rejoin"'), self.page.index('id="lobby"'))              # (above the lobby: it is no part of its grid)
         self.assertEqual(len(re.findall(r'id="rejoin[-a-z]*"', self.page)), 3)
 
-    def test_a_hidden_block_takes_no_room_and_nothing_else_moves(self):
-        self.assertIn("[hidden] { display: none !important; }", self.style)                # (the block is a flex row: this rule is what hides it)
-        self.assertIn(".rejoin { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 18px 0 0; }", self.style)       # (the button, and the line UNDER it)
-        page_grid = re.search(r"\.page \{ display: grid;[^}]*\}", self.style).group(0)
-        self.assertNotIn("rejoin", page_grid)                                              # (it is not a cell of the page's grid, whose areas stay as they were)
+    def test_a_hidden_strip_takes_no_room_and_nothing_else_moves(self):
+        self.assertIn("[hidden] { display: none !important; }", self.style)                # (the strip is a flex row: this rule is what hides it)
+        self.assertRegex(self.style, r"\.rejoin \{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px;")       # (a row that wraps: on a phone the button goes under the sentence)
+        self.assertIn(".rejoin span { flex: 1 1 220px; }", self.style)                     # (the sentence takes the row and the button stays beside it)
+        lobby_grid = re.search(r"\.grid \{[^}]*\}", self.style).group(0)
+        self.assertNotIn("rejoin", lobby_grid)                                             # (it is not a cell of the lobby's grid, whose columns stay as they were)
 
-    def test_it_is_the_pages_teal_button_with_its_focus_and_a_note_of_one_line(self):
-        self.assertRegex(self.style, r"a:focus-visible, \.btn:focus-visible,")             # (the outline of every button of the page: the Rejoin button is one)
-        self.assertIn(".rejoin-note { max-width: 100%; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }", self.style)
-        self.assertIn(".note { max-width: 34ch; }", self.style)                            # (the card's note wraps at 34 characters: this one is not a .note, so that it does not, and the one note of the card stays one)
-        self.assertEqual(len(re.findall(r'<p class="note[ "]', self.page)), 1)
-        self.assertIn(".rejoin .btn { max-width: 100%; text-align: center; overflow-wrap: anywhere; }", self.style)       # (a room code of 32 characters has no place to break)
-
-    def test_on_a_phone_the_button_takes_the_width(self):
-        phone = self.style[self.style.index("@media (max-width: 700px) {"):]
-        self.assertIn(".rejoin { margin: 10px 0 0; align-items: stretch; }", phone)
-        self.assertIn(".rejoin .btn { width: 100%; }", phone)
+    def test_it_is_the_pages_button_in_a_gold_frame_with_the_pages_focus_outline(self):
+        self.assertIn(":focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }", self.style)       # (the outline of every control of the page: the Rejoin button is one)
+        self.assertRegex(self.style, r"\.rejoin \{[^}]*border: 3px solid var\(--gold\);")                         # (the frame of the notice banner, in the page's gold)
+        self.assertRegex(self.style, r"\.btn \{ display: inline-flex;")
+        self.assertIn(".btn.sm, .btn.small {", self.style)                                  # (the button is `btn sm`, the banner's OK too)
 
 
 class TheBlockAndTheWiring(unittest.TestCase):
@@ -69,7 +68,8 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.page = read("web", "lobby.html")
         self.keys = self.page[self.page.index("// REJOINKEY_BEGIN"):self.page.index("// REJOINKEY_END")]       # (the keys that this browser holds: the same text in the game page)
         self.block = self.page[self.page.index("// REJOIN_BEGIN"):self.page.index("// REJOIN_END")]            # (the front page's own: where the button goes)
-        self.wiring = self.page[self.page.index("// REJOIN_END"):self.page.index("var room = '';")]
+        last = "window.addEventListener('storage', function () { if (!legacyRoom) showRejoin(); });"
+        self.wiring = self.page[self.page.index("// REJOIN_END"):self.page.index(last) + len(last)]           # (the strip's own code: from the block's end to its storage listener)
 
     def test_the_markers_are_once_and_the_blocks_touch_neither_the_page_nor_the_storage_themselves(self):
         for marker in ("// REJOINKEY_BEGIN", "// REJOINKEY_END", "// REJOIN_BEGIN", "// REJOIN_END"):
@@ -110,16 +110,28 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("return best ? { room: best.room, seat: best.seat, t: best.t } : null;", self.keys)
         self.assertEqual(len(re.findall(r"\bv\.k\b", self.keys)), 3)                                                   # (only the three checks of the key read it)
 
-    def test_the_button_is_looked_for_on_the_plain_front_page_only(self):
-        branch = self.page[self.page.index("function fromAddress() {"):self.page.index("// A match that an address asks for is the page of somebody who was sent a link")]
-        self.assertRegex(branch, r"\} else \{\s*\$\('cards'\)\.hidden = false;\s*\$\('how'\)\.hidden = false;\s*showRejoin\(\);")
-        self.assertEqual(len(re.findall(r"showRejoin\(\)", self.page)), 3)                                              # the definition, that call, and refreshRejoin
-        self.assertIn("function refreshRejoin() { if (!$('cards').hidden) showRejoin(); }", self.wiring)
+    def test_the_wiring_is_only_the_strips_own_code(self):
+        self.assertLess(len(self.wiring), 2000)                                                                         # (a slice that ran over the lobby would make the assertions below mean nothing)
+        self.assertIn("function showRejoin() {", self.wiring)
 
-    def test_it_is_looked_at_again_when_the_page_returns_and_when_another_tab_writes(self):
-        self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) refreshRejoin(); });", self.wiring)
-        self.assertIn("window.addEventListener('storage', refreshRejoin);", self.wiring)
-        self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 1)                        # (the line of numbers' own: tests/scripts/web_name_check.js counts it)
+    def test_the_strip_is_looked_for_when_the_lobby_runs_and_never_in_the_test_room(self):
+        self.assertRegex(self.page, r"function runLobby\(\) \{\s*showRejoin\(\);")                                      # (the first thing the lobby does)
+        self.assertEqual(len(re.findall(r"showRejoin\(\)", self.page)), 3)                                              # the definition, runLobby's call, and the storage listener
+        self.assertIn("if (!legacyRoom) showRejoin();", self.wiring)                                                    # (another tab's write does not bring it back over the test room)
+        self.assertIn("if (!offer || handing) { $('rejoin').hidden = true; return; }", self.wiring)                     # (nor while the page hands its seat to the game)
+        self.assertRegex(self.page, r"legacyRoom = true;\s*\$\('lobby'\)\.hidden = true;[^\n]*\n\s*\$\('rejoin'\)\.hidden = true;")       # (the test room takes the place of the lobby and hides the strip)
+        self.assertRegex(self.page, r"\{\s*document\.body\.classList\.add\('in-room'\);\s*runTestRoom\(\);\s*\} else \{\s*runLobby\(\);\s*\}")      # (which page this is: the test room for a map or a create block, else the lobby)
+        self.assertIn("if (asksMap || (asksRoom && (wantedBlock !== null || params.get('play') === 'here'))) {", self.page)
+
+    def test_it_is_looked_at_again_when_another_tab_writes_and_a_page_from_the_browsers_memory_is_loaded_again(self):
+        self.assertIn("window.addEventListener('storage', function () { if (!legacyRoom) showRejoin(); });", self.wiring)
+        self.assertEqual(len(re.findall(r"addEventListener\('storage'", self.page)), 1)
+        self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", self.page)       # (Back: the page loads anew, and looks again by itself)
+        self.assertEqual(len(re.findall(r"addEventListener\('pageshow'", self.page)), 1)
+        self.assertNotIn("refreshRejoin", self.page)
+        self.assertIn("document.addEventListener('visibilitychange', function () { if (!document.hidden && client) client.wake(); });", self.page)
+        self.assertIn("document.addEventListener('visibilitychange', poller.visibility);", self.page)
+        self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 2)                        # (the client's wake and the line of numbers' own: tests/scripts/web_name_check.js counts them)
 
     def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_name_and_shape_and_no_key(self):
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", self.wiring)
@@ -128,17 +140,35 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 1)                                              # (the one that test_web_lobby.py counts)
 
     def test_the_words_are_put_in_as_text_and_nothing_is_written_to_the_storage(self):
-        self.assertIn("$('rejoin-go').textContent = words.button;", self.wiring)
-        self.assertIn("$('rejoin-note').textContent = words.note;", self.wiring)
+        self.assertIn("$('rejoin-go').textContent = rejoinWords(offer).button;", self.wiring)
+        self.assertIn("$('rejoin-note').textContent = rejoinWords(offer).note;", self.wiring)
         self.assertNotRegex(self.wiring, r"innerHTML|remember\(|setItem|removeItem")
         self.assertNotIn("remember('ants.rejoin", self.page)
 
     def test_the_words_are_the_ones_the_plan_gave(self):
-        self.assertIn("var code = codeText(offer.room);", self.block)                                                    # (the code as a screen shows it, in two groups of three: the LOBBY block's codeText)
-        self.assertIn("button: 'Rejoin your match (' + code + ')'", self.block)
-        self.assertIn("note: 'Your match in room ' + code + ' is still running: go back to your seat.'", self.block)
+        self.assertIn("var code = codeText(offer.room);", self.block)                                                    # (the code as a screen shows it, in two groups of three)
+        self.assertIn("return { button: 'Rejoin it', note: 'Your match in room ' + code + ' is still running: go back to your seat.' };", self.block)
+        self.assertEqual(self.page.count("var codeText = Rules.codeText;"), 1)                                           # (the rules script's, defined once, outside the blocks: the check hands it to the block)
+        self.assertNotIn("var codeText", self.block + self.keys)
+        self.assertNotIn("Rejoin your match", self.page)                                                                 # (the older button, which named the room)
         self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9')", self.block)       # (the address keeps the plain code and has no create block: the room is there)
         self.assertNotIn("roomBlockQuery", self.block)
+
+    def test_start_hands_the_seat_over_with_the_key_in_the_storage_and_the_lobby_never_leaves_at_start(self):
+        start = self.page[self.page.index("function onStarting() {"):self.page.index("function shownTeam(seat)")]
+        self.assertIn("c.on('starting', mine(onStarting));", self.page)                                                  # (what the leader's START does to every page of the room)
+        self.assertIn("if (handing || !client) return;", start)                                                          # (once)
+        self.assertIn("var entry = client.rejoinEntry();", start)                                                        # (ants.rejoin.<room>.<seat> = {"k", "s", "t"}, as the game page writes it)
+        self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); } catch (e) {", start)
+        self.assertEqual(start.count("setItem("), 1)
+        self.assertIn("forgetSession();", start)                                                                         # (Back from the match makes a room again: this one is the match's now)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", start)    # (the Rejoin button's address: the plain code, the seat, the name, the shape)
+        self.assertIn("$('rejoin').hidden = true;", start)
+        self.assertNotRegex(start, r"\.leave\(|\.close\(|Leave")                                                       # (the seat is handed over, not given up: the game's own Hello takes it with the key)
+        net = read("web", "front", "lobby_net.js")
+        self.assertIn("return { name: 'ants.rejoin.' + code + '.' + seat, text: JSON.stringify({ k: hexOf(key), s: server, t: Math.floor(nowMs) }) };", net)
+        self.assertEqual(len(re.findall(r"localStorage\.setItem\(", self.page)), 2)                                      # (remember(), for the name and the shape, and this entry: nothing else of the page writes to the storage)
+        self.assertIn("function remember(key, value) { try { window.localStorage.setItem(key, value); }", self.page)
 
 
 class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
@@ -255,13 +285,26 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
 class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
     """What the documents say about the switch, the button and the check is what the files do."""
 
-    def test_the_two_texts_of_the_button_are_the_pages_own_in_the_network_document(self):
+    def test_the_two_texts_of_the_strip_are_the_pages_own_in_the_network_document(self):
         doc = read("docs", "NETWORK_PORT.md")
         lobby = read("web", "lobby.html")
-        self.assertIn("**\"Rejoin your match (CODE)\"**", doc)
+        self.assertIn("**\"Rejoin it\"**", doc)
         self.assertIn("**\"Your match in room CODE is still running: go back to your seat.\"**", doc)
-        self.assertIn("'Rejoin your match (' + code + ')'", lobby)                                                      # (code: the room's code as a screen shows it, "k7m 2xq")
-        self.assertIn("'Your match in room ' + code + ' is still running: go back to your seat.'", lobby)
+        self.assertIn("return { button: 'Rejoin it', note: 'Your match in room ' + code + ' is still running: go back to your seat.' };", lobby)       # (code: the room's code as a screen shows it, "k7m 2xq")
+        paragraph = doc[doc.index("**The front page's Rejoin button**"):doc.index("**The game page does not ask a key holder for a name**")]
+        self.assertNotIn("Rejoin your match", paragraph)                                                                 # (the older button, which named the room; the start menu of the native game still has that one)
+
+    def test_the_documents_say_where_the_strip_sits_and_how_start_hands_the_seat_over(self):
+        doc = read("docs", "NETWORK_PORT.md")
+        lobby = read("web", "lobby.html")
+        self.assertIn("a strip sits at the top of the page (below the notice banner, above the header;", doc)
+        self.assertLess(lobby.index('id="banner"'), lobby.index('id="rejoin"'))
+        self.assertLess(lobby.index('id="rejoin"'), lobby.index('<header class="mast">'))
+        for needle in ("`ants.rejoin.<room>.<seat>` = `{\"k\", \"s\", \"t\"}` (`rejoinEntry` of the client)", "The lobby never calls `leave()` at START (it sends no Leave and does not close its socket)",
+                       "a page that comes back from the browser's memory (Back) is loaded again, so it looks again by itself", "`web/lobby.html` loads it."):
+            self.assertIn(needle, doc, needle)
+        self.assertIn("a strip stands at the top of the front page, above its header", read("docs", "PLAY_IN_BROWSER.md"))
+        self.assertNotIn("No page loads it yet", doc)
 
     def test_no_document_says_that_the_switch_is_off_or_that_the_front_pages_button_is_still_to_come(self):
         for parts in (("README.md",), ("docs", "PLAY_IN_BROWSER.md"), ("docs", "SERVER.md"), ("docs", "NETWORK_PORT.md"), ("docs", "audit", "persist_notes.md")):

@@ -2,7 +2,7 @@
 # OPT-IN, not part of ./run_tests.sh: the way back to a running match in REAL browsers (docs/NETWORK_PORT.md, "What the clients do in release B"): two players, each a browser of their own with their own
 # storage, in a two-seat room of the real game server behind the real nginx of the web image: a reload (the page takes its seat again, with no "Get ready" dialog; the other screen says that the seat
 # is missing and then "... is back: the match goes on in N"; the state hashes of the two games agree), a restart of the server (SIGTERM, the same folder and ports: both pages say "Connection lost.
-# Reconnecting...", come back by themselves, the room is restored from its record), the front page's "Rejoin your match (CODE)" after a closed tab, and the front page without a usable entry.
+# Reconnecting...", come back by themselves, the room is restored from its record), the front page's "Rejoin it" strip after a closed tab, and the front page without a usable entry.
 # No automated test reaches this chain: the quick tier runs the front page's Rejoin block and the way back of the library and the application separately, never through a browser and nginx.
 #
 #   ANTS_WEB_URL=http://127.0.0.1:8080/ ANTS_WS_PORT=4012 tests/scripts/test_web_rejoin.sh [--only reload|restart|rejoin|leave|none] [--shots DIR] [--server PATH-TO-ants_server]

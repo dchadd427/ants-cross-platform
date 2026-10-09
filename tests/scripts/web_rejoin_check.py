@@ -2,7 +2,7 @@
 """The way back to a running match, in REAL browsers (opt-in; see tests/scripts/test_web_rejoin.sh and docs/NETWORK_PORT.md, "What the clients do in release B").
 
 The owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back". The server holds the seat of a player whose connection is lost (the default since
-release B), the game page comes back to its seat by itself (a reload, a restart of the server), and the front page has a Rejoin button for the player who closed the tab. Nothing but a browser
+release B), the game page comes back to its seat by itself (a reload, a restart of the server), and the front page (the lobby) has a Rejoin strip with a button for the player who closed the tab. Nothing but a browser
 can show that the whole chain works: the page's storage, the game's WebSocket through nginx, the server, the catch-up, the other player's screen.
 
 Needs the web image of this tree on a port (`docker build -t ants-beta .`; its nginx passes /ws and /busy to the game server's WebSocket port: --ws-port is that port), the native `ants_server` of
@@ -19,13 +19,13 @@ browser of its own (its own profile: its own local storage, as a player's own co
   * restart  the same match; the server is stopped with SIGTERM and started again on the same folder and ports: both pages say "Connection lost. Reconnecting...", both come back by themselves,
              the room came back from its restart record (the server's clock for a pause begins at the restore: players back within 3 s of it resume at once, and a pause of 3 s or more is
              counted down on a screen), and the match goes on with equal hashes;
-  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: "Rejoin your match (CODE)" is there with its note
-             (the code as a screen shows it, in two groups of three), pressing it puts the player back in its seat (the address has the plain code and no key, and no create block: the room is there),
+  * rejoin   the first player CLOSES its tab in the middle of the match (the key stays in the browser's storage), a new tab opens the front page: its Rejoin strip is there, above the logo and the colours, with the button
+             "Rejoin it" and its note "Your match in room CODE is still running: go back to your seat." (the code as a screen shows it, in two groups of three), pressing it puts the player back in its seat (the address has the plain code and no key, and no create block: the room is there),
              the other player sees "... is back", the match goes on with equal hashes;
   * leave    two players in a match; the second leaves ON PURPOSE through the page's Menu button and says yes to its question ("Leave the game and go back to the menu?"): the page goes to the front
              page, the server drops the seat at once (the room is never paused: a closed tab would have held the seat and stopped the match for the other player), the first player's screen never
              says that a connection was lost, the key is gone from the second browser's storage and the front page offers no Rejoin;
-  * none     the front page with no entry, with an old one (it is removed), one of another server (it stays), malformed ones and a fresh one of this site (the button is there, then gone with the
+  * none     the front page with no entry, with an old one (it is removed), one of another server (it stays), malformed ones and a fresh one of this site (the button "Rejoin it" is there, then gone with the
              entry; a phone-sized window with a room code of 32 characters has no sideways scroll).
 In every part the key is in no address, no text of any page and no console line.
 
@@ -45,6 +45,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -64,6 +65,12 @@ ROOM_BLOCK = "&roommap=tiny&roomseats=2"
 def grouped(code):
     """A room code as a screen shows it: six characters in two groups of three (web/lobby.html, codeText); any other length as it is."""
     return code[:3] + " " + code[3:] if len(code) == 6 else code
+
+def query_of(search):
+    """The parameters of an address's query as a dict. The game page leaves its address in an order that depends on when it ran: it drops the name parameter as its script starts, and puts the seat that
+    the room gave it at the end once the room has told it (web/shell.html, withoutName and withSeat), so the check compares what the address holds, not the order."""
+    return dict(urllib.parse.parse_qsl(search.lstrip("?"), keep_blank_values=True))
+
 
 # What runs in every new document of a player's tab: the state hashes that the game posts on the broadcast channel (every 100 ticks), and an id of the document (a reload makes a new one).
 HOOK = r"""
@@ -676,7 +683,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("rejoin"):
-            print("[web rejoin] rejoin: a player who closed the tab finds \"Rejoin your match\" on the front page")
+            print("[web rejoin] rejoin: a player who closed the tab finds the \"Rejoin it\" strip on the front page")
             room = new_room()
             a, b, running = begin_match(room)
             check(running, "two players joined %s and the match runs, with no dialog open" % room)
@@ -697,11 +704,11 @@ def main():
                 shown = wait_for(lambda: a.ev("!document.getElementById('rejoin').hidden"), 20, 0.3)
                 check(bool(shown), "the front page of the site shows the Rejoin block")
                 if shown:
-                    info = a.ev("""(function () { var go = document.getElementById('rejoin-go'), note = document.getElementById('rejoin-note'), r = go.getBoundingClientRect(), cards = document.getElementById('cards').getBoundingClientRect();
-                        return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: cards.top, enabled: !go.disabled }; })()""")
-                    check(info["button"] == "Rejoin your match (%s)" % grouped(room), "its button says \"Rejoin your match (CODE)\" with the room's code in two groups of three (%r)" % info["button"])
-                    check(info["note"] == "Your match in room %s is still running: go back to your seat." % grouped(room), "... and the line under it says that the match is still running (%r)" % info["note"])
-                    check(info["bottom"] <= info["cards"] and info["enabled"], "... above the card (the button ends at %.0f px, the card begins at %.0f px)" % (info["bottom"], info["cards"]))
+                    info = a.ev("""(function () { var go = document.getElementById('rejoin-go'), note = document.getElementById('rejoin-note'), r = go.getBoundingClientRect(), lobby = document.getElementById('lobby').getBoundingClientRect(), mast = document.querySelector('header.mast').getBoundingClientRect();
+                        return { button: go.textContent, note: note.textContent, bottom: r.bottom, cards: lobby.top, mast: mast.top, enabled: !go.disabled }; })()""")
+                    check(info["button"] == "Rejoin it", "its button says \"Rejoin it\" (the room's code is in the note beside it: %r)" % info["button"])
+                    check(info["note"] == "Your match in room %s is still running: go back to your seat." % grouped(room), "... and the note beside it says that the match is still running, with the room's code in two groups of three (%r)" % info["note"])
+                    check(info["bottom"] <= info["mast"] and info["mast"] <= info["cards"] and info["enabled"], "... above the logo and the colours (the button ends at %.0f px, the logo begins at %.0f px, the colours at %.0f px)" % (info["bottom"], info["mast"], info["cards"]))
                     a.shot(args.shots, "rejoin_button")
                     pages = lambda: len([t for t in a.browser.devtools.call("Target.getTargets")["targetInfos"] if t["type"] == "page"])
                     before_pages = pages()
@@ -714,9 +721,11 @@ def main():
                     went = wait_for(lambda: "join=" in (a.ev("location.search") or ""), 15, 0.2)
                     check(bool(went), "pressing it takes this tab to the game page")
                     check(pages() == before_pages, "... in the same tab (no new tab or window: %d page(s) before and after)" % before_pages)
-                    search = a.ev("location.search") or ""
                     given = wait_for(lambda: a.ev("typeof ANTS_ARGS !== 'undefined' ? ANTS_ARGS : null"), 10, 0.2) or []
-                    check(search == "?join=/ws&room=%s&seat=0&aspect=16:9" % room, "the game page's address is the plain code (not the two groups), the seat and the shape, and no key and no create block (it drops the name parameter itself, so that a copy of the address asks its owner): %s" % search)
+                    wait_for(lambda: "name" not in query_of(a.ev("location.search") or ""), 10, 0.2)                 # (the game page drops the name parameter as its script starts)
+                    search = a.ev("location.search") or ""
+                    check(query_of(search) == {"join": "/ws", "room": room, "seat": "0", "aspect": "16:9"} and search.count("seat=") == 1,
+                          "the game page's address holds the plain code (not the two groups), the seat and the shape, and no key, no create block and no name (the page drops the name itself, so that a copy of the address asks its owner): %s" % search)
                     check(["--join-url", "ws://" + web.split("//", 1)[1].rstrip("/") + "/ws", "--room", room, "--seat", "0"] == given[given.index("--join-url"):given.index("--join-url") + 6] if "--join-url" in given else False,
                           "... and the game is given the site's door, the room and the seat 0 (its arguments: %s)" % [x for x in given if x != "./this.program"])
                     back = [None]
@@ -797,16 +806,17 @@ def main():
                 for k, v in items.items():
                     p.ev("localStorage.setItem(%s, %s); 1" % (json.dumps(k), json.dumps(v)))
                 p.call("Page.navigate", {"url": web})
-                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !document.getElementById('cards').hidden"), 20, 0.2)
+                wait_for(lambda: p.ev("!!document.getElementById('rejoin') && !!document.querySelector('#slots li.k-person')"), 20, 0.2)       # (the page has its room: it sits in a colour)
                 time.sleep(0.4)
-                return p.ev("""(function () { var r = document.getElementById('rejoin'), go = document.getElementById('rejoin-go'), header = document.querySelector('header.top').getBoundingClientRect(),
-                    main = document.querySelector('main.page').getBoundingClientRect();
-                    return { hidden: r.hidden, shown: r.getBoundingClientRect().height > 0, button: go.textContent, names: Object.keys(localStorage).filter(function (k) { return k.indexOf('ants.rejoin.') === 0; }).sort(),
-                             scroll: [document.documentElement.scrollWidth, window.innerWidth], gap: main.top - header.bottom }; })()""")
+                return p.ev("""(function () { var r = document.getElementById('rejoin'), go = document.getElementById('rejoin-go'), mast = document.querySelector('header.mast').getBoundingClientRect(),
+                    main = document.querySelector('main.wrap'), top = main.getBoundingClientRect().top + parseFloat(getComputedStyle(main).paddingTop);
+                    return { hidden: r.hidden, shown: r.getBoundingClientRect().height > 0, button: r.hidden ? '' : go.textContent, note: r.hidden ? '' : document.getElementById('rejoin-note').textContent,
+                             names: Object.keys(localStorage).filter(function (k) { return k.indexOf('ants.rejoin.') === 0; }).sort(),
+                             scroll: [document.documentElement.scrollWidth, window.innerWidth], gap: mast.top - top }; })()""")
 
             plain = load_front({})
             check(plain["hidden"] and not plain["shown"] and plain["button"] == "", "no entry: nothing of the Rejoin is shown (the block is hidden and takes no room)")
-            check(plain["gap"] == 0, "... and nothing else moved: the page starts right under the header (a gap of %s px)" % plain["gap"])
+            check(plain["gap"] == 0, "... and nothing else moved: the logo starts at the top of the page (a gap of %s px above it)" % plain["gap"])
             old = load_front({"ants.rejoin.old-room.0": entry(age_ms=4 * 3600 * 1000)})
             check(old["hidden"] and old["names"] == [], "an entry older than 3 hours: not offered, and removed from the storage (%s)" % old["names"])
             other = load_front({"ants.rejoin.other-room.1": entry(server_text="wss://other.example/ws")})
@@ -817,22 +827,23 @@ def main():
                               "ants.rejoin.extra.1": json.dumps({"k": hexkey, "s": mine, "t": int(time.time() * 1000), "v": 2}), "ants.rejoin.ahead.3": entry(age_ms=-3600 * 1000)})
             check(bad["hidden"] and len(bad["names"]) == 6, "malformed entries, a bad seat, a room with a dot, a key of zeros, an extra member and a time an hour ahead: nothing is offered and nothing is removed (%d kept)" % len(bad["names"]))
             good = load_front({"ants.rejoin.k7m2xq.2": entry(), "ants.rejoin.older-room.0": entry(age_ms=600000), "ants.name": "Zed", "ants.aspect.v2": "4:3"})
-            check(not good["hidden"] and good["shown"] and good["button"] == "Rejoin your match (k7m 2xq)", "a fresh entry of this site: the button is there, for the newest of two entries, with its code in two groups of three (%r)" % good["button"])
-            check(good["gap"] > 40, "... it takes its own room above the page (%s px under the header) and the page moves down" % good["gap"])
+            check(not good["hidden"] and good["shown"] and good["button"] == "Rejoin it" and "k7m 2xq" in good["note"], "a fresh entry of this site: the button is there, for the newest of two entries, with its code in two groups of three in the note beside it (%r, %r)" % (good["button"], good["note"]))
+            check(good["gap"] > 40, "... it takes its own room above the logo (%s px) and the page moves down" % good["gap"])
             p.shot(args.shots, "rejoin_front_with_button")
             p.ev("document.getElementById('rejoin-go').click(); 1")
             wait_for(lambda: "join=" in (p.ev("location.search") or ""), 10, 0.2)
-            search = p.ev("location.search") or ""
             given = wait_for(lambda: p.ev("typeof ANTS_ARGS !== 'undefined' ? ANTS_ARGS : null"), 10, 0.2) or []
+            wait_for(lambda: "name" not in query_of(p.ev("location.search") or ""), 10, 0.2)                          # (the game page drops the name parameter as its script starts)
+            search = p.ev("location.search") or ""
             words = [x for x in given if x != "./this.program"]
-            check(search == "?join=/ws&room=k7m2xq&seat=2&aspect=4:3" and hexkey not in search, "the button's address names the plain code, the seat 2 and the remembered shape (4:3), and no key and no create block: %s" % search)
+            check(query_of(search) == {"join": "/ws", "room": "k7m2xq", "seat": "2", "aspect": "4:3"} and hexkey not in search, "the button's address names the plain code, the seat 2 and the remembered shape (4:3), and no key, no create block and no name: %s" % search)
             check("--join-url" in given and given[given.index("--join-url") + 1] == mine and given[given.index("--room") + 1] == "k7m2xq" and given[given.index("--seat") + 1] == "2" and given[given.index("--name") + 1] == "Zed" and "--room-map" not in given and "--room-seats" not in given,
                   "... and the game is given the site's door, the room, the seat and the remembered name (its arguments: %s)" % words)
             gone = load_front({})
             check(gone["hidden"], "with the entry gone the front page shows no Rejoin")
             long_code = "r" * 32
             phone = load_front({"ants.rejoin.%s.3" % long_code: entry()}, width=390)
-            check(not phone["hidden"] and phone["button"] == "Rejoin your match (%s)" % long_code and phone["scroll"][0] <= phone["scroll"][1], "at 390 px with a room code of 32 characters the button is there and the page does not scroll sideways (%s)" % (phone["scroll"],))
+            check(not phone["hidden"] and phone["button"] == "Rejoin it" and long_code in phone["note"] and phone["scroll"][0] <= phone["scroll"][1], "at 390 px with a room code of 32 characters the button is there, the note has the code, and the page does not scroll sideways (%s)" % (phone["scroll"],))
             p.shot(args.shots, "rejoin_front_phone")
             end_part()
     except NotReachable as e:
