@@ -123,6 +123,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     else if (!wants_replay) room->set_replay_store(nullptr, "the room was made with \"record\": false");
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
+    room->set_live_board(&live_board_);                           // (a room that records shows its match here once it has run 30 seconds)
     if (room->lobby()) room->set_lobby_services(lobby_services());
     rooms_.emplace(code, std::move(room));
     ++created_;
@@ -570,6 +571,7 @@ bool RoomManager::enable_restart_records(RestartConfig config, std::string& why)
 bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::string& why) {
     replays_.reset();
     replay_demo_ = include_demo;
+    live_board_.set_clock(config.clock_s);
     if (config.dir.empty()) return true;
     auto store = std::make_unique<ReplayStore>(std::move(config));
     if (!store->prepare(why)) return false;

@@ -130,6 +130,10 @@ public:
     static bool valid_file_name(const std::string& name);
     /// The end time (seconds since 1970 UTC) that a valid name carries; false for any other name
     static bool time_of_name(const std::string& name, int64_t& seconds);
+    /// The pieces of a name, for the id of a live match (live_board.hpp) to be made of the same: "TREASURE.LVL" gives "TREASURE" (the letters, digits and '_' of the map's file name without its extension, any other
+    /// character a '_', at most 24 of them; "match" when nothing is left), and a time gives "20261008-143209Z" (UTC)
+    static std::string map_stem(const std::string& map_name);
+    static std::string time_stamp(int64_t seconds);
 
 private:
     bool delete_file(ReplayEntry& entry, bool say = true);       // `say`: a file that cannot be deleted is a line in the log

@@ -155,6 +155,10 @@ public:
     /// The server's replays (null when it keeps none)
     ReplayStore* replay_store() noexcept { return replays_.get(); }
     const ReplayStore* replay_store() const noexcept { return replays_.get(); }
+    /// The matches that run now, which the public door shows live (live_board.hpp): the rooms that record register theirs here. Always there; empty on a server that keeps no replays. It takes its clock from the
+    /// replay configuration (enable_replays).
+    LiveBoard& live_board() noexcept { return live_board_; }
+    const LiveBoard& live_board() const noexcept { return live_board_; }
     /// The rooms that a visitor's create block makes are recorded too (false when the server keeps no replays)
     bool replays_include_demo() const noexcept { return replays_ != nullptr && replay_demo_; }
     /// Reads the records of the folder, newest first (by the time of their last write), and judges each one: a record that cannot be read is a line in the log and is deleted; one that cannot be restored
@@ -282,6 +286,7 @@ private:
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::unique_ptr<ReplayStore> replays_;       // (and the store of the replays that they keep)
+    LiveBoard live_board_;                       // (and the board of the matches that they record while they run: before the rooms, which take their match off it when they go)
     bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due

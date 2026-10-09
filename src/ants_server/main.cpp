@@ -69,8 +69,8 @@
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
 //                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
-//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays (GET /replays, GET /replays/<file>; no secret, nothing else answers): 0 = off, the default. This machine only;
-//                      the site's reverse proxy passes the two paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
+//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays and for the matches that run now (GET /replays, GET /replays/<file>, GET /live, GET /live/<id>; no secret, nothing
+//                      else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the four paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
 //   --version, --help
@@ -577,7 +577,7 @@ int main(int argc, char** argv) {
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
-            ": GET /replays and GET /replays/<file>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+            ": GET /replays, GET /replays/<file>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
     }
     if (http) {
         using ants::server::SecretSource;
