@@ -48,7 +48,7 @@ void run_merge_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 1, 0x03, Level::Hard, 0);
+        m.init("ISLANDS", 1, 0x03, Level::Hard, 0, [](LevelPlan& p) { p.island_timed_row = false; });                    // (the old row: its crew of six is the one whose ant stands beside the enemy for long enough; the timed row's crew of four hops on before the enemy's reflex reaches it)
         m.run(40);                                                                                              // (the crew is chosen at the first looks)
         std::set<uint32_t> crew;
         TileCoord beside{-1, -1};

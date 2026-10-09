@@ -67,9 +67,13 @@ public:
     SessionSink(HostSession& host, uint8_t seat) : host_(host), seat_(seat) {}
     sim::CommandResult submit(const sim::Command& c) override {
         sim::CommandResult r;
+        predicted.push_back(host_.turns_sealed());
         if (host_.submit_bot(seat_, c)) r.status = sim::CommandResult::Status::Applied;
         return r;
     }
+    /// What the sink of a room says (src/ants_server/room.cpp, Room::BotSink): the number of the turn that the sequencer seals next, which the engine executes at that tick
+    uint64_t applied_at(uint64_t) const override { return host_.turns_sealed(); }
+    std::vector<uint64_t> predicted;                         // applied_at at every submit
 
 private:
     HostSession& host_;
@@ -108,7 +112,7 @@ struct BotMatch {
     std::vector<std::pair<uint64_t, Command>> client_saw;
     uint32_t now{0};
 
-    explicit BotMatch(uint32_t seed) {
+    explicit BotMatch(uint32_t seed, ScriptBot::Think think = {}) {
         build_world(host_sim, seed);
         build_world(client_sim, seed);
         host = std::make_unique<HostSession>(host_sim, HostSession::Config{});
@@ -125,7 +129,7 @@ struct BotMatch {
         }
         sink = std::make_unique<SessionSink>(*host, 2);
         bots = std::make_unique<BotController>(host_sim, 11);
-        auto script = std::make_unique<ScriptBot>(wanderer(bot_ants, counter));
+        auto script = std::make_unique<ScriptBot>(think ? std::move(think) : wanderer(bot_ants, counter));
         bot = script.get();
         std::string why;
         BotSpec spec;
@@ -333,6 +337,7 @@ public:
         if (net_.submit_bot(seat_, c)) r.status = sim::CommandResult::Status::Applied;
         return r;
     }
+    uint64_t applied_at(uint64_t now) const override { return net_.bot_apply_tick(now); }
 
 private:
     NetGame& net_;
@@ -725,6 +730,7 @@ void run_net_tests() {
         }
         ASSERT_FALSE(bob.net.add_bot(3, "Bot (Easy)"));                                                     // only the host seats bots
         ASSERT_FALSE(bob.net.submit_bot(2, hatch_of(2)));
+        ASSERT_EQ(host.net.bot_apply_tick(777), 777u);                                                      // no match yet: a click would be applied "now", the caller's own tick
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
         ASSERT_TRUE(host.net.start_match(4242, hash));
@@ -736,6 +742,8 @@ void run_net_tests() {
             ASSERT_EQ(m->sim.grid().anthills().size(), 3u);                                                 // the bot's team is a team: it has its hill and its ants
         }
         ASSERT_TRUE(host.sim.state_hash() == bob.sim.state_hash());
+        ASSERT_EQ(bob.net.bot_apply_tick(777), 777u);                                                       // a guest runs no bot
+        ASSERT_TRUE(host.net.bot_apply_tick(777) != 777 && host.net.bot_apply_tick(0) >= host.sim.current_tick());        // the host: the number of the turn that is sealed next
         ASSERT_FALSE(host.net.submit_bot(1, hatch_of(1)));                                                  // seat 1 is a person's
         ASSERT_FALSE(host.net.submit_bot(0, hatch_of(0)));
         // the bot's mind runs on the host: its look every second, its commands through the host's sequencer
@@ -860,5 +868,50 @@ void run_net_tests() {
         ASSERT_TRUE(host.net.room().slots[2].state == SlotState::Bot && host.net.room().slots[3].state == SlotState::Bot);
         host.net.leave();
         ASSERT_FALSE(host.net.active());
+    } TEST_END();
+
+    TEST_CASE("AI5.8 Timed Clicks In A Room: The Tick That The Bot's Sink Names (The Number Of The Turn That The Sequencer Seals Next) Is The Tick At Which Both Engines Apply The Click, For Every Click Of A Bot That Sends A Chain Of Three Clicks (10 To 11 Ticks Apart, The Window Of A Hat) With A Different Ant Every Second Look; The Chains Are Whole (Nothing Expired Or Rejected), Their Clicks Are Applied 10 To 11 Ticks Apart, And Both Engines Stay Identical") {
+        std::vector<uint32_t> ants;
+        size_t chains = 0;
+        BotMatch m(77, [&](const BotView&, Orders& o) {
+            if (ants.empty()) return;
+            if (chains++ % 2 == 1) return;
+            const uint32_t ant = ants[(chains / 2) % ants.size()];
+            std::vector<ChainStep> steps(3);
+            for (size_t i = 0; i < 3; ++i) {
+                steps[i].tile = TileCoord{static_cast<int32_t>(8 + (chains * 3) % 20 + i), static_cast<int32_t>(14 + (chains / 2) % 10)};
+                steps[i].gap_lo = i == 0 ? 0u : 10u;
+                steps[i].gap_hi = i == 0 ? 0u : 11u;
+            }
+            o.chain(ant, steps);
+        });
+        ASSERT_TRUE(m.bot != nullptr);
+        ants = m.bot_ants;
+        m.run(40000);
+        m.host->freeze();
+        m.run(3000, false);
+        ASSERT_TRUE(m.host_sim.state_hash() == m.client_sim.state_hash());
+        ASSERT_TRUE(m.host->desyncs().empty() && !m.client->desynced());
+        const auto host_bot = of_issuer(m.host_saw, 2);
+        const auto client_bot = of_issuer(m.client_saw, 2);
+        ASSERT_TRUE(host_bot.size() >= 30 && host_bot.size() == client_bot.size());
+        ASSERT_EQ(m.sink->predicted.size(), host_bot.size());
+        for (size_t i = 0; i < host_bot.size(); ++i) {
+            ASSERT_EQ(host_bot[i].first, m.sink->predicted[i]);                                              // applied at the tick that the sink said when the click left
+            ASSERT_EQ(client_bot[i].first, m.sink->predicted[i]);
+        }
+        const auto& st = m.bots->stats(2);
+        ASSERT_TRUE(st.rejected == 0 && st.expired == 0 && st.pruned == 0);
+        ASSERT_EQ(m.bot->count(Bot::Fate::Expired), 0u);
+        // the clicks of a chain: three in a row on the same ant, applied 10 or 11 ticks apart (the first of the next chain of the same ant is far away)
+        size_t chain_pairs = 0;
+        for (size_t i = 0; i + 1 < host_bot.size(); ++i) {
+            if (host_bot[i].second.ants != host_bot[i + 1].second.ants || host_bot[i + 1].second.tile_x != host_bot[i].second.tile_x + 1) continue;
+            const uint64_t d = host_bot[i + 1].first - host_bot[i].first;
+            ASSERT_TRUE(d == 10 || d == 11);
+            ++chain_pairs;
+        }
+        ASSERT_TRUE(chain_pairs >= 20);
+        ASSERT_TRUE(m.host->turns_sealed() > 700);
     } TEST_END();
 }

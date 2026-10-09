@@ -121,6 +121,22 @@ struct Intent {
     /// A planned PICK-UP of a power-up: a plain click (GroupMove) of ONE ant on the tile of a power-up (Orders::pick_up). The controller lets a move onto a power-up tile through only
     /// with this mark: a click on one takes it for the ant that arrives, so no other order of a bot (a rally, a guard post, a spread) may name such a tile by accident.
     bool pickup{false};
+    /// A TIMED CHAIN (Orders::chain, docs/BOTS.md "Timed clicks"): the intents of one chain have the same `chain` number (not 0) and `step` 0, 1, 2, ... The controller releases step 0 like any intent (the
+    /// reaction time, the budget); every later step is released at the first tick at which the sink would APPLY it between `gap_lo` and `gap_hi` ticks after the step before was applied, and never
+    /// otherwise: a step that would be applied later is dropped with the rest of its chain (Fate::Expired). A chain the first step of which never leaves leaves no step.
+    uint32_t chain{0};
+    uint32_t step{0};
+    uint32_t gap_lo{0};
+    uint32_t gap_hi{0};
+};
+
+/// One click of a timed chain: the tile, whether it is a planned pick-up (the tile holds a power-up), and for every step but the first the ticks between the moment the step before is applied and the
+/// moment this one is
+struct ChainStep {
+    sim::TileCoord tile{};
+    bool pickup{false};
+    uint32_t gap_lo{0};
+    uint32_t gap_hi{0};
 };
 
 /// The only way out of a bot: what a person could click, as data. The named methods cannot express Quit or Drop (push_unchecked exists for the tests of the
@@ -134,6 +150,9 @@ public:
     void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent);
     /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
+    /// The clicks of ONE ant at moments that are counted from the moment the click before is APPLIED (the sink's own tick of it, CommandSink::applied_at): a person who clicks again the moment the ant
+    /// stands on a tile. What the controller does with them is in Intent (chain). The first step is an ordinary click (the reaction delay, the queue, the budget); every later one skips those but is paid for all the same: it leaves at its moment even when the bucket is empty, and the bucket goes into debt, which holds back the ordinary orders afterwards.
+    void chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority priority = Priority::Urgent);
     /// A special order (bomb, defuse, fire, extinguish, bridge, thief raid) of ONE ant: the HUD sends it for a single selected ant only
     void special(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     void stop(const std::vector<uint32_t>& ants, Priority priority = Priority::Normal);
@@ -145,7 +164,12 @@ public:
     void break_alliance();
 
     const std::vector<Intent>& intents() const noexcept { return intents_; }
-    void clear() noexcept { intents_.clear(); }
+    void clear() noexcept {
+        intents_.clear();
+        chains_ = 0;
+    }
+    /// The chains that were put in (their `chain` numbers are 1 to this)
+    uint32_t chains() const noexcept { return chains_; }
 
     /// For the tests of the controller's filter ONLY: puts any command into the list, however malformed (and, with `pickup`, marked as a planned pick-up whatever it names). No bot uses it.
     void push_unchecked(sim::Command command, Priority priority = Priority::Normal, bool pickup = false);
@@ -154,6 +178,7 @@ private:
     void group(sim::CommandType type, const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority);
     void alliance(sim::CommandType type, uint8_t other, Priority priority);
     std::vector<Intent> intents_;
+    uint32_t chains_{0};
 };
 
 /// What a bot is told when it starts. Not the engine: the BotView (and the MapInfo, the analysis of the map as it stood at the start) is the only window a bot has

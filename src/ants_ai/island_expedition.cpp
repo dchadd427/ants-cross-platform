@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <limits>
 
 namespace ants::ai {
@@ -17,6 +18,34 @@ const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept 
 }
 
 int32_t index_of(const sim::Grid& grid, sim::TileCoord t) noexcept { return t.y * static_cast<int32_t>(grid.width()) + t.x; }
+
+/// The tiles between two tiles on one straight line (the walk of a timed chain)
+int32_t line_dist(sim::TileCoord a, sim::TileCoord b) noexcept { return std::abs(a.x - b.x) + std::abs(a.y - b.y); }
+
+/// The ticks from a click to the moment the ant's tile is the hat's tile, for a hat `tiles` tiles away from an ant at rest on a tile centre (or on the centre that the click snaps it to): 10 for the
+/// next tile and 8 for each tile more (measured at all eight entrances of the corner rows of ISLANDS, docs/BOTS.md "Timed clicks"; 9 for the next tile when the walk goes east or south, the cancel
+/// then takes one tick more: the window used is from this to one tick more, which is inside both). The next click must be APPLIED in the window that starts there: earlier, the ant has not entered
+/// the hat's tile yet and the click finds no way across the hat; three ticks later, the ant takes the hat.
+constexpr uint32_t leg_ticks(int32_t tiles) noexcept { return 10u + 8u * static_cast<uint32_t>(tiles > 1 ? tiles - 1 : 0); }
+
+/// Whether the tiles lie on one straight line (one column or one row) and each is farther from the first than the one before: the walk of a timed chain
+bool straight_run(const std::vector<sim::TileCoord>& pts) noexcept {
+    if (pts.size() < 2) return true;
+    bool same_x = true;
+    bool same_y = true;
+    for (const sim::TileCoord& t : pts) {
+        same_x = same_x && t.x == pts[0].x;
+        same_y = same_y && t.y == pts[0].y;
+    }
+    if (!same_x && !same_y) return false;
+    int32_t last = 0;
+    for (size_t i = 1; i < pts.size(); ++i) {
+        const int32_t d = line_dist(pts[0], pts[i]);
+        if (d <= last) return false;
+        last = d;
+    }
+    return true;
+}
 
 /// The members of a row in the order of a walk from the entrance
 std::vector<uint32_t> walk_order(const TokenGroup& group, const TokenGroup::Entrance& entrance) {
@@ -37,6 +66,38 @@ bool occupied(const BotView& v, sim::TileCoord t, uint32_t except = 0) noexcept 
 }
 
 }  // namespace
+
+// The members of a row in the order of a walk from the entrance. The order of the analysis is that of a walk from the first end, and its reverse for the other; at the corner of the row in the south
+// east corner of ISLANDS (tokens at (59,58), (58,59) and (59,59)) the reverse is not the order of a walk from the west end, which meets (58,59) before (59,59). Timed: the tokens are ordered
+// by the steps of a walk through the tokens from the entrance (a step to a token beside it, diagonals too; ties keep the order of the analysis), which is the order of a walk at every end. It is the order of a Hard bot (`timed_row`) for the whole
+// attempt, also after the row has gone back to one ant for every hat: it is the better order there too, and `itimed=0` keeps the old one
+std::vector<uint32_t> ExpeditionTask::walk_of(const MapInfo& map, const TokenGroup& group, const TokenGroup::Entrance& entrance) const {
+    std::vector<uint32_t> order = walk_order(group, entrance);
+    if (!params_.timed_row) return order;
+    constexpr int32_t kFar = 1 << 20;
+    std::vector<sim::TileCoord> tiles;
+    for (const uint32_t m : order) tiles.push_back(map.powerups()[m].tile);
+    std::vector<int32_t> steps(order.size(), kFar);
+    std::vector<size_t> queue;
+    for (size_t i = 0; i < tiles.size(); ++i) {
+        if (tiles[i].chebyshev_dist(entrance.tile) > 1) continue;
+        steps[i] = 1;
+        queue.push_back(i);
+    }
+    for (size_t head = 0; head < queue.size(); ++head) {
+        for (size_t j = 0; j < tiles.size(); ++j) {
+            if (steps[j] != kFar || tiles[j].chebyshev_dist(tiles[queue[head]]) > 1) continue;
+            steps[j] = steps[queue[head]] + 1;
+            queue.push_back(j);
+        }
+    }
+    std::vector<size_t> by(order.size());
+    for (size_t i = 0; i < by.size(); ++i) by[i] = i;
+    std::stable_sort(by.begin(), by.end(), [&](size_t a, size_t b) { return steps[a] < steps[b]; });
+    std::vector<uint32_t> out;
+    for (const size_t i : by) out.push_back(order[i]);
+    return out;
+}
 
 uint32_t ExpeditionTask::swimmers_wanted() const { return tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)]; }
 
@@ -69,6 +130,7 @@ uint32_t ExpeditionTask::tokens_needed(const BotView& v) const {
     for (const sim::TileCoord t : row_) {
         const PowerUpView* p = v.powerup_at(t);
         if (p == nullptr) continue;
+        if (chains_now() && p->kind != sim::AntType::Swimmer) continue;                       // (timed: the hats stay where they are, one ant for every Swimmer)
         ++need;
         if (p->kind == sim::AntType::Swimmer && ++swimmers >= more) break;
     }
@@ -102,7 +164,9 @@ bool ExpeditionTask::crew_hopeless(const TaskContext& c) const {
         const AntView* a = find_ant(c.view.mine(), ant);
         if (a != nullptr && a->type == c.view.default_ant_type() && able_to_take(c, *a)) return false;
     }
-    return tokens_needed(c.view) > (params_.fly_on ? 1u : 0u);
+    // (a Bomber takes the last token and no other; timed: not behind hats, where the power-up that it drops would shut the way out)
+    const bool bomber = params_.fly_on && !(chains_now() && hats_before_swimmer(c.view));
+    return tokens_needed(c.view) > (bomber ? 1u : 0u);
 }
 
 bool ExpeditionTask::may_order(uint32_t ant, uint64_t now) const {
@@ -112,8 +176,17 @@ bool ExpeditionTask::may_order(uint32_t ant, uint64_t now) const {
 
 // An order that never left (dropped for lack of budget, refused by the controller): the ant may be ordered again at the next look
 void ExpeditionTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t) {
-    if (fate == Bot::Fate::Sent || command.ants.empty()) return;
+    if (command.ants.empty()) return;
+    const bool click = command.type == sim::CommandType::GroupMove && command.ants.size() == 1 && chained_.count(command.ants[0]) != 0;      // (a click of a chain that is ordered for the ant)
+    if (fate == Bot::Fate::Sent) {
+        if (click) chain_sent_.insert(command.ants[0]);
+        return;
+    }
     for (const uint32_t ant : command.ants) ordered_.erase(ant);
+    if (click && chain_sent_.count(command.ants[0]) == 0) {                                           // the chain never left (refused, superseded, too old): the ant stands where it stood and is free for the next look
+        end_chain(command.ants[0]);
+        if (row_ant_.erase(command.ants[0]) != 0) row_before_.erase(command.ants[0]);
+    }
     for (Leg& l : legs_) {
         if (command.type == sim::CommandType::GroupSpecial && l.bomber == command.ants[0] && l.chosen && command.tile_x == l.flight.bomb.x && command.tile_y == l.flight.bomb.y) l.plant_ordered = 0;
         if (command.type == sim::CommandType::GroupMove && l.hopper == command.ants[0] && l.chosen && command.tile_x == l.flight.bomb.x && command.tile_y == l.flight.bomb.y) {
@@ -141,6 +214,10 @@ void ExpeditionTask::release_all(TaskContext& c) {
     row_.clear();
     row_ant_.clear();
     row_before_.clear();
+    chained_.clear();
+    chain_sent_.clear();
+    stage_ant_ = 0;
+    row_timed_ = false;
     group_ = -1;
     entrance_ = -1;
 }
@@ -226,13 +303,16 @@ bool ExpeditionTask::plan(TaskContext& c) {
             if (e.comp < 0 || e.comp == hill_comp_ || static_cast<size_t>(e.comp) >= dist.size() || dist[static_cast<size_t>(e.comp)] <= 0) continue;
             uint32_t ants = 0;                                                                     // the ants that it takes to reach `more` Swimmers from this end
             uint32_t swimmers = 0;
-            for (const uint32_t m : walk_order(g, e)) {
+            std::vector<sim::TileCoord> walk;
+            for (const uint32_t m : walk_of(c.map, g, e)) {
                 const PowerUpView* p = v.powerup_at(c.map.powerups()[m].tile);
                 if (p == nullptr) continue;                                                        // (taken already)
+                walk.push_back(c.map.powerups()[m].tile);
                 ++ants;
                 if (p->kind == sim::AntType::Swimmer && ++swimmers >= more) break;
             }
             if (swimmers == 0) continue;
+            if (timed_on() && chain_row(v, walk, e.tile)) ants = swimmers;                         // (timed clicks: one ant for every Swimmer, the Fire hats stay)
             std::vector<int32_t> route = route_to(e.comp);
             if (route.size() < 2) continue;
             int32_t land = 1 << 20;                                                                // where the last flight lands, and how far that is from the entrance
@@ -277,11 +357,22 @@ bool ExpeditionTask::plan(TaskContext& c) {
     entrance_ = best.entrance;
     row_.clear();
     const TokenGroup& g = info.token_groups()[static_cast<size_t>(group_)];
-    for (const uint32_t m : walk_order(g, g.entrances[static_cast<size_t>(entrance_)])) row_.push_back(c.map.powerups()[m].tile);
+    for (const uint32_t m : walk_of(c.map, g, g.entrances[static_cast<size_t>(entrance_)])) row_.push_back(c.map.powerups()[m].tile);
     done_.clear();
     landed_.clear();
     row_ant_.clear();
     row_before_.clear();
+    chained_.clear();
+    chain_sent_.clear();
+    stage_ant_ = 0;
+    row_timed_ = false;
+    if (timed_on()) {
+        std::vector<sim::TileCoord> walk;
+        for (const sim::TileCoord t : row_) {
+            if (v.powerup_at(t) != nullptr) walk.push_back(t);
+        }
+        row_timed_ = chain_row(v, walk, g.entrances[static_cast<size_t>(entrance_)].tile);
+    }
     progress_ = now;
     ++planned_;
     return true;
@@ -595,6 +686,7 @@ void ExpeditionTask::note_taken(TaskContext& c) {
     for (auto it = row_ant_.begin(); it != row_ant_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         if (a == nullptr) {
+            end_chain(it->first);
             row_before_.erase(it->first);
             it = row_ant_.erase(it);
             continue;
@@ -602,18 +694,28 @@ void ExpeditionTask::note_taken(TaskContext& c) {
         if (a->type != row_before_[it->first]) {
             ++taken_;
             progress_ = now;
+            if (chained_.count(a->id) != 0) {                                                         // (a chain took it: a Swimmer ends the run of misses, a hat is a click that came late)
+                if (a->type == sim::AntType::Swimmer) {
+                    miss_run_ = 0;
+                } else {
+                    ++chain_misses_;
+                    if (++miss_run_ >= params_.chain_misses_max) timed_off_ = true;
+                }
+            }
             if (a->type == sim::AntType::Swimmer) {
                 ++swimmers_taken_;
                 if (first_swimmer_ == 0) first_swimmer_ = now;
             }
             done_.insert(a->id);
+            end_chain(a->id);                                                                         // (the chain in is over with the pick-up: the way out is another)
             crew_.erase(a->id);
-            c.ledger.release(a->id, id());
+            if (!exit_chains()) c.ledger.release(a->id, id());                                        // (timed: it is the task's until it is out of the row, nobody else may send it anywhere while it crosses the hats)
             row_before_.erase(it->first);
             it = row_ant_.erase(it);
             continue;
         }
-        if (v.powerup_at(it->second) == nullptr) {
+        if (v.powerup_at(it->second) == nullptr) {                                                    // (the token is gone, another team's: an ant that stands behind hats comes out over them)
+            strand(*a);
             row_before_.erase(it->first);
             it = row_ant_.erase(it);
             continue;
@@ -659,6 +761,127 @@ void ExpeditionTask::stations(const TaskContext& c, Stations& out) const {
     if (!have_park) out.leave = out.park = entrance.tile;
 }
 
+// ---- timed clicks -----------------------------------------------------------------------------------------------------------------------------------
+
+// Whether an ant is left alone because a chain of clicks is under way for it
+bool ExpeditionTask::chain_guarded(uint32_t ant, uint64_t now) const {
+    const auto it = chained_.find(ant);
+    return it != chained_.end() && now < it->second + params_.chain_ticks;
+}
+
+void ExpeditionTask::start_chain(uint32_t ant, uint64_t now) {
+    chained_[ant] = now;
+    chain_sent_.erase(ant);
+}
+
+void ExpeditionTask::end_chain(uint32_t ant) {
+    chained_.erase(ant);
+    chain_sent_.erase(ant);
+}
+
+// An ant that is left in the row without a token (the one it went for is gone, or its chain ran out) stands behind the hats that are still there: it is brought out over them like an ant that took
+// one, and stays the task's until it is out. One that stands in front of the row is free at once
+void ExpeditionTask::strand(const AntView& ant) {
+    end_chain(ant.id);
+    if (!exit_chains() || std::find(row_.begin(), row_.end(), ant.tile) == row_.end()) return;
+    crew_.erase(ant.id);
+    done_.insert(ant.id);
+}
+
+// Whether a hat lies before the first Swimmer of the row (in the order of a walk from the tile in front of it)
+bool ExpeditionTask::hats_before_swimmer(const BotView& v) const {
+    bool hat = false;
+    for (const sim::TileCoord t : row_) {
+        const PowerUpView* p = v.powerup_at(t);
+        if (p == nullptr) continue;
+        if (p->kind == sim::AntType::Swimmer) return hat;
+        hat = true;
+    }
+    return hat;
+}
+
+// Whether the row can be worked by chains: the hats before its first Swimmer lie on one straight line with the tile in front of it (`walk`: the tokens of the row in the order of a walk from there).
+// A row with no hat before its first Swimmer needs no chain (the plain click takes it) and counts as one
+bool ExpeditionTask::chain_row(const BotView& v, const std::vector<sim::TileCoord>& walk, sim::TileCoord entrance) const {
+    std::vector<sim::TileCoord> run{entrance};
+    for (const sim::TileCoord t : walk) {
+        const PowerUpView* p = v.powerup_at(t);
+        if (p == nullptr) continue;
+        if (p->kind == sim::AntType::Swimmer) return straight_run(run);
+        run.push_back(t);
+    }
+    return false;                                                                                    // (no Swimmer in it)
+}
+
+// The clicks that take an ant at rest on `from` over the hats of `along` (the tiles in front of it, nearest first; the hats are those with a power-up now) to `goal`: one click for every hat, each
+// applied when the ant's tile has become the hat's tile before it, and the click for `goal` last. False when there is no hat or the hats do not lie on one straight line with `from`
+bool ExpeditionTask::chain_steps(const BotView& v, sim::TileCoord from, const std::vector<sim::TileCoord>& along, sim::TileCoord goal, std::vector<ChainStep>& steps) const {
+    std::vector<sim::TileCoord> run{from};
+    for (const sim::TileCoord t : along) {
+        if (v.powerup_at(t) != nullptr) run.push_back(t);
+    }
+    if (run.size() < 2 || !straight_run(run)) return false;
+    std::vector<sim::TileCoord> targets(run.begin() + 1, run.end());
+    targets.push_back(goal);
+    steps.clear();
+    for (size_t i = 0; i < targets.size(); ++i) {
+        ChainStep st;
+        st.tile = targets[i];
+        st.pickup = v.powerup_at(targets[i]) != nullptr;
+        if (i >= 1) {                                                                                // the ant is on its way to targets[i - 1]: that many ticks after the click before
+            st.gap_lo = leg_ticks(line_dist(i == 1 ? from : targets[i - 2], targets[i - 1]));
+            st.gap_hi = st.gap_lo + params_.chain_slack;
+        }
+        steps.push_back(st);
+    }
+    return true;
+}
+
+// The chain that takes the next Swimmer of the row: from the tile in front of it over the hats before the first Swimmer token to that token. False when there is no hat to cross (the plain click does)
+bool ExpeditionTask::steps_in(const TaskContext& c, sim::TileCoord entrance, std::vector<ChainStep>& steps, sim::TileCoord* target) const {
+    std::vector<sim::TileCoord> along;
+    for (const sim::TileCoord t : row_) {
+        const PowerUpView* p = c.view.powerup_at(t);
+        if (p != nullptr && p->kind == sim::AntType::Swimmer) {
+            *target = t;
+            return chain_steps(c.view, entrance, along, t, steps);
+        }
+        along.push_back(t);
+    }
+    return false;
+}
+
+// The way of an ant that took a Swimmer out of the row, sent to `goal`: the tile `leave` beyond the tile in front of the row, or the tile in front of the other end. Of the two ends the one the ant
+// is in line with and that has no Swimmer token between it and the ant (the ant would take it) is taken, the near one first; the hats between are crossed by a chain (true, `steps` holds it:
+// the planner treats hats as solid, a plain click across them finds no way), and with no hat between a plain click does (false). False with `goal` untouched when it is in line with no end
+bool ExpeditionTask::steps_out(const TaskContext& c, const AntView& ant, sim::TileCoord leave, std::vector<ChainStep>& steps, sim::TileCoord* goal) const {
+    steps.clear();
+    const std::vector<TokenGroup::Entrance>& ends = islands_->info().token_groups()[static_cast<size_t>(group_)].entrances;
+    std::vector<size_t> order{static_cast<size_t>(entrance_)};
+    for (size_t i = 0; i < ends.size(); ++i) {
+        if (static_cast<int32_t>(i) != entrance_) order.push_back(i);
+    }
+    for (const size_t i : order) {
+        const sim::TileCoord end = ends[i].tile;
+        const int32_t dx = end.x - ant.tile.x;
+        const int32_t dy = end.y - ant.tile.y;
+        if ((dx != 0 && dy != 0) || (dx == 0 && dy == 0)) continue;                                  // (the rows of ISLANDS are straight between the ends and the corner)
+        const int32_t sx = (dx > 0) - (dx < 0);
+        const int32_t sy = (dy > 0) - (dy < 0);
+        std::vector<sim::TileCoord> between;
+        bool swimmer_between = false;
+        for (sim::TileCoord t{ant.tile.x + sx, ant.tile.y + sy}; t != end; t = sim::TileCoord{t.x + sx, t.y + sy}) {
+            const PowerUpView* p = c.view.powerup_at(t);
+            swimmer_between = swimmer_between || (p != nullptr && p->kind == sim::AntType::Swimmer);
+            between.push_back(t);
+        }
+        if (swimmer_between) continue;
+        *goal = static_cast<int32_t>(i) == entrance_ ? leave : end;
+        return chain_steps(c.view, ant.tile, between, *goal, steps);
+    }
+    return false;
+}
+
 void ExpeditionTask::drive_row(TaskContext& c) {
     const BotView& v = c.view;
     const sim::Grid& grid = v.grid();
@@ -672,36 +895,70 @@ void ExpeditionTask::drive_row(TaskContext& c) {
     stations(c, st);
     const sim::TileCoord park = st.park;
     const sim::TileCoord leave = st.leave;
+    const bool timed = chains_now();
+    const bool out_chains = exit_chains();
+    if (stage_ant_ != 0 && (now > stage_since_ + 300 || crew_.count(stage_ant_) == 0)) stage_ant_ = 0;      // (the ant that was sent to the tile in front of the row did not get there, or is gone)
 
-    // the ants that took their token walk out (told again when they stand still in the row); nobody goes in while one is in the tunnel
+    // the ants that took their token walk out (told again when they stand still in the row); nobody goes in while one is in the tunnel. Timed: the ant that took a Swimmer behind hats that are
+    // still there is brought out by a chain over them, and stays the task's until it is out
     bool tunnel_busy = false;
     for (auto it = done_.begin(); it != done_.end();) {
         const AntView* a = find_ant(v.mine(), *it);
         if (a == nullptr || in_row.count(index_of(grid, a->tile)) == 0) {
+            if (a != nullptr && out_chains) c.ledger.release(a->id, id());
+            end_chain(*it);
             it = done_.erase(it);
             continue;
         }
         tunnel_busy = true;
+        if (out_chains && chain_guarded(a->id, now)) {
+            ++it;
+            continue;
+        }
         if (a->idle() && may_order(a->id, now)) {
-            c.orders.move({a->id}, leave, Priority::Urgent);
+            std::vector<ChainStep> steps;
+            sim::TileCoord goal = leave;
+            if (out_chains && steps_out(c, *a, leave, steps, &goal)) {                                 // (it stands in the row again after a chain: the chain is ordered again)
+                c.orders.chain(a->id, steps);
+                start_chain(a->id, now);
+                ++chains_out_;
+            } else {
+                c.orders.move({a->id}, goal, Priority::Urgent);
+            }
             ordered_[a->id] = now;
         }
         ++it;
     }
-    // the ant that goes in is watched: told again when it stands still without its token
+    // the ant that goes in is watched: told again when it stands still without its token. Timed: an ant that a chain was ordered for is left alone while the chain runs; when the time is over and
+    // it has no token the chain missed, and the ant is free for the next one (after chain_misses_max misses in a row, a hat taken by a click that came late counts as one, the row goes back to one ant
+    // for every hat)
+    std::vector<uint32_t> missed;
     for (const auto& e : row_ant_) {
         tunnel_busy = true;
         const AntView* a = find_ant(v.mine(), e.first);
+        if (timed && chained_.count(e.first) != 0) {
+            if (!chain_guarded(e.first, now) && a != nullptr && a->idle()) missed.push_back(e.first);
+            continue;
+        }
         if (a != nullptr && a->idle() && may_order(a->id, now)) {
             c.orders.pick_up(a->id, e.second);
             ordered_[a->id] = now;
         }
     }
+    for (const uint32_t ant : missed) {
+        ++chain_misses_;
+        const AntView* a = find_ant(v.mine(), ant);
+        if (a != nullptr) strand(*a);
+        else end_chain(ant);
+        row_ant_.erase(ant);
+        row_before_.erase(ant);
+        if (++miss_run_ >= params_.chain_misses_max) timed_off_ = true;
+    }
     // the crew that waits on the island walks to the park tile meanwhile (one order a look), so that the next ant is there when the tunnel is free; an ant that stands idle in the throat
     // (the first steps from the entrance, one tile wide on ISLANDS) while the tunnel is in use shuts the way of the ant that walks out, and goes to the park tile as well
     for (const uint32_t ant : crew_) {
         const AntView* a = find_ant(v.mine(), ant);
-        if (a == nullptr || c.map.ant_component(c.seat, a->tile) != target || row_ant_.count(ant) != 0 || !a->idle() || !may_order(ant, now)) continue;
+        if (a == nullptr || c.map.ant_component(c.seat, a->tile) != target || row_ant_.count(ant) != 0 || ant == stage_ant_ || !a->idle() || !may_order(ant, now)) continue;
         const bool near = a->tile.chebyshev_dist(park) <= 2;
         const bool throat = st.steps_of(grid, a->tile) < Stations::kThroat;
         if (near && !throat) continue;
@@ -712,7 +969,14 @@ void ExpeditionTask::drive_row(TaskContext& c) {
         }
     }
     if (tunnel_busy) return;
-    // the next token: the first one that lies in the row, taken by the crew ant on the island that is nearest to the entrance
+    // the next token: the first one that lies in the row, taken by the crew ant on the island that is nearest to the entrance. Timed: the next Swimmer behind hats (a chain from the tile in front of
+    // the row, by the ant that was sent there), else the first token as before
+    std::vector<ChainStep> steps;
+    sim::TileCoord goal{-1, -1};
+    uint32_t have = 0;
+    for (const AntView& a : v.mine()) have += a.type == sim::AntType::Swimmer ? 1u : 0u;
+    if (timed && have >= swimmers_wanted()) return;                                                  // (the last Swimmer is out: the task is over with it)
+    const bool chain = timed && timed_on() && steps_in(c, entrance.tile, steps, &goal);
     sim::TileCoord first{-1, -1};
     for (const sim::TileCoord t : row_) {
         if (v.powerup_at(t) == nullptr) continue;
@@ -722,20 +986,43 @@ void ExpeditionTask::drive_row(TaskContext& c) {
     if (first.x < 0) return;
     // a typed ant leaves its old power-up on a free tile beside the token, which in the row is the way back and shuts it: a Bomber of the crew (it flew on when the crew was one ant short) takes the
     // last token that is needed and no other, so that the expedition is over with it
-    const bool bomber_may = tokens_needed(v) == 1u;
+    const bool bomber_may = !chain && tokens_needed(v) == 1u;
     const AntView* taker = nullptr;
     int32_t best = 1 << 20;
     for (const uint32_t ant : crew_) {
         const AntView* a = find_ant(v.mine(), ant);
         const bool plain = a != nullptr && a->type == v.default_ant_type();
         if (a == nullptr || c.map.ant_component(c.seat, a->tile) != target || !(plain || (bomber_may && a->type == sim::AntType::Bomber)) || !a->takes_orders() || c.ledger.owner(ant) != id()) continue;
-        const int32_t d = a->tile.chebyshev_dist(entrance.tile) + (plain ? 0 : 1000);               // (a plain ant goes before a Bomber that is there)
+        // (a plain ant goes before a Bomber that is there; the one that was sent to the entrance stays the one. Timed: the ant that is nearest by the steps of a walk, for an ant that stands in a
+        // dead end behind another cannot get out, which the distance in a straight line does not tell)
+        const int32_t near = params_.timed_row ? st.steps_of(grid, a->tile) * 16 : 0;
+        const int32_t d = near + a->tile.chebyshev_dist(entrance.tile) + (plain ? 0 : 1000) - (ant == stage_ant_ ? 500 : 0);
         if (d < best) {
             best = d;
             taker = a;
         }
     }
     if (taker == nullptr || !may_order(taker->id, now)) return;
+    if (chain) {
+        if (taker->tile != entrance.tile) {                                                          // to the tile in front of the row first: the model counts from an ant at rest there
+            if (taker->idle()) {
+                c.orders.move({taker->id}, entrance.tile);
+                ordered_[taker->id] = now;
+                stage_ant_ = taker->id;
+                stage_since_ = now;
+            }
+            return;
+        }
+        if (!taker->idle() || taker->state != sim::UnitState::Idle) return;                           // (it has arrived: the look after it stands)
+        c.orders.chain(taker->id, steps);
+        start_chain(taker->id, now);
+        ordered_[taker->id] = now;
+        row_ant_[taker->id] = goal;
+        row_before_[taker->id] = taker->type;
+        stage_ant_ = 0;
+        ++chains_in_;
+        return;
+    }
     c.orders.pick_up(taker->id, first);
     ordered_[taker->id] = now;
     row_ant_[taker->id] = first;
@@ -771,8 +1058,9 @@ void ExpeditionTask::step(TaskContext& c) {
         const PowerUpView* p = v.powerup_at(t);
         swimmer_left = swimmer_left || (p != nullptr && p->kind == sim::AntType::Swimmer);
     }
-    const bool finished = have >= want || !swimmer_left;
-    const bool lost = crew_.empty() && row_ant_.empty();
+    const bool exiting = exit_chains() && !done_.empty();                                             // (timed: a Swimmer that is on its way out over the hats is not left alone)
+    const bool finished = (have >= want || !swimmer_left) && !exiting;
+    const bool lost = crew_.empty() && row_ant_.empty() && !exiting;
     const uint32_t patience = row_ant_.empty() && crew_hopeless(c) ? std::min(params_.hopeless_ticks, params_.stuck_ticks) : params_.stuck_ticks;
     if (finished || lost || now > progress_ + patience) {
         if (!finished) ++given_up_;

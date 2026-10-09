@@ -35,6 +35,12 @@ public:
         r.status = ants::sim::CommandResult::Status::Applied;
         return r;
     }
+    /// The tick at which a command released at `now` reaches the engine: the first even tick at least `delay` later (the arena's DelayedSink)
+    uint64_t applied_at(uint64_t now) const override {
+        const uint64_t due = now + delay_;
+        return static_cast<uint64_t>(static_cast<int64_t>(due + due % 2) + skew_per_command * static_cast<int64_t>(log.size()));
+    }
+    int64_t skew_per_command{0};                                                                      // a sink that is wrong about its own clock (the test of what the bots do when their windows are missed): every command released so far adds this to what applied_at says (a negative one: it says it applies earlier than it does)
     void flush() {
         const uint64_t now = sim_.current_tick();
         if (now % 2 != 0 || pending_.empty()) return;

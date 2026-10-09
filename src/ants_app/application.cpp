@@ -150,6 +150,7 @@ public:
         if (net_.submit_bot(seat_, command)) result.status = sim::CommandResult::Status::Applied;
         return result;
     }
+    uint64_t applied_at(uint64_t now) const override { return net_.bot_apply_tick(now); }
 
 private:
     net::NetGame& net_;

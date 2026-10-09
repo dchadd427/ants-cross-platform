@@ -271,6 +271,20 @@ void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
     intents_.back().pickup = true;
 }
 
+void Orders::chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority priority) {
+    if (steps.empty()) return;
+    const uint32_t number = ++chains_;
+    for (size_t i = 0; i < steps.size(); ++i) {
+        group(sim::CommandType::GroupMove, std::vector<uint32_t>{ant}, steps[i].tile, priority);
+        Intent& in = intents_.back();
+        in.pickup = steps[i].pickup;
+        in.chain = number;
+        in.step = static_cast<uint32_t>(i);
+        in.gap_lo = steps[i].gap_lo;
+        in.gap_hi = steps[i].gap_hi;
+    }
+}
+
 void Orders::special(uint32_t ant, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupSpecial, std::vector<uint32_t>{ant}, tile, priority); }
 
 void Orders::stop(const std::vector<uint32_t>& ants, Priority priority) {

@@ -147,6 +147,10 @@ class CommandSink {
 public:
     virtual ~CommandSink() = default;
     virtual CommandResult submit(const Command& command) = 0;
+    /// For the bots' timed clicks (docs/BOTS.md, "Timed clicks"): the tick of the engine (SimulationEngine::current_tick() at the moment the command reaches apply_command) at which a command
+    /// that is submitted NOW would be applied, `now` being the engine's current tick. A sink that applies at once says `now`; a sink with a delay says when it will apply (the arena's: the first turn
+    /// boundary at least its latency later; a room's: the number of the turn that the sequencer seals next). It is read at the moment of the call only, never for a later time.
+    virtual uint64_t applied_at(uint64_t now) const { return now; }
 };
 
 }  // namespace ants::sim
