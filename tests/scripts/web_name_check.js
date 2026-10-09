@@ -998,6 +998,53 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y&aspect=16:9' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
 }
 
+// ---- 5.5b what the review of the page found: a room that waits for the games when the page first hears of it, a team that is left alone twice, the line of a move, a refusal that nothing knows
+{   // a page that is answered with a room that waits for the games already (a reload, or a lost link that came back with its key during the wait) goes to its game as the others did
+    const env = runLobby('', { 'ants.name': 'Sam' });
+    const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0, flags: 7 } });
+    const code = helloRoom(s.sent[0]);
+    same('the first Room that a page hears already says START was pressed: the page goes to the game page of its seat, as if it had seen the change', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam&aspect=16:9']);
+    check('... with its key in the browser\'s storage, and the room forgotten by the tab', !!env.storage.data['ants.rejoin.' + code + '.1'] && env.session.data['ants.lobby'] === undefined);
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
+    check('... once (a second Room of the same wait leads nowhere else)', env.assigned.length === 1);
+}
+{   // the host's page corrects a team that was left alone, and does so again the next time (the stamp of the correction is let go of when the room is right)
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const three = [[C, 'Maya'], [C, 'Sam'], [C, 'Alex'], [E, '']], two = [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']];
+    const s = env.arrive({ key: KEY, seats: three, room: { you: 0, leader: 0, teamA: 1, teamB: 2 } });
+    const plans = () => s.sent.filter((b) => b[0] === NET0.MSG.Plan).length;
+    check('three players with a team of two need no correction', plans() === 0);
+    s.receive(roomMessage(two, { you: 0, leader: 0, teamA: 1, teamB: 2 }));
+    check('Alex leaves and the team is a player alone: the host\'s page sends the plan again, with the teams cleared (one Plan)', plans() === 1);
+    s.receive(roomMessage(two, { you: 0, leader: 0, teamA: 1, teamB: 2 }));
+    check('... and does not send it twice for the same room', plans() === 1);
+    s.receive(roomMessage(two, { you: 0, leader: 0 }));
+    s.receive(roomMessage(three, { you: 0, leader: 0 }));
+    s.receive(roomMessage(three, { you: 0, leader: 0, teamA: 1, teamB: 2 }));
+    s.receive(roomMessage(two, { you: 0, leader: 0, teamA: 1, teamB: 2 }));
+    check('the same thing the next time (the room was right in between): the correction is sent again, so the room does not keep a team of one', plans() === 2);
+}
+{   // the line that the room sends a moved player is no strip; any other line of the room still is one
+    const chatFromRoom = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
+    const env = runLobby('', { 'ants.name': 'Sam' });
+    const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    s.receive(chatFromRoom('Maya moved you to Blue.'));
+    check('"Maya moved you to Blue." shows no strip (the colour and the toast say it)', env.$('banner').hidden);
+    s.receive(chatFromRoom('No teams: the teams need a pair.'));
+    check('... another line of the room is a strip of its own, with the server\'s words', !env.$('banner').hidden && env.$('banner-text').textContent === 'No teams: the teams need a pair.');
+}
+{   // a refusal that the page has no word for: a link makes the page's own room; the page's own room that is refused says "try again" with a button that does
+    const link = runLobby('?room=k7m2xq', {});
+    link.type('name-step-input', 'Zed');
+    link.$('name-step-go').click();
+    link.last().open().receive(reject(5));
+    const next = link.last().open().sent[0];
+    check('a link whose room refuses the page (BadRequest): the page makes a room of its own with a new code, and says the match there is not for this page', link.sockets.length === 2 && CODE.test(helloRoom(next)) && helloRoom(next) !== 'k7m2xq' && !link.$('banner').hidden && link.$('banner-text').textContent.indexOf('trying again') === -1);
+    const own = runLobby('', { 'ants.name': 'Sam' });
+    own.last().open().receive(reject(5));
+    check('the page\'s own room refused for a reason that nothing knows: no new room (no loop), the strip is the busy one with its Try again button, and no strip promises that the page is trying again', own.sockets.length === 1 && !own.$('banner').hidden && own.$('banner-x').textContent === 'Try again' && own.$('banner-text').textContent.indexOf('trying again') === -1);
+}
+
 
 // ---- 5.6 the Rejoin strip at the top of the page (the block REJOIN has its own check, web_rejoin_block_check.js; here is the page as a whole: when it is there, what it says, where it goes)
 {

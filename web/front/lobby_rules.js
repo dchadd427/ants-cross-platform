@@ -353,7 +353,8 @@
     };
     // What a banner's button does, in words (the page does it; a test reads the words)
     var ACTS = { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' };
-    // What a line that the room itself said (a Chat from sender 255, to the leader) means: { kind, server } for the sentences of the START (the words of include/ants_net/protocol.hpp), else the line as a notice
+    // What a line that the room itself said (a Chat from sender 255) means: { kind, server } for the sentences of the START (the words of include/ants_net/protocol.hpp, to the leader), 'moved' for the line that a moved player
+    // is sent (the page shows no strip for it), else the line as a notice
     function noticeKind(text) {
         var t = typeof text === 'string' ? text : '';
         if (/^These games did not come in time: /.test(t) || /'s game did not come in time\.$/.test(t)) return { kind: 'late', server: t };
@@ -361,6 +362,7 @@
         if (t.indexOf('The match could not start a few times in a row') === 0) return { kind: 'startsfailed', server: t };
         if (t === 'This map could not be loaded: choose another map.') return { kind: 'maplost', server: t };
         if (t === 'This map cannot be played with these colours.') return { kind: 'mapcolours', server: t };
+        if (/^.+ moved you to [A-Za-z]+\.$/.test(t)) return { kind: 'moved', server: t };                                   // the leader moved this player: the colour and the toast say so already, there is no strip
         return { kind: 'notice', server: t };
     }
     // The banner for a kind: { kind, text, tone, btn }

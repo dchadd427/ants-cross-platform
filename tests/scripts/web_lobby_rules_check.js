@@ -745,7 +745,10 @@ const PRIYA_LATE = 'Priya' + SAID.late;
     [SAID.maplost.slice(0, -1), 'notice'], [SAID.mapcolours.slice(0, -1), 'notice'], [SAID.maplost + ' ', 'notice'], [' ' + SAID.mapcolours, 'notice'], [SAID.mapcolours.toLowerCase(), 'notice'], [SAID.mapcolours + ' Later.', 'notice'],
     [PRIYA_LATE.slice(0, -1), 'notice'], [PRIYA_LATE + ' Press START.', 'notice'], ['Priya’s game did not come in time.', 'notice'], ['These games did not come in time', 'notice'], ['These games did not come in time:', 'notice'],
     ['  ' + SAID.noplace, 'notice'], ['the server has no place for another match right now', 'notice'], [SAID.startsfailed.slice(0, 20), 'notice'], ['The match could not start', 'notice'],
-    [SAID.noteams + 'the teams need a pair.', 'notice'], ['Hello', 'notice'], ['', 'notice']
+    [SAID.noteams + 'the teams need a pair.', 'notice'], ['Hello', 'notice'], ['', 'notice'],
+    // the line that a moved player is sent (HostLobby::move_seat) has no strip: the colour and the toast say it
+    ['Sam moved you to Blue.', 'moved'], ['The room moved you to Red.', 'moved'], ['Player 2 moved you to Black.', 'moved'], ['Sam moved you to Blue', 'notice'], [' moved you to Blue.', 'notice'], ['moved you to Blue.', 'notice'],
+    ['Sam moved you to Blue. Later.', 'notice'], ['Sam moved you to blue 2.', 'notice'], ['Sam moved you', 'notice']
 ].forEach(([text, kind]) => same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is ' + kind + ', with the text as the room said it', R.noticeKind(text), { kind: kind, server: text }));
 same('noticeKind of what is no text is a notice with no words', [null, undefined, 42, {}].map((t) => R.noticeKind(t)), [{ kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }]);
 
@@ -783,6 +786,7 @@ same('the kinds that have a strip: the seventeen of the picture and the line of 
     ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notice', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
 same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
 same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true]);
+same('... but "moved" is the one kind that says nothing: no strip and no words (the page drops it)', [('moved' in R.META), ('moved' in R.TEXT)], [false, false]);
 same('a button that is not OK or none says what it does, in words (the page does it; here the words are read): Try again, Use this window, Reload', Object.keys(R.META).filter((k) => R.META[k].btn !== '' && R.META[k].btn !== 'OK').sort(), Object.keys(R.ACTS).sort());
 same('what those buttons do', R.ACTS, { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' });
 same('the buttons are OK, Try again, Use this window, Reload or none', Object.keys(R.META).map((k) => R.META[k].btn).filter((b, i, a) => a.indexOf(b) === i).sort(), ['', 'OK', 'Reload', 'Try again', 'Use this window']);
