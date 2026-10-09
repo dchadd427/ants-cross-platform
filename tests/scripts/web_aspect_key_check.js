@@ -352,13 +352,26 @@ try {
         expect('shell.html, the postRun hook gives the game the shape that the page has now (it began with another)', r.ready() + ' ' + JSON.stringify(calls), 'true [3]');
         expect('shell.html, ... and again: the same number, the game keeps it', r.sync() + ' ' + JSON.stringify(calls), '1 [3,3]');
     }
-    // a name that is "--aspect" (a hand-made address) is a value, not the option: the press changes the option's own value, and the name and the option stay as they were
+    // a name that is "--aspect" (a hand-made address) is a value, not the option: the press changes the option's own value, and the name and the option stay as they were. The game's start puts the
+    // program's name in front of the arguments (the same array: no place of the option can be kept), and the name gate adds a name at the end
     {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1&name=--aspect', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
         const before = r.args.length;
+        r.args.unshift('./this.program');
         r.buttons[3].listeners.click();
         const nameAt = r.args.indexOf('--name');
-        expect('shell.html selector, a name that reads "--aspect": the name and the option are as they were; the option has the new shape', JSON.stringify([r.args.length === before, r.args[nameAt + 1], r.args.slice(-2), r.args.filter((a) => a === '--aspect').length]), '[true,"--aspect",["--aspect","21:9"],2]');
+        expect('shell.html selector, a name that reads "--aspect" and the program name in front: the name and the option are as they were; the option has the new shape',
+               JSON.stringify([r.args.length === before + 1, r.args[nameAt + 1], r.args.slice(-2), r.args.filter((a) => a === '--aspect').length]), '[true,"--aspect",["--aspect","21:9"],2]');
+        const late = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
+        late.args.unshift('./this.program');
+        late.args.push('--name', '--aspect');
+        late.buttons[1].listeners.click();
+        expect('shell.html selector, a name that reads "--aspect" added after the option: the option has the new shape, the name stays',
+               JSON.stringify([late.args.slice(-4), late.args.filter((a) => a === '16:10').length]), '[["--aspect","16:10","--name","--aspect"],1]');
+        const plain = runShell(shellPath, '', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
+        plain.args.unshift('./this.program');
+        plain.buttons[0].listeners.click();
+        expect('shell.html selector, the program name in front of the arguments: the option still gets the new shape', plain.args.join(' ').slice(-24), './this.program --aspect 4:3'.slice(-24));
     }
     for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_set_aspect() { throw new Error('the game is gone'); } })], ['no Module at all', () => undefined]]) {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });

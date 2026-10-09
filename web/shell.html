@@ -1844,7 +1844,6 @@
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
-        var ANTS_ASPECT_AT = -1;
         (function () {
             var fromAddress = null;
             var remembered = null;
@@ -1854,7 +1853,6 @@
             var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
-            ANTS_ASPECT_AT = ANTS_ARGS.length;                                       // (where the option stands: a name that is "--aspect" must not be taken for it)
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
             document.getElementById('game-stage').setAttribute('data-aspect', ANTS_ASPECT);
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
@@ -2724,13 +2722,23 @@
             } catch (e) { /* the game does not answer: it keeps the shape it has */ }
             return -1;
         }
+        // Where the option --aspect stands in the game's arguments (the game's start puts the program's name in front of them, so no place is kept). The only free text in the arguments is the value of
+        // --name, and a name can read "--aspect": the scan steps over the value of every --name.
+        function antsAspectOption() {
+            for (var i = 0; i < ANTS_ARGS.length; i++) {
+                if (ANTS_ARGS[i] === '--name') { i++; continue; }
+                if (ANTS_ARGS[i] === '--aspect') return i;
+            }
+            return -1;
+        }
         // Change the shape of the picture: the page's own state (the stage's shape in CSS, the pressed button, the arguments of a game that has not started, the address), the game's picture, and the
         // box (which tells the game's window system, with a `resize`, the pixels of the new box: the game's canvas has exactly the shape of its picture, so no black bar of its own shows).
         function antsSetAspect(value) {
             var shape = ANTS_PAGE.parseAspect(value);
             if (!shape || shape === ANTS_ASPECT) return;
             ANTS_ASPECT = shape;
-            if (ANTS_ASPECT_AT !== -1 && ANTS_ARGS[ANTS_ASPECT_AT] === '--aspect') ANTS_ARGS[ANTS_ASPECT_AT + 1] = shape;
+            var at = antsAspectOption();
+            if (at !== -1) ANTS_ARGS[at + 1] = shape;
             stageElement.setAttribute('data-aspect', shape);
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
                 b.setAttribute('aria-checked', b.getAttribute('data-aspect') === shape ? 'true' : 'false');
