@@ -1790,7 +1790,7 @@ def main():
 
             def frames_check(label, frames, want, size=None):
                 check(len(frames) == 2, "%s: two games on the page (%d frames)" % (label, len(frames)))
-                shape = (16, 9) if want == "16:9" else (4, 3)
+                shape = {"16:9": (16, 9), "4:3": (4, 3), "16:10": (8, 5), "21:9": (7, 3)}[want]
                 for f in frames:
                     ok = f["backing"] is not None and f["backing"][0] * shape[1] == f["backing"][1] * shape[0] and f["aspect"] == want and ("aspect=" + want) in f["src"] and "junk" not in f["src"]
                     ratio = f["frame"][0] / f["frame"][1]
@@ -1812,7 +1812,9 @@ def main():
             frames_check("a window of 2560 x 1440", four_frames("?map=tiny&players=2&play=here", 2560, 1440), "16:9", (960, 540))
             tab.save_shot(args.shots, "four_16x9_native")
             frames_check("?aspect=junk (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=junk"), "16:9")
-            frames_check("?aspect=21:9 (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=21:9"), "16:9")
+            frames_check("?aspect=3:2 (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=3:2"), "16:9")
+            frames_check("?aspect=16:10", four_frames("?map=tiny&players=2&play=here&aspect=16:10"), "16:10")
+            frames_check("?aspect=21:9", four_frames("?map=tiny&players=2&play=here&aspect=21:9"), "21:9")
             tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")
             frames_check("the choice that the game page remembered (4:3), no parameter", four_frames("?map=tiny&players=2&play=here"), "4:3", (640, 480))
             frames_check("... and ?aspect=16:9 beats it", four_frames("?map=tiny&players=2&play=here&aspect=16:9"), "16:9")

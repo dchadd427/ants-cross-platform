@@ -255,7 +255,6 @@
     @media (max-width: 339px) { .pick select { font-size: 15px; padding-left: 4px; } }
     @media (min-width: 721px) { .share { display: none; } }
     @media (pointer: coarse) { .grip { width: 44px; height: 44px; right: 2px; top: 8px; } }
-    @media (hover: none) { .fit-tag { display: none; } .bar.has-fit-tag { padding-bottom: 14px; } }     /* the tag is for a computer with a mouse: a phone or a tablet has no use for it */
     /* ---- the pieces that the page has and the pictures do not draw ---- */
     .mast h1 { display: block; font-size: inherit; font-weight: inherit; line-height: 0; }
     .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }              /* the label of a site, in front of the version */
@@ -269,6 +268,8 @@
     .fit-tag { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: #cfe3da; pointer-events: none; }
     .fit-tag[hidden] { display: none; }
     .bar.has-fit-tag { padding-bottom: 34px; }                                              /* room under the buttons for the tag */
+    .shape .opt:last-child .fit-tag { left: auto; right: 0; transform: none; }              /* the last button's tag ends with the button: centred it would stick out of the bar on a narrow window */
+    @media (hover: none) { .fit-tag { display: none; } .bar.has-fit-tag { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); } }     /* the tag is for a computer with a mouse: a phone or a tablet has no use for it (after the rules above, which it overrides) */
     .shape .seg input { position: absolute; left: 0; top: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
     .shape .seg label { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 3px 10px; font-size: 14px; line-height: 1.1; cursor: pointer;
         background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }

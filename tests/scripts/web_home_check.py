@@ -3,7 +3,7 @@
 
 The front page is the owner's lobby (web/lobby.html, the pictures he approved; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen 16:9, which is the default, or 4:3). A visitor who
+Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen: Classic 4:3, 16:10, 16:9, which is the default, or 21:9). A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
@@ -877,6 +877,19 @@ def main():
                     wrong.append((width, problems[:3]))
             check(not wrong, "%d widths from 320 to 1600 px: no sideways scroll and nothing out of the window, two columns from 1041 px (the room, the map and START! at its side) and one under it, the cards two by two above 720 px and one column below it in the order Black, Green, Red, Blue, "
                              "nothing out of a card or of the room's box, the grip's dots clear of the names and the drop-down, START! held in view on a phone, the longest map name whole (wrong: %s)" % (len(widths), wrong))
+            # the tag under the LAST button (21:9) ends with the button: on a computer with a mouse and a 3440 x 1440 screen (nearest to 21:9), in a narrow window, the tag stays inside it and the page does not scroll sideways
+            fresh_tab()
+            tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
+            tab.open(web, wait=False)
+            front_ready()
+            wrong_tag = []
+            for width in (320, 360, 370, 440, 480, 600, 720):
+                tab.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})
+                time.sleep(0.3)
+                m = json.loads(value("JSON.stringify({sw: document.documentElement.scrollWidth, iw: document.documentElement.clientWidth, tag: (function () { var t = document.querySelector('.fit-tag:not([hidden])'); if (!t) return null; var r = t.getBoundingClientRect(); return [t.id, Math.round(r.left), Math.round(r.right)]; })()})"))
+                if m["sw"] > m["iw"] or not m["tag"] or m["tag"][0] != "fit-21-9" or m["tag"][1] < 0 or m["tag"][2] > m["iw"]:
+                    wrong_tag.append((width, m))
+            check(not wrong_tag, "a computer with a mouse and a 3440 x 1440 screen, windows of 320 to 720 px: the tag under 21:9 stays inside the page and the page does not scroll sideways (against the width that a scrollbar leaves) (wrong: %s)" % (wrong_tag,))
             tab.emulate(1366, 900, 1)
             time.sleep(0.4)
             shot("home_front_1366")

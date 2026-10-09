@@ -713,7 +713,10 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertEqual(tags, ["4-3", "16-10", "16-9", "21-9"])                                         # every tag starts hidden, one per shape, left to right
         self.assertEqual(self.style.count(".fit-tag[hidden] { display: none; }"), 1)
         self.assertIn(".bar.has-fit-tag { padding-bottom: 34px; }", self.style)
-        self.assertRegex(self.style, r"@media \(hover: none\) \{ \.fit-tag \{ display: none; \} \.bar\.has-fit-tag \{ padding-bottom: 14px; \} \}")
+        self.assertRegex(self.style, r"@media \(hover: none\) \{ \.fit-tag \{ display: none; \} \.bar\.has-fit-tag \{ padding-bottom: calc\(14px \+ env\(safe-area-inset-bottom, 0px\)\); \} \}")
+        # the touch rule is the LATER one (same specificity as the 34 px rule it overrides), and the last button's tag ends with the button (a centred one sticks out of the bar at the right)
+        self.assertGreater(self.style.index("@media (hover: none) { .fit-tag { display: none; }"), self.style.index(".bar.has-fit-tag { padding-bottom: 34px; }"))
+        self.assertIn(".shape .opt:last-child .fit-tag { left: auto; right: 0; transform: none; }", self.style)
         self.assertIn('<footer class="bar" id="footer-bar">', self.page)
         self.assertEqual(Sheet(self.style).value(".shape", "flex-wrap"), "wrap")                         # a 320 px window: the label above the four buttons, nothing pushed past the edge
 
