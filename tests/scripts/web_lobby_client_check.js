@@ -246,6 +246,12 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
         N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, plan: [0, 0, 1, 0] })).map((e) => e.type),
         N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, teamA: 0, teamB: 1 })).map((e) => e.type)
     ], [['plan'], ['plan'], ['plan']]);
+    // the game mode is part of the plan (protocol 17): a Room message that changes it and nothing else is a plan event, in both directions, and the same mode is none
+    same('a plan change: only the game mode (the original\'s game to 187 and back)', [
+        N.diffRooms(a, r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, mode: 1 })).map((e) => e.type),
+        N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, mode: 1 }), a).map((e) => e.type),
+        N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, mode: 1 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, mode: 1 })).map((e) => e.type)
+    ], [['plan'], ['plan'], []]);
     // the host as the page's own seat tells it (every Room message says which seat is the page's: you)
     same('a host who came back after the hold ran out is a player now: another leads, and the page hears of the new host', N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 1, you: 0 })),
         [{ type: 'host', seat: 1, name: 'Sam', you: false, before: 'Priya' }]);

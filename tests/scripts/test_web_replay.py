@@ -8,6 +8,7 @@ play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code tha
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
+import json
 import os
 import re
 import shutil
@@ -151,6 +152,39 @@ class TheListPage(unittest.TestCase):
         header = read("include", "ants_replay", "replay.hpp")                                                # (the page's number is the header's, or the game of a mode would move to "Earlier versions")
         self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 2;")
         self.assertRegex(self.page, r"e\.sim_rules\s*===\s*RULES_187\s*&&\s*e\.mode\s*===\s*'187'")
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's rule for a playable match was NOT run")
+    def test_the_rule_for_a_playable_match_is_run_with_every_kind_of_entry(self):
+        # the page's own two lines (the number of 187's rules and playable()) are cut out of it and run on a table: the text checks above cannot tell && from || or a missing guard
+        number = re.search(r"^\s*var RULES_187 = \d+;$", self.page, re.M)
+        function = re.search(r"^\s*function playable\(e, rules\) \{.*\}$", self.page, re.M)
+        self.assertTrue(number and function)
+        table = [  # (the list's sim_rules, an entry's sim_rules, the entry's mode, playable)
+            (1, 1, None, True),           # the original's game on a build of rules 1 (entries of servers before 187 say no mode)
+            (1, 1, "highest-score", True),
+            (1, 2, "187", True),          # a match of 187 on that build
+            (1, 2, "highest-score", False),  # rules 2 are the rules of 187 only: the entry does not say it
+            (1, 2, None, False),
+            (1, 2, "", False),
+            (1, 1, "187", True),          # (rules 1 are this build's: the mode word is not looked at)
+            (1, 3, "187", False),         # rules that no build plays yet
+            (1, 3, "highest-score", False),
+            (1, 0, "187", False),
+            (1, 0, None, False),          # an entry of unknown rules is an earlier version
+            (1, None, "187", False),         # an entry that names no rules at all
+            (0, 0, None, False),          # a list that does not say the server's rules: nothing is playable
+            (0, 0, "187", False),
+            (0, 2, "187", False),
+            (0, 1, "highest-score", False),
+        ]
+        script = number.group(0) + "\n" + function.group(0) + "\n" + "const table = " + json.dumps(table) + ";\n" + (
+            "let bad = [];\n"
+            "for (const [rules, sim, mode, want] of table) { const e = {}; if (sim !== null) e.sim_rules = sim; if (mode !== null) e.mode = mode;"
+            " const got = playable(e, rules); if (got !== want) bad.push(JSON.stringify([rules, sim, mode, want, got])); }\n"
+            "console.log(bad.length === 0 ? 'all ' + table.length + ' ok' : 'wrong: ' + bad.join(' '));\n")
+        done = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), "all %d ok" % len(table), done.stdout)
 
     def test_nothing_that_a_recording_carries_becomes_markup(self):
         for bad in (".innerHTML", "document.write", "insertAdjacentHTML", "outerHTML", "eval(", "new Function"):

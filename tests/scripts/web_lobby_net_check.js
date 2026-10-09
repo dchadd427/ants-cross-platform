@@ -198,6 +198,11 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
     check('room: the mode byte 255 is refused', N.decode(with_(L - 1, 255)) === null);
     check('room: every mode byte above the last is refused, never read as another mode', Array.from({ length: 254 }, (_, i) => i + 2).every((v) => N.decode(with_(L - 1, v)) === null) && N.LAST_GAME_MODE === 1);
     check('room: protocol 16 (no mode byte) is no Room message', N.decode(room.subarray(0, L - 1)) === null);
+    // the encoder of a plan never builds a message with a mode that the codec does not know (the server would refuse it): it throws, for every value outside 0 .. LAST_GAME_MODE and for what is no whole number
+    const planWith = (m) => N.encodePlan('', [0, 0, 0, 0], 255, 255, m);
+    const throwsRange = (m) => { try { planWith(m); return false; } catch (e) { return e instanceof RangeError; } };
+    check('plan: a mode above the last (2, 3, 255), below 0 or no whole number throws a RangeError', [2, 3, 255, 256, -1, 1.5, '1', null, NaN, Infinity].every(throwsRange));
+    check('plan: no mode, 0 and 1 are fine, and the mode is the last byte', [undefined, 0, 1].every((m) => !throwsRange(m)) && planWith(undefined)[planWith(undefined).length - 1] === 0 && planWith(1)[planWith(1).length - 1] === 1);
 }
 // a name with a character outside printable ASCII, a platform byte out of range, a platform on a bot
 {
