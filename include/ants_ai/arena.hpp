@@ -72,6 +72,7 @@ public:
         uint32_t reactions{0};                 // the news items "Can't go there." and "Can't do that..." posted to the seat: everything its owner hears
         uint32_t began{0};                     // of them, those of an ant that was not in the can't-go state a tick before (the rest repeat: the original's loop)
         uint32_t orders{0};                    // the group orders (move, special, attack) for the seat, as the engine was given them
+        uint32_t attacks{0};                   // of them, the attack orders
         uint32_t refused{0};                   // of them, those followed within kRefusedWindow ticks by the first reaction of an ant they name (the engine answers a walk within 4)
     };
     /// A command that the engine was given when its tick count was `tick`: the ants it names are remembered
@@ -182,6 +183,9 @@ struct ArenaSeatResult {
     uint32_t cantgo{0};                        // the "Can't go there." / "Can't do that..." reactions of the seat's ants (CantGoTally::Seat::reactions)
     uint32_t cantgo_began{0};                  // of them, the ones that began from another state: the rest are the repeats of a can't-go loop
     uint32_t orders{0};                        // the orders (group moves, specials, attacks) that the engine was given for the seat
+    uint32_t attack_orders{0};                 // of them, the attack orders (CantGoTally::Seat::attacks)
+    uint32_t bombs_planted{0};                 // the bombs the seat's Bombers planted and the fire walls its Fire Ants lit (the engine's own match statistics)
+    uint32_t fires_lit{0};
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile

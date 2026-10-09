@@ -247,6 +247,27 @@ struct LevelPlan {
     bool flower_watch{false};            // (Hard) an ant waits beside the drop tile of the own side's flower, arrives about `flower_watch_early` ticks before the landing that the bot has learned to expect (Memory::flower) and takes a kind that the plan lacks
     uint32_t flower_watch_early{60};     // the ticks before the expected landing at which the watcher stands beside the drop tile (3 s)
     uint32_t flower_watch_chance{150};   // the least chance in permille that the next landing is a kind the plan lacks, for the watcher to wait (every kind alike until three landings were seen)
+    // the war batch (docs/BOTS.md, "The war batch"): the bots fight over the food and after it. Every field is off in a plan made by hand; `--tune war=0` switches all of them off again (the bot as it was)
+    uint32_t war_bombers{0};             // Bomber Ants wanted besides the opening's, for the mines (the drops of the flowers and the power-ups on the map; once an enemy plays)
+    bool war_free_only{false};           // the Bomber Ants for the mines are fetched and the mines laid only while an ant has nothing to harvest (the economy is not slowed by the war)
+    uint32_t war_fires{0};               // Fire Ants wanted besides the one of the walls, for the fire-in and the fire at the piles
+    uint32_t mine_per_pile{0};           // mines that stand at a pile an enemy works, at a time (MineTask; 0: no mines)
+    uint32_t mine_gate{0};               // ... and at the gate of the best opponent when no food is left to fight over (0: none)
+    uint32_t mine_min_units{8};          // a pile with fewer units left is not mined
+    uint32_t mine_percent{170};          // an enemy works a pile when its walk there costs at most this percentage of the own (an enemy far further away does not come)
+    uint32_t mine_replant_ticks{240};    // a mine that went off or was defused is laid again after this long, while the enemy still comes
+    bool raider_hunt{false};             // an enemy Fire or Bomber Ant within raider_radius tiles of the own hill or of a pile the own ants work is hunted by the fighters (the blows stop its work), whether or not walls stand
+    int32_t raider_radius{12};
+    bool raider_piles{false};            // also one at a pile the own ants work (it may be harvesting there: the hunts there cost the economy)
+    uint32_t raider_extra{0};            // fighters more than the level's defenders go after it
+    bool assault{false};                 // free ants (nothing to harvest) go for the enemy ants: the food is gone and the score is fixed, so the bot fights (FightTask)
+    uint32_t assault_force{2};           // ants at most in one assault, and never fewer than assault_min
+    uint32_t assault_min{2};
+    uint32_t assault_odds_percent{100};  // the assault force's strength against what answers near the target, in percent (an even trade is taken at 100)
+    int32_t assault_reach{40};           // free ants within this many tiles of the target are called
+    int32_t assault_chase{24};           // the target is not followed further than this from where it was first met
+    uint32_t assault_ticks{900};         // an assault lasts at most this long
+    uint32_t assault_after{600};         // no assault before this tick of the match
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -259,6 +280,9 @@ LevelPlan plan_for(Level level) noexcept;
 LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept;
 /// One of the styles that the level allows, drawn from the generator
 Style draw_style(Level level, BotRng& rng) noexcept;
+/// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
+/// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
+void without_war_batch(LevelPlan& plan) noexcept;
 
 // ---- the thief hole -------------------------------------------------------------------------------------------------------------------------------------
 

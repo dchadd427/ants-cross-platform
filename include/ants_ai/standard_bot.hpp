@@ -64,6 +64,7 @@ private:
           walls_(kWalls, tactics_),
           powerups_(kPowerUps, tactics_),
           bombs_(kBombs, tactics_),
+          mines_(kMines, tactics_),
           raids_(kRaids, tactics_),
           guard_(kGuard, tactics_),
           strike_(kStrike, tactics_),
@@ -91,6 +92,7 @@ public:
     const WallTask& walls() const noexcept { return walls_; }
     const PowerUpTask& powerups() const noexcept { return powerups_; }
     const BombTask& bombs() const noexcept { return bombs_; }
+    const MineTask& mines() const noexcept { return mines_; }
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
     const StrikeTask& strike() const noexcept { return strike_; }
@@ -139,6 +141,7 @@ public:
     static constexpr TaskId kIslands = 14;
     static constexpr TaskId kExpedition = 15;
     static constexpr TaskId kFerry = 16;
+    static constexpr TaskId kMines = 17;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -242,6 +245,7 @@ private:
     WallTask walls_;
     PowerUpTask powerups_;
     BombTask bombs_;
+    MineTask mines_;
     RaidTask raids_;
     GuardTask guard_;
     StrikeTask strike_;

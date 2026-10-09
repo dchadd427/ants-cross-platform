@@ -108,6 +108,8 @@ private:
         bool ally{false};                    // a blow on an ant of the ally: only ants within ally_help_radius of the target answer
         bool offence{false};                 // a skirmish of the bot's own (plan.skirmish): no blow came first, the force is skirmish_force and the fight ends by its strength and its clock
         bool fire{false};                    // the Fire Ant that lights fire walls on the ring round the own gate (plan.fire_defence): it is hunted while the walls stand
+        bool raider{false};                  // (with fire) an enemy Fire or Bomber Ant near the own hill or a pile the own ants work (plan.raider_hunt): hunted whether or not walls stand
+        bool assault{false};                 // (with offence) an assault of the free ants after the food (plan.assault): its own numbers
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;
     };
@@ -127,6 +129,8 @@ private:
     uint32_t offence_aborted_{0};
     uint64_t offence_pause_until_{0};
     uint32_t fire_hunts_{0};
+    uint32_t raider_hunts_{0};
+    uint32_t assaults_started_{0};
     uint32_t hunts_started_{0};
     uint32_t hunts_killed_{0};
     uint32_t clip_waits_{0};
@@ -135,6 +139,9 @@ private:
 public:
     /// Hunts of an enemy Fire Ant that fired the own gate in (plan.fire_defence)
     uint32_t fire_hunts() const noexcept { return fire_hunts_; }
+    /// Hunts of an enemy Fire or Bomber Ant near the own hill or piles (plan.raider_hunt), and the assaults of the free ants after the food (plan.assault)
+    uint32_t raider_hunts() const noexcept { return raider_hunts_; }
+    uint32_t assaults_started() const noexcept { return assaults_started_; }
     /// Whether the Fire Ant `ant` is hunted now
     bool hunting(uint32_t ant) const noexcept {
         const auto it = fights_.find(ant);
@@ -319,6 +326,56 @@ private:
     std::map<int64_t, uint64_t> black_;
     uint32_t defused_{0};
     uint32_t set_off_{0};
+    uint32_t failures_{0};
+};
+
+// ---- rank 4: the mines ------------------------------------------------------------------------------------------------------------------------------------
+
+/// "The bomber doesn't place any bombs currently, but he should be bombing up the food so they can't eat it" (the owner, 2026-10-09). The Bomber Ants of the bot (an own ant of type Bomber,
+/// claimed for a job and given back to the economy after it) lay mines, one job per Bomber at a time:
+///   at the food   on a pile that an enemy works (its walk there costs at most plan.mine_percent of the own, or one of its ants is near) and that holds plan.mine_min_units at least: the open
+///                 tiles two steps round the pile where the enemy is nearer than the bot (the enemy's walking cost to the tile below the own), the enemy-most first, plan.mine_per_pile standing
+///                 at a time. The engine's path finder goes round an own bomb and straight through an enemy's (an ant that steps on one loses 2 hit points, is thrown 4 tiles and loses its walk),
+///                 so the mines sit where the enemy walks and the bot does not
+///   at the gate   with plan.mine_gate and no pile to mine: the open tiles of the ring round the gate of the best opponent (SabotageTask::ring_of), plan.mine_gate standing at a time
+/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up, a tile with an ant on it, within four tiles of the own hill. Every job is
+/// checked with the engine's own prediction (a cursor that shows the target cursor), as the counters' are.
+class MineTask final : public Task {
+public:
+    MineTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "mines"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+    void finish(AntLedger& ledger) override;
+
+    // ---- for the tests and the reports ----
+    uint32_t planted() const noexcept { return planted_; }
+    uint32_t gone() const noexcept { return gone_; }
+    uint32_t failures() const noexcept { return failures_; }
+    size_t jobs() const noexcept { return jobs_.size(); }
+    /// The tiles that the bot's mines stand on now (as the last look saw them)
+    size_t standing() const noexcept { return known_.size(); }
+
+private:
+    static constexpr uint64_t kPending = ~uint64_t{0};
+    static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
+    struct Job {
+        sim::TileCoord tile{};
+        uint64_t decided{0};
+        uint64_t sent{kPending};
+    };
+    struct Target {
+        sim::TileCoord tile{};
+        int32_t score{0};
+    };
+    void collect_pile_targets(TaskContext& context, std::vector<Target>& out) const;
+    void collect_gate_targets(TaskContext& context, std::vector<Target>& out) const;
+    Tactics& tactics_;
+    std::map<uint32_t, Job> jobs_;                       // by the Bomber's id
+    std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
+    std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
+    uint32_t planted_{0};
+    uint32_t gone_{0};
     uint32_t failures_{0};
 };
 

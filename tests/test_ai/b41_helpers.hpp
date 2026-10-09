@@ -37,6 +37,13 @@ inline void tick_all(sim::SimulationEngine& sim, uint64_t n) {
     }
 }
 
+// The plan of a level without the war batch (docs/BOTS.md, "The war batch"): the tests of the older rules play it, so that the assault, the mines and the extra Fire Ants of the shipped plans take no part
+inline LevelPlan peace_plan(Level level) {
+    LevelPlan p = plan_for(level);
+    without_war_batch(p);
+    return p;
+}
+
 inline constexpr TileCoord kFightHills[4] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
 
 // Four hills on a 60 x 60 field of grass and nothing else: the tests put the ants and the piles

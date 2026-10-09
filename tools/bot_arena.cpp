@@ -716,6 +716,30 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
+    if (key == "war") {                                                               // the war batch of docs/BOTS.md, "The war batch" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_war_batch(p);
+        return true;
+    }
+    if (key == "wbomb") { p.war_bombers = static_cast<uint32_t>(v); return true; }
+    if (key == "wfire") { p.war_fires = static_cast<uint32_t>(v); return true; }
+    if (key == "mines") { p.mine_per_pile = static_cast<uint32_t>(v); return true; }
+    if (key == "minegate") { p.mine_gate = static_cast<uint32_t>(v); return true; }
+    if (key == "minemin") { p.mine_min_units = static_cast<uint32_t>(v); return true; }
+    if (key == "minepct") { p.mine_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "minere") { p.mine_replant_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "raider") return flag(p.raider_hunt);
+    if (key == "raiderr") { p.raider_radius = static_cast<int32_t>(v); return true; }
+    if (key == "warfree") return flag(p.war_free_only);
+    if (key == "raiderp") return flag(p.raider_piles);
+    if (key == "raiderx") { p.raider_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "assault") return flag(p.assault);
+    if (key == "asforce") { p.assault_force = static_cast<uint32_t>(v); return true; }
+    if (key == "asmin") { p.assault_min = static_cast<uint32_t>(v); return true; }
+    if (key == "asodds") { p.assault_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "asreach") { p.assault_reach = static_cast<int32_t>(v); return true; }
+    if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
+    if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
     if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
         p.race = false;
@@ -1402,6 +1426,9 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("losses", uint64_t{s.losses});
             j.field("stalls", uint64_t{s.stalls});
             j.field("orders", uint64_t{s.orders});
+            j.field("attack_orders", uint64_t{s.attack_orders});
+            j.field("bombs_planted", uint64_t{s.bombs_planted});
+            j.field("fires_lit", uint64_t{s.fires_lit});
             j.field("refused_orders", uint64_t{s.refused_orders});
             j.field("cantgo", uint64_t{s.cantgo});
             j.field("cantgo_began", uint64_t{s.cantgo_began});

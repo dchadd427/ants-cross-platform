@@ -544,7 +544,9 @@ void run_contest_tests() {
     TEST_CASE("AI20.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While; A Ring That Already Stands Calls Nobody, A Wall To Renew Calls The Escorts Again Before It Is Lit, Escorts That Do Not Arrive Or An Entrance That Cannot Be Held End The Attempt")
     {
         LevelPlan plan = plan_for(Level::Hard);
+        without_war_batch(plan);                                                                                                      // (the assault would send the Combat Ants away from the entrance that the escorts hold)
         plan.sabotage = true;
+        plan.sabotage_safe = true;                                                                                                    // (the subject; the shipped plans of Medium and Hard fire in whether or not the enemy can put it out: the war batch)
         plan.sabotage_after = 20;
         plan.sabotage_spare_keeper = false;                                                                                           // (the lone Fire Ant is free to go: the keeper of the own walls is not spared in this plan)
         sim::SimulationEngine probe;
