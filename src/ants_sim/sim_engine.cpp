@@ -95,6 +95,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     const ants::assets::LevelData& level = everybody ? level_in : roster_level;
     impl_->roster_mask_ = roster_mask;
     impl_->dropped_mask_ = 0;
+    impl_->out_of_ants_told_ = 0;
     impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
@@ -200,6 +201,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;
+    impl_->out_of_ants_told_ = 0;
     impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
@@ -237,6 +239,9 @@ void SimulationEngine::tick() {
     if (impl_->match_state_ == MatchState::GameOver) {
         return;
     }
+
+    // 187: a team that has no ant, egg or hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
+    if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();
 
     // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match
     if (impl_->match_clock_ms_ <= impl_->checkgo_next_ms_) {
@@ -494,6 +499,24 @@ bool SimulationEngineImpl::end_rule_187() const {
     const uint32_t sides = alive_sides();
     if (sides == 0) return true;                                // nobody has anything left (the original's rule too)
     return in_match >= 2 && sides == 1;                         // the last side standing wins at once, whatever its score (a match of one team has no one to beat)
+}
+
+// 187: a team that has no ant, no egg and no hatch left is out of the fight for good (nothing brings an egg or an ant back), so it is said once, as a News Flash for every player, with the cue
+// of a player that drops out (playerout.wav, as FUN_0100d03b plays it, and not once the match is over). Every machine runs this at the same tick on the same state, and the line and the cue are
+// presentation (the news and audio queues are not hashed), so the machines stay in step whatever they do with them. A team that dropped out has the line "%s dropped out of the game!" and gets none.
+void SimulationEngineImpl::announce_out_of_ants_187() {
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        const uint8_t bit = static_cast<uint8_t>(1u << k);
+        if ((roster_mask_ & bit) == 0 || (out_of_ants_told_ & bit) != 0) continue;
+        if (team_dropped(k)) {
+            out_of_ants_told_ = static_cast<uint8_t>(out_of_ants_told_ | bit);
+            continue;
+        }
+        if (team_alive(k)) continue;
+        out_of_ants_told_ = static_cast<uint8_t>(out_of_ants_told_ | bit);
+        post_news_flash(strings::kOutOfAnts, player_display_name(k), player_colour_name(k));
+        if (match_state_ != MatchState::GameOver) audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut, 0, 0, 1, 255});
+    }
 }
 
 uint8_t SimulationEngineImpl::last_standing_187() const {

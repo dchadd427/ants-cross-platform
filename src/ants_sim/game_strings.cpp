@@ -12,7 +12,7 @@ struct Entry {
     bool blink;
 };
 
-// Sorted by id. Every text is the original's (string_ids of Ants.exe); the title of string 5 is inserted by the caller.
+// Sorted by id. Every text is the original's (string_ids of Ants.exe) except the remake's own from 200 up; the title of string 5 is inserted by the caller.
 constexpr Entry kTable[] = {
     {1, "%s (%s) invites you to form a team.  Would you like to accept?", false},
     {2, "%s (%s) invites you to form a team.  This will remove you from the team you have with %s (%s).  Would you like to accept?", false},
@@ -86,6 +86,7 @@ constexpr Entry kTable[] = {
     {111, "Waiting for scores...", false},
     {112, "You can't join the game because the map file '%s' was not found on your computer.", false},
     {113, "%s was missing the map file '%s' and had to leave the game.", false},
+    {200, "%s (%s) is out of ants!", false},      // the remake's own (187), not in the original's table
 };
 
 const Entry* find(uint16_t id) noexcept {

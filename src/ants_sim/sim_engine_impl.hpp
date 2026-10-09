@@ -88,6 +88,10 @@ public:
     MatchState match_state_{MatchState::NotStarted};
     uint8_t roster_mask_{0x0F};             // bit p: team p takes part (a team without a player is NULL in the original's team table: no hill, ants or eggs)
     uint8_t dropped_mask_{0};               // bit p: team p dropped out of the match (team +0x64, FUN_0100d03b)
+    /// 187 only: bit p = the line "<Name> (<Colour>) is out of ants!" of team p has been said (or the team dropped out and has its own line). Presentation only, like the news and audio queues
+    /// beside it: what it decides (a news line and a cue) never feeds back into the simulation, so it is not in the state hash (state_hash.cpp), and being a plain member it is copied with
+    /// the engine.
+    uint8_t out_of_ants_told_{0};
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
     uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
 
@@ -121,6 +125,9 @@ public:
     bool end_rule_187() const;
     /// 187: the team that is the last one standing (the lowest-numbered alive team of the one side that is left), else PLAYER_NEUTRAL
     uint8_t last_standing_187() const;
+    /// 187: at the start of a tick (before CHECKGO, which may end the match), says once, to every player, that a team of the match has no ant, no egg and no hatch left, and plays the drop-out cue (not once the match is over).
+    /// A team that dropped out has its own line and gets none.
+    void announce_out_of_ants_187();
     std::array<std::string, MAX_PLAYERS> player_names_{};
     std::string player_display_name(uint8_t p) const;    // the set name, else the colour word
     std::string player_colour_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black
