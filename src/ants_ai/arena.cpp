@@ -57,6 +57,11 @@ public:
         r.status = sim::CommandResult::Status::Applied;
         return r;
     }
+    /// The first turn boundary at least `delay` ticks after `now` (what flush() will do with a command submitted now)
+    uint64_t applied_at(uint64_t now) const override {
+        const uint64_t due = now + delay_;
+        return due + (kTurnTicks - due % kTurnTicks) % kTurnTicks;
+    }
     /// After every tick, BEFORE the bots look: applies what is due at a turn boundary
     void flush() {
         const uint64_t now = sim_.current_tick();

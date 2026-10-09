@@ -754,6 +754,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ferry") return flag(p.island_ferry);
     if (key == "iswim") { p.island_swimmers = static_cast<uint32_t>(v); return true; }
     if (key == "ifly") return flag(p.island_fly_on);
+    if (key == "itimed") return flag(p.island_timed_row);
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
@@ -2424,6 +2425,9 @@ int selftest() {
         t.check(cg.island_fly_on && ai::plan_for(ai::Level::Medium).island_fly_on && !ai::plan_for(ai::Level::Easy).island_fly_on && apply_tune(cg, "ifly", 0, tune_err) && !cg.island_fly_on &&
                     apply_tune(cg, "ifly", 1, tune_err) && cg.island_fly_on,
                 "the key ifly switches the flying on of the expedition's Bomber (on at Medium and Hard, off at Easy)");
+        t.check(cg.island_timed_row && !ai::plan_for(ai::Level::Medium).island_timed_row && !ai::plan_for(ai::Level::Easy).island_timed_row && apply_tune(cg, "itimed", 0, tune_err) && !cg.island_timed_row &&
+                    apply_tune(cg, "itimed", 1, tune_err) && cg.island_timed_row,
+                "the key itimed switches the timed clicks through the hats of the rows of ISLANDS (on at Hard only)");
         ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
         const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
             const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};

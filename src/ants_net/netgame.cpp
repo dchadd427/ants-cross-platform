@@ -1401,6 +1401,11 @@ bool NetGame::submit_bot(uint8_t seat, const sim::Command& command) {
     return host_session_->submit_bot(seat, command);
 }
 
+uint64_t NetGame::bot_apply_tick(uint64_t fallback) const noexcept {
+    if (phase_ != Phase::Playing || !host_session_) return fallback;
+    return host_session_->turns_sealed();
+}
+
 // START needs a second player and "all players' thumbs have appeared": every guest has been measured at least once
 bool NetGame::can_start() const {
     return role_ == Role::Host && phase_ == Phase::Room && host_lobby_ && host_lobby_->can_start() && host_lobby_->all_measured();

@@ -14,6 +14,10 @@ using namespace island_test;
 using namespace ants;
 using namespace ants::ai;
 
+// Hard's plan with the old way through the row, one ant for every hat. The tests of the flights, the bombs and the Bomber that flies on (AI17.4 .. AI17.38) are about the crew, and their numbers are
+// those of a crew sized for five tokens; the timed way (a crew of four, the hats left in place) has tests of its own (AI17.40 .. AI17.43)
+const std::function<void(LevelPlan&)> kOldRow = [](LevelPlan& p) { p.island_timed_row = false; };
+
 // What the expedition of one seat did in a match of one bot on ISLANDS (the level's plan)
 struct Run {
     uint64_t first_plant{0};
@@ -28,6 +32,12 @@ struct Run {
     uint32_t planted{0};
     uint32_t hops{0};
     uint32_t chains{0};
+    uint32_t taken{0};                   // tokens taken by the crew, and the timed clicks (island_expedition.hpp): chains in over the hats, chains out, chains that missed, whether the row went back to one ant a hat
+    uint32_t chains_in{0};
+    uint32_t chains_out{0};
+    uint32_t chain_misses{0};
+    bool timed_off{false};
+    int fire_ants{0};                    // ants of the seat that are Fire ants at the end (a hat that was taken by a click that came late)
     bool active_at_end{false};
     size_t crew_at_end{0};
     int lost{0};                         // ants of the seat that died or drowned (the ants of the start: nobody hatches here)
@@ -39,12 +49,13 @@ struct Run {
     int32_t score{0};
 };
 
-Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}, uint32_t latency = 0) {
+Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}, uint32_t latency = 0, uint64_t skew = 0) {
     Match m;
     m.latency = latency;
     m.expedition = true;
     m.ferry = true;                                                                                  // (the bot as it plays: the Swimmers of the expedition go to work at once)
     m.init("ISLANDS", seed, static_cast<uint8_t>(1u << seat), level, 0, tweak);
+    if (m.delayed != nullptr) m.delayed->skew_per_command = skew;
     Run r;
     std::set<uint32_t> alive;
     std::set<uint32_t> burning;
@@ -88,11 +99,150 @@ Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::functio
     r.planted = ex.planted();
     r.hops = ex.hops();
     r.chains = m.island(seat).chains_finished();
+    r.taken = ex.taken();
+    r.chains_in = ex.chains_in();
+    r.chains_out = ex.chains_out();
+    r.chain_misses = ex.chain_misses();
+    r.timed_off = ex.timed_off();
+    for (const auto& a : m.sim.get_world_state().ants) r.fire_ants += (a.player_id == seat && a.raw_type == sim::AntType::Fire) ? 1 : 0;
     r.active_at_end = ex.active();
     r.crew_at_end = ex.crew_size();
     r.drowned = m.collapsed[seat] + m.other_drowned[seat];
     r.hash = m.sim.state_hash().total;
     r.score = m.sim.get_player_score(seat);
+    return r;
+}
+
+
+// ---- the timed chains row by row (AI17.40) ----------------------------------------------------------------------------------------------------------------
+
+// One end of one of the four rows of ISLANDS: the tile in front of it, the hats before the first Swimmer token (nearest first) and that token
+struct RowEnd {
+    sim::TileCoord front{-1, -1};
+    std::vector<sim::TileCoord> hats;
+    sim::TileCoord swimmer{-1, -1};
+};
+
+std::vector<RowEnd> row_ends(sim::SimulationEngine& sim) {
+    const MapInfo map(sim);
+    const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
+    std::vector<RowEnd> out;
+    for (const TokenGroup& g : info.token_groups()) {
+        if (g.members.size() < 7) continue;                                                          // (the rows of seven tokens; the other groups are a Bomber each)
+        for (const TokenGroup::Entrance& e : g.entrances) {
+            RowEnd end;
+            end.front = e.tile;
+            sim::TileCoord dir{0, 0};                                                                // the way in: towards the token beside the tile in front of the row
+            for (const uint32_t member : g.members) {
+                const sim::TileCoord t = map.powerups()[member].tile;
+                if (std::abs(t.x - e.tile.x) + std::abs(t.y - e.tile.y) == 1) dir = sim::TileCoord{t.x - e.tile.x, t.y - e.tile.y};
+            }
+            // the tokens in a line from there, up to the first Swimmer (5: Swimmer, 2: Fire)
+            for (sim::TileCoord t{e.tile.x + dir.x, e.tile.y + dir.y}; sim.grid().has_powerup_at(t); t = sim::TileCoord{t.x + dir.x, t.y + dir.y}) {
+                if (sim.grid().get_powerup_type(t) == 5) {
+                    end.swimmer = t;
+                    break;
+                }
+                end.hats.push_back(t);
+            }
+            out.push_back(end);
+        }
+    }
+    return out;
+}
+
+// What a scripted bot's chains did at one end of a row: a plain worker at rest on the tile in front of it is sent over the hats to the first Swimmer token (a chain of clicks, each applied 10 or 11 ticks
+// after the one before, through a real controller and the sink of the arena), and when it is idle again over the hats back to the tile in front of the row
+struct Crossing {
+    bool swimmer{false};                 // the worker is a Swimmer after the way in
+    bool token_gone{false};
+    bool hats_in{false};                 // the hats are all there after the way in, and after the way out
+    bool hats_out{false};
+    bool back{false};                    // the Swimmer stands on the tile in front of the row after the way out
+    bool still_swimmer{false};
+    uint32_t clicks{0};
+};
+
+Crossing cross(const RowEnd& end, uint32_t latency, uint32_t seed) {
+    sim::SimulationEngine sim;
+    start_match(sim, "ISLANDS", seed, 0x0F);
+    const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, end.front);
+    for (int i = 0; i < 4; ++i) sim.tick();                                                          // (it stands at rest on the centre of its tile)
+    std::unique_ptr<LatencySink> delayed;
+    std::unique_ptr<RecordingSink> direct;
+    if (latency > 0) delayed = std::make_unique<LatencySink>(sim, latency);
+    else direct = std::make_unique<RecordingSink>(sim, true);
+    sim::CommandSink& sink = delayed != nullptr ? static_cast<sim::CommandSink&>(*delayed) : static_cast<sim::CommandSink&>(*direct);
+    BotController ctl(sim, seed);
+    ctl.set_start_hold(0);
+    const auto hats_there = [&]() {
+        for (const sim::TileCoord t : end.hats) {
+            if (!sim.grid().has_powerup_at(t) || sim.grid().get_powerup_type(t) != 2) return false;
+        }
+        return true;
+    };
+    const auto link = [&](const std::vector<sim::TileCoord>& over, sim::TileCoord to) {
+        std::vector<ChainStep> steps;
+        for (size_t i = 0; i <= over.size(); ++i) {
+            ChainStep st;
+            st.tile = i < over.size() ? over[i] : to;
+            st.pickup = sim.grid().has_powerup_at(st.tile);
+            st.gap_lo = i == 0 ? 0u : 10u;
+            st.gap_hi = i == 0 ? 0u : 11u;
+            steps.push_back(st);
+        }
+        return steps;
+    };
+    int phase = 0;                                                                                   // 0: the way in is ordered at the first look, 1: waiting for the Swimmer to be idle, 2: the way out is ordered, 3: over
+    std::vector<ChainStep> in_steps = link(end.hats, end.swimmer);
+    std::vector<sim::TileCoord> back_over(end.hats.rbegin(), end.hats.rend());
+    Crossing r;
+    auto bot = std::make_unique<ScriptBot>([&](const BotView&, Orders& o) {
+        if (phase == 0) {
+            o.chain(ant, in_steps);
+            phase = 1;
+        } else if (phase == 2) {
+            o.chain(ant, link(back_over, end.front));
+            phase = 3;
+        }
+    });
+    ScriptBot* script = bot.get();
+    BotSpec spec;
+    spec.seat = 0;
+    spec.kind = "script";
+    spec.level = Level::Hard;
+    std::string why;
+    if (!ctl.add(spec, std::move(bot), sink, why)) return r;
+    int idle_for = 0;
+    for (int t = 0; t < 420; ++t) {
+        sim.tick();
+        if (delayed != nullptr) delayed->flush();
+        ctl.on_tick(sim);
+        for (const auto& a : sim.get_world_state().ants) {
+            if (a.id != ant) continue;
+            const bool idle = a.raw_type == sim::AntType::Swimmer && a.state == sim::UnitState::Idle;
+            idle_for = idle ? idle_for + 1 : 0;
+            if (phase == 1 && idle_for >= 3) {
+                r.swimmer = true;
+                r.token_gone = !sim.grid().has_powerup_at(end.swimmer);
+                r.hats_in = hats_there();
+                phase = 2;
+            }
+        }
+        if (phase == 3 && t > 40) {
+            for (const auto& a : sim.get_world_state().ants) {
+                if (a.id == ant && a.raw_type == sim::AntType::Swimmer && a.state == sim::UnitState::Idle && sim.get_unit(ant).occ_tile == end.front) {
+                    r.back = true;
+                    r.hats_out = hats_there();
+                    r.still_swimmer = true;
+                    r.clicks = static_cast<uint32_t>(script->count(Bot::Fate::Sent));
+                    return r;
+                }
+            }
+        }
+    }
+    r.clicks = static_cast<uint32_t>(script->count(Bot::Fate::Sent));
+    r.hats_out = hats_there();
     return r;
 }
 
@@ -109,12 +259,12 @@ struct Stranded {
     uint32_t bomber{0};                  // the Bomber of the first flight that was left with 2 hit points once it had flown on and landed (0: none did)
 };
 
-Stranded strand(Level level, uint8_t seat, uint32_t seed, uint32_t latency = 0, bool hurt_bomber = false) {
+Stranded strand(Level level, uint8_t seat, uint32_t seed, uint32_t latency = 0, bool hurt_bomber = false, const std::function<void(LevelPlan&)>& tweak = {}) {
     Match m;
     m.latency = latency;
     m.expedition = true;
     m.ferry = true;
-    m.init("ISLANDS", seed, static_cast<uint8_t>(1u << seat), level, 0);
+    m.init("ISLANDS", seed, static_cast<uint8_t>(1u << seat), level, 0, tweak);
     const ExpeditionTask& ex = m.bot(seat)->expedition();
     Stranded r;
     std::set<uint32_t> in_line;                                                                      // the ants that stood on the tile when a hop was ordered
@@ -178,11 +328,11 @@ struct Natural {
     int bombers_on_row{0};               // Bombers of the seat on the island of the row at the end
 };
 
-Natural four_bots(Level level, uint32_t seed, uint32_t latency, uint8_t seat, int ticks) {
+Natural four_bots(Level level, uint32_t seed, uint32_t latency, uint8_t seat, int ticks, const std::function<void(LevelPlan&)>& tweak = {}) {
     Match m;
     m.latency = latency;
     m.styled = true;
-    m.init("ISLANDS", seed, 0xFu, level, 0);
+    m.init("ISLANDS", seed, 0xFu, level, 0, tweak);
     const ExpeditionTask& ex = m.bot(seat)->expedition();
     Natural r;
     int32_t row = -2;
@@ -251,7 +401,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.4 A Bomb That Is A Dud Is Planted Again, And The Dud Is Seen As Soon As The Ant Burns: A Hard Bot With The Arena's Latency Of 3 Ticks (Seat 2, Seed 5, Four Duds, Each Costs The Ant 2 Of Its 10 Hit Points) Still Lands The Crew, Has Its Three Swimmers By Tick 1,400 And Loses Nobody (Waiting 60 Ticks To See The Ant Still On B Makes It 1,586)")
     {
-        const Run r = play(Level::Hard, 2, 5, 2400, {}, 3);
+        const Run r = play(Level::Hard, 2, 5, 2400, kOldRow, 3);
         ASSERT_TRUE(r.duds >= 4);
         ASSERT_TRUE(r.planted >= r.hops);
         ASSERT_EQ(r.lost, 0);
@@ -413,7 +563,7 @@ void run_island_expedition_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 6, 0x01, Level::Hard, 0);
+        m.init("ISLANDS", 6, 0x01, Level::Hard, 0, kOldRow);
         m.run(3600);
         const ExpeditionTask& ex = m.bot(0)->expedition();
         const ExpeditionResult e = read_expedition(ex);
@@ -447,7 +597,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.16 The Second Order To An Ant Comes As Soon As The Latency Of The Level Allows: A Hard Bot With The Arena's Latency Of 3 Ticks (Seat 1, Seed 19, Five Duds) Has Its Three Swimmers By Tick 1,700 (A Fixed Gap Of 60 Ticks: 2,122) And Loses Nobody")
     {
-        const Run r = play(Level::Hard, 1, 19, 2400, {}, 3);
+        const Run r = play(Level::Hard, 1, 19, 2400, kOldRow, 3);
         ASSERT_TRUE(r.duds >= 5);
         ASSERT_EQ(r.lost, 0);
         ASSERT_EQ(r.swimmers, 3u);
@@ -496,7 +646,7 @@ void run_island_expedition_tests() {
         ASSERT_EQ(a.hops, 10u);
         ASSERT_EQ(a.planted, 10u);
         ASSERT_EQ(a.swimmers, 3u);
-        const Run b = play(Level::Hard, 3, 12, 2400, {}, 3);
+        const Run b = play(Level::Hard, 3, 12, 2400, kOldRow, 3);
         ASSERT_EQ(b.duds, 0u);
         ASSERT_EQ(b.hops, 11u);
         ASSERT_EQ(b.swimmers, 3u);
@@ -607,7 +757,7 @@ void run_island_expedition_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 3, 1u, Level::Hard, 0);
+        m.init("ISLANDS", 3, 1u, Level::Hard, 0, kOldRow);
         const ExpeditionTask& ex = m.bot(0)->expedition();
         uint32_t first = 0;                                                                          // the Bomber of the first flight, and of the second
         uint32_t second = 0;
@@ -640,7 +790,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.27 An Ant That Cannot Hop Any More Still Counts For A Token Once It Stands On The Island Of The Row, For It Walks: A Hard Bot On Seat 0 (Seed 22) Has An Ant Left With 2 Hit Points By The Last Flight, And The Crew Of Two Is Not One Ant Short Of Two Tokens (12 Hops, 13 Bombs, Three Swimmers); Counted Out, Both Bombers Would Fly On For Nothing (14 And 14)")
     {
-        const Run r = play(Level::Hard, 0, 22, 3200);
+        const Run r = play(Level::Hard, 0, 22, 3200, kOldRow);
         ASSERT_EQ(r.swimmers, 3u);
         ASSERT_EQ(r.given_up, 0u);
         ASSERT_EQ(r.hops, 12u);
@@ -677,7 +827,7 @@ void run_island_expedition_tests() {
         ASSERT_EQ(a.taken, 5u);
         ASSERT_EQ(a.swimmers, 3u);
         ASSERT_EQ(a.given_up, 0u);
-        const Stranded b = strand(Level::Hard, 1, 1, 3, true);
+        const Stranded b = strand(Level::Hard, 1, 1, 3, true, kOldRow);
         ASSERT_TRUE(b.ant != 0 && b.bomber != 0);
         ASSERT_EQ(b.taken, 5u);
         ASSERT_EQ(b.swimmers, 3u);
@@ -821,7 +971,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.37 A Bomber Does Not Hold A Crew That Needs Two Tokens: In A Match Of Four Hard Bots (Seed 75, Seat 0, Commands At Once) The Only Ant Of The Crew That Can Take A Token, A Bomber On The Island Of The Row, Takes The Last Token And No Other, The Two Plain Ants Left On The Middle Island Have 2 Hit Points And Two Tokens Are Left: The Attempt Is Given Up At Tick 1,701, 204 Ticks After It Last Moved (If That Bomber Counts As An Ant That Takes Any Token, At Tick 3,901)")
     {
-        const Natural r = four_bots(Level::Hard, 75, 0, 0, 2400);
+        const Natural r = four_bots(Level::Hard, 75, 0, 0, 2400, kOldRow);
         ASSERT_TRUE(r.gave_up > 0 && r.gave_up <= 1800);
         ASSERT_EQ(r.swimmers, 1u);
         ASSERT_TRUE(r.gave_up - r.last_take >= 200 && r.gave_up - r.last_take <= 260);               // (the 200 ticks of a hopeless crew after the last token, not the 2,400 of one that is only slow)
@@ -829,7 +979,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.38 A Plain Ant Takes The Last Token Before A Bomber That Stands Nearer To The Entrance: In A Match Of Four Hard Bots (Seed 120, Seat 2) A Worker And A Bomber That Has Flown On Wait On The Island Of The Row For The Last Token, The Bomber Nearer, And The Worker Takes It: The Third Swimmer Is Taken At Tick 1,291 And The Bomber Is A Bomber Still (It Would Be A Swimmer With The Bomber Taking It)")
     {
-        const Natural r = four_bots(Level::Hard, 120, 3, 2, 3000);
+        const Natural r = four_bots(Level::Hard, 120, 3, 2, 3000, kOldRow);
         ASSERT_EQ(r.given_up, 0u);
         ASSERT_TRUE(r.third > 0 && r.third < 2000);
         ASSERT_EQ(r.bombers_on_row, 1);
@@ -852,5 +1002,67 @@ void run_island_expedition_tests() {
         ASSERT_EQ(ex.taken(), 4u);
         ASSERT_EQ(ex.swimmers_taken(), 2u);
         ASSERT_EQ(ex.given_up(), 0u);
+    } TEST_END();
+
+    TEST_CASE("AI17.40 One Ant Crosses The Fire Hats Of A Corner Row With Exactly Timed Clicks: At Each Of The Eight Ends Of The Four Rows Of ISLANDS, With The Arena's Delays Of 0, 2, 3 And 4 Ticks And Two Reaction Times, A Scripted Bot's Chain Of Three Clicks (Each Applied 10 Or 11 Ticks After The One Before) Through The Real Controller Makes A Plain Worker A Swimmer With Both Fire Hats Still There, And A Chain Of Three Clicks Brings It Back To The Tile In Front Of The Row, The Hats Still There")
+    {
+        sim::SimulationEngine probe;
+        start_match(probe, "ISLANDS", 1, 0x0F);
+        const std::vector<RowEnd> ends = row_ends(probe);
+        ASSERT_EQ(ends.size(), 8u);
+        for (const RowEnd& e : ends) ASSERT_TRUE(e.hats.size() == 2 && e.swimmer.x >= 0);
+        for (const RowEnd& e : ends) {
+            for (const uint32_t latency : {0u, 2u, 3u, 4u}) {
+                for (const uint32_t seed : {1u, 2u}) {
+                    const Crossing c = cross(e, latency, seed);
+                    ASSERT_TRUE(c.swimmer && c.token_gone && c.hats_in);
+                    ASSERT_TRUE(c.back && c.hats_out && c.still_swimmer);
+                    ASSERT_EQ(c.clicks, 6u);
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI17.41 A Hard Bot Takes The Swimmers Behind The Fire Hats With One Ant A Swimmer (Seats 0 To 3, Seed 1, The Arena's Delay Of 3 Ticks): Three Swimmers, Three Tokens Taken And No Fire Ant, Three Chains In And Three Out, No Chain Missed, The Row Not Given Up, And Nobody Lost; Over The Four Seats The First Swimmer Comes 80 Ticks Sooner On Average, And The Third 80, Than With The Old Way Of One Ant A Hat (`itimed=0`)")
+    {
+        int64_t first_gain = 0;
+        int64_t third_gain = 0;
+        for (uint8_t seat = 0; seat < 4; ++seat) {
+            const Run timed = play(Level::Hard, seat, 1, 2600, {}, 3);
+            const Run plain = play(Level::Hard, seat, 1, 2600, [](LevelPlan& p) { p.island_timed_row = false; }, 3);
+            ASSERT_EQ(timed.swimmers, 3u);
+            ASSERT_EQ(plain.swimmers, 3u);
+            ASSERT_EQ(timed.taken, 3u);                                                              // (the Fire hats are left where they are: three tokens, the three Swimmers)
+            ASSERT_EQ(plain.taken, 5u);
+            ASSERT_EQ(timed.fire_ants, 0);
+            ASSERT_TRUE(timed.chains_in == 3 && timed.chains_out >= 3 && !timed.timed_off && timed.given_up == 0);
+            ASSERT_EQ(plain.chains_in + plain.chains_out, 0u);
+            ASSERT_EQ(timed.lost + timed.drowned, 0);
+            first_gain += static_cast<int64_t>(plain.first_swimmer) - static_cast<int64_t>(timed.first_swimmer);
+            third_gain += static_cast<int64_t>(plain.third_swimmer) - static_cast<int64_t>(timed.third_swimmer);
+        }
+        ASSERT_TRUE(first_gain >= 4 * 80);
+        ASSERT_TRUE(third_gain >= 4 * 80);
+    } TEST_END();
+
+    TEST_CASE("AI17.42 A Bot Whose Windows Are Missed Goes Back To One Ant A Hat: When The Sink Is Wrong About Its Own Clock (Every Command Released Adds 6 To What It Says, So The Second Click Of A Chain Is Applied 6 Ticks Before The Bot Means It To), The Chains In Miss, The Row Goes Back To The Old Way After Two (The Fire Hats Are Untouched Until Then), And The Hard Bot Still Has Its Three Swimmers (Seat 1, Seed 1) By Tick 3,600 With Five Tokens Taken, Nobody Lost")
+    {
+        const Run r = play(Level::Hard, 1, 1, 3600, {}, 3, 6);
+        ASSERT_TRUE(r.timed_off && r.chain_misses >= 2 && r.chains_in == 2);
+        ASSERT_EQ(r.swimmers, 3u);
+        ASSERT_EQ(r.taken, 5u);
+        ASSERT_EQ(r.lost + r.drowned, 0);
+        ASSERT_TRUE(r.first_swimmer > 0 && r.third_swimmer > 0 && r.third_swimmer <= 3600);
+    } TEST_END();
+
+    TEST_CASE("AI17.43 The Timed Row Is Deterministic And Is Hard's Alone: The Same Hard Match Twice Gives The Same State Hash And The Same Times; Medium And Easy Send No Chain (Seat 2, Seed 3)")
+    {
+        const Run a = play(Level::Hard, 2, 3, 1800, {}, 3);
+        const Run b = play(Level::Hard, 2, 3, 1800, {}, 3);
+        ASSERT_TRUE(a.hash == b.hash && a.first_swimmer == b.first_swimmer && a.third_swimmer == b.third_swimmer);
+        ASSERT_TRUE(a.chains_in > 0);
+        const Run medium = play(Level::Medium, 2, 3, 1800, {}, 3);
+        const Run easy = play(Level::Easy, 2, 3, 1800, {}, 3);
+        ASSERT_EQ(medium.chains_in + medium.chains_out + easy.chains_in + easy.chains_out, 0u);
     } TEST_END();
 }

@@ -27,6 +27,10 @@
 //   issuer          every released command carries the seat of the bot, whatever the bot wrote
 //   anti-thrash     no second order to the same ant within Profile::reissue_cooldown ticks, unless it is Urgent (every order snaps the ant to its tile
 //                   centre and replaces its queued path request)
+//   timed chains    the clicks of a chain (Orders::chain: one ant, a few clicks, each at a moment counted from the moment the click before is APPLIED) are not released by the clock of the
+//                   decision: the first leaves like any order, every later one at the first tick at which the sink (CommandSink::applied_at) would apply it inside its window, and never
+//                   outside it (a click that would be late is dropped with the rest of the chain: Fate::Expired). They skip the reaction delay, the queue and the cool-down, as the
+//                   second click of a person does, but each costs a token: the bucket goes into debt, so the rate over time is the level's. A newer order that names the ant ends its chain
 //
 // The controller changes nothing in the simulation by itself: a bot that only reads leaves every state hash as it was. It has no thread, no clock and no
 // random source but the seat's BotRng, so a match with bots is reproducible from the match seed.
@@ -115,6 +119,18 @@ private:
         uint64_t expires{0};             // dropped when it is still here after this tick
         uint64_t seq{0};                 // the order in which the seat proposed it
         bool trimmed{false};
+        uint32_t chain{0};               // a timed chain (Intent::chain, made seat-wide) and the step in it; a step after the first has no release time: it leaves by the rules of its chain
+        uint32_t step{0};
+        uint32_t gap_lo{0};
+        uint32_t gap_hi{0};
+    };
+    /// The state of a timed chain of a seat
+    struct Chain {
+        enum class State : uint8_t { Waiting, Live, Broken };    // Waiting: the first step is queued; Live: steps went out; Broken: the first step never left, a step was late, a newer order took the ant
+        State state{State::Waiting};
+        uint32_t ant{0};
+        uint32_t next_step{1};
+        uint64_t applied{0};             // the tick at which the step that went out last is applied by the sink
     };
     struct Seat {
         uint8_t seat{0};
@@ -130,6 +146,8 @@ private:
         uint64_t last_release{0};                       // the release tick of the seat's latest decision: a later look never leaves before an earlier one
         std::vector<Pending> queue;
         std::map<uint32_t, uint64_t> last_order;        // ant -> tick of the last order released for it
+        std::map<uint32_t, Chain> chains;               // the timed chains that have steps in the queue or are Live (by seat-wide number)
+        uint32_t chain_base{0};
         SeatStats stats;
     };
 
@@ -139,6 +157,9 @@ private:
     bool allowed(const sim::SimulationEngine& sim, const Seat& s, const Intent& in) const;
     void refill(Seat& s, uint64_t tick) const;
     void release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
+    void release_timed(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
+    void drop_chain(Seat& s, uint32_t chain, Bot::Fate fate, uint64_t tick);
+    void break_chains_of(Seat& s, const std::vector<uint32_t>& ants, uint32_t except, uint64_t tick);
 
     const sim::SimulationEngine* sim_;
     uint64_t match_seed_;

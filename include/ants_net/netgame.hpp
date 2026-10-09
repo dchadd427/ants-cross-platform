@@ -352,6 +352,9 @@ public:
     /// Host only, during the match: a command of the bot at `seat` (the issuer is stamped with that seat). False unless this machine is the host and the seat is a bot seat.
     /// The simulation's verdict arrives with the turn, like every command's; a bot ignores it.
     bool submit_bot(uint8_t seat, const sim::Command& command);
+    /// Host only, during the match: the tick at which a command that a bot submits now is applied, the number of the turn that the sequencer seals next (turn N is executed at tick N); `fallback` when
+    /// this machine is not the host or no match runs
+    uint64_t bot_apply_tick(uint64_t fallback) const noexcept;
     /// Host only, at least two players: sends Start (the map named in the room, `seed`, the roster, the teams of set_start_teams when the seats that play can make them) to everybody and
     /// expects report_loaded(). Teams that the seats cannot make: the match starts without them and every person in the room is told why (the notice "No teams: ...", also on this machine's status line).
     bool start_match(uint32_t seed, uint64_t map_hash);

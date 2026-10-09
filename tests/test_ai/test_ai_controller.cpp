@@ -1,10 +1,11 @@
 // Tests of the controller that stands between a bot and the door of a person: schedule, reaction delay, budget, time to live, priorities, ants that died,
 // splitting, the rules of the HUD, the issuer, the anti-thrash cool-down, and above all that a controller whose bots only read changes nothing (AI2.3 .. AI2.16); AI2.21: a refused
-// click has a fate (Bot::Fate::Filtered).
+// click has a fate (Bot::Fate::Filtered); AI2.23 .. AI2.28: timed chains (Orders::chain, CommandSink::applied_at).
 #include "ai_test.hpp"
 
 #include <algorithm>
 #include <set>
+#include <tuple>
 
 #include "ants_ai/idle_bot.hpp"
 
@@ -81,6 +82,47 @@ size_t look_size(Level l) { return l == Level::Hard ? 8u : (l == Level::Medium ?
 // A longer hold than the product's, for the tests of the MECHANISM of the hold (v0.1.1 held the bots for the 100 ticks of the dialog, which then ran with the simulation; since v0.2.0 the
 // simulation waits for the dialog and the product's hold is kStartHoldTicks = 1, but the controller's hold is a number, and a number that is larger must still do what it says)
 constexpr uint32_t kLongHold = 100u;
+
+// A sink that says when it would apply a command (CommandSink::applied_at): `lag` ticks after the call, or on the next even tick when `even` is set (the arena's turns of two ticks); it applies nothing,
+// it records (the tick of the call, the tick it said, the command)
+class TimedSink final : public sim::CommandSink {
+public:
+    struct Entry {
+        uint64_t sent;
+        uint64_t applied;
+        sim::Command command;
+    };
+    TimedSink(sim::SimulationEngine& sim, uint32_t lag, bool even) : sim_(sim), lag_(lag), even_(even) {}
+    sim::CommandResult submit(const sim::Command& c) override {
+        log.push_back(Entry{sim_.current_tick(), applied_at(sim_.current_tick()), c});
+        sim::CommandResult r;
+        r.status = sim::CommandResult::Status::Applied;
+        return r;
+    }
+    uint64_t applied_at(uint64_t now) const override {
+        const uint64_t due = now + lag_;
+        return even_ ? due + due % 2 : due;
+    }
+    void set_lag(uint32_t lag) noexcept { lag_ = lag; }
+    std::vector<Entry> log;
+
+private:
+    sim::SimulationEngine& sim_;
+    uint32_t lag_;
+    bool even_;
+};
+
+std::vector<ChainStep> steps_of(const std::vector<std::tuple<int32_t, uint32_t, uint32_t>>& list) {      // (x, gap_lo, gap_hi); y is 30
+    std::vector<ChainStep> out;
+    for (const auto& e : list) {
+        ChainStep st;
+        st.tile = TileCoord{std::get<0>(e), 30};
+        st.gap_lo = std::get<1>(e);
+        st.gap_hi = std::get<2>(e);
+        out.push_back(st);
+    }
+    return out;
+}
 
 }  // namespace
 
@@ -1297,6 +1339,228 @@ void run_controller_tests() {
             ASSERT_EQ(bot2->count(Bot::Fate::Filtered), 1u);
             ASSERT_EQ(bot2->count(Bot::Fate::Sent), 1u);
             ASSERT_EQ(sink2.log.size(), 1u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.23 Orders::chain: One Intent Per Click, Numbered By Chain And Step, With The Windows And The Pick-Up Marks As Given; An Empty Chain Puts In Nothing And Takes No Number; clear() Starts The Numbers Again") {
+        Orders o;
+        ASSERT_EQ(o.chains(), 0u);
+        o.chain(7, {});
+        ASSERT_TRUE(o.intents().empty() && o.chains() == 0);
+        std::vector<ChainStep> a = steps_of({{20, 0, 0}, {21, 10, 11}, {22, 18, 19}});
+        a[1].pickup = true;
+        o.chain(7, a);
+        o.move({9}, TileCoord{5, 5});
+        o.chain(8, steps_of({{30, 0, 0}, {31, 12, 13}}), Priority::Normal);
+        ASSERT_EQ(o.chains(), 2u);
+        ASSERT_EQ(o.intents().size(), 6u);
+        const std::vector<Intent>& in = o.intents();
+        for (size_t i = 0; i < 3; ++i) {
+            ASSERT_TRUE(in[i].chain == 1 && in[i].step == i && in[i].priority == Priority::Urgent);
+            ASSERT_TRUE(in[i].command.type == CommandType::GroupMove && in[i].command.ants == std::vector<uint32_t>{7});
+            ASSERT_TRUE(in[i].command.tile_x == 20 + static_cast<int>(i) && in[i].command.tile_y == 30);
+        }
+        ASSERT_TRUE(in[1].gap_lo == 10 && in[1].gap_hi == 11 && in[2].gap_lo == 18 && in[2].gap_hi == 19);
+        ASSERT_TRUE(in[1].pickup && !in[0].pickup && !in[2].pickup);
+        ASSERT_TRUE(in[3].chain == 0 && in[3].step == 0 && !in[3].pickup);                                       // the single click is none of the chains
+        ASSERT_TRUE(in[4].chain == 2 && in[4].step == 0 && in[5].chain == 2 && in[5].step == 1 && in[5].gap_lo == 12 && in[4].priority == Priority::Normal);
+        o.clear();
+        ASSERT_TRUE(o.intents().empty() && o.chains() == 0);
+        o.chain(7, steps_of({{20, 0, 0}, {21, 10, 11}}));
+        ASSERT_EQ(o.intents()[0].chain, 1u);
+    } TEST_END();
+
+    TEST_CASE("AI2.24 A Timed Chain Leaves By The Sink's Clock: The First Click Like Any Order, Every Later One At The First Tick At Which The Sink Would Apply It Inside Its Window (10 To 11 Ticks After The Click Before, Then 18 To 19, Then 10 To 12), With A Sink That Applies At Once, After 1, 2 Or 4 Ticks, And On The Even Ticks Of The Arena, At Every Reaction Time; No Click Is Dropped, Each Costs A Token") {
+        const std::vector<std::tuple<int32_t, uint32_t, uint32_t>> chain = {{20, 0, 0}, {21, 10, 11}, {22, 18, 19}, {23, 10, 12}};
+        for (const auto& [lag, even] : std::vector<std::pair<uint32_t, bool>>{{0, false}, {1, false}, {2, true}, {3, true}, {4, true}, {5, false}}) {
+            for (uint32_t seed = 1; seed <= 6; ++seed) {
+                sim::SimulationEngine sim;
+                build_world(sim, seed);
+                TimedSink sink(sim, lag, even);
+                BotController c(sim, seed);
+                c.set_start_hold(0);
+                const uint32_t ant = ants_of(sim, 0)[0];
+                bool proposed = false;
+                ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                    if (proposed) return;
+                    proposed = true;
+                    o.chain(ant, steps_of(chain));
+                });
+                ASSERT_TRUE(bot != nullptr);
+                run_ticks(sim, c, 120);
+                ASSERT_TRUE(proposed);
+                ASSERT_EQ(sink.log.size(), 4u);
+                for (size_t i = 0; i < 4; ++i) {
+                    ASSERT_TRUE(sink.log[i].command.type == CommandType::GroupMove && sink.log[i].command.issuer == 0);
+                    ASSERT_TRUE(sink.log[i].command.ants == std::vector<uint32_t>{ant} && sink.log[i].command.tile_x == 20 + static_cast<int>(i));
+                    if (i == 0) continue;
+                    const uint64_t d = sink.log[i].applied - sink.log[i - 1].applied;                                        // the sink's own ticks of the two clicks
+                    ASSERT_TRUE(d >= std::get<1>(chain[i]) && d <= std::get<2>(chain[i]));
+                    ASSERT_TRUE(sink.log[i].sent > sink.log[i - 1].sent);
+                }
+                ASSERT_EQ(bot->count(Bot::Fate::Sent), 4u);
+                ASSERT_EQ(bot->count(Bot::Fate::Expired) + bot->count(Bot::Fate::Pruned) + bot->count(Bot::Fate::Filtered), 0u);
+                const auto& st = c.stats(0);
+                ASSERT_TRUE(st.released == 4 && st.expired == 0 && st.rejected == 0);
+                ASSERT_EQ(c.pending(0), 0u);
+                if (!even) {                                                                                                 // a sink with a fixed lag: every click leaves as soon as its window opens
+                    ASSERT_EQ(sink.log[1].sent - sink.log[0].sent, 10u);
+                    ASSERT_EQ(sink.log[2].sent - sink.log[1].sent, 18u);
+                    ASSERT_EQ(sink.log[3].sent - sink.log[2].sent, 10u);
+                }
+                if (even) for (const auto& e : sink.log) ASSERT_EQ(e.applied % 2, 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.25 A Click That Would Be Applied Late Is Not Sent: When The Sink's Delay Jumps After The First Click (From 0 To 30 Ticks), The Second Cannot Be Applied In Its Window, And It Is Dropped With The Rest Of The Chain (Fate::Expired, Told To The Bot), The First Having Left; Nothing Waits In The Queue") {
+        sim::SimulationEngine sim;
+        build_world(sim, 4);
+        TimedSink sink(sim, 0, false);
+        BotController c(sim, 9);
+        c.set_start_hold(0);
+        const uint32_t ant = ants_of(sim, 0)[0];
+        bool proposed = false;
+        ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+            if (proposed) return;
+            proposed = true;
+            o.chain(ant, steps_of({{20, 0, 0}, {21, 10, 11}, {22, 10, 11}}));
+        });
+        ASSERT_TRUE(bot != nullptr);
+        for (int i = 0; i < 100 && sink.log.empty(); ++i) run_ticks(sim, c, 1);
+        ASSERT_EQ(sink.log.size(), 1u);
+        sink.set_lag(30);
+        run_ticks(sim, c, 80);
+        ASSERT_EQ(sink.log.size(), 1u);
+        ASSERT_EQ(bot->count(Bot::Fate::Sent), 1u);
+        ASSERT_EQ(bot->count(Bot::Fate::Expired), 2u);
+        ASSERT_EQ(c.stats(0).expired, 2u);
+        ASSERT_EQ(c.pending(0), 0u);
+        size_t last = 0;
+        for (const auto& seen : bot->fates) {
+            if (seen.fate == Bot::Fate::Expired) {
+                ASSERT_TRUE(seen.command.tile_x == 21 + static_cast<int>(last) && seen.command.ants == std::vector<uint32_t>{ant});
+                ++last;
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.26 A Chain With A Click That The HUD Would Refuse Leaves No Click At All: A Step Off The Map, A Step On A Power-Up Without The Pick-Up Mark, Or A Pick-Up Mark On A Tile With Nothing To Take Is Filtered With The Rest (Fate::Filtered For Each, At The Look), The First Step Included; The Same Chain Without It Leaves Whole; A Chain Of Another Team's Ant Is Pruned (Its First Step) And Expired (The Rest)") {
+        sim::SimulationEngine sim;
+        build_world(sim, 5);
+        const uint32_t ant = ants_of(sim, 0)[0];
+        const uint32_t lone = ants_of(sim, 1)[0];
+        sim.grid_mut().place_powerup(25, 30, 1);                                                                   // (a power-up that variant 2 names without the mark)
+        for (int variant = 0; variant < 5; ++variant) {
+            TimedSink sink(sim, 3, true);
+            BotController c(sim, 9);
+            c.set_start_hold(0);
+            bool proposed = false;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                if (proposed) return;
+                proposed = true;
+                std::vector<ChainStep> steps = steps_of({{20, 0, 0}, {21, 10, 11}, {22, 10, 11}});
+                if (variant == 1) steps[2].tile = TileCoord{-4, 30};                                               // off the map
+                if (variant == 2) steps[2].tile = TileCoord{25, 30};                                               // on a power-up, unmarked
+                if (variant == 3) steps[1].pickup = true;                                                          // (marked, and nothing to take there)
+                if (variant == 4) o.chain(lone, steps);                                                            // another team's ant
+                else o.chain(ant, steps);
+            });
+            ASSERT_TRUE(bot != nullptr);
+            run_ticks(sim, c, 100);
+            ASSERT_TRUE(proposed);
+            if (variant == 0) {
+                ASSERT_EQ(sink.log.size(), 3u);
+                ASSERT_EQ(bot->count(Bot::Fate::Filtered), 0u);
+            } else if (variant == 4) {
+                ASSERT_TRUE(sink.log.empty());
+                ASSERT_TRUE(bot->count(Bot::Fate::Pruned) == 1 && bot->count(Bot::Fate::Expired) == 2 && bot->count(Bot::Fate::Filtered) == 0);
+                ASSERT_EQ(c.pending(0), 0u);
+            } else {
+                ASSERT_TRUE(sink.log.empty());
+                ASSERT_EQ(bot->count(Bot::Fate::Filtered), 3u);
+                ASSERT_EQ(c.stats(0).filtered, 3u);
+                ASSERT_EQ(c.pending(0), 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.27 A Newer Order For The Ant Ends Its Chain, And So Does Its Death: The Clicks After The One Sent Are Dropped (Expired After A Newer Order, Pruned After A Death), Nothing Else Of The Chain Leaves, And The Newer Order Leaves Once") {
+        for (const bool kill : {false, true}) {
+            sim::SimulationEngine sim;
+            build_world(sim, 8);
+            TimedSink sink(sim, 0, false);
+            BotController c(sim, 5);
+            c.set_start_hold(0);
+            const uint32_t ant = ants_of(sim, 0)[0];
+            int looks = 0;
+            bool killed = false;
+            bool moved = false;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                ++looks;
+                if (looks == 1) {
+                    o.chain(ant, steps_of({{20, 0, 0}, {21, 30, 31}, {22, 30, 31}}));
+                } else if (!kill && !moved && !sink.log.empty()) {                                                     // (the look after the first click left: once)
+                    moved = true;
+                    o.move({ant}, TileCoord{40, 40}, Priority::Urgent);
+                }
+            });
+            ASSERT_TRUE(bot != nullptr);
+            for (int i = 0; i < 100 && sink.log.empty(); ++i) run_ticks(sim, c, 1);
+            ASSERT_EQ(sink.log.size(), 1u);
+            if (kill) {
+                sim.kill_unit(ant);
+                killed = true;
+            }
+            run_ticks(sim, c, 100);
+            if (kill) {
+                ASSERT_TRUE(killed);
+                ASSERT_EQ(sink.log.size(), 1u);
+                ASSERT_EQ(bot->count(Bot::Fate::Pruned), 2u);
+                ASSERT_EQ(bot->count(Bot::Fate::Expired), 0u);
+            } else {
+                ASSERT_EQ(sink.log.size(), 2u);
+                ASSERT_TRUE(sink.log[1].command.tile_x == 40 && sink.log[1].command.tile_y == 40);
+                ASSERT_EQ(bot->count(Bot::Fate::Expired), 2u);
+                ASSERT_EQ(bot->count(Bot::Fate::Sent), 2u);
+            }
+            ASSERT_EQ(c.pending(0), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.28 A Chain Is Paid For: A Bot That Floods With Five Clicks At Every Look And Sends A Chain Of Four Every Fifth Look Gets No More Out In A Minute Than The Bucket And The Rate Allow (A Few Clicks Over At Most: The Bucket Goes Into Debt For The Clicks After The First, And The Orders After Them Wait Until It Is Paid), At Every Level, And The Chains Are Whole") {
+        for (const Level level : {Level::Medium, Level::Hard}) {
+            sim::SimulationEngine sim;
+            build_world(sim, 3);
+            TimedSink sink(sim, 3, true);
+            BotController c(sim, 7);
+            c.set_start_hold(0);
+            const std::vector<uint32_t> mine = ants_of(sim, 0);
+            size_t next = 0;
+            size_t looks = 0;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, level), sink, [&](const BotView& v, Orders& o) {
+                ++looks;
+                if (looks % 5 == 0) {                                                                                // (a chain lasts about 30 ticks: four ants take turns, none is named again while its chain runs)
+                    if (v.tick() < 1100) o.chain(mine[(looks / 5) % 4], steps_of({{20, 0, 0}, {21, 10, 11}, {22, 10, 11}, {23, 10, 11}}));
+                    return;
+                }
+                for (int i = 0; i < 5; ++i) o.move({mine[4 + next++ % (mine.size() - 4)]}, TileCoord{30, 30});
+            });
+            ASSERT_TRUE(bot != nullptr);
+            const Profile p = profile_for(level);
+            run_ticks(sim, c, 1200);
+            const auto& st = c.stats(0);
+            const double allowed = p.burst + p.rate_milli_cps / 1000.0 * 60.0;
+            ASSERT_TRUE(st.released <= allowed + 4 && st.released >= allowed * 0.8);
+            size_t chain_clicks = 0;
+            for (const auto& e : sink.log) {
+                const bool of_chain = e.command.tile_y == 30 && e.command.tile_x >= 20 && e.command.tile_x <= 23 && e.command.ants.size() == 1 &&
+                                      std::find(mine.begin(), mine.begin() + 4, e.command.ants[0]) != mine.begin() + 4;
+                chain_clicks += of_chain ? 1u : 0u;
+            }
+            ASSERT_TRUE(chain_clicks >= 12);                                                                          // (Hard: a chain every 20 ticks; Medium: every 100)
+            ASSERT_EQ(chain_clicks % 4, 0u);                                                                           // a chain that was begun was finished
+            ASSERT_EQ(st.rejected, 0u);
         }
     } TEST_END();
 }

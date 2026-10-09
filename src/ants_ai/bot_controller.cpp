@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
+#include <set>
 #include <utility>
 
 #include "ants_ai/bot_view.hpp"
@@ -12,6 +14,7 @@ namespace {
 
 constexpr int64_t kToken = 1000;                // one command, in thousandths of a command
 constexpr uint32_t kTicksPerSecond = 20;        // the refill is per second, the controller runs per tick (50 ms)
+constexpr uint64_t kNever = std::numeric_limits<uint64_t>::max();     // the release time of a step of a timed chain after the first: it leaves by the rules of its chain
 
 bool is_rejection(sim::CommandResult::Status status) noexcept {
     using S = sim::CommandResult::Status;
@@ -120,6 +123,7 @@ void BotController::on_tick(const sim::SimulationEngine& sim) {
         Seat& s = *sp;
         if (sim.is_player_dropped(s.seat)) {                       // the team is out of the match: its bot has nothing left to say
             s.queue.clear();
+            s.chains.clear();
             continue;
         }
         if (tick >= s.next_decision) decide(sim, s, tick);
@@ -201,10 +205,31 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
     const uint32_t cap = std::clamp<uint32_t>(s.profile.max_ants_per_command, 1u, kHudAntCap);
     bool release_drawn = false;
     uint64_t release = 0;
+    std::set<uint32_t> refused;                                                             // the chains (of this look) of which the filter refused a click: none of their clicks leaves
     for (const Intent& in : orders.intents()) {
-        if (!allowed(sim, s, in)) {
+        if (in.chain != 0 && !allowed(sim, s, in)) refused.insert(in.chain);
+    }
+    for (const Intent& in : orders.intents()) {
+        const uint32_t chain = in.chain != 0 ? s.chain_base + in.chain : 0;
+        const bool later = in.chain != 0 && in.step != 0;
+        if ((in.chain != 0 && refused.count(in.chain) != 0) || (later && s.chains.count(chain) == 0) || (in.chain == 0 && !allowed(sim, s, in))) {
             ++s.stats.filtered;
             s.bot->on_command(in.command, Bot::Fate::Filtered, tick);                       // the bot is told, or a task would propose the same refused click at every look
+            continue;
+        }
+        if (later) {                                                                        // a step after the first: no release time, the chain says when
+            Pending p;
+            p.command = in.command;
+            p.priority = in.priority;
+            p.release = kNever;
+            p.expires = kNever;
+            p.seq = s.next_seq++;
+            p.chain = chain;
+            p.step = in.step;
+            p.gap_lo = in.gap_lo;
+            p.gap_hi = in.gap_hi;
+            s.queue.push_back(std::move(p));
+            ++s.stats.intents;
             continue;
         }
         if (!release_drawn) {
@@ -230,10 +255,17 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             p.release = release;
             p.expires = release + s.profile.intent_ttl;
             p.seq = s.next_seq++;
+            if (chain != 0) {                                                               // the first step of a chain (one ant: allowed() saw to it)
+                p.chain = chain;
+                Chain c;
+                c.ant = p.command.ants.empty() ? 0u : p.command.ants[0];
+                s.chains[chain] = c;
+            }
             s.queue.push_back(std::move(p));
             ++s.stats.intents;
         }
     }
+    s.chain_base += orders.chains();
 }
 
 // The token bucket: rate_milli_cps thousandths of a command per second = rate / 20 per tick (the remainder is carried, so the rate is exact). It does not fill before the hold's first tick
@@ -250,7 +282,10 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
         if (it->second + s.profile.reissue_cooldown <= tick) it = s.last_order.erase(it);
         else ++it;
     }
-    if (s.queue.empty()) return;
+    if (s.queue.empty()) {
+        s.chains.clear();                                                               // (a chain with no step in the queue is over)
+        return;
+    }
 
     // 1. what could not be paid in time is dropped: the world has moved on, the bot finds out in its next look
     for (size_t i = 0; i < s.queue.size();) {
@@ -259,6 +294,7 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             continue;
         }
         sim::Command gone = std::move(s.queue[i].command);
+        if (s.queue[i].chain != 0 && s.queue[i].step == 0) s.chains[s.queue[i].chain].state = Chain::State::Broken;           // (the first step never left: the others do not)
         s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
         ++s.stats.expired;
         s.bot->on_command(gone, Bot::Fate::Expired, tick);
@@ -290,6 +326,7 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
         }
         if (keep.empty()) {
             sim::Command gone = std::move(p.command);
+            if (p.chain != 0 && p.step == 0) s.chains[p.chain].state = Chain::State::Broken;
             s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
             s.bot->on_command(gone, Bot::Fate::Pruned, tick);
             continue;
@@ -323,12 +360,17 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             std::vector<sim::Command> gone;
             for (const size_t i : emptied) {
                 gone.push_back(std::move(s.queue[i].command));
+                if (s.queue[i].chain != 0 && s.queue[i].step == 0) s.chains[s.queue[i].chain].state = Chain::State::Broken;
                 s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
                 ++s.stats.superseded;
             }
             for (sim::Command& c : gone) s.bot->on_command(c, Bot::Fate::Superseded, tick);
         }
     }
+
+    // 2c. the steps of the timed chains that are under way, before the other orders of this tick: the sink keeps the order in which they come, and an order that was submitted first
+    // is the first that the engine finds a path for
+    release_timed(sim, s, tick);
 
     // 3. release what is due and paid for: the highest priority first, first come first served inside a class; an ant that was ordered a moment ago is left
     // alone unless the order is urgent
@@ -349,15 +391,110 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             best = i;
         }
         if (best == s.queue.size()) break;
+        const uint32_t chain = s.queue[best].chain;
         sim::Command c = std::move(s.queue[best].command);
         s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(best));
         c.issuer = s.seat;                                                              // whatever the bot wrote: the seat speaks
         s.tokens_milli -= kToken;
         for (const uint32_t id : c.ants) s.last_order[id] = tick;
+        break_chains_of(s, c.ants, chain, tick);                                        // (the later click of a person wins: a chain that is under way for the ant is over)
+        const uint64_t applies = s.sink->applied_at(tick);
         const sim::CommandResult result = s.sink->submit(c);
         ++s.stats.released;
         if (is_rejection(result.status)) ++s.stats.rejected;
+        if (chain != 0) {                                                               // the first step of a chain: the others are counted from the moment it is applied
+            Chain& ch = s.chains[chain];
+            ch.state = is_rejection(result.status) ? Chain::State::Broken : Chain::State::Live;
+            ch.applied = applies;
+        }
         s.bot->on_command(c, Bot::Fate::Sent, tick);
+    }
+}
+
+// A newer order that names an ant ends the timed chain that is under way for it (its steps are dropped by release_timed)
+void BotController::break_chains_of(Seat& s, const std::vector<uint32_t>& ants, uint32_t except, uint64_t) {
+    for (auto& entry : s.chains) {
+        if (entry.first == except || entry.second.state == Chain::State::Broken) continue;
+        if (std::find(ants.begin(), ants.end(), entry.second.ant) != ants.end()) entry.second.state = Chain::State::Broken;
+    }
+}
+
+// The steps after the first of the timed chains (Intent::chain). A chain that is Live waits for the tick at which the sink would apply its next step inside the window that is counted from the
+// tick at which the step before is applied; at that tick the step is paid for (the bucket may go into debt, which holds back the ordinary orders afterwards) and leaves at once. A step that
+// would be applied after its window is dropped with the rest of the chain (Fate::Expired): the ant is not where the bot wanted it, and a late click would do harm (the bot sees it in its next look).
+void BotController::release_timed(const sim::SimulationEngine& sim, Seat& s, uint64_t tick) {
+    if (s.chains.empty()) return;
+    std::vector<uint32_t> finished;
+    for (auto& entry : s.chains) {
+        const uint32_t id = entry.first;
+        Chain& ch = entry.second;
+        if (ch.state == Chain::State::Waiting) continue;                                 // (its first step is in the queue)
+        bool open = true;
+        while (open) {
+            size_t at = s.queue.size();
+            bool any = false;
+            for (size_t i = 0; i < s.queue.size(); ++i) {
+                if (s.queue[i].chain != id || s.queue[i].step == 0) continue;
+                any = true;
+                if (s.queue[i].step == ch.next_step) at = i;
+            }
+            if (!any) {                                                                  // nothing is left of it
+                finished.push_back(id);
+                break;
+            }
+            if (ch.state == Chain::State::Broken || at == s.queue.size()) {
+                drop_chain(s, id, Bot::Fate::Expired, tick);
+                finished.push_back(id);
+                break;
+            }
+            const Pending& p = s.queue[at];
+            const uint64_t applies = s.sink->applied_at(tick);
+            if (applies < ch.applied + p.gap_lo) break;                                  // not yet
+            if (applies > ch.applied + p.gap_hi) {                                       // too late: the click would do what the chain was made to avoid
+                drop_chain(s, id, Bot::Fate::Expired, tick);
+                finished.push_back(id);
+                break;
+            }
+            bool alive = false;
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.id == ch.ant && a.player_id == s.seat && a.hp > 0 && a.state != sim::UnitState::Dead && a.state != sim::UnitState::Drowning) alive = true;
+            }
+            if (!alive) {
+                drop_chain(s, id, Bot::Fate::Pruned, tick);
+                finished.push_back(id);
+                break;
+            }
+            sim::Command c = std::move(s.queue[at].command);
+            s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(at));
+            c.issuer = s.seat;
+            s.tokens_milli -= kToken;
+            s.last_order[ch.ant] = tick;
+            const sim::CommandResult result = s.sink->submit(c);
+            ++s.stats.released;
+            if (is_rejection(result.status)) {
+                ++s.stats.rejected;
+                ch.state = Chain::State::Broken;
+            }
+            ch.applied = applies;
+            ++ch.next_step;
+            s.bot->on_command(c, Bot::Fate::Sent, tick);
+        }
+    }
+    for (const uint32_t id : finished) s.chains.erase(id);
+}
+
+// Drops every step of a chain that is still in the queue and tells the bot
+void BotController::drop_chain(Seat& s, uint32_t chain, Bot::Fate fate, uint64_t tick) {
+    for (size_t i = 0; i < s.queue.size();) {
+        if (s.queue[i].chain != chain) {
+            ++i;
+            continue;
+        }
+        sim::Command gone = std::move(s.queue[i].command);
+        s.queue.erase(s.queue.begin() + static_cast<std::ptrdiff_t>(i));
+        if (fate == Bot::Fate::Pruned) ++s.stats.pruned;
+        else ++s.stats.expired;
+        s.bot->on_command(gone, fate, tick);
     }
 }
 

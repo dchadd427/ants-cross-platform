@@ -120,6 +120,7 @@ LevelPlan plan_for(Level level) noexcept {
             // without it, 25 being equal; it keeps three ants from the piles for up to 600 ticks at a time and the enemy's defenders come: docs/BOTS.md, "Fights of its own")
             p.islands = true;
             p.island_expedition = true;
+            p.island_timed_row = true;
             p.island_ferry = true;
             p.island_swimmers = 3;
             p.island_builders = 0;
