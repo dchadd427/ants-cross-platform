@@ -46,7 +46,7 @@ const RoomStatus* only_bot_room(const std::vector<RoomStatus>& rooms) {
 }  // namespace
 
 void run_bot_match_tests() {
-    TEST_CASE("S3.190 A Room Of Computer Players Alone Is Refused Unless Every Seat Is A Bot, And Is No Lobby, No Public Room And Holds No Seats") {
+    TEST_CASE("S3.179 A Room Of Computer Players Alone Is Refused Unless Every Seat Is A Bot, And Is No Lobby, No Public Room And Holds No Seats") {
         World w;
         RoomSpec fewer = bots_only_spec("BM-FEWER", 3);
         fewer.bots.pop_back();
@@ -76,7 +76,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(!b.ok && b.error.find("at least one") != std::string::npos);
     } TEST_END();
 
-    TEST_CASE("S3.191 A Room Of Computer Players Alone Starts With Nobody In It, Is Not Closed For Lack Of People, Plays At The Normal Speed Until The Time Limit And Is Kept Like Any Other Match") {
+    TEST_CASE("S3.180 A Room Of Computer Players Alone Starts With Nobody In It, Is Not Closed For Lack Of People, Plays At The Normal Speed Until The Time Limit And Is Kept Like Any Other Match") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -107,7 +107,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
     } TEST_END();
 
-    TEST_CASE("S3.192 The Timer Makes A Match Of Two To Four Computer Players After The First Wait And Then Every N Minutes, One At A Time, From Its Seed The Same Match; With No Replays It Makes None And Says Why") {
+    TEST_CASE("S3.181 The Timer Makes A Match Of Two To Four Computer Players After The First Wait And Then Every N Minutes, One At A Time, From Its Seed The Same Match; With No Replays It Makes None And Says Why") {
         ReplayClock clock;
         std::string why;
         std::string first;
