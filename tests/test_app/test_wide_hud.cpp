@@ -2584,7 +2584,7 @@ void test_default_and_options() {
     check(c.aspect == Aspect::Classic4x3 && c.aspect_given, "--aspect 4:3 gives the classic picture");
     c = parse({"ants", "--aspect", "16:9"});
     check(c.aspect == Aspect::Wide16x9 && c.aspect_given, "--aspect 16:9 gives the wide one");
-    c = parse({"ants", "--aspect", "21:9"});
+    c = parse({"ants", "--aspect", "3:2"});
     check(c.aspect == kPlatformDefaultAspect && !c.aspect_given && !c.startup_error.empty(), "a refused --aspect leaves the default and refuses the game");
     check(ApplicationConfig{}.aspect == Aspect::Classic4x3 && !ApplicationConfig{}.aspect_given, "a config that is made by hand (the tests') is the original's 4:3");
     // the application: nothing said, the command line's default, the settings key, the command line beats the settings
@@ -2618,7 +2618,7 @@ void test_default_and_options() {
     check(aspect_of(parse({"ants"}), "aspect=4:3\n").first == Aspect::Classic4x3, "the settings' key aspect=4:3 beats the default");
     check(aspect_of(parse({"ants"}), "aspect=16:9\n").first == Aspect::Wide16x9, "aspect=16:9 in the settings: 16:9");
     check(aspect_of(parse({"ants", "--aspect", "16:9"}), "aspect=4:3\n").first == Aspect::Wide16x9, "--aspect beats the settings' key");
-    check(aspect_of(parse({"ants"}), "aspect=21:9\n").first == kPlatformDefaultAspect, "a value that is neither is ignored: the default");
+    check(aspect_of(parse({"ants"}), "aspect=3:2\n").first == kPlatformDefaultAspect, "a value that is no shape is ignored: the default");
     check(aspect_of(ApplicationConfig{}, "").first == Aspect::Classic4x3, "a config made by hand is 4:3 whatever the platform's default");
 #endif
     // the four-window rig: a game that is started with --grid and no aspect (what start_game.sh does) takes its cell's largest rectangle of the default shape

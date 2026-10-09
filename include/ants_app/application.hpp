@@ -68,8 +68,9 @@ struct ApplicationConfig {
     int window_width{1280};  // the classic canvas at 2x: the size that the window is created with; a 16:9 game is given its own first window right after (apply_window_layout)
     int window_height{960};
     bool fullscreen{false};
-    /// --aspect 16:9 | 4:3 (the settings key `aspect` when the command line does not say): the shape of the picture. 4:3 is the original's fixed 640 x 480 canvas; 16:9 is a fixed
-    /// 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
+    /// --aspect 4:3 | 16:10 | 16:9 | 21:9 (the settings key `aspect` when the command line does not say): the shape of the picture (the web page's selector changes it while the game runs:
+    /// Application::set_aspect). 4:3 is the original's fixed 640 x 480 canvas; 16:10 is 960 x 600 and 21:9 is 1260 x 540 (the 16:9 match screen with a taller or a wider map view; each page is the
+    /// 960 x 540 one, centred in the canvas); 16:9 is a fixed 960 x 540 canvas, in which the match screen is the wide frame (a 762 x 500 map view, the right panel pinned to the right edge: shell_layout.hpp) and every screen outside a match is
     /// composed for the whole canvas from the original's own art: the setup screen and the room (setup_layout.hpp, with a map preview), the loading screen and the quick help at the start
     /// (page_layout.hpp), the results (results_layout.hpp) and the desktop start menu (start_menu.hpp), all on the wide pages' clay and frame (wide_page.hpp); the options window and the quick help of
     /// a match sit over the map view with the frame around them. SDL scales the canvas into the window by
@@ -251,7 +252,7 @@ public:
     float get_current_fps() const noexcept { return current_fps_; }
 
     AppState state() const noexcept { return state_; }
-    /// A match is being played right now: the match screen is up and its results are not (the browser page asks before it restarts the game for another picture, see ants_match_running)
+    /// A match is being played right now: the match screen is up and its results are not (the web page's Menu button and footer link ask before they leave it, see ants_match_running)
     bool match_running() const noexcept { return state_ == AppState::Playing && !scorecard_.is_open(); }
     /// The desktop start menu: the model (the tests drive it with keys and the mouse like the window does), whether this run has one, and the window's title (a room's code is in it
     /// from the moment the player is in the room until the player is back at the menu)
@@ -297,7 +298,7 @@ public:
     /// The aspect the game runs in (the command line's, else the settings', else the platform's default: 16:9 on a desktop), the canvas that the window shows (SDL's logical size) and
     /// where the picture on screen sits in it (the pointer's coordinates are the picture's, the canvas's bars around it count as its nearest edge pixel): a match is the picture of
     /// `layout()`, the whole canvas of its aspect, and so is every other screen: in the 960 x 540 canvas each is composed for it (its own wide version), in the 640 x 480 canvas each is
-    /// the original's own page
+    /// the original's own page; a canvas of the other wide shapes (16:10, 21:9) shows the 960 x 540 page centred in it (CanvasLayout::page)
     Aspect aspect() const noexcept { return aspect_; }
     CanvasLayout canvas() const noexcept { return renderer_ ? CanvasLayout{renderer_->canvas_w(), renderer_->canvas_h()} : CanvasLayout::of(aspect_); }
     const LayoutRect& picture() const noexcept { return picture_; }
@@ -357,6 +358,11 @@ public:
     /// Gives every consumer a layout: the renderer's view and camera, the HUD's rectangles, and (through `layout()`) the edge scroll, the pointer's limits, the sound listener,
     /// the network overlay and the start view. The original's picture until it is told otherwise; the canvas (`renderer().set_canvas_size`) is a separate choice.
     void set_layout(const ScreenLayout& layout);
+    /// THE LIVE SWITCH OF THE PICTURE'S SHAPE (the page's selector, web build): the game goes on in another shape without a restart. The canvas, the match screen's layout, the HUD, the camera and the
+    /// pages all follow; what a match is (the simulation, the network, the seats, the selection, the orders, the sounds) is not touched. In a match the world point in the middle of the map view stays in
+    /// the middle, and the zoom that the player chose comes back when the new view offers it. The pointer keeps its coordinates held to the new picture until it moves. A native window keeps its size
+    /// (SDL scales the new canvas into it with bars). False when the game has no renderer yet; true for the shape that it already has (nothing happens).
+    bool set_aspect(Aspect aspect);
     HUD& hud() noexcept { return hud_; }
     ScorecardModal& scorecard() noexcept { return scorecard_; }
     MidiPlayer& midi_player() noexcept { return midi_player_; }
@@ -445,7 +451,7 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
-    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match): the
+    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link: ants_leave_match): the
     /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
     /// its seat is held and its key kept, which is what lets it come back.
     void leave_network_match();
@@ -819,8 +825,10 @@ private:
     void offer_replay();                                               // last_replay_: the desktop game writes it beside its settings (the web build has no recording to offer)
     void withdraw_replay();                                            // a match begins: the last file is let go
 
-    bool wide_setup() const;                              // the canvas is the 960 x 540 one that the setup screen's wide version is made for
-    bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same canvas: wide_page.hpp)
+    bool wide_setup() const;                              // the page is the 960 x 540 one that the setup screen's wide version is made for (the canvas itself, or centred in a bigger one: CanvasLayout::page)
+    bool wide_pages() const;                              // ... and the loading screen, the quick help, the results and the start menu (the same page: wide_page.hpp)
+    bool page_up() const;                                 // a page is the screen (not the match): the setup screen, the room, the loading screen, the quick help, the start menu, the results, the catch-up screen
+    LayoutRect corner_area() const;                       // where the corner's plate (frame rate, version, ping) stands: the canvas's corner in a match, the page's own corner on a page
     LayoutRect picture_for_state() const;                 // where the picture on screen sits in the canvas: the match is the layout's picture (the whole canvas, the original's own 640 x 480 in a 4:3 canvas), and so is every other screen
     void update_picture();                                // the screen changed (a match starts, the results open, the setup screen is back): the picture and the pointer's coordinates follow
     WindowRect initial_window_rect() const;                // what the window is created as: the picture's shape (see the definition)

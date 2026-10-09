@@ -1172,6 +1172,41 @@ void test_chat_log(const assets::AssetArchive& arc) {
         check(h3.get_chat_log().size() > before + 3, "a new measure lays every entry out again");
     }
 
+    // the picture's shape changes while the log is open (the browser's selector): a window that shows the newest line keeps showing it in a shorter view (16:10 has a 221 px log, the classic
+    // picture 101 px)
+    {
+        const ScreenLayout tall = ScreenLayout::with_size(960, 600);
+        check(tall.chat_view().h == 221 && ScreenLayout::classic().chat_view().h == 101, "the logs of the 16:10 and the classic picture are 221 and 101 px high");
+        HUD h5;
+        h5.init(0);
+        h5.set_ticks_function(&chat_clock);
+        g_chat_clock = 9000;
+        h5.set_layout(tall);
+        for (int i = 0; i < 14; ++i) h5.add_chat_entry("Ann", "a line of the chat", false, 2);
+        for (int i = 0; i < 400 && h5.chat_follow_pos() != h5.chat_follow_target(); ++i) {
+            g_chat_clock += 50;
+            h5.update(sim.get_world_state(), 1);
+        }
+        const int32_t end = h5.chat_content_end();
+        check(end > 221 + 40 && h5.chat_follow_pos() == h5.chat_follow_target() && h5.chat_follow_pos() == end - 1 - 221, "16:10: the window has followed the newest line to the log's end");
+        h5.set_layout(ScreenLayout::classic());
+        check(h5.chat_follow_pos() == end - 1 - 101 && h5.chat_follow_target() == h5.chat_follow_pos(), "... in the classic picture's shorter log it still shows the newest line (the last row is the entry's)");
+        h5.set_layout(tall);
+        check(h5.chat_follow_pos() == end - 1 - 221 && h5.chat_follow_target() == h5.chat_follow_pos(), "... and back in 16:10 it ends at the log's end again");
+        h5.set_layout(ScreenLayout::classic());
+        h5.set_layout(ScreenLayout::classic());
+        check(h5.chat_follow_pos() == end - 1 - 101, "the same shape again changes nothing");
+
+        // the follow task has not run yet: the window is still at the top of the log, away from its target, and the target is the new end
+        HUD h7;
+        h7.init(0);
+        h7.set_ticks_function(&chat_clock);
+        h7.set_layout(tall);
+        for (int i = 0; i < 14; ++i) h7.add_chat_entry("Cy", "a line of the chat", false, 1);
+        h7.set_layout(ScreenLayout::classic());
+        check(h7.chat_follow_pos() <= h7.chat_follow_target() && h7.chat_follow_target() == h7.chat_content_end() - 1 - 101, "a window on its way to the newest line is sent to the new end");
+    }
+
     // the transcript the original writes to chat.txt at the end of the program (0x10122d4): "date @ time", a blank line, "header body" per entry. The start of the original's own file:
     {
         HUD h4;

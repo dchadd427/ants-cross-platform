@@ -36,8 +36,48 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertRegex(page, r'id="aspect-4-3" data-aspect="4:3" aria-checked="false"')
         self.assertRegex(page, r"#game-stage \{\s*--ar-w: 16;\s*--ar-h: 9;")              # the slot's own shape; only data-aspect="4:3" changes it
         self.assertRegex(page, r'#game-stage\[data-aspect="4:3"\] \{\s*--ar-w: 4;\s*--ar-h: 3;')
+        self.assertRegex(page, r'#game-stage\[data-aspect="16:10"\] \{\s*--ar-w: 8;\s*--ar-h: 5;')       # the slot of the two other shapes (their smallest whole numbers)
+        self.assertRegex(page, r'#game-stage\[data-aspect="21:9"\] \{\s*--ar-w: 7;\s*--ar-h: 3;')
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
         self.assertIn("return { aspect: '16:9', source: 'default' };", page)                 # nothing says otherwise: 16:9 on every device, a phone held upright included
+
+    def test_the_selector_has_the_four_shapes_in_this_order_with_these_hover_texts(self):
+        page = read(SHELL)
+        bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
+        buttons = re.findall(r'<button type="button" role="radio" id="aspect-([0-9-]+)" data-aspect="([0-9:]+)" aria-checked="(true|false)" title="([^"]+)">([^<]+)</button>', bar)
+        self.assertEqual([(b[0], b[1], b[2], b[3], b[4]) for b in buttons], [
+            ("4-3", "4:3", "false", "Classic 4:3: the original's picture (640 x 480)", "Classic 4:3"),
+            ("16-10", "16:10", "false", "16:10: laptops and 16:10 monitors (960 x 600)", "16:10"),
+            ("16-9", "16:9", "true", "16:9: the wide picture (960 x 540)", "16:9"),
+            ("21-9", "21:9", "false", "21:9: ultrawide monitors (1260 x 540)", "21:9"),
+        ])
+        self.assertEqual(bar.count('<span class="fit-tag" hidden>fills your screen</span>'), 4)             # one tag under each button, hidden until the script says which shape is the screen's
+
+    def test_the_page_and_the_game_agree_on_the_shapes(self):
+        """The selector's order is the game's kAllAspects, ants_set_aspect takes the shape's place in it, and each canvas is a whole number of steps of the page's box."""
+        page = read(SHELL)
+        header = read(os.path.join(REPO, "include", "ants_app", "canvas_layout.hpp"))
+        game = read(os.path.join(REPO, "src", "ants_app", "application.cpp"))
+        order = re.search(r"kAllAspects = \{([^}]*)\}", header).group(1)
+        self.assertEqual([x.strip() for x in order.split(",")], ["Aspect::Classic4x3", "Aspect::Wide16x10", "Aspect::Wide16x9", "Aspect::Ultra21x9"])
+        self.assertIn("var SHAPE_ORDER = ['4:3', '16:10', '16:9', '21:9'];", page)
+        self.assertIn("extern \"C\" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {", game)
+        self.assertIn("Module._ants_set_aspect(ANTS_PAGE.shapeNumber(ANTS_ASPECT))", page)
+        steps = {"4:3": (4, 3), "16:10": (8, 5), "16:9": (16, 9), "21:9": (7, 3)}
+        canvas = {"4:3": (640, 480), "16:10": (960, 600), "16:9": (960, 540), "21:9": (1260, 540)}
+        for name, (w, h) in steps.items():
+            self.assertIn("'" + name + "': { w: %d, h: %d }" % (w, h), page)
+            self.assertEqual((canvas[name][0] % w, canvas[name][1] % h), (0, 0), name)
+            self.assertEqual(canvas[name][0] // w, canvas[name][1] // h, name)                           # the same number of steps on both axes: the canvas has the box's shape
+        self.assertIn("kWideCanvasWidth = 960", header)
+        self.assertIn("kWideCanvasHeight = 540", header)
+
+    def test_the_selector_changes_the_picture_in_place(self):
+        page = read(SHELL)
+        block = page[page.index("ANTS_SELECTOR_BEGIN"):page.index("ANTS_SELECTOR_END")]
+        self.assertNotIn("window.location.assign", block)                                                # no reload
+        self.assertNotIn("window.confirm", block)                                                        # no "Leave the match to change the picture?"
+        self.assertIn("antsSetAspect(value);", block)
 
     def test_the_front_page_frames_and_buttons_start_with_16_9(self):
         page = read(LOBBY)

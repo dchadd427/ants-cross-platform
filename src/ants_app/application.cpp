@@ -433,10 +433,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--start-menu") == 0) {                // forces the start menu (also headless, with --screenshot: the tests and the screenshots)
             menu_forced = true;
-        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect 16:9 | 4:3 (nothing else exists yet)
+        } else if (std::strcmp(argv[i], "--aspect") == 0) {                      // --aspect 4:3 | 16:10 | 16:9 | 21:9 (nothing else exists yet)
             std::string why;
             if (i + 1 >= argc) {
-                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs 16:9 or 4:3";
+                if (cfg.startup_error.empty()) cfg.startup_error = "--aspect needs 4:3, 16:10, 16:9 or 21:9";
             } else if (parse_aspect(argv[++i], cfg.aspect, why)) {
                 cfg.aspect_given = true;
             } else if (cfg.startup_error.empty()) {
@@ -930,24 +930,64 @@ void Application::set_layout(const ScreenLayout& layout) {
     hud_.set_layout(layout_);
 }
 
+// The live switch of the picture's shape (application.hpp). The canvas is SDL's logical size, so the next frame is drawn in the new shape and scaled into the window (a page's box changes with it: the
+// web page sizes the canvas to the shape in the same breath); the match screen's layout is the new canvas's; the HUD places its rectangles again; every page is composed for the new canvas (the 960 x 540
+// page centred in a 16:10 or 21:9 one: update_picture). The simulation, the network and the match's own state are never read or written here. In a match the camera keeps the world point in the middle
+// of the view (a view that grew shows more around it, a view that shrank less) and takes the zoom that the player chose, or the nearest level that the new view offers (the limit of the zoom-out follows
+// the view's shape): the level that the player chose stays remembered, so that a shape that offers it again gets it back.
+bool Application::set_aspect(Aspect aspect) {
+    if (!renderer_) return false;
+    if (aspect == aspect_) return true;
+    ViewportCamera& camera = renderer_->camera();
+    const double middle_x = static_cast<double>(camera.x) + zoom::visible_exact(camera.viewport_w, camera.zoom) / 2.0;
+    const double middle_y = static_cast<double>(camera.y) + zoom::visible_exact(camera.viewport_h, camera.zoom) / 2.0;
+    aspect_ = aspect;
+    renderer_->set_canvas_size(canvas_width_of(aspect_), canvas_height_of(aspect_));       // (this forgets the picture: the picture that the application remembers is set again, update_picture compares with it)
+    layout_ = ScreenLayout::with_size(canvas_width_of(aspect_), canvas_height_of(aspect_));
+    renderer_->set_picture(picture_);
+    renderer_->set_layout(layout_);
+    hud_.set_layout(layout_);
+    update_picture();
+    if (state_ == AppState::Playing) {
+        const LayoutRect view = layout_.view();
+        const float level = zoom::level_for_match(zoom_wanted_, zoom_fit(), zoom_limits());
+        camera.zoom = level;
+        const double ox = middle_x - zoom::visible_exact(view.w, level) / 2.0;
+        const double oy = middle_y - zoom::visible_exact(view.h, level) / 2.0;
+        camera.set_origin(level == zoom::kNormal ? std::floor(ox + 0.5) : ox, level == zoom::kNormal ? std::floor(oy + 0.5) : oy, current_level_.width(), current_level_.height());
+    }
+    return true;
+}
+
 // Where the picture that is on screen sits in the canvas: a match is the layout's picture (the whole canvas of its aspect), and so is every other screen: the setup screen and the room, the
 // loading screen, the quick help, the results and the start menu of a 960 x 540 canvas are composed for it (setup_layout.hpp, page_layout.hpp, results_layout.hpp, start_menu.hpp), and in the
 // 640 x 480 canvas the original's own pages are the whole canvas
 LayoutRect Application::picture_for_state() const {
     if (match_running()) return canvas().centred(layout_.width, layout_.height);
-    return canvas().rect();
+    return canvas().page();
 }
 
-// The setup screen has a wide version for the 16:9 canvas of 960 x 540 (and for no other size: any other canvas draws the original's page)
+// A page is on the screen: every screen but the match (the catch-up screen is drawn inside a match: it is a page too, the loading screen of a machine that runs the match from the server's log)
+bool Application::page_up() const {
+    return !match_running() || catch_up_screen_active();
+}
+
+// The frame rate, the version and the network's readout stand in the corner of the picture that is up: the canvas's corner in a match (the viewport: the same in every layout), and on a page the
+// page's own corner, which is the canvas's where the page is the canvas (16:9, 4:3) and the 960 x 540 page's in the other wide shapes, so that the readout is never in the black beside a page
+LayoutRect Application::corner_area() const {
+    return page_up() ? canvas().page() : canvas().rect();
+}
+
+// The setup screen has a wide version for the 16:9 canvas of 960 x 540, which is also the page of the 16:10 and 21:9 canvases (CanvasLayout::page: centred in them); any other canvas draws the original's page
 bool Application::wide_setup() const {
-    const CanvasLayout c = canvas();
-    return SetupLayout::supports(c.width, c.height);
+    const LayoutRect p = canvas().page();
+    return SetupLayout::supports(p.w, p.h);
 }
 
 // ... and so have the loading screen, the quick help at the start, the results and the start menu: the same canvas
 bool Application::wide_pages() const {
-    const CanvasLayout c = canvas();
-    return wide_pages_supported(c.width, c.height);
+    const LayoutRect p = canvas().page();
+    return wide_pages_supported(p.w, p.h);
 }
 
 // The picture changes when the layout does (a match of another layout: the original's own 640 x 480 picture centred in a 960 x 540 canvas, a test hook; every screen is the whole canvas, so
@@ -974,7 +1014,7 @@ void Application::update_picture() {
 
 // --aspect, else the settings' key `aspect`, else the default of the platform (parse_arguments puts it into the config: kPlatformDefaultAspect in canvas_layout.hpp, 16:9 on a desktop and
 // in the web build, whose page passes the shape it shows as `--aspect`); a config that is made by hand keeps its own aspect (the original's 4:3 unless it says otherwise). A settings file
-// never stops the game: a value that is not 16:9 or 4:3 is reported and ignored. The settings of the web build are the browser's local storage (the same key).
+// never stops the game: a value that is none of 4:3, 16:10, 16:9 and 21:9 is reported and ignored. The settings of the web build are the browser's local storage (the same key).
 void Application::choose_aspect() {
     aspect_ = config_.aspect;
     if (!config_.aspect_given && config_store_.has("aspect")) {
@@ -1766,8 +1806,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
 }
 
-// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button, the footer's Menu link, the picture selector's "Leave the match to change the picture?" once
-// the player has said yes): the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
+// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button and the footer's Menu link, once the player has said yes):
+// the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
 // reload do not call it: the seat is held and the key kept, so that the player can come back. The page calls it only once the game runs (isReadyToPlay).
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
     if (g_web_app != nullptr) g_web_app->leave_network_match();
@@ -1780,8 +1820,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_touch_cancel() {
     if (g_web_app != nullptr) g_web_app->cancel_touch_queued();
 }
 
-// For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The selector of the picture under the game restarts the game
-// (the picture is made when the game starts), so it asks the player first when this says 1. A recording that is watched is no match to lose: 0.
+// For the page (web/shell.html): the selector of the picture under the game changes the shape of the picture while the game runs (Application::set_aspect: no reload, no new match, nothing of the
+// simulation is touched). `shape` is the place of the shape in the selector, left to right: 0 Classic 4:3, 1 16:10, 2 16:9, 3 21:9 (kAllAspects: a number, because the page's exports take only
+// numbers). Returns 1 when the game has that shape now (also when it had it already), 0 for a number that is no shape (nothing changes), -1 when the game is not up yet (the page asks again
+// when it is: its postRun hook, and the arguments that it starts with name the shape that the page has now).
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_set_aspect(int shape) {
+    if (g_web_app == nullptr) return -1;
+    if (shape < 0 || static_cast<size_t>(shape) >= kAllAspects.size()) return 0;
+    return g_web_app->set_aspect(kAllAspects[static_cast<size_t>(shape)]) ? 1 : -1;
+}
+
+// For the page (web/shell.html): 1 while a match is being played (the match screen is up and its results are not), else 0. The Menu button and the footer's link ask the player first when this says 1
+// (the picture's selector does not: it changes the shape without leaving the match). A recording that is watched is no match to lose: 0.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_match_running() {
     return (g_web_app != nullptr && !g_web_app->replay_mode() && g_web_app->match_running()) ? 1 : 0;
 }
@@ -1808,6 +1858,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
+// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the selector, left to right: 0 4:3, 1 16:10, 2 16:9, 3 21:9: the
+// index in kAllAspects), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // Anything else, or no game: -1.
@@ -1860,6 +1912,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             for (const ants::sim::AntSnapshot& ant : g_web_app->sim().get_world_state().ants) alive += ant.player_id == what - 21 ? 1 : 0;
             return alive;
         }
+        case 40: return g_web_app->canvas().width;
+        case 41: return g_web_app->canvas().height;
+        case 42: {                                                       // the shape's place in the selector (ants_set_aspect's number)
+            for (size_t i = 0; i < kAllAspects.size(); ++i) {
+                if (kAllAspects[i] == g_web_app->aspect()) return static_cast<int>(i);
+            }
+            return -1;
+        }
+        case 43: return g_web_app->picture().x;
+        case 44: return g_web_app->picture().y;
+        case 45: return g_web_app->picture().w;
+        case 46: return g_web_app->picture().h;
         case 30: return static_cast<int>(g_web_app->touch().stats().taps);
         case 31: return static_cast<int>(g_web_app->touch().stats().holds);
         case 32: return static_cast<int>(g_web_app->touch().stats().drags);
@@ -3092,7 +3156,7 @@ int32_t Application::catch_up_percent() const {
 }
 
 void Application::render_catch_up_screen() {
-    renderer_->set_picture(canvas().rect());                             // (the loading screen is the whole canvas, whatever picture the match has)
+    renderer_->set_picture(canvas().page());                             // (the loading screen is the whole canvas, or the 960 x 540 page centred in a bigger one, whatever picture the match has)
     draw_catch_up_screen(*renderer_, assets_, wide_pages(), catch_up_percent());
     renderer_->set_picture(picture_);
     hud_.render_quit_dialog_alone(*renderer_, assets_);                  // (Esc asked: the dialog is the match's own, over this picture)
@@ -3232,9 +3296,10 @@ void Application::render_frame() {
     }
 
     // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout):
-    // the plate is the canvas's, not the picture's
-    renderer_->set_picture(canvas().rect());
-    const CornerPlate plate = CornerPlate::for_canvas(renderer_->canvas_w(), renderer_->canvas_h());
+    // the plate is the canvas's, not the picture's (a page is the picture's own corner: corner_area)
+    const LayoutRect corner = corner_area();
+    renderer_->set_picture(corner);
+    const CornerPlate plate = CornerPlate::for_canvas(corner.w, corner.h);
     int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
     std::string fps_text = std::to_string(fps_val) + " FPS";
     int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
