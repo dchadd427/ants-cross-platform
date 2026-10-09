@@ -5401,7 +5401,10 @@ int main() {
             room.run(100);
             ASSERT_EQ(room.host.mode(), 1);
             ASSERT_EQ(room.guests[ann].lobby->room().mode, 1);
+            room.guests[ann].lobby->take_events();
             room.host.set_mode(1);                                                    // (the same mode: nothing is sent again)
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->take_events().empty());
             room.host.set_mode(0);
             room.run(100);
             ASSERT_EQ(room.guests[ann].lobby->room().mode, 0);

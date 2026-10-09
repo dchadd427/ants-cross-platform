@@ -143,6 +143,8 @@ int main() {
         b.init(tiny, 9u);
         ASSERT_TRUE(a.state_hash() == b.state_hash());
         ASSERT_TRUE(!(a.state_hash() == plain.state_hash()));
+        ASSERT_TRUE(a.state_hash().engine != plain.state_hash().engine);        // the mode word itself is in the engine part (the map's food and droppers are other parts)
+        ASSERT_TRUE(explicit_default.state_hash().engine == plain.state_hash().engine);
         // 187's engine part alone (the mode word) is mixed in: the same state with the word taken away would hash like the other engine's
         for (int i = 0; i < 400; ++i) { a.tick(); b.tick(); }
         ASSERT_TRUE(a.state_hash() == b.state_hash());
@@ -241,6 +243,30 @@ int main() {
             plain_drops = plain_drops || plain_end > plain_start;
         }
         ASSERT_TRUE(plain_drops);                                          // (the check is able to see a drop: some shipped map drops one in three minutes without the mode)
+    } TEST_END();
+
+    TEST_CASE("2.6 the food and the droppers are gone from the engine's lists, not only from the tiles: the hash parts of the food objects and of the droppers are those of a world that never had any") {
+        SimulationEngine empty;
+        empty.init_test_world(40, 40, 11, 720000);
+        const StateHash none = empty.state_hash();
+        bool plain_has_food = false;
+        bool plain_has_droppers = false;
+        for (const char* name : kMaps) {
+            const LevelData level = load_map(name);
+            SimulationEngine plain;
+            plain.init(level, 21u);
+            plain_has_food = plain_has_food || plain.state_hash().food != none.food;
+            plain_has_droppers = plain_has_droppers || plain.state_hash().droppers != none.droppers;
+            SimulationEngine e;
+            e.set_game_mode(GameMode::Kills187);
+            e.init(level, 21u);
+            ASSERT_TRUE(e.state_hash().food == none.food);
+            ASSERT_TRUE(e.state_hash().droppers == none.droppers);
+            for (int t = 0; t < 400; ++t) e.tick();
+            ASSERT_TRUE(e.state_hash().food == none.food);
+            ASSERT_TRUE(e.state_hash().droppers == none.droppers);
+        }
+        ASSERT_TRUE(plain_has_food && plain_has_droppers);                    // (the check is able to see them: the maps have food and droppers without the mode)
     } TEST_END();
 
     TEST_CASE("3.1 a kill is a point: the killer's score and its enemy_killed go up together, the victim's team loses an ant, nothing else scores") {
@@ -484,6 +510,78 @@ int main() {
         ASSERT_TRUE(r.is_winner(1) && !r.is_winner(0) && !r.is_winner(2));
     } TEST_END();
 
+    TEST_CASE("3.7b allies, the lower-numbered one is wiped out: the alliance is still a side because the other is alive, the match goes on against the enemy, and when the enemy is gone the one that is left stands, its row (the alliance's, made by the dead lower team) first") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2});
+        e.apply_command([] { Command c; c.type = CommandType::AllianceInvite; c.issuer = 0; c.other_player = 1; return c; }());
+        e.apply_command([] { Command c; c.type = CommandType::AllianceAccept; c.issuer = 1; c.other_player = 0; return c; }());
+        ASSERT_EQ(e.alliance_of(0), 1);
+        kill_pair(e, 2, 1);
+        kill_pair(e, 2, 1);                                                // the enemy has 2 kills, the alliance none
+        for (const AntSnapshot& a : ants_of(e, 0)) e.kill_unit(a.id);
+        run_ticks(e, 60);
+        ASSERT_FALSE(e.is_match_over());                                   // team 1 and team 2 are alive: two sides
+        for (const AntSnapshot& a : ants_of(e, 2)) e.kill_unit(a.id);
+        run_ticks(e, 60);
+        ASSERT_TRUE(e.is_match_over());
+        const MatchResult r = e.get_world_state().match_result;
+        ASSERT_EQ(r.standing, 1);                                          // (team 0 is dead: the one that is left is the second team of the alliance's row)
+        for (uint8_t local = 0; local < 3; ++local) {
+            const std::vector<ResultRow> rows = r.rows(local);
+            ASSERT_EQ(rows[0].first, 0);
+            ASSERT_EQ(rows[0].second, 1);
+            ASSERT_EQ(rows[1].first, 2);                                   // the enemy had the kills and goes second, on its own screen too
+        }
+        ASSERT_TRUE(r.is_winner(1) && r.is_winner(0) && !r.is_winner(2));
+    } TEST_END();
+
+    TEST_CASE("3.8b a team that dropped out is not alive although it still has eggs: the others decide the match (a match of 3 with eggs for everybody, one drops, one is killed)") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2});
+        e.set_player_eggs(2, 2);
+        e.apply_command([] { Command c; c.type = CommandType::Drop; c.issuer = 2; return c; }());
+        run_ticks(e, 100);
+        ASSERT_FALSE(e.is_match_over());                                   // teams 0 and 1 are left
+        for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);
+        run_ticks(e, 60);
+        ASSERT_TRUE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+    } TEST_END();
+
+    TEST_CASE("3.11 a roster of exactly two teams, as in a match of two players (every pair of seats, every shipped map): it goes on while both have ants and ends when one of them has nothing left; the other stands") {
+        for (const char* name : kMaps) {
+            const LevelData level = load_map(name);
+            for (const uint8_t roster : {uint8_t{0x03}, uint8_t{0x05}, uint8_t{0x09}, uint8_t{0x06}, uint8_t{0x0A}, uint8_t{0x0C}}) {
+                if (!level.validate(roster).playable) continue;
+                uint8_t seats[2] = {0, 0};
+                int n = 0;
+                for (uint8_t p = 0; p < MAX_PLAYERS; ++p) if ((roster & (1u << p)) != 0) seats[n++] = p;
+                SimulationEngine e;
+                e.set_game_mode(GameMode::Kills187);
+                e.init(level, 5u, roster);
+                run_ticks(e, 100);
+                ASSERT_FALSE(e.is_match_over());
+                ASSERT_TRUE(!ants_of(e, seats[1]).empty());
+                e.set_player_eggs(seats[1], 0);
+                for (const AntSnapshot& a : ants_of(e, seats[1])) e.kill_unit(a.id);
+                run_ticks(e, 100);
+                ASSERT_TRUE(e.is_match_over());
+                ASSERT_EQ(e.get_world_state().match_result.standing, seats[0]);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("3.12 `standing` names the team that is left only when the match is over: between the removal of the last enemy ant and the end of the match (the rule looks every 200 ms) it is nobody") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1});
+        for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);
+        const WorldState& before = e.get_world_state();
+        ASSERT_EQ(before.match_result.ants_left[1], 0u);                   // the ants are gone, the rule has not looked yet
+        ASSERT_EQ(before.match_result.ants_left[0], 3u);
+        ASSERT_FALSE(e.is_match_over());
+        ASSERT_EQ(before.match_result.standing, PLAYER_NEUTRAL);
+        run_ticks(e, 40);
+        ASSERT_TRUE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+    } TEST_END();
+
     TEST_CASE("4.1 the eggs are lives: a team with an egg is not out when its last ant dies, the free hatch costs it none of its kills, and the match goes on until the egg is hatched and the ant killed") {
         SimulationEngine e = small_world(GameMode::Kills187, {0, 1}, 1);
         kill_pair(e, 1, 0);
@@ -508,6 +606,18 @@ int main() {
         ASSERT_TRUE(f.is_match_over());
         ASSERT_EQ(f.get_world_state().match_result.standing, 0);
         ASSERT_EQ(f.get_world_state().player_scores[0], 2);
+    } TEST_END();
+
+    TEST_CASE("4.1c an egg alone keeps a side alive (no ant, no hatch yet): the match goes on; it ends when the egg is gone and the last ant with it") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0});
+        e.set_player_eggs(1, 2);                                           // team 1 has two eggs and not one ant
+        run_ticks(e, 200);
+        ASSERT_FALSE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, PLAYER_NEUTRAL);
+        e.set_player_eggs(1, 0);
+        run_ticks(e, 40);
+        ASSERT_TRUE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, 0);
     } TEST_END();
 
     TEST_CASE("4.1b a hatch that a player asks for needs 200 kills in 187 (as it needs 200 points elsewhere) and takes none of them") {

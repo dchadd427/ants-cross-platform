@@ -951,6 +951,47 @@ void run_bot_tests() {
         ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{4});
     } TEST_END();
 
+    TEST_CASE("AI6.11d --game-mode 187 Is The Room's Mode When The Application Hosts: The Room Shows It To A Guest Before START, The Start Carries It, And Both Machines Play A Game Without Food (The Same State); No Option Is The Original's Game") {
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.game_mode = 1;
+        cfg.game_mode_given = true;
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        ASSERT_EQ(app.net()->room().mode, 1);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->can_start() && bob.net.phase() == net::NetGame::Phase::Room; }, 8000));
+        ASSERT_EQ(bob.net.room().mode, 1);                                                                                 // the guest's setup screen is told
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(bob.net.start_info().mode, 1);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187 && bob.sim.game_mode() == sim::GameMode::Kills187);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        for (const auto& cell : bob.sim.get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1);
+        duo.step(4000 + kDialogMs);
+        app.net()->freeze();                                                                                               // the host stops sealing: what is in flight arrives, then both are at the same tick
+        duo.step(3000);
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        // no option: the room is the original's
+        ApplicationConfig cfg0 = headless_config();
+        cfg0.net_role = ApplicationConfig::NetRole::Host;
+        cfg0.net_port = 0;
+        cfg0.net_loopback_only = true;
+        cfg0.player_name = "Alice";
+        Application plain;
+        ASSERT_TRUE(plain.init(cfg0));
+        ASSERT_EQ(plain.net()->room().mode, 0);
+    } TEST_END();
+
     TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;

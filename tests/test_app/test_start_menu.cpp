@@ -2251,7 +2251,11 @@ int main(int argc, char* argv[]) {
         for (const auto& args : std::vector<std::vector<std::string>>{{"--replay", "x.antsrep", "--game-mode", "187"}, {"--game-mode", "187", "--replay", "x.antsrep"},
                                                                     {"--join", "127.0.0.1:4001", "--game-mode", "187"}, {"--game-mode", "187", "--join", "127.0.0.1:4001"},
                                                                     {"--join-url", "ws://x/ws", "--game-mode", "187"}, {"--game-mode", "187", "--join-url", "ws://x/ws"},
-                                                                    {"--room", "abc", "--game-mode", "187"}, {"--game-mode", "187", "--room", "abc"}}) {
+                                                                    {"--room", "abc", "--game-mode", "187"}, {"--game-mode", "187", "--room", "abc"},
+                                                                    {"--room-map", "tiny", "--game-mode", "187"}, {"--game-mode", "187", "--room-map", "tiny"},       // (the options of the room that a server makes when a join finds none: the room's rules are the creator's plan, not this word)
+                                                                    {"--room-seats", "3", "--game-mode", "187"}, {"--game-mode", "187", "--room-seats", "3"},
+                                                                    {"--room-teams", "ffa", "--game-mode", "187"}, {"--game-mode", "187", "--room-teams", "0+1"},
+                                                                    {"--room-leader-start", "--game-mode", "187"}, {"--game-mode", "187", "--room-leader-start"}}) {
             c = parse(args);
             if (c.startup_error.empty()) std::cout << "\n    no error for " << args[0] << " " << args[1];
             ASSERT_TRUE(c.startup_error.find("--game-mode ") == 0 && (c.startup_error.find("cannot be") != std::string::npos));

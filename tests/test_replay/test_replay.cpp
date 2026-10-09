@@ -1445,6 +1445,12 @@ int main(int argc, char* argv[]) {
             Replay mode_255 = p.replay;
             mode_255.head.mode = 255;
             ASSERT_TRUE(refused(mode_255, "game mode"));
+            for (const uint8_t unknown : {uint8_t{2}, uint8_t{255}}) {          // a mode that nobody has with the rules number of a later build (3, 255): no rule about the pair catches it, only the mode itself does
+                Replay later_build = p.replay;
+                later_build.head.mode = unknown;
+                later_build.head.sim_rules = unknown == 2 ? uint16_t{3} : uint16_t{255};
+                ASSERT_TRUE(refused(later_build, "game mode"));
+            }
             std::string error;
             ASSERT_TRUE(!encode(p.replay, error).empty() && !encode(original.replay, error).empty());     // (and the two that belong together are written)
         }
@@ -1505,7 +1511,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(sim_rules_for_mode(0) == 1 && sim_rules_for_mode(1) == 2 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         {
             struct Case { uint8_t mode; uint16_t rules; bool plays; };
-            for (const Case& c : {Case{0, 1, true}, Case{1, 2, true}, Case{0, 2, false}, Case{1, 1, false}, Case{0, 3, false}, Case{1, 3, false}, Case{2, 2, false}, Case{2, 1, false}, Case{2, 3, false}, Case{0, 0, false}, Case{1, 0, false}}) {
+            for (const Case& c : {Case{0, 1, true}, Case{1, 2, true}, Case{0, 2, false}, Case{1, 1, false}, Case{0, 3, false}, Case{1, 3, false}, Case{2, 2, false}, Case{2, 1, false}, Case{2, 3, false}, Case{0, 0, false}, Case{1, 0, false}, Case{2, 0, false}, Case{3, 0, false}, Case{255, 0, false}}) {
                 Header h = original.replay.head;
                 h.mode = c.mode;
                 h.sim_rules = c.rules;

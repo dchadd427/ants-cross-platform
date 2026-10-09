@@ -849,6 +849,32 @@ int main(int argc, char* argv[]) {
         plain.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA1.10b --game-mode 187 with a map and bots (the game starts at once, with no setup screen): the engine is made with the mode before its first init, so the first tick has no food and the file says game mode 1 and rules 2; no option: the original's game") {
+        Application app;
+        ApplicationConfig cfg = local_config(0x02);
+        cfg.start_in_map_select = false;                                               // (init makes the engine itself: the setup screen's START, which sets the mode in load_match, never comes)
+        cfg.game_mode = 1;
+        cfg.game_mode_given = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.state() == AppState::Playing);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_TRUE(app.sim().get_world_state().flower_droppers.empty());
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1 && app.recorder()->replay().head.sim_rules == replay::kSimRulesMode187);
+        app.shutdown();
+        Application plain;
+        ApplicationConfig cfg0 = local_config(0x02);
+        cfg0.start_in_map_select = false;
+        ASSERT_TRUE(plain.init(cfg0));
+        ASSERT_TRUE(plain.sim().game_mode() == sim::GameMode::HighestScore);
+        bool food = false;
+        for (const auto& cell : plain.sim().get_world_state().cells) food = food || cell.is_food;
+        ASSERT_TRUE(food);
+        ASSERT_TRUE(plain.recorder() != nullptr && plain.recorder()->replay().head.mode == 0 && plain.recorder()->replay().head.sim_rules == replay::kSimRules);
+        plain.shutdown();
+    } TEST_END();
+
     TEST_CASE("RA2.1 A match of the network: the machine's file holds every machine's orders and the quit, names and seats as the Start gave them, and plays out to the state of the match") {
         Peer host;
         Application app;
