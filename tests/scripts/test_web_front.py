@@ -15,8 +15,8 @@ licence text. The page's rules and its client of the game server are two scripts
   - the tool's files say that they are a developer's tool, and its list of the ant's pictures is the game's own animation
   - the ants: all four teams are ONE sheet (ants.png) that the page draws from CSS offsets; every pixel of it is what the game draws for each team, and the page's sizes, rows, columns and timing
     address the right cells of it, at the game's own pace
-  - the panels that the pictures did not draw: the name step (a card with a banner, a field and a refusal line), a room of the test mode (a smaller header, the games as wide as the room's panel), the
-    notices (a name or a code that is refused, the blocked windows) and the exact size of the games' frames in a wide window (the arithmetic of the two breakpoints is checked against the style's own numbers)
+  - the panels that the pictures did not draw: the name step (a card with a banner, a field and a refusal line), the
+    notices (a name or a code that is refused)
   - the page uses the art: every picture it names is in the folder (and the folder holds nothing it does not use), each <img> has the size of its file, the Map Info lines are the ones in the level
     files, nothing is loaded from another site, the pictures that are not seen at once are lazy, the font is preloaded and the picture's shape is chosen with radio buttons that the keyboard reaches
   - the layout at many widths (what needs no browser) and the contrast of the text of the page's components
@@ -741,65 +741,17 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
         self.assertIn("var(--bevel)", self.sheet.value(".name-step-title", "box-shadow"))
         self.assertEqual(self.sheet.colours(".name-step", "background"), [self.sheet.tokens["clay"]])                                       # (the card lies on the same clay as the page, as the game page's own does)
         self.assertIn("var(--tile)", self.sheet.value(".name-step", "background"))
-        for prop in ("color", "background", "border-left"):                                                                                 # (a refused name looks like every other refusal of the page: .msg)
-            self.assertEqual(self.sheet.colours(".name-step-msg", prop), self.sheet.colours(".msg", prop), prop)
+        for prop, token in (("color", "bad-ink"), ("background", "bad-bg"), ("border-left", "bad-edge")):                                   # (a refused name is the page's refusal red: the tokens of every refusal of the pages)
+            self.assertEqual(self.sheet.colours(".name-step-msg", prop), [self.sheet.tokens[token]], prop)
         self.assertEqual(self.sheet.value(".name-step-msg:empty", "display"), "none")                                                       # (and takes no room when there is nothing to say)
         self.assertIn("NAME_MAX = 32;", self.page)
 
     def test_a_notice_is_a_notice_and_a_hint_is_a_hint(self):
-        self.assertRegex(self.page, r'<p class="msg" id="popup-hint" hidden>')                                       # (the browser blocked the windows)
-        self.assertRegex(self.page, r'<p class="hint" id="fill-hint" hidden>')                                       # (what the leader's START does with the empty seats is not an error)
         self.assertRegex(self.page, r'<p class="hint" id="joinhint" role="status">')                                 # (the line under the field of a room code that does not lead anywhere)
         self.assertIn('aria-describedby="joinhint"', self.page)
-        self.assertEqual(self.sheet.colours(".msg", "color"), [self.sheet.tokens["bad-ink"]])
-        self.assertEqual(self.sheet.colours(".msg", "background"), [self.sheet.tokens["bad-bg"]])
-        self.assertEqual(self.sheet.colours(".msg", "border-left"), [self.sheet.tokens["bad-edge"]])
-        for selector in (".msg:empty", ".hint:empty", ".name-step-msg:empty"):
+        for selector in (".hint:empty", ".name-step-msg:empty"):
             self.assertEqual(self.sheet.value(selector, "display"), "none", selector)
         self.assertIn('id="banner" role="status"', self.page)                                                        # (the strip at the top: what the page changed for you, or what did not work)
-
-    def test_a_room_has_a_smaller_header_and_the_page_adds_its_class_once_a_room_is_shown(self):
-        self.assertRegex(self.page, r"classList\.add\('in-room'\);[^\n]*\n\s*\$\('room-panel'\)\.hidden = false;")          # (the room of an address is shown with its class)
-        self.assertRegex(self.page, r"classList\.add\('in-room'\);\s*runTestRoom\(\);")                                     # (and the page opens in the class, before the room is made: no wide header that shrinks)
-        self.assertEqual(self.page.count("classList.add('in-room')"), 2)
-        self.assertEqual(self.page.count("classList.remove('in-room')"), 0)
-        for needle in (".in-room .mast { min-height: 0; }", ".in-room .mast p { display: none; }", ".in-room .mast img { width: 120px; }", ".in-room .wrap { max-width: 1332px; }"):
-            self.assertIn(needle, self.style, needle)
-        self.assertLess(int(re.search(r"\.in-room \.mast img \{ width: (\d+)px; \}", self.style).group(1)), int(self.sheet.value(".mast img", "width")[:-2]))           # (smaller than the lobby's)
-
-    def test_the_games_the_strip_and_the_note_are_as_wide_as_the_room_s_panel(self):
-        wrap = int(re.search(r"\.in-room \.wrap \{ max-width: (\d+)px; \}", self.style).group(1))
-        grid = re.search(r"#grid \{([^}]*)\}", self.style).group(1)
-        padding = int(re.search(r"padding: 0 (\d+)px", grid).group(1))
-        self.assertEqual(int(re.search(r"max-width: (\d+)px", grid).group(1)), wrap)
-        self.assertEqual(padding, int(re.search(r"\.wrap \{[^}]*padding: \d+px (\d+)px", self.style).group(1)))     # the page's own side padding
-        self.assertEqual(int(re.search(r"#sync \{[^}]*max-width: (\d+)px", self.style, re.S).group(1)), wrap - 2 * padding)
-        self.assertIn("calc(100%% - %dpx)" % (2 * padding), re.search(r"#sync \{(.*?)\}", self.style, re.S).group(1))
-        self.assertRegex(self.style, r"\.frames-note \{[^}]*max-width: %dpx;[^}]*padding: 0 %dpx;" % (wrap, padding))
-
-    def test_two_games_side_by_side_get_their_own_size_from_the_windows_that_can_hold_them(self):
-        """A column is the picture and the 2 px border of its cell on both sides (964 and 644); the window needs two columns, the gap, the page's padding and a scrollbar."""
-        grid = re.search(r"#grid \{([^}]*)\}", self.style).group(1)
-        gap = int(re.search(r"gap: \d+px (\d+)px", grid).group(1))
-        padding = int(re.search(r"padding: 0 (\d+)px", grid).group(1))
-        border = int(re.search(r"\.cell \{ border: (\d+)px", self.style).group(1))
-        scrollbar = 15
-        ONLY_THE_DEFAULT_COLUMNS = r':not\(\[data-aspect="4:3"\]\):not\(\[data-aspect="21:9"\]\)'          # (16:9 and 16:10 are 960 wide: one rule)
-        for shape, columns, picture in (("16:9", 964, 960), ("16:10", 964, 960), ("21:9", 1264, 1260), ("4:3", 644, 640)):
-            self.assertEqual(picture + 2 * border, columns)
-            need = 2 * columns + gap + 2 * padding + scrollbar
-            at = re.search(r"@media \(min-width: (\d+)px\) \{\s*body%s #grid \{ grid-template-columns: repeat\(2, %dpx\);" % ({"16:9": ONLY_THE_DEFAULT_COLUMNS, "16:10": ONLY_THE_DEFAULT_COLUMNS, "21:9": r'\[data-aspect="21:9"\]', "4:3": r'\[data-aspect="4:3"\]'}[shape], columns), self.style)
-            self.assertIsNotNone(at, shape)
-            self.assertGreaterEqual(int(at.group(1)), need, "the window of %s px cannot hold two %s games (%d px needed)" % (at.group(1), shape, need))
-            self.assertLess(int(at.group(1)) - need, 20, "the breakpoint of the %s games is far above what they need (%d px)" % (shape, need))
-
-    def test_the_cells_keep_the_cells_border_and_the_frame_is_the_pictures_own_shape(self):
-        self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", self.style)
-        self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', self.style)
-        self.assertIn('body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }', self.style)
-        self.assertIn('body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }', self.style)
-        for seat, place in (("3", "0"), ("0", "1"), ("1", "2"), ("2", "3")):                       # Black, Green, Red, Blue: the way the four hills lie
-            self.assertIn('.cell[data-seat="%s"] { order: %s; }' % (seat, place), self.style)
 
 
 class TheCardsAtManyWidths(unittest.TestCase):
@@ -862,7 +814,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertEqual(self.sheet.value(".invite input", "text-overflow"), "ellipsis")                        # (a field can shrink under its row: a long link never makes the page wider)
         self.assertEqual(self.sheet.value(".joinbox input", "min-width"), "0")
         self.assertEqual(self.sheet.value(".joinbox input", "flex"), "1")
-        for selector in (".invite-note", ".invite-note .rt", ".morebox", ".rejoin", ".banner"):               # (the lines of the page wrap: the note under the link, the test mode's buttons, the strips)
+        for selector in (".invite-note", ".invite-note .rt", ".rejoin", ".banner"):                           # (the lines of the page wrap: the note under the link, the strips)
             self.assertEqual(self.sheet.value(selector, "flex-wrap"), "wrap", selector)
         self.assertIn(".head { margin-bottom: 10px; flex-wrap: wrap; }", self.phone)
 
@@ -925,7 +877,6 @@ class TheColours(unittest.TestCase):
 
     def test_the_banners_buttons_and_hovered_buttons_keep_their_text_readable(self):
         self.check((
-            ("gold title on the room's teal banner", (".room-title", "color"), (".room-title", "background")),
             ("gold title on the name step's teal banner", (".name-step-title", "color"), (".name-step-title", "background")),
             ("cream text on a teal button", (".btn", "color"), (".btn", "background")),
             ("cream text on a hovered button", (".btn", "color"), (".btn:hover", "background-color")),
@@ -950,18 +901,9 @@ class TheColours(unittest.TestCase):
             ("the room code's box", (".code b", "color"), (".code b", "background")),
             ("the note under the link", (".invite-note", "color"), (".panel", "background")),
             ("the links under the link", (".invite-note button", "color"), (".panel", "background")),
-            ("the words of the test mode", (".morebox span", "color"), (".panel", "background")),
             ("a hint", (".hint", "color"), (".panel", "background")),
             ("the note under the colours", (".slots-note", "color"), (".panel", "background")),
             ("a refused team", (".teams-note.warn", "color"), (".panel", "background")),
-            ("the state of the games", ("#sync", "color"), ("#sync", "background")),
-            ("the state of the games, in step", ("#sync.ok", "color"), ("#sync", "background")),
-            ("the state of the games, a seat that is lost", ("#sync.bad", "color"), ("#sync.bad", "background")),
-            ("the label of a game", (".label", "color"), (".label", "background")),
-            ("the seat in the label of a game", (".label .seat", "color"), (".label", "background")),
-            ("a seat of the test mode's list", (".seatrow", "color"), (".roster", "background")),
-            ("the state of a seat of the list", (".seatrow .state", "color"), (".roster", "background")),
-            ("a refusal", (".msg", "color"), (".msg", "background")),
             ("the name step's refusal", (".name-step-msg", "color"), (".name-step-msg", "background")),
         ))
 
@@ -1020,8 +962,6 @@ class TheColours(unittest.TestCase):
             ("the name step's label", (".name-step label", "color"), (":root", "--clay")),
             ("the name step's hint", (".name-step-hint", "color"), (":root", "--clay")),
             ("the line under START", (".go .plan", "color"), (":root", "--clay")),
-            ("a label of the test mode", (".lab", "color"), (":root", "--clay")),
-            ("a hint of the test mode", (".room .hint", "color"), (":root", "--clay")),
         ))
         self.assertEqual(self.sheet.colours("body", "color"), [self.token("ink")])                           # (and the page's own text, where nothing says another colour, is that ink)
         self.assertGreaterEqual(self.ratio(self.token("ink"), self.token("clay")), 4.5)

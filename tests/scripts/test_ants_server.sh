@@ -98,44 +98,32 @@ cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
 if part_enabled options; then
 # the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in): on the host's own colour, in the line that the others read, in
-# "How it works", and in the hint of the test room (the old addresses), where the leader is the first player to connect
-check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's colour says 'Host. You start the match.', the others read that the host starts the match when everybody is in, How it works says that the host starts the match with whoever is in, and the test room keeps its hint that the first player to connect leads the room" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html" && [ "$(grep -c 'The first player to connect leads the room' "$ROOT/web/lobby.html")" -ge 1 ]; echo $?)"
+# and in "How it works"
+check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's colour says 'Host. You start the match.', the others read that the host starts the match when everybody is in, and How it works says that the host starts the match with whoever is in" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html"; echo $?)"
 # bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the lobby has a card for each of the four colours; the host gives a free colour to Open, an Easy, Medium or Hard bot or
-# Nobody with a select, presses Team 1 or Team 2 under a player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page); the old addresses' links carry the plan as
-# ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address cannot put another word on the command line)
+# Nobody with a select, presses Team 1 or Team 2 under a player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page); the links that START hands to the game
+# carry the plan as ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
 if grep -qF "[['open', 'Open'], ['easy', 'Easy bot'], ['medium', 'Medium bot'], ['hard', 'Hard bot'], ['nobody', 'Nobody']]" "$FOUR_PAGE" && grep -qF "'Team ' + t.side" "$FOUR_PAGE" && grep -qF "client.setPlan(" "$FOUR_PAGE" \
     && grep -qF "var GRID = [3, 0, 1, 2];" "$ROOT/web/front/lobby_rules.js" && grep -qF "data-remove" "$FOUR_PAGE"; then FILL_FORM=0; fi
 check 'web/lobby.html has a card for each of the four colours (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Nobody for a free colour, the Team 1 and Team 2 buttons, Remove, and sends every change to the room as a plan' "$FILL_FORM"
-FILL_LINKS=1
-if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInBlock) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
-    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/lobby.html puts the plan into every game link of the test room (the old addresses) and into its own address as &fill=<plan> (and &teams=A+B for a room whose create block names no teams), and reads the address through validFillPlan and validRoomTeams" "$FILL_LINKS"
-# the room's teams are a part of its create block (protocol 15, they were a word of the code in protocol 13): the test room (the old addresses) reads the block of an address (roomBlockOf), and its links carry
-# &teams= only for a room whose block names none (the lobby has no create block of its own: its room's teams are the plan that the host sends)
-TEAM_BLOCK=1
-if grep -qF "var wantedBlock = roomBlockOf(window.location.search);" "$FOUR_PAGE" && grep -qF "var roomTeam = hostTeam(validRoomTeams(teams), players);" "$FOUR_PAGE" \
-    && grep -qF "var shown = shownRoomTeams(named, seatCount);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" && grep -qF "joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams)" "$FOUR_PAGE" \
-    && grep -qF "hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '')" "$FOUR_PAGE"; then TEAM_BLOCK=0; fi
-check "web/lobby.html's test room reads the create block of an address (roomBlockOf, roomblock and roomseats and roomteams in every link), lets the block's teams win over the address's &teams=, and narrows an address's &teams= to the seats that the block names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_BLOCK"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi
 check "web/shell.html gives the game --fill-bots, --teams and --start-when from antsFillPlanArg's, antsTeamsArg's and antsStartArg's answers and nothing else (the lines that take the address's text and the lines that hand it to the game)" "$FILL_SHELL"
 # The validation itself is RUN, not read: the functions are cut out of the pages and given a table of addresses' values (the three words in any case, four words for the seats, a team of two seats; empty,
 # other words, spaces, line ends, look-alikes, an argument smuggled behind a word, a very long text, values that are no text): shell.html's antsFillArg, antsFillPlanArg and antsTeamsArg and lobby.html's
-# validFill and validFillPlan must answer the lower case text or nothing
+# validFill must answer the lower case text or nothing
 if command -v node > /dev/null 2>&1; then
     FILL_RUN="$(node "$ROOT/tests/scripts/web_fill_check.js" "$SHELL_PAGE" "$FOUR_PAGE" 2>&1)"
     FILL_RUN_RC=$?
     [ "$FILL_RUN_RC" -ne 0 ] && echo "$FILL_RUN" | sed 's/^/    /'
-    check "the pages' own code for ?fill=, ?teams= and ?start= (web/shell.html antsFillArg, antsFillPlanArg, antsTeamsArg and antsStartArg, web/lobby.html validFill and validFillPlan), run with node on tables of values: the levels in any case and the lists of four give the lower case text, a team of two seats gives A+B, one digit 1 - 4 gives the people to wait for, everything else gives nothing" "$FILL_RUN_RC"
+    check "the pages' own code for ?fill=, ?teams= and ?start= (web/shell.html antsFillArg, antsFillPlanArg, antsTeamsArg and antsStartArg, web/lobby.html validFill), run with node on tables of values: the levels in any case and the lists of four give the lower case text, a team of two seats gives A+B, one digit 1 - 4 gives the people to wait for, everything else gives nothing" "$FILL_RUN_RC"
 else
     echo "  SKIP: node is not installed: the validation code of ?fill= and ?teams= in web/shell.html and web/lobby.html was NOT run (tests/scripts/web_fill_check.js)"
 fi
-check "web/lobby.html tells what happens to a hidden or covered window (the match does not wait for it, a lagging notice after 3 s, dropped after 30 s without a sign of life, cannot come back) and no longer says that the match waits for it (it did not since v0.0.94)" "$([ "$(grep -c 'The match does not wait for it' "$ROOT/web/lobby.html")" -eq 1 ] && grep -q 'dropped from the match and cannot come back' "$ROOT/web/lobby.html" && ! grep -q 'and the match waits for it' "$ROOT/web/lobby.html"; echo $?)"
 # AGENTS.md rule 6: the game files of the beta site (.wasm, .data, .html, .css, .js) are revalidated, not stored away and not downloaded again: exactly Cache-Control "no-cache, must-revalidate",
 # ETags on (no `etag off`), no `no-store` (a response that may not be stored cannot be revalidated: every reload fetched 9 MB) and no `expires -1` (nginx would add a second Cache-Control
 # line and an Expires date); the cross-origin headers stay in each of the three blocks. (A real answer from the built web image is checked by hand: curl -I twice, the second with If-None-Match: 304.)
@@ -461,7 +449,7 @@ for p in $PLAN_PIDS; do kill "$p" 2> /dev/null; done
 for p in $PLAN_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" > /dev/null
 
-# the links of the earlier front page's one card (and of today's old test-room addresses), START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
+# the links of the earlier front page's one card, START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
 # for You, a Friend and Nobody) and --start-when 1. A room for four started by its leader alone seats the bots at the seats 0 and 1 (a bot at Green too), the leader holds seat 2, seat 3 stays empty
 CARD="E2E-CARD-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CARD\",\"seed\":19}" "$CTL/rooms"
