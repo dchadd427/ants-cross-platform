@@ -79,6 +79,7 @@
     .banner span { flex: 1 1 220px; }
     .banner.warn { border-color: var(--gold); }
     .joinbox input { flex: 1; min-width: 0; min-height: 44px; padding: 6px 12px; background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; color: var(--cream); }
+    .joinbox input::placeholder { color: #7f9c92; opacity: 1; }                 /* (the browser's own grey is 4.1:1 on this field; the name card's field has the same colour) */
 
     /* ---- the four colours ---- */
     .slots { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 16px; margin: 18px 0 0; padding: 0; }

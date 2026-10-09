@@ -1,45 +1,50 @@
 #!/usr/bin/env python3
-"""The front page and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/NETWORK_PORT.md, "The front page").
+"""The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/NETWORK_PORT.md, "The front page").
 
-The owner, on a phone: "I don't see a way to change colors or send an invite to another person should all be right there. We don't need separate AI and online. Only do online." The front page is
-ONE card, New match: four seats (exactly one You, every other Friend, a bot of a level or Nobody, each with a Team 1 and a Team 2 switch), an invitation for each Friend and START!, which takes THIS tab into a match on the game
-server. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`, run it on a port), a Chromium-based browser and Python 3; the parts that play
-need the site's /ws to lead to a game server: --ws-port is the port that it leads to, and the check starts the native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools
-protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway headless browser (its own profile and port; nothing of yours is touched). Parts:
+The front page is the owner's lobby (web/lobby.html, the pictures he approved; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
+numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
+Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen 16:9, which is the default, or 4:3). A visitor who
+opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
+wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
+run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
+native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway
+headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
-  * front    the page at "/" (a first visit: ONE card with Treasure, You at Green, a Friend in the other three seats, START on, "Have a code?"; the header links, the footer's version and build,
-             the picture's two buttons, the name field with its line about recorded online matches, the font; the line of numbers (not there, or well formed); 21 widths from 320 to 1600 px: no sideways scroll, the five buttons of every seat on
-             ONE line, the seat's line (colour, buttons and Sit here on one line from 701 px, two under it), two columns from 1100 px; the contrast of all text at 1440 and 390 px, also with an invitation
-             and the note about changed links up);
-  * seats    the keyboard and the pointer: the arrows move and check inside a seat's group, Tab goes on to Sit here and the next seat, the focused button shows its outline; Sit here (the key Enter and the
-             pointer) moves You and the focus goes to the seat that You left; the Team 1 and Team 2 switches of the seats that play make the teams (two seats on one switch, the other two on the other); a Friend seat shows its invitation, Copy link puts exactly that link on the
-             clipboard; with every other seat Nobody START is on and says that it starts a game for one on this computer;
-  * play     START with bots only takes THIS tab to the game page (no new tab): the game's arguments are the room (a code of six characters, a name and no more) with the room's choices (--room-map
-             treasure, --room-seats 4), your seat, the plan (a Medium bot in every other seat), --start-when 1, your name and the shape; the address bar of that page keeps the code and the same choices;
-             the match starts without a START of the player's after the quick help closes (the "Get ready" dialog), the server's status lists the three bots
-             (Bot (Medium), seats 1 - 3) and the player, and the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first (a room is joined) and, with Yes,
-             goes back to the front page in the same tab, which remembers its choices;
-  * solo     START with every other seat Nobody takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
-             with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs (a room of the server needs two people), at Green whatever seat was You;
-  * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game
-             button takes THIS tab back to the front page (no new tab); the same for a match in a room of the server (one Medium bot); the quit dialog's Yes with three opponents left (the quit
-             ends a match only when one is left) takes the tab to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to
-             rejoin a match that was left on purpose;
-  * friend   two people, each a browser of their own: the host sits at Blue, a Friend at Black, nobody else; START takes the host to the room and the room WAITS (the server's status: waiting, one
-             player); the friend opens the invitation link (asked for a name first), joins the seat that the link names, and the match starts by itself, with no START pressed after that, for both;
-             the server's status lists both seats and the empty ones, no START of a game that does not lead was heard, and the two games' state hashes agree;
-  * old      the old addresses: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a
-             shared link (with its way back to the front page), /play.html with nothing is today's front page (the setup screen, no arguments), /?map=...&players=1 asks for a name (a step without that line: a game on this computer is not recorded)
-             and plays a game on this computer;
-  * room     an address that hosts a match (/?map=treasure&players=3&fill=easy&teams=0+1) makes the room panel (a new six-character code shown in two groups of three; the map, the seats and the
-             team are the room's own choices, which every link of it carries), and "Play in this tab" takes this tab to the game page with the room, its choices, the name and the bots of the
-             leader's START;
-  * game     the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure
-             card; 19 widths from 320 to 1600 px with no sideways scroll, the header's seven controls (one row with "More" up to 700 px: the five other links, over the picture), the picture, the bar
-             and the guide inside the frame, a phone on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs
-             under the game (the chosen one is pressed in; the clicks keep their ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
-Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts
-that play no game server of this tree or a site whose /ws does not lead to it).
+  * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link, Have a code? and More ways to play;
+             the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
+             and notice; Screen with 16:9 the default and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
+             a room that is gone (and the room of its own, with the strip that says so); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
+             below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
+             strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
+  * lobby    one host and guests, each a browser of its own: a guest joins through the link and its name card (a bad name is refused with the reason) and takes the next free colour; the host drags a player onto an
+             open colour (a move) and onto a taken one (a swap), or taps the grip and then the colour (Esc lets go); with three players Team 1 and Team 2 appear on each colour that plays, a team goes with its player, a
+             third colour on a full team is refused with the reason, and a guest sees the teams as read-only tabs; a bot of a level takes a colour; a player renames themselves with the pencil (a bad name is refused, a name
+             with markup stays text); the host's Remove asks first (Keep, Esc, one question at a time) and the removed player gets a room of their own with the strip that says why; a typed code (spaces and capitals do not
+             matter) leads through the name card into the room, a code that has no room does not; a reload brings the seat back; the page holds up at 320 px with a name of 32 wide letters and the question open; START
+             hands everybody into the real game: every page goes to the game page with its seat's key kept in the browser, the server's status and /busy show the match (three people and a bot, the teams that were set),
+             every game runs it, the state hashes agree, a game page that is reloaded takes its seat back, and a link opened now gets a room of its own;
+  * play     START with a bot in every other colour takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
+             plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
+             lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
+             in the same tab, which makes a room again for the same name;
+  * solo     START with nobody else in the match (every other colour Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
+             with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and 16:9, the default, is what it gets when nothing is chosen);
+  * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
+             to the front page (no new tab); the same for a match in a room of the server (START with one Medium bot); the quit dialog's Yes with three opponents left (the quit ends a match only when one is left) takes the tab
+             to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to rejoin a match that was left on purpose;
+  * friend   two people, each a browser of its own: the host and a player who comes through the link and the name card; START takes both into the real game, the match starts by itself, with no START pressed after that
+             (the server's status lists both seats, no bot and no START that did not lead; /busy counts two people) and the two games' state hashes agree;
+  * old      the old addresses: /?join=...&room=... and /?embed=1 open the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a shared link (with
+             its way back to the front page), /play.html with nothing is the game page's own setup screen (no argument but the picture's shape), /?map=...&players=1 asks for a name (a step without that line: a game on this computer is not
+             recorded) and plays a game on this computer;
+  * room     an address that hosts a match (/?map=treasure&players=3&fill=easy&teams=0+1) makes the test room's panel (a new code of six letters and numbers, shown in two groups of three; the map, the seats and the team are the room's own
+             choices, which every link of it carries), and "Play in this tab" takes this tab to the game page with the room, its choices, the name and the bots of the leader's START;
+  * game     the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
+             from 320 to 1600 px with no sideways scroll, the header's seven controls (one row with "More" up to 700 px: the five other links, over the picture), the picture, the bar and the guide inside the frame, a phone
+             on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
+             ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
+Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts that open the front page
+or play no game server of this tree or a site whose /ws does not lead to it).
 """
 import argparse
 import json
@@ -59,28 +64,36 @@ from web_aspect_check import Browser, NotReachable, Tab                    # noq
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("front", "seats", "play", "solo", "leave", "friend", "old", "room", "game")
-NEEDS_SERVER = ("play", "leave", "friend")                                   # (the parts that play a match in a room need the site's /ws to lead to a game server)
+PARTS = ("front", "lobby", "play", "solo", "leave", "friend", "old", "room", "game")
+NEEDS_SERVER = ("front", "lobby", "play", "solo", "leave", "friend")         # (the parts that open "/" or play a match in a room: the page makes its room on the game server, and the site's /ws must lead to one)
+CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"                            # a room's code is six of these (31 symbols: no i, l, o, 0 or 1; web/front/lobby_rules.js makeCode)
+NAMES = ("Maple", "Clover", "Pebble", "Sorrel", "Fern", "Bramble", "Juniper", "Flint", "Willow", "Cedar", "Moss", "Thistle")      # the names that the page picks for a visitor who has none (web/front/lobby_rules.js)
+COLOURS = ("black", "green", "red", "blue")                                  # the cards in their reading order: the four hills of the maps, top left to bottom right
+SEAT = {"green": 0, "red": 1, "blue": 2, "black": 3}                         # (the number of a colour stays its seat)
+
+MAP_LINE_LEAST = 2.9                                                         # the map line's contrast at the tile's lightest end is 2.95:1 in the approved picture; it must not get worse (the owner decides whether the picture's colour stays)
 
 # The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
-# and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1) and text in the footer against the ends of its gradient, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
+# and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1), text in the footer against the ends of its gradient and text on a colour's card against the card's
+# two ends, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
 CONTRAST_JS = """(function () {
   function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
   function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
   function lum(c) { return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b); }
   function ratio(a, b) { var l1 = lum(a), l2 = lum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
   function mix(c, back, t) { return { r: c.r * t + back.r * (1 - t), g: c.g * t + back.g * (1 - t), b: c.b * t + back.b * (1 - t), a: 1 }; }
-  var CLAY = [{ r: 216, g: 71, b: 16 }, { r: 233, g: 94, b: 36 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }];
+  var CLAY = [{ r: 216, g: 71, b: 16 }, { r: 233, g: 94, b: 36 }], BAR = [{ r: 0x2b, g: 0x68, b: 0x5f }, { r: 0x2b, g: 0x6b, b: 0x4f }], CARD = [{ r: 0x0f, g: 0x18, b: 0x20 }, { r: 0x08, g: 0x0c, b: 0x11 }];
   function bgOf(el) {
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
       if (e.classList && e.classList.contains('bar')) return BAR;
       var c = parse(getComputedStyle(e).backgroundColor);
       if (e.tagName === 'BODY' || e.tagName === 'HTML') return CLAY;
       if (c && c.a > 0.99) return [c];
+      if (e.classList && e.classList.contains('slot') && c && c.a === 0) return CARD;
     }
     return CLAY;
   }
-  var rows = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var rows = [], info = null, walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     var n = walker.currentNode, t = n.textContent.replace(/\\s+/g, ' ').trim(), el = n.parentElement;
     if (!t || !el || el.closest('[hidden]') || el.closest('script,style,noscript,option')) continue;
@@ -92,58 +105,103 @@ CONTRAST_JS = """(function () {
     behind.forEach(function (back) {
       bgOf(el).forEach(function (bg) { worst = Math.min(worst, ratio(back ? mix(fg, back, op) : fg, back ? mix(bg, back, op) : bg)); });
     });
+    if (el.closest('#info')) { info = Math.round(worst * 100) / 100; continue; }          // (the map line: cream on the clay tile as the owner's picture 1 draws it, held apart below)
     rows.push([Math.round(worst * 100) / 100, t.slice(0, 40)]);
   }
   rows.sort(function (a, b) { return a[0] - b[0]; });
-  return JSON.stringify({ texts: rows.length, lowest: rows.slice(0, 3) });
+  return JSON.stringify({ texts: rows.length, lowest: rows.slice(0, 3), info: info });
 })()"""
 
-# What the card shows now: who is You, the choice in every seat's group, the Team 1 and Team 2 switches and the line under them, the invitations, START and the line under it, the note about changed links
-CARD_JS = """(function () {
-  function el(id) { return document.getElementById(id); }
-  return JSON.stringify({
-    map: el('map-pick').value,
-    you: [0, 1, 2, 3].filter(function (s) { return !el('seat-you-' + s).hidden; }),
-    seats: [0, 1, 2, 3].map(function (s) { var r = document.querySelector('input[name=seat-' + s + ']:checked'); return r ? r.value : '?'; }),
-    switches: [0, 1, 2, 3].map(function (s) { return el('team-set-' + s).hidden ? '' : [1, 2].filter(function (k) { return el('team-' + s + '-' + k).getAttribute('aria-pressed') === 'true'; }).join('') || '-'; }),
-    dimmed: [0, 1, 2, 3].map(function (s) { return [1, 2].filter(function (k) { return el('team-' + s + '-' + k).getAttribute('aria-disabled') === 'true'; }).join(''); }),
-    teamsShown: !el('teams-line').hidden, teamsLine: el('teams-line').textContent,
-    invites: el('invite-list').children.length, invitesShown: !el('invites').hidden,
-    links: Array.prototype.map.call(el('invite-list').querySelectorAll('input'), function (i) { return i.value; }),
-    startOff: el('play').disabled, note: el('start-note').textContent, linksNote: !el('links-note').hidden });
-})()"""
-
-# The layout of the card at the width of the window: the sideways scroll, the two columns, for every seat the place of its two team switches and for every seat that is not You the line of its colour, of its five buttons and of Sit here,
-# and the places of the seat's tab stops in the order of the markup (the switches, Sit here, the checked one of the five buttons: its label)
-LAYOUT_JS = """(function () {
-  function rect(e) { var r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }
-  var left = document.querySelector('.match-grid .left'), right = document.querySelector('.match-grid .right');
+# The form controls, which a text walk does not see: the face of every drop-down and field against its own background (a shut drop-down shows the text of its chosen option), and a field's placeholder against the same
+FORMS_JS = """(function () {
+  function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+  function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function lum(c) { return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b); }
+  function ratio(a, b) { var l1 = lum(a), l2 = lum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
+  function mix(c, back) { return { r: c.r * c.a + back.r * (1 - c.a), g: c.g * c.a + back.g * (1 - c.a), b: c.b * c.a + back.b * (1 - c.a) }; }
   var rows = [];
-  function stopsOf(li) {
-    return Array.prototype.filter.call(li.querySelectorAll('button, input[type=radio]:checked'), function (e) { return !e.closest('[hidden]'); }).map(function (e) { return rect(e.type === 'radio' ? li.querySelector('label[for=' + e.id + ']') : e); });
-  }
-  for (var s = 0; s < 4; s++) {
-    var li = document.getElementById('seat-row-' + s);
-    var ts = document.getElementById('team-set-' + s), tb = ts.hidden ? [] : Array.prototype.slice.call(ts.querySelectorAll('.tbtn')).map(rect);
-    var team = tb.length ? { rect: rect(ts), buttons: tb.length, oneLine: Math.abs(tb[0].top - tb[1].top) < 6, inside: tb.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }), nm: rect(li.querySelector('.nm')) } : null;
-    if (!document.getElementById('seat-you-' + s).hidden) { rows.push({ seat: s, you: true, team: team, stops: stopsOf(li) }); continue; }
-    var labels = Array.prototype.slice.call(li.querySelectorAll('.pair label')).map(rect);
-    var pair = li.querySelector('.pair'), sit = document.getElementById('sit-' + s), nm = li.querySelector('.nm');
-    var tops = labels.map(function (r) { return r.top; });
-    rows.push({ seat: s, you: false, team: team, oneLine: Math.max.apply(null, tops) - Math.min.apply(null, tops) < 6,       /* (the checked button is pressed in by 2 px; a second line would be 30 px lower) */ buttons: labels.length, rowRect: rect(li), pair: rect(pair), sit: rect(sit), nm: rect(nm), stops: stopsOf(li),
-                inside: labels.every(function (r) { var l = rect(li); return r.left >= l.left - 0.5 && r.right <= l.right + 0.5; }) && rect(sit).right <= rect(li).right + 0.5 });
-  }
-  return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: rect(left), right: rect(right), rows: rows });
+  Array.prototype.forEach.call(document.querySelectorAll('select, input[type=text]'), function (e) {
+    var r = e.getBoundingClientRect();
+    if (e.closest('[hidden]') || r.width === 0 || r.height === 0 || getComputedStyle(e).visibility === 'hidden') return;
+    var cs = getComputedStyle(e), bg = parse(cs.backgroundColor), label = (e.id || e.className || e.tagName) + (e.tagName === 'SELECT' ? ' ' + e.options[e.selectedIndex].text : '');
+    if (!bg || bg.a < 0.99) return;
+    rows.push([ratio(mix(parse(cs.color), bg), bg), label]);
+    if (e.placeholder) { var ph = parse(getComputedStyle(e, '::placeholder').color); if (ph) rows.push([ratio(mix(ph, bg), bg), label + ' (placeholder)']); }
+  });
+  rows.sort(function (a, b) { return a[0] - b[0]; });
+  return JSON.stringify({ n: rows.length, lowest: rows.slice(0, 3).map(function (x) { return [Math.round(x[0] * 100) / 100, x[1]]; }) });
 })()"""
 
+# What a lobby page shows now: the room, every colour's card (who sits there or what it is set to, what its line says, the buttons it has, the team tabs), the notes, START, the strip at the top, the rejoin line, the toast
+STATE_JS = """(function () {
+  function $(id) { return document.getElementById(id); }
+  function text(e) { return e ? e.textContent.replace(/\\s+/g, ' ').trim() : ''; }
+  var banner = $('banner');
+  var cards = Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (li) {
+    var select = li.querySelector('select.mode'), nm = li.querySelector('.nm'), field = li.querySelector('.pname input'), you = li.querySelector('.you'), stat = li.querySelector('.pstat'), tab = li.querySelector('.tab');
+    var teams = Array.prototype.map.call(li.querySelectorAll('.teamset button'), function (b) { return { side: +b.getAttribute('data-side'), on: b.getAttribute('aria-pressed') === 'true', dim: b.getAttribute('aria-disabled') === 'true' }; });
+    var ask = li.querySelector('.rmask');
+    return { seat: +li.getAttribute('data-i'), c: li.getAttribute('data-c'), kind: (/k-(\\w+)/.exec(li.className) || [])[1] || '', label: li.getAttribute('aria-label'), mode: select ? select.value : null,
+             modes: select ? Array.prototype.map.call(select.options, function (o) { return o.value + '=' + o.text; }).join(',') : '', name: nm ? text(nm) : field ? field.value : '', who: text(li.querySelector('.pname')), badge: you ? text(you) : '',
+             stat: stat ? text(stat) : '', statClass: stat ? stat.className : '', pencil: !!li.querySelector('[data-edit]'), remove: !!li.querySelector('[data-remove]'), ask: ask ? text(ask) : '', grip: !!li.querySelector('[data-grip]'),
+             tab: tab ? text(tab) : '', teams: teams, picked: li.classList.contains('picked'), target: li.classList.contains('picked-target'), classes: li.className, markup: nm ? nm.children.length : 0 };
+  });
+  return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: $('link').value, invite: text($('invite-line')), cards: cards,
+    slotsNote: text($('slots-note')), teamsNote: text($('teams-note')), teamsWarn: $('teams-note').classList.contains('warn'),
+    start: { text: text($('start')), disabled: $('start').disabled, busy: $('start').getAttribute('aria-busy') }, plan: text($('plan')), planShort: text($('plan-short')), info: text($('info')), map: $('map').value, mapDisabled: $('map').disabled,
+    banner: { shown: !banner.hidden, text: text($('banner-text')), button: $('banner-x').hidden ? '' : text($('banner-x')), cls: banner.className }, rejoin: !$('rejoin').hidden, toast: $('toast').hidden ? '' : text($('toast')),
+    nameStep: !$('name-step').hidden, offline: document.body.classList.contains('offline'), guest: document.body.classList.contains('guest') });
+})()"""
 
-NOTICE_TEXT = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players\u2019 names."      # (the line under the name field of the front page and of the game page's name card)
-FRONT_NOTICE_JS = """JSON.stringify((function () {
-  var n = document.getElementById('who-notice'), box = document.getElementById('who').getBoundingClientRect(), r = n.getBoundingClientRect(), s = getComputedStyle(n);
-  var line = [document.getElementById('who-general'), document.getElementById('who-step-hint')].filter(function (e) { return !e.hidden; })[0].getBoundingClientRect();
-  return { text: n.textContent, shown: !n.hidden && r.width > 0 && r.height > 0 && s.display === 'block', below: r.top >= line.bottom - 1, inside: r.left >= box.left - 1 && r.right <= box.right + 1 && r.bottom <= box.bottom + 1,
-           sideways: document.documentElement.scrollWidth > window.innerWidth };
+# The layout of the lobby at the width of the window: the sideways scroll, the columns, the places of the four cards (in the order of the markup), whatever sticks out of a card or out of the window, the grip's dots against the
+# names and the drop-down, START and the line under it, the link and its buttons, and the widest map name against the room that the map's drop-down leaves it
+LAYOUT_JS = """(function () {
+  function $(id) { return document.getElementById(id); }
+  function rect(e) { var r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }
+  function shown(e) { if (!e || e.closest('[hidden]')) return false; var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).display !== 'none'; }
+  function textRect(e) { var g = document.createRange(); g.selectNodeContents(e); return g.getBoundingClientRect(); }
+  function overlap(a, b) { return a.width > 0 && b.width > 0 && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top; }
+  var panel = document.querySelector('.panel'), side = document.querySelector('.side');
+  var cards = Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (li) {
+    var lr = li.getBoundingClientRect(), outside = [], dots = [];
+    Array.prototype.forEach.call(li.querySelectorAll('.antbox, .cname, .mode, .pname, .pname > *, .pstat, .teamset button, .grip, .rmask, .rmask > *'), function (e) {
+      var r = e.getBoundingClientRect();
+      if (r.width > 0 && (r.left < lr.left - 0.5 || r.right > lr.right + 0.5 || r.top < lr.top - 0.5 || r.bottom > lr.bottom + 0.5)) outside.push(e.className || e.tagName);
+    });
+    var dot = li.querySelector('.grip i');
+    if (dot) {
+      var d = dot.getBoundingClientRect();
+      Array.prototype.forEach.call(li.querySelectorAll('.cname, .pstat'), function (e) { if (overlap(d, textRect(e))) dots.push(e.className); });
+      Array.prototype.forEach.call(li.querySelectorAll('.mode, .pname > *, .rmask > *, .teamset button'), function (e) { if (overlap(d, e.getBoundingClientRect())) dots.push(e.className || e.tagName); });
+    }
+    return { c: li.getAttribute('data-c'), rect: rect(li), outside: outside, dots: dots };
+  });
+  var strays = Array.prototype.filter.call(document.querySelectorAll('button, select, input, a, img, .btn, li, .panel, .banner'), function (e) {
+    if (!shown(e) || e.closest('.sr') || e.type === 'radio') return false;
+    var r = e.getBoundingClientRect();
+    return r.right > window.innerWidth + 0.5 || r.left < -0.5;
+  }).map(function (e) { return e.id || e.className || e.tagName; });
+  var map = $('map'), cs = getComputedStyle(map), cv = document.createElement('canvas').getContext('2d');
+  cv.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+  var widest = Math.max.apply(null, Array.prototype.map.call(map.options, function (o) { return cv.measureText(o.text).width; }));
+  return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, innerH: window.innerHeight, docH: document.documentElement.scrollHeight, scrollY: window.scrollY,
+    panel: rect(panel), side: shown(side) ? rect(side) : null, maprow: rect(document.querySelector('.maprow')), start: rect($('start')), go: rect(document.querySelector('.go')), cards: cards, strays: strays,
+    plan: [shown($('plan')), shown($('plan-short'))], link: shown($('link')), copy: rect($('copy')), invite: rect(document.querySelector('.invite')), share: shown($('share')),
+    mapFit: [widest, map.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)] });
+})()"""
+
+LOBBY_NOTICE = "Online matches are recorded and kept for 30 days. The recordings are public and show the players’ names."        # (the line under the name field of the front page's name card and in its footer)
+NOTICE_TEXT = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players’ names."      # (the line under the name field of the game page's name card)
+NAME_CARD_JS = """JSON.stringify((function () {
+  var card = document.querySelector('.name-step').getBoundingClientRect(), hint = document.getElementById('name-step-hint').getBoundingClientRect(), n = document.getElementById('who-notice'), own = document.getElementById('name-step-own').getBoundingClientRect();
+  var r = n.getBoundingClientRect(), s = getComputedStyle(n), h = getComputedStyle(document.getElementById('name-step-hint'));
+  return { shown: !document.getElementById('name-step').hidden, title: document.getElementById('name-step-title').textContent, button: document.getElementById('name-step-go').textContent, hint: document.getElementById('name-step-hint').textContent,
+           own: document.getElementById('name-step-own').textContent, input: document.getElementById('name-step-input').value, placeholder: document.getElementById('name-step-input').placeholder, msg: document.getElementById('name-step-msg').textContent,
+           notice: { text: n.textContent, shown: !n.hidden && r.width > 0 && r.height > 0 && s.display === 'block', below: r.top >= hint.bottom - 1, above: r.bottom <= own.top + 1, sameType: s.fontSize === h.fontSize && s.color === h.color,
+                     inside: r.left >= card.left - 1 && r.right <= card.right + 1 && r.bottom <= card.bottom + 1 },
+           inside: card.left >= 0 && card.right <= window.innerWidth && card.top >= 0 && card.bottom <= window.innerHeight, sideways: document.documentElement.scrollWidth > window.innerWidth };
 })())"""
+# The name step of the GAME page (web/shell.html): its notice sits between the hint and the way out, in the hint's own type
 CARD_NOTICE_JS = """JSON.stringify((function () {
   var c = document.querySelector('.name-step').getBoundingClientRect(), hint = document.querySelector('.name-step-hint'), n = document.querySelector('.name-step-notice'), back = document.getElementById('name-step-back');
   var r = n.getBoundingClientRect(), h = hint.getBoundingClientRect(), b = back.getBoundingClientRect(), sn = getComputedStyle(n), sh = getComputedStyle(hint);
@@ -167,10 +225,119 @@ def wait_for(condition, timeout=10.0, step=0.1):
     return value
 
 
+# ---- what a person does at a lobby page: `t` is a Tab or a rejoin.Player (both speak `call` and `ev`) ---------------------------------------------------------------------------------------------------------------
+
+def lobby_of(t):
+    """What the lobby page of `t` shows now (STATE_JS) as a dict."""
+    return json.loads(t.ev(STATE_JS))
+
+
+def seated(t):
+    """The page is in its room: the room has welcomed it (the colours are not greyed out) and a person sits in a colour."""
+    return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
+
+
+def card_of(state, colour):
+    """The card of a colour in a lobby state (None when there is none)."""
+    return next((c for c in state["cards"] if c["c"] == colour), None)
+
+
+def code_of(state):
+    """The room's plain code, from the link that the page shows."""
+    found = re.search(r"[?&]room=([^&]+)", state["link"])
+    return found.group(1) if found else ""
+
+
+def key_press(t, name, code, vk, text="", modifiers=0):
+    for kind in ("keyDown", "keyUp"):
+        t.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk, "text": text if kind == "keyDown" else "", "modifiers": modifiers})
+
+
+def mouse(t, kind, x, y):
+    t.call("Input.dispatchMouseEvent", {"type": kind, "x": x, "y": y, "button": "none" if kind == "mouseMoved" else "left", "buttons": 1 if kind == "mousePressed" else 0, "clickCount": 0 if kind == "mouseMoved" else 1})
+
+
+def centre_of(t, selector, scroll=True):
+    """The middle of an element of the page of `t` (scrolled into view first, unless `scroll` is False)."""
+    return json.loads(t.ev("(function () { var e = document.querySelector(%s); if (!e) return JSON.stringify(null); %s var r = e.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()"
+                           % (json.dumps(selector), "e.scrollIntoView({ block: 'center' });" if scroll else "")))
+
+
+def click_on(t, selector):
+    """A click of the pointer on the middle of an element (the pointer moves there first)."""
+    p = centre_of(t, selector)
+    if p is None:
+        raise RuntimeError("nothing at " + selector)
+    mouse(t, "mouseMoved", p["x"], p["y"])
+    time.sleep(0.1)
+    mouse(t, "mousePressed", p["x"], p["y"])
+    time.sleep(0.05)
+    mouse(t, "mouseReleased", p["x"], p["y"])
+
+
+def drag_on(t, source, target, during=None):
+    """The pointer takes the middle of `source`, goes to the middle of `target` in steps (`during()` is called while it is held there) and lets go."""
+    a = centre_of(t, source)
+    b = centre_of(t, target, scroll=False)
+    if a is None or b is None:
+        raise RuntimeError("nothing at %s or %s" % (source, target))
+    mouse(t, "mouseMoved", a["x"], a["y"])
+    time.sleep(0.1)
+    mouse(t, "mousePressed", a["x"], a["y"])
+    for i in range(1, 9):
+        mouse(t, "mouseMoved", a["x"] + (b["x"] - a["x"]) * i / 8, a["y"] + (b["y"] - a["y"]) * i / 8)
+        time.sleep(0.03)
+    time.sleep(0.3)
+    held = during() if during else None
+    mouse(t, "mouseReleased", b["x"], b["y"])
+    return held
+
+
+def set_mode(t, colour, word):
+    """The host's drop-down of an open colour: Open, Easy bot, Medium bot, Hard bot or Nobody (the browser's own list cannot be driven: the value is set and the page told, as a pick would)."""
+    t.ev("(function () { var s = document.querySelector('#slots li[data-c=%s] select'); s.value = %s; s.dispatchEvent(new Event('change', { bubbles: true })); })(); 1" % (colour, json.dumps(word)))
+
+
+def open_name_card(t):
+    return bool(t.ev("!document.getElementById('name-step').hidden"))
+
+
+def fill_name_card(t, name, press=True):
+    """Types `name` into the name card (a real insertion into the focused field) and presses Join."""
+    t.ev("(function () { var i = document.getElementById('name-step-input'); i.focus(); i.select(); })(); 1")
+    if name:
+        t.call("Input.insertText", {"text": name})
+    else:
+        t.ev("document.getElementById('name-step-input').value = ''; 1")
+    if press:
+        click_on(t, "#name-step-go")
+
+
+def agree(players, limit=60):
+    """Waits until the games of `players` (rejoin.Player objects) have reported at least two ticks in common (a game reports every 100 ticks, 5 s of play) and returns (the common ticks, whether every game
+    reported the same hash at each of them, whether any game reported one tick with two hashes)."""
+    deadline = time.time() + limit
+    common = []
+    while time.time() < deadline:
+        for p in players:
+            p.syncs()
+        common = [t for t in sorted(players[0].ticks) if all(t in p.ticks for p in players)]
+        if len(common) >= 2:
+            break
+        time.sleep(1.0)
+    same = bool(common) and all(len({p.ticks[t] for p in players}) == 1 for t in common)
+    return common, same, any(p.conflicts for p in players)
+
+
+def console_trouble(players):
+    """What the pages of `players` (rejoin.Player objects) said in their consoles that is no good: an exception, or an error that is no failed download of a file."""
+    return [(i, kind, text[:120]) for i, p in enumerate(players) for (_, kind, text) in p.console if kind == "exception" or (kind == "error" and "Failed to load resource" not in text)]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--web", required=True, help="the site, e.g. http://127.0.0.1:19980/")
-    ap.add_argument("--ws-port", type=int, default=0, help="the WebSocket port that the site's /ws and /busy lead to: the check starts its game server there (needed by the parts that play: %s)" % ", ".join(NEEDS_SERVER))
+    ap.add_argument("--ws-port", type=int, default=0, help="the WebSocket port that the site's /ws and /busy lead to: the check starts its game server there (needed by the parts that open the front page or play: %s)" % ", ".join(NEEDS_SERVER))
     ap.add_argument("--server", default=os.environ.get("ANTS_SERVER_BIN", os.path.join(REPO, "build", "src", "ants_server", "ants_server")), help="the ants_server program of this tree")
     ap.add_argument("--maps", default=os.path.join(REPO, "Original-Ants", "Maps"), help="the maps folder (default: the original's)")
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
@@ -181,6 +348,7 @@ def main():
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
     web = args.web if args.web.endswith("/") else args.web + "/"
+    door = "ws://" + web.split("//", 1)[1].rstrip("/") + "/ws"                           # (the game server's door as the game is given it)
 
     failures = []
     count = [0]
@@ -206,7 +374,7 @@ def main():
     work = None
     if plays:
         if not args.ws_port:
-            note("no --ws-port: the games in a room of the game server (parts %s) are left out" % ", ".join(NEEDS_SERVER))
+            note("no --ws-port: the parts that open the front page or play in a room of the game server (%s) are left out" % ", ".join(NEEDS_SERVER))
         elif not os.path.isfile(args.server) or not os.access(args.server, os.X_OK):
             print("  SKIP: the game server program is not there (build the target ants_server, or give --server)")
             return 3
@@ -233,6 +401,14 @@ def main():
                 print("  SKIP: the site's /busy is not the game server's answer (%r): does the site's /ws lead to port %d?" % (busy, args.ws_port))
                 return 3
             print("[web home] the server: %s" % server.describe(), flush=True)
+
+        def site_busy():
+            """The site's /busy: what the game server says it is hosting ({"matches": N, "players": M}), or None."""
+            try:
+                return json.loads(urllib.request.urlopen(web + "busy", timeout=10).read().decode("utf-8", "replace"))
+            except (OSError, urllib.error.URLError, ValueError):
+                return None
+
         browser = Browser(path)
         tab = Tab(browser)
         dialogs = []
@@ -269,7 +445,8 @@ def main():
                 time.sleep(settle + 0.5)
 
         def clear_storage():
-            tab.open(web + "lobby.html", wait=False)
+            """The site's storage of this tab emptied (a page of the site that holds no room: the front page makes one at once and keeps its key in the tab's session storage)."""
+            tab.open(web + "changelog.html", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
 
@@ -279,23 +456,43 @@ def main():
         def shot(name):
             tab.save_shot(args.shots, name)
 
-        def card():
-            return json.loads(value(CARD_JS))
+        def front_up():
+            """The tab shows the front page (its colour cards are there), whatever room it is in."""
+            return bool(tab.ev("!!document.getElementById('slots')"))
 
-        def type_name(text):
-            tab.ev("var n = document.getElementById('player-name'); n.value = %s; n.dispatchEvent(new Event('input')); 1" % json.dumps(text))
+        def front_ready(t=None, timeout=20):
+            """The front page of `t` (default: the tab) has its room: the room has welcomed it and a person sits in a colour."""
+            t = t or tab
+            return bool(wait_for(lambda: seated(t), timeout))
 
-        def centre(selector):
-            """The middle of an element in the window, after it was scrolled into view."""
-            return json.loads(value("(function () { var e = document.querySelector(%s); e.scrollIntoView({ block: 'center' }); var r = e.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()" % json.dumps(selector)))
+        def lobby(t=None):
+            return lobby_of(t or tab)
 
         def real_click(selector):
-            p = centre(selector)
-            tab.click(p["x"], p["y"])
+            click_on(tab, selector)
 
-        def key(name, code, text="", modifiers=0):
-            for kind in ("keyDown", "keyUp"):
-                tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": name, "windowsVirtualKeyCode": code, "text": text if kind == "keyDown" else "", "modifiers": modifiers})
+        def key(name, vk, text="", modifiers=0):
+            key_press(tab, name, name, vk, text, modifiers)
+
+        def rename_by_pencil(t, name, refused=False):
+            """The player's own colour: the pencil turns the name into a field; the name is typed (a real insertion) and Enter ends it. The next step waits until the card shows the name (the page
+            has the room's word for it: a pencil pressed before that does nothing), or, for a name that the page refuses (`refused`), a moment."""
+            click_on(t, "#slots li.k-person [data-edit]")
+            wait_for(lambda: t.ev("!!document.querySelector('#slots .pname input')"), 5)
+            t.call("Input.insertText", {"text": name})
+            key_press(t, "Enter", "Enter", 13, "\r")
+            if refused:
+                time.sleep(0.8)
+            else:
+                wait_for(lambda: any(c["badge"] == "You" and c["name"] == name for c in lobby_of(t)["cards"]), 6)
+                time.sleep(0.3)
+
+        def set_modes(t, modes):
+            """The host's drop-downs, one after another ({"red": "medium", ...}): a person takes a moment between two, so the room's reply to one comes before the next change is made."""
+            for colour, word in modes.items():
+                set_mode(t, colour, word)
+                wait_for(lambda c=colour, w=word: card_of(lobby_of(t), c)["mode"] == w, 5)
+                time.sleep(0.2)
 
         def score_strip(cv):
             """The rectangle of the bottom of the picture where the HUD shows the other players' scores: below the map view, whose last rows show the player's own ants (they move, bots or not), and
@@ -332,337 +529,770 @@ def main():
                 return False
             return bool(wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))          # the "get ready" dialog closes by itself
 
+        def match_runs(t, timeout=None):
+            """The game of `t` (a tab or a person) is in a running match with no dialog up: a match that the lobby's START begins needs no key (the "Get ready" dialog closes by itself)."""
+            return bool(wait_for(lambda: t.ev("typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1 && Module._ants_probe(5) === 0"), timeout or args.ready_timeout, 0.5))
+
+        def stored_rejoin(t):
+            """The names of the game's key entries in the browser of `t` (names only: room and seat; the keys are secrets and are never read here)."""
+            return t.ev("Object.keys(localStorage).filter(function (k) { return k.indexOf('ants.rejoin.') === 0; }).sort()") or []
+
+        def game_args(t):
+            return json.loads(t.ev("JSON.stringify(ANTS_ARGS)"))
+
+        def contrast(where, prepare="", restore="", forms=True, least=30, t=None):
+            """Every text of the page of `t` (default: the tab) is at least 4.5:1 (`prepare` shows what is closed, `restore` closes it again), and so is every drop-down and field, and its placeholder."""
+            t = t or tab
+            found = json.loads(t.ev((prepare + "; " if prepare else "") + "var found = " + CONTRAST_JS + "; " + (restore + "; " if restore else "") + "found"))
+            check(found["texts"] >= least and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
+            if found.get("info") is not None:
+                check(found["info"] >= MAP_LINE_LEAST, "%s: ... but for the map line, which is cream on the clay tile as the owner's picture 1 draws it (his call: 4.5:1 would need another colour), it is not lower than %s:1 (%s)" % (where, MAP_LINE_LEAST, found["info"]))
+            if forms:
+                f = json.loads(t.ev(FORMS_JS))
+                check(f["n"] >= 2 and f["lowest"][0][0] >= 4.5, "%s: ... and for all %d drop-downs and fields, with their placeholders (lowest: %s)" % (where, f["n"], f["lowest"]))
+
+        codes = []                                                                         # (the codes of the rooms that the check saw: their alphabet is checked at the end of part front)
+
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        if wanted("front"):
+        if wanted("front") and not can_play:
+            note("front: left out (no game server: give --ws-port; opening the front page makes a room)")
+        if wanted("front") and can_play:
             print("[web home] the front page: a first visit")
             clear_storage()
-            load(web, settle=1.5)
-            shot("home_front")
-            info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname,
-                cards: document.querySelectorAll('.card').length, selects: document.querySelectorAll('select').length, host: !!document.getElementById('host'), solo: !!document.getElementById('map-solo'),
-                banner: document.querySelector('.card .banner').textContent,
-                start: (function () { var b = document.getElementById('play'), r = b.getBoundingClientRect(), cs = getComputedStyle(b);
-                    return {text: b.textContent.trim(), label: b.getAttribute('aria-label'), w: Math.round(r.width), h: Math.round(r.height), bg: cs.backgroundImage, font: cs.fontSize}; })(),
-                corners: Array.prototype.map.call(document.querySelectorAll('.btn, .banner, .pair label'), function (e) { return getComputedStyle(e).borderTopLeftRadius; }),
-                faces: Array.prototype.map.call(document.querySelectorAll('.btn, .banner, .pair input:not(:checked) + label'), function (e) { return getComputedStyle(e).backgroundImage; }),
-                chosen: Array.prototype.map.call(document.querySelectorAll('.pair input:checked + label'), function (e) { return getComputedStyle(e).backgroundImage; }),
-                shown: [!document.getElementById('cards').hidden, !document.getElementById('how').hidden], name: document.getElementById('player-name').value,
-                aspect: document.querySelector('input[name=aspect]:checked').value, code: !!document.getElementById('join-code') && !!document.getElementById('join-go'), haveCode: document.querySelector('.havecode .lab').textContent,
-                example: (document.getElementById('join-code') || document.body).getAttribute('placeholder'),
-                links: Array.prototype.map.call(document.querySelectorAll('header a'), function (a) { return [a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target')]; }),
-                footer: document.querySelector('footer').textContent, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
-            now = card()
-            check(info["title"].startswith("Ants (1998)") and info["path"] == "/", "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
-            check(info["cards"] == 1 and info["banner"] == "New match" and not info["host"] and not info["solo"] and info["selects"] == 1, "ONE card, New match (a select for the map; no Host button, no second card) (%s cards, %r)" % (info["cards"], info["banner"]))
-            check(now["map"] == "treasure" and now["you"] == [0] and now["seats"] == ["friend", "friend", "friend", "friend"] and now["switches"] == ["-", "-", "-", "-"], "a first visit: Treasure, You at Green, a Friend in the other seats, free for all (no switch is on) (%s)" % now)
-            check(now["teamsShown"] and now["dimmed"] == ["", "", "", ""] and now["teamsLine"] == "Free for all. For a team, put two colours on the same team." and now["invitesShown"] and now["invites"] == 3 and not now["startOff"] and now["note"].startswith("Starts when your friends are in"),
-                  "... four seats play: every seat has the two switches (also You), and the line says free for all and how to make a team; an invitation for each Friend; START is on and says that it starts when the friends are in (%r)" % now["note"])
-            start = info["start"]
-            check(start["text"] == "START!" and start["label"] is None and "url(" not in start["bg"] and 150 <= start["w"] <= 260 and 44 <= start["h"] <= 64,
-                  "START is a real button with its own text, drawn by the browser (no picture, so no blocky edges) at a modest size: 150 - 260 x 44 - 64 px, not the 294 x 81 of the original's picture blown up (%s)" % (start,))
-            corners = [float(c[:-2]) if c and c.endswith("px") else None for c in info["corners"]]
-            check(len(corners) >= 10 and None not in corners and len(set(corners)) == 1 and 8 <= corners[0] <= 12,
-                  "every button, banner and two-state button has rounded corners, all alike (8 - 12 px; they were 2 and 3): START, the links, the seats' buttons and the rest (%d of them: %s)" % (len(corners), sorted(set(info["corners"]))))
-            check(len(info["faces"]) >= 10 and all("linear-gradient" in f and "url(" not in f for f in info["faces"]) and info["chosen"] and all(f == "none" for f in info["chosen"]),
-                  "... and their faces are lit from above (a gradient over the teal, %d of them), while a chosen two-state button is a flat dark plate (%d)" % (len(info["faces"]), len(info["chosen"])))
-            check(info["shown"] == [True, True] and info["code"] and info["haveCode"] == "Have a code?", "\"How it works\" and \"Have a code?\" with its field and Join are there (%r)" % (info["haveCode"],))
-            check(info["example"] == "k7m 2xq", "... the field shows what a code looks like: six characters in two groups of three (%r)" % (info["example"],))
-            check(info["name"] == "" and info["aspect"] == "16:9", "no name yet, the picture is 16:9")
-            hrefs = [l[1] for l in info["links"]]
-            check("/asset_catalog/" in hrefs and "/changelog.html" in hrefs and any("github.com" in h and "issues" not in h for h in hrefs) and any(h.endswith("/issues") for h in hrefs),
-                  "the header has the links: Sprites and sounds, Changelog, GitHub, Feedback (%s)" % [l[0] for l in info["links"]])
-            check(all(l[2] == "_blank" for l in info["links"]), "the links that leave the page keep their new tab")
-            check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"], "the footer names the version and the build (%r)" % info["footer"][:80])
-            check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
-            check(bool(value("Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; })")), "the game's own font, Libre Franklin, is loaded from the site")
-            stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
-            check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online( \d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
-                  "the line of numbers is either not there (a site with no /stats) or says what it counts (%r)" % (stats,))
-
-            def contrast(where):
-                """Every text of the page is at least 4.5:1 (the help is opened for it, and closed again)."""
-                found = json.loads(value("var how = document.getElementById('how'), was = how.open; how.open = true; var found = " + CONTRAST_JS + "; how.open = was; found"))
-                check(found["texts"] > 40 and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
-
-            contrast("1440 px")
-            # the invitations of a first visit, the note about changed links (a copy, then a change) and a START that is for one player: every text of them is readable too
-            tab.ev("document.querySelector('#invite-list .btn').click(); 1")
-            time.sleep(0.4)
-            tab.ev("document.getElementById('seat-2-hard').click(); 1")
-            c = card()
-            check(c["invites"] == 2 and c["invitesShown"] and c["linksNote"], "two invitations and, after a copy and a change, the note about changed links are up (%s)" % {k: c[k] for k in ("invites", "linksNote")})
-            contrast("1440 px with an invitation and its note")
-            tab.ev("document.getElementById('team-0-1').click(); document.getElementById('team-1-1').click(); 1")
-            c = card()
-            dimmed = tab.ev("document.querySelectorAll('.tbtn[aria-disabled=true]').length")
-            check(c["switches"] == ["1", "1", "2", "2"] and dimmed == 4, "Green and Red on Team 1: Blue and Black show Team 2, and the four switches that a full team shuts out are dimmed (%s, %s dimmed)" % (c["switches"], dimmed))
-            contrast("1440 px with two colours on a team (the dimmed switches are on screen: no faded letters under 4.5:1)")
-            tab.ev("document.getElementById('seat-1-nobody').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
-            c = card()
-            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents." and not c["teamsShown"] and not c["invitesShown"],
-                  "with no other player START stays on and the line under it says that it starts a game for one on this computer (%r)" % c["note"])
-            contrast("1440 px with START for one player")
-            clear_storage()
             load(web, settle=1.0)
-            # many widths: no sideways scroll at any of them; the five buttons of a seat on ONE line; the seat's line (the colour, the buttons and Sit here on one line from 701 px up, the buttons under the
-            # colour up to 700 px); the map and the seats in two columns from 1100 px up, one above the other under it
+            check(front_ready(), "the page is in a room of its own: the room has welcomed it and the host sits in a colour")
+            shot("home_front")
+            st = lobby()
+            codes.append(code_of(st))
+            info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname, h1: document.querySelectorAll('h1').length,
+                logo: (function () { var i = document.querySelector('header.mast img'); return i ? [i.complete && i.naturalWidth === 581, i.getAttribute('alt'), i.getBoundingClientRect().width] : null; })(),
+                tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
+                head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
+                link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
+                buttons: ['copy', 'havecode', 'more'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
+                joinbox: document.getElementById('joinbox').hidden, morebox: document.getElementById('morebox').hidden,
+                font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
+                aspect: [document.getElementById('aspect-16-9').checked, document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')],
+                footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
+                nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
+                version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
+            check(info["title"].startswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
+            check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and 100 <= info["logo"][2] <= 200 and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
+                  "the mast has the logo (loaded, %s px wide) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["logo"] and round(info["logo"][2]), info["tag"]))
+            check(bool(info["font"]), "the game's own font, Libre Franklin, is loaded from the site")
+            code = code_of(st)
+            check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
+                  "the room: \"Your room\" with a code of six letters and numbers (no i, l, o, 0 or 1) shown in two groups of three (%r, the link carries %r)" % (st["code"], code))
+            check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free colour.",
+                  "the link is the page's address with ?room=<code> in a read-only field, and the line under it says what it does (%r)" % (info["link"][0],))
+            check(info["buttons"] == ["Copy link", "Have a code?", "More ways to play"] and info["share"] == "none" and info["joinbox"] and info["morebox"],
+                  "Copy link, Have a code? and More ways to play are there (the last two open nothing yet; Share is for a phone) (%s)" % (info["buttons"],))
+            status = server.room(code) or {}
+            check(status.get("lobby") is True and status.get("state") == "waiting" and status.get("leader") == 0 and status.get("joined") == 1 and status.get("starting") is False and status.get("plan", "").startswith("oooo"),
+                  "the game server holds that room as a lobby: waiting, the visitor its leader at seat 0, every colour open (%s)" % {k: status.get(k) for k in ("lobby", "state", "leader", "joined", "plan")})
+            mine = status.get("players", [{}])[0].get("name") if status.get("players") else None
+            check(mine is not None and card_of(st, "green")["name"] == mine and mine in NAMES,
+                  "the host plays under a picked name, the one the room shows on the host's card (%r)" % mine)
+
+            # the four cards, in the reading order of the four hills of the maps
+            check([c["c"] for c in st["cards"]] == list(COLOURS) and [c["seat"] for c in st["cards"]] == [3, 0, 1, 2], "the four colour cards are built in the reading order Black, Green, Red, Blue, and keep the seats' numbers (%s)" % [(c["c"], c["seat"]) for c in st["cards"]])
+            green = card_of(st, "green")
+            check(green["kind"] == "person" and green["badge"] == "You" and green["pencil"] and not green["remove"] and green["stat"] == "Host. You start the match." and green["grip"] and green["label"] == "Green: %s, you, host" % green["name"],
+                  "Green is the host: the name with You, a pencil to change it, no Remove, the line \"Host. You start the match.\" and the grip (%s)" % {k: green[k] for k in ("badge", "pencil", "remove", "stat", "label")})
+            others = [card_of(st, c) for c in ("black", "red", "blue")]
+            check(all(c["kind"] == "open" and c["mode"] == "open" and c["stat"] == "Takes the next player who joins." and c["grip"] and c["label"] == c["c"].capitalize() + ": open" and not c["teams"] for c in others)
+                  and all(c["modes"] == "open=Open,easy=Easy bot,medium=Medium bot,hard=Hard bot,nobody=Nobody" for c in others),
+                  "Black, Red and Blue are open: a drop-down of Open, Easy bot, Medium bot, Hard bot and Nobody that says Open, \"Takes the next player who joins.\", no team buttons (one player) (%s)" % [(c["c"], c["mode"]) for c in others])
+            pos = json.loads(value("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (l) { var r = l.getBoundingClientRect(); return [l.getAttribute('data-c'), Math.round(r.left), Math.round(r.top)]; }))"))
+            by = {p[0]: p for p in pos}
+            check(by["black"][1] < by["green"][1] and abs(by["black"][2] - by["green"][2]) < 3 and by["red"][1] == by["black"][1] and by["blue"][1] == by["green"][1] and abs(by["red"][2] - by["blue"][2]) < 3 and by["red"][2] > by["black"][2] + 50,
+                  "at 1440 px they lie as the hills do: Black top left, Green top right, Red bottom left, Blue bottom right (%s)" % pos)
+            check(st["slotsNote"] == "Waiting for players. Drag a player onto another colour to move them." and st["teamsNote"] == "" and st["banner"]["shown"] is False and st["rejoin"] is False,
+                  "the line under the cards says what to do (%r); no team line with one player, no strip at the top, no rejoin line" % st["slotsNote"])
+
+            # the map side
+            side = json.loads(value("""JSON.stringify({preview: (function () { var i = document.getElementById('preview'); return [i.complete && i.naturalWidth > 0, i.getAttribute('src'), i.alt]; })(),
+                maps: Array.prototype.map.call(document.getElementById('map').options, function (o) { return o.value + '=' + o.text; }).join(), map: document.getElementById('map').value, info: document.getElementById('info').textContent,
+                arrows: [document.getElementById('prev').getAttribute('aria-label'), document.getElementById('next').getAttribute('aria-label'), document.getElementById('prev').disabled, document.getElementById('next').disabled],
+                start: (function () { var b = document.getElementById('start'), r = b.getBoundingClientRect(), cs = getComputedStyle(b); return [b.textContent, b.disabled, Math.round(r.width), Math.round(r.height), cs.fontSize]; })(),
+                plan: document.getElementById('plan').textContent})"""))
+            check(side["preview"] == [True, "front/preview_treasure.png", "The map: Treasure"] and side["map"] == "treasure" and side["info"] == "One person's trash... (12 min)",
+                  "the map is Treasure, the default of the page (its picture, its line from the original's setup screen: %r)" % side["info"])
+            check(side["maps"] == "tiny=Tiny,small=Small,medium=Medium,gauntlet=Gauntlet,treasure=Treasure,islands=Islands" and side["arrows"] == ["Previous map", "Next map", False, False], "the map's drop-down lists the six maps of the original, with arrows (%s)" % side["maps"])
+            check(side["start"][0] == "START!" and not side["start"][1] and side["start"][2] >= 280 and side["start"][3] >= 56 and side["plan"] == "A game for one. Red, Blue and Black are open and stay empty unless a player joins first.",
+                  "START! is on and big (%s x %s px) and the line under it says that, alone, it is a game for one: \"%s\"" % (side["start"][2], side["start"][3], side["plan"]))
+            real_click("#next")
+            ok = wait_for(lambda: lobby()["map"] == "islands", 5)
+            status = server.room(code) or {}
+            check(bool(ok) and status.get("map") == "ISLANDS.LVL" and lobby()["info"] == "Island hopping, expert map (12 min)" and lobby()["start"]["text"] == "START!",
+                  "the arrow > chooses the next map, Islands: the game server's room has it (%s) and the line follows (%r)" % (status.get("map"), lobby()["info"]))
+            real_click("#prev")
+            real_click("#prev")
+            ok = wait_for(lambda: lobby()["map"] == "gauntlet", 5)
+            check(bool(ok) and (server.room(code) or {}).get("map") == "GAUNTLET.LVL", "the arrow < twice goes back over Treasure to Gauntlet, and the room follows (%s)" % (server.room(code) or {}).get("map"))
+            tab.ev("var m = document.getElementById('map'); m.value = 'tiny'; m.dispatchEvent(new Event('change', { bubbles: true })); 1")
+            ok = wait_for(lambda: (server.room(code) or {}).get("map") == "TINY.LVL", 5)
+            check(bool(ok) and lobby()["info"] == "Tiny map with no PowerUps (6 min)", "the drop-down chooses a map too (Tiny: %r)" % lobby()["info"])
+            tab.ev("var m = document.getElementById('map'); m.value = 'treasure'; m.dispatchEvent(new Event('change', { bubbles: true })); 1")
+            wait_for(lambda: (server.room(code) or {}).get("map") == "TREASURE.LVL", 5)
+
+            # the open colours: a bot of a level, Nobody (the drop-down tells the room, the card and the line under START follow)
+            set_mode(tab, "red", "hard")
+            ok = wait_for(lambda: card_of(lobby(), "red")["kind"] == "bot", 5)
+            red = card_of(lobby(), "red")
+            check(bool(ok) and red["mode"] == "hard" and red["stat"] == "Computer player" and (server.room(code) or {}).get("plan", "")[1:2] == "h" and lobby()["plan"].startswith("You and a Hard bot play on Treasure."),
+                  "Red set to a Hard bot: the card says Computer player, the room's plan has it and the line under START names it (%r)" % lobby()["plan"])
+            set_mode(tab, "blue", "nobody")
+            ok = wait_for(lambda: card_of(lobby(), "blue")["kind"] == "nobody", 5)
+            blue = card_of(lobby(), "blue")
+            check(bool(ok) and blue["stat"] == "Stays out of the match." and lobby()["plan"].startswith("You and a Hard bot play on Treasure. Black is open and stays empty unless a player joins first."),
+                  "Blue set to Nobody: its card says it stays out of the match, and the line under START leaves it out (%r)" % lobby()["plan"])
+            set_mode(tab, "red", "open")
+            set_mode(tab, "blue", "open")
+            wait_for(lambda: lobby()["plan"].startswith("A game for one."), 5)
+
+            # How it works
+            real_click("#how-open")
+            how = json.loads(value("JSON.stringify({shown: !document.getElementById('how').hidden, titles: Array.prototype.map.call(document.querySelectorAll('#how h3'), function (h) { return h.textContent; }), role: document.querySelector('#how .panel').getAttribute('role'), focus: document.activeElement.id})"))
+            check(how["shown"] and how["role"] == "dialog" and how["focus"] == "how-close" and how["titles"] == ["The room", "The other colours", "Removing a player", "Teams", "START!", "When the host leaves"],
+                  "How it works opens a dialog over the page, with the focus on Close (%s)" % how["titles"])
+            contrast("1440 px with How it works up")
+            key("Escape", 27)
+            check(bool(wait_for(lambda: value("document.getElementById('how').hidden") is True, 3)) and value("document.activeElement.id") == "how-open", "Esc closes it and the focus goes back to the link that opened it")
+            real_click("#how-open")
+            real_click("#how-close")
+            check(value("document.getElementById('how').hidden") is True, "the Close button closes it too")
+
+            # Have a code?, More ways to play
+            real_click("#more")
+            more = json.loads(value("JSON.stringify({shown: !document.getElementById('morebox').hidden, buttons: Array.prototype.map.call(document.querySelectorAll('#morebox button'), function (b) { return b.textContent; }), note: document.querySelector('#morebox span').textContent})"))
+            check(more["shown"] and more["buttons"] == ["Play every colour myself, in this page", "Play every colour in separate windows"] and more["note"] == "For testing:",
+                  "More ways to play opens the two ways to play every colour yourself, for testing (%s)" % more["buttons"])
+            real_click("#havecode")
+            check(value("!document.getElementById('joinbox').hidden && document.activeElement.id") == "joincode", "Have a code? opens the field, with the focus in it")
+            contrast("1440 px with the code field and More ways to play open", least=45)
+            real_click("#joingo")
+            check(lobby()["start"]["text"] == "START!" and value("document.getElementById('joinhint').textContent") == "Type or paste the code first.", "Join with nothing typed says to type or paste the code first")
+            tab.ev("document.getElementById('joincode').focus(); 1")
+            tab.call("Input.insertText", {"text": "a!b"})
+            real_click("#joingo")
+            check(value("document.getElementById('joinhint').textContent") == "A room code has letters and numbers only, like k7m 2xq.", "a code with a sign in it is told: letters and numbers only (%r)" % value("document.getElementById('joinhint').textContent"))
+            contrast("1440 px with a line under the code field", least=45)
+            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            tab.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
+            real_click("#joingo")
+            check(value("document.getElementById('joinhint').textContent") == "That is your own room." and not open_name_card(tab), "the page's own code (capitals and the space do not matter) is \"That is your own room.\" and asks for no name")
+            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            tab.call("Input.insertText", {"text": "zzz zzz"})
+            real_click("#joingo")
+            asked = wait_for(lambda: open_name_card(tab), 5)
+            card = json.loads(value(NAME_CARD_JS))
+            check(bool(asked) and card["title"] == "Join the room zzz zzz" and card["button"] == "Join" and card["own"] == "Start a room of my own instead" and card["placeholder"] in NAMES and card["notice"]["text"] == LOBBY_NOTICE,
+                  "another code opens the name card first: \"%s\", the field, Join, \"Start a room of my own instead\" and the notice about recorded matches (%s)" % (card["title"], card["placeholder"]))
+            contrast("1440 px with the name card up", least=40)
+            shot("home_front_name_card")
+            click_on(tab, "#name-step-go")
+            ok = wait_for(lambda: value("document.getElementById('joinhint').textContent") != "", 8)
+            check(bool(ok) and value("document.getElementById('joinhint').textContent") == "There is no room with that code. Check it, or ask the host to send the link again." and not open_name_card(tab) and lobby()["code"] == st["code"],
+                  "Join with a code that has no room: \"%s\" and the page's own room stays (%s)" % (value("document.getElementById('joinhint').textContent"), lobby()["code"]))
+            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            tab.call("Input.insertText", {"text": "zzz zzz"})
+            real_click("#joingo")
+            wait_for(lambda: open_name_card(tab), 5)
+            click_on(tab, "#name-step-own")
+            check(not open_name_card(tab) and lobby()["code"] == st["code"] and lobby()["heading"] == "Your room", "\"Start a room of my own instead\" closes the card and the page's own room stays")
+            real_click("#havecode")
+            real_click("#more")
+            check(value("document.getElementById('joinbox').hidden && document.getElementById('morebox').hidden") is True, "the two links close what they opened")
+
+            # the footer
+            check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
+                  "the footer names the version and the build (%r)" % re.sub(r"\s+", " ", info["footer"]).strip()[:80])
+            hrefs = {n[1]: (n[0], n[2], n[3]) for n in info["nav"]}
+            check([n[1] for n in info["nav"]] == ["How it works", "Watch live", "Watch replays", "Sprites and sounds", "Changelog", "GitHub", "Feedback"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Watch live"][1] == "/watch.html" and hrefs["Watch replays"][1] == "/watch.html"
+                  and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog.html" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues"),
+                  "the footer links: How it works, Watch live, Watch replays, Sprites and sounds, Changelog, GitHub, Feedback (%s)" % [n[1] for n in info["nav"]])
+            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback")) and hrefs["Watch live"][2] is None and hrefs["Watch replays"][2] is None, "the links that leave the front page keep their new tab, the two that watch a match do not")
+            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, kept for 30 days and public with the players' names (%r)" % info["notice"])
+            stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
+            check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online(\d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
+                  "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
+            check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
+
+            # the picture's shape: 16:9 is the default, 4:3 is chosen under Screen and remembered
+            check(info["aspect"] == [True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and 4:3 is not (%s)" % info["aspect"])
+            real_click("label[for=aspect-4-3]")
+            chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-4-3').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])"))
+            check(chosen == [True, False, "4:3", "4:3"] and lobby()["code"] == st["code"], "a press on 4:3 chooses it (the page keeps its room) and the browser remembers it (%s)" % (chosen,))
+            tab.open(web, wait=False)
+            time.sleep(1.5)
+            chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-4-3').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')])"))
+            check(chosen == [True, False, "4:3"], "... and the next visit starts with 4:3 chosen (%s)" % (chosen,))
+            real_click("label[for=aspect-16-9]")
+            check(value("[document.getElementById('aspect-16-9').checked, localStorage.getItem('ants.aspect.v2')]") == [True, "16:9"], "a press on 16:9 brings it back")
+            tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
+            tab.open(web, wait=False)
+            time.sleep(1.5)
+            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "a remembered value that is no shape is ignored: 16:9")
+            tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.setItem('ants.aspect', '4:3'); 1")
+            tab.open(web, wait=False)
+            time.sleep(1.5)
+            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "a 4:3 that the old key 'ants.aspect' remembers is not read: 16:9 (every browser starts with 16:9)")
+            tab.open(web + "?aspect=4:3", wait=False)
+            time.sleep(1.5)
+            check(value("[document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')]") == [True, "4:3"], "?aspect=4:3 in the address chooses 4:3")
+            tab.open(web + "?aspect=21:9", wait=False)
+            time.sleep(1.5)
+            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=21:9 is not a shape the page offers: ignored, 16:9")
+            tab.ev("localStorage.removeItem('ants.aspect'); 1")
+
+            # a new tab makes a new room each time: the codes are letters and numbers
+            for _ in range(7):
+                fresh_tab()
+                tab.emulate(1440, 900, 1)
+                tab.open(web, wait=False)
+                wait_for(lambda: seated(tab), 15)
+                codes.append(code_of(lobby()))
+            alphabet_ok = all(re.match(r"^[%s]{6}$" % CODE_ALPHABET, c) for c in codes)
+            check(alphabet_ok and len(set(codes)) == len(codes) and any(ch.isdigit() for c in codes for ch in c) and any(ch.isalpha() for c in codes for ch in c),
+                  "every new tab makes a room of its own with a new code of six letters and numbers (%d codes seen, all different: %s)" % (len(codes), " ".join(codes)))
+
+            # a link to a room that is gone: the name card first, then a room of the visitor's own, with the strip that says so
+            fresh_tab()
+            tab.emulate(1440, 900, 1)
+            tab.open(web + "?room=qqqqqq", wait=False)
+            asked = wait_for(lambda: open_name_card(tab), 10)
+            card = json.loads(value(NAME_CARD_JS))
+            st = lobby()
+            check(bool(asked) and card["title"] == "Join the room qqq qqq" and card["notice"]["shown"] and card["notice"]["below"] and card["notice"]["above"] and card["notice"]["inside"] and card["notice"]["sameType"] and not card["sideways"] and card["inside"],
+                  "a link to a room (?room=qqqqqq) asks for a name first: the notice about recorded matches is under the hint and above the way out, in the hint's type, inside the card (%s)" % card["notice"])
+            check(st["heading"] == "Joining a room" and st["start"]["disabled"] and st["plan"] == "" and st["cards"][0]["kind"] in ("open", "nobody") and not any(c["grip"] or c["pencil"] for c in st["cards"]) and st["offline"],
+                  "the page behind the card waits with no names and START off: \"Joining a room\", the colours grey and shut (%s)" % st["heading"])
+            check(not tab.ev("document.querySelector('.maprow').getBoundingClientRect().height > 0 && getComputedStyle(document.querySelector('.maprow')).visibility === 'visible'"), "... and the map is not shown, as it is not known yet")
+            check(server.room("qqqqqq") is None, "no room was made yet: the server has none under that code")
+            contrast("1440 px with the name card of a link", least=40)
+            fill_name_card(tab, "Zoeë", press=False)
+            click_on(tab, "#name-step-go")
+            time.sleep(0.4)
+            card = json.loads(value(NAME_CARD_JS))
+            check(card["shown"] and "printable ASCII" in card["msg"] and (server.room("qqqqqq") is None), "a name with an accent is refused with the reason, in the card, and nothing starts (%r)" % card["msg"][:60])
+            contrast("1440 px with the name card's refusal", least=40)
+            fill_name_card(tab, "Bot (Zed)", press=False)
+            click_on(tab, "#name-step-go")
+            time.sleep(0.4)
+            check("Bot (" in json.loads(value(NAME_CARD_JS))["msg"], "a name that begins like a computer player's is refused too (%r)" % json.loads(value(NAME_CARD_JS))["msg"][:60])
+            fill_name_card(tab, "Iris")
+            ok = front_ready()
+            st = lobby()
+            check(ok and not open_name_card(tab) and st["heading"] == "Your room" and st["banner"]["shown"] and st["banner"]["text"] == "That room is gone, because everybody left, so this one is yours now. Send the link on if you like." and st["banner"]["button"] == "OK" and "warn" not in st["banner"]["cls"],
+                  "Join with a name: the room is not there, so this one is the visitor's own, under that name, and a green strip says so (%r)" % st["banner"]["text"])
+            check(card_of(st, "green")["name"] == "Iris" and code_of(st) == "qqqqqq" and (server.room("qqqqqq") or {}).get("lobby") is True and (server.room("qqqqqq") or {}).get("leader") == 0,
+                  "... the link's code is made again, for the visitor: a lobby on the server with Iris its leader (%s)" % {k: (server.room("qqqqqq") or {}).get(k) for k in ("lobby", "state", "leader")})
+            shot("home_front_gone_strip")
+            contrast("1440 px with the strip at the top", least=40)
+            real_click("#banner-x")
+            check(lobby()["banner"]["shown"] is False, "OK closes the strip")
+            check(value("localStorage.getItem('ants.name')") == "Iris", "the name that was typed is remembered by the browser (for the next room)")
+
+            # widths: the layout of the whole page, 320 to 1600 px
+            fresh_tab()
+            tab.emulate(1440, 900, 1)
+            tab.open(web, wait=False)
+            front_ready()
             wrong = []
-            for width in (320, 340, 360, 375, 390, 414, 480, 600, 700, 701, 768, 900, 1024, 1099, 1100, 1219, 1220, 1280, 1366, 1440, 1600):
-                tab.emulate(width, 900, 1, width <= 480)       # (a phone's scrollbar is an overlay and takes no width: a browser that shows classic ones leaves 305 px of a 320 px window, which five buttons cannot share)
+            widths = (320, 339, 340, 360, 374, 375, 390, 414, 480, 600, 720, 721, 768, 900, 1024, 1040, 1041, 1100, 1220, 1280, 1366, 1440, 1600)
+            for width in widths:
+                tab.emulate(width, 900, 1, width <= 480)       # (a phone's scrollbar is an overlay and takes no width: a browser that shows classic ones leaves 305 px of a 320 px window)
                 time.sleep(0.3)
                 m = json.loads(value(LAYOUT_JS))
                 problems = []
                 if m["scrollW"] > m["innerW"]:
                     problems.append("scrolls sideways (%d > %d)" % (m["scrollW"], m["innerW"]))
-                two = m["right"]["left"] >= m["left"]["right"] - 1 and abs(m["right"]["top"] - m["left"]["top"]) < 30
-                if two != (width >= 1100):
+                if m["strays"]:
+                    problems.append("sticks out of the window: %s" % m["strays"][:3])
+                panel, start = m["panel"], m["start"]
+                two = m["side"] is not None and m["side"]["left"] >= panel["right"] - 1 and abs(m["side"]["top"] - panel["top"]) < 30
+                if two != (width >= 1041):
                     problems.append("%s columns" % ("two" if two else "one"))
-                if not two and m["right"]["top"] < m["left"]["bottom"] - 1:
-                    problems.append("the seats overlap the map")
-                for r in m["rows"]:
-                    t = r["team"]
-                    if t is None:
-                        problems.append("seat %d: the two team switches are not there (four seats play)" % r["seat"])
-                    else:
-                        if not (t["oneLine"] and t["buttons"] == 2):
-                            problems.append("seat %d: the team switches are not on one line" % r["seat"])
-                        if not t["inside"]:
-                            problems.append("seat %d: a team switch sticks out of its row" % r["seat"])
-                        where, nm = t["rect"], t["nm"]
-                        if width >= 701:                         # under the colour, from its left edge
-                            put = where["top"] >= nm["bottom"] - 3 and abs(where["left"] - nm["left"]) < 4
-                        elif width >= 375:                       # beside the colour (and before Sit here)
-                            put = where["left"] >= nm["right"] - 1 and abs(where["top"] - nm["top"]) < 30 and (r["you"] or r["sit"]["left"] >= where["right"] - 1)
-                        else:                                    # the narrowest phones: a line of their own under the colour, with Sit here beside them, over the five buttons (for You, who has neither, under the colour)
-                            put = where["top"] >= nm["bottom"] - 3 and (r["you"] or (where["bottom"] <= r["pair"]["top"] + 3 and abs(r["sit"]["top"] - where["top"]) < 6 and r["sit"]["left"] >= where["right"] - 1))
-                        if not put:
-                            problems.append("seat %d: the team switches are in the wrong place" % r["seat"])
-                    if r["you"]:
-                        continue
-                    if not (r["oneLine"] and r["buttons"] == 5):
-                        problems.append("seat %d: the buttons are not on one line" % r["seat"])
-                    if not r["inside"]:
-                        problems.append("seat %d: something sticks out of its row" % r["seat"])
-                    beside = abs(r["pair"]["top"] - r["nm"]["top"]) < 25 and r["sit"]["right"] <= r["pair"]["left"] + 1
-                    if width >= 701 and r["team"] is not None:         # Sit here is beside the two switches (under the colour), the five buttons are to the right of both
-                        beside = beside and r["sit"]["left"] >= r["team"]["rect"]["right"] - 1 and abs(r["sit"]["top"] - r["team"]["rect"]["top"]) < 6
-                    under = r["pair"]["top"] >= r["nm"]["bottom"] - 3 and r["sit"]["top"] < r["pair"]["top"]
-                    if (width >= 701 and not beside) or (width <= 700 and not under):
-                        problems.append("seat %d: %s" % (r["seat"], "Sit here and the five buttons are not in a row after the colour" if width >= 701 else "the buttons are not under the colour"))
-                # Tab goes the way that the eye does: each tab stop of a seat (the switches, Sit here, the checked one of the five buttons: the order of the markup) is to the right of the one before it on its line, or on a later
-                # line, and the next seat's first stop is below the last one of this seat
-                stops = [stop for r in m["rows"] for stop in r["stops"]]
-                if len(stops) != 2 * 4 + 2 * 3:
-                    problems.append("%d tab stops (every seat has its two switches, every seat but You Sit here and a checked button)" % len(stops))
-                for a, b in zip(stops, stops[1:]):
-                    if not (b["left"] >= a["right"] - 2 and min(a["bottom"], b["bottom"]) - max(a["top"], b["top"]) > 4) and not b["top"] >= a["bottom"] - 3:
-                        problems.append("Tab goes from (%d, %d) to (%d, %d): not to the right on the same line, not on a later line" % (a["left"], a["top"], b["left"], b["top"]))
-                        break
+                if not two and m["side"] is not None and m["side"]["top"] < panel["bottom"] - 1:
+                    problems.append("the map side overlaps the room")
+                cards = {c["c"]: c["rect"] for c in m["cards"]}
+                if [c["c"] for c in m["cards"]] != list(COLOURS):
+                    problems.append("the cards are not in the order Black, Green, Red, Blue")
+                elif width >= 721:
+                    b, g, r, bl = (cards[c] for c in COLOURS)
+                    if not (b["left"] < g["left"] and abs(b["top"] - g["top"]) < 3 and abs(r["left"] - b["left"]) < 3 and abs(bl["left"] - g["left"]) < 3 and abs(r["top"] - bl["top"]) < 3 and r["top"] > b["bottom"] - 1):
+                        problems.append("the cards do not lie two by two (Black, Green / Red, Blue): %s" % {k: (round(v["left"]), round(v["top"])) for k, v in cards.items()})
+                else:
+                    seq = [cards[c] for c in COLOURS]
+                    if not (all(abs(x["left"] - seq[0]["left"]) < 3 for x in seq) and all(a["bottom"] <= b["top"] + 1 for a, b in zip(seq, seq[1:]))):
+                        problems.append("the cards are not one column in the order Black, Green, Red, Blue")
+                for c in m["cards"]:
+                    r = c["rect"]
+                    if r["left"] < panel["left"] - 0.5 or r["right"] > panel["right"] + 0.5:
+                        problems.append("%s sticks out of the room's box" % c["c"])
+                    if c["outside"]:
+                        problems.append("%s: %s stick out of the card" % (c["c"], c["outside"][:2]))
+                    if c["dots"]:
+                        problems.append("%s: the grip's dots lie over %s" % (c["c"], c["dots"][:2]))
+                if width <= 720:                                                         # START stays in view at the bottom of a phone's window, with its line under it (the page is longer than the window)
+                    if not (m["docH"] > m["innerH"] and start["top"] >= 0 and start["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] <= m["innerH"] + 0.5 and m["go"]["bottom"] >= m["innerH"] - 30):
+                        problems.append("START! is not held at the bottom of the window (%s)" % {k: round(v) for k, v in start.items() if k in ("top", "bottom")})
+                    if m["plan"] != [False, True] or m["link"] or m["copy"]["left"] < panel["left"] or m["copy"]["right"] > panel["right"]:
+                        problems.append("the phone's short line, no link field and a Copy link inside the room's box: %s" % ([m["plan"], m["link"]],))
+                else:
+                    if m["plan"] != [True, False] or not m["link"]:
+                        problems.append("the long line under START and the link field are shown: %s" % ([m["plan"], m["link"]],))
+                    if width >= 1041 and start["bottom"] > m["innerH"]:
+                        problems.append("START! is not in the first screen")
+                if m["mapFit"][0] > m["mapFit"][1] + 0.5:
+                    problems.append("the map's name is cut off (%.0f px of text in %.0f)" % (m["mapFit"][0], m["mapFit"][1]))
                 if problems:
                     wrong.append((width, problems[:3]))
-            check(not wrong, "21 widths from 320 to 1600 px: no sideways scroll, the five buttons of a seat on one line, from 701 px the colour with its switches and Sit here under it and the five buttons to their right and on two lines under it, the two team switches of a seat on one line (under the colour from 701 px, beside it from 375 px, a line of their own with Sit here below that), the tab stops in reading order, two columns from 1100 px (wrong: %s)" % (wrong,))
-            for width, height, name in ((1366, 900, "home_front_1366"), (768, 1000, "home_front_768")):
-                tab.emulate(width, height, 1)
-                time.sleep(0.4)
-                notice = json.loads(value(FRONT_NOTICE_JS))
-                check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"],
-                      "the plain page at %d px says under the name that online matches are recorded, kept for 30 days and public with the players' names: a block under the hint, inside the name box (%s)" % (width, notice))
-                shot(name)
-            tab.emulate(390, 844, 2, mobile=True)
-            tab.open(web, wait=False)
-            time.sleep(1.5)
-            phone = json.loads(value("JSON.stringify({scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: document.getElementById('who').getBoundingClientRect().left, startBottom: document.getElementById('play').getBoundingClientRect().bottom})"))
-            check(phone["scrollW"] <= phone["innerW"] and phone["left"] >= 15, "phone width (390): no horizontal scroll, 16 px gutters (%s)" % phone)
-            contrast("390 px")
-            shot("home_front_phone")
-            tab.ev("document.getElementById('seat-1-friend').click(); document.getElementById('seat-2-friend').click(); 1")
+            check(not wrong, "%d widths from 320 to 1600 px: no sideways scroll and nothing out of the window, two columns from 1041 px (the room, the map and START! at its side) and one under it, the cards two by two above 720 px and one column below it in the order Black, Green, Red, Blue, "
+                             "nothing out of a card or of the room's box, the grip's dots clear of the names and the drop-down, START! held in view on a phone, the longest map name whole (wrong: %s)" % (len(widths), wrong))
+            tab.emulate(1366, 900, 1)
             time.sleep(0.4)
-            shot("home_front_phone_friends")
-            tab.open(web, wait=False)
-            time.sleep(1.5)
-            notice = json.loads(value(FRONT_NOTICE_JS))
-            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and on a phone (390 px) the plain page has the notice under the hint too, inside the box, with no sideways scroll (%s)" % notice)
-            tab.open(web + "?room=k7m2xq&roommap=small&roomseats=2", wait=False)
-            time.sleep(1.5)
-            notice = json.loads(value(FRONT_NOTICE_JS))
-            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and so does the page that asks for the name of a shared link, under the step's own line (%s)" % notice)
-            tab.open(web + "?map=small&players=1&fill=hard", wait=False)
-            time.sleep(1.5)
-            check(tab.ev("document.getElementById('who-notice').hidden") is True and tab.ev("getComputedStyle(document.getElementById('who-notice')).display") == "none",
-                  "... and the step of a game on this computer has no notice (that game is not recorded by the server)")
+            shot("home_front_1366")
+            tab.emulate(768, 1000, 1)
+            time.sleep(0.4)
+            shot("home_front_768")
+
+            # a phone
+            stub = tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": "window.__shared = []; navigator.share = function (d) { window.__shared.push(d); return Promise.resolve(); };"})["identifier"]
+            try:
+                tab.emulate(390, 844, 2, mobile=True)
+                tab.open(web, wait=False)
+                front_ready()
+                phone = json.loads(value("JSON.stringify({scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, left: document.querySelector('.panel').getBoundingClientRect().left, share: document.getElementById('share').getBoundingClientRect().width > 0, label: document.getElementById('share').textContent})"))
+                check(phone["scrollW"] <= phone["innerW"] and phone["left"] >= 15 and phone["share"] and phone["label"] == "Share", "phone width (390): no horizontal scroll, 16 px gutters, and where the browser has navigator.share a Share button beside Copy link (%s)" % phone)
+                shot("home_front_phone")
+                real_click("#share")
+                shared = wait_for(lambda: value("window.__shared"), 3)
+                check(isinstance(shared, list) and len(shared) == 1 and shared[0].get("url") == lobby()["link"], "Share hands the room's link to the browser's share sheet (%s)" % (shared,))
+                contrast("390 px")
+                real_click("#how-open")
+                contrast("390 px with How it works up")
+                real_click("#how-close")
+                tab.ev("window.scrollTo(0, document.documentElement.scrollHeight); 1")
+                time.sleep(0.3)
+                shot("home_front_phone_bottom")
+                pb = json.loads(value("JSON.stringify({start: document.getElementById('start').getBoundingClientRect().bottom, inner: window.innerHeight, foot: document.querySelector('footer').getBoundingClientRect().bottom, docH: document.documentElement.scrollHeight})"))
+                check(abs(pb["foot"] - pb["inner"]) < 2 and pb["start"] <= pb["inner"], "scrolled to the bottom of a phone the footer ends the page and START! has not moved off the window (%s)" % pb)
+            finally:
+                tab.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": stub})
+            fresh_tab()
+            tab.emulate(390, 844, 2, mobile=True)
+            tab.open(web + "?room=qqqqqq", wait=False)
+            wait_for(lambda: open_name_card(tab), 10)
+            card = json.loads(value(NAME_CARD_JS))
+            check(card["shown"] and card["inside"] and not card["sideways"] and card["notice"]["inside"], "the name card of a link on a phone (390 px): whole in the window, with its notice, no sideways scroll (%s)" % {k: card[k] for k in ("inside", "sideways")})
+            contrast("390 px with the name card up", least=40)
+            shot("home_front_phone_name_card")
             tab.emulate(1440, 900, 1)
 
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        if wanted("seats"):
-            print("[web home] the seats: the keyboard and the pointer, Sit here, the Teams, the invitations, START (always on)")
+            # the game server cannot be reached: the gold strip, the colours grey, and the room made by itself when the server is back
+            fresh_tab()
+            server.stop()
+            tab.emulate(1440, 900, 1)
+            tab.open(web, wait=False)
+            shown = wait_for(lambda: lobby()["banner"]["shown"], 15)
+            st = lobby()
+            check(bool(shown) and st["banner"]["text"] == "Cannot reach the game server. Check your connection; trying again…" and "warn" in st["banner"]["cls"] and st["banner"]["button"] == "" and st["offline"] and st["start"]["disabled"] is True and st["plan"] == "There is no room yet.",
+                  "with no game server behind /ws the page says so in a gold strip with no button and goes on trying (%r)" % st["banner"]["text"])
+            shot("home_front_unreachable")
+            contrast("1440 px with the game server unreachable", least=30)
+            server.start()
+            back = wait_for(lambda: seated(tab) and not lobby()["banner"]["shown"], 40, 0.5)
+            st = lobby()
+            check(bool(back) and st["heading"] == "Your room" and (server.room(code_of(st)) or {}).get("lobby") is True,
+                  "... and when the server is back the page gets its room by itself, the strip goes (a room on the server: %s)" % ((server.room(code_of(st)) or {}).get("state"),))
+            tab.emulate(1440, 900, 1)
             clear_storage()
-            browser.devtools.call("Browser.grantPermissions", {"origin": re.match(r"^https?://[^/]+", web).group(0), "permissions": ["clipboardReadWrite", "clipboardSanitizedWrite"]})
-            load(web, settle=1.5)
-            groups = json.loads(value("""JSON.stringify([0, 1, 2, 3].map(function (n) { var f = document.querySelector('input[name=seat-' + n + ']').closest('fieldset');
-                return [f.querySelector('legend').textContent, Array.prototype.map.call(f.querySelectorAll('input[type=radio]'), function (r) { return r.value; }).join()]; }))"""))
-            check(groups == [[c, "friend,easy,medium,hard,nobody"] for c in ("Green", "Red", "Blue", "Black")], "every seat is a fieldset named by its colour (its legend) with the buttons Friend, Easy, Medium, Hard, Nobody (%s)" % groups)
-            tab.ev("[0, 1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")          # (a first visit has a Friend in every seat: Medium bots here, also in the seat that You leaves)
-            tab.ev("document.getElementById('seat-1-medium').focus(); 1")
-            key("ArrowRight", 39)
-            c = card()
-            check(c["seats"][1] == "hard" and tab.ev("document.activeElement.id") == "seat-1-hard", "ArrowRight moves from Medium to Hard and checks it (%s)" % c["seats"])
-            key("ArrowRight", 39)
-            key("ArrowRight", 39)
-            check(card()["seats"][1] == "friend" and tab.ev("document.activeElement.id") == "seat-1-friend", "ArrowRight twice more goes round from Hard over Nobody to Friend, as a browser's radio buttons do (%s)" % card()["seats"])
-            check(card()["invites"] == 1 and card()["invitesShown"], "Friend at Red: the invitation is there")
-            key("ArrowLeft", 37)
-            key("ArrowLeft", 37)
-            c = card()
-            check(c["seats"] == ["medium", "hard", "medium", "medium"] and not c["invitesShown"], "ArrowLeft twice goes back round from Friend over Nobody to Hard: the groups of the other seats did not move, the invitation is gone (%s)" % c["seats"])
-            key("ArrowDown", 40)
-            check(card()["seats"][1] == "nobody", "ArrowDown is ArrowRight (%s)" % card()["seats"])
-            key("ArrowUp", 38)
-            check(card()["seats"][1] == "hard", "ArrowUp is ArrowLeft (%s)" % card()["seats"])
-            key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "team-2-1", "Tab leaves the group for the next seat's Team 1 switch: a seat's switches and Sit here come before its five buttons, the way they stand (%s)" % tab.ev("document.activeElement.id"))
-            outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
-            check(outline[0] != "none" and outline[1] == "3px", "the focused switch shows a visible outline of 3 px (%s)" % outline)
-            key("Enter", 13, "\r")
-            c = card()
-            check(c["switches"] == ["-", "-", "1", "-"] and tab.ev("document.activeElement.id") == "team-2-1" and tab.ev("document.activeElement.getAttribute('aria-pressed')") == "true", "Enter on it puts Blue on Team 1 (the switch says that it is on, the focus stays) (%s)" % c["switches"])
-            key("Enter", 13, "\r")
-            check(card()["switches"] == ["-", "-", "-", "-"], "... and Enter on it again takes Blue off Team 1 (%s)" % card()["switches"])
-            key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "team-2-2", "Tab goes on to Team 2 of that seat (%s)" % tab.ev("document.activeElement.id"))
-            key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "sit-2", "... and then to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
-            outline = json.loads(value("""(function () { var c = getComputedStyle(document.activeElement); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
-            check(outline[0] != "none" and outline[1] == "3px", "the focused Sit here shows a visible outline of 3 px (%s)" % outline)
-            key("Tab", 9)
-            check(tab.ev("document.activeElement.id") == "seat-2-medium", "... and then to the checked one of that seat's five buttons (%s)" % tab.ev("document.activeElement.id"))
-            outline = json.loads(value("""(function () { var l = document.querySelector('label[for=seat-2-medium]'); var c = getComputedStyle(l); return JSON.stringify([c.outlineStyle, c.outlineWidth]); })()"""))
-            check(outline[0] != "none" and outline[1] == "3px", "the focused button shows a visible outline of 3 px (%s)" % outline)
-            key("Tab", 9, "", 8)
-            check(tab.ev("document.activeElement.id") == "sit-2", "Shift + Tab goes back to that seat's Sit here (%s)" % tab.ev("document.activeElement.id"))
-            key("Enter", 13, "\r")
-            c = card()
-            check(c["you"] == [2] and tab.ev("document.activeElement.id") == "sit-0", "Enter on Sit here at Blue: You are at Blue, and the focus goes to the Sit here of Green, the seat that You left (%s, %s)" % (c["you"], tab.ev("document.activeElement.id")))
-            check(c["seats"] == ["medium", "hard", "medium", "medium"], "... the choices of the seats stayed (Green kept Medium, Blue keeps its own while it is You) (%s)" % c["seats"])
-            real_click("#sit-3")
-            check(card()["you"] == [3], "a click of the pointer on Sit here at Black: You are at Black (%s)" % card()["you"])
-            check(bool(tab.ev("var r = document.getElementById('seat-name-3'); !r.hidden && r.textContent.length > 0")), "... and the name stands under You at Black")
-            type_name("Maya")
-            check(tab.ev("document.getElementById('seat-name-3').textContent") == "Maya", "the name that is typed is under You as it is typed")
-            real_click("label[for=seat-1-friend]")
-            real_click("label[for=seat-2-hard]")
-            c = card()
-            check(c["seats"][1] == "friend" and c["seats"][2] == "hard" and c["invites"] == 1, "a click on Friend (Red) and on Hard (Blue) with the pointer: the choices and one invitation (%s)" % c["seats"])
-            check(c["teamsShown"] and c["switches"] == ["-", "-", "-", "-"], "Green, Red, Blue and Black play (You at Black): all four have the two switches, none is on (%s)" % c["switches"])
-            tab.ev("document.getElementById('seat-0-nobody').click(); 1")
-            c = card()
-            check(c["switches"] == ["", "-", "-", "-"], "Green is Nobody: three seats play (Red, Blue, Black) and have the switches, Green has none (%s)" % c["switches"])
-            real_click("#team-2-1")
-            real_click("#team-3-1")
-            c = card()
-            room_code = re.search(r"room=([^&]+)", c["links"][0]).group(1) if c["links"] else ""
-            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"] == "Teams: Blue + Black against Red." and re.match(r"^[a-z2-9]{6}$", room_code) is not None,
-                  "a click of the pointer on Team 1 of Blue and of Black: Blue + Black against Red, and the room has a code of six characters (%s, %s)" % (c["teamsLine"], room_code))
-            check(c["dimmed"] == ["", "1", "", ""], "... Team 1 is full: it is dimmed on Red, the only seat that is not in it (%s)" % c["dimmed"])
-            real_click("#team-1-1")
-            c = card()
-            check(c["switches"] == ["", "-", "1", "1"] and c["teamsLine"].startswith("Team 1 has two colours already."), "a click on the dimmed switch changes nothing and the line under the seats says why (%s)" % c["teamsLine"])
-            look = json.loads(value("""(function () { function c(id) { var s = getComputedStyle(document.getElementById(id)); return [s.backgroundColor, s.color, s.opacity, s.borderTopStyle]; } return JSON.stringify([c('team-2-1'), c('team-2-2'), c('team-1-1')]); })()"""))
-            check(look[0][0] != look[1][0] and look[0][1] != look[1][1] and look[2][0] != look[1][0] and look[2][0] != look[0][0] and [look[0][2], look[1][2], look[2][2]] == ["1", "1", "1"] and look[2][3] == "dashed" and look[1][3] == "solid",
-                  "the switch that is on is drawn as a pressed button (another background and another colour of text than the one that is off), a dimmed one has its own flat face and a dashed edge and is not faded: no opacity, its letters keep their contrast (%s)" % look)
-            tab.ev("window.__written = 0; new MutationObserver(function (l) { window.__written += l.length; }).observe(document.getElementById('teams-line'), { childList: true, characterData: true, subtree: true }); 1")
-            real_click("#team-1-1")
-            time.sleep(0.2)
-            first = tab.ev("window.__written")
-            real_click("#team-1-1")
-            time.sleep(0.2)
-            second = tab.ev("window.__written")
-            check(first == 1 and second == 2, "a second press on the dimmed switch writes its reason again (a live region says only what is written, so the person hears it again) (%s, %s writes)" % (first, second))
-            link = c["links"][0]
-            q = {k: v for k, v in (kv.split("=", 1) for kv in link.split("?", 1)[1].split("&"))}
-            check(re.match(r"^[a-z2-9]{6}$", room_code) is not None and q.get("roommap") == "treasure" and q.get("roomseats") == "4" and q.get("roomteams") == "2%2B3",
-                  "Blue + Black against Red is part of the room's create block in the link (roomteams=2%%2B3, with its map and its four seats); the code is only a name, six characters (%s)" % link.split("?", 1)[1])
-            check(re.match(r"^[^?]*\?join=/ws&room=[a-z2-9]{6}&roommap=treasure&roomseats=4&roomteams=2%2B3&seat=1&", link) is not None,
-                  "... and the block comes right after the code, before the seat (%s)" % link.split("?", 1)[1])
-            check(q.get("seat") == "1" and q.get("fill") == "none,none,hard,none" and q.get("start") == "2" and q.get("aspect") == "16:9" and "name" not in q and "teams" not in q and not re.search(r"key|token", link, re.I),
-                  "the link of the Friend at Red: its seat, the plan (a Hard bot at Blue; none for You, the friend and Nobody), two people to wait for, the shape; no name, no teams (the block has them), no key (%s)" % link.split("?", 1)[1])
-            share = tab.ev("typeof navigator.share === 'function'")
-            buttons = tab.ev("Array.prototype.map.call(document.querySelectorAll('#invite-list .invite .btn'), function (b) { return b.textContent; })")
-            check(buttons == (["Copy link", "Share"] if share else ["Copy link"]), "the invitation has Copy link, and Share where the browser has it (%s; share: %s)" % (buttons, share))
-            # what the page hands to the clipboard is recorded (the page's own call is still made), and the clipboard itself is read where the browser lets this page do it
-            tab.ev("window.__copied = []; (function () { var c = navigator.clipboard; if (c && c.writeText) { var w = c.writeText.bind(c); c.writeText = function (t) { window.__copied.push(t); return w(t); }; } })(); 1")
-            real_click("#invite-list .invite .btn")
-            wait_for(lambda: tab.ev("document.querySelector('#invite-list .invite .btn').textContent") == "Copied", 3.0, 0.05)
-            handed = tab.ev("window.__copied")
-            check(handed == [link], "Copy link hands exactly that link to the clipboard, once (%r)" % ([h[:90] for h in handed] if isinstance(handed, list) else handed))
-            check(tab.ev("document.querySelector('#invite-list .invite .btn').textContent") == "Copied", "... and the button says Copied")
-            clip = tab.ev("navigator.clipboard.readText().catch(function (e) { return 'unreadable: ' + e.name; })")
-            if isinstance(clip, str) and clip.startswith("unreadable: "):
-                note("the browser did not let the page read its clipboard (%s): what was handed to it is what was checked" % clip)
-            else:
-                check(clip == link, "... and that link is what the clipboard holds (%r)" % (clip[:90] if isinstance(clip, str) else clip))
-            tab.ev("var m = document.getElementById('map-pick'); m.value = 'small'; m.dispatchEvent(new Event('change')); 1")
-            c = card()
-            other_code = re.search(r"room=([^&]+)", c["links"][0]).group(1) if c["links"] else ""
-            check(c["linksNote"] and re.match(r"^[a-z2-9]{6}$", other_code) is not None and other_code != room_code and "&roommap=small&roomseats=4&roomteams=2%2B3&" in c["links"][0],
-                  "another map after a copy: a new room (another code, the block of the new map with the same team), new links, and the note says to copy them again (%s)" % c["linksNote"])
-            # two Friends (Blue is one too): the note stays up until every link that was sent is the one that is shown for its seat
-            tab.ev("document.getElementById('seat-2-friend').click(); 1")
-            real_click("#invite-list .invite:nth-child(1) .btn")
-            real_click("#invite-list .invite:nth-child(2) .btn")
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        if wanted("lobby") and not can_play:
+            note("lobby: left out (no game server: give --ws-port)")
+        if wanted("lobby") and can_play:
+            print("[web home] the lobby: a host and players, each a browser of its own, then START into the real game")
+            ready = args.ready_timeout
+
+            def person(label, width=1366, height=900):
+                p = rejoin.Player(path, label, 0, web, ready)
+                people.append(p)
+                p.resize(width, height)
+                return p
+
+            def named(status):
+                return {s.get("seat"): s.get("name") for s in (status.get("players") or [])}
+
+            def phone(p, width, height=700):
+                p.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": 1, "mobile": True, "screenWidth": width, "screenHeight": height})
+
+            def until(p, predicate, timeout=8.0):
+                return bool(wait_for(lambda: predicate(lobby_of(p)), timeout, 0.15))
+
+            def say(p):
+                return lobby_of(p)["toast"]
+
+            def toast_has(p, text, timeout=4.0):
+                return bool(wait_for(lambda: text in lobby_of(p)["toast"], timeout, 0.1))
+
+            host = person("Host")
+            host.call("Page.navigate", {"url": web})
+            check(bool(wait_for(lambda: seated(host), 25)), "the host opens the front page: its room is made and it sits in a colour")
+            hs = lobby_of(host)
+            code = code_of(hs)
+            codes.append(code)
+            check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None, "the room's code is six letters and numbers (%s)" % code)
+            rename_by_pencil(host, "Ann")
+            ok = until(host, lambda s: card_of(s, "green")["name"] == "Ann" and not card_of(s, "green")["ask"])
+            check(ok and named(server.room(code) or {}) == {0: "Ann"} and host.ev("localStorage.getItem('ants.name')") == "Ann",
+                  "the host changes its name with the pencil: the card shows Ann, the room has it (%s) and the browser remembers it" % named(server.room(code) or {}))
+
+            # ---- a guest opens the link: the name card, then the next free colour
+            pal = person("Pal")
+            pal.call("Page.navigate", {"url": hs["link"]})
+            check(bool(wait_for(lambda: open_name_card(pal), 15)), "a guest opens the room's link and is asked for a name first")
+            card = json.loads(pal.ev(NAME_CARD_JS))
+            check(card["title"] == "Join the room %s %s" % (code[:3], code[3:]) and card["button"] == "Join" and card["own"] == "Start a room of my own instead" and card["placeholder"] in NAMES
+                  and card["hint"] == "The name the other players see. Leave it empty to be called %s." % card["placeholder"] and card["notice"]["text"] == LOBBY_NOTICE and card["notice"]["shown"] and card["input"] == "",
+                  "the card says \"Join the room %s %s\", asks for the name (the field is empty, its hint says what an empty field means), and shows the notice about recorded matches (%s)" % (code[:3], code[3:], card["hint"]))
+            fill_name_card(pal, "Zoë")
             time.sleep(0.4)
-            check(not card()["linksNote"], "two Friends, both links copied: no note")
-            tab.ev("var m = document.getElementById('map-pick'); m.value = 'tiny'; m.dispatchEvent(new Event('change')); 1")
-            check(card()["linksNote"], "... another map: the note is up")
-            real_click("#invite-list .invite:nth-child(1) .btn")
-            check(card()["linksNote"], "... one of the links copied again: the note stays (the link that was sent to the other friend is the old room's)")
-            real_click("#invite-list .invite:nth-child(2) .btn")
-            check(not card()["linksNote"], "... both copied again: the note goes")
-            shot("home_seats")
-            tab.ev("['1', '2'].forEach(function (n) { document.getElementById('seat-' + n + '-nobody').click(); }); 1")
-            c = card()
-            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents. Alone you play Green." and not c["teamsShown"] and not c["invitesShown"],
-                  "everybody else Nobody (You at Black): START is on, the line says that it is a game for one on this computer and that You play Green, the Teams and the invitations are gone (%r)" % c["note"])
+            card = json.loads(pal.ev(NAME_CARD_JS))
+            check(card["shown"] and "printable ASCII" in card["msg"] and (server.room(code) or {}).get("joined") == 1, "a name with an accent is refused with the reason and the guest does not join (%r)" % card["msg"][:50])
+            fill_name_card(pal, "Bot (Zed)")
+            time.sleep(0.4)
+            check("Bot (" in json.loads(pal.ev(NAME_CARD_JS))["msg"] and (server.room(code) or {}).get("joined") == 1, "a name that begins like a computer player's is refused too")
+            fill_name_card(pal, "Pal")
+            ok = wait_for(lambda: seated(pal) and not open_name_card(pal), 15)
+            ps = lobby_of(pal)
+            hs = lobby_of(host)
+            check(bool(ok) and ps["code"] == hs["code"] and ps["heading"] == "Ann’s room" and ps["guest"], "the guest is in the room, which is named after its host (%r, code %s)" % (ps["heading"], ps["code"]))
+            status = server.room(code) or {}
+            check(status.get("joined") == 2 and named(status) == {0: "Ann", 1: "Pal"} and status.get("leader") == 0,
+                  "the next free colour is Red, in seat order (the server: Ann at seat 0, Pal at seat 1, Ann leads: %s)" % named(status))
+            pg, pr = card_of(ps, "green"), card_of(ps, "red")
+            check(pg["name"] == "Ann" and pg["badge"] == "Host" and pg["stat"] == "Starts the match." and not pg["pencil"] and not pg["remove"] and not pg["grip"]
+                  and pr["name"] == "Pal" and pr["badge"] == "You" and pr["stat"] == "Waiting for the host to start." and pr["pencil"] and not pr["remove"] and not pr["grip"] and pr["label"] == "Red: Pal, you",
+                  "the guest's screen: Ann is the Host (\"Starts the match.\"), Pal is You with a pencil; no Remove, no grip, nothing to drag (%s)" % {k: pr[k] for k in ("badge", "stat", "pencil", "grip")})
+            check(all(c["kind"] == "open" and c["mode"] is None and c["who"] == "Open" and not c["grip"] for c in (card_of(ps, "black"), card_of(ps, "blue")))
+                  and ps["start"]["text"] == "Waiting for Ann" and ps["start"]["disabled"] and ps["mapDisabled"] and ps["slotsNote"] == "Ann arranges the colours and starts the match." and ps["plan"].startswith("Ann starts the match when everybody is in."),
+                  "... the open colours say Open with no drop-down, START says \"Waiting for Ann\" and is off, the map cannot be changed, and the line under the cards says who arranges them (%r)" % ps["slotsNote"])
+            hr = card_of(hs, "red")
+            check(hr["name"] == "Pal" and hr["stat"] == "In the room" and hr["remove"] and hr["grip"] and not hr["pencil"] and hr["badge"] == "" and toast_has(host, "Pal joined as Red.")
+                  and hs["plan"].startswith("You and Pal play on Treasure. Blue and Black are open and stay empty unless a player joins first."),
+                  "the host's screen: Pal in Red with Remove and a grip, a note that Pal joined as Red, and the line under START counts the two (%r)" % hs["plan"])
+            check(not any(c["teams"] for c in hs["cards"]) and hs["teamsNote"] == "Teams need three or four players." and not any(c["teams"] or c["tab"] for c in ps["cards"]) and ps["teamsNote"] == "",
+                  "with two players there are no team buttons; the host's line says teams need three or four, the guest's has none (%r, %r)" % (hs["teamsNote"], ps["teamsNote"]))
+
+            # ---- the host drags: onto an open colour (a move), onto a taken one (a swap), by the grip's tap and the colour's tap
+            seen = {}
+
+            def mid():
+                seen["drag"] = json.loads(host.ev("""JSON.stringify({chip: !!document.querySelector('.chip'), chipText: (document.querySelector('.chip') || {}).textContent || '',
+                    drop: (function () { var d = document.querySelector('.slot.drop'); return d ? [d.getAttribute('data-c'), d.getAttribute('data-drop')] : null; })(), lifted: Array.prototype.map.call(document.querySelectorAll('#slots li.lifted'), function (l) { return l.getAttribute('data-c'); }) })"""))
+            drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox", during=mid)
+            check(seen["drag"]["chip"] and "Pal" in seen["drag"]["chipText"] and seen["drag"]["drop"] == ["black", "Move here"] and seen["drag"]["lifted"] == ["red"],
+                  "while Pal is dragged a token with the name follows the pointer, the colour it came from is lifted and the open one under it says \"Move here\" (%s)" % seen["drag"])
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "Pal" and card_of(s, "red")["kind"] == "open")
+            status = server.room(code) or {}
+            check(ok and named(status) == {0: "Ann", 3: "Pal"}, "dropped on the open Black: Pal moves there, and the room has it (%s)" % named(status))
+            ok = until(pal, lambda s: card_of(s, "black")["badge"] == "You" and card_of(s, "red")["kind"] == "open") and toast_has(pal, "You moved to Black.")
+            check(ok, "Pal's own screen follows: You are at Black, and a note says so (%r)" % say(pal))
+            quinn = person("Quinn")
+            quinn.call("Page.navigate", {"url": hs["link"]})
+            wait_for(lambda: open_name_card(quinn), 15)
+            fill_name_card(quinn, "Quinn")
+            ok = wait_for(lambda: seated(quinn) and not open_name_card(quinn), 15)
+            status = server.room(code) or {}
+            check(bool(ok) and named(status) == {0: "Ann", 1: "Quinn", 3: "Pal"} and toast_has(host, "Quinn joined as Red."), "a second guest takes the next free colour, Red (%s) and the host is told" % named(status))
+            seen.clear()
+            drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox", during=mid)
+            check(seen["drag"]["drop"] == ["black", "Swap places"], "a person dragged onto a taken colour: it says \"Swap places\" (%s)" % (seen["drag"]["drop"],))
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "Quinn" and card_of(s, "red")["name"] == "Pal")
+            status = server.room(code) or {}
+            check(ok and named(status) == {0: "Ann", 1: "Pal", 3: "Quinn"} and toast_has(pal, "swapped colours."), "... and the two swap places (the server: %s; Pal's note: %r)" % (named(status), say(pal)))
+            host.ev("document.querySelector('#slots li[data-c=black] [data-grip]').focus(); 1")
+            key_press(host, "Enter", "Enter", 13, "\r")
+            st = lobby_of(host)
+            check(card_of(st, "black")["picked"] and card_of(st, "red")["target"] and st["slotsNote"] == "Now tap the colour where Quinn goes (tap the same player again to let go).",
+                  "the keyboard: Enter on a grip picks the player up, the other colours become targets, and the line says what to do (%r)" % st["slotsNote"])
+            key_press(host, "Escape", "Escape", 27)
+            check(not any(c["picked"] for c in lobby_of(host)["cards"]), "Esc lets go")
+            click_on(host, "#slots li[data-c=black] [data-grip]")
+            check(card_of(lobby_of(host), "black")["picked"], "a tap on the grip picks the player up")
+            click_on(host, "#slots li[data-c=blue] .antbox")
+            ok = until(host, lambda s: card_of(s, "blue")["name"] == "Quinn" and card_of(s, "black")["kind"] == "open" and not any(c["picked"] for c in s["cards"]))
+            status = server.room(code) or {}
+            check(ok and named(status) == {0: "Ann", 1: "Pal", 2: "Quinn"}, "... and a tap on an open colour puts the player there (the server: %s)" % named(status))
+            host.shot(args.shots, "home_lobby_three")
+
+            # ---- three play: Team 1 and Team 2 on each colour that plays
+            st = lobby_of(host)
+            check([bool(card_of(st, c)["teams"]) for c in COLOURS] == [False, True, True, True] and st["teamsNote"] == "Free for all. For a team, put two colours on the same team." and not st["teamsWarn"],
+                  "with three players Team 1 and Team 2 appear under each colour that plays (not under the open one), and the line says free for all (%r)" % st["teamsNote"])
+            click_on(host, "#slots button[data-seat='0'][data-side='1']")
+            click_on(host, "#slots button[data-seat='1'][data-side='1']")
+            ok = until(host, lambda s: s["teamsNote"] == "Teams: Green + Red against Blue.")
+            status = server.room(code) or {}
+            st = lobby_of(host)
+            g, r, b = card_of(st, "green"), card_of(st, "red"), card_of(st, "blue")
+            check(ok and g["teams"][0]["on"] and r["teams"][0]["on"] and not g["teams"][1]["on"] and not b["teams"][0]["on"] and b["teams"][0]["dim"] and not b["teams"][1]["dim"],
+                  "Team 1 on Green and on Red: \"%s\", the third colour's Team 1 is dashed (full) and its Team 2 is free" % st["teamsNote"])
+            print("  note: the server's plan with that team: %r" % status.get("plan"))
+            check(status.get("plan", "").endswith(" 0+1"), "the room holds the team: Green and Red (plan %r)" % status.get("plan"))
+            click_on(host, "#slots button[data-seat='2'][data-side='1']")
+            st = lobby_of(host)
+            check(st["teamsWarn"] and st["teamsNote"] == "Team 1 has two colours already. Press one of them to take it off first." and not card_of(st, "blue")["teams"][0]["on"],
+                  "a third colour on the full Team 1 is refused, with the reason in the gold team line (%r)" % st["teamsNote"])
+            ps = lobby_of(pal)
+            check([card_of(ps, c)["tab"] for c in COLOURS] == ["", "Team 1", "Team 1", ""] and ps["teamsNote"] == "Teams: Green + Red against Blue." and not any(c["teams"] for c in ps["cards"]),
+                  "the guest sees the teams as read-only tabs, Team 1 on Green and Red, and the line under the cards (%s, %r)" % ([card_of(ps, c)["tab"] for c in COLOURS], ps["teamsNote"]))
+            drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox")
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "Pal" and s["teamsNote"] == "Teams: Green + Black against Blue.")
+            st = lobby_of(host)
+            check(ok and card_of(st, "black")["teams"][0]["on"] and toast_has(host, "Pal moved to Black. Team 1 goes along."),
+                  "Pal dragged to the open Black takes the team along: Team 1 is on at Black now (%r; %r)" % (st["teamsNote"], st["toast"]))
+            ok = until(pal, lambda s: card_of(s, "black")["tab"] == "Team 1" and card_of(s, "green")["tab"] == "Team 1" and card_of(s, "red")["kind"] == "open")
+            check(ok, "... on Pal's own screen too (the tabs: %s)" % ([card_of(lobby_of(pal), c)["tab"] for c in COLOURS],))
+            click_on(host, "#slots button[data-seat='3'][data-side='1']")
+            ok = until(host, lambda s: s["teamsNote"] == "Free for all. For a team, put two colours on the same team.")
+            check(ok and (server.room(code) or {}).get("plan", "").endswith("-"), "a press on a lit button takes it off: no team (%r)" % lobby_of(host)["teamsNote"])
+            click_on(host, "#slots button[data-seat='3'][data-side='1']")
+            ok = until(host, lambda s: s["teamsNote"] == "Teams: Green + Black against Blue.") and wait_for(lambda: (server.room(code) or {}).get("plan", "").endswith(" 0+3"), 5)
+            check(bool(ok), "... and a press puts it back, and the room holds it again (plan %r)" % (server.room(code) or {}).get("plan"))
+
+            # ---- a bot of a level
+            time.sleep(0.6)                                          # (the host's page has the room's word for the team before the next change is made)
+            set_mode(host, "red", "medium")
+            ok = until(host, lambda s: card_of(s, "red")["kind"] == "bot")
+            st = lobby_of(host)
+            status = server.room(code) or {}
+            red = card_of(st, "red")
+            check(ok and red["mode"] == "medium" and red["stat"] == "Computer player" and not red["remove"] and red["grip"] and status.get("plan", "")[1:2] == "m" and toast_has(host, "Red is now a Medium bot."),
+                  "Red set to a Medium bot: its card says Computer player (a grip, no Remove) and the room's plan has it (%r)" % status.get("plan"))
+            lit = [[t["on"] for t in card_of(st, c)["teams"]] for c in COLOURS]
+            check(lit == [[True, False], [True, False], [False, True], [False, True]] and st["teamsNote"] == "Teams: Green + Black against Red + Blue.",
+                  "four play: Black and Green are on Team 1, and the other two colours show Team 2 lit though nobody pressed it; the line says \"%s\" (Team 1 and Team 2 lit, in the order Black, Green, Red, Blue: %s)" % (st["teamsNote"], lit))
+            ps = lobby_of(pal)
+            check([card_of(ps, c)["tab"] for c in COLOURS] == ["Team 1", "Team 1", "Team 2", "Team 2"] and card_of(ps, "red")["who"] == "Medium bot",
+                  "the guest sees them: Black and Green on Team 1, Red (the Medium bot) and Blue on Team 2 (%s)" % [card_of(ps, c)["tab"] for c in COLOURS])
+            host.shot(args.shots, "home_lobby_bot")
+
+            # ---- the pencil: a player renames themselves (a refused name, markup, a name)
+            rename_by_pencil(pal, "Bot (x", refused=True)
+            check("Bot (" in lobby_of(pal)["toast"] and card_of(lobby_of(host), "black")["name"] == "Pal", "a name that begins like a computer player's is refused with the reason, and the host still sees Pal (%r)" % lobby_of(pal)["toast"][:60])
+            rename_by_pencil(pal, "<i>P</i> & co")
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "<i>P</i> & co")
+            hb = card_of(lobby_of(host), "black")
+            check(ok and hb["markup"] == 0 and named(server.room(code) or {}).get(3) == "<i>P</i> & co", "a name with markup in it is shown as the text it is (no element is made of it; the room has it as typed)")
+            rename_by_pencil(pal, "Pip")
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "Pip")
+            seen_names = (card_of(lobby_of(host), "black")["name"], named(server.room(code) or {}).get(3), card_of(lobby_of(pal), "black")["name"], pal.ev("localStorage.getItem('ants.name')"))
+            check(ok and seen_names == ("Pip", "Pip", "Pip", "Pip"),
+                  "the guest renames with the pencil: the host's card and the room say Pip, and the guest's own card and browser remember it (host's card, room, guest's card, guest's storage: %s)" % (seen_names,))
+
+            # ---- Remove, with its question
+            click_on(host, "#slots li[data-c=blue] [data-remove]")
+            st = lobby_of(host)
+            blue = card_of(st, "blue")
+            focus = host.ev("document.activeElement.getAttribute('data-remove-no')")
+            check(blue["ask"] == "Remove Quinn from the room?RemoveKeep" and blue["classes"].find("removing") != -1 and focus == "2" and not blue["remove"],
+                  "Remove asks first: \"Remove Quinn from the room?\" with Remove and Keep, and the focus is on Keep (%r)" % blue["ask"])
+            contrast("1366 px, the host's screen with three players, a bot, teams and the question open", t=host, least=40)
+            host.shot(args.shots, "home_lobby_ask")
+            click_on(host, "#slots li[data-c=black] [data-remove]")
+            st = lobby_of(host)
+            check(card_of(st, "black")["ask"] != "" and card_of(st, "blue")["ask"] == "" and card_of(st, "blue")["remove"], "one question at a time: asking about Pip closes the one about Quinn")
+            key_press(host, "Escape", "Escape", 27)
+            st = lobby_of(host)
+            check(not any(c["ask"] for c in st["cards"]) and host.ev("document.activeElement.getAttribute('data-remove')") == "3", "Esc is Keep: the question closes and the focus goes back to Remove")
+            click_on(host, "#slots li[data-c=blue] [data-remove]")
+            click_on(host, "#slots li[data-c=blue] [data-remove-no]")
+            st = lobby_of(host)
+            check(not any(c["ask"] for c in st["cards"]) and card_of(st, "blue")["name"] == "Quinn" and (server.room(code) or {}).get("joined") == 3, "Keep closes the question and nothing changes (the room still has Quinn)")
+            click_on(host, "#slots li[data-c=blue] [data-remove]")
+            click_on(host, "#slots li[data-c=blue] [data-remove-yes]")
+            ok = until(host, lambda s: card_of(s, "blue")["kind"] == "open")
+            status = server.room(code) or {}
+            check(ok and named(status) == {0: "Ann", 3: "Pip"} and toast_has(host, "Quinn was removed. Blue is open again."), "Remove: Blue opens at once and the host is told (%r; the room: %s)" % (say(host), named(status)))
+            ok = wait_for(lambda: lobby_of(quinn)["banner"]["shown"] and lobby_of(quinn)["heading"] == "Your room", 10)
+            qs = lobby_of(quinn)
+            own_code = code_of(qs)
+            check(bool(ok) and qs["banner"]["text"] == "The host removed you from the room, so this one is yours now. Send the link on if you like." and qs["banner"]["button"] == "OK" and "warn" not in qs["banner"]["cls"],
+                  "the removed player's page makes a room of its own under the same name and a green strip says why (%r)" % qs["banner"]["text"])
+            check(own_code != code and qs["path"] == "/" and qs["search"] == "" and card_of(qs, "green")["name"] == "Quinn" and (server.room(own_code) or {}).get("lobby") is True and named(server.room(own_code) or {}) == {0: "Quinn"},
+                  "... a new code (%s), no room in the address, Quinn the host of it: a lobby on the server" % own_code)
+            quinn.shot(args.shots, "home_lobby_removed")
+            contrast("1366 px, the removed player's screen", t=quinn, least=40)
+            click_on(quinn, "#banner-x")
+            check(lobby_of(quinn)["banner"]["shown"] is False, "OK closes the strip")
+
+            # ---- a typed code: "Have a code?"
+            click_on(quinn, "#havecode")
+            quinn.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
+            click_on(quinn, "#joingo")
+            asked = wait_for(lambda: open_name_card(quinn), 5)
+            card = json.loads(quinn.ev(NAME_CARD_JS))
+            check(bool(asked) and card["title"] == "Join the room %s %s" % (code[:3], code[3:]) and card["input"] == "Quinn", "the host's code, typed with a capital and a space, opens the name card with the remembered name (%r)" % card["title"])
+            click_on(quinn, "#name-step-go")
+            ok = wait_for(lambda: seated(quinn) and lobby_of(quinn)["code"] == lobby_of(host)["code"] and lobby_of(quinn)["guest"], 10)
+            qs = lobby_of(quinn)
+            status = server.room(code) or {}
+            check(bool(ok) and qs["heading"] == "Ann’s room" and card_of(qs, "blue")["badge"] == "You" and named(status) == {0: "Ann", 2: "Quinn", 3: "Pip"}
+                  and quinn.ev("document.getElementById('joinbox').hidden && document.getElementById('joincode').value === ''") is True and not qs["banner"]["shown"],
+                  "Join: Quinn is back in Ann's room, in Blue, the code field has closed (the removal is no ban: the room has %s)" % named(status))
+            check(toast_has(host, "Quinn joined as Blue.") and card_of(lobby_of(host), "blue")["name"] == "Quinn", "the host is told, and the cards agree")
+            check((server.room(own_code) or {}).get("joined", 0) == 0 or server.room(own_code) is None, "the room that Quinn had of its own is left (%s)" % ((server.room(own_code) or {}).get("joined"),))
+
+            # ---- a reload brings the seat back
+            before = named(server.room(code) or {})
+            pal.call("Page.reload", {"ignoreCache": False})
+            ok = wait_for(lambda: seated(pal) and lobby_of(pal)["code"] == lobby_of(host)["code"], 15)
+            ps = lobby_of(pal)
+            status = server.room(code) or {}
+            check(bool(ok) and card_of(ps, "black")["badge"] == "You" and card_of(ps, "black")["name"] == "Pip" and named(status) == before and status.get("joined") == 3 and ps["guest"],
+                  "a guest reloads the page: it is back in the same room, in the same colour and name, and the room has no second Pip (%s)" % named(status))
+            host.call("Page.reload", {"ignoreCache": False})
+            ok = wait_for(lambda: seated(host) and lobby_of(host)["code"] == hs["code"], 15)
+            st = lobby_of(host)
+            check(bool(ok) and not st["guest"] and card_of(st, "green")["badge"] == "You" and card_of(st, "red")["mode"] == "medium" and card_of(st, "blue")["name"] == "Quinn" and st["teamsNote"] == "Teams: Green + Black against Red + Blue." and (server.room(code) or {}).get("leader") == 0,
+                  "the host reloads: it leads the same room again, with the bot, the guests and the teams as they were (%r)" % st["teamsNote"])
+            check(pal.ev("sessionStorage.getItem('ants.lobby') !== null") and host.ev("sessionStorage.getItem('ants.lobby') !== null") and not any(k.startswith("ants.rejoin.") for k in (host.ev("Object.keys(localStorage)") or [])),
+                  "the tab keeps its seat in the session storage; no game key is in the browser before START")
+
+            # ---- a phone: a name of 32 wide letters and the question open
+            rename_by_pencil(pal, "W" * 32)
+            ok = until(host, lambda s: card_of(s, "black")["name"] == "W" * 32)
+            phone(host, 320)
+            phone(pal, 320)
+            time.sleep(0.6)
+            click_on(host, "#slots li[data-c=black] [data-remove]")
+            time.sleep(0.4)
+            for who, p in (("the host's", host), ("the guest's", pal)):
+                m = json.loads(p.ev(LAYOUT_JS))
+                bad = [m["strays"][:3] if m["strays"] else None, [(c["c"], c["outside"][:2]) for c in m["cards"] if c["outside"]], [(c["c"], c["dots"]) for c in m["cards"] if c["dots"]]]
+                check(bool(ok) and m["scrollW"] <= m["innerW"] and not any(bad), "320 px, %s screen with a name of 32 wide letters in a colour%s: no sideways scroll, nothing out of a card (%s)" % (who, " and the Remove question open" if p is host else "", [b for b in bad if b]))
+            host.shot(args.shots, "home_lobby_phone_host")
+            pal.shot(args.shots, "home_lobby_phone_guest")
+            contrast("320 px, the host's screen with the question open", t=host, least=40)
+            key_press(host, "Escape", "Escape", 27)
+            rename_by_pencil(pal, "Pip")
+            until(host, lambda s: card_of(s, "black")["name"] == "Pip")
+            host.resize(1366, 900)
+            pal.resize(1366, 900)
+            time.sleep(0.5)
+            contrast("1366 px, the guest's screen with the teams as tabs", t=pal, least=40)
+
+            # ---- START: everybody goes into the real game
+            st = lobby_of(host)
+            check(st["start"]["text"] == "START!" and not st["start"]["disabled"] and st["plan"] == "You, a Medium bot, Quinn and Pip play on Treasure.",
+                  "before START: the line under it names who plays (%r)" % st["plan"])
+            players_now = [host, pal, quinn]
+            host.shot(args.shots, "home_lobby_before_start")
+            base = site_busy() or {"matches": -1, "players": 0}                  # (what the site counts before START: the server may hold other rooms of the earlier parts)
+            click_on(host, "#start")
+            seats = {id(host): 0, id(quinn): 2, id(pal): 3}
+            names = {id(host): "Ann", id(quinn): "Quinn", id(pal): "Pip"}
+            gone = [bool(wait_for(lambda p=p: "join=" in (p.ev("location.search") or ""), 30)) for p in players_now]
+            check(all(gone), "START: every page leaves the lobby for the game page, the host's and both guests' (%s)" % gone)
+            readied = [bool(wait_for(lambda p=p: p.ev("!!window.isReadyToPlay"), ready)) for p in players_now]
+            check(all(readied), "... and every game is ready (%s)" % readied)
+            for who, p in (("Ann", host), ("Pip", pal), ("Quinn", quinn)):
+                seat = seats[id(p)]
+                wait_for(lambda p=p, seat=seat: p.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=%d" % (code, seat), 20)
+                given = game_args(p)
+                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", str(seat), "--name", names[id(p)], "--aspect", "16:9"] and p.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=%d" % (code, seat),
+                      "%s's game page: the door, the room, seat %d, the name and the shape and nothing else (the server holds the plan); the address keeps the code and the shape, not the name (%s)" % (who, seat, p.ev("location.search")))
+                check(stored_rejoin(p) == ["ants.rejoin.%s.%d" % (code, seat)] and not p.ev("!!document.getElementById('name-step') && !document.getElementById('name-step').hidden"),
+                      "... the key of the seat is in the browser (%s) and the game does not ask for a name" % stored_rejoin(p))
+            began = time.time()
+            runs = [match_runs(p) for p in players_now]
+            check(all(runs), "every game runs the match by itself, with the \"Get ready\" dialog closed (%s, %.0f s)" % (runs, time.time() - began))
+            status = server.room(code) or {}
+            bots = status.get("bots") or []
+            seated_people = {k: v for k, v in named(status).items() if k not in [b.get("seat") for b in bots]}
+            check(status.get("state") == "running" and seated_people == {0: "Ann", 2: "Quinn", 3: "Pip"} and [(b.get("seat"), b.get("level")) for b in bots] == [(1, "medium")] and status.get("joined") == 4 and status.get("ignored_start_requests", 0) == 0,
+                  "the server's status: the match runs, Ann, Quinn and Pip at seats 0, 2 and 3, a Medium bot at seat 1, no START that was not the leader's heard (%s)" % dict({k: status.get(k) for k in ("state", "joined", "plan", "ignored_start_requests")}, people=seated_people))
+            note("the server's status of the match: %s" % {k: status[k] for k in status if k in ("teams", "team", "plan", "expected", "bots")})
+            hosted = site_busy()
+            check(hosted is not None and hosted.get("matches") == base["matches"] + 1 and hosted.get("players", 0) >= 3, "the site's /busy shows the match: one match more than before START, with its three people counted (before %s, now %s)" % (base, hosted))
+            common, same, conflicts = agree(players_now)
+            check(len(common) >= 2 and same and not conflicts, "the three games' state hashes agree at the ticks that all reported (%s)" % common[:6])
+            check(not any("out of sync" in d for p in players_now for d in p.dialogs), "no game said that it was out of sync")
+            host.shot(args.shots, "home_lobby_game_host")
+            # a reload of one game page: the key that START left in the browser brings its seat back, and the match goes on
+            quinn.call("Page.reload", {"ignoreCache": False})
+            time.sleep(2.0)
+            back = wait_for(lambda: quinn.ev("!!window.isReadyToPlay"), ready) and match_runs(quinn, 120)
+            status = server.room(code) or {}
+            again = {k: v for k, v in named(status).items() if k not in [b.get("seat") for b in status.get("bots") or []]}
+            check(bool(back) and quinn.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=2" % code and status.get("joined") == 4 and again == seated_people and stored_rejoin(quinn) == ["ants.rejoin.%s.2" % code],
+                  "a game page that is reloaded takes its seat back with the key in the browser: the same address, the same seat, no second Quinn in the room (%s)" % again)
+            # a link that is opened now (the match has started): a room of its own, with the strip that says so
+            late = person("Late")
+            late.call("Page.navigate", {"url": hs["link"]})
+            wait_for(lambda: open_name_card(late), 15)
+            fill_name_card(late, "Late")
+            ok = wait_for(lambda: seated(late) and lobby_of(late)["banner"]["shown"], 15)
+            ls = lobby_of(late)
+            check(bool(ok) and ls["banner"]["text"] == "The match in that room has already started, so this room is yours instead. Send the link on if you like." and "warn" not in ls["banner"]["cls"] and code_of(ls) != code and not ls["guest"]
+                  and ls["search"] == "" and (server.room(code_of(ls)) or {}).get("lobby") is True,
+                  "a link opened while the match runs gives a room of its own and a green strip that says so (%r)" % ls["banner"]["text"])
+            trouble = console_trouble(people)
+            check(not trouble, "no page said anything bad in its console: no exception, no error but a file that is not there (%s)" % trouble[:3])
+            for p in people:
+                try:
+                    p.close()
+                except Exception:                                # noqa: BLE001
+                    pass
+            people.clear()
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("play") and not can_play:
             note("play: left out (no game server: give --ws-port)")
         if wanted("play") and can_play:
-            print("[web home] START with bots only: this tab goes into a match against Medium bots, which starts by itself")
+            print("[web home] START with a bot in every other colour: this tab goes into a match against Medium bots, which starts by itself")
             clear_storage()
             load(web, settle=1.5)
-            type_name("Bob")
-            tab.ev("[0, 1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")          # (a first visit has a Friend in every seat: Medium bots here)
+            front_ready()
+            rename_by_pencil(tab, "Bob")
+            set_modes(tab, {"red": "medium", "blue": "medium", "black": "medium"})
+            st = lobby()
+            code = code_of(st)
+            codes.append(code)
+            check(st["plan"] == "You, a Medium bot, a Medium bot and a Medium bot play on Treasure." and not st["start"]["disabled"] and st["start"]["text"] == "START!" and card_of(st, "green")["name"] == "Bob",
+                  "before START: Bob and a Medium bot in each of the other colours, and the line under START says so (%r)" % st["plan"])
             before = pages()
-            tab.ev("document.getElementById('play').click(); 1")
+            base = site_busy() or {"matches": -1, "players": 0}                  # (what the site counts before START: the server may hold other rooms of the earlier parts)
+            real_click("#start")
             ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20)
-            check(ok, "START takes this tab to the game page of a room")
+            check(bool(ok), "START takes this tab to the game page of the room")
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 time.sleep(1.0)
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
-                a = json.loads(tab.ev("JSON.stringify({args: ANTS_ARGS, search: location.search})"))
-                arg = lambda name: a["args"][a["args"].index(name) + 1] if name in a["args"] else None
-                code = arg("--room") or ""
-                check(re.match(r"^[a-z2-9]{6}$", code) is not None and arg("--room-map") == "treasure" and arg("--room-seats") == "4" and arg("--seat") == "0" and arg("--fill-bots") == "none,medium,medium,medium" and arg("--start-when") == "1" and arg("--name") == "Bob" and arg("--aspect") == "16:9",
-                      "the game's arguments: the room (%s: six characters, a name and no more) with its map and its four seats (the room's create block), seat 0, the plan none,medium,medium,medium, --start-when 1, the name and the shape (%s)" % (code, [x for x in a["args"] if x != "./this.program"]))
-                order = [a["args"].index(n) for n in ("--join-url", "--room", "--room-map", "--room-seats", "--seat", "--fill-bots", "--start-when", "--name", "--aspect") if n in a["args"]]
-                check(len(order) == 9 and order == sorted(order), "... in the order that the page's rule gives them: the door, the room, its map and seats, the seat, the plan, the number of people, the name, and the shape last (%s)" % order)
-                check("--map" not in a["args"] and "--play" not in a["args"] and "--bot" not in a["args"] and "--teams" not in a["args"] and "--room-teams" not in a["args"] and "--room-leader-start" not in a["args"] and "--platform" not in a["args"],
-                      "... no local game's argument (no --map, --play, --bot), no teams (free for all: no --teams, no --room-teams), no --room-leader-start (a full room starts by itself) and no --platform (the page does not look for it)")
-                check(a["search"] == "?join=/ws&room=%s&roommap=treasure&roomseats=4&fill=none,medium,medium,medium&aspect=16:9&start=1&seat=0" % code,
-                      "the address bar keeps START's room with its map and seats, the plan, the shape and the number of people, and the seat that the room gave this window (the game tells the page: it stands at the end), but not the name (the game page takes it out) (%s)" % a["search"])
+                given = game_args(tab)
+                check(given == ["./this.program", "--join-url", door, "--room", code, "--seat", "0", "--name", "Bob", "--aspect", "16:9"],
+                      "the game's arguments: the site's door, the room (%s: the lobby's own, six letters and numbers), seat 0, the name and the shape, and nothing else (the server holds the plan: the map, the bots, the teams) (%s)" % (code, [x for x in given if x != "./this.program"]))
+                check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and tab.ev("location.search") == "?join=/ws&room=%s&aspect=16:9&seat=0" % code,
+                      "the address bar keeps the room's code and the shape and the seat that the room gave this window (the game tells the page: it stands at the end), but not the name (%s)" % tab.ev("location.search"))
+                check(stored_rejoin(tab) == ["ants.rejoin.%s.0" % code], "the key of the seat is in the browser, for a reload of the game page (%s)" % stored_rejoin(tab))
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
-                pressed = close_quick_help()
-                started = bool(wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30))
-                check(started, "the match starts by itself once the quick help is closed (Enter pressed %d time(s) before the match ran)" % pressed)
+                began = time.time()
+                started = match_runs(tab, 60)
+                check(started, "the match starts by itself, with no key pressed (no START of the player's after this one, the \"Get ready\" dialog closes by itself: %.0f s)" % (time.time() - began))
                 shot("home_play_start")
                 if started:
-                    check(bool(wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5)), "... with the \"Get ready\" dialog, which closes by itself")
                     status = server.room(code) or {}
                     bots = status.get("bots", [])
                     names = {p.get("seat"): p.get("name") for p in status.get("players", [])}
-                    check(status.get("state") == "running" and [b.get("seat") for b in bots] == [1, 2, 3] and all(b.get("level") == "medium" and b.get("fill") for b in bots) and names.get(0) == "Bob" and status.get("joined") == 4,
-                          "the server's status: running, Bot (Medium) at the seats 1, 2 and 3 (seated by the leader's START), Bob at seat 0 (%s)" % {"state": status.get("state"), "joined": status.get("joined"), "bots": [(b.get("seat"), b.get("name")) for b in bots]})
+                    check(status.get("state") == "running" and [(b.get("seat"), b.get("level")) for b in bots] == [(1, "medium"), (2, "medium"), (3, "medium")] and names.get(0) == "Bob" and status.get("joined") == 4,
+                          "the server's status: running, a Medium bot at each of the seats 1, 2 and 3 (seated by the leader's START), Bob at seat 0 (%s)" % {"state": status.get("state"), "joined": status.get("joined"), "bots": [(b.get("seat"), b.get("name")) for b in bots]})
                     check(status.get("ignored_start_requests", 0) == 0, "no START that was not the leader's was heard (%s)" % status.get("ignored_start_requests"))
+                    hosted = site_busy()
+                    check(hosted is not None and hosted.get("matches") == base["matches"] + 1 and hosted.get("players", 0) >= 1, "the site's /busy shows the match: one match more than before START, with its person counted (the bots do not count: before %s, now %s)" % (base, hosted))
                     first = tab.shot()
                     t0 = time.time()
                     time.sleep(max(0.0, args.bot_seconds - 1.0))
@@ -683,35 +1313,43 @@ def main():
                     check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and "join=" in tab.ev("location.search"), "menu: while a match runs the link asks first (%s) and No stays in the game" % dialogs)
                     answer["accept"] = True
                     tab.ev("document.getElementById('menu-btn').click(); 1")
-                    back = wait_for(lambda: tab.ev("location.search") == "" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
+                    back = wait_for(lambda: tab.ev("location.search") == "" and front_up(), 20)
                     check(back and pages() == before, "menu: Yes goes back to the front page in the same tab (no new tab)")
                     if back:
-                        remembered = card()
-                        check(remembered["map"] == "treasure" and remembered["you"] == [0] and remembered["seats"] == ["medium", "medium", "medium", "medium"] and tab.ev("document.getElementById('player-name').value") == "Bob",
-                              "menu: the front page has its choices again and remembers the name (%s)" % {k: remembered[k] for k in ("map", "you", "seats")})
+                        front_ready()
+                        remembered = lobby()
+                        check(code_of(remembered) != code and card_of(remembered, "green")["name"] == "Bob" and remembered["map"] == "treasure" and tab.ev("localStorage.getItem('ants.name')") == "Bob" and not remembered["guest"],
+                              "menu: the front page makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
+                        note("the front page after the Menu of a match that goes on: rejoin line %s (%r)" % ("shown" if remembered["rejoin"] else "not shown", tab.ev("document.getElementById('rejoin-note').textContent")))
+            else:
+                check(False, "the game page of the room is ready")
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        if wanted("solo"):
-            print("[web home] START with every other seat Nobody: a game for one on this computer, in this tab")
+        if wanted("solo") and not can_play:
+            note("solo: left out (no game server: give --ws-port)")
+        if wanted("solo") and can_play:
+            print("[web home] START with every other colour Nobody: a game for one on this computer, in this tab")
             clear_storage()
             load(web, settle=1.5)
-            type_name("Bob")
-            tab.ev("[1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-nobody').click(); }); 1")
-            c = card()
-            check(not c["startOff"] and c["note"] == "Starts at once, on this computer: just you on the map, no opponents." and not c["teamsShown"] and not c["invitesShown"],
-                  "every other seat Nobody: START is on and says that it is a game for one on this computer (%r)" % c["note"])
+            front_ready()
+            rename_by_pencil(tab, "Bob")
+            set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
+            st = lobby()
+            check(not st["start"]["disabled"] and st["start"]["text"] == "START!" and st["plan"] == "A game for one: only your colony is on the map." and not any(c["teams"] for c in st["cards"]),
+                  "every other colour Nobody: START is on and the line under it says that it is a game for one (%r)" % st["plan"])
+            code = code_of(st)
             before = pages()
-            tab.ev("document.getElementById('play').click(); 1")
+            real_click("#start")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
-            check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where,
-                  "START takes this tab to /play.html with the map: no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
+            check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where and "aspect=16:9" in where,
+                  "START takes this tab to /play.html with the map and the shape (16:9, the default): no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
-                a = json.loads(tab.ev("JSON.stringify({args: ANTS_ARGS})"))
-                given = [x for x in a["args"] if x != "./this.program"]
-                check("--map" in given and "--play" in given and "--alone" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"],
-                      "the game's arguments are a game for one on this computer: --map, --play, --alone and the name, no --bot, no room, no --teams (%s)" % given)
+                given = [x for x in game_args(tab) if x != "./this.program"]
+                check("--map" in given and "--play" in given and "--alone" in given and "--bot" not in given and "--join-url" not in given and "--room" not in given and "--teams" not in given and given[given.index("--name") + 1:][:1] == ["Bob"]
+                      and given[given.index("--aspect") + 1:][:1] == ["16:9"],
+                      "the game's arguments are a game for one on this computer: --map, --play, --alone, the name and the shape 16:9, no --bot, no room, no --teams (%s)" % given)
                 check(not tab.ev("document.getElementById('name-step') && !document.getElementById('name-step').hidden"), "the game does not ask for a name (the front page chose it)")
                 started = start_by_enter()
                 check(started, "the match starts once the quick help is closed (Enter), with the \"Get ready\" dialog, which closes by itself")
@@ -723,8 +1361,26 @@ def main():
                           "... and only Green's colony is there: the roster is Green alone (1) and Green has ants, while Red, Blue and Black have none (roster %s, ants of Green, Red, Blue, Black %s)" % (seats[0], seats[1:]))
                     check(not any("out of sync" in d for d in dialogs), "no dialog said that the game was out of sync")
                     shot("home_solo_running")
+                status = server.room(code) or {}
+                check(status.get("joined", 0) == 0 or status.get("state") in ("finished", "ended", None), "the room that the front page made is let go of: nobody is in it now (%s)" % {k: status.get(k) for k in ("state", "joined", "reason")})
             else:
                 check(False, "the game page of a game on this computer is ready")
+            # Classic 4:3, chosen under Screen, is what reaches the game (the choice is remembered by the browser)
+            clear_storage()
+            load(web, settle=1.5)
+            front_ready()
+            rename_by_pencil(tab, "Bob")
+            real_click("label[for=aspect-4-3]")
+            set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
+            real_click("#start")
+            ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
+            where = tab.ev("location.pathname + location.search") if ok else ""
+            check(ok and "aspect=4:3" in where, "with Classic 4:3 chosen under Screen, START takes this tab to the game with that shape (%s)" % where)
+            if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
+                given = [x for x in game_args(tab) if x != "./this.program"]
+                check(given[given.index("--aspect") + 1:][:1] == ["4:3"] and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "4:3", "... and the game is the 4:3 one (--aspect 4:3, the stage says 4:3)")
+            else:
+                check(False, "the 4:3 game is ready")
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("leave"):
@@ -759,8 +1415,11 @@ def main():
                 return x + (shape[0] - 640) + w / 2, y + h / 2
 
             def at_front_page():
-                """The tab is on the front page itself: its path "/" with no arguments, and its name field."""
-                return bool(wait_for(lambda: tab.ev("location.pathname") == "/" and tab.ev("location.search") == "" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20))
+                """The tab is on the front page itself: its path "/" with no arguments, and its colour cards."""
+                return bool(wait_for(lambda: tab.ev("location.pathname") == "/" and tab.ev("location.search") == "" and front_up(), 20))
+
+            def rejoin_offered():
+                return bool(tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false"))
 
             def leave_from_results(shape, what):
                 """The quit dialog's Yes with one opponent left ends the match and the results are up; a click on Leave Game. Whether the tab is on the front page after it."""
@@ -779,6 +1438,15 @@ def main():
                 check(went and pages() == before, "%s: Leave Game takes this tab back to the front page, the menu of the site (no new tab; now %s)" % (what, tab.ev("location.pathname + location.search") if went else "elsewhere"))
                 return went
 
+            def front_with(modes):
+                """A first visit to the front page under the name Bob, the other colours set as `modes` says ({"red": "medium", ...}); the room's code."""
+                clear_storage()
+                load(web, settle=1.5)
+                front_ready()
+                rename_by_pencil(tab, "Bob")
+                set_modes(tab, modes)
+                return code_of(lobby())
+
             for shape_name, shape in (("16:9", (960, 540)), ("4:3", (640, 480))):             # a game on this computer against one Easy bot, each shape of the picture (the button is in another place)
                 clear_storage()
                 load(web + "play.html?map=tiny&bots=easy,none,none&name=Bob&aspect=" + shape_name, ready=True, settle=1.5)
@@ -786,31 +1454,29 @@ def main():
                 check(started, "a game on this computer against one bot (%s) starts" % shape_name)
                 if started:
                     leave_from_results(shape, "game on this computer %s" % shape_name)
+                if can_play and front_up():
+                    front_ready()
+                    check(rejoin_offered() is False, "... and the front page offers no rejoin (a game on this computer has no room)")
 
             if can_play:
-                # a match in a room of the game server: the card's START with one Medium bot (the other seats Nobody)
-                clear_storage()
-                load(web, settle=1.5)
-                type_name("Bob")
-                tab.ev("document.getElementById('seat-1-medium').click(); document.getElementById('seat-2-nobody').click(); document.getElementById('seat-3-nobody').click(); 1")
-                tab.ev("document.getElementById('play').click(); 1")
+                # a match in a room of the game server: the lobby's START with one Medium bot (the other colours Nobody)
+                code = front_with({"red": "medium", "blue": "nobody", "black": "nobody"})
+                real_click("#start")
                 ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
-                check(ok, "START with one bot takes this tab to the game page of a room")
+                check(bool(ok), "START with one bot takes this tab to the game page of a room")
                 if ok:
                     code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
                     started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
                     check(started, "the match against the bot starts by itself (room %s)" % code)
                     if started and leave_from_results((960, 540), "match in a room"):
-                        offered = tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false")
-                        check(not offered, "... and the front page does not offer to rejoin the match that was left")
+                        front_ready()
+                        check(not rejoin_offered(), "... and the front page does not offer to rejoin the match that was left")
+                        check(not any(k.endswith(".0") and code in k for k in (tab.ev("Object.keys(localStorage)") or [])), "... and the browser keeps no key of that seat (%s)" % stored_rejoin(tab))
                 # the quit dialog's Yes with three opponents left (a match goes on without the player): the game leaves for the front page at once, and the seat is dropped, not held
-                clear_storage()
-                load(web, settle=1.5)
-                type_name("Bob")
-                tab.ev("[1, 2, 3].forEach(function (n) { document.getElementById('seat-' + n + '-medium').click(); }); 1")
-                tab.ev("document.getElementById('play').click(); 1")
+                front_with({"red": "medium", "blue": "medium", "black": "medium"})
+                real_click("#start")
                 ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
-                check(ok, "START with three bots takes this tab to the game page of a room")
+                check(bool(ok), "START with three bots takes this tab to the game page of a room")
                 if ok:
                     code = tab.ev("(function () { var a = ANTS_ARGS; return a[a.indexOf('--room') + 1]; })()")
                     started = bool(close_quick_help() and wait_for(lambda: tab.ev("Module._ants_match_running()") == 1, 30) and wait_for(lambda: tab.ev("Module._ants_probe(5)") == 0, 60, 0.5))
@@ -824,85 +1490,71 @@ def main():
                         dropped = bool(wait_for(lambda: (server.room(code) or {}).get("state") == "finished", 10))
                         status = server.room(code) or {}
                         check(dropped and status.get("reason") == "everybody left", "... the seat is dropped on the server at once, not held for a page that is gone: with nobody left the room ends (%s: %s)" % (status.get("state"), status.get("reason")))
-                        check(went and not tab.ev("document.getElementById('rejoin') ? !document.getElementById('rejoin').hidden : false"), "... and the front page does not offer to rejoin it")
+                        if went:
+                            front_ready()
+                            check(not rejoin_offered(), "... and the front page does not offer to rejoin it")
 
         if wanted("friend") and not can_play:
             note("friend: left out (no game server: give --ws-port)")
         if wanted("friend") and can_play:
-            print("[web home] a Friend seat: the room waits for the friend, who opens the invitation; the match starts by itself")
-            host = rejoin.Player(path, "Host", 2, web, args.ready_timeout)
+            print("[web home] two people: the host's room, a friend who comes through the link and its name card; START takes both into the match")
+            host = rejoin.Player(path, "Host", 0, web, args.ready_timeout)
             people.append(host)
-            guest = rejoin.Player(path, "Pal", 3, web, args.ready_timeout)
+            guest = rejoin.Player(path, "Pal", 1, web, args.ready_timeout, link_seat=False)
             people.append(guest)
             host.call("Page.navigate", {"url": web})
-            wait_for(lambda: host.ev("!!document.getElementById('play')"), 20)
-            time.sleep(1.0)
-            host.ev("""var n = document.getElementById('player-name'); n.value = 'Host'; n.dispatchEvent(new Event('input'));
-                       document.getElementById('sit-2').click(); document.getElementById('seat-3-friend').click(); document.getElementById('seat-0-nobody').click(); document.getElementById('seat-1-nobody').click(); 1""")
-            seats = json.loads(host.ev(CARD_JS))
-            check(seats["you"] == [2] and seats["seats"][3] == "friend" and seats["invites"] == 1 and not seats["startOff"] and seats["note"].startswith("Starts when your friend is in"),
-                  "the host sits at Blue, a Friend at Black, Green and Red are Nobody: one invitation, START on, and the line says that it waits for the friend (%s)" % {k: seats[k] for k in ("you", "seats", "invites")})
-            invite = seats["links"][0]
-            room_code = re.search(r"room=([^&]+)", invite).group(1)
-            check(re.match(r"^[a-z2-9]{6}$", room_code) is not None and "&roommap=treasure&roomseats=4&seat=3&" in invite and "start=2" in invite and "name=" not in invite and "fill=" not in invite and "roomteams=" not in invite,
-                  "the invitation: the room (a code of six characters) and its create block (the map and four seats, no teams), seat 3, two people to wait for, no name, no plan (no bots) (%s)" % invite.split("?", 1)[1])
-            host.ev("document.getElementById('play').click(); 1")
-            ready = wait_for(lambda: "join=" in host.ev("location.search") and host.ev("!!window.isReadyToPlay"), args.ready_timeout)
-            check(bool(ready), "START takes the host's tab to the game page of the room")
-            if ready:
-                hargs = json.loads(host.ev("JSON.stringify(ANTS_ARGS)"))
-                harg = lambda name: hargs[hargs.index(name) + 1] if name in hargs else None
-                check(harg("--room") == room_code and harg("--room-map") == "treasure" and harg("--room-seats") == "4" and harg("--seat") == "2" and harg("--start-when") == "2" and harg("--name") == "Host" and "--fill-bots" not in hargs,
-                      "the host's game: the same room as the invitation with the same create block, seat 2, --start-when 2, no plan (%s)" % [x for x in hargs if x != "./this.program"])
-                for _ in range(5):                                       # (nobody else is in and the plan has no bot: an Enter in the waiting room starts nothing, so the quick help is closed with several, a while apart)
-                    enter(host)
-                    time.sleep(2.0)
-                time.sleep(2.0)
+            wait_for(lambda: seated(host), 25)
+            rename_by_pencil(host, "Host")
+            wait_for(lambda: card_of(lobby_of(host), "green")["name"] == "Host", 8)
+            hs = lobby_of(host)
+            room_code = code_of(hs)
+            codes.append(room_code)
+            guest.call("Page.navigate", {"url": hs["link"]})
+            asked = wait_for(lambda: open_name_card(guest), 20)
+            check(bool(asked), "the friend opens the host's link and is asked for a name first (the link has none)")
+            if asked:
+                fill_name_card(guest, "Pal")
+                ok = wait_for(lambda: seated(guest) and not open_name_card(guest) and lobby_of(guest)["guest"], 15)
                 status = server.room(room_code) or {}
-                check(status.get("state") == "waiting" and status.get("joined") == 1 and not host.in_match(), "the room waits: the server says waiting with one player, and the host's game does not run a match (%s)" % {k: status.get(k) for k in ("state", "joined", "leader")})
-                guest.call("Page.navigate", {"url": invite})
-                asked = wait_for(lambda: guest.ev("(function () { var s = document.getElementById('name-step'); return !!s && !s.hidden; })()"), 60)
-                check(bool(asked), "the friend opens the invitation and is asked for a name first (the link has none)")
-                if asked:
-                    guest.ev("document.getElementById('name-step-input').value = 'Pal'; document.getElementById('name-step-go').click(); 1")
-                    gready = wait_for(lambda: guest.ev("!!window.isReadyToPlay"), args.ready_timeout)
-                    check(bool(gready), "the friend's game is ready after the name")
-                    gargs = json.loads(guest.ev("JSON.stringify(ANTS_ARGS)")) if gready else []
-                    garg = lambda name: gargs[gargs.index(name) + 1] if name in gargs else None
-                    check(garg("--room") == room_code and garg("--room-map") == "treasure" and garg("--room-seats") == "4" and garg("--seat") == "3" and garg("--start-when") == "2" and garg("--name") == "Pal",
-                          "the friend's game: the room and its create block (the host's room is there, so the block changes nothing), seat 3, --start-when 2, the name that was typed (%s)" % [x for x in gargs if x != "./this.program"])
-                    # the friend closes the quick help too (an Enter in the waiting room of a game that does not lead sends nothing); nobody presses START
-                    began = time.time()
-                    started = None
-                    both = False
-                    last_enter = 0.0
-                    while time.time() - began < 150 and not both:
-                        status = server.room(room_code) or {}
-                        if started is None and status.get("state") in ("running", "loading"):
-                            started = time.time() - began
-                        both = started is not None and host.in_match() and guest.in_match()
-                        shown = guest.state()
-                        if not both and shown is not None and shown[1] != 1 and time.time() - last_enter >= 3.0 and time.time() - began > 4.0:
-                            enter(guest)
-                            last_enter = time.time()
-                        time.sleep(0.5)
-                    check(started is not None, "the match starts by itself when the friend is in (nobody pressed START after that: %s s after the friend's name)" % (round(started) if started is not None else "never"))
-                    check(bool(both), "both games run the match, the \"Get ready\" dialog closed")
+                names = {p.get("seat"): p.get("name") for p in status.get("players", [])}
+                check(bool(ok) and names == {0: "Host", 1: "Pal"} and status.get("lobby") is True,
+                      "the friend is in the room, in Red: the server lists Host at Green and Pal at Red (%s), and the room is still a lobby (%s)" % (names, status.get("state")))
+                hs = lobby_of(host)
+                gs = lobby_of(guest)
+                check(hs["plan"] == "You and Pal play on Treasure. Blue and Black are open and stay empty unless a player joins first." and gs["start"]["disabled"] and gs["start"]["text"] == "Waiting for Host",
+                      "the host's line counts the two of them (%r); the friend's START waits for the host" % hs["plan"])
+                host.shot(args.shots, "home_friend_lobby")
+                base = site_busy() or {"matches": -1, "players": 0}              # (what the site counts before START: the server may hold other rooms of the earlier parts)
+                click_on(host, "#start")
+                gone = [bool(wait_for(lambda p=p: "join=" in (p.ev("location.search") or ""), 30)) for p in (host, guest)]
+                check(all(gone), "START takes both pages to the game page of the room (%s)" % gone)
+                ready = [bool(wait_for(lambda p=p: p.ev("!!window.isReadyToPlay"), args.ready_timeout)) for p in (host, guest)]
+                check(all(ready), "... and both games are ready (%s)" % ready)
+                for who, p, seat in (("Host", host, 0), ("Pal", guest, 1)):
+                    given = game_args(p)
+                    check(given == ["./this.program", "--join-url", door, "--room", room_code, "--seat", str(seat), "--name", who, "--aspect", "16:9"],
+                          "%s's game: the door, the same room, seat %d, the name and the shape (%s)" % (who, seat, [x for x in given if x != "./this.program"]))
+                began = time.time()
+                started = None
+                both = False
+                while time.time() - began < 150 and not both:                    # (the match begins by itself: nobody presses START in a game page, and no Enter is needed)
                     status = server.room(room_code) or {}
-                    names = {p.get("seat"): p.get("name") for p in status.get("players", [])}
-                    check(status.get("joined") == 2 and names == {2: "Host", 3: "Pal"} and not status.get("bots"), "the server's status: Host at Blue, Pal at Black, nobody else (Green and Red are Nobody), no bot (%s)" % names)
-                    check(status.get("ignored_start_requests", 0) == 0, "no START of a game that did not lead was heard (%s)" % status.get("ignored_start_requests"))
-                    for _ in range(40):
-                        host.syncs()
-                        guest.syncs()
-                        common = [t for t in sorted(host.ticks) if t in guest.ticks]
-                        if len(common) >= 2:
-                            break
-                        time.sleep(1.0)
-                    common = [t for t in sorted(host.ticks) if t in guest.ticks]
-                    check(len(common) >= 2 and all(host.ticks[t] == guest.ticks[t] for t in common) and not host.conflicts and not guest.conflicts, "the two games' state hashes agree at the ticks that both reported (%s)" % common[:6])
-                    host.shot(args.shots, "home_friend_host")
-                    guest.shot(args.shots, "home_friend_guest")
+                    if started is None and status.get("state") in ("running", "loading"):
+                        started = time.time() - began
+                    both = started is not None and host.in_match() and guest.in_match()
+                    time.sleep(0.5)
+                check(started is not None, "the match starts by itself once both games are in the room (nobody pressed START in a game page, and no key: %s s after the games were ready)" % (round(started) if started is not None else "never"))
+                check(bool(both), "both games run the match, the \"Get ready\" dialog closed")
+                status = server.room(room_code) or {}
+                names = {p.get("seat"): p.get("name") for p in status.get("players", [])}
+                check(status.get("joined") == 2 and names == {0: "Host", 1: "Pal"} and not status.get("bots"), "the server's status: Host at Green, Pal at Red, nobody else (Blue and Black stay empty), no bot (%s)" % names)
+                check(status.get("ignored_start_requests", 0) == 0, "no START of a game that did not lead was heard (%s)" % status.get("ignored_start_requests"))
+                hosted = site_busy()
+                check(hosted is not None and hosted.get("matches") == base["matches"] + 1 and hosted.get("players", 0) >= 2, "the site's /busy shows the match: one match more than before START, with its two people counted (before %s, now %s)" % (base, hosted))
+                common, same, conflicts = agree([host, guest], 40)
+                check(len(common) >= 2 and same and not conflicts, "the two games' state hashes agree at the ticks that both reported (%s)" % common[:6])
+                host.shot(args.shots, "home_friend_host")
+                guest.shot(args.shots, "home_friend_guest")
             for p in people:
                 try:
                     p.close()
@@ -916,7 +1568,7 @@ def main():
             clear_storage()
             before = pages()
             load(web + "?join=/ws&room=demo-small-2p-abc123&aspect=16:9", ready=False, settle=2.0)
-            info = json.loads(value("JSON.stringify({stage: !!document.getElementById('game-stage'), lobby: !!document.getElementById('player-name'), ask: !document.getElementById('name-step').hidden, args: ANTS_ARGS})"))
+            info = json.loads(value("JSON.stringify({stage: !!document.getElementById('game-stage'), lobby: !!document.getElementById('slots'), ask: !document.getElementById('name-step').hidden, args: ANTS_ARGS})"))
             check(info["stage"] and not info["lobby"] and info["ask"], "a shared game link (/?join=/ws&room=...) opens the game page, which asks for a name")
             check(tab.ev("(function () { var a = document.getElementById('name-step-back'); return !!a && a.getAttribute('href') === '/' && !!a.closest('.name-step') && a.textContent.indexOf('front page') !== -1; })()"),
                   "... and the name step has its way out: a link to the front page inside the card")
@@ -928,23 +1580,32 @@ def main():
             load(web + "?embed=1&aspect=16:9", ready=False, settle=1.5)
             check(tab.ev("!!document.getElementById('game-stage') && document.body.classList.contains('embed')"), "/?embed=1 opens the game page as a frame's game")
             load(web + "four.html?room=k7m2xq&roommap=small&roomseats=2&fill=medium", ready=False, settle=2.0)
-            info = json.loads(value("JSON.stringify({path: location.pathname, search: location.search, lobby: !!document.getElementById('player-name'), ask: !document.getElementById('who-go').hidden, title: document.getElementById('who-title').textContent, back: !document.getElementById('who-back').hidden && document.getElementById('who-back').getAttribute('href')})"))
-            check(info["path"] == "/" and info["search"].startswith("?room=k7m2xq&roommap=small&roomseats=2&fill=medium") and info["lobby"], "/four.html?room=... goes to /?room=... for good, with its whole query (%s%s)" % (info["path"], info["search"]))
-            check(info["ask"] and info["title"] == "Join the match k7m 2xq" and info["back"] == "/", "... and the front page asks for the name of the shared link (its code in two groups of three), with its way back to the front page (%r)" % info["title"])
-            notice = json.loads(value(FRONT_NOTICE_JS))
-            check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["below"] and notice["inside"] and not notice["sideways"], "... and that step has the notice about recorded matches under its own line (%s)" % notice)
+            wait_for(lambda: open_name_card(tab), 10)
+            info = json.loads(value("JSON.stringify({path: location.pathname, search: location.search, front: !!document.getElementById('slots'), game: !!document.getElementById('game-stage')})"))
+            check(info["path"] == "/" and info["search"].startswith("?room=k7m2xq&roommap=small&roomseats=2&fill=medium") and info["front"] and not info["game"],
+                  "/four.html?room=... goes to /?room=... for good, with its whole query, and that is the front page (%s%s)" % (info["path"], info["search"]))
+            card = json.loads(value(NAME_CARD_JS))
+            check(card["shown"] and card["title"] == "Join the match k7m 2xq" and card["button"] == "Join" and card["own"] == "← Back to the front page" and card["inside"] and not card["sideways"],
+                  "... and the front page asks for the name of the shared link (its code in two groups of three), with its way back to the front page (%r, %r)" % (card["title"], card["own"]))
+            check(card["notice"]["text"] == LOBBY_NOTICE and card["notice"]["shown"] and card["notice"]["below"] and card["notice"]["above"] and card["notice"]["inside"],
+                  "... and that step has the notice about recorded matches between its line and its way back, inside the card (%s)" % card["notice"])
+            real_click("#name-step-own")
+            went = wait_for(lambda: tab.ev("location.pathname + location.search") == "/" and front_up() and not open_name_card(tab), 15)
+            check(bool(went) and (not can_play or front_ready()), "... and the way back takes this tab to the front page itself (no room in the address%s)" % ("; it makes a room of its own" if can_play else ""))
             load(web + "play.html", ready=True, settle=1.0)
             info = json.loads(value("JSON.stringify({args: ANTS_ARGS})"))
             given = [a for a in info["args"] if a != "./this.program"]                             # (the runtime puts the program's own name in front)
             check(given == ["--aspect", "16:9"], "/play.html with nothing is today's front page: no argument but the picture's shape (%s)" % given)
             shot("home_play_plain")
             load(web + "?map=small&players=1&fill=hard", ready=False, settle=1.5)
-            info = json.loads(value("JSON.stringify({go: document.getElementById('who-go').textContent, hidden: document.getElementById('who-go').hidden, cards: document.getElementById('cards').hidden})"))
-            check(not info["hidden"] and info["go"] == "Play" and info["cards"], "/?map=small&players=1&fill=hard still asks for a name (its button says Play) and plays a game on this computer")
-            tab.ev("document.getElementById('who-go').click(); 1")
+            wait_for(lambda: open_name_card(tab), 10)
+            card = json.loads(value(NAME_CARD_JS))
+            check(card["shown"] and card["button"] == "Play" and card["title"] == "Play a game on this computer" and not card["notice"]["shown"],
+                  "/?map=small&players=1&fill=hard still asks for a name (its button says Play; no notice about recorded matches, a game on this computer is not recorded) and plays a game on this computer (%r)" % card["title"])
+            real_click("#name-step-go")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
-            check(ok and "map=small" in where and "bots=hard" in where, "... after the name it takes this tab to /play.html with the map and the Hard bots (%s)" % where)
+            check(ok and "map=small" in where and "bots=hard" in where and "join=" not in where, "... after the name it takes this tab to /play.html with the map and the Hard bots (%s)" % where)
             check(pages() == before, "no new tab was opened by any of it")
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -952,16 +1613,20 @@ def main():
             print("[web home] an address that hosts a match: the room panel, and Play in this tab")
             clear_storage()
             load(web + "?map=treasure&players=3&fill=easy&teams=0%2B1", settle=1.5)
-            type_name("Ann")
-            tab.ev("document.getElementById('who-go').click(); 1")
+            wait_for(lambda: open_name_card(tab), 10)
+            card = json.loads(value(NAME_CARD_JS))
+            check(card["shown"] and card["title"] == "Host a match" and card["button"] == "Host" and card["notice"]["shown"], "the address asks for a name first (Host a match), with the notice about recorded matches (%r)" % card["title"])
+            fill_name_card(tab, "Ann")
             time.sleep(0.8)
             room = tab.ev("document.getElementById('room-code').textContent")
-            check(tab.ev("!document.getElementById('room-panel').hidden") and re.match(r"^[a-z2-9]{3} [a-z2-9]{3}$", room) is not None, "the address makes the room panel, and the room's code is a new one of six characters, shown in two groups of three (%s)" % room)
+            check(tab.ev("!document.getElementById('room-panel').hidden") and re.match(r"^[%s]{3} [%s]{3}$" % (CODE_ALPHABET, CODE_ALPHABET), room) is not None,
+                  "the address makes the room panel, and the room's code is a new one of six letters and numbers (the lobby's alphabet), shown in two groups of three (%s)" % room)
             code = room.replace(" ", "")
+            codes.append(code)
             check(tab.ev("document.getElementById('room-map').textContent") == "Treasure map, 3 players" and tab.ev("location.search") == "?room=%s&roommap=treasure&roomseats=3&roomteams=0%%2B1&fill=easy" % code,
                   "... the room's choices are in its create block, which the address bar of the page keeps with the plain code, the bots and no &teams= (%s, %s)" % (tab.ev("document.getElementById('room-map').textContent"), tab.ev("location.search")))
-            check(tab.ev("document.body.classList.contains('in-room') && document.getElementById('cards').hidden && document.getElementById('how').hidden && getComputedStyle(document.querySelector('.tv')).display === 'none'"),
-                  "... in its room mode: the card and the header's picture give way to the room")
+            check(tab.ev("document.body.classList.contains('in-room') && document.getElementById('lobby').hidden && document.getElementById('rejoin').hidden && getComputedStyle(document.querySelector('.mast p')).display === 'none'"),
+                  "... in its room mode: the lobby and the header's line give way to the room")
             before = pages()
             tab.ev("document.getElementById('play-tab').click(); 1")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/" and "join=" in tab.ev("location.search"), 15)
@@ -971,9 +1636,10 @@ def main():
                   "Play in this tab takes this tab to the game page of the room (the plain code and its create block, no &teams=: %s), no new tab" % a["search"])
             check("--join-url" in a["args"] and "--fill-bots" in a["args"] and a["args"][a["args"].index("--fill-bots") + 1] == "easy" and "--name" in a["args"], "... with the room, the leader's bots and the name in the game's arguments (%s)" % a["args"])
             argument = lambda name: a["args"][a["args"].index(name) + 1] if name in a["args"] else None
-            check(argument("--room") == code and argument("--room-map") == "treasure" and argument("--room-seats") == "3" and argument("--room-teams") == "0+1" and "--teams" not in a["args"] and "--room-leader-start" not in a["args"],
-                  "... the room's choices are the create block that the game sends in its first Hello (--room-map treasure, --room-seats 3, --room-teams 0+1), so there is no --teams (%s)" % a["args"])
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+            check(argument("--room") == code and argument("--room-map") == "treasure" and argument("--room-seats") == "3" and argument("--room-teams") == "0+1" and "--teams" not in a["args"] and "--room-leader-start" not in a["args"]
+                  and argument("--name") == "Ann",
+                  "... the room's choices are the create block that the game sends in its first Hello (--room-map treasure, --room-seats 3, --room-teams 0+1), so there is no --teams, and the name is the one that was typed (%s)" % a["args"])
+
         if wanted("game"):
             print("[web home] the game page in the front page's look")
             play = web + "play.html"
@@ -1138,7 +1804,7 @@ def main():
 
             # --- the pairs under the game: the chosen button is pressed in, a click keeps its id and what it remembers
             pairs = json.loads(value("""JSON.stringify(['aspect-16-9', 'aspect-4-3', 'lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id), s = getComputedStyle(e);
-                return [id, e.getAttribute('aria-checked'), s.backgroundColor, s.transform, (s.boxShadow.match(/rgb\(157, 13, 23\) (\d+)px (\d+)px/) || []).slice(1).join('x')]; }))"""))
+                return [id, e.getAttribute('aria-checked'), s.backgroundColor, s.transform, (s.boxShadow.match(/rgb\\(157, 13, 23\\) (\\d+)px (\\d+)px/) || []).slice(1).join('x')]; }))"""))
             pressed, raised = ("rgb(16, 43, 37)", "matrix(1, 0, 0, 1, 1, 2)"), ("rgb(43, 99, 87)", "none")
             check([tuple(p[2:4]) for p in pairs] == [pressed, raised, pressed, raised] and [p[1] for p in pairs] == ["true", "false", "true", "false"],
                   "the pairs under the game: 16:9 and Locked are pressed in (dark, moved), Classic 4:3 and Free are teal (%s)" % pairs)
@@ -1203,7 +1869,7 @@ def main():
             before = pages()
             dialogs.clear()
             tab.ev("document.getElementById('logo-link').click(); 1")
-            back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
+            back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
             check(back and not dialogs and pages() == before, "the logo at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
             tab.emulate(1440, 900, 1)
             tab.open(play + "?map=treasure&bots=medium&name=Ann", settle=2.0)
@@ -1217,7 +1883,7 @@ def main():
                 check(tab.ev("Module._ants_match_running()") == 1, "... the match goes on")
                 answer["accept"] = True
                 tab.ev("document.getElementById('logo-link').click(); 1")
-                back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('player-name') ? 1 : 0")), 20)
+                back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
                 check(back and pages() == before, "... and Yes goes back to the front page in the same tab (no new tab)")
             else:
                 check(False, "the local game started (Enter at the quick help)")
@@ -1264,7 +1930,7 @@ def main():
                       "... and its notice at %s: online matches are recorded, kept for 30 days and public with the players' names, in the hint's own type, between the hint and the way out, inside the card (%s)" % (label, notice))
                 real_click("#name-step-back")
                 time.sleep(1.0)
-                check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('player-name')"), "... which takes the friend to the front page (the card, no room in the address)")
+                check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('slots')"), "... which takes the friend to the front page (the colour cards, no room in the address)")
             tab.emulate(1440, 900, 1)
             clear_storage()
     except NotReachable as e:
@@ -1272,6 +1938,8 @@ def main():
         return 3
     except Exception as e:                                      # noqa: BLE001  (a page that hangs or crashes is a failure, never a skip)
         print("  FAIL: the check broke down: %s: %s" % (type(e).__name__, e))
+        import traceback
+        traceback.print_exc()
         return 1
     finally:
         for p in people:
