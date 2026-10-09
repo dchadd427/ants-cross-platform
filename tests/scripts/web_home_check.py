@@ -137,7 +137,7 @@ LAYOUT_JS = """(function () {
 })()"""
 
 
-NOTICE_TEXT = "Online matches are recorded and kept for 30 days. The recordings are public and show the players\u2019 names."      # (the line under the name field of the front page and of the game page's name card)
+NOTICE_TEXT = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players\u2019 names."      # (the line under the name field of the front page and of the game page's name card)
 FRONT_NOTICE_JS = """JSON.stringify((function () {
   var n = document.getElementById('who-notice'), box = document.getElementById('who').getBoundingClientRect(), r = n.getBoundingClientRect(), s = getComputedStyle(n);
   var line = [document.getElementById('who-general'), document.getElementById('who-step-hint')].filter(function (e) { return !e.hidden; })[0].getBoundingClientRect();

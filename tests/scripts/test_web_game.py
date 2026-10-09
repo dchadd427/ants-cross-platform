@@ -451,7 +451,7 @@ class TheFooter(PageCase):
         self.assertIn('id="watch-link"', found[1][1])                                                           # (the replays are the site's own page: this tab, not a new one)
         self.assertNotIn("target=", found[1][1])
         lobby_nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.lobby, re.S).group(1)
-        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])
+        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], ["Watch live"] + [text for _, _, text in found[1:]])     # (the front page alone has "Watch live": test_web_replay.py)
 
 
 class TheEmbedModeIsOnlyTheGame(PageCase):
