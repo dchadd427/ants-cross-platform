@@ -194,7 +194,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertGreaterEqual(ratio(colour(ink), colour(ground)), 4.5, "a %s button: %s on %s" % (look, ink, ground))
         # a pressed button is told from a loose one by more than its hue: its edge is far lighter than the loose edge (3 : 1 is the least that a state needs against what it is told from)
         self.assertGreaterEqual(ratio(colour(edge(pressed)), colour(edge(base))), 3.0, "the edge of a pressed button against the edge of a loose one")
-        # a place for them on every width: 36 px high on a wide page (the 38 px of a small button, less the card's room), 40 on a phone, a narrower phone only makes the letters and the room around them smaller
+        # a place for them on every width: 36 px high on a wide page, 40 on a phone, and a narrower phone only makes the letters and the room around them smaller
         self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 36)
         phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
         self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 40px; \}")
@@ -206,7 +206,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertLess(self.script.index("txt.appendChild(set);"), self.script.index("li.appendChild(txt);"))
 
     def test_the_room_has_its_code_its_link_with_copy_link_and_share_and_the_link_carries_the_plain_code_only(self):
-        # which element shows what: the code in two groups of three beside the heading, the link in a read-only field (a phone hides the field: the button is all it needs), Copy link, Share where the browser has it
+        # which element shows what: the code in two groups of three beside the heading, the link in a read-only field (a phone hides the field and Copy link takes the width), Copy link, Share where the browser has it
         self.assertIn('<input id="link" type="text" readonly value="" aria-label="Invitation link">', self.markup)
         self.assertIn('<button class="btn" type="button" id="copy">Copy link</button>', self.markup)
         self.assertIn('<button class="btn share" type="button" id="share" hidden>Share</button>', self.markup)
@@ -545,7 +545,7 @@ class TheGamePage(PageCase):
             self.assertGreater(join.index("'%s'" % name), join.index("if (join && "), name + " only after a valid join is checked")
 
     def test_the_name_step_names_the_room_by_its_code_in_two_groups_of_four_as_the_front_page_does(self):
-        # (the same function on both pages: tests/scripts/web_lobby_check.js runs the two on a table of texts and they must agree)
+        # (the same function on both pages: tests/scripts/web_lobby_check.js runs the game page's and the rules script's (front/lobby_rules.js) on a table of texts and they must agree)
         self.assertIn("function codeText(code) {", self.page[self.page.index("ANTS_PAGE_BEGIN"):self.page.index("// ANTS_PAGE_END")])
         self.assertIn("return text.length === 6 ? text.slice(0, 3) + ' ' + text.slice(3) : text;", self.page)
         self.assertIn("asksForName: asksForName, codeText: codeText, withoutName: withoutName", self.page)

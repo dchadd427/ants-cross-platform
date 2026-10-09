@@ -11,7 +11,7 @@ What it makes (web/front/, or the folder of --out):
                                    is 98 x 27 pixels and broke up when it was shown larger, so web/lobby.html draws a button of its own in the same teal
   clay.png                         the background tile that every page repeats: the orange of the game's menus with a little noise and dirt (artlib.dirty_clay; the original's own tile is a flat
                                    orange, which looked too clean). It is made, not cut out, and the same every time. The pages name it with ?v= and the first 8 hex digits of its sha256, because the
-                                   server lets a browser keep a .png for a week: after a new tile, put its hash in the six places (tests/scripts/test_web_front.py says which)
+                                   server lets a browser keep a .png for a week: after a new tile, put its hash in the seven places (tests/scripts/test_web_front.py says which)
   ants.png                         the standing ant of the game's start screen in the colours that the game gives each team (ants.chd's palette indices, shifted by 60, 40, 20 and 0 colours:
                                    artlib.team_ant): one row for each colour (green, red, blue, black), the seven pictures of the ant's 12 steps (sprites 1481 - 1487) left to right, a cell of
                                    24 x 41 pixels with the ant's origin in the same place in every cell, 168 x 164 in all. The lobby's colour cards play it as a sprite sheet (web/lobby.html)

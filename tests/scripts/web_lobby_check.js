@@ -1,6 +1,8 @@
 // Runs the front page's OWN code that is still in the page, without a browser. The front page is the lobby now (a room on the game server, protocol 16): what decides what its cards show and what it asks of the
-// room lives in web/front/lobby_rules.js (tests/scripts/web_lobby_rules_check.js holds that: the rooms' codes, the names, the Team 1 / Team 2 buttons, the moves, the words) and the client in web/front/lobby_net.js.
+// room lives in web/front/lobby_rules.js (run by tests/scripts/web_lobby_rules_check.js) and the client of the game server in web/front/lobby_net.js (web_lobby_net_check.js, web_lobby_client_check.js).
 // What this file holds is the rest of the page:
+//   * the page and the two scripts it loads before its own: every member of the rules script (Rules.x), of the net script (Net.x, Net.REJECT.x, Net.OS.x), of the lobby client (client.x) and every event of the client
+//     (c.on('x')) that the page uses is there, so that a name that is mistyped or gone fails here and not in a browser;
 //   * web/lobby.html, the block LOBBY_BEGIN .. LOBBY_END (the old addresses of the TEST ROOM and of a game on this computer, which the lobby still opens): playersChoice (1 .. 4, else the fallback), soloSeatsText,
 //     localGameQuery (the address of a game on THIS computer, which an address with &players=1 still plays and which START of a lobby with nobody else plays too: ?map=<key>[&bots=<levels>]&name=<name>&aspect=<shape>,
 //     never a ?join=, a room or a server), hostSeats / hostFillText / hostTeamChoices / hostTeam / hostTeamText / shownRoomTeams / validFillPlan / validRoomTeams / hostPlanText (a room that an address asks for)
@@ -54,7 +56,7 @@ const repo = path.resolve(path.dirname(shellPath), '..');
 const rulesPath = path.join(path.dirname(lobbyPath), 'front', 'lobby_rules.js');
 const Rules = require(path.resolve(rulesPath));
 const aliases = lobbyText.match(/^[ \t]*var (?:MAPS|DEFAULT_MAP_KEY|mapByKey) = Rules\.\w+;$/gm) || [];
-same('the page takes its list of maps, its default map and mapByKey from the rules script, and nothing else is defined above the blocks under those names', aliases.map((a) => a.trim()),
+same('the page takes its list of maps, its default map and mapByKey from the rules script', aliases.map((a) => a.trim()),
      ['var MAPS = Rules.MAPS;', 'var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;', 'var mapByKey = Rules.mapByKey;']);
 const lobbyBlock = between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath);
 const lobbyCode = [

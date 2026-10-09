@@ -1,19 +1,19 @@
 // Runs the pages' OWN code for the player's name (the owner: "the ability for somebody to type in their name ... so their name goes into the game instead of random", and "when joining a
 // link from somebody else, it should ask you first what you want your name to be"):
-//   - the rules of a name (the block NAME_BEGIN .. NAME_END, the same text in web/lobby.html and web/shell.html) on a table of names: the rules of the desktop start menu
-//     (printable ASCII, trimmed, at most 32, nothing that starts with "Bot (" with blanks and case ignored; an empty name means "none chosen");
-//   - the name step (runNameStep): filled in from what the browser remembered, a bad name explained and not accepted, the button or Enter accepts once, the name is remembered;
-//   - web/shell.html: which addresses ask for a name (a shared link: ANTS_PAGE.asksForName), the address without its name (withoutName), and the gate that holds the game back until the name
-//     is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
-//   - web/lobby.html (the front page) as a whole, with a small fake of the browser's DOM: a first visit (Treasure, You at Green, a Friend in the other seats), the ONE card (a group of five buttons for each seat that is not You,
-//     Sit here, the Teams, an invitation for each Friend; START takes this tab to the game page of the room), the room panel of an address that hosts a match (players 2 - 4), the host's own seat in this tab, and the field that every button shares is remembered and filled in, its name goes to the seat that this person plays
-//     (the first seat of the page) and the other seats of the page keep random names, a link made for somebody else carries none, bad names start nothing, a name with < > & is only
-//     ever text (the page writes no markup at all), an empty field falls back to a random name (and to Player for a join), a shared link of the page asks first and starts nothing before.
-//     the room codes (protocol 15: six characters, a name and nothing more, shown in two groups of three wherever a screen shows one, plain in every link and field; the Join box drops the blanks of a typed or
-//     pasted code) and the create block (&roommap= &roomseats= &roomteams= &roomleaderstart=, right after &room=) that every link of a room that the page made carries: the invitations and START, the room
-//     panel's links, windows and frames, the address of the panel itself and the "Play in this tab" address; a room that was made some other way (no block in its address, a code that is Joined) has none anywhere.
-//     the Rejoin button at the top of the front page as a whole (only on the plain page, with a fresh entry of this site: its words, its address, no key anywhere; old entries removed, other servers' left alone;
-//     the page's return from memory and the storage events), the block's own rules being tests/scripts/web_rejoin_block_check.js.
+//   1. the rules of a name (the block NAME_BEGIN .. NAME_END, the same text in web/lobby.html and web/shell.html) on a table of names: the rules of the desktop start menu
+//      (printable ASCII, trimmed, at most 32, nothing that starts with "Bot (" with blanks and case ignored; an empty name means "none chosen");
+//   2. the name step (runNameStep): filled in from what the browser remembered, a bad name explained and not accepted, the button or Enter accepts once, the name is remembered;
+//   3. web/shell.html: which addresses ask for a name (a shared link: ANTS_PAGE.asksForName), the address without its name (withoutName), and the gate that holds the game back until the name
+//      is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
+//   4. web/lobby.html (the front page, the owner's lobby: a room on the game server, protocol 16) read from the file: its scripts, its ids, the name card's wiring, a name only ever as text
+//      (textContent, a value, an attribute, encodeURIComponent in an address), and the links that are made for somebody else (no name in them);
+//   5. web/lobby.html as a whole, run with a small fake of the browser's DOM, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server:
+//      a plain visit makes a room at once under the remembered or picked name (Hello's name, room, key and the session storage that keeps them), the pencil renames the host, a link of somebody
+//      else's room (?room=) and a typed code (Have a code?) ask for a name first and send nothing before it, START hands the seat to the game page (ants.rejoin.<room>.<seat>; no leave()), the
+//      Rejoin strip, the test room of the old addresses (?map=, ?room= with a create block, ?play=here: the typed name goes to the first seat that the page starts, the others have random
+//      names, a link made for somebody else carries none, bad names start nothing, a name with < > & is only ever text, the room codes and the create block that every link of a room that the
+//      page made carries) and the line of numbers in the footer. What a fake DOM cannot say (the look, the phone widths, the pointer, the real focus and the real WebSocket) is the job of
+//      the browser checks (web_home_check.py and the web_lobby_*_check.js against the server), and the block REJOIN has its own check, web_rejoin_block_check.js.
 // tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -46,7 +46,8 @@ function between(text, begin, end, path) {
 }
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
-const NOTICE_HTML = 'Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names.';       // (the line under the name field of both pages)
+const LOBBY_NOTICE_HTML = 'Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.';       // (the front page's: its footer and the card of a link)
+const NOTICE_HTML = 'Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names.';       // (the game page's line under its name field; the lobby's own sentence is LOBBY_NOTICE_HTML)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The rules of a name: the same text in both pages, on a table
@@ -363,27 +364,113 @@ for (const [label, e, want] of [
     const hintAt = stepMarkup.indexOf('<div class="name-step-hint">The name the other players see.');
     check('the card tells a player who joins by a link what the server does with an online match: one more paragraph of the hint\'s own type, after the hint and before the way out, once',
           hintAt !== -1 && noticeAt > hintAt && noticeAt < stepMarkup.indexOf('name-step-back') && shellText.split(NOTICE_HTML).length === 2);
-    check('the front page says the same words once, inside the hint under the name field after the step\'s own line, and the markup does not hide them (only the step for a game on this computer does)',
-          lobbyText.includes('<span id="who-step-hint" hidden></span><span class="notice" id="who-notice">' + NOTICE_HTML + '</span></p>') && lobbyText.split(NOTICE_HTML).length === 2);
+}
+
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 4. web/lobby.html, read from the file: its scripts, its ids, the wiring of the name card, what it does with a name and what it puts into a link
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const path = require('path');
+const lobbyDir = path.dirname(path.resolve(lobbyPath));
+const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.indexOf('<script'));
+const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
+{
+    same('the page loads its two scripts from front/ (the rules, then the network client) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'inline']);
+    const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+    check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
+    const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
+    const missing = [...asked].filter((id) => markupIds.indexOf(id) === -1);
+    check('every id that the script asks for is in the markup (' + asked.size + ' of them)', missing.length === 0, missing.join(','));
+    for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg', 'name-step-hint', 'who-notice', 'name-step-own', 'rejoin', 'rejoin-note', 'rejoin-go', 'link', 'copy', 'havecode', 'joinbox', 'joincode', 'joingo', 'joinhint', 'slots', 'start', 'banner', 'banner-text', 'room-panel', 'grid', 'any-link', 'seat-rows', 'play-tab', 'stats', 'stats-live', 'stats-played'])
+        check('the page has #' + id + ' once', lobbyMarkup.split('id="' + id + '"').length === 2);
+    for (const gone of ['player-name', 'join-name', 'who', 'who-go', 'who-back', 'who-title', 'cards', 'map-pick', 'play', 'seat-you-0', 'sit-0', 'invite-list', 'name-msg', 'join-go', 'join-code'])
+        check('the one-card page\'s #' + gone + ' is gone', lobbyMarkup.indexOf('id="' + gone + '"') === -1);
+    check('the markup has no name field but the card\'s: one text input with the id name-step-input and no other input for a name', (lobbyMarkup.match(/<input[^>]*>/g) || []).filter((t) => /name/i.test(t.replace(/aria-label="[^"]*"/g, ''))).length === 1);
+    // The name card is the game page's step in the lobby page: the NAME block's runNameStep runs it, over the card's own field, button and message
+    check('the name card is run by the NAME block\'s runNameStep, over the card\'s own field, button and message (the field and the button are fresh nodes: no listener of an earlier use stays)',
+          /input: freshNode\('name-step-input'\), button: freshNode\('name-step-go'\),\s*message: \{ get textContent\(\) \{ return \$\('name-step-msg'\)\.textContent; \}, set textContent\(v\) \{ \$\('name-step-msg'\)\.textContent = v; ui\.input\.setAttribute\('aria-invalid', v \? 'true' : 'false'\); \} \},/.test(lobbyScript) &&
+          /runNameStep\(ui,\{ recall: recall, remember: remember \}, function \(name\) \{ o\.done\(name \|\| suggestion\); \}\);/.test(lobbyScript) &&
+          /function freshNode\(id\) \{\s*var old = \$\(id\), copy = old\.cloneNode\(true\);\s*old\.parentNode\.replaceChild\(copy, old\);\s*return copy;\s*\}/.test(lobbyScript));
+    check('three things ask for a name: a link of somebody else\'s room, a code that was typed, and an address of the test room (askName is called three times, and no other way starts a seat of a stranger)', (lobbyScript.match(/\baskName\(\{/g) || []).length === 3);
+    check('the card says its words as text: the title, the button, the hint, the suggestion in the field, the way out', /\$\('name-step-title'\)\.textContent = o\.title;/.test(lobbyScript) && /ui\.button\.textContent = o\.button;/.test(lobbyScript) && /ui\.input\.placeholder = suggestion;/.test(lobbyScript)
+          && /\$\('name-step-hint'\)\.textContent = o\.hint \|\| 'The name the other players see\. Leave it empty to be called ' \+ suggestion \+ '\.';/.test(lobbyScript) && /\$\('name-step-own'\)\.textContent = o\.backText \|\| 'Start a room of my own instead';/.test(lobbyScript));
+    check('an empty name is the page\'s picked name (the one the field\'s placeholder and the hint say), and the browser remembers what was typed (NAME_KEY, by the NAME block)', /o\.done\(name \|\| suggestion\)/.test(lobbyScript) && /var suggestion = Rules\.pickName\(Math\.random\(\)\);/.test(lobbyScript));
+    // What the page does with a name: nothing is put into markup. A name is set as text (el() sets textContent), through a value or an attribute, and goes into an address only through encodeURIComponent
+    check('el() makes an element with its text as textContent, and a person\'s name goes onto a card through it', /function el\(tag, cls, text\) \{[^}]*e\.textContent = text;[^}]*\}/.test(lobbyScript) && /card\.who\.forEach\(function \(w\) \{ who\.appendChild\(el\('span', w\.cls, w\.text\)\); \}\);/.test(lobbyScript));
+    check('the toast, the strip\'s sentence and the removal question are text too', /t\.textContent = text; t\.hidden = false;/.test(lobbyScript) && /\$\('banner-text'\)\.textContent = b\.text;/.test(lobbyScript) && /ask\.appendChild\(el\('span', '', 'Remove ' \+ card\.who\[0\]\.text \+ ' from the room\?'\)\);/.test(lobbyScript));
+    check('the pencil turns the name into a field by value (not into markup), asks nameCheck before the room hears of it, and the room is asked to rename only for a name that the rules take and that is new',
+          /input\.value = nm\.textContent; input\.maxLength = 32;/.test(lobbyScript) && /var checked = nameCheck\(input\.value\);\s*if \(!checked\.ok\) say\(checked\.why\);\s*else if \(checked\.name && checked\.name !== nm\.textContent\) \{\s*if \(client && client\.rename\(checked\.name\)\) remember\(NAME_KEY, checked\.name\);/.test(lobbyScript));
+    check('nothing in the script makes markup from text', !/\.innerHTML\s*[+]?=|\.outerHTML|insertAdjacentHTML|document\.write/.test(lobbyScript));
+    // What goes into an address: a link that is made for somebody else carries the room and no name; the addresses of this page's own games and the way back carry the name that this page's person chose
+    check('the link of the room is the page\'s own address with the plain code and nothing else (no name, no key): ?room=<code>', /function roomLink\(\) \{ return window\.location\.origin \+ window\.location\.pathname\.replace\(\/\^\\\/\+\/, '\/'\) \+ '\?room=' \+ encodeURIComponent\(client \? client\.code : ''\); \}/.test(lobbyScript));
+    check('the Copy button, the Share sheet and the link field all give that link', /copyButton\(\$\('copy'\), roomLink\);/.test(lobbyScript) && /navigator\.share\(\{ url: roomLink\(\) \}\)/.test(lobbyScript) && /if \(\$\('link'\)\.value !== roomLink\(\)\) \$\('link'\)\.value = roomLink\(\);/.test(lobbyScript));
+    check('a game address of the test room has a name only for a seat that this page starts itself (own), and the links for somebody else (Copy link, the link for anybody) are made without it',
+          /if \(own && seat >= 0\) q \+= '&name=' \+ encodeURIComponent\(seatNames\.start\(/.test(lobbyScript) && /copyButton\(copy, function \(\) \{ return gameUrl\(i\); \}\);/.test(lobbyScript) && /\$\('any-link'\)\.value = gameUrl\(-1\);/.test(lobbyScript) &&
+          (lobbyScript.match(/gameUrl\([^)]*\btrue\b/g) || []).length === 4);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 4. web/lobby.html as a whole, with a small fake of the browser
+// 5. web/lobby.html as a whole, with a small fake of the browser, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const NAMES_OF_THE_PAGE = (function () { const m = /var NAMES = \[([^\]]*)\]/.exec(lobbyText); return m ? m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')) : []; })();
-check('the page has its list of random names', NAMES_OF_THE_PAGE.length >= 4);
+// The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)
+function loadFront(file, scope) {
+    const root = {};
+    new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', fs.readFileSync(path.join(lobbyDir, 'front', file), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout);
+    return root;
+}
+const NOSCOPE = { WebSocket: function () { throw new Error('no socket here'); }, setTimeout() { return 0; }, clearTimeout() {} };
+const RULES0 = loadFront('lobby_rules.js', NOSCOPE).AntsLobbyRules;
+const NET0 = loadFront('lobby_net.js', NOSCOPE).AntsLobbyNet;
+check('the two scripts of front/ give the page its globals', !!RULES0 && !!NET0 && typeof RULES0.nameCheck === 'function' && typeof NET0.LobbyClient === 'function');
+const NAMES_OF_THE_PAGE = RULES0.NAMES;
+const SUGGESTION = RULES0.pickName(0.5);               // the page's picked name when Math.random() says 0.5 (the fake page's does)
+const hex = (bytes) => NET0.hexOf(bytes);
+
+// the messages of a game server, as the C++ server writes them (the check of the client, tests/scripts/web_lobby_client_check.js, runs the client against the same builders)
+const E = NET0.SLOT.Empty, C = NET0.SLOT.Client;
+function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
+const KEY = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x30 + i));
+const welcome = (player, key, flags) => Uint8Array.from([2, player, 4].concat(Array.from(key || KEY), [flags === undefined ? 2 : flags]));
+const reject = (reason) => Uint8Array.from([3, reason]);
+// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame }
+function roomMessage(seats, o) {
+    o = o || {};
+    const w = [12];
+    for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }
+    str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
+    w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
+    for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
+    w.push(o.inGame || 0);
+    return Uint8Array.from(w);
+}
+// What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)
+const helloBytes = (name, room, o) => NET0.encodeHello({ name, room, key: (o && o.key) || null, platform: 0x13, create: o && o.join ? null : { map: 'TREASURE.LVL' } });
+const helloName = (b) => String.fromCharCode(...b.slice(4, 4 + b[3]));
+const helloRoom = (b) => { const at = 4 + b[3] + 2 + 1; return String.fromCharCode(...b.slice(at + 1, at + 1 + b[at])); };
+const CODE = /^[a-z2-9]{6}$/;
+const grouped = (code) => code.slice(0, 3) + ' ' + code.slice(3);
+const BLOCK_PARAMS = ['roommap', 'roomseats', 'roomteams', 'roomleaderstart'];
+const blockText = (link) => { const m = /[?&]room=[^&#]*((?:&room(?:map|seats|teams|leaderstart)=[^&#]*)*)/.exec(String(link)); return m ? m[1] : null; };
+const noBlockOf = (env, link) => blockText(link) === '' && BLOCK_PARAMS.every((k) => env.param(link, k) === null) && !/room(map|seats|teams|leaderstart)/.test(String(link));
 
 class El {
     constructor(env, tag, id) {
         this.env = env; this.tagName = tag; this.id = id || ''; this.children = []; this.parent = null; this.attributes = {}; this.listeners = {};
-        this._text = ''; this.style = {}; this.hidden = false; this.value = ''; this.className = ''; this.src = ''; this.classes = new Set(); this.readOnly = false; this._checked = false;
+        this._text = ''; this.style = {}; this.hidden = false; this.value = ''; this.className = ''; this.src = ''; this.alt = ''; this.readOnly = false; this._checked = false; this.disabled = false; this.selected = false;
     }
+    get parentNode() { return this.parent; }
     get checked() { return this._checked; }
     set checked(on) {                                    // a radio button: checking it unchecks the others of its group (the same name), as a browser does
         const radio = (e) => e.tagName === 'input' && e.attributes.type === 'radio' && e.attributes.name;
         if (on && radio(this)) for (const other of Object.values(this.env.elements)) if (other !== this && radio(other) && other.attributes.name === this.attributes.name) other._checked = false;
         this._checked = !!on;
     }
+    get placeholder() { return Object.prototype.hasOwnProperty.call(this.attributes, 'placeholder') ? this.attributes.placeholder : ''; }
+    set placeholder(v) { this.attributes.placeholder = String(v); }
+    get maxLength() { return Object.prototype.hasOwnProperty.call(this.attributes, 'maxlength') ? Number(this.attributes.maxlength) : -1; }
+    set maxLength(v) { this.attributes.maxlength = String(v); }
     get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
     set textContent(v) { this.children = []; this._text = String(v); }
     set innerHTML(v) { this.env.innerHTMLWrites.push(String(v)); this.children = []; this._text = String(v); }
@@ -391,14 +478,30 @@ class El {
     get firstChild() { return this.children[0] || null; }
     appendChild(c) { c.parent = this; this.children.push(c); return c; }
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parent = null; return c; }
+    replaceChild(fresh, old) {
+        const at = this.children.indexOf(old);
+        if (at !== -1) this.children[at] = fresh;
+        fresh.parent = this; old.parent = null;
+        if (this.env.elements[old.id] === old) this.env.elements[old.id] = fresh;     // (what the page asks for by that id is the new node)
+        return old;
+    }
+    replaceWith(fresh) { if (this.parent) this.parent.replaceChild(fresh, this); }
+    cloneNode(deep) {
+        const copy = new El(this.env, this.tagName, this.id);
+        copy.attributes = Object.assign({}, this.attributes); copy.className = this.className; copy.hidden = this.hidden; copy.value = this.value; copy._checked = this._checked; copy._text = this._text; copy.readOnly = this.readOnly; copy.disabled = this.disabled;
+        if (deep) for (const c of this.children) copy.appendChild(c.cloneNode ? c.cloneNode(true) : Object.assign({}, c, { parent: null }));
+        return copy;
+    }
     setAttribute(k, v) { this.attributes[k] = String(v); if (k === 'class') this.className = String(v); }
     getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k) ? this.attributes[k] : null; }
     removeAttribute(k) { delete this.attributes[k]; }
+    hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k); }
     addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
     fire(t, ev) { (this.listeners[t] || []).forEach((fn) => fn(ev || {})); }
-    click() { this.fire('click', {}); }
+    click() { this.fire('click', { target: this, detail: 1 }); }
     key(k) { this.fire('keydown', { key: k, preventDefault() {} }); }
-    focus() { this.env.focused = this; }
+    focus() { this.env.focused = this; this.env.doc.activeElement = this; }
+    blur() { if (this.env.doc.activeElement === this) this.env.doc.activeElement = null; this.fire('blur', {}); }
     select() {}
     contains(o) { for (let n = o; n; n = n.parent) if (n === this) return true; return false; }
     get classList() {
@@ -413,31 +516,54 @@ class El {
     }
     all() { return [this].concat(...this.children.map((c) => (c.all ? c.all() : []))); }
     findAll(pred) { return this.all().filter((e) => e.tagName && pred(e)); }
-    querySelector(sel) { const cls = sel.replace(/^\./, ''); return this.all().find((e) => e !== this && e.tagName && String(e.className).split(/\s+/).indexOf(cls) !== -1) || null; }
+    // a selector of this fake: a list of simple selectors (a tag, .class, [attribute], [attribute="value"], in any mix)
+    matches(selector) {
+        return selector.split(',').some((part) => {
+            const m = /^\s*([a-z0-9]*)((?:\.[\w-]+|\[[\w-]+(?:="[^"]*")?\])*)\s*$/i.exec(part);
+            if (!m) throw new Error('the fake DOM does not know the selector ' + selector);
+            if (m[1] && this.tagName !== m[1].toLowerCase()) return false;
+            for (const q of m[2].match(/\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]/g) || []) {
+                if (q[0] === '.') { if (String(this.className).split(/\s+/).indexOf(q.slice(1)) === -1) return false; }
+                else {
+                    const a = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(q);
+                    if (!this.hasAttribute(a[1]) || (a[2] !== undefined && this.getAttribute(a[1]) !== a[2])) return false;
+                }
+            }
+            return true;
+        });
+    }
+    closest(selector) { for (let n = this; n && n.matches; n = n.parent) if (n.matches(selector)) return n; return null; }
+    querySelector(selector) { return this.all().find((e) => e !== this && e.tagName && e.matches(selector)) || null; }
 }
 
 const THROWS = 'THROWS';
+// One page: the markup of the page and its script, run in a fake browser. search is the address's query; stored is what local storage holds (THROWS: a browser that refuses its storage);
+// options: session (what this tab's session storage holds), noSession, clipboard (false: none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), noWebSocket.
+// env.sockets are the sockets that the page opened (env.last() the newest); env.arrive() opens the newest and plays a server's Welcome and Room.
 function runLobby(search, stored, options) {
     options = options || {};
-    const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [] };
-    const html = lobbyText;
-    const body = html.slice(html.indexOf('<body>'));
-    for (const m of body.matchAll(/<(\w+)([^>]*)>/g)) {
+    const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [], reloads: 0, sockets: [], timers: [], clock: 0, nextTimer: 1 };
+    env.root = new El(env, 'html', '');
+    for (const m of lobbyMarkup.matchAll(/<(\w+)([^>]*)>/g)) {
         const idm = /\bid="([^"]+)"/.exec(m[2]);
         if (!idm) continue;
         const el = new El(env, m[1], idm[1]);
         el.hidden = /\bhidden\b/.test(m[2].replace(/aria-hidden/g, '').replace(/="[^"]*"/g, ''));       // (the boolean attribute, not a word inside a value)
         el._checked = /\bchecked\b/.test(m[2].replace(/="[^"]*"/g, ''));                                      // (the same for a radio button that is checked in the markup)
         for (const a of m[2].matchAll(/([\w-]+)="([^"]*)"/g)) { el.attributes[a[1]] = a[2]; if (a[1] === 'class') el.className = a[2]; }
-        if (m[1] === 'input' && el.attributes.value !== undefined) el.value = el.attributes.value;               // (an input's value as the markup gives it: the radio buttons of the levels, the players)
+        if (m[1] === 'input' && el.attributes.value !== undefined) el.value = el.attributes.value;
+        el.parent = env.root;
         env.elements[idm[1]] = el;
     }
+    // the markup's own text (the buttons say Join, Rejoin it, START!): what stands between a tag with an id and the next tag
+    for (const m of lobbyMarkup.matchAll(/<(\w+)[^>]*\bid="([^"]+)"[^>]*>([^<]*)</g)) env.elements[m[2]]._text = m[3].replace(/&rsquo;/g, '’').replace(/&amp;/g, '&').replace(/&#8249;/g, '‹').replace(/&#8250;/g, '›');
     const doc = {
         body: new El(env, 'body', ''),
         getElementById(id) { if (!env.elements[id]) throw new Error('the page asked for #' + id + ', which its markup does not have'); return env.elements[id]; },
         createElement(tag) { return new El(env, tag, ''); },
         createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
         activeElement: null,
+        elementFromPoint() { return null; },
         execCommand(cmd) {                                // the copy command copies what the last field of the page holds (options.copyResult: false is a browser that did not copy, 'throws' one that refuses)
             const field = doc.body.children[doc.body.children.length - 1];
             env.commanded.push({ cmd, value: field ? field.value : null });
@@ -446,7 +572,9 @@ function runLobby(search, stored, options) {
         },
         hidden: false, listeners: {},
         addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
+        removeEventListener() {},
     };
+    env.doc = doc;
     const data = stored === THROWS ? {} : Object.assign({}, stored);
     const storage = {
         data,
@@ -456,7 +584,7 @@ function runLobby(search, stored, options) {
         key(i) { if (stored === THROWS) throw new Error('storage is blocked'); const names = Object.keys(data); return i < names.length ? names[i] : null; },
         removeItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); delete data[k]; },
     };
-    // the tab's own storage (the card keeps its room there until START): options.session is what it holds, options.noSession is a browser that has none; where the other storage throws this one does too
+    // the tab's own storage (the lobby keeps its room and its key there): options.session is what it holds, options.noSession is a browser that has none; where the other storage throws this one does too
     const sessionData = stored === THROWS ? {} : Object.assign({}, options.session);
     const session = {
         data: sessionData,
@@ -464,30 +592,55 @@ function runLobby(search, stored, options) {
         setItem(k, v) { if (stored === THROWS) throw new Error('storage is blocked'); sessionData[k] = String(v); },
         removeItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); delete sessionData[k]; },
     };
+    const history = { replaceState(...a) { env.replaced.push(a); } };
     const win = {
-        location: { search, href: 'https://play.test/' + search, pathname: '/', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); } },
-        localStorage: storage,
+        location: { search, href: 'https://play.test/' + search, pathname: '/', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); }, reload() { env.reloads++; } },
+        localStorage: storage, history,
         crypto: nodeCrypto.webcrypto,
         listeners: {},
         addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); },
+        removeEventListener() {},
         open(url, name, features) { env.opened.push({ url, name, features }); return { closed: false, focus() {} }; },
         confirm(q) { env.confirms.push(q); return true; },
     };
     if (!options.noSession) win.sessionStorage = session;
-    const nav = options.clipboard === false ? {} : { clipboard: { writeText(t) { env.copied.push(t); return { then() {} }; } } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
+    // a clock that stands still until env.advance(ms): the page's toasts and the client's waits
+    const setTimer = (fn, ms) => { const id = env.nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; };
+    const clearTimer = (id) => { env.timers = env.timers.filter((t) => t.id !== id); };
+    env.advance = (ms) => {
+        const until = env.clock + ms;
+        for (;;) {
+            const due = env.timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+            if (!due) break;
+            env.timers = env.timers.filter((t) => t !== due);
+            env.clock = Math.max(env.clock, due.at);
+            due.fn();
+        }
+        env.clock = until;
+    };
+    class FakeSocket {
+        constructor(url) { this.url = url; this.sent = []; this.closed = false; this.readyState = 0; env.sockets.push(this); }
+        send(bytes) { if (this.closed || this.readyState !== 1) throw new Error('send on a socket that is not open'); this.sent.push(Uint8Array.from(bytes)); }
+        close() { this.closed = true; }
+        open() { this.readyState = 1; if (this.onopen) this.onopen(); return this; }
+        receive(bytes) { if (this.onmessage) this.onmessage({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) }); return this; }
+        drop() { this.closed = true; if (this.onclose) this.onclose({ code: 1006 }); }
+    }
+    const scope = { WebSocket: options.noWebSocket ? undefined : FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer };
+    win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
+    win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
+    const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
+    if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
-    if (options.share === true) nav.share = (data) => { env.shared.push(data); return Promise.resolve(); };
+    if (options.share === true) nav.share = (d) => { env.shared.push(d); return Promise.resolve(); };
     if (options.share === 'throws') nav.share = () => { throw new Error('not allowed'); };
-    if (options.share === 'rejects') nav.share = (data) => { env.shared.push(data); return Promise.reject(new Error('AbortError')); };
-    const history = { replaceState(...a) { env.replaced.push(a); } };
-    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-    const code = scripts[scripts.length - 1][1];
+    if (options.share === 'rejects') nav.share = (d) => { env.shared.push(d); return Promise.reject(new Error('AbortError')); };
     // the site's answers (options.fetch(url, init) -> a promise of a response; the default is no network at all; options.noFetch is a browser that has no fetch)
     env.fetches = [];
     const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
     const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
-    new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'fetch', code)(win, doc, history, nav, function () { return 0; }, function () { return 0; }, fetchSpy);
-    env.doc = doc;
+    const fakeMath = Object.assign(Object.create(Math), { random: () => (options.random === undefined ? 0.5 : options.random) });     // (the page's picked name, and the order of its random names, are the same on every run)
+    new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, setTimer, clearTimer, fetchSpy, undefined, fakeMath);
     env.storage = storage;
     env.session = session;
     env.win = win;
@@ -500,72 +653,482 @@ function runLobby(search, stored, options) {
     env.frameOf = (seat) => { const cell = env.$('grid').children.find((c) => c.getAttribute('data-seat') === String(seat)); return cell ? cell.findAll((e) => e.tagName === 'iframe')[0] : null; };
     env.param = (url, key) => new URL(url).searchParams.get(key);
     env.roomStarted = () => !env.$('room-panel').hidden;
-    // The person picks a button: it is checked and its change event comes (the others of its group are unchecked)
-    env.pick = (id) => { env.$(id).checked = true; env.$(id).fire('change', {}); };
+    env.last = () => env.sockets[env.sockets.length - 1];
+    // The newest socket opens and the server welcomes it as seat `seat` and tells it the room: seats [[state, name] x 4], o as roomMessage takes it (you: the seat, leader: the first)
+    env.arrive = (o) => {
+        o = o || {};
+        const seat = o.seat === undefined ? 0 : o.seat;
+        const s = env.last().open();
+        s.receive(welcome(seat, o.key, o.flags));
+        s.receive(roomMessage(o.seats || [[C, 'Maya'], [E, ''], [E, ''], [E, '']], Object.assign({ you: seat, leader: 0 }, o.room || {})));
+        return s;
+    };
+    // a person presses a button of the page by its id; the card of a colour by its seat; the buttons inside it
+    env.card = (seat) => env.$('slots').children.find((li) => li.getAttribute('data-i') === String(seat));
+    env.inCard = (seat, attr) => env.card(seat).findAll((e) => e.hasAttribute(attr))[0] || null;
+    env.press = (el) => env.$('slots').fire('click', { target: el, detail: 1 });
+    env.pagePlays = () => env.assigned.length > 0;
+    env.dumpAll = () => Object.values(env.elements).flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);
     return env;
 }
 function randomName(n) { return NAMES_OF_THE_PAGE.indexOf(n) !== -1; }
 
-// ---- the plain page (nothing in the address)
+
+(async () => {
+
+// ---- 5.1 the plain visit: the page is the lobby, its room is made at once, under the name that this browser remembers or a picked one; nothing is asked first
 {
     const env = runLobby('', {});
-    check('the page has ONE name field, near the top, in the same box for START and Join', !!env.$('player-name') && !env.$('join-name') && env.$('who') && !env.$('who').hidden);
-    check('nothing is asked first: the card and "How it works" are there, the step\'s button and its way out are not', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-back').hidden && env.$('who-go').hidden && env.$('who-title').hidden);
-    check('... and the page is not in its room mode', !env.body.classList.contains('in-room'));
-    check('nothing remembered: the field is empty and its placeholder is Player', env.$('player-name').value === '' && env.$('player-name').getAttribute('placeholder') === 'Player' && env.$('player-name').getAttribute('maxlength') === '32');
-    check('the notice that online matches are recorded is shown under the name (the plain page hides nothing of it)', !env.$('who-notice').hidden && !env.$('who-hint').hidden);
+    check('a plain visit asks nothing first: no name card, no strip, no banner; the lobby is up and the page is not in its test-room mode', env.$('name-step').hidden && env.$('rejoin').hidden && env.$('banner').hidden && !env.$('lobby').hidden && env.$('room-panel').hidden && !env.body.classList.contains('in-room'));
+    same('... it makes a room on the game server at once: one socket, to this site\'s /ws', env.sockets.map((s) => s.url), ['wss://play.test/ws']);
+    const hello = env.last().open().sent[0];
+    const code = helloRoom(hello);
+    check('... the Hello makes the room: a new code of six characters, the name picked for a visitor who has none, no key, the lobby block', CODE.test(code) && helloName(hello) === SUGGESTION && hex(hello) === hex(helloBytes(SUGGESTION, code)), hex(hello));
+    check('... the invitation is the page\'s address and ?room=<code>: no name, no key, no seat (whoever opens it is asked), and the code is shown in two groups of three', env.$('link').value === 'https://play.test/?room=' + code && env.$('code').textContent === grouped(code), env.$('link').value);
 }
-{
-    const env = runLobby('', { 'ants.name': 'Maya' });
-    check('a remembered name is filled in the next time', env.$('player-name').value === 'Maya');
-}
-for (const bad of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
-    const env = runLobby('', { 'ants.name': bad });
-    check('a remembered name that the rules refuse is not filled in (' + JSON.stringify(bad).slice(0, 14) + ')', env.$('player-name').value === '');
+for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a remembered name with blanks at its ends (they are cut off)', '  Maya  ', 'Maya'], ['a name that looks like markup (it is printable ASCII: a name, shown as text)', '<b>Hi</b> & "you"', '<b>Hi</b> & "you"'],
+                                     ['a remembered name that the rules refuse (a computer player\'s)', 'Bot (x)', SUGGESTION], ['one with an accent', 'Zoë', SUGGESTION], ['one of 33 characters', 'a'.repeat(33), SUGGESTION], ['an empty one (none was chosen)', '', SUGGESTION]]) {
+    const env = runLobby('', { 'ants.name': stored });
+    const hello = env.last().open().sent[0];
+    check('the page makes its room under ' + what + ': ' + JSON.stringify(want), helloName(hello) === want, helloName(hello));
 }
 {
     let env = null;
     try { env = runLobby('', THROWS); } catch (e) { check('a browser that refuses its storage still runs the page', false, e.message); }
     if (env) {
-        env.type('player-name', 'Alice');
-        env.$('play').click();
-        check('... and still starts (nothing is remembered, nothing breaks)', env.assigned.length === 1);
+        const hello = env.last().open().sent[0];
+        check('a browser that refuses its storage still makes its room (nothing is remembered, nothing breaks)', helloName(hello) === SUGGESTION && CODE.test(helloRoom(hello)));
+        env.arrive();
+        check('... and shows it', env.$('code').textContent === grouped(helloRoom(hello)) && env.card(0).textContent.indexOf('Maya') !== -1 && env.$('rejoin').hidden);
+    }
+    const none = runLobby('', {}, { noWebSocket: true });
+    check('a browser with no WebSocket says that the game server cannot be reached, and nothing breaks', none.sockets.length === 0 && !none.$('banner').hidden && /Cannot reach the game server/.test(none.$('banner-text').textContent));
+}
+{   // the tab keeps its room and the key of its seat in the SESSION storage; a reload takes the seat back; the key is nowhere else
+    const env = runLobby('', {});
+    const s = env.arrive({ key: KEY });
+    const code = helloRoom(s.sent[0]);
+    same('once the room has welcomed the page, this tab\'s session storage keeps the room: its code, the key of the seat, the name that the room shows, and that this page made it', JSON.parse(env.session.data['ants.lobby']), { c: code, k: hex(KEY), n: 'Maya', o: 1 });
+    const everything = env.dumpAll() + JSON.stringify(env.storage.data) + JSON.stringify(env.copied);
+    check('THE KEY IS A SECRET: it is not in this browser\'s local storage, not in the link, and not in any text, attribute, field or address of the page (the game page finds it itself: START writes it once, below)',
+          !('ants.lobby' in env.storage.data) && Object.keys(env.storage.data).every((k) => k.indexOf('ants.rejoin.') !== 0) && everything.indexOf(hex(KEY)) === -1 && everything.indexOf(hex(KEY).slice(0, 8)) === -1);
+    const again = runLobby('', {}, { session: env.session.data });
+    const h2 = again.last().open().sent[0];
+    check('a reload of the tab takes the same seat back, with no card: the same code, the key of the seat and the name that the room showed', hex(h2) === hex(helloBytes('Maya', code, { key: KEY })) && again.$('name-step').hidden, hex(h2));
+    for (const [what, junk] of [['text that is no JSON', 'not json'], ['an empty object', '{}'], ['a code with a capital letter (a control interface\'s)', JSON.stringify({ c: 'K7M2XQ', k: hex(KEY), n: 'x', o: 1 })], ['a key of zeros', JSON.stringify({ c: 'k7m2xq', k: '0'.repeat(32), n: 'x', o: 1 })], ['a key that is too short', JSON.stringify({ c: 'k7m2xq', k: 'abc', n: 'x', o: 1 })]]) {
+        const e2 = runLobby('', {}, { session: { 'ants.lobby': junk } });
+        const h = e2.last().open().sent[0];
+        check('a session entry that is ' + what + ' is ignored: a new room with a new code and no key', CODE.test(helloRoom(h)) && helloRoom(h) !== 'k7m2xq' && hex(h) === hex(helloBytes(SUGGESTION, helloRoom(h))));
+    }
+    const codes = new Set();
+    for (let i = 0; i < 20; i++) codes.add(helloRoom(runLobby('', {}).last().open().sent[0]));
+    check('twenty visits have twenty codes, each of six characters of the alphabet without look-alikes (no i, l, o, 0 or 1)', codes.size === 20 && [...codes].every((c) => /^[abcdefghjkmnpqrstuvwxyz23456789]{6}$/.test(c)), [...codes].slice(0, 3).join(','));
+}
+
+// ---- 5.2 the room as the page paints it: a name is only ever text; the pencil changes the player's own name; a link made for somebody else carries no name
+{
+    const evil = '<img src=x onerror=alert(1)>';
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, evil], [E, ''], [E, '']] });
+    same('the four cards are built in the reading order of the colours on the map: Black, Green, Red, Blue (seats 3, 0, 1, 2)', env.$('slots').children.map((li) => li.getAttribute('data-i')), ['3', '0', '1', '2']);
+    check('a card shows the colour and the name of the player who has it, as text', env.card(0).textContent.indexOf('Maya') !== -1 && env.card(0).textContent.indexOf('Green') !== -1 && env.card(1).textContent.indexOf(evil) !== -1);
+    check('... a name with < > & makes no element and no markup: the page made no markup at all', env.innerHTMLWrites.length === 0 && env.$('slots').findAll((e) => e.tagName === 'img').length === 0);
+    check('... the text of the card of the players, to a screen reader, is an attribute (never markup): the colour and the name', env.card(1).getAttribute('aria-label') === 'Red: ' + evil);
+    const pencil = env.inCard(0, 'data-edit');
+    check('the host\'s own card has the pencil (named "Change your name"); no other card has one', !!pencil && pencil.textContent === '✎' && pencil.getAttribute('aria-label') === 'Change your name' && [1, 2, 3].every((i) => env.inCard(i, 'data-edit') === null));
+    const field = () => env.card(0).findAll((e) => e.tagName === 'input')[0];
+    const before = s.sent.length;
+    env.press(pencil);
+    check('the pencil turns the name into a field that holds it (32 characters at the most, labelled)', !!field() && field().value === 'Maya' && field().maxLength === 32 && field().getAttribute('aria-label') === 'Your name');
+    field().value = 'Bot (x)';
+    field().key('Enter');
+    check('a name that the rules refuse is explained (the toast) and the room is told nothing; the card shows the old name again and the browser keeps its own', /computer players/.test(env.$('toast').textContent) && !env.$('toast').hidden && s.sent.length === before && !field() && env.card(0).textContent.indexOf('Maya') !== -1 && env.storage.data['ants.name'] === 'Maya');
+    env.press(env.inCard(0, 'data-edit'));
+    field().value = 'Zoë';
+    field().key('Enter');
+    check('... an accent too (ASCII only)', /ASCII/.test(env.$('toast').textContent) && s.sent.length === before);
+    env.press(env.inCard(0, 'data-edit'));
+    field().value = 'Maya';
+    field().key('Enter');
+    env.press(env.inCard(0, 'data-edit'));
+    field().value = '';
+    field().key('Enter');
+    check('the same name, or no name at all, asks the room for nothing', s.sent.length === before && env.storage.data['ants.name'] === 'Maya');
+    env.press(env.inCard(0, 'data-edit'));
+    field().value = '  Mia  ';
+    field().key('Enter');
+    check('a new name that the rules take (blanks cut off) asks the room to rename: one Name message, and the browser remembers it', s.sent.length === before + 1 && hex(s.sent[before]) === hex(NET0.encodeName('Mia')) && env.storage.data['ants.name'] === 'Mia', hex(s.sent[before] || []));
+    s.receive(roomMessage([[C, 'Mia'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    check('... and the card shows it when the room says so', env.card(0).textContent.indexOf('Mia') !== -1 && env.card(0).textContent.indexOf('Maya') === -1);
+    const done = env.sockets.length;
+    env.press(env.inCard(0, 'data-edit'));
+    field().value = 'Zed';
+    s.receive(roomMessage([[C, 'Mia'], [C, evil], [C, 'Newcomer'], [E, '']], { you: 0, leader: 0 }));
+    check('a room that changes while the name is being typed does not take the field away (the cards are drawn again afterwards)', !!field() && field().value === 'Zed' && env.card(2).textContent.indexOf('Newcomer') === -1);
+    field().key('Enter');
+    check('... and the card of the newcomer is there when the field is done', env.card(2).textContent.indexOf('Newcomer') !== -1 && env.sockets.length === done);
+    // Remove: the host asks first; only a yes removes; the name is text in the question and in the toast
+    const rm = env.inCard(1, 'data-remove');
+    check('the host\'s screen has a Remove button on another player\'s card and none on the own card', !!rm && rm.textContent === 'Remove' && env.inCard(0, 'data-remove') === null && rm.getAttribute('aria-label') === 'Remove ' + evil + ' from the room');
+    const sentBefore = s.sent.length;
+    env.press(rm);
+    const ask = env.card(1).findAll((e) => e.hasAttribute('data-remove-yes'))[0];
+    const keep = env.card(1).findAll((e) => e.hasAttribute('data-remove-no'))[0];
+    check('Remove asks first ("Remove <name> from the room?" with Remove and Keep), the focus is on Keep, and nothing is sent', !!ask && !!keep && env.card(1).textContent.indexOf('Remove ' + evil + ' from the room?') !== -1 && env.focused === keep && s.sent.length === sentBefore && env.innerHTMLWrites.length === 0);
+    env.press(keep);
+    check('Keep puts the question away and sends nothing', env.card(1).findAll((e) => e.hasAttribute('data-remove-yes')).length === 0 && s.sent.length === sentBefore && !!env.inCard(1, 'data-remove'));
+    env.press(env.inCard(1, 'data-remove'));
+    env.press(env.card(1).findAll((e) => e.hasAttribute('data-remove-yes'))[0]);
+    const guard = NET0.seatingHash(NET0.decode(roomMessage([[C, 'Mia'], [C, evil], [C, 'Newcomer'], [E, '']], { you: 0, leader: 0 })));
+    check('a yes sends one Remove message with the guard of the seating that the host saw, and says so in the toast (the name as text)', s.sent.length === sentBefore + 1 && hex(s.sent[sentBefore]) === hex(NET0.encodeRemove(1, guard)) && env.$('toast').textContent === evil + ' was removed. Red is open again.', hex(s.sent[sentBefore] || []));
+}
+{   // a player's screen: the pencil on the own card, no Remove, and the host's name is the host's
+    const env = runLobby('', { 'ants.name': 'Sam' });
+    const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    check('a player\'s screen has the pencil on the own card only, and no Remove button anywhere', !!env.inCard(1, 'data-edit') && env.inCard(0, 'data-edit') === null && env.$('slots').findAll((e) => e.hasAttribute('data-remove')).length === 0);
+    same('... the room is named after the host, and START waits for the host', [env.$('room-h').textContent, env.$('start').disabled, env.$('start').textContent], ['Maya’s room', true, 'Waiting for Maya']);
+    env.press(env.inCard(1, 'data-edit'));
+    const f = env.card(1).findAll((e) => e.tagName === 'input')[0];
+    f.value = 'Sammy';
+    f.key('Enter');
+    check('a player renames too: the room is asked, with the name', hex(s.sent[s.sent.length - 1]) === hex(NET0.encodeName('Sammy')) && env.storage.data['ants.name'] === 'Sammy');
+}
+{   // the link, the Copy button and the Share sheet carry the room and nothing of the player
+    const env = runLobby('', { 'ants.name': 'Maya' }, { share: true });
+    env.arrive({ key: KEY });
+    const code = env.$('code').textContent.replace(' ', '');
+    env.$('copy').click();
+    same('Copy link copies the invitation: the page\'s address and ?room=<code>', env.copied, ['https://play.test/?room=' + code]);
+    check('... the Share button is there on a browser that can share, and shares the same link only', env.$('share').hidden === false && (env.$('share').click(), env.shared.length === 1 && JSON.stringify(env.shared[0]) === JSON.stringify({ url: 'https://play.test/?room=' + code })));
+    check('... the field holds it (a name is never in it)', env.$('link').value === 'https://play.test/?room=' + code && env.param(env.$('link').value, 'name') === null);
+    const plain = runLobby('', {});
+    check('a browser that cannot share has no Share button', plain.$('share').hidden === true);
+}
+
+// ---- 5.3 the name card of a link that somebody sent (?room=): asked first, every time; nothing connects before the button
+{
+    const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
+    check('a link to a room asks for a name first, every time, even when this browser remembers one: the card is up over the page', !env.$('name-step').hidden && env.$('name-step').getAttribute('role') === 'dialog' && env.$('name-step').getAttribute('aria-modal') === 'true');
+    same('... titled with the room as a screen shows it (two groups of three), a Join button, the remembered name in the field', [env.$('name-step-title').textContent, env.$('name-step-go').textContent, env.$('name-step-input').value], ['Join the room k7m 2xq', 'Join', 'Maya']);
+    same('... the field\'s placeholder and the hint say the name that an empty field gets; the way out is a button', [env.$('name-step-input').placeholder, env.$('name-step-hint').textContent, env.$('name-step-own').textContent],
+         [SUGGESTION, 'The name the other players see. Leave it empty to be called ' + SUGGESTION + '.', 'Start a room of my own instead']);
+    check('... the notice that online matches are recorded is shown, and there is no message yet', !env.$('who-notice').hidden && env.$('name-step-msg').textContent === '');
+    check('nothing connects before the button: no socket, the address is not rewritten, and the page behind the card is "Joining a room" with START off and the colours greyed', env.sockets.length === 0 && env.replaced.length === 0 && env.$('room-h').textContent === 'Joining a room' && env.$('start').disabled === true && env.body.classList.contains('offline') && env.body.classList.contains('joining'));
+    env.type('name-step-input', 'Bot (x)');
+    env.$('name-step-go').click();
+    check('a name that is a computer player\'s is explained under the field, and nothing happens: the card stays, no socket, nothing remembered', /computer players/.test(env.$('name-step-msg').textContent) && !env.$('name-step').hidden && env.sockets.length === 0 && env.storage.data['ants.name'] === 'Maya');
+    env.type('name-step-input', 'Zoë');
+    env.$('name-step-input').key('Enter');
+    check('... an accent too (Enter asks as the button does), and typing again takes the message away', /ASCII/.test(env.$('name-step-msg').textContent) && env.sockets.length === 0 && (env.type('name-step-input', 'Zed'), env.$('name-step-msg').textContent === ''));
+    env.$('name-step-input').key('Enter');
+    check('Enter with a good name joins: the card goes away, the page connects (one socket) and the browser remembers the name', env.$('name-step').hidden && env.sockets.length === 1 && env.storage.data['ants.name'] === 'Zed');
+    const hello = env.last().open().sent[0];
+    check('... the Hello is the name that was typed, in the room of the link, with the lobby block (a room that is gone is made again, as the owner\'s picture 9 shows) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq')) && env.replaced.length === 0, hex(hello));
+}
+{
+    const env = runLobby('?room=k7m2xq', {});
+    check('a link with nothing remembered: an empty field with the picked name as its placeholder', env.$('name-step-input').value === '' && env.$('name-step-input').placeholder === SUGGESTION && !env.$('name-step').hidden);
+    env.$('name-step-go').click();
+    const hello = env.last().open().sent[0];
+    check('... an empty field is fine: the page plays under the picked name that the placeholder showed, and the browser remembers that none was chosen', helloName(hello) === SUGGESTION && env.storage.data['ants.name'] === '' && env.$('name-step').hidden);
+}
+{   // a link whose room is gone, full, running or a seat that was refused: a room of the visitor's own, under the same name, with the strip's sentence
+    const link = (name) => { const e = runLobby('?room=k7m2xq', {}); e.type('name-step-input', name); e.$('name-step-go').click(); return e; };
+    const gone = link('Zed');
+    gone.arrive({ flags: 2, seats: [[C, 'Zed'], [E, ''], [E, ''], [E, '']] });
+    same('a link to a room that has gone (the Hello made a new one): the strip says so, with the page\'s own sentence', [gone.$('banner').hidden, gone.$('banner-text').textContent, gone.$('banner-x').textContent], [false, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 'OK']);
+    const joined = link('Zed');
+    joined.arrive({ seat: 1, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    check('a link to a room that is there joins it: no strip, the room is the host\'s', joined.$('banner').hidden && joined.$('room-h').textContent === 'Maya’s room' && joined.$('code').textContent === 'k7m 2xq');
+    for (const [what, reason, sentence] of [['full', 1, 'That room is full, so this one is yours now. Send the link on if you like.'], ['whose match has started', 3, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.']]) {
+        const e = link('Zed');
+        e.last().open().receive(reject(reason));
+        const next = e.last().open().sent[0];
+        check('a link to a room that is ' + what + ': the page makes a room of its own under the same name (a new code, no key), and the strip says why', e.sockets.length === 2 && CODE.test(helloRoom(next)) && helloRoom(next) !== 'k7m2xq' && hex(next) === hex(helloBytes('Zed', helloRoom(next))) && e.$('banner-text').textContent === sentence, e.$('banner-text').textContent);
+        check('... and its address is the plain page again (the link is no longer in the bar)', e.replaced.length === 1 && e.replaced[0][2] === '/');
+    }
+    const kicked = runLobby('', { 'ants.name': 'Sam' });
+    kicked.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } }).receive(reject(4));
+    const own = kicked.last().open().sent[0];
+    check('a player whom the host removed gets a room of their own under their name: a new code, no key (the server forgot it), and the strip says why', kicked.sockets.length === 2 && hex(own) === hex(helloBytes('Sam', helloRoom(own))) && CODE.test(helloRoom(own)) && kicked.$('banner-text').textContent === 'The host removed you from the room, so this one is yours now. Send the link on if you like.');
+    check('... and that session entry is the old room\'s no longer (the key of the old room is let go of)', !(kicked.session.data['ants.lobby'] && JSON.parse(kicked.session.data['ants.lobby']).k === hex(KEY)));
+}
+{   // "Start a room of my own instead": the page's own room, and the one that this tab already had when it has one
+    const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
+    env.$('name-step-own').click();
+    const hello = env.last().open().sent[0];
+    check('"Start a room of my own instead" closes the card, makes a room of the visitor\'s own (a new code, the remembered name) and puts the plain address in the bar', env.$('name-step').hidden && env.sockets.length === 1 && CODE.test(helloRoom(hello)) && helloRoom(hello) !== 'k7m2xq' && hex(hello) === hex(helloBytes('Maya', helloRoom(hello))) && env.replaced.length === 1 && env.replaced[0][2] === '/');
+    const kept = { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) };
+    const env2 = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: kept });
+    check('a tab that has a room of its own is asked first too, and nothing connects before the card is done (the own room waits)', !env2.$('name-step').hidden && env2.sockets.length === 0);
+    env2.$('name-step-own').click();
+    check('... "my own instead" takes the own room back with its key', hex(env2.last().open().sent[0]) === hex(helloBytes('Maya', 'abc234', { key: KEY })));
+    const env3 = runLobby('?room=k7m2xq', {}, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 0 }) } });
+    check('a reload of the tab that joined that very room takes the seat back at once: no card, the key, the name that the room showed', env3.$('name-step').hidden && hex(env3.last().open().sent[0]) === hex(helloBytes('Sam', 'k7m2xq', { key: KEY })));
+    for (const bad of ['?room=a%20b', '?room=k7m%202xq', '?room=', '?room=' + 'x'.repeat(33), '?room=k7m2xq%00', '?room=..%2Fx']) {
+        const e = runLobby(bad, {});
+        check('an address with no room code that a room can have (' + bad.slice(0, 20) + ') is the plain page: nothing is asked, the page makes a room of its own', e.$('name-step').hidden && e.sockets.length === 1 && !e.$('lobby').hidden && e.$('room-panel').hidden && e.replaced.length === 0);
+    }
+    check('an address with only a picture is the plain page too', runLobby('?aspect=4:3', {}).$('name-step').hidden);
+}
+
+// ---- 5.4 "Have a code?": the name card first, then a look at the room while the page's own room stays
+{
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const own = env.arrive({ key: KEY });
+    const ownCode = helloRoom(own.sent[0]);
+    check('"Have a code?" opens the box (hidden until then) and puts the cursor in it', env.$('joinbox').hidden && (env.$('havecode').click(), !env.$('joinbox').hidden && env.focused === env.$('joincode')));
+    for (const [what, typed, why] of [['nothing', '', 'Type or paste the code first.'], ['a line of blanks', '   \n', 'Type or paste the code first.'], ['text that is no code', 'not a code!', 'A room code has letters and numbers only, like k7m 2xq.'], ['a path', 'k7m2/xq', 'A room code has letters and numbers only, like k7m 2xq.'],
+                                       ['an accent', 'abé', 'A room code has letters and numbers only, like k7m 2xq.'], ['33 characters', 'x'.repeat(33), 'A room code has letters and numbers only, like k7m 2xq.'], ['an address', '?room=x&seat=1', 'A room code has letters and numbers only, like k7m 2xq.']]) {
+        env.type('joincode', typed);
+        env.$('joingo').click();
+        check('typing ' + what + ' and pressing Join explains it under the box and opens no card, no socket', env.$('joinhint').textContent === why && env.$('name-step').hidden && env.sockets.length === 1, env.$('joinhint').textContent);
+    }
+    env.type('joincode', '  ' + grouped(ownCode).toUpperCase() + ' ');
+    env.$('joingo').click();
+    check('the code of the page\'s own room (typed as shown, in capitals) is its own: "That is your own room." and no card', env.$('joinhint').textContent === 'That is your own room.' && env.$('name-step').hidden && env.sockets.length === 1);
+    env.type('joincode', 'K7M 2xq');
+    check('typing again takes the hint away', env.$('joinhint').textContent === '');
+    env.$('joincode').key('Enter');
+    check('Enter in the box asks for the name too: the card is up, titled with the code as typed in two groups, and nothing connects yet (blanks and capitals of a typed or pasted code do not matter)', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq' && env.$('name-step-go').textContent === 'Join' && env.$('name-step-input').value === 'Maya' && env.sockets.length === 1);
+    check('... the code in the box stays as it was typed', env.$('joincode').value === 'K7M 2xq');
+    env.type('name-step-input', 'Bot (x)');
+    env.$('name-step-go').click();
+    check('a bad name is explained on the card and nothing is looked at', /computer players/.test(env.$('name-step-msg').textContent) && env.sockets.length === 1 && !env.$('name-step').hidden);
+    env.type('name-step-input', 'Ann & <b>Bob</b>');
+    env.$('name-step-go').click();
+    const probe = env.last();
+    check('a good name looks at the room: a second socket, with the Hello of a page that only joins (no lobby block: a code with no room is answered "no such room", never made), under the name typed (< > & are just characters)', env.sockets.length === 2 && env.$('name-step').hidden && hex(probe.open().sent[0]) === hex(helloBytes('Ann & <b>Bob</b>', 'k7m2xq', { join: true })), hex(probe.sent[0] || []));
+    check('... the page\'s own room stays while it looks: no Leave, the socket open, the code and the link still the own room\'s', !own.closed && own.sent.length === 1 && env.$('code').textContent === grouped(ownCode) && env.$('link').value === 'https://play.test/?room=' + ownCode && env.storage.data['ants.name'] === 'Ann & <b>Bob</b>');
+    probe.receive(reject(6));
+    check('a room that does not exist: the box says so, and the own room is as it was', env.$('joinhint').textContent === 'There is no room with that code. Check it, or ask the host to send the link again.' && !own.closed && env.$('code').textContent === grouped(ownCode) && env.innerHTMLWrites.length === 0);
+}
+{
+    const typedJoin = (typed, name) => {
+        const e = runLobby('', {});
+        e.arrive({ key: KEY });
+        e.$('havecode').click();
+        e.type('joincode', typed);
+        e.$('joingo').click();
+        if (name !== undefined) e.type('name-step-input', name);
+        e.$('name-step-go').click();
+        return e;
+    };
+    for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['k7m\t2xq\n', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], [' k 7 m 2 x q ', 'k7m2xq'], ['K7M 2XQ', 'k7m2xq'], ['my_room-1', 'my_room-1'], ['a', 'a'], ['--', '--'],
+                                 ['a'.repeat(32), 'a'.repeat(32)], ['demo-small-2p-x7k2', 'demo-small-2p-x7k2'], ['demo-tiny-2p-t01-abcdef', 'demo-tiny-2p-t01-abcdef'], ['abc def ghi', 'abcdefghi']]) {
+        const e = typedJoin(typed);
+        const hello = e.last().open().sent[0];
+        check('Join takes ' + JSON.stringify(typed) + ' as the code ' + want + ' (blanks dropped, capitals lowered; nothing else is made of it, and an older, longer code is a code too): a joining Hello for it, under the picked name', e.sockets.length === 2 && hex(hello) === hex(helloBytes(SUGGESTION, want, { join: true })) && e.$('joinhint').textContent === '', hex(hello));
+    }
+    const full = typedJoin('k7m2xq', 'Zed');
+    full.last().open().receive(reject(1));
+    check('a room that is full: "That room is full." under the box', full.$('joinhint').textContent === 'That room is full.');
+    const running = typedJoin('k7m2xq', 'Zed');
+    running.last().open().receive(reject(3));
+    check('a room whose match has started: "The match in that room has already started."', running.$('joinhint').textContent === 'The match in that room has already started.');
+    const old = typedJoin('k7m2xq', 'Zed');
+    old.last().open().receive(reject(2));
+    check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
+    // the probe is welcomed: the page leaves its own room and shows that one
+    const ok = typedJoin('k7m2xq', 'Zed');
+    const ownSocket = ok.sockets[0];
+    const p = ok.last().open();
+    p.receive(welcome(1, Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i)), 0));
+    p.receive(roomMessage([[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+    check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && ok.$('link').value === 'https://play.test/?room=k7m2xq' && ok.$('joinbox').hidden);
+    same('... and this tab keeps that room (session storage), not the old one: the code, the key, the name, and that the page did not make it', JSON.parse(ok.session.data['ants.lobby']), { c: 'k7m2xq', k: hex(Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i))), n: 'Zed', o: 0 });
+    const away = runLobby('', {});
+    away.arrive({ key: KEY });
+    away.$('havecode').click();
+    away.type('joincode', 'k7m2xq');
+    away.$('joingo').click();
+    away.$('name-step-own').click();
+    check('"Start a room of my own instead" on that card closes it and the own room stays (no new socket)', away.$('name-step').hidden && away.sockets.length === 1 && !away.sockets[0].closed && away.$('joinbox').hidden === false);
+}
+
+// ---- 5.5 START: the page hands its seat to the game page with the key in the browser's storage, and does not leave the room
+{
+    const KEY_ENTRY = 'ants.rejoin.';
+    const env = runLobby('', { 'ants.name': 'Maya', 'ants.rejoin.old-room.1': '{"k":"0f1e2d3c4b5a69788796a5b4c3d2e1f0","s":"wss://play.test/ws","t":' + (Date.now() - 600000) + '}' });
+    check('before START: the way back to an older match is offered, and the page is waiting in its room', !env.$('rejoin').hidden);
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    const code = helloRoom(s.sent[0]);
+    check('with another player in the room START is on, and says START!', env.$('start').disabled === false && env.$('start').textContent === 'START!');
+    env.$('start').click();
+    check('START asks the room (one StartRequest) and the page goes on waiting: nothing has moved yet', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.StartRequest && env.assigned.length === 0 && Object.keys(env.storage.data).every((k) => k !== KEY_ENTRY + code + '.0'));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    const want = 'https://play.test/?join=/ws&room=' + code + '&seat=0&name=Maya&aspect=16:9';
+    same('the room says that START was pressed: this tab goes to the game page of the room (the plain code, the seat, the name, the picture\'s shape; no key, no create block)', env.assigned, [want]);
+    const entry = JSON.parse(env.storage.data[KEY_ENTRY + code + '.0']);
+    check('... the seat\'s key is in the browser\'s local storage as ants.rejoin.<room>.<seat> = {"k", "s", "t"}: the game page takes the seat from it', Object.keys(entry).sort().join() === 'k,s,t' && entry.k === hex(KEY) && entry.s === 'wss://play.test/ws' && Math.abs(entry.t - Date.now()) < 5000);
+    check('... and the key is in no address, text or attribute of the page', env.assigned[0].indexOf(hex(KEY)) === -1 && env.dumpAll().indexOf(hex(KEY)) === -1 && noBlockOf(env, env.assigned[0]));
+    const P2 = P;
+    const gameArgs = P2.joinArguments(new URL(want).search, true, 'play.test').args;
+    check('... the game page reads that address as a join of this room and seat that asks for no name, and holds the seat (its own look at the storage finds the entry): it goes straight in', gameArgs.join(' ') === '--join-url wss://play.test/ws --room ' + code + ' --seat 0 --name Maya' && P2.asksForName(new URL(want).search) === false &&
+          shell.holdsThisSeat(new URL(want).search, gameArgs, { length: Object.keys(env.storage.data).length, key: (i) => Object.keys(env.storage.data)[i] || null, getItem: (k) => (k in env.storage.data ? env.storage.data[k] : null), removeItem() {} }, Date.now()) === true);
+    check('the lobby does not leave the room at START: no Leave message, the socket stays open (the game\'s own Hello takes the seat over), and the tab forgets its room (Back makes a new one)', s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && env.session.data['ants.lobby'] === undefined);
+    check('... the strip of the older match is gone: the page is on its way', env.$('rejoin').hidden);
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 3 }));
+    check('what the room says after that is not heard (the page has gone: one hand-over only)', env.assigned.length === 1);
+}
+{   // a player's page goes the same way when the room says START, with its own seat and name
+    const env = runLobby('', { 'ants.name': 'Sam' });
+    const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    const code = helloRoom(s.sent[0]);
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
+    same('a player\'s page, when the room says START, goes to the game page with its own seat and name', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam&aspect=16:9']);
+    check('... the entry is under that seat', !!env.storage.data['ants.rejoin.' + code + '.1'] && Object.keys(env.storage.data).filter((k) => k.indexOf('ants.rejoin.') === 0).length === 1);
+    const shape = runLobby('?aspect=4:3', { 'ants.name': 'Maya' });
+    const t = shape.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    t.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    check('the picture\'s shape of the page goes with it', /&aspect=4:3$/.test(shape.assigned[0] || ''), shape.assigned[0]);
+}
+{   // a match for one: the game page's own single player; the room is let go of
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const s = env.arrive({ key: KEY });
+    env.$('start').click();
+    same('START with nobody else in the room plays a game on this computer: the game page\'s own single player, on the map of the room, under the name of the player', env.assigned, ['https://play.test/play.html?map=treasure&name=Maya&aspect=16:9']);
+    check('... the room is let go of (a Leave, the socket closes), the tab forgets it, and no key is written for the game page', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.Leave && s.closed && env.session.data['ants.lobby'] === undefined && Object.keys(env.storage.data).every((k) => k.indexOf('ants.rejoin.') !== 0));
+    const evil = runLobby('', { 'ants.name': '<b>x</b>&y' });
+    evil.arrive({ key: KEY, seats: [[C, '<b>x</b>&y'], [E, ''], [E, ''], [E, '']] });
+    evil.$('start').click();
+    check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y&aspect=16:9' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
+}
+
+
+// ---- 5.6 the Rejoin strip at the top of the page (the block REJOIN has its own check, web_rejoin_block_check.js; here is the page as a whole: when it is there, what it says, where it goes)
+{
+    const SERVER = 'wss://play.test/ws';                                    // (the fake page is https://play.test/)
+    const RKEY = '0f1e2d3c4b5a69788796a5b4c3d2e1f0';
+    const entry = (age, server) => '{"k":"' + RKEY + '","s":"' + (server || SERVER) + '","t":' + (Date.now() - age) + '}';
+    const rejoinView = (env) => ({ hidden: env.$('rejoin').hidden, button: env.$('rejoin-go').textContent, note: env.$('rejoin-note').textContent });
+    {
+        const env = runLobby('', {});
+        same('no entry: nothing of the strip is shown, and the lobby is made as ever', [rejoinView(env).hidden, env.sockets.length, env.$('lobby').hidden], [true, 1, false]);
+    }
+    {
+        const stored = { 'ants.rejoin.k7m2xq.1': entry(5000) };
+        const env = runLobby('', stored);
+        same('a fresh entry of this site: the strip says that the match still runs (the room as a screen shows it, in two groups of three) and offers one button, "Rejoin it"', rejoinView(env), { hidden: false, button: 'Rejoin it', note: 'Your match in room k7m 2xq is still running: go back to your seat.' });
+        check('... the lobby is there as ever (the strip is above it: the page still makes its room)', env.sockets.length === 1 && !env.$('lobby').hidden);
+        check('... and the key is in no text or attribute of the page', env.dumpAll().indexOf(RKEY) === -1 && env.dumpAll().indexOf(RKEY.slice(0, 8)) === -1);
+        env.$('rejoin-go').click();
+        same('pressing it takes THIS tab to the game page: the plain code, the seat, the (empty) name and the shape', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=&aspect=16:9']);
+        check('... with no key in the address, no create block (the seat is already in the room: the game finds its key by itself), nothing opened in another window, and nothing written to the storage', env.assigned[0].indexOf(RKEY) === -1 && noBlockOf(env, env.assigned[0]) && env.opened.length === 0 && env.storage.data['ants.rejoin.k7m2xq.1'] === stored['ants.rejoin.k7m2xq.1'] && Object.keys(env.storage.data).length === 1);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.3': entry(1000), 'ants.name': 'Maya', 'ants.aspect.v2': '4:3' });
+        env.$('rejoin-go').click();
+        same('the remembered name and the remembered shape go with it', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=3&name=Maya&aspect=4:3']);
+    }
+    {
+        const env = runLobby('?aspect=4:3', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Maya' });
+        env.$('rejoin-go').click();
+        same('the shape of the address is the page\'s shape, so it is the one that goes with the button', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=0&name=Maya&aspect=4:3']);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Zoë' });
+        env.$('rejoin-go').click();
+        check('a remembered name that the rules refuse is no name', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=&aspect=/.test(env.assigned[0]), env.assigned[0]);
+        const evil = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'A&B <i>' });
+        evil.$('rejoin-go').click();
+        check('a remembered name with < > & goes into the address encoded', evil.assigned[0] === 'https://play.test/?join=/ws&room=r-1&seat=0&name=A%26B%20%3Ci%3E&aspect=16:9', evil.assigned[0]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.old-match.0': entry(4 * 3600 * 1000), 'ants.rejoin.mid-match.1': entry(2 * 3600 * 1000) });
+        same('an entry older than three hours is not offered and is removed (as the game does); one a little younger is the offer (a code of another length than six is shown as it is)', [rejoinView(env).note, Object.keys(env.storage.data)], ['Your match in room mid-match is still running: go back to your seat.', ['ants.rejoin.mid-match.1']]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'wss://other.test/ws'), 'ants.rejoin.mine.1': entry(9000) });
+        same('an entry of another server is not offered and stays, even when it is newer', [/room mine /.test(rejoinView(env).note), Object.keys(env.storage.data).sort()], [true, ['ants.rejoin.mine.1', 'ants.rejoin.other.0']]);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'ws://play.test/ws'), 'ants.rejoin.bad.7': entry(1000), 'ants.rejoin.junk.1': 'not json' });
+        check('only entries of the game count: another scheme, a seat that is none and a value that is no JSON show nothing', rejoinView(env).hidden === true && Object.keys(env.storage.data).length === 3);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.a.0': entry(60000), 'ants.rejoin.b.2': entry(1000), 'ants.rejoin.c.1': entry(30000) });
+        same('of several entries the newest is offered, and the seat goes with it', [/room b /.test(rejoinView(env).note), (env.$('rejoin-go').click(), env.assigned.map((u) => env.param(u, 'seat')))], [true, ['2']]);
+    }
+    {   // a link to a room: the page is the lobby with a card over it; the way back is offered behind the card
+        const env = runLobby('?room=k7m2xq', { 'ants.rejoin.r-1.1': entry(1000) });
+        check('the lobby page offers the way back to a running match also when it was opened by a link (the strip is above the page, the name card over it)', rejoinView(env).hidden === false && !env.$('name-step').hidden);
+    }
+    for (const [label, search] of [['a room of the test mode (?room= with its create block)', '?room=k7m2xq&roommap=tiny&roomseats=2'], ['a room that starts at once (?play=here)', '?room=k7m2xq&roommap=tiny&roomseats=2&play=here'], ['a match to host (?map=)', '?map=tiny&players=2&play=here'], ['a match to host, after its card', '?map=tiny&players=2']]) {
+        const env = runLobby(search, { 'ants.rejoin.k7m2xq.1': entry(1000) });
+        check(label + ': the page is about that, not about the match of the key: no strip', rejoinView(env).hidden === true && env.$('name-step').hidden === (search.indexOf('play=here') !== -1));
+        if (!env.$('name-step').hidden) env.$('name-step-go').click();
+        check('... not even after the name card', rejoinView(env).hidden === true && env.roomStarted());
+        (env.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+        (env.win.listeners.storage || []).forEach((fn) => fn({}));
+        check('... nor when another tab writes to the storage (the room of the test mode is on the page)', rejoinView(env).hidden === true && env.$('lobby').hidden === true);
+    }
+    {   // another tab that changes the storage: the match may have ended meanwhile; a page that comes back from the browser's memory (Back) is loaded again
+        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) });
+        same('the page listens for its return, for the storage, and for its visibility (the client\'s wake and the line of numbers\' own)', [(env.win.listeners.pageshow || []).length, (env.win.listeners.storage || []).length, (env.doc.listeners.visibilitychange || []).length], [1, 1, 2]);
+        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: false }));
+        check('a page that is loaded anew is not loaded again by pageshow', env.reloads === 0 && rejoinView(env).hidden === false);
+        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+        check('a page that comes back from the browser\'s memory (Back) is loaded again: it looks again by itself', env.reloads === 1);
+        delete env.storage.data['ants.rejoin.r-1.1'];
+        env.win.listeners.storage.forEach((fn) => fn({}));
+        check('the match ended in another tab: the strip is gone', rejoinView(env).hidden === true);
+        env.storage.data['ants.rejoin.r-2.0'] = entry(500);
+        env.win.listeners.storage.forEach((fn) => fn({}));
+        same('a new match in another tab: the strip is there, for that match', [rejoinView(env).hidden, /room r-2 /.test(rejoinView(env).note)], [false, true]);
+        delete env.storage.data['ants.rejoin.r-2.0'];
+        env.win.listeners.storage.forEach((fn) => fn({}));
+        check('... and gone again when the key is let go of', rejoinView(env).hidden === true);
+        env.$('rejoin-go').click();
+        check('a press that comes after the strip is gone goes nowhere', env.assigned.length === 0);
+    }
+    {
+        let env = null;
+        try { env = runLobby('', THROWS); } catch (e) { check('a browser that refuses its storage still runs the page, with no strip', false, e.message); }
+        if (env) check('a storage that throws offers nothing, and the lobby is there', rejoinView(env).hidden === true && !env.$('lobby').hidden);
+    }
+    {
+        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) });
+        const before = JSON.stringify(env.storage.data);
+        env.$('rejoin-go').click();
+        check('the page writes nothing to the storage for it (the game page owns the entries)', JSON.stringify(env.storage.data) === before);
     }
 }
 
-// A room's panel without the card: START goes to the game page, but an address that names a map or a room opens the panel (after the name step, as for every address of somebody else's): the old
-// addresses work as they did. openRoom types the name (when one is given) and takes the step.
+// ---- 5.7 the test room of the old addresses (?map=, ?room= with a create block, ?play=here): the name card first, then the room's panel; the typed name goes to the first seat of the page
+// An address that asks for a match is the page of somebody who was sent a link: they are asked for a name first, every time, and nothing starts before; the test mode ?play=here asks nobody
 const openRoom = (search, stored, name) => {
     const env = runLobby(search, stored || {});
-    if (name !== undefined) env.type('player-name', name);
-    env.$('who-go').click();
+    if (name !== undefined) env.type('name-step-input', name);
+    env.$('name-step-go').click();
     return env;
 };
-
-// The codes and the create block (protocol 15). A code that the page makes is six characters of an alphabet without look-alikes: a name and nothing more (a screen shows it in two groups of three, a link and a
-// field keep it plain). What the room is, its map, its seats and its teams, travels in its CREATE BLOCK, which every link of a room that the page made carries right after &room=<code>:
-// &roommap=<key>&roomseats=<n>[&roomteams=<A%2BB>][&roomleaderstart=1], made by ONE helper of the page (roomBlockQuery); a room that was made some other way has none.
-const CODE = /^[a-z2-9]{6}$/;
-const BLOCK_PARAMS = ['roommap', 'roomseats', 'roomteams', 'roomleaderstart'];
-// what stands right after &room=<code> in a link: the block's own parameters, as the link spells them ('' when it has none, null when it has no room at all)
-const blockText = (link) => { const m = /[?&]room=[^&#]*((?:&room(?:map|seats|teams|leaderstart)=[^&#]*)*)/.exec(String(link)); return m ? m[1] : null; };
-// the same as the address decodes them: [map, seats, teams, flag], null for a parameter that is not there
-const blockParams = (env, link) => BLOCK_PARAMS.map((k) => env.param(link, k));
-// a link with no create block at all: none of the four parameters (a room that was made some other way, or a code that is only Joined)
-const noBlockOf = (env, link) => blockText(link) === '' && blockParams(env, link).every((v) => v === null) && !/room(map|seats|teams|leaderstart)/.test(String(link));
-// the code as a screen shows it: two groups of three
-const grouped = (code) => code.slice(0, 3) + ' ' + code.slice(3);
-// every link of a game page that a room makes says the same about the room: the code, then its block in the same place, then the seat (the tests below ask each of them)
-const BLOCK_TREASURE4 = '&roommap=treasure&roomseats=4';
-
-// ---- a room's panel: the typed name goes to the first seat of the page; the others keep random names
 {
     const env = runLobby('?map=small&players=4', {});
-    env.type('player-name', '  Alice  ');
-    env.$('who-go').click();
-    check('the name step with a good name makes the room', env.roomStarted() && env.$('player-name').value === '  Alice  ');
-    check('... and the room takes the place of the card and of "How it works"', env.$('cards').hidden && env.$('how').hidden && !env.$('room-panel').hidden);
-    check('... and the page is in its room mode (the header is a smaller one: the class in-room of the body)', env.body.classList.contains('in-room'));
+    same('an address that hosts a match asks first: a card titled "Host a match" with a Host button, a hint that says what the name is for, the notice, and a way out that goes back to the front page', [env.$('name-step').hidden, env.$('name-step-title').textContent, env.$('name-step-go').textContent, env.$('name-step-hint').textContent, env.$('who-notice').hidden, env.$('name-step-own').textContent],
+         [false, 'Host a match', 'Host', 'The name your ants play under in the match that you host from this page. Leave it empty for a random name. This browser remembers it.', false, '← Back to the front page']);
+    check('... nothing starts before the button: no room panel, no frame, no socket, the address is not rewritten, and the page is in its room mode (the lobby is not shown)', !env.roomStarted() && env.frames().length === 0 && env.sockets.length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.body.classList.contains('in-room'));
+    env.$('name-step-own').click();
+    same('... the way out is a plain address of the front page (no query: nothing of the match goes with it)', env.assigned, ['https://play.test/']);
+    const room = runLobby('?room=k7m2xq&roommap=small&roomseats=2', { 'ants.name': 'Maya' });
+    same('an address with a room and its create block asks first too: "Join the match k7m 2xq", a Join button, the remembered name', [room.$('name-step-title').textContent, room.$('name-step-go').textContent, room.$('name-step-input').value, room.$('name-step-hint').textContent, room.$('who-notice').hidden],
+         ['Join the match k7m 2xq', 'Join', 'Maya', 'The name your ants play under in this match: the seat that you play from this page takes it. Leave it empty for a random name. This browser remembers it.', false]);
+    const solo = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya' });
+    same('an address that plays a game on this computer asks first: "Play a game on this computer", a Play button, its own hint, and no notice about recorded matches (the server records the matches of its rooms, not this game)', [solo.$('name-step-title').textContent, solo.$('name-step-go').textContent, solo.$('name-step-hint').textContent, solo.$('who-notice').hidden],
+         ['Play a game on this computer', 'Play', 'The name your ants play under in the game on this computer. Leave it empty for a random name. This browser remembers it.', true]);
+    check('... nothing starts before the button', solo.assigned.length === 0 && solo.sockets.length === 0);
+    solo.$('name-step-go').click();
+    const u = solo.assigned[0] || '';
+    same('... then the game on this computer on that map with the Hard bots and the name', [solo.assigned.length, solo.param(u, 'map'), solo.param(u, 'bots'), solo.param(u, 'name'), solo.param(u, 'aspect')], [1, 'small', 'hard', 'Maya', '16:9']);
+    check('... in no room: no door, no code, no create block, no seat (a game on this computer makes none), nothing written but the name, and the notice is back on the card (nothing stays half-changed if the browser shows this page again)', ['join', 'room', 'roommap', 'roomseats', 'roomteams', 'roomleaderstart', 'platform', 'seat', 'start'].every((k) => solo.param(u, k) === null) && solo.replaced.length === 0 && Object.keys(solo.storage.data).join() === 'ants.name' && !solo.$('who-notice').hidden && solo.$('name-step').hidden);
+    check('the test mode ?play=here asks nobody: ?map=...&players=1 plays at once', runLobby('?map=treasure&players=1&play=here', {}).assigned.length === 1);
+}
+{   // the typed name goes to the first seat that the page starts; the others have random names
+    const env = runLobby('?map=small&players=4', {});
+    env.type('name-step-input', '  Alice  ');
+    env.$('name-step-go').click();
+    check('the card with a good name makes the room: the panel of the test room takes the place of the lobby, in the page\'s room mode', env.roomStarted() && env.$('name-step-input').value === '  Alice  ' && env.$('lobby').hidden && env.$('name-step').hidden && env.body.classList.contains('in-room'));
     check('... and remembers the name (trimmed) under ants.name', env.storage.data['ants.name'] === 'Alice');
     check('before a seat starts every row shows a random name', env.rows().length >= 2 && env.rows().every((r, i) => randomName(r.children[0].textContent.split(' · ')[1])));
     env.rowButton(2, 'Play here').click();
@@ -583,7 +1146,7 @@ const BLOCK_TREASURE4 = '&roommap=treasure&roomseats=4';
     env.rowButton(0, 'Copy link').click();
     check('the link of a seat for somebody else carries its seat and no name', env.copied.length === 1 && env.param(env.copied[0], 'seat') === '0' && env.param(env.copied[0], 'name') === null && !/name=/.test(env.copied[0]), env.copied[0]);
     check('every game of a room that the page made carries the room\'s create block (Small, four seats) right after the room: the frames, the window, the link for anybody and the link of a seat',
-          [f2.src, f1.src, env.opened[0].url, anyLink, env.copied[0]].every((u) => blockText(u) === '&roommap=small&roomseats=4'), JSON.stringify([f2.src, f1.src, env.opened[0].url, anyLink, env.copied[0]]));
+          [f2.src, f1.src, env.opened[0].url, anyLink, env.copied[0]].every((url) => blockText(url) === '&roommap=small&roomseats=4'), JSON.stringify([f2.src, f1.src, env.opened[0].url, anyLink, env.copied[0]]));
     env.rowButton(2, 'Play here').click();
     check('"Play here" again (a reconnect) keeps the seat\'s name', env.param(env.frameOf(2).src, 'name') === 'Alice');
 }
@@ -636,7 +1199,7 @@ const BLOCK_TREASURE4 = '&roommap=treasure&roomseats=4';
     const env = openRoom('?map=treasure&players=4', {}, 'Alice');
     env.$('all-here').click();
     const urls = [0, 1, 2, 3].map((s) => env.frameOf(s).src);
-    check('all seats on this page: seat 0 plays as Alice, the others have random names, all different', env.param(urls[0], 'name') === 'Alice' && urls.slice(1).every((u) => randomName(env.param(u, 'name'))) && new Set(urls.slice(1).map((u) => env.param(u, 'name'))).size === 3);
+    check('all seats on this page: seat 0 plays as Alice, the others have random names, all different', env.param(urls[0], 'name') === 'Alice' && urls.slice(1).every((url) => randomName(env.param(url, 'name'))) && new Set(urls.slice(1).map((url) => env.param(url, 'name'))).size === 3);
 }
 {   // the random fallback
     const env = openRoom('?map=treasure&players=4', {});
@@ -644,94 +1207,30 @@ const BLOCK_TREASURE4 = '&roommap=treasure&roomseats=4';
     const got = [0, 1, 2, 3].map((s) => env.param(env.frameOf(s).src, 'name'));
     check('an empty field: every seat has a random name, as before', got.every(randomName) && new Set(got).size === 4, got.join(','));
     check('... and an empty field is remembered as none', env.storage.data['ants.name'] === '');
+    for (const refused of ['Bot (x)', 'Zoë', 'z'.repeat(40)]) {
+        const e = openRoom('?map=treasure&players=4', { 'ants.name': refused });
+        check('a remembered name that the rules refuse (' + JSON.stringify(refused).slice(0, 14) + ') is not in the card\'s field and no seat plays under it', e.$('name-step-input').value === '' && (e.$('all-here').click(), [0, 1, 2, 3].every((s) => randomName(e.param(e.frameOf(s).src, 'name')))));
+    }
 }
 
 // ---- bad names start nothing
 for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), 'a\u0001b']) {
-    const env = runLobby('', {});
-    env.type('player-name', bad);
-    env.$('play').click();
-    check('START with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') goes nowhere and says why under the field', env.assigned.length === 0 && env.$('name-msg').textContent.length > 8 && env.replaced.length === 0 && env.$('player-name').getAttribute('aria-invalid') === 'true');
-    env.type('player-name', 'Fine');
-    check('... typing again clears the message', env.$('name-msg').textContent === '' && env.$('player-name').getAttribute('aria-invalid') === null);
     const step = runLobby('?map=small&players=4', {});
-    step.type('player-name', bad);
-    step.$('who-go').click();
-    check('the name step of an address that hosts a match with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') makes no room and says why', !step.roomStarted() && step.$('name-msg').textContent.length > 8 && step.replaced.length === 0);
-    const env2 = runLobby('', {});
-    env2.type('player-name', bad);
-    env2.type('join-code', 'ABC-1');
-    env2.$('join-go').click();
-    check('Join with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') goes nowhere and says why', env2.assigned.length === 0 && env2.$('name-msg').textContent.length > 8);
-}
-{   // a bad name typed after the room is made starts no seat
-    const env = openRoom('?map=small&players=4', {});
-    env.type('player-name', 'Bot (x)');
-    env.rowButton(1, 'Play here').click();
-    env.rowButton(2, 'Open a window').click();
-    env.$('all-here').click();
-    check('a seat does not start with a bad name in the field', env.frames().length === 0 && env.opened.length === 0 && env.$('name-msg').textContent.length > 8);
-    env.type('player-name', 'Good');
-    env.rowButton(1, 'Play here').click();
-    check('... and starts when the name is fine', env.frames().length === 1 && env.param(env.frameOf(1).src, 'name') === 'Good');
-}
-
-// ---- joining with a code
-{
-    const env = runLobby('', {});
-    check('the Join box shows what a code looks like on a screen: two groups of three (k7m 2xq), and holds up to 32 characters', env.$('join-code').getAttribute('placeholder') === 'k7m 2xq' && env.$('join-code').getAttribute('maxlength') === '32');
-    env.type('player-name', 'Alice');
-    env.type('join-code', 'k7m 2xq');
-    env.$('join-go').click();
-    check('Join: the game page is opened with the room and the typed name; the code is typed as it is shown (two groups of three) and goes as the plain code', env.assigned.length === 1 && env.param(env.assigned[0], 'room') === 'k7m2xq' && env.param(env.assigned[0], 'name') === 'Alice' && env.param(env.assigned[0], 'join') === '/ws', env.assigned[0]);
-    same('... the whole address: the door, the plain code, the name and no more (no create block: the page does not know what a room that somebody else made is, and a code that no room has is "no such room" for the game server; no seat, bots or teams either)', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&name=Alice']);
-    check('... the name is remembered', env.storage.data['ants.name'] === 'Alice');
-    const env2 = runLobby('', { 'ants.name': 'Maya' });
-    env2.type('join-code', 'ABC');
-    env2.$('join-code').key('Enter');
-    check('Enter in the code field joins, with the remembered name that the field shows', env2.assigned.length === 1 && env2.param(env2.assigned[0], 'name') === 'Maya');
-    const env3 = runLobby('', {});
-    env3.type('join-code', 'ABC');
-    env3.$('join-go').click();
-    check('an empty name joins too, with the name\'s parameter empty (the game says Player; the game page does not ask again)', env3.assigned.length === 1 && env3.param(env3.assigned[0], 'name') === '' && /[?&]name=(&|$)/.test(env3.assigned[0]), env3.assigned[0]);
-    const env4 = runLobby('', {});
-    env4.type('player-name', 'Alice');
-    env4.type('join-code', 'not a code!');
-    env4.$('join-go').click();
-    check('a bad room code joins nowhere (the form says why)', env4.assigned.length === 0 && /room code/.test(env4.$('join-hint').textContent));
-    same('... in words that name the letters, digits, - and _ of a code, its 32 characters and the way it is shown', env4.$('join-hint').textContent, 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.');
-    check('... in a notice (the class bad), and typing the code again takes the notice away', env4.$('join-hint').classList.contains('bad') && (env4.type('join-code', 'ABC'), !env4.$('join-hint').classList.contains('bad') && env4.$('join-hint').textContent === ''));
-    // the blanks of what is typed or pasted are dropped before the code is checked (a code is shown as "k7m 2xq"; a paste may bring a blank or a line end at either end), and nothing else is made of the text
-    for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['k7m\t2xq\n', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], [' k 7 m 2 x q ', 'k7m2xq'], ['K7M 2XQ', 'K7M2XQ'],
-                                 ['my_room-1', 'my_room-1'], ['a', 'a'], ['a'.repeat(32), 'a'.repeat(32)], ['demo-small-2p-x7k2', 'demo-small-2p-x7k2'], ['demo-tiny-2p-t01-abcdef', 'demo-tiny-2p-t01-abcdef'], ['abc def ghi', 'abcdefghi']]) {
-        const j = runLobby('', {});
-        j.type('join-code', typed);
-        j.$('join-go').click();
-        check('Join drops the blanks of ' + JSON.stringify(typed) + ' and joins ' + want + ' (a code of any other kind that is valid is a name too: nothing is made of it, no create block)',
-              j.assigned.length === 1 && j.param(j.assigned[0], 'room') === want && noBlockOf(j, j.assigned[0]) && j.$('join-hint').textContent === '' && !/\s/.test(j.assigned[0]), j.assigned[0]);
-    }
-    for (const bad of ['', '   ', '\n', 'not a code!', 'k7m2/xq', 'k7m2.xq', 'abé', 'x'.repeat(33), 'k7m 2xq ' + 'x'.repeat(30), 'a b!', '?room=x&seat=1']) {
-        const j = runLobby('', {});
-        j.type('join-code', bad);
-        j.$('join-go').click();
-        check('Join with ' + JSON.stringify(bad).slice(0, 24) + ' goes nowhere and says why', j.assigned.length === 0 && j.$('join-hint').textContent === 'A room code has letters, digits, - and _ only (up to 32), like k7m 2xq.' && j.$('join-hint').classList.contains('bad'));
-    }
-    const dashes = runLobby('', {});
-    dashes.type('join-code', '--');
-    dashes.$('join-go').click();
-    check('... "--" is a valid code (letters, digits, - and _, one to 32 of them)', dashes.assigned.length === 1 && dashes.param(dashes.assigned[0], 'room') === '--');
-    const dropped = runLobby('', {});
-    dropped.type('join-code', 'k7m 2xq');
-    dropped.$('join-code').key('Enter');
-    check('Enter in the box joins the same way (the blank is dropped there too)', dropped.assigned.length === 1 && dropped.param(dropped.assigned[0], 'room') === 'k7m2xq');
-    const blanked = runLobby('', {});
-    blanked.type('join-code', 'k7m 2xq');
-    check('the field keeps what was typed (the code as it is shown): only the address that Join makes drops the blank', blanked.$('join-code').value === 'k7m 2xq' && (blanked.$('join-go').click(), blanked.$('join-code').value === 'k7m 2xq'));
-    const env5 = runLobby('', {});
-    env5.type('player-name', 'Ann & <b>Bob</b>');
-    env5.type('join-code', 'ABC');
-    env5.$('join-go').click();
-    check('a name with < > & goes into the address URL-encoded', env5.assigned.length === 1 && env5.assigned[0].indexOf('name=Ann%20%26%20%3Cb%3EBob%3C%2Fb%3E') !== -1 && env5.param(env5.assigned[0], 'name') === 'Ann & <b>Bob</b>', env5.assigned[0]);
+    step.type('name-step-input', bad);
+    step.$('name-step-go').click();
+    check('the card of an address that hosts a match with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') makes no room and says why', !step.roomStarted() && step.$('name-step-msg').textContent.length > 8 && step.replaced.length === 0 && !step.$('name-step').hidden && step.frames().length === 0);
+    const link = runLobby('?room=k7m2xq', {});
+    link.type('name-step-input', bad);
+    link.$('name-step-go').click();
+    check('... the card of a link to a room: no socket, and the same message', link.sockets.length === 0 && link.$('name-step-msg').textContent.length > 8 && !link.$('name-step').hidden);
+    const typed = runLobby('', {});
+    typed.arrive();
+    typed.$('havecode').click();
+    typed.type('joincode', 'ABC-1');
+    typed.$('joingo').click();
+    typed.type('name-step-input', bad);
+    typed.$('name-step-go').click();
+    check('... the card of a typed code: nothing is looked at, and the same message', typed.sockets.length === 1 && typed.$('name-step-msg').textContent.length > 8 && !typed.$('name-step').hidden);
 }
 
 // ---- a name with < > & is text, never markup
@@ -748,718 +1247,58 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     check('no element of the page was made from the name\'s characters (a < in a name makes no tag)', cell0.findAll((e) => e.tagName === 'img').length === 0 && env.rows()[0].findAll((e) => e.tagName === 'img').length === 0);
     check('the frame\'s address carries the name encoded: no raw < or > or quote in it', env.frameOf(0).src.indexOf('<') === -1 && env.frameOf(0).src.indexOf('>') === -1 && env.param(env.frameOf(0).src, 'name') === typed, env.frameOf(0).src);
 }
-check('the step\'s way out is a plain anchor to "/" with a readable text, hidden in the markup (the script shows it with the step)', /<a id="who-back" class="btn sm who-back" href="\/" hidden>&larr; Back to the front page<\/a>/.test(lobbyText));
-check('the page assigns no innerHTML anywhere', !/\.innerHTML\s*[+]?=/.test(lobbyText) && !/document\.write/.test(lobbyText) && !/insertAdjacentHTML/.test(lobbyText));
+check('the front page\'s only window.open is the seat\'s explicit one (no window is opened by default)', (lobbyText.match(/window\.open\(/g) || []).length === 1);
 
-// ---- a link of the page that asks for a match: the name is asked first, every time, and nothing starts before
+// ---- the addresses of the test room
 {
-    const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
-    check('a shared room link: the step is up, with the remembered name in the field and a Join button', !env.$('who-go').hidden && env.$('who-go').textContent === 'Join' && !env.$('who-title').hidden && /k7m 2xq/.test(env.$('who-title').textContent) && env.$('player-name').value === 'Maya');
-    same('... the step names the room by its code as a screen shows it (two groups of three)', env.$('who-title').textContent, 'Join the match k7m 2xq');
-    check('... nothing starts before the button: no room panel, no frame, the address is not rewritten', !env.roomStarted() && env.frames().length === 0 && env.replaced.length === 0 && env.opened.length === 0 && env.$('cards').hidden && env.$('how').hidden);
-    check('... the step has a way out: "Back to the front page" is shown, a plain link to the site\'s front page (no query: nothing of the match goes with it)', !env.$('who-back').hidden && env.$('who-back').getAttribute('href') === '/');
-    check('... the name step is the full page, not a room (the room class comes with the room)', !env.body.classList.contains('in-room'));
-    check('... the step tells the person that online matches are recorded (the step\'s own line replaces the general line, the notice stays)', !env.$('who-notice').hidden && env.$('who-general').hidden && !env.$('who-step-hint').hidden);
-    env.type('player-name', 'Bot (x)');
-    env.$('who-go').click();
-    check('... a bad name does not start it and says why', !env.roomStarted() && env.$('name-msg').textContent.length > 8);
-    env.type('player-name', 'Zed');
-    env.$('player-name').key('Enter');
-    check('... Enter with a good name does: the room panel opens (the address is rewritten to the room), the step goes away', env.roomStarted() && env.replaced.length === 1 && env.$('who-go').hidden && env.$('who-title').hidden && env.$('who-back').hidden && env.storage.data['ants.name'] === 'Zed');
-    check('... and the notice stays under the name above the room panel, with the general line back', !env.$('who-notice').hidden && !env.$('who-general').hidden && env.$('who-step-hint').hidden);
-    env.rowButton(1, 'Play here').click();
-    check('... and the seat that this person plays takes the name', env.param(env.frameOf(1).src, 'name') === 'Zed');
-    // a room that this page did not make (its address has no create block): four seats, and nothing of a block anywhere: the page sends none, and a code that no room has is the game server's to refuse
-    same('... the panel shows the code as a screen shows it (two groups of three), four seats and says that the room was made some other way', [env.$('room-code').textContent, env.$('room-map').textContent, env.rows().length], ['k7m 2xq', 'a room made some other way, 4 players', 4]);
-    same('... the address of the page is the room alone: no create block to carry (and the plain code)', env.replaced.map((a) => a[2]), ['/?room=k7m2xq']);
-    env.rowButton(0, 'Copy link').click();
-    env.rowButton(2, 'Open a window').click();
-    const made = [env.frameOf(1).src, env.opened[0].url, env.copied[0], env.$('any-link').value];
-    check('... and no game of it carries a create block: the frame, the window, the link of a seat and the link for anybody are the plain room (the code is the plain one in all of them)', made.every((u) => noBlockOf(env, u) && env.param(u, 'room') === 'k7m2xq'), JSON.stringify(made));
-    env.$('play-tab').click();
-    check('... nor does "Play in this tab"', env.assigned.length === 1 && noBlockOf(env, env.assigned[0]) && env.param(env.assigned[0], 'room') === 'k7m2xq', env.assigned[0]);
-}
-{
-    const env = runLobby('?room=k7m2xq', {});
-    check('a shared room link with nothing remembered: an empty field, the placeholder', env.$('player-name').value === '' && !env.roomStarted());
-    env.$('who-go').click();
-    check('... an empty name is fine: the room opens, random names for the seats', env.roomStarted());
-    env.rowButton(0, 'Play here').click();
-    check('... (a random name for the seat)', randomName(env.param(env.frameOf(0).src, 'name')));
+    const env = openRoom('?room=k7m2xq&roommap=small&roomseats=2', { 'ants.name': 'Maya' });
+    check('an address with a room and its create block: the card (with the remembered name) then the room\'s panel, with its name card gone and the notice back', env.roomStarted() && env.$('name-step').hidden);
+    env.type('name-step-input', 'x');
+    const bad = runLobby('?room=k7m2xq&roommap=small&roomseats=2', {});
+    bad.type('name-step-input', 'Bot (x)');
+    bad.$('name-step-input').key('Enter');
+    check('... a bad name does not open it and says why; Enter with a good name does (the address is rewritten to the room, the card goes away, the browser remembers the name)', !bad.roomStarted() && bad.$('name-step-msg').textContent.length > 8 && (bad.type('name-step-input', 'Zed'), bad.$('name-step-input').key('Enter'), bad.roomStarted() && bad.replaced.length === 1 && bad.$('name-step').hidden && bad.storage.data['ants.name'] === 'Zed'));
+    bad.rowButton(1, 'Play here').click();
+    check('... and the seat that this person plays takes the name', bad.param(bad.frameOf(1).src, 'name') === 'Zed');
 }
 {
     const env = runLobby('?map=treasure&players=2', {});
-    check('a link that hosts a match on a map asks for the name first too (button: Host), and has its way out too', !env.$('who-go').hidden && !env.$('who-back').hidden && env.$('who-go').textContent === 'Host' && !env.roomStarted() && env.replaced.length === 0);
-    check('... and its step tells the person that online matches are recorded (a hosted match is one)', !env.$('who-notice').hidden);
-    env.type('player-name', 'Alice');
-    env.$('who-go').click();
-    check('... then the room is made on that map: a new code of six characters and its create block (Treasure, two seats) are in the address of the page', env.roomStarted() && env.replaced.length === 1 && /^\/\?room=[a-z2-9]{6}&roommap=treasure&roomseats=2$/.test(String(env.replaced[0][2])), String(env.replaced[0] && env.replaced[0][2]));
+    env.type('name-step-input', 'Alice');
+    env.$('name-step-go').click();
+    check('a match to host on a map: the room is made on that map: a new code of six characters and its create block (Treasure, two seats) are in the address of the page', env.roomStarted() && env.replaced.length === 1 && /^\/\?room=[a-z2-9]{6}&roommap=treasure&roomseats=2$/.test(String(env.replaced[0][2])), String(env.replaced[0] && env.replaced[0][2]));
     same('... the panel says it: the code in two groups of three, the map and two seats', [env.$('room-code').textContent === grouped(env.param(new URL(String(env.replaced[0][2]), 'https://play.test').href, 'room')), env.$('room-map').textContent, env.rows().length], [true, 'Treasure map, 2 players', 2]);
 }
 {
     const env = runLobby('?room=k7m2xq&roommap=small&roomseats=2&play=here', { 'ants.name': 'Maya' });
-    check('the test mode ?play=here asks nobody: every seat starts at once (the two seats of the create block)', !env.$('who-go').hidden === false && env.roomStarted() && env.frames().length === 2);
+    check('the test mode ?play=here asks nobody: every seat starts at once (the two seats of the create block)', env.$('name-step').hidden && env.roomStarted() && env.frames().length === 2);
     const names2 = [0, 1].map((s) => env.param(env.frameOf(s).src, 'name'));
     check('... the first seat takes the remembered name, the other seat is random', names2[0] === 'Maya' && randomName(names2[1]), names2.join(','));
     const env2 = runLobby('?map=small&play=here', {});
-    check('?map= with ?play=here asks nobody either', env2.roomStarted() && env2.frames().length === 4 && env2.$('who-go').hidden);
-    const elsewhere = runLobby('?room=k7m2xq&play=here', {});
-    check('a room with no create block that starts at once has four seats (the page does not know the room: nothing is trusted but the code)', elsewhere.roomStarted() && elsewhere.frames().length === 4);
+    check('?map= with ?play=here asks nobody either', env2.roomStarted() && env2.frames().length === 4 && env2.$('name-step').hidden);
 }
+{   // a room that this page did not make (its address has no create block, and a code that is only played here): four seats, and nothing of a block anywhere: the page sends none, and a code that no room has is the game server's to refuse
+    const env = runLobby('?room=k7m2xq&play=here', { 'ants.name': 'Zed' });
+    check('a room with no create block that starts at once has four seats (the page does not know the room: nothing is trusted but the code)', env.roomStarted() && env.frames().length === 4 && env.$('name-step').hidden);
+    same('... the panel shows the code as a screen shows it (two groups of three), four seats and says that the room was made some other way', [env.$('room-code').textContent, env.$('room-map').textContent, env.rows().length], ['k7m 2xq', 'a room made some other way, 4 players', 4]);
+    same('... the address of the page is the room alone: no create block to carry (and the plain code)', env.replaced.map((a) => a[2]), ['/?room=k7m2xq']);
+    env.rowButton(0, 'Copy link').click();
+    env.rowButton(2, 'Open a window').click();
+    env.$('play-tab').click();
+    const made = [env.frameOf(1).src, env.opened[0].url, env.copied[0], env.$('any-link').value, env.assigned[0]];
+    check('... and no game of it carries a create block: the frame, the window, the link of a seat, the link for anybody and "Play in this tab" are the plain room (the code is the plain one in all of them)', made.every((url) => noBlockOf(env, url) && env.param(url, 'room') === 'k7m2xq'), JSON.stringify(made));
+    check('... and the seat that this person plays takes the name', env.param(env.frameOf(0).src, 'name') === 'Zed' && env.param(env.assigned[0], 'name') === 'Zed');
+}
+{   // ... a browser that refuses its storage still plays in the test room
+    const env = runLobby('?map=small&play=here', THROWS);
+    check('a browser that refuses its storage still plays in the test room (nothing is remembered, nothing breaks)', env.roomStarted() && env.frames().length === 4);
+}
+// ... an address that names a map and no players hosts 4 (the card plays on this computer only with &players=1)
 {
-    const env = runLobby('?room=a%20b', {});
-    check('an address that is no room code is the plain page (nothing is asked)', !env.$('cards').hidden && !env.$('how').hidden && env.$('who-go').hidden && !env.roomStarted());
-    for (const shown of ['?room=k7m%202xq', '?room=k7m+2xq', '?room=k7m%2B2xq', '?room=', '?room=' + 'x'.repeat(33), '?room=k7m2xq%00', '?room=..%2Fx']) {
-        const e = runLobby(shown + '&roommap=small&roomseats=2', {});
-        check('an address with the code as a screen shows it (a blank in the middle) or with no code that a room can have is no room: ' + shown + ' is the plain page, even with a create block', !e.$('cards').hidden && !e.$('how').hidden && e.$('who-go').hidden && !e.roomStarted() && e.replaced.length === 0);
-    }
-}
-{
-    const env = runLobby('?aspect=4:3', {});
-    check('an address with only a picture is the plain page', !env.$('cards').hidden && env.$('who-go').hidden);
-}
-
-// ---- the front page: ONE card, "New match" (the owner, on a phone: "I don't see a way to change colors or send an invite to another person should all be right there. We don't need separate AI and
-// online. Only do online."): a map with its preview, four seats (exactly one of them You, a choice for each of the others, and a Team 1 and a Team 2 switch), an invitation for each Friend seat and START; under it "Have a code?" and Join
-const lobbyScript = (() => { const all = [...lobbyText.matchAll(/<script>([\s\S]*?)<\/script>/g)]; return all[all.length - 1][1]; })();
-const WORDS5 = ['friend', 'easy', 'medium', 'hard', 'nobody'];
-// A browser that remembered Medium bots for the other three seats: the first visit is Friends, so most of the scenarios below start from the bots, as the card used to (a fresh object each time: the page writes
-// into the storage that it is given)
-const BOTS = () => ({ 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: 'ffa' }) });
-const seatId = (seat, word) => 'seat-' + seat + '-' + word;
-// what the four rows show: the seats whose You marker is up, and the one button that is checked in each row's group ('?n' when it is not exactly one)
-const youSeats = (env) => [0, 1, 2, 3].filter((s) => !env.$('seat-you-' + s).hidden);
-const seatWords = (env) => [0, 1, 2, 3].map((s) => { const on = WORDS5.filter((w) => env.$(seatId(s, w)).checked); return on.length === 1 ? on[0] : '?' + on.length; });
-const choose = (env, seat, word) => env.pick(seatId(seat, word));
-const sit = (env, seat) => env.$('sit-' + seat).click();
-// the Team 1 / Team 2 switches: for each seat '' when it has none (the seat does not play, or fewer than three seats do), else which one is lit ('1', '2') or '-' when neither is; and which are dimmed ('' none, '1', '2', '12')
-const switchesShown = (env) => [0, 1, 2, 3].map((s) => (env.$('team-set-' + s).hidden ? '' : [1, 2].filter((k) => env.$('team-' + s + '-' + k).getAttribute('aria-pressed') === 'true').join('') || '-'));
-const switchesDimmed = (env) => [0, 1, 2, 3].map((s) => [1, 2].filter((k) => env.$('team-' + s + '-' + k).getAttribute('aria-disabled') === 'true').join(''));
-const pressTeam = (env, seat, side) => env.$('team-' + seat + '-' + side).click();
-const FFA_LINE = 'Free for all. For a team, put two colours on the same team.';
-const invites = (env) => env.$('invite-list').children;
-const inviteLinks = (env) => invites(env).map((row) => row.children[1].value);
-const copyOf = (env, i) => invites(env)[i].children[2];
-const pickMap = (env, key) => { env.$('map-pick').value = key; env.$('map-pick').fire('change', {}); };
-const MAP_KEYS = ['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands'];
-// the create block that the card's room carries in every link: the card's map, four seats (every colour can be taken) and the card's teams (A+B: %2B in a link), never the leader-starts flag
-const cardBlockText = (map, teams) => '&roommap=' + map + '&roomseats=4' + (teams && teams !== 'ffa' ? '&roomteams=' + teams.replace('+', '%2B') : '');
-{
-    const env = runLobby('', {});
-    same('a first visit: Treasure, You at Green, a Friend in every other seat, free for all (no switch is on)', [env.$('map-pick').value, youSeats(env), seatWords(env), switchesShown(env)], ['treasure', [0], ['friend', 'friend', 'friend', 'friend'], ['-', '-', '-', '-']]);
-    check('... the name under You is one of the page\'s random names (the field is empty: "Leave it empty for a random name"), and the marker says You', randomName(env.$('seat-name-0').textContent) && !env.$('seat-name-0').hidden && [0, 1, 2, 3].every((s) => new RegExp('<span class="you" id="seat-you-' + s + '" hidden> &middot; You</span>').test(lobbyText)));
-    same('... the rows of the other seats have a Sit here and a group of five buttons; the row of You has neither', [0, 1, 2, 3].map((s) => [env.$('sit-' + s).hidden, env.$('seat-set-' + s).hidden]), [[true, true], [false, false], [false, false], [false, false]]);
-    check('... the seat of You is marked (a class), the others are not', env.$('seat-row-0').classList.contains('is-you') && [1, 2, 3].every((s) => !env.$('seat-row-' + s).classList.contains('is-you')));
-    same('... four seats play: every seat has a Team 1 and a Team 2 switch (the one of You too), none is on or dimmed, and the line under the seats says free for all and how to make a team', [env.$('teams-line').hidden, switchesShown(env), switchesDimmed(env), env.$('teams-line').textContent], [false, ['-', '-', '-', '-'], ['', '', '', ''], FFA_LINE]);
-    same('... an invitation for each of the three Friends, START is on and says that it waits for them', [env.$('invites').hidden, invites(env).map((r) => r.children[0].textContent), !env.$('play').disabled, env.$('start-note').textContent], [false, ['Red', 'Blue', 'Black'], true, 'Starts when your friends are in (the first player in the room can start sooner).']);
-    same('... the preview and the Map Info line are those of Treasure', [env.$('map-preview').src, env.$('map-info').textContent], ['front/preview_treasure.png', "One person's trash... (12 min)"]);
-    check('... the card is there with the name field, "Have a code?" and the picture\'s buttons; "How it works" too', !env.$('cards').hidden && !env.$('how').hidden && !!env.$('player-name') && !!env.$('join-code') && !!env.$('aspect-16-9'));
-    check('... START is a real button whose own text, START!, names it for a screen reader (no aria-label: it is no longer the original\'s picture) and the line under it describes it', /<button id="play" class="btn startbtn" type="button" aria-describedby="start-note">START!<\/button>/.test(lobbyText) && env.$('play').getAttribute('aria-label') === null && env.$('play').getAttribute('aria-describedby') === 'start-note');
-    const heldRoom = JSON.parse(env.session.data['ants-match-room'] || 'null') || {};
-    check('nothing was written by merely loading but the tab\'s own room for the invitations (no choice is remembered)', Object.keys(env.storage.data).length === 0 && Object.keys(env.session.data).join() === 'ants-match-room', JSON.stringify([env.storage.data, env.session.data]));
-    same('... the room that the tab holds is { code, map, teams, used }: a code of six characters, the card\'s map and teams (the create block of its links is made of them), no link copied yet', [Object.keys(heldRoom).sort(), CODE.test(heldRoom.code), heldRoom.map, heldRoom.teams, heldRoom.used],
-         [['code', 'map', 'teams', 'used'], true, 'treasure', 'ffa', {}]);
-    const ids = [...lobbyText.matchAll(/<input type="radio" name="(seat-\d)" id="(seat-\d-\w+)" value="(\w*)"/g)].map((m) => m.slice(1, 4).join(' '));
-    same('the choices are radio buttons of four groups (names seat-0 to seat-3), Friend, Easy, Medium, Hard, Nobody in this order (the arrow keys and Tab are the browser\'s own)', ids,
-         [0, 1, 2, 3].flatMap((s) => WORDS5.map((w) => 'seat-' + s + ' seat-' + s + '-' + w + ' ' + w)));
-    same('every seat\'s group is a fieldset named by its colour for a screen reader (the legend), and every Sit here says which seat it is for',
-         [0, 1, 2, 3].map((s) => [new RegExp('<fieldset class="seatset" id="seat-set-' + s + '"><legend class="sr">' + ['Green', 'Red', 'Blue', 'Black'][s] + '</legend>').test(lobbyText), env.$('sit-' + s).getAttribute('aria-label')]),
-         [[true, 'Sit here as Green'], [true, 'Sit here as Red'], [true, 'Sit here as Blue'], [true, 'Sit here as Black']]);
-}
-{   // Sit here
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'hard');
-    choose(env, 2, 'friend');
-    choose(env, 3, 'nobody');
-    sit(env, 2);
-    same('Sit here at Blue: You are at Blue (and only there); Green shows the choice that it kept (Medium), Blue\'s own choice (Friend) is kept out of sight, Red and Black keep theirs', [youSeats(env), seatWords(env)], [[2], ['medium', 'hard', 'friend', 'nobody']]);
-    same('... Blue has the marker, the name and neither buttons nor Sit here; the others have Sit here and buttons', [[0, 1, 2, 3].map((s) => env.$('sit-' + s).hidden), [0, 1, 2, 3].map((s) => env.$('seat-set-' + s).hidden), [0, 1, 2, 3].map((s) => env.$('seat-name-' + s).hidden)], [[false, false, true, false], [false, false, true, false], [true, true, false, true]]);
-    check('... and the focus goes to the Sit here of the seat that You left (the button that was pressed is gone)', env.focused === env.$('sit-0'));
-    same('... what is remembered: You at Blue and the four choices', JSON.parse(env.storage.data['ants-match']), { map: 'treasure', you: 2, seats: ['medium', 'hard', 'friend', 'nobody'], teams: 'ffa', sides: [0, 0, 0, 0] });
-    sit(env, 0);
-    same('... and back at Green: Blue shows its Friend again', [youSeats(env), seatWords(env)], [[0], ['medium', 'hard', 'friend', 'nobody']]);
-    const again = runLobby('', env.storage.data);
-    same('the next visit comes back with them: You, the choices', [youSeats(again), seatWords(again)], [[0], ['medium', 'hard', 'friend', 'nobody']]);
-}
-{   // the name under You: the typed name, as text, and a random one while the field is empty
-    const env = runLobby('', BOTS());
-    env.type('player-name', 'Ann & <b>Bob</b>');
-    check('the name that is typed is under You as text (no markup is made of it)', env.$('seat-name-0').textContent === 'Ann & <b>Bob</b>' && env.innerHTMLWrites.length === 0);
-    env.type('player-name', '  Zed  ');
-    check('... trimmed, as the name is', env.$('seat-name-0').textContent === 'Zed');
-    env.type('player-name', 'Bot (x)');
-    check('... a name that the rules refuse is not shown (a random one is: nothing starts with it)', randomName(env.$('seat-name-0').textContent));
-    env.type('player-name', '');
-    check('... an empty field is a random name again', randomName(env.$('seat-name-0').textContent));
-    sit(env, 3);
-    env.type('player-name', 'Maya');
-    check('the name follows You to another seat', env.$('seat-name-3').textContent === 'Maya' && env.$('seat-name-3').hidden === false && env.$('seat-name-0').hidden === true);
-    const remembered = runLobby('', { 'ants.name': 'Zoe' });
-    check('a remembered name is under You from the start', remembered.$('seat-name-0').textContent === 'Zoe');
-}
-{   // invitations: a link for each Friend seat
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'friend');
-    check('a Friend seat shows the invitations, one row for it', !env.$('invites').hidden && invites(env).length === 1);
-    const link = inviteLinks(env)[0];
-    const code = env.param(link, 'room');
-    check('its room is a code of six characters (a name and nothing more), and is in the tab\'s session', CODE.test(code) && JSON.parse(env.session.data['ants-match-room']).code === code, code);
-    same('... and its create block, right after the code, is the map and four seats (every colour can be taken), free for all: no teams, no leader-starts flag', [blockText(link), blockParams(env, link)], [BLOCK_TREASURE4, ['treasure', '4', null, null]]);
-    same('the link: this site\'s game page, the door, the room, the friend\'s seat, the plan (Green is You, Red the friend, Medium bots at Blue and Black), the picture and the people to wait for (You and the friend)',
-         [new URL(link).origin + new URL(link).pathname, env.param(link, 'join'), env.param(link, 'seat'), env.param(link, 'fill'), env.param(link, 'aspect'), env.param(link, 'start')], ['https://play.test/', '/ws', '1', 'none,none,medium,medium', '16:9', '2']);
-    same('... all of it, in this order (the door, the plain code, the create block, the seat, the plan, the picture, the people)', link, 'https://play.test/?join=/ws&room=' + code + BLOCK_TREASURE4 + '&seat=1&fill=none,none,medium,medium&aspect=16:9&start=2');
-    check('... no name (whoever opens it is asked what they want to be called), no teams (a room\'s teams are in its block), no key, no leader-starts flag, no platform', ['name', 'teams', 'key', 'token', 'embed', 'roomteams', 'roomleaderstart', 'platform'].every((k) => env.param(link, k) === null) && !/key|token/i.test(link), link);
-    same('the row: the friend\'s colour, the link in a field that cannot be typed in, Copy link; no Share where the browser has none', [invites(env)[0].children[0].textContent, invites(env)[0].children[1].value === link && invites(env)[0].children[1].attributes.readonly !== undefined && invites(env)[0].children[1].readOnly === true, copyOf(env, 0).textContent, invites(env)[0].children.length], ['Red', true, 'Copy link', 3]);
-    check('... the field has a name for a screen reader', invites(env)[0].children[1].getAttribute('aria-label') === 'Invitation link for Red');
-    copyOf(env, 0).click();
-    same('Copy link copies that link (and nothing else)', env.copied, [link]);
-    choose(env, 3, 'friend');
-    same('a second Friend seat: two rows, in the order of the seats, the same room, the same plan (none for both friends) and the people to wait for (three)', [invites(env).map((r) => r.children[0].textContent), inviteLinks(env).map((l) => env.param(l, 'room')).every((r) => r === code), inviteLinks(env).map((l) => env.param(l, 'seat')), inviteLinks(env).map((l) => env.param(l, 'fill')), inviteLinks(env).map((l) => env.param(l, 'start'))],
-         [['Red', 'Black'], true, ['1', '3'], ['none,none,medium,none', 'none,none,medium,none'], ['3', '3']]);
-    check('... and the same create block in both (the first Hello of the room makes it from whichever link is opened first)', inviteLinks(env).length === 2 && inviteLinks(env).every((l) => blockText(l) === BLOCK_TREASURE4));
-    choose(env, 1, 'easy');
-    same('a seat that is no Friend any more loses its row, and the plan has its bot', [invites(env).map((r) => r.children[0].textContent), env.param(inviteLinks(env)[0], 'fill'), env.param(inviteLinks(env)[0], 'start')], [['Black'], 'none,easy,medium,none', '2']);
-    choose(env, 3, 'hard');
-    check('no Friend seat: no invitations', env.$('invites').hidden && invites(env).length === 0);
-    check('the page made no markup of any of it', env.innerHTMLWrites.length === 0);
-}
-{   // Share, where the browser has it
-    const env = runLobby('', BOTS(), { share: true });
-    choose(env, 2, 'friend');
-    same('the row has Share too where the browser has it', [invites(env)[0].children.length, invites(env)[0].children[3].textContent], [4, 'Share']);
-    invites(env)[0].children[3].click();
-    same('Share gives the browser the link of that seat (a title and a line of text as well, nothing private)', [env.shared.length, env.shared[0].url, env.shared[0].title, /Blue/.test(env.shared[0].text), Object.keys(env.shared[0]).sort()], [1, inviteLinks(env)[0], 'Ants', true, ['text', 'title', 'url']]);
-    check('a link that was shared is in use like a copied one: no note yet', env.$('links-note').hidden);
-    choose(env, 3, 'hard');
-    check('... and a choice that changes the links after a Share brings the note', !env.$('links-note').hidden);
-    const refused = runLobby('', BOTS(), { share: 'throws' });
-    choose(refused, 2, 'friend');
-    let ok = true;
-    try { invites(refused)[0].children[3].click(); } catch (e) { ok = false; }
-    check('a Share that fails (or is refused by the person: a promise that fails) breaks nothing', ok);
-    const closed = runLobby('', BOTS(), { share: 'rejects' });
-    choose(closed, 2, 'friend');
-    invites(closed)[0].children[3].click();
-    check('... a rejected promise is caught too', closed.shared.length === 1);
-}
-{   // the room's code: made when a Friend seat first needs it, kept while the map and the teams stay (they are its create block, and the first Hello of a code is the one that is read: another map or other teams
-    // are another room), new when they change, with a note once a link was in use
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'friend');
-    const first = env.param(inviteLinks(env)[0], 'room');
-    choose(env, 2, 'friend');
-    choose(env, 3, 'hard');
-    choose(env, 2, 'easy');
-    sit(env, 3);
-    same('the code stays while the map and the teams stay (other seats, other choices, You at another seat)', inviteLinks(env).map((l) => env.param(l, 'room')), [first]);
-    same('... and so does the create block that every link carries: the map and four seats, whoever sits where', inviteLinks(env).map((l) => blockText(l)), [BLOCK_TREASURE4]);
-    check('... and no note is up (no link was copied)', env.$('links-note').hidden);
-    pickMap(env, 'small');
-    const second = env.param(inviteLinks(env)[0], 'room');
-    check('another map: another room (a new code of six characters, with the block of Small), and the links are made again; no note yet (nothing was copied)', CODE.test(second) && second !== first && blockText(inviteLinks(env)[0]) === cardBlockText('small') && env.$('links-note').hidden, second);
-    copyOf(env, 0).click();
-    check('a link is copied: the note is not up', env.$('links-note').hidden);
-    choose(env, 0, 'easy');
-    check('a choice that changes the links (the plan has a bot at Green now) after a copy: the note is up (it says "copy them again"), the room is the same', !env.$('links-note').hidden && /<p class="hint" id="links-note" role="status" hidden>[^<]*copy them again\.<\/p>/.test(lobbyText) && env.param(inviteLinks(env)[0], 'room') === second);
-    copyOf(env, 0).click();
-    check('... copying again takes the note away', env.$('links-note').hidden);
-    choose(env, 0, 'medium');
-    check('... and the next change brings it back', !env.$('links-note').hidden);
-    choose(env, 0, 'easy');
-    check('... and a choice that is put back makes the links the ones that were copied: no note', env.$('links-note').hidden);
-    pickMap(env, 'tiny');
-    const third = env.param(inviteLinks(env)[0], 'room');
-    check('another map after a copy: another room (a new code, the block of Tiny) and the note', CODE.test(third) && third !== second && blockText(inviteLinks(env)[0]) === cardBlockText('tiny') && !env.$('links-note').hidden);
-    copyOf(env, 0).click();
-    pressTeam(env, 0, 1);
-    pressTeam(env, 1, 1);
-    const fourth = env.param(inviteLinks(env)[0], 'room');
-    check('the teams are in the block: Green + Red (all four seats play) makes another room (a new code) whose block names them (&roomteams=0%2B1, the "+" encoded), and the note is up again (the links changed after a copy)',
-          CODE.test(fourth) && fourth !== third && blockText(inviteLinks(env)[0]) === cardBlockText('tiny', '0+1') && blockText(inviteLinks(env)[0]) === '&roommap=tiny&roomseats=4&roomteams=0%2B1' && !env.$('links-note').hidden);
-    same('... decoded, the block of the link is the map, four seats and the pair (the teams are in no other parameter), and the code is plain', [blockParams(env, inviteLinks(env)[0]), env.param(inviteLinks(env)[0], 'teams'), /[?&]room=[a-z2-9]{6}&/.test(inviteLinks(env)[0])], [['tiny', '4', '0+1', null], null, true]);
-    pressTeam(env, 1, 1);
-    check('... and free for all again (Red\'s switch off) is another room again, with a block that has no teams', CODE.test(env.param(inviteLinks(env)[0], 'room')) && env.param(inviteLinks(env)[0], 'room') !== fourth && blockText(inviteLinks(env)[0]) === cardBlockText('tiny'));
-}
-{   // two Friends: the note stays up until every link that was sent is the one that is shown for its seat (a seat that was never sent has nothing to be out of date)
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'friend');
-    choose(env, 2, 'friend');
-    copyOf(env, 0).click();
-    copyOf(env, 1).click();
-    check('both links copied: no note', env.$('links-note').hidden);
-    pickMap(env, 'small');
-    check('another map after both were sent: the note is up (both links are another room\'s now)', !env.$('links-note').hidden);
-    copyOf(env, 0).click();
-    check('... one of them copied again: the note stays (the link that was sent for the other seat is the old room\'s: its friend would wait alone)', !env.$('links-note').hidden);
-    const half = runLobby('', env.storage.data, { session: env.session.data });
-    check('... and a reload of the page does not lose that (the tab keeps what was copied for each seat)', !half.$('links-note').hidden);
-    copyOf(env, 1).click();
-    check('... both copied again: the note goes', env.$('links-note').hidden);
-    check('... and a reload keeps it gone', runLobby('', env.storage.data, { session: env.session.data }).$('links-note').hidden);
-    choose(env, 3, 'easy');
-    check('Black is an Easy bot now (the plan is in every link) after both were sent: the note is up', !env.$('links-note').hidden);
-    copyOf(env, 1).click();
-    check('... the second link copied: the first one that was sent is still the old one, the note stays', !env.$('links-note').hidden);
-    choose(env, 3, 'medium');
-    check('... Black put back: the first link is the one that was sent for its seat again, the second is not (it was copied with Easy): the note stays for that one', !env.$('links-note').hidden);
-    copyOf(env, 1).click();
-    check('... and when that one is copied again the note goes', env.$('links-note').hidden);
-    choose(env, 2, 'easy');
-    check('Blue is a bot now: one row left, and its link changed (the plan, the people to wait for): the note is up', invites(env).length === 1 && !env.$('links-note').hidden);
-    copyOf(env, 0).click();
-    check('... the one link that is shown copied: the note goes (the seat that shows no link keeps nothing up)', env.$('links-note').hidden);
-    const lone = runLobby('', BOTS());
-    choose(lone, 1, 'friend');
-    choose(lone, 2, 'friend');
-    copyOf(lone, 1).click();
-    check('a link copied for one seat only: no note (the other seat was never sent)', lone.$('links-note').hidden);
-    choose(lone, 3, 'easy');
-    check('... and a change that changes the link that was sent brings it (the link of the seat that was never sent changes too: it does not matter)', !lone.$('links-note').hidden);
-    copyOf(lone, 0).click();
-    check('... copying the other seat\'s link does not take it away: the link that was sent is still the old one', !lone.$('links-note').hidden);
-    copyOf(lone, 1).click();
-    check('... copying that seat\'s link does', lone.$('links-note').hidden);
-}
-{   // the copy: the browser's own API, else the copy command (and what that says is told: a copy that the browser did not do is not "Copied")
-    const text = (env, i) => copyOf(env, i).textContent;
-    const api = runLobby('', BOTS());
-    choose(api, 1, 'friend');
-    copyOf(api, 0).click();
-    check('where the browser has the clipboard\'s API the copy command is not used', api.commanded.length === 0 && api.copied.length === 1);
-    const plain = runLobby('', BOTS(), { clipboard: false });
-    choose(plain, 1, 'friend');
-    const link = inviteLinks(plain)[0];
-    const before = plain.body.children.length;
-    copyOf(plain, 0).click();
-    same('a browser without it: the copy command copies the link (from a field that is gone again) and the button says Copied', [plain.commanded, plain.body.children.length, text(plain, 0)], [[{ cmd: 'copy', value: link }], before, 'Copied']);
-    const no = runLobby('', BOTS(), { clipboard: false, copyResult: false });
-    choose(no, 1, 'friend');
-    copyOf(no, 0).click();
-    same('... a copy command that says no (the browser did not copy): the button asks the person to select the link and copy it, and no field is left behind', [text(no, 0), no.body.children.length], ['Select the link and copy it', 0]);
-    const refuses = runLobby('', BOTS(), { clipboard: false, copyResult: 'throws' });
-    choose(refuses, 1, 'friend');
-    copyOf(refuses, 0).click();
-    same('... a copy command that throws says the same', [text(refuses, 0), refuses.body.children.length], ['Select the link and copy it', 0]);
-    check('... and the link counts as sent in every case (the person copies it by hand): changing the map after it brings the note', [plain, no, refuses].every((e) => { pickMap(e, 'small'); return !e.$('links-note').hidden; }));
-}
-{   // the line under START is a live region: it is written only when its text changes (a screen reader says a live region again whenever it is written)
-    const env = runLobby('', BOTS());
-    const note = env.$('start-note');
-    const own = Object.getOwnPropertyDescriptor(El.prototype, 'textContent');
-    let writes = 0;
-    Object.defineProperty(note, 'textContent', { get() { return own.get.call(note); }, set(v) { writes++; own.set.call(note, v); } });
-    choose(env, 1, 'easy');
-    choose(env, 2, 'hard');
-    sit(env, 3);
-    pickMap(env, 'small');
-    pressTeam(env, 0, 1);
-    pressTeam(env, 1, 1);
-    check('choices that leave the line as it is (bots, a seat for You, a map, the teams) do not write it', writes === 0, String(writes));
-    choose(env, 1, 'friend');
-    same('a Friend seat changes it: one write, with the new text', [writes, note.textContent], [1, 'Starts when your friend is in (the first player in the room can start sooner).']);
-    choose(env, 2, 'easy');
-    choose(env, 0, 'hard');
-    check('... and a choice that leaves it as it is again does not write it', writes === 1, String(writes));
-    choose(env, 2, 'friend');
-    check('... the second Friend seat changes the words: another write', writes === 2 && /^Starts when your friends are in/.test(note.textContent), String(writes));
-    env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-    check('a page that comes back from the browser\'s memory shows the card again and writes nothing that did not change', writes === 2, String(writes));
-}
-{   // a reload keeps the room of the tab (the links that were sent stay good); START lets go of it; the page that comes back from memory has a room of its own
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'friend');
-    const link = inviteLinks(env)[0];
-    copyOf(env, 0).click();
-    const reloaded = runLobby('', env.storage.data, { session: env.session.data });
-    same('a reload (the page is opened again): the same links', inviteLinks(reloaded), [link]);
-    check('... and no note (they are the links that were copied)', reloaded.$('links-note').hidden);
-    choose(reloaded, 2, 'friend');
-    check('... and a change after the reload that changes the links brings the note (what was copied is remembered by the tab)', !reloaded.$('links-note').hidden && reloaded.param(inviteLinks(reloaded)[0], 'room') === env.param(link, 'room'));
-    pickMap(reloaded, 'islands');
-    const third = runLobby('', reloaded.storage.data, { session: reloaded.session.data });
-    same('a reload after the map changed keeps the room of that map (the tab saved it when it was made), with the block of that map', [blockText(inviteLinks(third)[0]), third.param(inviteLinks(third)[0], 'room') === reloaded.param(inviteLinks(reloaded)[0], 'room')], [cardBlockText('islands'), true]);
-    same('... the tab saved it as { code, map, teams, used }: the card\'s map and teams (the block of its links is made of them) and the links that were copied', [JSON.parse(reloaded.session.data['ants-match-room']).map, JSON.parse(reloaded.session.data['ants-match-room']).teams, Object.keys(JSON.parse(reloaded.session.data['ants-match-room'])).sort()], ['islands', 'ffa', ['code', 'map', 'teams', 'used']]);
-    // what a tab holds from another time: { code, map, teams, used } as the page writes it (a code of six characters), here for another map than the card's
-    const held = (extra) => ({ 'ants-match-room': JSON.stringify(Object.assign({ code: 'abcdef', map: 'tiny', teams: 'ffa', used: {} }, extra)) });
-    const other = runLobby('', reloaded.storage.data, { session: held({}) });
-    check('a room that the tab holds for another map is not used (the choices changed meanwhile: the block of its links would be the other map\'s): the page makes a room of its own, for the card\'s map', CODE.test(other.param(inviteLinks(other)[0], 'room')) && blockText(inviteLinks(other)[0]) === cardBlockText('islands') && other.param(inviteLinks(other)[0], 'room') !== 'abcdef');
-    check('... and with no link copied there is no note', other.$('links-note').hidden);
-    const fitting = runLobby('', reloaded.storage.data, { session: held({ map: 'islands' }) });
-    same('a room that the tab holds for the card\'s map and teams is the one that the links use (its code is one that the page makes: six characters)', [fitting.param(inviteLinks(fitting)[0], 'room'), blockText(inviteLinks(fitting)[0])], ['abcdef', cardBlockText('islands')]);
-    const otherTeams = runLobby('', reloaded.storage.data, { session: held({ map: 'islands', teams: '0+1' }) });
-    check('... another team is another room too (the teams are in the block)', otherTeams.param(inviteLinks(otherTeams)[0], 'room') !== 'abcdef' && blockText(inviteLinks(otherTeams)[0]) === cardBlockText('islands'));
-    const kept = runLobby('', reloaded.storage.data, { session: held({ used: { 1: 'the link that was copied' } }) });
-    check('... but what was copied stays known (the map changed in another tab): the link of that seat is not that any more, so the note is up', !kept.$('links-note').hidden && blockText(inviteLinks(kept)[0]) === cardBlockText('islands'));
-    const unseen = runLobby('', reloaded.storage.data, { session: held({ used: { 0: 'a link of the seat of You', 3: 'a link of a seat that is a bot' } }) });
-    check('... a link that was copied for a seat that shows no link (You, a bot) keeps nothing up', unseen.$('links-note').hidden);
-    const longUsed = runLobby('', reloaded.storage.data, { session: held({ used: { 1: 'x'.repeat(1001) } }) });
-    const textUsed = runLobby('', reloaded.storage.data, { session: held({ used: 'the links that were copied' }) });
-    const numberUsed = runLobby('', reloaded.storage.data, { session: held({ used: 5 }) });
-    const listUsed = runLobby('', reloaded.storage.data, { session: held({ used: ['a', 'the link that was copied'] }) });
-    const badLink = runLobby('', reloaded.storage.data, { session: held({ used: { 1: 5, 2: null } }) });
-    check('... a record that is too long, is no object or holds no text is not believed (the first versions of the page kept the links as one text: that is not read either)', [longUsed, textUsed, numberUsed, listUsed, badLink].every((e) => e.$('links-note').hidden));
-    for (const junk of ['not json', '{}', '{"code":5}', '{"code":"x"}', 'null', '[]', '"abcdef"',
-                        '{"code":"abcdef"}', '{"code":"abcdef","used":{}}',                                                        // (no map, no teams: an entry of an earlier shape does not fit)
-                        '{"code":"abcdef","map":"tiny","teams":"ffa"}', '{"code":"abcdef","map":"islands","teams":"0+1"}',          // (another map, other teams)
-                        '{"code":"abcdef","map":5,"teams":"ffa"}', '{"code":"abcdef","map":"islands","teams":5}', '{"code":"abcdef","map":"islands"}', '{"code":"abcdef","teams":"ffa"}',
-                        '{"code":"ABCDEF","map":"islands","teams":"ffa"}', '{"code":"abcde","map":"islands","teams":"ffa"}', '{"code":"abcdefg","map":"islands","teams":"ffa"}', '{"code":"abcdefgh","map":"islands","teams":"ffa"}',      // (not six characters of the page's alphabet)
-                        '{"code":"abc def","map":"islands","teams":"ffa"}', '{"code":"abcde1","map":"islands","teams":"ffa"}', '{"code":"abcde-","map":"islands","teams":"ffa"}',
-                        '{"code":"demo-islands-4p-abcdef","map":"islands","teams":"ffa"}', '{"code":"demo-islands-4p-t01-abcdef","map":"islands","teams":"0+1"}', '{"code":"demo-islands-4p-abcdef","used":{}}']) {
-        const j = runLobby('', reloaded.storage.data, { session: { 'ants-match-room': junk } });
-        check('a room entry that is junk or of another shape (' + junk.slice(0, 48) + ') is not used: the page makes its own', CODE.test(j.param(inviteLinks(j)[0], 'room')) && j.param(inviteLinks(j)[0], 'room') !== 'abcdef' && blockText(inviteLinks(j)[0]) === cardBlockText('islands'));
-    }
-    // START takes this tab into the match with the same room, and the tab lets go of it
-    const start = runLobby('', BOTS());
-    start.type('player-name', 'Ann');
-    choose(start, 1, 'friend');
-    const startRoom = start.param(inviteLinks(start)[0], 'room');
-    start.$('play').click();
-    check('START: one assignment, this tab (no window), the same room as the invitations, with the same create block', start.assigned.length === 1 && start.opened.length === 0 && start.param(start.assigned[0], 'room') === startRoom && blockText(start.assigned[0]) === blockText(inviteLinks(start)[0]) && blockText(start.assigned[0]) === BLOCK_TREASURE4, JSON.stringify(start.assigned));
-    check('... the tab still holds the room while the game page loads (the navigation may not happen at all: the links on the card stay the room\'s)', start.session.data['ants-match-room'] !== undefined && JSON.parse(start.session.data['ants-match-room']).code === startRoom);
-    start.$('play').click();
-    check('a second click while the game page loads (a held Enter, a tap on a slow phone) goes to the same room, not to another one: the friend\'s link stays good', start.assigned.length === 2 && start.param(start.assigned[1], 'room') === startRoom && start.assigned[1] === start.assigned[0], JSON.stringify(start.assigned));
-    (start.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: false }));
-    check('... the tab lets go of the room when it leaves the page (the next match is another room)', start.session.data['ants-match-room'] === undefined);
-    start.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-    check('a page that comes back from the browser\'s memory (Back) has a room of its own', start.param(inviteLinks(start)[0], 'room') !== startRoom && CODE.test(start.param(inviteLinks(start)[0], 'room')));
-    let ok = true;
-    try { const t = runLobby('', BOTS(), { noSession: true }); choose(t, 1, 'friend'); ok = inviteLinks(t).length === 1; } catch (e) { ok = false; }
-    check('a browser with no session storage (or one that refuses it) still has its links', ok);
-    const away = runLobby('', BOTS());                       // a page that is left for another reason than START (a link, a Join, a close) keeps its room: Back brings the same links
-    choose(away, 1, 'friend');
-    const awayRoom = away.param(inviteLinks(away)[0], 'room');
-    (away.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: true }));
-    check('a page that is left without START keeps the room of the tab (the links that were sent stay good)', away.session.data['ants-match-room'] !== undefined && JSON.parse(away.session.data['ants-match-room']).code === awayRoom);
-}
-{   // Back from the browser's memory without START (from a Join, say): the card's room and what was copied stay
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'friend');
-    const link = inviteLinks(env)[0];
-    copyOf(env, 0).click();
-    env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-    same('a page that comes back from the browser\'s memory without START shows the same links, still in use: no note', [inviteLinks(env), env.$('links-note').hidden], [[link], true]);
-    choose(env, 3, 'hard');
-    check('... and a change after that brings the note (what was copied is not forgotten)', !env.$('links-note').hidden);
-}
-{   // START
-    const env = runLobby('', BOTS());
-    env.type('player-name', 'Ann');
-    choose(env, 1, 'friend');
-    choose(env, 2, 'hard');
-    sit(env, 3);
-    env.$('play').click();
-    const u = env.assigned[0] || '';
-    same('START: this tab goes to the game page with the room, your seat (Black), the plan (Green a Medium bot, Red the friend, Blue a Hard bot, You at Black), your name, the picture and the people to wait for (You and the friend)',
-         [env.assigned.length, new URL(u).origin + new URL(u).pathname, env.param(u, 'join'), env.param(u, 'seat'), env.param(u, 'fill'), env.param(u, 'name'), env.param(u, 'aspect'), env.param(u, 'start')], [1, 'https://play.test/', '/ws', '3', 'medium,none,hard,none', 'Ann', '16:9', '2']);
-    check('... a room of a new code (six characters) whose create block, right after it, is four seats on the map; no teams parameter, no key, no embed, nothing opened in another window', CODE.test(env.param(u, 'room')) && blockText(u) === BLOCK_TREASURE4 && env.param(u, 'teams') === null && env.param(u, 'key') === null && env.param(u, 'embed') === null && env.opened.length === 0 && env.replaced.length === 0, u);
-    same('... the whole address, in this order: the door, the code, the block, the seat, the plan, the name, the picture, the people', u, 'https://play.test/?join=/ws&room=' + env.param(u, 'room') + BLOCK_TREASURE4 + '&seat=3&fill=medium,none,hard,none&name=Ann&aspect=16:9&start=2');
-    same('... the choices are remembered (ants-match) and the name (ants.name), and nothing else of the page\'s storage was written', [Object.keys(env.storage.data).sort(), JSON.parse(env.storage.data['ants-match']).you, env.storage.data['ants.name']], [['ants-match', 'ants.name'], 3, 'Ann']);
-    const bots = runLobby('', BOTS());
-    bots.$('play').click();
-    const b = bots.assigned[0] || '';
-    same('START with bots only: no Friend row, so one person to wait for (the leader\'s game presses START at once), a Medium bot in every other seat, an empty name is a random one of the page\'s', [bots.param(b, 'start'), bots.param(b, 'fill'), bots.param(b, 'seat'), randomName(bots.param(b, 'name'))], ['1', 'none,medium,medium,medium', '0', true]);
-    check('... and nothing was remembered by it but the name (the choices are the ones that were remembered)', Object.keys(bots.storage.data).sort().join() === 'ants-match,ants.name' && bots.storage.data['ants-match'] === BOTS()['ants-match'], JSON.stringify(bots.storage.data));
-    const first = runLobby('', {});
-    first.$('play').click();
-    const f = first.assigned[0] || '';
-    same('START on a first visit: three Friends, so four people to wait for and no plan (no fill parameter), Green\'s seat, and the room of the invitations (its code and its create block)', [first.param(f, 'start'), first.param(f, 'fill'), first.param(f, 'seat'), first.param(f, 'room') === first.param(inviteLinks(first)[0], 'room'), blockText(f) === blockText(inviteLinks(first)[0]) && blockText(f) === BLOCK_TREASURE4], ['4', null, '0', true, true]);
-    check('... and nothing was remembered by it but the name (no choice was made)', Object.keys(first.storage.data).join() === 'ants.name', JSON.stringify(first.storage.data));
-    const four = runLobby('', BOTS());
-    for (const s of [1, 2, 3]) choose(four, s, 'friend');
-    four.$('play').click();
-    same('three friends: four people to wait for and no bot: no plan at all (no fill parameter)', [four.param(four.assigned[0], 'start'), four.param(four.assigned[0], 'fill'), inviteLinks(four).map((l) => four.param(l, 'fill'))], ['4', null, [null, null, null]]);
-    const shape = runLobby('?aspect=4:3', {});
-    shape.$('play').click();
-    check('the picture of the page goes with START (and the invitations)', shape.param(shape.assigned[0], 'aspect') === '4:3' && (choose(shape, 1, 'friend'), shape.param(inviteLinks(shape)[0], 'aspect')) === '4:3');
-    const stored = runLobby('', { 'ants.aspect.v2': '4:3' });
-    stored.$('play').click();
-    check('... also the one that its buttons remembered', stored.param(stored.assigned[0], 'aspect') === '4:3');
-}
-{   // nobody else in the match: START plays a game for one on this computer (a room of the game server needs two people to start)
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'nobody');
-    choose(env, 2, 'nobody');
-    check('two seats play: START is on and starts a room at once', !env.$('play').disabled && env.$('start-note').textContent === 'Starts at once, in this tab. Bots gather food, raid and fight back.');
-    choose(env, 3, 'nobody');
-    same('one seat plays (You): START is still on, and the line under it says that it is a game for one on this computer', [!env.$('play').disabled, env.$('start-note').textContent], [true, 'Starts at once, on this computer: just you on the map, no opponents.']);
-    same('... the Team switches are gone (nothing to choose) and there is no invitation', [env.$('teams-line').hidden, switchesShown(env), env.$('invites').hidden], [true, ['', '', '', ''], true]);
-    env.type('player-name', 'Ann');
-    env.$('play').click();
-    const u = env.assigned[0] || '';
-    same('... and START goes to the game page of this computer (this tab): the map, your name and the picture, no room (so no create block either), no bots, no seat, no people to wait for', [env.assigned.length, new URL(u).origin + new URL(u).pathname, env.param(u, 'map'), env.param(u, 'name'), env.param(u, 'aspect'), ['join', 'room', 'roommap', 'roomseats', 'roomteams', 'roomleaderstart', 'platform', 'bots', 'teams', 'fill', 'start', 'seat', 'key'].map((k) => env.param(u, k))],
-         [1, 'https://play.test/play.html', 'treasure', 'Ann', '16:9', [null, null, null, null, null, null, null, null, null, null, null, null, null]]);
-    check('... in this tab (no window), with no room made for it (the tab holds none) and nothing remembered but the choices and the name', env.opened.length === 0 && env.session.data['ants-match-room'] === undefined && Object.keys(env.storage.data).sort().join() === 'ants-match,ants.name', JSON.stringify([env.session.data, env.storage.data]));
-    const nameless = runLobby('', BOTS());
-    for (const s of [1, 2, 3]) choose(nameless, s, 'nobody');
-    pickMap(nameless, 'islands');
-    nameless.$('play').click();
-    const nu = nameless.assigned[0] || '';
-    same('an empty name is the one that the card shows under You (a random one of the page\'s, as for a room: the line under the field says so), on the map that the card has', [nameless.param(nu, 'map'), randomName(nameless.param(nu, 'name')), nameless.param(nu, 'name') === nameless.$('seat-name-0').textContent], ['islands', true, true]);
-    const classic = runLobby('?aspect=4:3', BOTS());
-    for (const s of [1, 2, 3]) choose(classic, s, 'nobody');
-    classic.$('play').click();
-    check('the picture of the page goes with a game for one too (Classic 4:3)', classic.assigned.length === 1 && new URL(classic.assigned[0]).pathname === '/play.html' && classic.param(classic.assigned[0], 'aspect') === '4:3', JSON.stringify(classic.assigned));
-    const kept = runLobby('', {});                         // a first visit: three Friends, so the tab holds a room for their links
-    const keptRoom = kept.param(inviteLinks(kept)[0], 'room');
-    for (const s of [1, 2, 3]) choose(kept, s, 'nobody');
-    kept.$('play').click();
-    (kept.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: true }));
-    check('a game for one is in no room: the tab keeps the room of its invitations when it leaves', kept.assigned.length === 1 && new URL(kept.assigned[0]).pathname === '/play.html' && kept.session.data['ants-match-room'] !== undefined && JSON.parse(kept.session.data['ants-match-room']).code === keptRoom, JSON.stringify(kept.session.data));
-    kept.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-    choose(kept, 1, 'friend');
-    check('... and Back from the game brings the same links (the friends who were sent them wait in that room)', kept.param(inviteLinks(kept)[0], 'room') === keptRoom);
-    choose(env, 2, 'friend');
-    same('a Friend seat is a player: START says that it waits for the friend', [!env.$('play').disabled, env.$('start-note').textContent], [true, 'Starts when your friend is in (the first player in the room can start sooner).']);
-    choose(env, 3, 'friend');
-    check('... two friends: "your friends are in"', env.$('start-note').textContent === 'Starts when your friends are in (the first player in the room can start sooner).');
-    sit(env, 1);
-    choose(env, 2, 'nobody');
-    choose(env, 3, 'nobody');
-    same('Sit here moves what counts: You at Red and Green a Medium bot (it kept its choice): two players, START starts a room', [youSeats(env), env.$('start-note').textContent], [[1], 'Starts at once, in this tab. Bots gather food, raid and fight back.']);
-    choose(env, 0, 'nobody');
-    same('... Green set to Nobody: one player, a game for one (which is Green\'s colour: the line says so when You sit elsewhere)', env.$('start-note').textContent, 'Starts at once, on this computer: just you on the map, no opponents. Alone you play Green.');
-    env.$('play').click();
-    check('... and START plays it (on this computer, as ever)', env.assigned.length === 2 && new URL(env.assigned[1]).pathname === '/play.html' && env.param(env.assigned[1], 'join') === null, JSON.stringify(env.assigned));
-}
-{   // the Teams: a Team 1 and a Team 2 switch on each seat that plays; two seats on the same switch are a team, which is in the room's create block (roomteams), not in a teams parameter and not in the code
-    const env = runLobby('', BOTS());
-    choose(env, 1, 'nobody');
-    same('Red is Nobody: three seats play (Green, Blue, Black) and have the switches, Red has none, and no switch is on', [env.$('teams-line').hidden, switchesShown(env), env.$('teams-line').textContent], [false, ['-', '', '-', '-'], FFA_LINE]);
-    pressTeam(env, 2, 2);
-    same('Team 2 on Blue: one seat on a switch is no team (free for all: the line still says how to make one)', [switchesShown(env), env.$('teams-line').textContent, env.$('team-2-2').getAttribute('aria-pressed'), env.$('team-2-1').getAttribute('aria-pressed')], [['-', '', '2', '-'], FFA_LINE, 'true', 'false']);
-    pressTeam(env, 3, 2);
-    same('... Team 2 on Black too: Blue + Black against Green (Green plays alone, nothing is on for it), and the line says so', [switchesShown(env), env.$('teams-line').textContent], [['-', '', '2', '2'], 'Teams: Blue + Black against Green.']);
-    same('... a team of two is full: Green cannot take Team 2 (dimmed), everybody else can take the switches that they have', [switchesDimmed(env), env.$('team-0-2').getAttribute('aria-disabled'), env.$('team-0-1').getAttribute('aria-disabled')], [['2', '', '', ''], 'true', null]);
-    choose(env, 2, 'friend');
-    const teamed = env.param(inviteLinks(env)[0], 'room');
-    same('a team stays while its two seats play; a Friend seat gives the room a create block that names it (&roomteams=2%2B3: the "+" is encoded), and no teams parameter', [env.$('teams-line').textContent, blockText(inviteLinks(env)[0]), blockParams(env, inviteLinks(env)[0]), env.param(inviteLinks(env)[0], 'teams'), CODE.test(teamed)],
-         ['Teams: Blue + Black against Green.', '&roommap=treasure&roomseats=4&roomteams=2%2B3', ['treasure', '4', '2+3', null], null, true]);
-    choose(env, 3, 'nobody');
-    const ffa = env.param(inviteLinks(env)[0], 'room');
-    same('a seat that leaves the match takes the team with it: two seats play, the switches are gone, a block with no teams (and another room: the first Hello of a code is the one that is read, so the teams are a new room\'s)', [env.$('teams-line').hidden, switchesShown(env), blockText(inviteLinks(env)[0]), CODE.test(ffa) && ffa !== teamed], [true, ['', '', '', ''], BLOCK_TREASURE4, true]);
-    choose(env, 3, 'hard');
-    same('... and it stays free for all when the seat comes back (a team is made again by a person)', [switchesShown(env), env.$('teams-line').textContent], [['-', '', '-', '-'], FFA_LINE]);
-    sit(env, 1);
-    same('Sit here changes the seats that play, and the switches follow (Red is You, Green a bot, Blue a Friend, Black Hard: four play, every seat has them)', [switchesShown(env), env.$('teams-line').hidden], [['-', '-', '-', '-'], false]);
-    pressTeam(env, 0, 1);
-    same('Team 1 on Green: one seat is no team, so nothing is on for the others', [switchesShown(env), switchesDimmed(env)], [['1', '-', '-', '-'], ['', '', '', '']]);
-    pressTeam(env, 1, 1);
-    same('Team 1 on Red (You are at Red): Green + Red against Blue + Black; Blue and Black show Team 2 although nobody pressed it, and Team 1 is dimmed on them (it is full), Team 2 on Green and Red',
-         [switchesShown(env), switchesDimmed(env), env.$('teams-line').textContent], [['1', '1', '2', '2'], ['2', '2', '1', '1'], 'Teams: Green + Red against Blue + Black.']);
-    pressTeam(env, 2, 1);
-    same('pressing a dimmed switch changes nothing and says why in the line under the seats (a team is two colours)', [switchesShown(env), env.$('teams-line').textContent, JSON.parse(env.storage.data['ants-match']).sides], [['1', '1', '2', '2'], 'Team 1 has two colours already. Press one of them to take it off first.', [1, 1, 0, 0]]);
-    {   // a person who presses it again asks again: the reason is written again each time (a live region says what is written, not what stays)
-        const line = env.$('teams-line');
-        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(line), 'textContent');
-        let writes = 0;
-        Object.defineProperty(line, 'textContent', { get() { return descriptor.get.call(line); }, set(v) { writes++; descriptor.set.call(line, v); }, configurable: true });
-        pressTeam(env, 2, 1);
-        pressTeam(env, 2, 1);
-        same('... pressed again it is written again each time', [writes, line.textContent], [2, 'Team 1 has two colours already. Press one of them to take it off first.']);
-        delete line.textContent;
-    }
-    choose(env, 2, 'hard');
-    same('... and the next choice puts the teams back in the line', env.$('teams-line').textContent, 'Teams: Green + Red against Blue + Black.');
-    pressTeam(env, 1, 1);
-    pressTeam(env, 2, 1);
-    same('to put Blue with Green instead: Red takes its Team 1 off, Blue takes Team 1 (Green + Blue against Red + Black; Red and Black show Team 2)', [switchesShown(env), env.$('teams-line').textContent], [['1', '2', '1', '2'], 'Teams: Green + Blue against Red + Black.']);
-    env.$('play').click();
-    const u = env.assigned[0] || '';
-    check('START with a team: the room\'s create block names it (&roomteams=0%2B2: the pair, the lower seat first), and there is no teams parameter', blockText(u) === cardBlockText('treasure', '0+2') && JSON.stringify(blockParams(env, u)) === JSON.stringify(['treasure', '4', '0+2', null]) && env.param(u, 'teams') === null && !/[?&]teams=/.test(u), u);
-    same('... remembered: the team that the switches make, and the switches', [JSON.parse(env.storage.data['ants-match']).teams, JSON.parse(env.storage.data['ants-match']).sides], ['0+2', [1, 0, 1, 0]]);
-    const back = runLobby('', env.storage.data);
-    same('the next visit comes back with the switches (the two that were pressed are on, the other two show the other team)', [switchesShown(back), back.$('teams-line').textContent], [['1', '2', '1', '2'], 'Teams: Green + Blue against Red + Black.']);
-    choose(back, 3, 'friend');
-    const withTeam = back.param(inviteLinks(back)[0], 'room');
-    check('a Friend at Black gives the room a create block with the team (&roomteams=0%2B2: Green + Blue)', invites(back).length === 1 && CODE.test(withTeam) && blockText(inviteLinks(back)[0]) === cardBlockText('treasure', '0+2'), JSON.stringify(inviteLinks(back)));
-    pressTeam(back, 3, 2);
-    same('pressing the Team 2 that Black shows (nobody pressed it) takes the teams away: no switch is on, free for all', [switchesShown(back), switchesDimmed(back), back.$('teams-line').textContent, JSON.parse(back.storage.data['ants-match']).sides, JSON.parse(back.storage.data['ants-match']).teams], [['-', '-', '-', '-'], ['', '', '', ''], FFA_LINE, [0, 0, 0, 0], 'ffa']);
-    check('... and the room made for those choices has a block with no teams, and a code of its own', invites(back).length === 1 && CODE.test(back.param(inviteLinks(back)[0], 'room')) && back.param(inviteLinks(back)[0], 'room') !== withTeam && blockText(inviteLinks(back)[0]) === BLOCK_TREASURE4, JSON.stringify(inviteLinks(back)));
-    check('the switches are buttons that say whether they are on (aria-pressed) and are named by their seat (the button\'s own name: Team 1 for Green; and a group named for its colour)', [0, 1, 2, 3].every((x) => [1, 2].every((k) => new RegExp('<button type="button" class="tbtn" id="team-' + x + '-' + k + '" aria-label="Team ' + k + ' for ' + ['Green', 'Red', 'Blue', 'Black'][x] + '" aria-pressed="false">Team ' + k + '</button>').test(lobbyText)) && new RegExp('<span class="teamset" id="team-set-' + x + '" role="group" aria-label="' + ['Green', 'Red', 'Blue', 'Black'][x] + '\'s team" hidden>').test(lobbyText)));
-    {   // a press that the other seats hold: Team 1 on Green, then Team 2 on Red and Blue show Black on Team 1 as well; a press that is accepted always shows
-        const e = runLobby('', BOTS());
-        pressTeam(e, 0, 1);
-        pressTeam(e, 1, 2);
-        pressTeam(e, 2, 2);
-        same('Team 1 on Green, Team 2 on Red and on Blue: Green + Black against Red + Blue, and Green and Black show Team 1', [switchesShown(e), e.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
-        pressTeam(e, 0, 1);
-        same('... pressing Team 1 on Green (what it pressed is held by the others now) takes the teams away, as Black\'s does: every switch is off', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
-        pressTeam(e, 0, 1);
-        pressTeam(e, 1, 1);
-        pressTeam(e, 0, 2);
-        same('Green + Red against Blue + Black: Green cannot take the Team 2 that Blue and Black show (nobody pressed it), and the line says to clear the teams first', [switchesShown(e), e.$('teams-line').textContent], [['1', '1', '2', '2'], 'Team 2 is the other two colours already. Press a lit switch to clear the teams first.']);
-        pressTeam(e, 3, 2);
-        same('... and a press on a lit switch does clear them', [switchesShown(e), e.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
-    }
-    const old = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3' }) });
-    same('a state of the first versions of the card (a team and no switches) shows its pair on Team 1 and the other two on Team 2', [switchesShown(old), old.$('teams-line').textContent], [['1', '2', '2', '1'], 'Teams: Green + Black against Red + Blue.']);
-    const junk = runLobby('', { 'ants-match': JSON.stringify({ map: 'treasure', you: 0, seats: ['medium', 'medium', 'medium', 'medium'], teams: '0+3', sides: [1, 1, 1, 0] }) });
-    same('switches that put three seats on one switch are no switches: free for all (the team that was written is not used either)', [switchesShown(junk), junk.$('teams-line').textContent], [['-', '-', '-', '-'], FFA_LINE]);
-}
-{   // the map: its preview and Map Info line, the setup screen's own; it is remembered
-    const info = (() => { const m = /var MAP_INFO = \{([\s\S]*?)\};/.exec(lobbyText); return new Function('return {' + m[1] + '};')(); })();
-    same('the page has the Map Info line of each of the six maps', Object.keys(info).sort(), MAP_KEYS.slice().sort());
-    const env = runLobby('', BOTS());
-    let wrong = 0;
-    let sample = '';
-    for (const key of MAP_KEYS) {
-        pickMap(env, key);
-        const alt = env.$('map-preview').getAttribute('alt');
-        if (env.$('map-preview').src !== 'front/preview_' + key + '.png' || env.$('map-info').textContent !== info[key] || alt.toLowerCase().indexOf(key) === -1 || env.$('map-pick').value !== key) { wrong++; if (!sample) sample = key + ': ' + env.$('map-preview').src + ' / ' + env.$('map-info').textContent + ' / ' + alt; }
-    }
-    check('choosing a map shows its own preview, Map Info line and a text for it (' + sample + ')', wrong === 0);
-    check('... the select has the six maps in the page\'s order', JSON.stringify(env.$('map-pick').children.map((o) => o.value)) === JSON.stringify(MAP_KEYS));
-    pickMap(env, 'islands');
-    env.$('play').click();
-    same('the map is in START\'s room (its create block: &roommap=islands&roomseats=4) and remembered with the rest', [blockText(env.assigned[0]), JSON.parse(env.storage.data['ants-match']).map], [cardBlockText('islands'), 'islands']);
-    const again = runLobby('', env.storage.data);
-    same('the next visit comes back on that map, with its preview', [again.$('map-pick').value, again.$('map-preview').src], ['islands', 'front/preview_islands.png']);
-}
-{   // what the earlier pages left in the browser is read for a first visit, and never written
-    const old = { 'ants-solo-seats': 'easy,none,hard', 'ants-solo-teams': '0+3', 'ants-four-map': 'small', 'ants-four-players': '4', 'ants-four-fill': 'none,medium,medium,medium', 'ants-four-teams': '0+1' };
-    const env = runLobby('', old);
-    same('the opponents of a game on this computer, its team and the last map: Red Easy, Blue Nobody, Black Hard, Green and You with Black as a team (Team 1 for both, three seats play: Red alone), Small', [seatWords(env), youSeats(env), switchesShown(env), env.$('teams-line').textContent, env.$('map-pick').value, env.$('map-preview').src], [['friend', 'easy', 'nobody', 'hard'], [0], ['1', '-', '', '1'], 'Teams: Green + Black against Red.', 'small', 'front/preview_small.png']);
-    choose(env, 2, 'friend');
-    same('... what the card remembers is its own key; the old keys are left as they were and nothing was added', [Object.keys(env.storage.data).sort(), env.storage.data['ants-solo-seats'], env.storage.data['ants-four-fill']], [Object.keys(old).concat(['ants-match']).sort(), 'easy,none,hard', 'none,medium,medium,medium']);
-    const hosted = runLobby('', { 'ants-four-players': '3', 'ants-four-fill': 'none,easy,none,hard', 'ants-four-teams': '0+2', 'ants-four-map': 'tiny' });
-    same('a browser that only hosted rooms: its room is the card (3 players: Red Easy, Blue a Friend, Black Nobody) with its team', [seatWords(hosted), switchesShown(hosted), hosted.$('teams-line').textContent, hosted.$('map-pick').value, hosted.$('invites').hidden === false && invites(hosted).length === 1 && invites(hosted)[0].children[0].textContent], [['friend', 'easy', 'friend', 'nobody'], ['1', '-', '1', ''], 'Teams: Green + Blue against Red.', 'tiny', 'Blue']);
-    const legacy = runLobby('', { 'ants-solo-bots': 'hard' });
-    same('the opponents that the first versions remembered (Hard) are in all three seats', seatWords(legacy), ['friend', 'hard', 'hard', 'hard']);
-    const legacyNone = runLobby('', { 'ants-solo-bots': 'none' });
-    same('... and None is Nobody in all three (the original\'s single player: START plays it, on this computer)', [seatWords(legacyNone), !legacyNone.$('play').disabled, legacyNone.$('start-note').textContent], [['friend', 'nobody', 'nobody', 'nobody'], true, 'Starts at once, on this computer: just you on the map, no opponents.']);
-    const own = runLobby('', Object.assign({ 'ants-match': JSON.stringify({ map: 'gauntlet', you: 1, seats: ['hard', 'medium', 'friend', 'easy'], teams: 'ffa' }) }, old));
-    same('a state of the card\'s own beats all of them', [youSeats(own), seatWords(own), own.$('map-pick').value], [[1], ['hard', 'medium', 'friend', 'easy'], 'gauntlet']);
-    for (const junk of ['not json', '{}', '{"map":"treasure","you":9,"seats":["medium","medium","medium","medium"],"teams":"ffa"}', '{"map":"treasure","you":0,"seats":["medium","medium","medium","HARD"],"teams":"ffa"}', 'null', '[]']) {
-        const j = runLobby('', Object.assign({ 'ants-match': junk }, old));
-        same('a remembered state that is junk (' + junk.slice(0, 40) + ') is not used: the first visit\'s', [seatWords(j), j.$('map-pick').value], [['friend', 'easy', 'nobody', 'hard'], 'small']);
-    }
-    let ok = true;
-    try { const t = runLobby('', THROWS); choose(t, 1, 'friend'); sit(t, 2); t.$('play').click(); ok = t.assigned.length === 1; } catch (e) { ok = false; }
-    check('a browser that refuses its storage still runs the card, invites and starts (nothing is remembered, nothing breaks)', ok);
-}
-{   // random clicks on the page itself: every address that START and the invitations make is read by the game page as what the card shows; no text of the address reaches the game's arguments
-    let seed = 99;
-    const rnd = (n) => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) % n; };
-    let wrong = '';
-    let started = 0;
-    let invited = 0;
-    let teamed = 0;
-    let alone = 0;
-    const env = runLobby('', {});
-    const names = ['Ann', 'Bob & <b>x</b>', '', 'x'.repeat(40), 'a=b&seat=2&start=4&room=z&fill=h', 'Zoë', 'Bot (x)', '  Max  ', '--name y', '%00'];
-    for (let step = 0; step < 4000; step++) {
-        const what = rnd(10);
-        if (what < 4) choose(env, rnd(4), WORDS5[rnd(5)]);
-        else if (what < 6) sit(env, rnd(4));
-        else if (what < 7) pickMap(env, MAP_KEYS[rnd(6)]);
-        else if (what < 8) { const here = [0, 1, 2, 3].filter((x) => !env.$('team-set-' + x).hidden); if (here.length) pressTeam(env, here[rnd(here.length)], 1 + rnd(2)); }
-        else if (what < 9) env.type('player-name', names[rnd(names.length)]);
-        else if (invites(env).length) copyOf(env, rnd(invites(env).length)).click();
-        // what the card shows now
-        const words = seatWords(env);
-        const you = youSeats(env);
-        if (you.length !== 1 || words.some((w) => w.charAt(0) === '?')) { wrong += ' rows ' + step; break; }
-        const friends = [0, 1, 2, 3].filter((s) => s !== you[0] && words[s] === 'friend');
-        const bots = [0, 1, 2, 3].filter((s) => s !== you[0] && ['easy', 'medium', 'hard'].indexOf(words[s]) !== -1);
-        const playing = 1 + friends.length + bots.length;
-        if (env.$('play').disabled) wrong += ' start ' + step;                          // (START is always on: a game for one is a game too)
-        let teamNow = 'ffa';                                   // what the switches make: the pair (with four players the team that Green is in), else free for all
-        {   // the switches and the line under the seats say what the room's create block says (the team that Green is in when four play), and no team has three seats
-            const sw = switchesShown(env);
-            const line = env.$('teams-line');
-            const plays = [0, 1, 2, 3].filter((x) => x === you[0] || words[x] !== 'nobody');
-            if (line.hidden !== (plays.length < 3) || sw.some((v, x) => (v === '') !== (plays.indexOf(x) === -1 || plays.length < 3))) wrong += ' switches ' + step;
-            if (!line.hidden && !/^(Free for all\. For a team|Teams: \w+ \+ \w+ against |Team [12] has two colours already\. Press one of them to take it off first\.|Team [12] is the other two colours already\. Press a lit switch to clear the teams first\.)/.test(line.textContent)) wrong += ' line ' + step + ' ' + line.textContent;
-            const on = sw.map((v) => (v === '1' || v === '2' ? Number(v) : 0));
-            const twos = [1, 2].map((k) => [0, 1, 2, 3].filter((x) => on[x] === k)).filter((list) => list.length === 2);
-            if ([1, 2].some((k) => on.filter((v) => v === k).length > 2)) wrong += ' crowded ' + step;
-            if (twos.length) { const pair = plays.length === 4 && twos[0][0] !== 0 ? [0, 1, 2, 3].filter((x) => twos[0].indexOf(x) === -1) : twos[0]; teamNow = pair[0] + '+' + pair[1]; }
-            if (!line.hidden && !/^Team [12] (has two|is the other two) colours/.test(line.textContent) && /^Teams: /.test(line.textContent) !== (teamNow !== 'ffa')) wrong += ' teamline ' + step;
-        }
-        if (invites(env).length !== friends.length || env.$('invites').hidden !== (friends.length === 0)) wrong += ' invites ' + step;
-        const plan = [0, 1, 2, 3].map((s) => (bots.indexOf(s) !== -1 ? words[s] : 'none')).join(',');
-        const roomPart = ['--room-map', env.$('map-pick').value, '--room-seats', '4', ...(teamNow === 'ffa' ? [] : ['--room-teams', teamNow])];       // (the create block of the card's room: its map, four seats and its teams, in the game's own arguments)
-        for (const [k, link] of inviteLinks(env).entries()) {
-            const args = P.joinArguments(new URL(link).search, true, 'play.test').args;
-            invited++;
-            const want = ['--join-url', 'wss://play.test/ws', '--room', env.param(link, 'room'), ...roomPart, '--seat', String(friends[k]), ...(bots.length ? ['--fill-bots', plan] : []), '--start-when', String(1 + friends.length)];
-            if (JSON.stringify(args) !== JSON.stringify(want) || !CODE.test(env.param(link, 'room')) || blockText(link) !== cardBlockText(env.$('map-pick').value, teamNow)) wrong += ' invite ' + step + ' ' + JSON.stringify(args);
-        }
-        if (step % 7 === 0) {
-            const before = env.assigned.length;
-            const typed = nameCheck(env.$('player-name').value);
-            env.$('play').click();
-            if (!typed.ok) {                                   // (a bad name starts nothing)
-                if (env.assigned.length !== before) wrong += ' badname ' + step;
-                continue;
-            }
-            const u = env.assigned[before];
-            started++;
-            if (playing === 1) {                               // nobody else: the game of this computer on the card's map, under the name that the card shows under You, with no room and nothing of one
-                alone++;
-                const same4 = new URL(u).pathname === '/play.html' && env.param(u, 'map') === env.$('map-pick').value && env.param(u, 'name') === (typed.name || env.$('seat-name-' + you[0]).textContent) && env.param(u, 'aspect') === '16:9' &&
-                              ['join', 'room', 'roommap', 'roomseats', 'roomteams', 'roomleaderstart', 'platform', 'bots', 'teams', 'fill', 'start', 'seat', 'key'].every((k) => env.param(u, k) === null);
-                if (!same4) wrong += ' alone ' + step + ' ' + u;
-                env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-                continue;
-            }
-            const args = P.joinArguments(new URL(u).search, true, 'play.test').args;
-            const nameAt = args.indexOf('--name');
-            const rest = args.filter((a, i) => i !== nameAt && i !== nameAt + 1);
-            const want = ['--join-url', 'wss://play.test/ws', '--room', env.param(u, 'room'), ...roomPart, '--seat', String(you[0]), ...(bots.length ? ['--fill-bots', plan] : []), '--start-when', String(1 + friends.length)];
-            if (JSON.stringify(rest) !== JSON.stringify(want) || !CODE.test(env.param(u, 'room')) || blockText(u) !== cardBlockText(env.$('map-pick').value, teamNow) || nameAt === -1 || args[nameAt + 1] !== (typed.name || env.$('seat-name-' + you[0]).textContent)) wrong += ' start ' + step + ' ' + JSON.stringify(args);
-            if (nameAt !== -1 && !/^[\x20-\x7e]{1,32}$/.test(args[nameAt + 1])) wrong += ' name ' + step;
-            if (env.param(u, 'roomteams') !== null) teamed++;
-            env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));         // (Back after START: the card is there again, with a room of its own)
-        }
-        if (wrong.length > 300) break;
-    }
-    check('4000 random clicks (seats, Sit here, map, teams, names, copies): every START (' + started + ', ' + alone + ' of them a game for one) and invitation (' + invited + ', ' + teamed + ' of the STARTs with a team in the block) is read by the game page as exactly what the card shows: a new code of six characters, the create block (the card\'s map, four seats, its teams), your seat, the plan, the people to wait for, no teams parameter, no key; a bad name starts nothing:' + wrong, wrong === '' && started > 200 && alone >= 3 && invited > 500 && teamed > 10);
-}
-check('"How it works" is a details element that no script opens or closes (the script only hides it with the card, and shows it with the card)', /<details class="how" id="how" hidden>\s*<summary>/.test(lobbyText) && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).length === 2 && (lobbyScript.match(/\$\('how'\)[.\w]*/g) || []).every((u) => u === "$('how').hidden") && !/getElementById\('how'\)/.test(lobbyScript));
-for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
-    const env = runLobby('', {});
-    env.type('player-name', bad);
-    env.$('play').click();
-    check('START with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') goes nowhere and says why under the field', env.assigned.length === 0 && env.$('name-msg').textContent.length > 8 && env.$('player-name').getAttribute('aria-invalid') === 'true');
-}
-{
-    const env = runLobby('', THROWS);
-    env.$('play').click();
-    check('a browser that refuses its storage still plays (nothing is remembered, nothing breaks)', env.assigned.length === 1 && env.param(env.assigned[0], 'start') === '4' && env.param(env.assigned[0], 'fill') === null);
-}
-// ... the addresses: ?map=...&players=1 plays on this computer after the name step; an address that names no players still hosts 4 (the card plays on this computer only with nobody else in the match)
-{
-    const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya' });
-    check('?map=small&players=1&fill=hard asks for the name first (button Play), and nothing starts before', !env.$('who-go').hidden && env.$('who-go').textContent === 'Play' && /computer/.test(env.$('who-title').textContent) && env.assigned.length === 0 && env.$('cards').hidden && env.$('how').hidden);
-    check('... the step explains itself in its own line, and the general line is not shown', !env.$('who-step-hint').hidden && /game on this computer/.test(env.$('who-step-hint').textContent) && env.$('who-general').hidden);
-    check('... and no notice about recorded matches: the server records the matches of its rooms, and this game is on this computer', env.$('who-notice').hidden);
-    env.$('who-go').click();
-    const u = env.assigned[0] || '';
-    check('... then the game of this computer on that map with the Hard bots and the name', env.assigned.length === 1 && env.param(u, 'map') === 'small' && env.param(u, 'bots') === 'hard' && env.param(u, 'name') === 'Maya', u);
-    check('... in no room: no door, no code, and nothing of a create block (a game on this computer makes none)', ['join', 'room', 'roommap', 'roomseats', 'roomteams', 'roomleaderstart', 'platform', 'seat', 'start'].every((k) => env.param(u, k) === null) && env.replaced.length === 0, u);
-    check('... and the step is gone, the general line is back', env.$('who-step-hint').hidden && !env.$('who-general').hidden && env.$('who-go').hidden && env.$('who-title').hidden && env.$('who-back').hidden);
-    check('... and the page is whole again when the step ends, the notice with it (nothing stays half-changed if the browser shows this page again)', !env.$('who-notice').hidden);
-    same('... such an address writes nothing of the card\'s or of the earlier pages\' keys (the card remembers its own choices only)', Object.keys(env.storage.data).sort(), ['ants.name']);
-}
-{
-    const env = runLobby('?map=small&players=1&fill=hard', { 'ants.name': 'Maya', 'ants-solo-seats': 'easy,medium,hard', 'ants-solo-teams': '0+1' });
-    env.$('who-go').click();
-    const u = env.assigned[0] || '';
-    check('an address with &fill=hard: Hard in all three bases, no teams', env.param(u, 'bots') === 'hard' && env.param(u, 'teams') === null, u);
-    same('... and the earlier pages\' keys are left as they were', [env.storage.data['ants-solo-seats'], env.storage.data['ants-solo-teams'], 'ants-four-map' in env.storage.data, 'ants-four-players' in env.storage.data], ['easy,medium,hard', '0+1', false, false]);
-}
-{
-    const env = runLobby('?map=treasure&players=1&play=here', {});
-    check('the test mode ?play=here asks nobody: ?map=...&players=1 plays at once', env.assigned.length === 1 && env.$('who-go').hidden);
-    const room = runLobby('?map=small', {});
-    check('an address that names a map and no players hosts 4, as it always did (after the name step)', !room.$('who-go').hidden && room.$('who-go').textContent === 'Host');
-    room.$('who-go').click();
+    const room = openRoom('?map=small', {});
     const hostedAt = String(room.replaced[0] && room.replaced[0][2]);
-    check('... the room of 4 on that map: a new code of six characters, shown in two groups of three, and the map and four seats as its create block (in the address of the page)', room.roomStarted() && /^\/\?room=[a-z2-9]{6}&roommap=small&roomseats=4$/.test(hostedAt) && /^[a-z2-9]{3} [a-z2-9]{3}$/.test(room.$('room-code').textContent) && room.$('room-map').textContent === 'Small map, 4 players' && room.assigned.length === 0, hostedAt);
-    check('... and the page is in its room mode', room.body.classList.contains('in-room'));
-    check('... the card and "How it works" give way to the room', room.$('cards').hidden && room.$('how').hidden && !room.$('room-panel').hidden);
-    same('... nothing is remembered by it (the card\'s choices are the card\'s own)', Object.keys(room.storage.data).sort(), ['ants.name']);
+    check('an address that names a map and no players hosts 4: the room of 4 on that map, a new code of six characters shown in two groups of three, and the map and four seats as its create block', room.roomStarted() && /^\/\?room=[a-z2-9]{6}&roommap=small&roomseats=4$/.test(hostedAt) && /^[a-z2-9]{3} [a-z2-9]{3}$/.test(room.$('room-code').textContent) && room.$('room-map').textContent === 'Small map, 4 players' && room.assigned.length === 0, hostedAt);
+    check('... the lobby gives way to the room, in its room mode', room.$('lobby').hidden && !room.$('room-panel').hidden && room.body.classList.contains('in-room'));
+    same('... nothing is remembered by it but the name', Object.keys(room.storage.data).sort(), ['ants.name']);
 }
 // ... the room's own seat in this tab: the address that Join makes, with the bots of the leader's START (the room panel of an old address)
 {
@@ -1470,10 +1309,6 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     check('"Play in this tab": this tab goes to the game page with the room (the plain code, not the two groups that the panel shows), the bots of the leader\'s START and the name (no seat, no embed, no new window)',
           env.assigned.length === 1 && env.opened.length === 0 && env.param(u, 'join') === '/ws' && env.param(u, 'room') === env.$('room-code').textContent.replace(' ', '') && /^[a-z2-9]{6}$/.test(env.param(u, 'room')) && env.param(u, 'fill') === 'medium' && env.param(u, 'name') === 'Ann' && env.param(u, 'seat') === null && env.param(u, 'embed') === null, u);
     same('... the whole address: the door, the code, the create block of the room (Treasure, three seats), the bots, the name', u, 'https://play.test/?join=/ws&room=' + env.param(u, 'room') + '&roommap=treasure&roomseats=3&fill=medium&name=Ann');
-    const bad = openRoom('?map=treasure&players=3', {});
-    bad.type('player-name', 'Bot (x)');
-    bad.$('play-tab').click();
-    check('... a bad name starts nothing', bad.assigned.length === 0 && bad.$('name-msg').textContent.length > 8);
     const shown = openRoom('?map=treasure&players=3', {});
     shown.rowButton(1, 'Play here').click();
     check('a game that plays on the page shows the note about the frames', shown.$('frames-note').hidden === false);
@@ -1515,11 +1350,6 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         ['?room=k7m2xq&roomteams=0%2B1', '&roomseats=4&roomteams=0%2B1', ['--room-seats', '4', '--room-teams', '0+1'], 'the server\'s own map, 4 players', 4, '/?room=k7m2xq&roomseats=4&roomteams=0%2B1'],
         ['?room=k7m2xq&roommap=nowhere&roomseats=2&roomleaderstart=yes', '&roomseats=2', ['--room-seats', '2'], 'the server\'s own map, 2 players', 2, '/?room=k7m2xq&roomseats=2'],
         ['?room=k7m2xq&roommap=small&roomseats=2&aspect=4:3', '&roommap=small&roomseats=2', ['--room-map', 'small', '--room-seats', '2'], 'Small map, 2 players', 2, '/?room=k7m2xq&roommap=small&roomseats=2&aspect=4:3'],
-        // a room that was made some other way: none of the four parameters says anything that is any good, so there is no block (four seats, "made some other way"), and none is sent
-        ['?room=k7m2xq', '', [], 'a room made some other way, 4 players', 4, '/?room=k7m2xq'],
-        ['?room=k7m2xq&roommap=nowhere&roomseats=9&roomteams=7%2B7&roomleaderstart=yes', '', [], 'a room made some other way, 4 players', 4, '/?room=k7m2xq'],
-        ['?room=k7m2xq&roommap=&roomseats=&roomteams=&roomleaderstart=', '', [], 'a room made some other way, 4 players', 4, '/?room=k7m2xq'],
-        ['?room=k7m2xq&platform=linux&roomleaderstart=0', '', [], 'a room made some other way, 4 players', 4, '/?room=k7m2xq'],
     ];
     for (const [search, text, args, mapLine, seats, bar] of ROOMS) {
         const env = openRoom(search, {}, 'Ann');
@@ -1527,10 +1357,15 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         check('the panel of ' + label + ': the code in two groups of three, "' + mapLine + '", one row for each of its ' + seats + ' seats', env.roomStarted() && env.$('room-code').textContent === 'k7m 2xq' && env.$('room-map').textContent === mapLine && env.rows().length === seats, env.$('room-map').textContent);
         same('... the address of the page is the room with its create block (a reload, a bookmark or a copied address come back to it)', env.replaced.map((a) => a[2]), [bar]);
         const links = panelLinks(env);
-        const wrong = kinds.filter((k) => !(blockText(links[k]) === text && env.param(links[k], 'room') === 'k7m2xq' && JSON.stringify(blockArgs(links[k])) === JSON.stringify(args) && (text !== '' || noBlockOf(env, links[k])) && env.param(links[k], 'teams') === null && teamsArg(links[k]) === null));
-        check('... every address that it makes (the frame, the window, the link of a seat, the link for anybody, its Copy, "Play in this tab") has the block right after the plain code' + (text === '' ? ' (none: nothing is carried)' : '') + ', and the game page turns it into ' + JSON.stringify(args.join(' ')) + ': ' + wrong.join(','), wrong.length === 0, JSON.stringify(links));
+        const wrong = kinds.filter((k) => !(blockText(links[k]) === text && env.param(links[k], 'room') === 'k7m2xq' && JSON.stringify(blockArgs(links[k])) === JSON.stringify(args) && env.param(links[k], 'teams') === null && teamsArg(links[k]) === null));
+        check('... every address that it makes (the frame, the window, the link of a seat, the link for anybody, its Copy, "Play in this tab") has the block right after the plain code, and the game page turns it into ' + JSON.stringify(args.join(' ')) + ': ' + wrong.join(','), wrong.length === 0, JSON.stringify(links));
         const again = openRoom('?' + bar.split('?')[1], {}, 'Ann');
         check('... and the address that the page puts in its own bar brings back the same room: the same link for anybody, the same panel', again.$('any-link').value === env.$('any-link').value && again.$('room-map').textContent === mapLine && again.rows().length === seats && again.replaced.map((a) => a[2]).join() === bar, again.$('any-link').value);
+    }
+    // a link to a room with no create block is no room of the test mode: it is the lobby's link (the card of a link, then the lobby), however its other parts look
+    for (const search of ['?room=k7m2xq', '?room=k7m2xq&roommap=nowhere&roomseats=9&roomteams=7%2B7&roomleaderstart=yes', '?room=k7m2xq&roommap=&roomseats=&roomteams=&roomleaderstart=', '?room=k7m2xq&platform=linux&roomleaderstart=0']) {
+        const env = runLobby(search, {});
+        check('the address ' + search.replace('?room=k7m2xq', '?room=<code>') + ' has no create block that says anything: it is a link to a lobby (the card of a link, "Join the room k7m 2xq"), not the panel of the test room', !env.roomStarted() && !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq' && !env.body.classList.contains('in-room'));
     }
     {   // the first room, whole: the order of the parameters of every kind of address
         const env = openRoom(ROOMS[0][0], {}, 'Ann');
@@ -1542,7 +1377,7 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         check('... the window of a seat too (its own random name)', /^https:\/\/play\.test\/\?join=\/ws&room=k7m2xq&roommap=small&roomseats=2&seat=0&name=[^&]+&aspect=16:9$/.test(l.window), l.window);
         const withShape = openRoom('?room=k7m2xq&roommap=small&roomseats=2&aspect=4:3', {}, 'Ann');
         const s = panelLinks(withShape);
-        check('an address with a picture: it is in every link, after the block (and after the plan and the teams, when there are some)', [s.frame, s.seat, s.anybody, s.copiedAnybody, s.tab, s.window].every((u) => blockText(u) === '&roommap=small&roomseats=2' && withShape.param(u, 'aspect') === '4:3' && /&aspect=4:3(&embed=1)?$/.test(u)), JSON.stringify(s));
+        check('an address with a picture: it is in every link, after the block (and after the plan and the teams, when there are some)', [s.frame, s.seat, s.anybody, s.copiedAnybody, s.tab, s.window].every((url) => blockText(url) === '&roommap=small&roomseats=2' && withShape.param(url, 'aspect') === '4:3' && /&aspect=4:3(&embed=1)?$/.test(url)), JSON.stringify(s));
     }
     // &teams= is the leader's START choice for a room whose block names no teams of its own (every room that was made some other way); the teams that a block names are the room's own and win over it, and the links then
     // carry &roomteams= and no &teams=. Where the block says how many seats the room has, a pair that those seats cannot make is free for all (the page narrows it, as it narrows the teams of an address that makes a room:
@@ -1568,8 +1403,8 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         ['?room=k7m2xq&roommap=small&roomseats=3&roomteams=2%2B3&teams=0%2B1', '&roommap=small&roomseats=3&roomteams=2%2B3', null, null, '/?room=k7m2xq&roommap=small&roomseats=3&roomteams=2%2B3', ''],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&teams=1%2B1', BLOCKED, null, null, '/?room=k7m2xq&roommap=treasure&roomseats=4', ''],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=3%2B3&teams=0%2B3', BLOCKED, '0+3', null, '/?room=k7m2xq&roommap=treasure&roomseats=4&teams=0%2B3', AT_START('Green + Black against Red + Blue')],
-        ['?room=k7m2xq&teams=0%2B1', '', '0+1', null, '/?room=k7m2xq&teams=0%2B1', AT_START('Green + Red against Blue + Black')],
-        ['?room=k7m2xq&teams=2%2B3', '', '2+3', null, '/?room=k7m2xq&teams=2%2B3', AT_START('Blue + Black against Green + Red')],
+        ['?room=k7m2xq&roomleaderstart=1&teams=0%2B1', '&roomseats=4&roomleaderstart=1', '0+1', null, '/?room=k7m2xq&roomseats=4&roomleaderstart=1&teams=0%2B1', AT_START('Green + Red against Blue + Black')],
+        ['?room=k7m2xq&roomseats=4&teams=2%2B3', '&roomseats=4', '2+3', null, '/?room=k7m2xq&roomseats=4&teams=2%2B3', AT_START('Blue + Black against Green + Red')],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&fill=hard', BLOCKED + '&roomteams=0%2B1', null, 'hard', '/?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&fill=hard', 'Teams of this room: Green + Red against Blue + Black.'],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&fill=none,easy,none,hard&teams=0%2B2', BLOCKED, '0+2', 'none,easy,none,hard', '/?room=k7m2xq&roommap=treasure&roomseats=4&fill=none,easy,none,hard&teams=0%2B2', 'Empty seats at START: Red Easy, Black Hard.'],
     ];
@@ -1601,8 +1436,7 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
     for (const [search, mapLine, seats, text, fill, rest] of MADE) {
         const env = openRoom(search, {}, 'Ann');
         const code = env.roomStarted() ? env.param(env.$('any-link').value, 'room') : '';
-        const label = search;
-        check('the panel of ' + label + ': a new code of six characters in two groups of three, "' + mapLine + '", ' + seats + ' seats', env.roomStarted() && CODE.test(code) && env.$('room-code').textContent === grouped(code) && env.$('room-map').textContent === mapLine && env.rows().length === seats, env.$('room-map').textContent);
+        check('the panel of ' + search + ': a new code of six characters in two groups of three, "' + mapLine + '", ' + seats + ' seats', env.roomStarted() && CODE.test(code) && env.$('room-code').textContent === grouped(code) && env.$('room-map').textContent === mapLine && env.rows().length === seats, env.$('room-map').textContent);
         same('... the address of the page: the code, the block of the room that was made, the plan', env.replaced.map((a) => a[2]), ['/?room=' + code + text + rest]);
         const links = panelLinks(env);
         const wrong = kinds.filter((k) => !(blockText(links[k]) === text && env.param(links[k], 'room') === code && env.param(links[k], 'teams') === null && teamsArg(links[k]) === null && env.param(links[k], 'fill') === fill));
@@ -1614,10 +1448,9 @@ for (const bad of ['Bot (Medium)', 'Zoë', 'x'.repeat(33)]) {
         check('twenty rooms made from one address have twenty codes, each of six characters of the alphabet without look-alikes (no i, l, o, 0 or 1)', codes.size === 20 && [...codes].every((c) => /^[abcdefghjkmnpqrstuvwxyz23456789]{6}$/.test(c)), [...codes].slice(0, 3).join(','));
     }
 }
-check('the front page says no more that the page opens a window by default (its only window.open is the seat\'s explicit one)', (lobbyText.match(/window\.open\(/g) || []).length === 1);
 
 
-// ---- the line of numbers in the header (the block STATS has its own check, web_stats_check.js; here is the page as a whole: what it asks, what it shows, when it looks)
+// ---- 5.9 the line of numbers in the footer (the block STATS has its own check, web_stats_check.js; here is the page as a whole: what it asks, what it shows, when it looks)
 const settle = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
 const answers = (table) => (url) => {
     const a = table[url];
@@ -1628,162 +1461,72 @@ const answers = (table) => (url) => {
 };
 const GOOD_STATS = { now: { matches: 3, players: 7 }, online: { day: 5, total: 900 }, local: { day: 16, total: 384 }, since: '2026-10-04' };
 const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-dot').className, live: env.$('stats-live').textContent, played: env.$('stats-played').textContent, title: env.$('stats').getAttribute('title') });
-(async () => {
-    {
-        const env = runLobby('', {});
-        await settle();
-        same('no network: the line is not there and says nothing (no text of an error), the page itself works', [statsView(env).hidden, statsView(env).live, statsView(env).played, env.fetches.map((f) => f.url)], [true, '', '', ['/stats', '/busy']]);
-        env.$('play').click();
-        check('... and START plays', env.assigned.length === 1);
-    }
-    {
-        const env = runLobby('', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
-        check('before the answer the line is hidden (the markup says so)', /<p class="stats" id="stats" hidden>/.test(lobbyText) && env.$('stats').hidden === true);
-        await settle();
-        same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
-        same('... one request, to the site\'s own /stats, with no cache and no cookies', env.fetches.map((f) => [f.url, f.init.cache, f.init.credentials]), [['/stats', 'no-store', 'omit']]);
-        check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
-    }
-    {
-        const env = runLobby('', {}, { fetch: answers({ '/stats': 'page', '/busy': { matches: 0, players: 2 } }) });
-        await settle();
-        same('/stats is the game page (the site has no such route) and /busy answers: the live part, a grey dot, no totals', [env.fetches.map((f) => f.url), statsView(env)],
-             [['/stats', '/busy'], { hidden: false, dot: 'live', live: '0 matches being played · 2 players online', played: '', title: null }]);
-    }
-    for (const [label, table] of [['/stats answers 404 and /busy 200', { '/stats': 404, '/busy': { matches: 1, players: 1 } }], ['/stats fails and /busy answers', { '/busy': { matches: 1, players: 1 } }]]) {
-        const env = runLobby('', {}, { fetch: answers(table) });
-        await settle();
-        same(label + ': 1 match, 1 player, singular', [statsView(env).hidden, statsView(env).live], [false, '1 match being played · 1 player online']);
-    }
-    {
-        const env = runLobby('', {}, { fetch: answers({ '/stats': { now: { matches: '<img src=x onerror=alert(1)>', players: 1 }, online: { day: 0, total: 0 }, local: { day: 0, total: 0 } }, '/busy': 500 }) });
-        await settle();
-        check('an answer with text where numbers belong shows nothing, and nothing of it is in the page', statsView(env).hidden === true && !/[<>]/.test(env.$('stats').textContent + env.$('stats-live').textContent + env.$('stats-played').textContent) && env.innerHTMLWrites.length === 0);
-    }
-    {   // the page looks again when it is shown after being hidden, and not while it is hidden
-        let now = GOOD_STATS;
-        const env = runLobby('', {}, { fetch: (url) => answers({ '/stats': now })(url) });
-        await settle();
-        check('the page listens for its visibility', (env.doc.listeners.visibilitychange || []).length === 1);
-        const before = env.fetches.length;
-        env.doc.hidden = true;
-        env.doc.listeners.visibilitychange.forEach((fn) => fn());
-        await settle();
-        check('hidden: it asks nothing', env.fetches.length === before);
-        now = { now: { matches: 0, players: 0 }, online: { day: 0, total: 1000 }, local: { day: 0, total: 234 }, since: '2026-10-04' };
-        env.doc.hidden = false;
-        env.doc.listeners.visibilitychange.forEach((fn) => fn());
-        await settle();
-        same('shown again: it looks at once and shows the new numbers (a grey dot, no match, 1,234 games, 0 today)', [env.fetches.length - before, statsView(env).dot, statsView(env).live, statsView(env).played], [1, 'live', '0 matches being played · 0 players online', '1,234 games played (0 today)']);
-        now = undefined;                                                                  // the site stops answering: the next look finds neither /stats nor /busy
-        env.doc.hidden = true;
-        env.doc.listeners.visibilitychange.forEach((fn) => fn());
-        env.doc.hidden = false;
-        env.doc.listeners.visibilitychange.forEach((fn) => fn());
-        await settle();
-        same('... and when the site stops answering the line goes away again (it was shown before)', [statsView(env).hidden, env.fetches.length - before], [true, 3]);
-    }
-    {
-        const env = runLobby('', {}, { noFetch: true });
-        await settle();
-        check('a browser with no fetch has no line and the page works', statsView(env).hidden === true && env.fetches.length === 0 && (env.$('play').click(), env.assigned.length === 1));
-    }
-    {   // a page that is a room, or asks for a name, has the line too (it is the header's)
-        const room = runLobby('?room=k7m2xq&roommap=small&roomseats=2&play=here', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
-        await settle();
-        check('a room has the line too', room.roomStarted() && statsView(room).hidden === false);
-    }
-
-// ---- the Rejoin button at the top of the front page (the block REJOIN has its own check, web_rejoin_block_check.js; here is the page as a whole: when it is there, what it says, where it goes)
 {
-    const SERVER = 'wss://play.test/ws';                                    // (the fake page is https://play.test/)
-    const KEY = '0f1e2d3c4b5a69788796a5b4c3d2e1f0';
-    const entry = (age, server) => '{"k":"' + KEY + '","s":"' + (server || SERVER) + '","t":' + (Date.now() - age) + '}';
-    const rejoinView = (env) => ({ hidden: env.$('rejoin').hidden, button: env.$('rejoin-go').textContent, note: env.$('rejoin-note').textContent });
-    const wholeText = (env) => Object.values(env.elements).map((e) => e.textContent + '|' + JSON.stringify(e.attributes)).join('\n') + env.innerHTMLWrites.join('');
-    {
-        const env = runLobby('', {});
-        same('no entry: nothing of the Rejoin is shown, and the cards are there as ever', [rejoinView(env).hidden, env.$('cards').hidden, env.$('how').hidden], [true, false, false]);
-        check('... the markup has it hidden, with no text of its own (the script fills it in)', /<section id="rejoin" class="rejoin" aria-label="Your running match" hidden>\s*<button id="rejoin-go" type="button" class="btn big"><\/button>\s*<p class="rejoin-note" id="rejoin-note"><\/p>\s*<\/section>/.test(lobbyText));
-    }
-    {
-        const stored = { 'ants.rejoin.k7m2xq.1': entry(5000) };
-        const env = runLobby('', stored);
-        same('a fresh entry of this site: ONE button with the room (its code as a screen shows it, in two groups of three), and the note under it', rejoinView(env), { hidden: false, button: 'Rejoin your match (k7m 2xq)', note: 'Your match in room k7m 2xq is still running: go back to your seat.' });
-        check('... the cards stay where they were (the button is above them, in its own block, not in their grid)', !env.$('cards').hidden && lobbyText.indexOf('<section id="rejoin"') > lobbyText.indexOf('</header>') && lobbyText.indexOf('<section id="rejoin"') < lobbyText.indexOf('<main class="page">'));
-        check('... and the key is in no text or attribute of the page', wholeText(env).indexOf(KEY) === -1 && wholeText(env).indexOf(KEY.slice(0, 8)) === -1);
-        env.$('rejoin-go').click();
-        same('pressing it takes THIS tab to the game page: the plain code, the seat, the (empty) name and the shape', env.assigned, ['https://play.test/?join=/ws&room=k7m2xq&seat=1&name=&aspect=16:9']);
-        check('... with no key in the address, no create block (the seat is already in the room: the game finds its key by itself) and nothing opened in another window', env.assigned[0].indexOf(KEY) === -1 && noBlockOf(env, env.assigned[0]) && env.opened.length === 0 && env.storage.data['ants.rejoin.k7m2xq.1'] === stored['ants.rejoin.k7m2xq.1']);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.r-1.3': entry(1000), 'ants.name': 'Maya', 'ants.aspect.v2': '4:3' });
-        env.$('rejoin-go').click();
-        same('the remembered name and the remembered shape go with it', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=3&name=Maya&aspect=4:3']);
-    }
-    {
-        const env = runLobby('?aspect=4:3', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Maya' });
-        env.$('rejoin-go').click();
-        same('the shape of the address is the page\'s shape, so it is the one that goes with the button', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=0&name=Maya&aspect=4:3']);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.r-1.0': entry(1000), 'ants.name': 'Zo\u00eb' });
-        env.$('rejoin-go').click();
-        check('a remembered name that the rules refuse is no name (the field is empty too)', env.assigned.length === 1 && env.param(env.assigned[0], 'name') === '' && /&name=&aspect=/.test(env.assigned[0]), env.assigned[0]);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.old-match.0': entry(4 * 3600 * 1000), 'ants.rejoin.mid-match.1': entry(2 * 3600 * 1000) });
-        same('an entry older than three hours is not offered and is removed (as the game does); one a little younger is the offer (a code of another length than six is shown as it is)', [rejoinView(env).button, Object.keys(env.storage.data)], ['Rejoin your match (mid-match)', ['ants.rejoin.mid-match.1']]);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'wss://other.test/ws'), 'ants.rejoin.mine.1': entry(9000) });
-        same('an entry of another server is not offered and stays, even when it is newer', [rejoinView(env).button, Object.keys(env.storage.data).sort()], ['Rejoin your match (mine)', ['ants.rejoin.mine.1', 'ants.rejoin.other.0']]);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.other.0': entry(1000, 'ws://play.test/ws'), 'ants.rejoin.bad.7': entry(1000), 'ants.rejoin.junk.1': 'not json' });
-        check('only entries of the game count: another scheme, a seat that is none and a value that is no JSON show nothing', rejoinView(env).hidden === true && Object.keys(env.storage.data).length === 3);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.a.0': entry(60000), 'ants.rejoin.b.2': entry(1000), 'ants.rejoin.c.1': entry(30000) });
-        same('of several entries the newest is offered, and the seat goes with it', [rejoinView(env).button, (env.$('rejoin-go').click(), env.assigned.map((u) => env.param(u, 'seat')))], ['Rejoin your match (b)', ['2']]);
-    }
-    for (const [label, search] of [['a room (?room=)', '?room=k7m2xq&roommap=tiny&roomseats=2'], ['a room that starts at once (?play=here)', '?room=k7m2xq&roommap=tiny&roomseats=2&play=here'], ['a match to host (?map=)', '?map=tiny&players=2&play=here']]) {
-        const env = runLobby(search, { 'ants.rejoin.k7m2xq.1': entry(1000) });
-        check(label + ': the page is about that, not about the match of the key: no button', rejoinView(env).hidden === true && env.$('cards').hidden === true);
-        env.$('who-go').click();
-        check('... not even after the name step', rejoinView(env).hidden === true);
-        (env.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
-        (env.win.listeners.storage || []).forEach((fn) => fn({}));
-        check('... nor when the page comes back from the browser\'s memory or another tab writes to the storage (the cards are not up)', rejoinView(env).hidden === true && env.$('cards').hidden === true);
-    }
-    {   // the page that comes back from the browser's memory (Back), and another tab that changes the storage: the match may have ended meanwhile
-        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) });
-        check('the page listens for its return (the Rejoin button\'s and the card\'s) and for the storage', (env.win.listeners.pageshow || []).length === 2 && (env.win.listeners.storage || []).length === 1);
-        delete env.storage.data['ants.rejoin.r-1.1'];
-        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: false }));
-        check('a page that is loaded anew is not looked at again by pageshow (it has just looked)', rejoinView(env).hidden === false);
-        env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
-        check('the match ended in another tab, and the page comes back from memory: the button is gone', rejoinView(env).hidden === true);
-        env.storage.data['ants.rejoin.r-2.0'] = entry(500);
-        env.win.listeners.storage.forEach((fn) => fn({}));
-        same('a new match in another tab: the button is there, for that match', [rejoinView(env).hidden, rejoinView(env).button], [false, 'Rejoin your match (r-2)']);
-        delete env.storage.data['ants.rejoin.r-2.0'];
-        env.win.listeners.storage.forEach((fn) => fn({}));
-        check('... and gone again when the key is let go of', rejoinView(env).hidden === true);
-        env.$('rejoin-go').click();
-        check('a press that comes after the button is gone goes nowhere', env.assigned.length === 0);
-    }
-    {
-        let env = null;
-        try { env = runLobby('', THROWS); } catch (e) { check('a browser that refuses its storage still runs the page, with no button', false, e.message); }
-        if (env) check('a storage that throws offers nothing, and the cards are there', rejoinView(env).hidden === true && !env.$('cards').hidden);
-    }
-    {
-        const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) });
-        const before = JSON.stringify(env.storage.data);
-        env.$('rejoin-go').click();
-        check('the page writes nothing to the storage for it (the game page owns the entries)', JSON.stringify(env.storage.data) === before);
-    }
+    const env = runLobby('', {});
+    await settle();
+    same('no network: the line is not there and says nothing (no text of an error), the page itself works', [statsView(env).hidden, statsView(env).live, statsView(env).played, env.fetches.map((f) => f.url)], [true, '', '', ['/stats', '/busy']]);
+    check('... and the lobby is made as ever (one socket, the lobby shown)', env.sockets.length === 1 && !env.$('lobby').hidden);
+}
+{
+    const env = runLobby('', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
+    check('before the answer the line is hidden (the markup says so)', /<p class="stats" id="stats" hidden>/.test(lobbyText) && env.$('stats').hidden === true);
+    await settle();
+    same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
+    same('... one request, to the site\'s own /stats, with no cache and no cookies', env.fetches.map((f) => [f.url, f.init.cache, f.init.credentials]), [['/stats', 'no-store', 'omit']]);
+    check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
+}
+{
+    const env = runLobby('', {}, { fetch: answers({ '/stats': 'page', '/busy': { matches: 0, players: 2 } }) });
+    await settle();
+    same('/stats is the game page (the site has no such route) and /busy answers: the live part, a grey dot, no totals', [env.fetches.map((f) => f.url), statsView(env)],
+         [['/stats', '/busy'], { hidden: false, dot: 'live', live: '0 matches being played · 2 players online', played: '', title: null }]);
+}
+for (const [label, table] of [['/stats answers 404 and /busy 200', { '/stats': 404, '/busy': { matches: 1, players: 1 } }], ['/stats fails and /busy answers', { '/busy': { matches: 1, players: 1 } }]]) {
+    const env = runLobby('', {}, { fetch: answers(table) });
+    await settle();
+    same(label + ': 1 match, 1 player, singular', [statsView(env).hidden, statsView(env).live], [false, '1 match being played · 1 player online']);
+}
+{
+    const env = runLobby('', {}, { fetch: answers({ '/stats': { now: { matches: '<img src=x onerror=alert(1)>', players: 1 }, online: { day: 0, total: 0 }, local: { day: 0, total: 0 } }, '/busy': 500 }) });
+    await settle();
+    check('an answer with text where numbers belong shows nothing, and nothing of it is in the page', statsView(env).hidden === true && !/[<>]/.test(env.$('stats').textContent + env.$('stats-live').textContent + env.$('stats-played').textContent) && env.innerHTMLWrites.length === 0);
+}
+{   // the page looks again when it is shown after being hidden, and not while it is hidden
+    let now = GOOD_STATS;
+    const env = runLobby('', {}, { fetch: (url) => answers({ '/stats': now })(url) });
+    await settle();
+    const wake = () => (env.doc.listeners.visibilitychange || []).forEach((fn) => fn());
+    check('the page listens for its visibility (the client\'s wake and the line of numbers\' own look)', (env.doc.listeners.visibilitychange || []).length === 2);
+    const before = env.fetches.length;
+    env.doc.hidden = true;
+    wake();
+    await settle();
+    check('hidden: it asks nothing', env.fetches.length === before);
+    now = { now: { matches: 0, players: 0 }, online: { day: 0, total: 1000 }, local: { day: 0, total: 234 }, since: '2026-10-04' };
+    env.doc.hidden = false;
+    wake();
+    await settle();
+    same('shown again: it looks at once and shows the new numbers (a grey dot, no match, 1,234 games, 0 today)', [env.fetches.length - before, statsView(env).dot, statsView(env).live, statsView(env).played], [1, 'live', '0 matches being played · 0 players online', '1,234 games played (0 today)']);
+    now = undefined;                                                                  // the site stops answering: the next look finds neither /stats nor /busy
+    env.doc.hidden = true;
+    wake();
+    env.doc.hidden = false;
+    wake();
+    await settle();
+    same('... and when the site stops answering the line goes away again (it was shown before)', [statsView(env).hidden, env.fetches.length - before], [true, 3]);
+}
+{
+    const env = runLobby('', {}, { noFetch: true });
+    await settle();
+    check('a browser with no fetch has no line and the page works', statsView(env).hidden === true && env.fetches.length === 0 && env.sockets.length === 1 && !env.$('lobby').hidden);
+}
+{   // the test room and the lobby have the line too (it is the footer's)
+    const room = runLobby('?room=k7m2xq&roommap=small&roomseats=2&play=here', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
+    await settle();
+    check('a room of the test mode has the line too', room.roomStarted() && statsView(room).hidden === false);
+    const lobby = runLobby('', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
+    await settle();
+    check('... and so has the lobby', !lobby.$('lobby').hidden && statsView(lobby).hidden === false);
 }
 
 })().then(() => {

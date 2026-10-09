@@ -681,11 +681,14 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s"' % (default, default.capitalize()), self.page)       # (the picture that the page opens with is the default map's)
 
     def test_the_pictures_that_are_not_seen_at_once_load_lazily_and_the_ones_that_are_do_not(self):
-        lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in re.findall(r"<img [^>]*loading=\"lazy\"[^>]*>", self.page))
-        self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works"); the logo and the map are on the screen at once
-        for tag in re.findall(r"<img [^>]*loading=\"lazy\"[^>]*>", self.page):
-            self.assertIn('decoding="async"', tag)
-        self.assertEqual(len(re.findall(r"<img [^>]*>", self.page)) - len(lazy), 2)
+        tags = re.findall(r"<img [^>]*>", self.page)
+        lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' in t)
+        at_once = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' not in t)
+        self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works")
+        self.assertEqual(at_once, {"logo.png", "preview_treasure.png"})                    # the logo and the map are on the screen at once
+        for tag in tags:
+            if 'loading="lazy"' in tag:
+                self.assertIn('decoding="async"', tag)
 
     def test_the_font_is_declared_and_preloaded_from_the_one_file(self):
         self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
@@ -743,8 +746,8 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
         self.assertIn('id="banner" role="status"', self.page)                                                        # (the strip at the top: what the page changed for you, or what did not work)
 
     def test_a_room_has_a_smaller_header_and_the_page_adds_its_class_once_a_room_is_shown(self):
-        self.assertIn("document.body.classList.add('in-room');   // (and the header is a smaller one)\n            $('room-panel').hidden = false;", self.page)           # (the room of an address: shown with its class)
-        self.assertIn("document.body.classList.add('in-room');\n            runTestRoom();", self.page)                      # (and the page opens in the class, before the room is made: no wide header that shrinks)
+        self.assertRegex(self.page, r"classList\.add\('in-room'\);[^\n]*\n\s*\$\('room-panel'\)\.hidden = false;")          # (the room of an address is shown with its class)
+        self.assertRegex(self.page, r"classList\.add\('in-room'\);\s*runTestRoom\(\);")                                     # (and the page opens in the class, before the room is made: no wide header that shrinks)
         self.assertEqual(self.page.count("classList.add('in-room')"), 2)
         self.assertEqual(self.page.count("classList.remove('in-room')"), 0)
         for needle in (".in-room .mast { min-height: 0; }", ".in-room .mast p { display: none; }", ".in-room .mast img { width: 120px; }", ".in-room .wrap { max-width: 1332px; }"):
@@ -784,7 +787,8 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
 
 
 class TheCardsAtManyWidths(unittest.TestCase):
-    """A browser measures the page from 320 to 1600 px; what needs no browser is read here: the columns of the room, the colours' cards and the map's side, in every window the style has a rule for."""
+    """What the style says for the windows from a 320 px phone to a wide screen, read without a browser: the columns of the room, the colour cards, the map's side and START, the lines that wrap, and the
+    order of the rules that lets the narrower ones win."""
 
     def setUp(self):
         self.page = read("web", "lobby.html")
@@ -798,7 +802,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn(".grid { grid-template-columns: minmax(0, 1fr);", narrower)
         self.assertIn(".side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr);", narrower)                 # (one column: the map's picture beside its drop-down and START)
         self.assertIn(".side .maprow { grid-row: span 2; }", narrower)
-        self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants a step bigger where both the width and the height have room: one pixel more than the narrower rule)
+        self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants 4 times their size instead of 3, only where both the width and the height have room)
         self.assertEqual(self.sheet.value(".wrap", "max-width"), self.sheet.value(".bar-in", "max-width"))          # (the footer lines up with the page)
 
     def test_the_four_colours_lie_black_green_red_blue_in_two_columns_and_one_on_a_phone(self):
@@ -842,14 +846,12 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertEqual(self.sheet.value(".invite input", "text-overflow"), "ellipsis")                        # (a field can shrink under its row: a long link never makes the page wider)
         self.assertEqual(self.sheet.value(".joinbox input", "min-width"), "0")
         self.assertEqual(self.sheet.value(".joinbox input", "flex"), "1")
-        for selector in (".invite-note", ".invite-note .rt", ".morebox", ".rejoin", ".banner", ".mast"):         # (the lines of the page wrap: the code line, the note under the link, the test mode's buttons, the strips)
-            self.assertIn(self.sheet.value(selector, "flex-wrap"), ("wrap", None), selector)
-        for selector in (".invite-note", ".invite-note .rt", ".morebox", ".rejoin", ".banner"):
+        for selector in (".invite-note", ".invite-note .rt", ".morebox", ".rejoin", ".banner"):               # (the lines of the page wrap: the note under the link, the test mode's buttons, the strips)
             self.assertEqual(self.sheet.value(selector, "flex-wrap"), "wrap", selector)
         self.assertIn(".head { margin-bottom: 10px; flex-wrap: wrap; }", self.phone)
 
     def test_a_long_name_wraps_instead_of_widening_the_page(self):
-        # (a name of 32 capital letters widened an earlier draft of these cards by 19 px: every box on the way from the page to the name may shrink and breaks the word)
+        # (a name of 32 capital letters once widened the cards by 19 px: every box on the way from the page to the name may shrink, and the word breaks)
         for selector in (".pname", ".rmask span", ".name-step-title", ".go .plan"):
             self.assertEqual(self.sheet.value(selector, "overflow-wrap"), "anywhere", selector)
         for selector in (".slot .txt", ".pname", ".pname input"):
@@ -871,8 +873,8 @@ class TheCardsAtManyWidths(unittest.TestCase):
 
 
 class TheColours(unittest.TestCase):
-    """The text of the page is at least 4.5:1 against its background, in every state of the buttons, banners and cards (a browser measures the whole page; this reads the colours of the style: each pair
-    is the colour of one rule against the background of another, as the style says them, so a colour that changes is measured again)."""
+    """The text of the page's components is at least 4.5:1 against its background, in every state of the buttons, banners and cards. Each pair is the colour of one rule against the background of another,
+    read from the style, so a colour that changes is measured again; a pair whose rule is gone fails instead of passing by default."""
 
     def setUp(self):
         page = read("web", "lobby.html")

@@ -167,12 +167,6 @@
         border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
     .pick select:disabled { background-image: none; padding-right: 14px; cursor: default; }
     .info { text-align: center; font-size: 15px; color: var(--cream); }
-    .seg { display: flex; gap: 8px; flex-wrap: wrap; }
-    .seg button { flex: 1 1 0; min-width: 0; padding: 8px 10px; font-size: 15px; line-height: 1.1; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); min-height: 42px; }
-    .seg button:hover { background-color: var(--teal-hi); }
-    .seg button[aria-checked="true"] { background: #102b25; color: #f6dc86; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow); }
-    .seg button[disabled] { cursor: default; }
-    .seg button[disabled]:not([aria-checked="true"]) { filter: saturate(.4) brightness(.75); }
     .go { display: grid; gap: 10px; }
     .go .plan { font-size: 15px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
     .plan-short { display: none; }
@@ -218,7 +212,6 @@
         .side .maprow { grid-row: span 2; }
     }
     @media (max-width: 720px) {
-        .msgrow { grid-template-columns: minmax(0, 1fr); }
         :root { --k: 2; }
         .wrap { padding: 14px 16px 0; }
         .mast { min-height: 50px; margin-bottom: 10px; gap: 14px; } .mast img { width: 120px; } .mast .tag { font-size: 16px; } .mast .sub { font-size: 13px; }
@@ -1167,7 +1160,8 @@ their music and their sound: only the window you are in is heard). The match is 
         // title / button / hint: the words of this use; notice: show the recording notice; back: what "a room of my own" does
         function askName(o) {
             var ui = {
-                input: freshNode('name-step-input'), button: freshNode('name-step-go'), message: $('name-step-msg'),
+                input: freshNode('name-step-input'), button: freshNode('name-step-go'),
+                message: { get textContent() { return $('name-step-msg').textContent; }, set textContent(v) { $('name-step-msg').textContent = v; ui.input.setAttribute('aria-invalid', v ? 'true' : 'false'); } },
                 show: function () {
                     $('name-step-title').textContent = o.title;
                     ui.button.textContent = o.button;
