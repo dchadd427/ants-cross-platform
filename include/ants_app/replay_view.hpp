@@ -34,7 +34,9 @@ enum class ReplayControl : int {
     SetPaused = 1,   // value 1 pauses, 0 plays
     SetSpeed = 2,    // value: the speed times 100 (50, 100, 200, 400, 800); anything from 25 to 1600 is taken
     Seek = 3,        // value: the turn to be at (a turn is 50 ms); past the end is the end
-    Restart = 4      // from the start, playing (the bar's "Watch again")
+    Restart = 4,     // from the start, playing (the bar's "Watch again")
+    Extend = 5,      // a recording that is still being made (--replay-live): the page has put a newer copy of the same match in the file; the game reads it again (a copy that is not the same match, or shorter, is ignored)
+    LiveOver = 6     // no newer copy will come: the game stops waiting for more and plays to the end of what it holds
 };
 
 /// What the page reads (Application::replay_value)
@@ -45,7 +47,14 @@ enum class ReplayValue : int {
     Speed = 3,       // times 100
     JumpPercent = 4, // while Jumping: how far
     Failure = 5,     // a ReplayFailure
-    JumpTarget = 6   // while Jumping: the turn that it goes to
+    JumpTarget = 6,  // while Jumping: the turn that it goes to
+    Live = 7,        // 1 while the game follows a recording that is still being made (--replay-live, not over, not complete), else 0
+    Limit = 8,       // the last turn that can be played now: Total, and while following Total less the turns held back (kLiveHoldTurns) so that the picture does not stall between two copies
+    Complete = 9     // 1 when the file holds its end (the match is over and the file is whole)
 };
+
+/// A following game keeps this many turns (2 seconds) of the recording unplayed: the copies of a match that is going on come every few seconds, and a picture that ran up to the newest turn would stand still
+/// until the next one
+inline constexpr unsigned kLiveHoldTurns = 40;
 
 }  // namespace ants::app

@@ -484,6 +484,8 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.replay_path = argv[++i];
             cfg.start_in_map_select = false;
             mode_given = direct_match = true;
+        } else if (std::strcmp(argv[i], "--replay-live") == 0) {               // the file of --replay is a copy of a match that is still going on (ApplicationConfig::replay_live)
+            cfg.replay_live = true;
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
@@ -495,6 +497,7 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     if (!cfg.replay_path.empty() && cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once)) {
         cfg.startup_error = "--replay shows a recorded match: it cannot be combined with --host, --join, --join-url, --bot, --alone or --play.";
     }
+    if (cfg.replay_live && cfg.replay_path.empty() && cfg.startup_error.empty()) cfg.startup_error = "--replay-live follows the file of --replay: it needs --replay FILE.";
     if (cfg.alone && !cfg.bots.empty() && cfg.startup_error.empty()) cfg.startup_error = "--alone cannot be used with --bot: a game for one has no other player.";
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
