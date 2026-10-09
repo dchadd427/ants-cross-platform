@@ -48,6 +48,7 @@ enum class FontSize : uint8_t {
     Px18 = 18,   // the setup screen's names and map name, the results screen's rows
     Px20 = 20,   // "Waiting for scores..."
     Px24 = 24,   // dialog texts (quit, alliance, notices), "Waiting for others..."
+    Px27 = 27,   // the remake's own (not an original height): the smaller headings of the 187 results page, the size of the approved picture's text
     Px35 = 35    // the start dialog's main text
 };
 
@@ -600,7 +601,7 @@ private:
         }
     };
 
-    static constexpr size_t kFontSizes = 6;          // the enumerators of FontSize
+    static constexpr size_t kFontSizes = 7;          // the enumerators of FontSize
     static size_t font_index(FontSize size) noexcept;
     TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
     std::array<TTF_Font*, kFontSizes> fonts_{};

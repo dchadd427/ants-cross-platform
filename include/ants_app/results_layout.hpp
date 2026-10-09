@@ -17,12 +17,20 @@
 //     (Franklin Gothic Medium at the height 18) has digits 8 px wide, so two digits take 16 of the 19 - 21 px. The bundled substitute face has wider digits (10 px on average): the numbers are drawn
 //     squeezed to the original's 8 px a digit and clipped to the label's box (ScorecardModal::render, IRenderer::draw_text_squeezed). Before, "20", "4" and "10" ran into one another ("204 10").
 //
+// The 187 page (docs/GAMEPLAY.md "187", the owner approved the pictures): the four baked headings (newstats.bmp: Score, Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) are not drawn. Three
+// headings of the game's own letters stand in their place, "Kills", "Ants lost" and "Ants left", each with a stroke and an arrow over the number column it names (the columns of the score, the
+// friendly ants lost and the new ants hatched, whose last place the ants that are left take), and a headline of the same green stands at the top, right of "YOUR SCORE". The numbers are the
+// original's counters (above). In the wide page every position is the approved picture's own (the pixel positions of its 960 x 540 frame); the classic page has the same construction moved the way
+// the page moves its parts (what is anchored to the right by -320, what is in the middle by -30), with the headline in the free space right of "YOUR SCORE" (the pictures do not show it).
+//
 // The classic picture is the original's page: its numbers are the layout's classic() rectangles, and nothing of the wide composition is used there.
 // All rectangles are half-open (LayoutRect). The geometry is plain numbers; draw_results_art needs a renderer.
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
@@ -63,6 +71,17 @@ void draw_results_box(IRenderer& renderer, const ants::assets::AssetArchive& arc
 /// The two bottom-edge chains of the wide boxes (ids "results.winner.bottom" and "results.others.bottom"), for the tests of the seams. `count` is set to their number.
 const PieceStrip* results_strips(size_t& count) noexcept;
 
+/// One of the three headings of the 187 page: the text (right aligned at `text_right`), the stroke from the text to the arrow and the arrow over the number column `column` (an index of
+/// ResultsLayout::column_x): the arrow's shaft stands at that column's left edge + 6
+struct Results187Heading {
+    const char* text{""};
+    FontSize size{FontSize::Px24};
+    int32_t column{0};
+    int32_t text_right{0};
+    int32_t text_y{0};                           // the top of the text's cell
+    int32_t stroke_y{0};                         // the top row of the 2 px stroke (and the row where the shaft begins)
+};
+
 /// The geometry of the results page: the classic one is the original's, the wide one is the recomposed page at 960 x 540. A rectangle of art is the sprite's rectangle; the outer rectangle of a box.
 struct ResultsLayout {
     bool is_wide{false};
@@ -89,6 +108,13 @@ struct ResultsLayout {
     std::array<int32_t, 2> portrait_pair_x{};
     int32_t portrait_dy{0};                      // the ants stand at (x, Y + portrait_dy)
 
+    // The 187 page
+    std::array<Results187Heading, 3> headings187;      // Kills, Ants lost, Ants left: the lowest first, each one's arrow is one column further right
+    int32_t arrow_tip_y187{0};                         // the row of the arrows' tips (the next row is the top line of the winner's box)
+    std::array<int32_t, 3> numbers187_x{};             // the three numbers of a row (kills, ants lost, ants left): left edges (the columns of the headings)
+    std::array<int32_t, 3> numbers187_w{};             // and the widths of their labels (what is wider is cut): up to the next column, the last one to the box's inside edge
+    LayoutRect headline187;                            // where the headline stands: its lines are centred in this box, whose height holds what the page has room for
+
     /// The row of position i (0 = the top row)
     constexpr int32_t row_y(size_t i) const noexcept { return i == 0 ? first_row_y : static_cast<int32_t>(i) * row_pitch + other_rows_y; }
 
@@ -102,7 +128,23 @@ struct ResultsLayout {
 inline constexpr int32_t kResultsDigitWidth = 8;
 
 /// Draws the static art of the wide results page: the clay and the frame, the banner, "YOUR SCORE", the two boxes, the column headers and the two labels. The rows, the ants and the Leave Game
-/// button are the screen's (they change). The classic page is the animation re_screen, drawn by the screen.
-void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive);
+/// button are the screen's (they change). The classic page is the animation re_screen, drawn by the screen. `headers` false leaves out the baked column headers (newstats.bmp): the 187 page.
+void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool headers = true);
+
+/// The green of the art's own letters (the page's headings and arrows), which the 187 page's headings, arrows and headline are drawn in
+inline constexpr ants::assets::ColorRGBA kResultsArtGreen{19, 71, 47, 255};
+
+/// The three headings of the 187 page with their strokes and arrows (instead of the baked headers), in the page's own coordinates: the layout's headings187
+void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout);
+
+/// The headline of the 187 page as it is drawn: the largest of the sizes (35, 27, 24, 20, 18) at which the text, wrapped at the box's width, fits the box's height; if none does, the smallest with
+/// as many lines as the box holds and the end of the last one cut ("..."). `y` is the top of the first line (the lines are centred in the box); every line is centred in the box's width.
+struct Results187Headline {
+    FontSize size{FontSize::Px35};
+    std::vector<std::string> lines;
+    int32_t y{0};
+};
+Results187Headline fit_results_headline_187(const IRenderer& renderer, const ResultsLayout& layout, const std::string& text);
+void draw_results_headline_187(IRenderer& renderer, const ResultsLayout& layout, const std::string& text);
 
 }  // namespace ants::app

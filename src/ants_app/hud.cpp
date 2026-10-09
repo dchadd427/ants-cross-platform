@@ -84,7 +84,8 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     chat_scroll_task_ = false;
     if (announce) {
         post_status_id(sim::strings::kWelcome, "Ants");    // FUN_0100dbe2 0x100e173, once when the match screen is built
-        add_news_flash(0, "Game started! Go get that food!");     // FUN_01022432: "[0:00] News Flash:", the start message
+        // FUN_01022432: "[0:00] News Flash:", the start message (187 has no food: its players are told what the match is about)
+        add_news_flash(0, game_mode_ == sim::GameMode::Kills187 ? "Game started! Most kills wins." : "Game started! Go get that food!");
     }
 
     // The buttons start with no state; where they are comes from the layout (apply_layout, at the end)

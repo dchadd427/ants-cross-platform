@@ -681,6 +681,7 @@ bool Application::init(const ApplicationConfig& config) {
     // 8. Initialize HUD and Scorecard
     hud_.set_text_metrics(renderer_.get());
     hud_.set_layout(layout_);
+    hud_.set_game_mode(sim_.game_mode());
     hud_.init(0);
     hud_.options().load(config_store_);
     hud_.set_config_store(&config_store_);
@@ -1308,6 +1309,7 @@ void Application::enter_match(bool rejoin) {
     }
 
     // Reset HUD & Scorecard
+    hud_.set_game_mode(sim_.game_mode());
     hud_.init(local_player_id_, !rejoin);
     hud_.reset(!rejoin);
     if (!rejoin) hud_.start_match_modal(network_active());                  // (the simulation waits for it: update_simulation, post_tick)
@@ -2665,7 +2667,7 @@ void Application::check_match_over() {
     match_over_handled_ = true;
     finish_recording();                                          // (the replay is the match as it ended: every command and every tick are in it)
     const auto& world = sim_.get_world_state();
-    scorecard_.show(world.match_result, local_player_id_);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
+    scorecard_.show(world.match_result, local_player_id_, world.game_mode);       // "Waiting for scores..."; the cue plays when the rows appear (update_scorecard)
     update_picture();                                            // the results are the whole canvas (their wide page, or the original's own page)
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
     else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
@@ -3548,6 +3550,7 @@ void Application::set_local_player(uint8_t team_id) {
     local_player_id_ = team_id;
     sim_.set_viewing_player_id(local_player_id_);
     map_select_.set_player_team(local_player_id_);
+    hud_.set_game_mode(sim_.game_mode());
     hud_.init(local_player_id_);
     hud_.clear_selection();
     if (renderer_) {

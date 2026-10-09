@@ -36,8 +36,10 @@ void ScorecardModal::set_wide_layout(bool wide) {
 
 // FUN_010153a1: the screen is created; its portraits exist but are not on the screen yet, the Leave button does not exist yet, a label says that it waits, and a
 // task that runs 250 ms later builds the rows as soon as every team's scores are in.
-void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_id) {
+void ScorecardModal::show(const sim::MatchResult& result, uint8_t local_player_id, sim::GameMode mode) {
     is_active_ = true;
+    mode_ = mode;
+    headline_.clear();
     phase_ = Phase::Waiting;
     elapsed_ms_ = 0.0;
     local_player_id_ = local_player_id;
@@ -71,11 +73,36 @@ void ScorecardModal::build_rows() {
         row.name = name_of(r.first);
         if (r.has_second()) row.name += " & " + name_of(r.second);
         if (row.name.size() > NAME_MAX_CHARS) row.name.resize(NAME_MAX_CHARS);        // the label's buffer holds 35 characters
-        row.numbers = {std::to_string(r.score), std::to_string(r.friendly_lost), std::to_string(r.enemy_killed), std::to_string(r.new_hatched)};
+        if (mode_ == sim::GameMode::Kills187) {
+            row.numbers = {std::to_string(r.score), std::to_string(r.friendly_lost), std::to_string(r.ants_left), std::string()};       // (the score is the kills; no hatches)
+        } else {
+            row.numbers = {std::to_string(r.score), std::to_string(r.friendly_lost), std::to_string(r.enemy_killed), std::to_string(r.new_hatched)};
+        }
         rows_.push_back(std::move(row));
     }
+    if (mode_ == sim::GameMode::Kills187) headline_ = headline_187();
     audio_to_play_ = result_.is_winner(local_player_id_) ? sim::SoundID::VictoryFanfare : sim::SoundID::PlayerDefeat;
     phase_ = Phase::Rows;
+}
+
+// 187: who won and how. The side that is left (MatchResult::standing: its lowest-numbered team) is named by its row, in the player names of the rows; an alliance whose two teams both still have ants is
+// "A and B" (the lower-numbered team first). Without a team standing the clock ran out, or nobody has an ant left; a quit that ended the match is neither, and its page has no headline.
+std::string ScorecardModal::headline_187() const {
+    const sim::MatchResult& r = result_;
+    if (r.standing < sim::MAX_PLAYERS) {
+        for (const Row& row : rows_) {
+            if (row.first != r.standing && row.second != r.standing) continue;
+            if (row.has_second() && r.ants_left[row.first] > 0 && r.ants_left[row.second] > 0) {
+                return name_of(row.first) + " and " + name_of(row.second) + " are the last colonies standing!";
+            }
+            break;
+        }
+        return name_of(r.standing) + " is the last colony standing!";
+    }
+    if (r.quitter != sim::NO_QUITTER) return std::string();
+    uint32_t ants = 0;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) ants += ((r.present_mask >> t) & 1u) != 0 ? r.ants_left[t] : 0u;
+    return ants == 0 ? "Nobody is left. The most kills wins!" : "Time is up. The most kills wins!";
 }
 
 bool ScorecardModal::handle_mouse_down(int32_t x, int32_t y) {
@@ -125,20 +152,25 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
 
     // 1. The page. In the original's picture: the authentic re_screen composite (149 frame elements from Table 4 Animation 25), rendered in reverse order to produce the authentic 640x480 terracotta
     // layout with frames, banners, headers, boxes and column arrows. In the 16:9 picture: the same pieces recomposed for the whole canvas (results_layout.hpp).
+    // The 187 page leaves out the four baked headings (newstats.bmp) and draws its own three (results_layout.hpp).
+    const bool is_187 = mode_ == sim::GameMode::Kills187;
     if (wide_) {
-        draw_results_art(renderer, assets);
+        draw_results_art(renderer, assets, !is_187);
     } else {
         const auto* anim = assets.find_animation("re_screen");
         if (anim && !anim->subitems.empty()) {
             const auto& frames = anim->subitems[0].frames;
+            const int32_t baked_headings = is_187 ? assets.find_sprite_id("newstats.bmp") : -1;
             for (size_t i = frames.size(); i-- > 0; ) {
                 const auto& fr = frames[i];
+                if (baked_headings >= 0 && static_cast<int32_t>(fr.sprite_index) == baked_headings) continue;
                 renderer.draw_sprite(fr.sprite_index, fr.dx, fr.dy);
             }
         } else {
             renderer.fill_rect(0, 0, ScreenLayout::kClassicWidth, ScreenLayout::kClassicHeight, assets::ColorRGBA{219, 75, 19, 255});
         }
     }
+    if (is_187) draw_results_headings_187(renderer, layout);
 
     // 2. While the scores are awaited: the label (100, 350) 385 x 50, 20 px high lines; nothing else
     if (phase_ == Phase::Waiting) {
@@ -152,7 +184,11 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
         const Row& row = rows_[i];
         const int32_t y = layout.row_y(i);
         draw_label(renderer, row.name, layout.name_x, y, layout.name_w, kLabelColour, FontSize::Px18, false);
-        for (size_t c = 0; c < 4; ++c) draw_counter(renderer, row.numbers[c], layout.column_x[c], y, layout.column_w[c]);
+        if (is_187) {
+            for (size_t c = 0; c < 3; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c], y, layout.numbers187_w[c]);
+        } else {
+            for (size_t c = 0; c < 4; ++c) draw_counter(renderer, row.numbers[c], layout.column_x[c], y, layout.column_w[c]);
+        }
         if (row.has_second()) {
             draw_portrait(renderer, assets, row.first, layout.portrait_pair_x[0], y + layout.portrait_dy);
             draw_portrait(renderer, assets, row.second, layout.portrait_pair_x[1], y + layout.portrait_dy);
@@ -160,6 +196,9 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
             draw_portrait(renderer, assets, row.first, layout.portrait_alone_x, y + layout.portrait_dy);
         }
     }
+
+    // 3b. 187: the headline
+    if (is_187 && !headline_.empty()) draw_results_headline_187(renderer, layout, headline_);
 
     // 4. Top-right "Leave Game" button: animations leave1 / leave2 (hover) / leave3 (pressed), absolute coordinates (the wide page: 320 further right)
     draw_animation_frame0(renderer, assets, quit_.pressed() ? "leave3" : (quit_.hovered() ? "leave2" : "leave1"), layout.dx, 0);

@@ -418,7 +418,7 @@ bool Renderer::init(SDL_Window* window,
                 const double cell_ratio = static_cast<double>(TTF_FontAscent(probe) - TTF_FontDescent(probe)) / 200.0;
                 TTF_CloseFont(probe);
                 bool ok = cell_ratio > 0.5;
-                static constexpr FontSize kSizes[kFontSizes] = {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px35};
+                static constexpr FontSize kSizes[kFontSizes] = {FontSize::Px12, FontSize::Px14, FontSize::Px18, FontSize::Px20, FontSize::Px24, FontSize::Px35, FontSize::Px27};
                 for (size_t i = 0; ok && i < kFontSizes; ++i) {
                     fonts_[i] = TTF_OpenFont(path.c_str(), ttf_point_size(font_cell_height(kSizes[i]), cell_ratio));
                     ok = fonts_[i] != nullptr;
@@ -2153,6 +2153,7 @@ size_t Renderer::font_index(FontSize size) noexcept {
         case FontSize::Px20: return 3;
         case FontSize::Px24: return 4;
         case FontSize::Px35: return 5;
+        case FontSize::Px27: return 6;
     }
     return 0;
 }

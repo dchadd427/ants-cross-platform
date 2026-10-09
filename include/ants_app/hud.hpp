@@ -202,6 +202,9 @@ public:
     /// The names of the four teams (the labels of the other players' scores); an empty name shows the colour word. The roster says which teams exist.
     void set_team_names(const std::array<std::string, 4>& names) { team_names_ = names; }
     void set_roster_mask(uint8_t mask) noexcept { roster_mask_ = static_cast<uint8_t>(mask & 0x0Fu); }
+    /// The rules of the match (the application sets it from the simulation before the screen is built): the start news says "Most kills wins." in 187 instead of "Go get that food!"
+    void set_game_mode(sim::GameMode mode) noexcept { game_mode_ = mode; }
+    sim::GameMode game_mode() const noexcept { return game_mode_; }
     const std::array<std::string, 4>& team_names() const noexcept { return team_names_; }
     uint8_t roster_mask() const noexcept { return roster_mask_; }
     const std::string& get_player_name() const noexcept { return player_name_; }
@@ -429,6 +432,7 @@ private:
 
     ScreenLayout layout_{ScreenLayout::classic()};
     uint8_t local_player_id_{0};
+    sim::GameMode game_mode_{sim::GameMode::HighestScore};
     uint32_t selected_ant_id_{0};
     std::vector<uint32_t> selected_ant_ids_{};
     // The original's panel [54ec] is 4 ("several ants"). It is stored by the selection operations and never recounted: a shift add or shift drag sets it

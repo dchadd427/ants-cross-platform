@@ -612,6 +612,41 @@ target_link_libraries(test_wide_pages PRIVATE ants_test_paths)
 add_test(NAME test_wide_pages COMMAND test_wide_pages)
 set_tests_properties(test_wide_pages PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The game mode 187's results page and chat lines (docs/GAMEPLAY.md "187"): the headline's words, the three numbers of a row, the headings and arrows of the approved picture (pixel for pixel), the baked
+# headings left out, nothing else of the page changed, the headline's fit, the start line and the out-of-ants line of the chat log, a match of the application from start to results
+add_executable(test_results_187
+    test_results_187.cpp
+)
+
+target_include_directories(test_results_187 PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_results_187 PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_results_187 PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_results_187 PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_results_187 PRIVATE ants_test_paths)
+
+add_test(NAME test_results_187 COMMAND test_results_187)
+set_tests_properties(test_results_187 PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # The map preview as the game's own picture of the map (the world drawn offscreen by the real renderer and reduced by an exact area filter): the filter against an independent oracle, the fit
 # of a non-square map, the render (the match screen's own pixels, the live renderer left as it was, tiles equal the whole), the engine, the cache, the fallback, the six shipped maps pinned
 add_executable(test_map_preview

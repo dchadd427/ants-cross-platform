@@ -1,8 +1,10 @@
 #include "ants_app/results_layout.hpp"
 
+#include <algorithm>
 #include <array>
 
 #include "ants_app/scorecard.hpp"
+#include "ants_app/text_layout.hpp"
 
 namespace ants::app {
 
@@ -64,6 +66,17 @@ ResultsLayout make_classic() {
     l.portrait_alone_x = ScorecardModal::PORTRAIT_X_ALONE;
     l.portrait_pair_x = {ScorecardModal::PORTRAIT_X_PAIR[0], ScorecardModal::PORTRAIT_X_PAIR[1]};
     l.portrait_dy = ScorecardModal::PORTRAIT_Y_OFFSET;
+    // The 187 page, in the original's page coordinates (the approved wide picture's positions less the page's own moves, 320 and 30): the three headings stand over the columns of the score, the
+    // friendly ants lost and the new ants hatched, one step up and to the left of each other, their strokes and arrows come down to the top line of the winner's box (the row of the tips is the one above)
+    l.headings187 = {{
+        {"Kills", FontSize::Px35, 0, 471, 171, 190},
+        {"Ants lost", FontSize::Px27, 1, 520, 140, 155},
+        {"Ants left", FontSize::Px27, 3, 562, 108, 123},
+    }};
+    l.arrow_tip_y187 = 217;
+    l.numbers187_x = {ScorecardModal::COLUMN_X[0], ScorecardModal::COLUMN_X[1], ScorecardModal::COLUMN_X[3]};
+    l.numbers187_w = {ScorecardModal::COLUMN_X[1] - ScorecardModal::COLUMN_X[0], ScorecardModal::COLUMN_X[3] - ScorecardModal::COLUMN_X[1], 24};
+    l.headline187 = LayoutRect{343, 38, 282, 54};         // right of "YOUR SCORE", under the banner, above the headings
     return l;
 }
 
@@ -87,6 +100,14 @@ ResultsLayout make_wide() {
     l.first_row_y += l.dy;
     l.other_rows_y += l.dy;
     for (size_t c = 0; c < 4; ++c) l.column_x[c] += l.dx;
+    for (Results187Heading& h : l.headings187) {
+        h.text_right += l.dx;
+        h.text_y += l.dy;
+        h.stroke_y += l.dy;
+    }
+    l.arrow_tip_y187 += l.dy;
+    for (int32_t& x : l.numbers187_x) x += l.dx;
+    l.headline187 = LayoutRect{265, 69, 610, 40};          // centred on x 570, the line of the approved picture (a 35 px line at y 71)
     return l;
 }
 
@@ -126,17 +147,65 @@ void draw_results_box(IRenderer& renderer, const ants::assets::AssetArchive& arc
     }
 }
 
-void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive) {
+void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool headers) {
     const ResultsLayout& l = ResultsLayout::wide();
     draw_wide_background(renderer, archive, PageClay::Tiles);
     // the banner hangs from the top edge (it covers the frame there, as in the original)
     draw_piece(renderer, "resbanr.bmp", l.banner.x, l.banner.y);
     draw_piece(renderer, "yoscore.bmp", l.your_score.x, l.your_score.y);
     draw_results_box(renderer, archive, kWinnerBox, l.dx, l.dy, find_strip(kStrips.data(), kStrips.size(), "results.winner.bottom"));
-    draw_piece(renderer, "newstats.bmp", l.headers.x, l.headers.y);
+    if (headers) draw_piece(renderer, "newstats.bmp", l.headers.x, l.headers.y);
     draw_piece(renderer, "winnr.bmp", l.winner_label.x, l.winner_label.y);
     draw_piece(renderer, "otherp.bmp", l.others_label.x, l.others_label.y);
     draw_results_box(renderer, archive, kOthersBox, l.dx, l.dy, find_strip(kStrips.data(), kStrips.size(), "results.others.bottom"));
+}
+
+// The head of an arrow, one row after the other from its top: how far right of the shaft's column (the column's left edge) each row starts and how wide it is. The shaft is 2 px wide at +6, so the head is
+// a triangle of 11 px at its base and 1 px at its tip, symmetric about the shaft
+constexpr int32_t kArrowHead[10][2] = {{1, 11}, {2, 9}, {2, 9}, {3, 7}, {3, 7}, {4, 5}, {4, 5}, {5, 3}, {5, 3}, {6, 1}};
+
+void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout) {
+    for (const Results187Heading& h : layout.headings187) {
+        const int32_t cx = layout.column_x[static_cast<size_t>(h.column)];
+        renderer.draw_text(h.text, h.text_right - renderer.get_text_width(h.text, h.size), h.text_y, kResultsArtGreen, h.size);
+        renderer.fill_rect(cx - 12, h.stroke_y, 20, 2, kResultsArtGreen);                                      // from the text to the shaft
+        renderer.fill_rect(cx + 6, h.stroke_y, 2, layout.arrow_tip_y187 - h.stroke_y, kResultsArtGreen);       // the shaft, down to the tip's row
+        for (int32_t row = 0; row < 10; ++row) {
+            renderer.fill_rect(cx + kArrowHead[row][0], layout.arrow_tip_y187 - 9 + row, kArrowHead[row][1], 1, kResultsArtGreen);
+        }
+    }
+}
+
+Results187Headline fit_results_headline_187(const IRenderer& renderer, const ResultsLayout& layout, const std::string& text) {
+    static constexpr FontSize kSizes[] = {FontSize::Px35, FontSize::Px27, FontSize::Px24, FontSize::Px20, FontSize::Px18};
+    const LayoutRect& box = layout.headline187;
+    Results187Headline out;
+    for (const FontSize size : kSizes) {
+        std::vector<std::string> lines = wrap_label_text(renderer, text, box.w, size);
+        bool fits = !lines.empty() && static_cast<int32_t>(lines.size()) * font_cell_height(size) <= box.h;
+        for (const std::string& line : lines) fits = fits && renderer.get_text_width(line, size) <= box.w;
+        if (fits) {
+            out.size = size;
+            out.lines = std::move(lines);
+            break;
+        }
+    }
+    if (out.lines.empty()) {                                  // nothing fits whole: the smallest size, the lines that the box holds, the end of the last one cut
+        out.size = FontSize::Px18;
+        out.lines = wrap_label_fitted(renderer, text, box.w, out.size, static_cast<size_t>(std::max<int32_t>(1, box.h / font_cell_height(out.size))));
+    }
+    out.y = box.y + (box.h - static_cast<int32_t>(out.lines.size()) * font_cell_height(out.size)) / 2;
+    return out;
+}
+
+void draw_results_headline_187(IRenderer& renderer, const ResultsLayout& layout, const std::string& text) {
+    const Results187Headline headline = fit_results_headline_187(renderer, layout, text);
+    const int32_t pitch = font_cell_height(headline.size);
+    int32_t y = headline.y;
+    for (const std::string& line : headline.lines) {
+        renderer.draw_text(line, layout.headline187.x + (layout.headline187.w - renderer.get_text_width(line, headline.size)) / 2, y, kResultsArtGreen, headline.size);
+        y += pitch;
+    }
 }
 
 }  // namespace ants::app

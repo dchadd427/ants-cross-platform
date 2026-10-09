@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "ants_assets/asset_archive.hpp"
+#include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_button.hpp"
@@ -25,6 +26,10 @@ namespace ants::app {
  *
  * In a 960 x 540 canvas the page is recomposed for the whole picture (results_layout.hpp): the layout is `ResultsLayout::of(wide_layout())`, and the Leave button, the rows and the label of the
  * waiting phase stand where it puts them. The four numbers of a row are the original's single-line labels (left aligned, a surface that clips what is wider), drawn in the original's 8 px digits.
+ *
+ * The game mode 187 has its own page (results_layout.hpp, docs/GAMEPLAY.md "187"): the baked column headings are not drawn, three headings of the game's own letters stand instead, a row has three
+ * numbers (the kills, which are the score; the ants lost; the ants that are left) and the headline says who won and how: "<Name> is the last colony standing!" (two allied teams that are both left:
+ * "<A> and <B> are the last colonies standing!"), "Time is up. The most kills wins!", or "Nobody is left. The most kills wins!". A match that a player's quit ended has no headline (its row is last, as ever).
  */
 class ScorecardModal {
 public:
@@ -58,7 +63,7 @@ public:
         uint8_t first{0};                          // the team that made the row (the lower one of an alliance)
         uint8_t second{sim::PLAYER_NEUTRAL};       // its ally, PLAYER_NEUTRAL for a single team
         std::string name;                          // "A" or "A & B", at most 35 characters
-        std::array<std::string, 4> numbers;        // score, friendly lost, enemy killed, new hatched
+        std::array<std::string, 4> numbers;        // score, friendly lost, enemy killed, new hatched (187: kills, ants lost, ants left, and nothing)
         bool has_second() const noexcept { return second != sim::PLAYER_NEUTRAL; }
     };
 
@@ -70,14 +75,17 @@ public:
     void set_player_names(const std::array<std::string, 4>& names) { player_names_ = names; }
     /// The teams that get a row (bit p = team p): a browser game has no other players, so its idle teams are not listed (default: all)
     void set_shown_teams(uint8_t mask) noexcept { shown_mask_ = static_cast<uint8_t>(mask & 0x0Fu); }
-    /// Opens the screen in its waiting phase
-    void show(const sim::MatchResult& result, uint8_t local_player_id);
+    /// Opens the screen in its waiting phase. `mode` is the rules of the match that ended (the 187 page, or the original's)
+    void show(const sim::MatchResult& result, uint8_t local_player_id, sim::GameMode mode = sim::GameMode::HighestScore);
     void hide() noexcept { is_active_ = false; }
     bool is_open() const noexcept { return is_active_; }
     /// The screen's clock: after 250 ms the rows are built and the cue is chosen; the portraits animate with it
     void update(float dt_seconds);
     bool is_waiting() const noexcept { return is_active_ && phase_ == Phase::Waiting; }
     const std::vector<Row>& rows() const noexcept { return rows_; }
+    sim::GameMode game_mode() const noexcept { return mode_; }
+    /// The 187 page's headline (empty before the rows are built, in the other modes, and for a match that a quit ended)
+    const std::string& headline() const noexcept { return headline_; }
 
     /// The screen as the 16:9 page (the whole 960 x 540 picture, results_layout.hpp) or the original's 640 x 480 page; the Leave button's rectangles move with it
     void set_wide_layout(bool wide);
@@ -109,6 +117,7 @@ private:
     enum class Phase : uint8_t { Waiting, Rows };
 
     void build_rows();
+    std::string headline_187() const;
     std::string name_of(uint8_t team) const;
     void draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const;
 
@@ -121,6 +130,8 @@ private:
     Phase phase_{Phase::Waiting};
     double elapsed_ms_{0.0};              // the screen's own clock since it was created
     uint8_t local_player_id_{0};
+    sim::GameMode mode_{sim::GameMode::HighestScore};    // the rules of the match that ended
+    std::string headline_{};              // 187: the line at the top of the page, made with the rows
     sim::MatchResult result_{};           // what the screen was created with, reduced to the shown teams
     std::vector<Row> rows_{};
     uint32_t audio_to_play_{0};           // Sound 56 (winner) vs Sound 42 (loser), set when the rows are built
