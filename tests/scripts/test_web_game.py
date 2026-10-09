@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The owner: "This page layout didn't get updated". The game page (web/shell.html, served as /play.html, as "/"
-for a link that somebody shared and as /?embed=1 inside the front page's frames) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
+"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The owner: "This page layout didn't get updated". The game page (web/shell.html, served as /play.html and, as "/", for
+a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
 the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
 
   - the colours are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
@@ -58,9 +58,9 @@ def rule(style, selector, nth=0):
 FAMILY_CLASSES = ("btn", "banner", "startbtn", "sit", "sort-btn", "copy-btn", "ctrl-btn", "stage-pill-btn", "stage-mini-btn", "view-toggle-btn", "filter-chip", "sound-quick-play", "anim-link-chip", "step-link-btn", "tab-btn")
 FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button" % "|".join(FAMILY_CLASSES))
 # The front page (the lobby) is drawn as the owner's approved pictures draw it and names its pieces differently: its `.banner` is the picture's message strip, a black box with a frame (not a teal
-# face, not a button: it is not in the family), its teal heading banners are `.room-title` and `.name-step-title`, and its two-state buttons are the labels of the footer's radio buttons
+# face, not a button: it is not in the family), its teal heading banner is `.name-step-title`, and its two-state buttons are the labels of the footer's radio buttons
 # (`.shape .seg label`, the chosen one is `.shape .seg input:checked + label`). (`.pair label` stays in both patterns, so that the old front page's pair cannot come back unchecked.)
-LOBBY_FAMILY_CLASSES = tuple(name for name in FAMILY_CLASSES if name != "banner") + ("room-title", "name-step-title")
+LOBBY_FAMILY_CLASSES = tuple(name for name in FAMILY_CLASSES if name != "banner") + ("name-step-title",)
 LOBBY_FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button|\.shape \.seg [^,{]*label" % "|".join(LOBBY_FAMILY_CLASSES))
 
 
@@ -113,7 +113,7 @@ class TheLookIsTheFrontPages(PageCase):
         for name in ("min-height", "padding", "font-size"):
             self.assertEqual(btn[name], theirs[name], name)
         for name in ("min-height", "padding", "font-size"):
-            self.assertEqual(rule(self.style, ".btn.sm")[name], rule(self.lobby_style, ".btn.sm, .btn.small")[name], name)
+            self.assertEqual(rule(self.style, ".btn.sm")[name], rule(self.lobby_style, ".btn.sm")[name], name)
         self.assertEqual(rule(self.style, ".btn:active")["box-shadow"], rule(self.lobby_style, ".btn:active")["box-shadow"])
         self.assertEqual(rule(self.style, ".btn:active")["transform"], rule(self.lobby_style, ".btn:active")["transform"])
         self.assertEqual(rule(self.style, ".btn:hover")["background-color"], rule(self.lobby_style, ".btn:hover")["background-color"])
@@ -123,14 +123,13 @@ class TheLookIsTheFrontPages(PageCase):
 
     def test_the_banner_is_the_front_pages(self):
         # The game page's .banner is a teal heading banner, cut like the teal button: it shares the face (the colour with the sheen, the frame, the corners, the bevel and the red shadow, the cream words)
-        # with the front page's .btn (the front page's own .banner is another thing, the picture's black message strip). The front page's teal heading banners, .name-step-title (the same card as the
-        # game page's own, which is this page's .name-step-title.banner) and .room-title, have that face too; the gold words of the title are the game page's .name-step-title.
+        # with the front page's .btn (the front page's own .banner is another thing, the picture's black message strip). The front page's teal heading banner, .name-step-title (the same card as the
+        # game page's own, which is this page's .name-step-title.banner), has that face too; the gold words of the title are the game page's .name-step-title.
         banner, theirs = rule(self.style, ".banner"), rule(self.lobby_style, ".btn")
         for name in ("background", "border", "border-radius", "box-shadow", "color"):
             self.assertEqual(banner[name], theirs[name], name)
-        for selector in (".name-step-title", ".room-title"):
-            for name in ("background", "border", "border-radius", "box-shadow"):
-                self.assertEqual(banner[name], rule(self.lobby_style, selector)[name], selector + " " + name)
+        for name in ("background", "border", "border-radius", "box-shadow"):
+            self.assertEqual(banner[name], rule(self.lobby_style, ".name-step-title")[name], ".name-step-title " + name)
         for name in ("color", "text-shadow"):
             self.assertEqual(rule(self.style, ".name-step-title")[name], rule(self.lobby_style, ".name-step-title")[name], name)
 
@@ -141,14 +140,13 @@ class TheLookIsTheFrontPages(PageCase):
                 "Sprites and sounds": (style_of(read("asset_catalog", "index.html")), FAMILY)}
 
     def faces_and_corners(self):
-        """{where: rule} of every teal button face of the site: the front page (the buttons, the two heading banners and the footer's two-state buttons; its black message strip .banner is no teal
+        """{where: rule} of every teal button face of the site: the front page (the buttons, the heading banner of the name card and the footer's two-state buttons; its black message strip .banner is no teal
         face), the game page, the style sheet of the changelog pages and Sprites and sounds."""
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         group = [d for s, d in blocks(style_of(read("asset_catalog", "index.html"))) if s.startswith(".sort-btn, .copy-btn,") and "border-radius" in d]
         self.assertEqual(len(group), 1, "Sprites and sounds: one rule for the small buttons (it starts with .sort-btn, .copy-btn,) that says their corners")
         return {
             "the front page's buttons": rule(self.lobby_style, ".btn"),
-            "the front page's room title": rule(self.lobby_style, ".room-title"),
             "the front page's name card title": rule(self.lobby_style, ".name-step-title"),
             "the front page's two-state buttons": rule(self.lobby_style, ".shape .seg label"),
             "the game page's buttons": rule(self.style, ".btn"),
@@ -281,10 +279,10 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(style.count("#3d9a7d"), 2, where)
         for where, declarations in self.faces_and_corners().items():
             self.assertRegex(declarations["box-shadow"], r"^var\(--(?:bevel|bevel-sm|btn-shadow|btn-shadow-sm)\)", where)
-        # the pressed button and the small buttons of the room (the seats' Play here, Open a window and Copy link: `.btn.small`): from the same tokens
+        # the pressed button and the small buttons (`.btn.sm`): from the same tokens
         for where, declarations in (("the front page's pressed button", rule(self.lobby_style, ".btn:active")), ("the game page's pressed button", rule(self.style, ".btn:active"))):
             self.assertTrue(declarations["box-shadow"].startswith("var(--bevel), "), where)
-        self.assertTrue(rule(self.lobby_style, ".btn.sm, .btn.small")["box-shadow"].startswith("var(--bevel-sm), "))
+        self.assertTrue(rule(self.lobby_style, ".btn.sm")["box-shadow"].startswith("var(--bevel-sm), "))
         for token, bevel in (("--btn-shadow", "var(--bevel)"), ("--btn-shadow-down", "var(--bevel)"), ("--btn-shadow-sm", "var(--bevel-sm)")):
             self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel + ", "), token)
 
@@ -489,21 +487,11 @@ class TheFooter(PageCase):
         self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links, one "Watch matches": test_web_replay.py)
 
 
-class TheEmbedModeIsOnlyTheGame(PageCase):
-    def test_a_frame_of_the_front_page_has_no_header_footer_frame_or_margin(self):
-        body = rule(self.style, "body.embed")
-        self.assertEqual((body["padding"], body["min-height"], body["background"], body["overflow"]), ("0", "0", "#000", "hidden"))
-        self.assertEqual(rule(self.style, "body.embed::after")["display"], "none")                                  # (the green frame is the page's, not the game's)
-        gone = [s for s, d in blocks(self.style) if d.get("display") == "none !important" and "body.embed" in s]
-        self.assertEqual(len(gone), 1)
-        for part in ("header", "footer", ".mobile-tip-banner", ".view-bar", ".info-panel-wrapper"):
-            self.assertIn("body.embed " + part, gone[0], part)
-        stage = rule(self.style, "body.embed #game-stage")
-        self.assertEqual((stage["width"], stage["aspect-ratio"], stage["max-width"], stage["min-width"]), ("100vw", "auto", "none", "0"))
-        self.assertEqual(rule(self.style, "body.embed #game-container")["box-shadow"], "none")                       # (no ring: the picture fills the frame)
-
-    def test_the_page_still_says_that_it_is_embedded_by_adding_the_class_to_the_body(self):
-        self.assertIn("if (ANTS_EMBED) document.body.classList.add('embed');", self.page)
+class TheGamePageHasNoFrameMode(PageCase):
+    def test_nothing_of_the_old_frames_of_the_front_page_is_left(self):
+        self.assertNotIn("body.embed", self.style)                                                                   # (the front page holds no game in a frame: the test room that did is gone)
+        self.assertNotIn("ANTS_EMBED", self.page)
+        self.assertNotIn("classList.add('embed')", self.page)
 
 
 class TheFullscreenStageIsStillBlack(PageCase):

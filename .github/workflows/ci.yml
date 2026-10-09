@@ -350,7 +350,7 @@ jobs:
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html watch.html replay_page.js index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/classic.css && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html watch.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
-      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=, ?embed=1), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
+      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
       - name: Check the routes of the site (the front page, the game page's addresses, the redirect of the old Play online address)
         run: |
