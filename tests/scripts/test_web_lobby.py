@@ -194,7 +194,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertGreaterEqual(ratio(colour(ink), colour(ground)), 4.5, "a %s button: %s on %s" % (look, ink, ground))
         # a pressed button is told from a loose one by more than its hue: its edge is far lighter than the loose edge (3 : 1 is the least that a state needs against what it is told from)
         self.assertGreaterEqual(ratio(colour(edge(pressed)), colour(edge(base))), 3.0, "the edge of a pressed button against the edge of a loose one")
-        # a place for them on every width: 36 px high on a wide page, 34 on a phone (the shorter cards of the picture the owner approved on Oct 9; they were 40), and a narrower phone only makes the letters and the room around them smaller
+        # a place for them on every width: 36 px high on a wide page, 34 on a phone (the shorter cards of the approved picture; they were 40), and a narrower phone only makes the letters and the room around them smaller
         self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 36)
         phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
         self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 34px; \}")
