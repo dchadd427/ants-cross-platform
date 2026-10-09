@@ -166,4 +166,68 @@ void run_bot_match_tests() {
         ASSERT_TRUE(w.status("BM-FLAG").bots_only);
         ASSERT_TRUE(w.mgr.create_room(spec_of("BM-PLAIN", 2), w.now).ok && !w.status("BM-PLAIN").bots_only);
     } TEST_END();
+
+    TEST_CASE("S3.183 The Timer's Match Is Free For All Or A Match Of Teams, Any Way To Seat Them Equally Likely And Never Teams For Two; The Teams Are Drawn Last, So A Seed Still Chooses The Rest As Before") {
+        ReplayClock clock;
+        std::string why;
+        std::set<std::string> seen;                                          // "<bots> <teams>" of every match that the seeds made
+        std::string pinned;
+        for (uint32_t seed = 1; seed <= 150; ++seed) {
+            World w;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-teams", &clock), false, why));
+            w.mgr.enable_bot_matches(5, w.now, 1000u, seed);
+            w.run(2000);
+            const std::vector<RoomStatus> rooms = w.mgr.list(w.now);
+            const RoomStatus* made = only_bot_room(rooms);
+            ASSERT_TRUE(made != nullptr);
+            uint8_t roster = 0;
+            for (const RoomStatus::Bot& b : made->bots) roster = static_cast<uint8_t>(roster | (1u << b.seat));
+            std::vector<std::string> choices;                                // what a match of these seats may be: free for all ("") or one of the ways to make teams
+            for (const sim::StartTeams& c : sim::roster_team_choices(roster)) choices.push_back(c.set ? sim::start_teams_text(c) : std::string());
+            ASSERT_TRUE(std::find(choices.begin(), choices.end(), made->room_teams) != choices.end());
+            if (made->bots.size() == 2) ASSERT_EQ(made->room_teams, std::string());
+            seen.insert(std::to_string(made->bots.size()) + " " + (made->room_teams.empty() ? std::string("ffa") : made->room_teams));
+            if (seed == 7u) pinned = bot_match_choice(*made) + " teams " + (made->room_teams.empty() ? std::string("ffa") : made->room_teams);
+        }
+        std::string all_seen;
+        for (const std::string& one : seen) all_seen += one + "; ";
+        // two bots: free for all only; three: free for all and every pair of seats that the draw gave (the third plays alone); four: free for all and each of the three splits
+        ASSERT_EQ(all_seen, std::string("2 ffa; 3 0+1; 3 0+2; 3 0+3; 3 1+2; 3 1+3; 3 2+3; 3 ffa; 4 0+1; 4 0+2; 4 0+3; 4 ffa; "));
+        ASSERT_EQ(pinned, std::string("GAUNTLET.LVL players 3 0:medium 1:hard 3:medium teams 0+3"));      // (seed 7: the map, seats and levels that the timer chose before it drew teams, and the teams drawn after them)
+    } TEST_END();
+
+    TEST_CASE("S3.184 A Room Of Computer Players With Teams Starts As A Match Of Those Teams (Every Engine Of The Match Has Them Before The First Turn), The Third Of Three Plays Alone, And The Replay Has Them In Its Head And Plays Out") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-teams-room", &clock), false, why));
+        RoomSpec four = bots_only_spec("BM-FOUR", 4);
+        four.teams = sim::StartTeams{true, 0, 2};
+        four.run_ms = 45u * 1000u;
+        ASSERT_TRUE(w.mgr.create_room(four, w.now).ok);
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-FOUR").state == RoomState::Running; }, 12000));
+        RoomStatus s = w.status("BM-FOUR");
+        ASSERT_EQ(s.teams, std::string("0+2"));
+        ASSERT_EQ(s.room_teams, std::string("0+2"));
+        ASSERT_TRUE(s.allies[0] == 2 && s.allies[2] == 0 && s.allies[1] == 3 && s.allies[3] == 1);      // (Green and Blue against Red and Black: the referee's engine is allied from the start)
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-FOUR").state != RoomState::Running; }, 60000));
+        s = w.status("BM-FOUR");
+        ASSERT_TRUE(s.replay_kept && ReplayStore::valid_file_name(s.replay_file));
+        const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.head.roster == 0x0F);
+        ASSERT_TRUE(f.rep.head.teams.set && f.rep.head.teams.a == 0 && f.rep.head.teams.b == 2);
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));                               // (the file's own start: the same teams on a fresh engine, to every hash it holds)
+        ASSERT_TRUE(played.complete && played.hashes_checked >= 5);
+
+        RoomSpec three = bots_only_spec("BM-THREE", 3);
+        three.teams = sim::StartTeams{true, 1, 2};
+        World v;
+        ASSERT_TRUE(v.mgr.enable_replays(replay_config("botmatch-teams-three", &clock), false, why));
+        ASSERT_TRUE(v.mgr.create_room(three, v.now).ok);
+        ASSERT_TRUE(run_until(v, [&] { return v.status("BM-THREE").state == RoomState::Running; }, 12000));
+        s = v.status("BM-THREE");
+        ASSERT_EQ(s.teams, std::string("1+2"));
+        ASSERT_TRUE(s.allies[1] == 2 && s.allies[2] == 1 && s.allies[0] == 4);                          // (Green plays alone)
+    } TEST_END();
 }

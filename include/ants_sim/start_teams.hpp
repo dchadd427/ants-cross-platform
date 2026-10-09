@@ -48,6 +48,9 @@ StartTeams start_teams_for(const StartTeams& room_own, bool by_leader, const Sta
 std::vector<StartTeams> local_team_choices(uint8_t own_seat, uint8_t filled_mask);
 /// The choices for the room of `players` seats (2 - 4): free for all first, then the pairs 0+1 and 0+2 and 0+3 for four players, 0+1, 0+2 and 1+2 for three (the third seat plays alone); only free for all for two.
 std::vector<StartTeams> room_team_choices(uint8_t players);
+/// The choices for a match of the seats in `roster` (bit s: seat s plays; any seats, not the first ones): free for all first, then every way to make teams: four seats: the lowest seat with each of the others
+/// (the two left are the other team), three: any two of the three (the third plays alone); only free for all for two (and for fewer or more than that). For the seats 0 to `players` - 1 it is room_team_choices(players).
+std::vector<StartTeams> roster_team_choices(uint8_t roster);
 /// A choice as a person reads it, from the colour words of the seats that play (`roster`): "Free for all", "Green + Red against Blue + Black", "Green + Red against Blue". A pair that `roster` cannot make
 /// is written as "Green + Red" alone.
 std::string start_teams_title(const StartTeams& teams, uint8_t roster);

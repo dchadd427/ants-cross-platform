@@ -585,8 +585,10 @@ void RoomManager::enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, ui
     bot_rng_.seed(seed != 0 ? seed : std::random_device{}());
 }
 
-// The match: a map of the original's six that the store has, two to four standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, and a seed.
-// The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
+// The match: a map of the original's six that the store has, two to four standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, a seed, and
+// the teams: free for all or any way to make teams of the seats that play (roster_team_choices: with four, the three ways to split them in two, which on a map whose hills sit at the corners of a square are top
+// against bottom, left against right and across the corners; with three, any two of them and the third alone; with two, free for all), each choice as likely as any other. The teams are drawn last, so a seed
+// still chooses the same map, seats, levels and seed as before. The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
 // match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
 bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why) {
     code.clear();
@@ -625,6 +627,10 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
     }
     spec.seed = (bot_rng_() & 0x7FFFFFFFu) + 1u;
     spec.has_seed = true;
+    uint8_t roster = 0;
+    for (const ai::BotSpec& bot : spec.bots) roster = static_cast<uint8_t>(roster | (1u << bot.seat));
+    const std::vector<sim::StartTeams> team_choices = sim::roster_team_choices(roster);
+    spec.teams = team_choices[bot_rng_() % team_choices.size()];                // (the room starts with them: Room::update, sim::start_teams_for; the replay's head and the live match carry them)
     spec.bots_only = true;
     spec.early_start = false;
     spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)

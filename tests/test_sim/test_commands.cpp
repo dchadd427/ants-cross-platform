@@ -15,6 +15,7 @@
 #include <limits>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1282,6 +1283,39 @@ void run_start_team_tests() {
         ASSERT_EQ(choices_of(room_team_choices(1)), std::string("ffa "));
         ASSERT_EQ(choices_of(room_team_choices(0)), std::string("ffa "));
         ASSERT_EQ(choices_of(room_team_choices(5)), std::string("ffa "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x0F)), std::string("ffa 0+1 0+2 0+3 "));                 // (the seats that play, whichever they are: the server's own match of computer players draws from these)
+        ASSERT_EQ(choices_of(roster_team_choices(0x0D)), std::string("ffa 0+2 0+3 2+3 "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x0B)), std::string("ffa 0+1 0+3 1+3 "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x0E)), std::string("ffa 1+2 1+3 2+3 "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x07)), std::string("ffa 0+1 0+2 1+2 "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x05)), std::string("ffa "));                             // two seats: a team would be the whole match
+        ASSERT_EQ(choices_of(roster_team_choices(0x08)), std::string("ffa "));
+        ASSERT_EQ(choices_of(roster_team_choices(0x00)), std::string("ffa "));
+        ASSERT_EQ(choices_of(roster_team_choices(0xFF)), std::string("ffa 0+1 0+2 0+3 "));                 // (there are four seats: the other bits mean nothing)
+        for (unsigned roster = 0; roster < 16; ++roster) {                                                 // every choice can be made by the seats that play, the first is free for all, no pair is listed twice
+            const std::vector<StartTeams> all = roster_team_choices(static_cast<uint8_t>(roster));
+            ASSERT_TRUE(!all.empty() && !all[0].set);
+            std::set<std::string> seen;
+            for (const StartTeams& c : all) {
+                ASSERT_TRUE(plan_start_teams(c, static_cast<uint8_t>(roster)).why.empty());
+                ASSERT_TRUE(seen.insert(start_teams_text(c)).second);
+            }
+            const unsigned seated = static_cast<unsigned>((roster & 1u) + ((roster >> 1) & 1u) + ((roster >> 2) & 1u) + ((roster >> 3) & 1u));
+            ASSERT_EQ(all.size(), seated >= 3 ? size_t{4} : size_t{1});
+            if (seated == 4) {                                                                             // the three ways to make two teams of four seats, each once
+                std::set<std::string> sides;
+                for (const StartTeams& c : all) {
+                    if (!c.set) continue;
+                    const StartTeamsPlan plan = plan_start_teams(c, static_cast<uint8_t>(roster));
+                    ASSERT_EQ(plan.pairs.size(), size_t{2});
+                    sides.insert(std::to_string(plan.pairs[1][0]) + std::to_string(plan.pairs[1][1]));
+                }
+                ASSERT_EQ(sides.size(), size_t{3});
+            }
+        }
+        for (uint8_t players = 2; players <= 4; ++players) {                                               // a room of the first seats is the same list
+            ASSERT_EQ(choices_of(roster_team_choices(static_cast<uint8_t>((1u << players) - 1u))), choices_of(room_team_choices(players)));
+        }
         for (uint8_t players = 2; players <= 4; ++players) {                                               // every choice that a room offers can be made by the seats it fills first
             const uint8_t roster = static_cast<uint8_t>((1u << players) - 1u);
             for (const StartTeams& c : room_team_choices(players)) ASSERT_TRUE(plan_start_teams(c, roster).why.empty());
