@@ -598,7 +598,7 @@ class TheSiteConfiguration(Scratch):
         self.addCleanup(server.stop)
         url = server.start()
         self.assertTrue(server.running(), "the master process is found by its command line")
-        for path, expected in (("", "the lobby"), ("?join=ABC", "the game"), ("?embed=1", "the game"), ("index.html", "the game"), ("lobby.html", "the lobby")):
+        for path, expected in (("", "the lobby"), ("?join=ABC", "the game"), ("?embed=1", "the lobby"), ("index.html", "the game"), ("lobby.html", "the lobby")):
             with urllib.request.urlopen(url + path, timeout=5) as answer:
                 self.assertIn(expected, answer.read().decode("utf-8"), path)
         with urllib.request.urlopen(url + "index.wasm", timeout=5) as answer:

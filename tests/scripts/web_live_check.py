@@ -7,7 +7,9 @@ page's own part: the glue that fetches the growing file again and again and tell
 C++ tests do). The DevTools protocol is spoken with the client of web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
 Parts (--only): list (the "Live now" box: the matches, hostile names as text, a match that comes later, no box when the door is not there), watch (a match at its present: the tag, Pause and
 "Jump to live", the file that grows, the feed that stops and comes back), ends (a match that ends and was kept, one that ends and was not kept, a kept replay that is slow to appear), cards
-(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling).
+(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), bar (the REPLAY tag lies outside the picture
+in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
+note says how to bring it back; a mouse works as ever).
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser); 2 is the status of a bad command line.
 """
@@ -185,10 +187,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards or replay (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay or bar (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "watch", "ends", "cards", "replay")
+    parts = ("list", "watch", "ends", "cards", "replay", "bar")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -225,6 +227,19 @@ def main():
 
     def shot(tab, name):
         tab.save_shot(args.shots, name)
+
+    def touch(tab, points, pause=0.03):                                        # (a finger: down at the first point, along the others, up at the last)
+        x, y = points[0]
+        tab.call("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x, "y": y}]})
+        for x, y in points[1:]:
+            time.sleep(pause)
+            tab.call("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
+        time.sleep(pause)
+        tab.call("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
+    def centre(tab, ident):
+        r = tab.ev("(function () { var r = document.getElementById('%s').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width, r.height]; })()" % ident)
+        return r[0], r[1]
 
     def fresh(**kw):                                                           # (the door as a match at 11:16 that does not move, unless said otherwise)
         state = dict(mode="ok", freeze=True, live=[ID, OTHER], live_door=True, kept_at=0.0, kept_listed=True, names=PLAYERS, seconds=676)
@@ -384,6 +399,101 @@ def main():
             open_page(tab, "/play.html?replay=ants-NOPE-20260101-000000Z.antsrep")
             check(until(tab, "document.getElementById('rm-title').textContent === 'That replay is gone'") is True, "a file that is gone: 'That replay is gone'")
             tab.close()
+
+        if args.only in ("", "bar"):
+            print("[web live] part bar: the REPLAY tag outside the picture, and the bar of a fullscreen page")
+            fresh(kept_at=1.0)
+            outside = ("(function () { var t = document.getElementById('rtag').getBoundingClientRect(), g = document.getElementById('game-container').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect();"
+                       " return t.top >= g.bottom && t.bottom <= b.top && t.left >= 0 && t.right <= window.innerWidth && t.width > 0 && document.getElementById('rbar').contains(document.getElementById('rtag')); })()")
+            for label, size in (("a phone upright", (390, 844, 2, True)), ("a computer window", (1440, 900, 1, False)), ("a phone on its side", (800, 360, 2, True))):
+                tab = new_tab(*size)
+                open_page(tab, "/play.html?replay=" + KEPT)
+                until(tab, READY)
+                time.sleep(1.0)
+                check(tab.ev(outside) is True, "%s: the REPLAY tag lies under the picture and over the bar, inside the screen, with nothing of it over the picture" % label)
+                if label == "a phone upright":
+                    shot(tab, "tag-phone")
+                    check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "%s: no sideways scroll" % label)
+                    check(tab.ev("getComputedStyle(document.getElementById('b-tab')).display") == "none" and tab.ev("document.getElementById('redge').hidden") is True, "%s: no tab and no bottom strip outside fullscreen" % label)
+                if label == "a phone on its side":
+                    shot(tab, "tag-side")
+                    print("[web live] a phone on its side: fullscreen")
+                    fx, fy = centre(tab, "fullscreen-btn-r")
+                    tab.tap(fx, fy)                                               # (a finger: the page now knows that touch is what is used)
+                    check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "the bar lies over the picture in fullscreen")
+                    idle = "document.getElementById('rbar').classList.contains('idle')"
+                    edge_up = "!document.getElementById('redge').hidden"
+                    note_up = "!document.getElementById('rnote').hidden"
+                    check(tab.ev(idle) is False and tab.ev(edge_up) is False, "fullscreen opens with the bar up (and no strip)")
+                    shot(tab, "fs-bar-up")
+                    check(tab.ev("(function () { var t = document.getElementById('rtag').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect(); return t.bottom <= b.top + 4 && t.left >= b.left; })()") is True, "the tag lies above the bar, at its left, and goes with it")
+                    check(until(tab, idle, 6) is True, "playing: the bar goes by itself after 3 seconds")
+                    check(tab.ev(edge_up) is True and tab.ev(note_up) is True and tab.ev("document.getElementById('rnote').textContent") == "Swipe up from the bottom edge to bring the bar back",
+                          "a finger was used: the strip is there and the note says how to bring the bar back")
+                    shot(tab, "fs-bar-gone-note")
+                    check(until(tab, "document.getElementById('rnote').hidden", 6) is True, "the note goes after 3 seconds")
+                    w, h = 800, 360
+                    touch(tab, [(w / 2, h / 2)])                                  # a tap on the picture
+                    time.sleep(0.4)
+                    check(tab.ev(idle) is True, "a tap on the picture does not call the bar")
+                    touch(tab, [(300, 200), (350, 180), (400, 160), (450, 140), (500, 120)])      # a drag across the picture (the map)
+                    time.sleep(0.4)
+                    check(tab.ev(idle) is True, "a drag across the picture does not call it either")
+                    check(tab.ev("getComputedStyle(document.getElementById('rbar')).opacity") == "0", "the picture is clear: the bar and its tag are not drawn")
+                    shot(tab, "fs-clear")
+                    touch(tab, [(w / 2, h - 20), (w / 2, h - 40), (w / 2, h - 70), (w / 2, h - 100)])   # a swipe up from the bottom edge
+                    check(until(tab, "!" + idle, 3) is True and tab.ev(edge_up) is False, "a swipe up from the bottom edge calls the bar (and the strip goes)")
+                    check(until(tab, idle, 6) is True, "it goes by itself again")
+                    check(tab.ev(note_up) is False, "and the note does not come a second time in this visit")
+                    touch(tab, [(w / 2, h - 20)])                                 # a tap there
+                    check(until(tab, "!" + idle, 3) is True, "a tap on the bottom edge calls it too")
+                    bx, by = (lambda r: (r[0], r[1]))(tab.ev("(function () { var r = document.querySelector('#speed button[data-s=\"2\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()"))
+                    check(until(tab, idle, 6) is True and by > h - 56, "the bar is away again (its 2x button lies in the strip along the bottom edge)")
+                    touch(tab, [(bx, by)])                                        # a tap on the strip where the 2x button will be: the bar comes up and the tap is not a click on the button
+                    time.sleep(0.6)
+                    check(tab.ev(idle) is False and tab.ev("__stub.speed") == 100, "a tap on the strip over a button calls the bar and does not press the button (the speed is %r)" % tab.ev("__stub.speed"))
+                    tab.ev("__stub.state = 3")                                    # the match is paused: the bar stays
+                    time.sleep(4.0)
+                    check(tab.ev(idle) is False, "paused: the bar stays up")
+                    tx, ty = centre(tab, "tl")
+                    touch(tab, [(tx, ty), (tx, ty + 30), (tx, ty + 60)])         # a swipe down that starts on the timeline: the timeline's own
+                    time.sleep(0.4)
+                    check(tab.ev(idle) is False, "a swipe down that starts on the timeline does not hide the bar")
+                    until(tab, "__stub.state === 3")                              # (the timeline's seek is a jump of 0.4 s in the stand-in: the bar is called again when it ends)
+                    time.sleep(0.8)
+                    cx, cy = centre(tab, "clock")
+                    touch(tab, [(cx, cy), (cx, cy + 15), (cx, cy + 30), (cx, cy + 50)])           # a swipe down on the bar
+                    check(until(tab, idle, 3) is True, "a swipe down on the bar hides it, paused or not")
+                    touch(tab, [(w / 2, h - 20)])
+                    until(tab, "!" + idle, 3)
+                    ux, uy = centre(tab, "b-tab")
+                    touch(tab, [(ux, uy)])                                        # a tap on the tab
+                    check(until(tab, idle, 3) is True, "a tap on the tab hides it")
+                    tab.mouse("mouseMoved", 400, 100, button="none")
+                    check(until(tab, "!" + idle, 3) is True and tab.ev(edge_up) is False, "a mouse that moves calls the bar as ever (and the strip is not for a mouse)")
+                    tab.ev("__stub.state = 2")
+                    check(until(tab, idle, 6) is True and tab.ev(edge_up) is False, "after a mouse the bar goes by itself and leaves no strip over the game's edge")
+                    shot(tab, "fs-mouse")
+                tab.close()
+            # a phone upright in fullscreen: the tag at the bar's left end and the tab at its right end must not lie on each other, with a short tag (a replay, paused) and a long one (a live match)
+            apart = ("(function () { var a = document.getElementById('rtag').getBoundingClientRect(), b = document.getElementById('b-tab').getBoundingClientRect();"
+                     " return [a.left, a.right, b.left, b.right, window.innerWidth, a.right <= b.left || b.right <= a.left, b.left >= 0 && b.right <= window.innerWidth && a.left >= 0, getComputedStyle(document.getElementById('b-tab')).display]; })()")
+            for label, address, wait_for in (("a phone upright, a replay paused", "/play.html?replay=" + KEPT, "Paused"), ("a phone upright, a live match", "/play.html?live=" + ID, "about")):
+                fresh(kept_at=1.0) if address.find("replay=") != -1 else fresh()
+                tab = new_tab(390, 844, 2, True)
+                open_page(tab, address)
+                until(tab, READY)
+                time.sleep(1.0)
+                if wait_for == "Paused":
+                    tab.ev("__stub.state = 3")
+                until(tab, "document.getElementById('rtag-s').textContent.indexOf('%s') !== -1" % wait_for, 6)
+                fx, fy = centre(tab, "fullscreen-btn-r")
+                tab.tap(fx, fy)
+                check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "%s: the bar lies over the picture in fullscreen" % label)
+                a = tab.ev(apart)
+                check(a[7] != "none" and a[5] is True and a[6] is True, "%s: the tag (x %d to %d) and the tab (x %d to %d) lie apart, inside the %d px screen" % ((label, a[0], a[1], a[2], a[3], a[4])))
+                shot(tab, "fs-phone-" + ("paused" if wait_for == "Paused" else "live"))
+                tab.close()
     except (RuntimeError, TimeoutError, ConnectionError) as e:
         check(False, "the browser or the page broke down: %s" % e)
     finally:

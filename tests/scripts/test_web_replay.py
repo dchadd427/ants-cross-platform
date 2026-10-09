@@ -156,7 +156,7 @@ class ThePlayerPage(unittest.TestCase):
 
     def test_the_pieces_that_the_glue_finds_by_id_are_all_there(self):
         for ident in ("r-title", "r-meta", "all-btn", "copy-btn", "fullscreen-btn-r", "copy-more", "rtag", "endnote", "veil", "veil-t", "veil-f", "rm", "rm-title", "rm-body", "rbar", "b-play", "tl", "rail",
-                      "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast"):
+                      "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
         self.assertEqual(len(re.findall(r'data-s="(?:0\.5|1|2|4|8)"', self.page)), 5)
         self.assertIn('href="/watch.html"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
@@ -190,6 +190,50 @@ class ThePlayerPage(unittest.TestCase):
         self.assertIn("numbers only", glue)
         for bad in ("insertAdjacentHTML", "document.write", "outerHTML", "eval("):
             self.assertNotIn(bad, glue, bad)
+
+
+class TheTagAndTheFullscreenBar(unittest.TestCase):
+    """The REPLAY tag lies outside the picture (above the bar), and in fullscreen a finger on the picture never calls the bar (docs/REPLAYS.md "Watching a replay"); a swipe down or the tab hides it, a tap
+    or a swipe up along the bottom edge calls it. tests/scripts/web_live_check.py (part bar) shows all of it in a real browser."""
+    page = read("web", "shell.html")
+    glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
+
+    def test_the_tag_is_a_part_of_the_bar_and_not_of_the_picture(self):
+        self.assertRegex(self.page, r'<div class="rbar rep-only" id="rbar">\s*<div class="rtag rep-only" id="rtag" hidden>')
+        stage = self.page[self.page.index('<div id="game-container">'):self.page.index('id="pseudo-exit"')]
+        self.assertNotIn('id="rtag"', stage)
+        rule = re.search(r"\n\s*\.rtag \{([^}]*)\}", self.page).group(1)
+        self.assertIn("position: absolute", rule)
+        self.assertIn("bottom: calc(100% + 6px)", rule)
+        self.assertNotIn("cqw", rule)                                                                       # (it is outside the picture's box: its sizes are pixels)
+        self.assertNotIn("cqw", re.search(r"\.rtag\.lv b::before \{([^}]*)\}", self.page).group(1))
+
+    def test_the_bar_leaves_room_for_the_tag_in_every_layout(self):
+        self.assertRegex(self.page, r"\.rbar \{ position: relative; [^}]*margin: 49px 0 10px;")
+        self.assertIn("margin: 45px 0 8px;", block(self.page, "@media (max-width: 700px) {\n            body.replay header { flex-wrap: wrap; }"))
+        self.assertIn("margin-top: 43px;", block(self.page, "@media (max-height: 520px) {\n            #r-meta { display: none; }"))
+
+    def test_a_finger_on_the_picture_never_calls_the_bar(self):
+        for line in ("var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';",
+                     "if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;",
+                     "if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;"):
+            self.assertIn(line, self.glue, line)
+        self.assertNotIn("document.addEventListener(name, wake", self.glue)                                  # (the old wiring: every touch, anywhere, called the bar)
+        self.assertIn("idleTimer = setTimeout(hideBar, 3000);", self.glue)                                   # (a bar that plays still goes by itself after 3 seconds)
+
+    def test_the_bar_is_called_from_the_bottom_edge_and_hidden_by_a_swipe_or_the_tab(self):
+        for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));",    # (the strip: only for a finger, only while the bar is away)
+                     "edgeFrom.y - ev.clientY >= EDGE_SWIPE", "$('redge').addEventListener('click', wake);",           # (a TAP calls the bar in its click: a bar called earlier takes the click)
+                     "ev.pointerType === 'touch' && $('rbar').classList.contains('over') && !$('tl').contains(ev.target)",
+                     "down >= BAR_SWIPE", "$('b-tab').addEventListener('click', hideBar);"):
+            self.assertIn(line, self.glue, line)
+        self.assertIn('<div class="redge rep-only" id="redge" hidden></div>', self.page)
+        self.assertRegex(self.page, r'<button class="rtab" type="button" id="b-tab" aria-label="Hide the bar"')
+        self.assertIn(".rbar.over { touch-action: none; }", self.page)
+        self.assertIn("Swipe up from the bottom edge to bring the bar back", self.page)                      # (the note of the first time)
+        self.assertIn("noteShown", self.glue)
+        self.assertNotIn("TAP_SLOP", self.glue)                                                              # (no tap logic on pointerup any more: see the click)
+        self.assertRegex(self.page, r"@media \(max-width: 700px\)[^@]*?\.rbar\.over \.rtab \{ left: auto; right: 14px; transform: none; \}")   # (a phone upright: the tab at the right end, clear of the tag)
 
 
 class TheLiveGlue(unittest.TestCase):
