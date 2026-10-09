@@ -224,10 +224,7 @@ bool RoomManager::take_match_place(uint32_t now_ms) {
     return true;
 }
 
-bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
-    // Lobbies need the server's public rooms (a match that a lobby begins is one of them), a map, and keys (a seat is held for its key). The code is a visitor's, as for a public room.
-    if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
-    if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
+bool RoomManager::lobby_place(uint32_t now_ms) {
     const auto waiting = [this]() {
         size_t n = 0;
         for (const auto& kv : rooms_) n += kv.second->lobby_waiting() ? 1u : 0u;
@@ -237,10 +234,14 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     while (waiting() >= limits_.demo_lobbies || rooms_.size() + restoring_.size() >= limits_.max_rooms) {
         if (!evict_empty_lobby(now_ms) && !evict_idle_lobby(now_ms)) return false;
     }
+    return true;
+}
+
+RoomSpec RoomManager::lobby_spec(const std::string& code, const std::string& map) const {
     RoomSpec spec = default_spec();
     spec.code = code;
     spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);
-    spec.map = public_choice_of(block, limits_).map;                // (the map of the block when the server offers it; the plan changes it)
+    spec.map = map;
     spec.players = sim::MAX_PLAYERS;
     spec.public_room = true;                                        // (the match it begins is a public one: it holds a place among them from its START on)
     spec.early_start = true;
@@ -252,7 +253,57 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     spec.empty_close_ms = limits_.lobby_empty_close_ms;
     spec.keep_ms = 30000;
     spec.run_ms = 30u * 60u * 1000u;
-    return create_room(std::move(spec), now_ms).ok;
+    return spec;
+}
+
+bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms) {
+    // Lobbies need the server's public rooms (a match that a lobby begins is one of them), a map, and keys (a seat is held for its key). The code is a visitor's, as for a public room.
+    if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
+    if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
+    if (!lobby_place(now_ms)) return false;
+    return create_room(lobby_spec(code, public_choice_of(block, limits_).map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
+}
+
+// The room after a match (protocol 16). A lobby room that ended by its rules has the record of itself (Room::lobby_return); a finished room is forgotten after its keep time (half a minute), and the people take longer
+// than that to read the results and leave the game page, so the record goes into the manager's keeping, by the code, for lobby_return_keep_ms from the end of the match. Only a record with a person in it is kept:
+// without one nobody comes back to the room.
+void RoomManager::capture_return(Room& room, uint32_t now_ms) {
+    if (room.return_taken() || room.lobby_return() == nullptr) return;
+    room.mark_return_taken();
+    if (limits_.lobby_return_keep_ms == 0 || limits_.lobby_return_max == 0 || room.lobby_return()->people.empty()) return;
+    while (returns_.size() >= limits_.lobby_return_max && returns_.find(room.code()) == returns_.end()) {     // (the oldest goes: a flood of short matches cannot make the memory grow)
+        auto oldest = returns_.begin();
+        for (auto it = returns_.begin(); it != returns_.end(); ++it) {
+            if (now_ms - it->second.ended_ms > now_ms - oldest->second.ended_ms) oldest = it;
+        }
+        returns_.erase(oldest);
+    }
+    returns_[room.code()] = Return{*room.lobby_return(), now_ms};
+}
+
+// The lobby of a code whose match is over comes back with its people. The pool of lobbies and the limits of the server are the same as for any lobby; the map must still be one that the server offers (else its
+// own); a record that the lobby refuses is thrown away with the room that was made for it, and the Hello goes on as if there were none.
+bool RoomManager::make_returned_lobby(const std::string& code, uint32_t now_ms) {
+    const auto found = returns_.find(code);
+    if (found == returns_.end()) return false;
+    if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect || !net::public_room_code(code)) return false;
+    if (!lobby_place(now_ms)) return false;                         // (the record stays: the next Hello may find a place)
+    net::LobbyReturn record = found->second.record;
+    std::string map = lobby_services().choose_map(record.map);
+    if (map.empty()) map = limits_.demo_map;
+    record.map = map;
+    if (!create_room(lobby_spec(code, map), now_ms).ok) return false;
+    const auto room = rooms_.find(code);
+    if (room == rooms_.end() || !room->second->restore_return(record, now_ms, limits_.lobby_return_hold_ms)) {
+        if (room != rooms_.end()) {
+            room->second->forget(now_ms);
+            rooms_.erase(room);
+        }
+        returns_.erase(code);
+        return false;
+    }
+    returns_.erase(code);
+    return true;
 }
 
 bool RoomManager::evict_empty_lobby(uint32_t now_ms) {
@@ -416,7 +467,24 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     // A Hello that shows a key is a player who comes back to a match: never a newcomer. It does not make a public room and does not replace an ended one (the match of its key is over: NoSuchRoom,
     // and its machine lets the key go); the review found a stale key that opened a new, empty room of the same code and left the player alone in it.
     const bool keyed = !net::key_is_zero(hello.key);
-    if (ended && !keyed && hello.create.has_value() && it->second->public_room() && limits_.demo_rooms > 0) {
+    // The room after a match (protocol 16): a page that comes for the code of a lobby whose match is over finds the lobby again, with its people in their colours as seats that wait for their keys (the page that was
+    // in the match comes with its key, a page that follows the link or types the code is a newcomer in it). A game never does: its Hello with a key is for a match, and that is over.
+    if (hello.client_kind == net::kClientPage && !hello.room.empty() && (it == rooms_.end() || (ended && it->second->state() == RoomState::Finished))) {
+        if (it != rooms_.end()) capture_return(*it->second, now_ms);               // (the match may have ended in this very pass: the record is made before the door looks for it)
+        if (returns_.find(hello.room) != returns_.end() && (it == rooms_.end() || it->second->lobby())) {
+            if (it != rooms_.end()) {
+                if (!it->second->end_reported()) {
+                    it->second->mark_end_reported();
+                    unreported_.push_back(it->second->status(now_ms));
+                }
+                rooms_.erase(it);
+            }
+            make_returned_lobby(hello.room, now_ms);
+            it = rooms_.find(hello.room);
+        }
+    }
+    const bool ended_now = it != rooms_.end() && (it->second->state() == RoomState::Finished || it->second->state() == RoomState::Failed);
+    if (ended_now && !keyed && hello.create.has_value() && it->second->public_room() && limits_.demo_rooms > 0) {
         // A public room that is over is forgotten at once when somebody comes back to its code with a create block (a late friend, a reload, a rematch with the same
         // link: the link carries the block): its end is reported, and the Hello makes a new room below
         if (!it->second->end_reported()) {
@@ -543,6 +611,7 @@ void RoomManager::update(uint32_t now_ms) {
     // 4. the rooms
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
+        capture_return(*it->second, now_ms);                       // (a lobby whose match ended in this pass: the room after it is kept before the finished room's keep time can run out)
         if (it->second->expired(now_ms)) {
             if (!it->second->end_reported()) {                     // (a room with no keep time ends and expires in one pass: its end is still reported)
                 it->second->mark_end_reported();
@@ -552,6 +621,11 @@ void RoomManager::update(uint32_t now_ms) {
         } else {
             ++it;
         }
+    }
+    // 5. the records of the lobbies whose match is over (protocol 16): a record that nobody came back to in lobby_return_keep_ms is forgotten
+    for (auto it = returns_.begin(); it != returns_.end();) {
+        if (now_ms - it->second.ended_ms >= limits_.lobby_return_keep_ms) it = returns_.erase(it);
+        else ++it;
     }
 }
 

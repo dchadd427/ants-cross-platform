@@ -438,6 +438,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     Connection* old = g.conn;
     g.conn = p.conn;
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
+    g.hold_ms = 0;                                               // (a seat that restore_return held for longer is held for the room's own time from now on)
     g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
     g.address = p.address;
@@ -460,6 +461,11 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     w.key = g.key;
     p.conn->send(encode(w));
     broadcast_room();
+    if (!g.back_notice.empty()) {                                // (the room after a match: the person that comes back to its colour is told once that its match is over)
+        const std::string note = g.back_notice;
+        g.back_notice.clear();
+        notify(seat, note);
+    }
 }
 
 void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32_t now_ms, bool& consumed, bool created) {
@@ -704,7 +710,7 @@ void HostLobby::update(uint32_t now_ms) {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS && phase_ != Phase::Begun; ++s) {
         if (guests_[s].conn == nullptr) {
             // a held seat (a lobby room): its hold runs out, but not while the leader's START waits (that has its time: the games are on their way, and a page that goes to the game closes its link first)
-            if (guests_[s].held && !starting_.active && now_ms - guests_[s].held_since_ms >= cfg_.hold_ms) {
+            if (guests_[s].held && !starting_.active && now_ms - guests_[s].held_since_ms >= (guests_[s].hold_ms != 0 ? guests_[s].hold_ms : cfg_.hold_ms)) {
                 ++hold_expiries_;
                 remove_guest(s, false, RejectReason::Kicked);
             }
@@ -789,6 +795,74 @@ uint8_t HostLobby::joiner_seat(uint8_t want) const noexcept {
         if (takes(s)) return s;
     }
     return 255;
+}
+
+// The room after a match (protocol 16). What a lobby room keeps of itself: the map, the plan, the teams, and the persons that are to come back (their colours, names, keys and places in the order of the Welcomes). The
+// bots of the plan are not kept as bots: the plan says what each colour is, and START seats the bots again.
+LobbyReturn HostLobby::make_return(uint8_t keep) const {
+    LobbyReturn r;
+    if (!cfg_.lobby_room) return r;
+    r.map = room_.map_name;
+    r.plan = room_.plan;
+    r.team_a = room_.team_a;
+    r.team_b = room_.team_b;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (((keep >> s) & 1u) == 0 || room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;       // (a person without a key could not come back to its colour)
+        LobbyReturn::Person p;
+        p.seat = s;
+        p.name = room_.slots[s].name;
+        p.key = guests_[s].key;
+        p.join_order = guests_[s].join_order;
+        p.platform = room_.slots[s].platform;
+        r.people.push_back(std::move(p));
+    }
+    return r;
+}
+
+// Every person of a record holds its colour as a seat that waits for its key, as after a link that was lost, but for longer (hold_ms): the people are on their way back from the match's own page. The room is
+// refused whole when the record is not one that make_return makes (the checks are the ones that the Room message's decoder and the lobby's own rules make): nothing is half seated.
+bool HostLobby::restore_return(const LobbyReturn& rec, uint32_t now_ms, uint32_t hold_ms, const std::string& notice) {
+    if (!cfg_.lobby_room || phase_ != Phase::Room || starting_.active || joins_ != 0 || players() != 0) return false;
+    if (!rec.map.empty() && !valid_map_name(rec.map)) return false;
+    for (const PlanKind kind : rec.plan) {
+        if (static_cast<uint8_t>(kind) > kPlanKindLast) return false;
+    }
+    const bool no_teams = rec.team_a == kNoTeam && rec.team_b == kNoTeam;
+    if (!no_teams && !(rec.team_a < rec.team_b && rec.team_b < sim::MAX_PLAYERS)) return false;
+    std::array<bool, sim::MAX_PLAYERS> taken{};
+    for (size_t i = 0; i < rec.people.size(); ++i) {
+        const LobbyReturn::Person& p = rec.people[i];
+        if (p.seat >= sim::MAX_PLAYERS || taken[p.seat] || key_is_zero(p.key) || p.join_order == 0) return false;
+        taken[p.seat] = true;
+        for (size_t j = 0; j < i; ++j) {
+            if (key_matches(rec.people[j].key, p.key) || rec.people[j].join_order == p.join_order) return false;      // (two seats never share a key, and the order of the Welcomes is strict)
+        }
+    }
+    if (!rec.map.empty()) room_.map_name = rec.map;                                       // (a record without a map keeps the room's own)
+    room_.plan = rec.plan;
+    room_.team_a = rec.team_a;
+    room_.team_b = rec.team_b;
+    for (const LobbyReturn::Person& p : rec.people) {
+        Guest& g = guests_[p.seat];
+        g = Guest{};
+        g.held = true;
+        g.held_since_ms = now_ms;
+        g.hold_ms = hold_ms;
+        g.heard_ms = now_ms;
+        g.forgive_at_ms = now_ms + cfg_.forgive_ms;
+        g.key = p.key;
+        g.join_order = p.join_order;
+        g.kind = kClientPage;
+        g.back_notice = notice;
+        room_.slots[p.seat].state = SlotState::Client;
+        room_.slots[p.seat].name = human_name(p.name, "Player " + std::to_string(static_cast<unsigned>(p.seat) + 1u));
+        room_.slots[p.seat].platform = valid_platform(p.platform) ? p.platform : kPlatformUnknown;
+        room_.slots[p.seat].rtt_ms = kRttUnknown;
+        joins_ = std::max(joins_, p.join_order);
+    }
+    last_update_ms_ = now_ms;
+    elect_leader();
+    return true;
 }
 
 // The plan has a bot for a colour that nobody holds: then one person is enough to start (can_start_filled), as for a leader's fill

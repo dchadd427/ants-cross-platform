@@ -731,10 +731,11 @@ same('a context with nothing in it is the plain host screen', R.viewOf(model(S2)
 const protocolPath = path.join(repoDir, 'include', 'ants_net', 'protocol.hpp');
 const protocolText = fs.existsSync(protocolPath) ? fs.readFileSync(protocolPath, 'utf8') : '';
 const said = (name) => { const m = new RegExp(name + ' = "((?:[^"\\\\]|\\\\.)*)"').exec(protocolText); return m ? m[1] : null; };
-const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams') };
+const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams'), overFirst: said('kNoticeMatchOverFirst'), overLast: said('kNoticeMatchOverLast') };
 same('the sentences of the server\'s START, as protocol.hpp has them', SAID, {
     late: '\'s game did not come in time.', lates: 'These games did not come in time: ', maplost: 'This map could not be loaded: choose another map.', mapcolours: 'This map cannot be played with these colours.',
-    noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: '
+    noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: ',
+    overFirst: 'Your match on ', overLast: ' is over.'
 });
 const PRIYA_LATE = 'Priya' + SAID.late;
 [
@@ -750,6 +751,12 @@ const PRIYA_LATE = 'Priya' + SAID.late;
     ['Sam moved you to Blue.', 'moved'], ['The room moved you to Red.', 'moved'], ['Player 2 moved you to Black.', 'moved'], ['Sam moved you to Blue', 'notice'], [' moved you to Blue.', 'notice'], ['moved you to Blue.', 'notice'],
     ['Sam moved you to Blue. Later.', 'notice'], ['Sam moved you to blue 2.', 'notice'], ['Sam moved you', 'notice']
 ].forEach(([text, kind]) => same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is ' + kind + ', with the text as the room said it', R.noticeKind(text), { kind: kind, server: text }));
+// the line that the room says once to a person who comes back to the room after its match (HostLobby::restore_return): the file of the map, between the server's two halves
+[['TREASURE.LVL', 'Treasure'], ['treasure.lvl', 'Treasure'], ['SMALL.LVL', R.mapOfFile('SMALL.LVL') ? R.mapOfFile('SMALL.LVL').name : 'SMALL'], ['SOMEWHERE.LVL', 'SOMEWHERE'], ['my_map.lvl', 'my_map'], ['TWO WORDS.LVL', 'TWO WORDS'], ['NOFILE', 'NOFILE']].forEach(([file, name]) =>
+    same('noticeKind of the room after a match on ' + file + ' is "over" with the map\'s name ' + name, R.noticeKind(SAID.overFirst + file + SAID.overLast), { kind: 'over', server: SAID.overFirst + file + SAID.overLast, map: name }));
+[SAID.overFirst + 'TREASURE.LVL' + SAID.overLast + ' Later.', ' ' + SAID.overFirst + 'TREASURE.LVL' + SAID.overLast, SAID.overFirst + SAID.overLast, SAID.overFirst + 'TREASURE.LVL is over', 'your match on TREASURE.LVL is over.'].forEach((text) =>
+    same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is only a notice (the sentence is matched whole, with a file name in it)', R.noticeKind(text), { kind: 'notice', server: text }));
+same('the strip for that line is picture 8\'s, whatever map the page lists', R.MAPS.map((m) => R.banner('over', R.noticeKind(SAID.overFirst + m.file + SAID.overLast)).text), R.MAPS.map((m) => 'Welcome back. Your match on ' + m.name + ' is over. Everything is as you left it: change what you like and press START for another.'));
 same('noticeKind of what is no text is a notice with no words', [null, undefined, 42, {}].map((t) => R.noticeKind(t)), [{ kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }]);
 
 // picture 15, strip by strip: [kind, what the page knows (the arguments), the words, the colour of the strip ('' green, 'warn' gold), the button ('' none)]

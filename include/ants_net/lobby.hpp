@@ -99,6 +99,24 @@ private:
     uint64_t taken_{0};
 };
 
+/// Protocol 16, the room after a match: what a lobby room keeps of itself when its match is over, so that a room of the same code can be made again with its people in their colours, the plan as the leader left it
+/// and the leader still the leader (HostLobby::make_return takes it, HostLobby::restore_return puts it back into a fresh lobby room; the server's RoomManager keeps it between the two). The keys are secrets: it lives in
+/// the server's memory and goes nowhere else.
+struct LobbyReturn {
+    struct Person {
+        uint8_t seat{0};                     // the colour
+        std::string name;
+        SeatKey key{};
+        uint32_t join_order{0};              // the place in the order of the Welcomes: the earliest person still here leads
+        uint8_t platform{0};
+    };
+    std::string map;                         // the file name of the room's map
+    std::array<PlanKind, sim::MAX_PLAYERS> plan{};
+    uint8_t team_a{kNoTeam};
+    uint8_t team_b{kNoTeam};
+    std::vector<Person> people;              // the persons who came out of the match (a person who left it is not here: its colour is open)
+};
+
 class HostLobby {
 public:
     struct Config {
@@ -283,6 +301,14 @@ public:
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
     std::vector<Event> take_events();
+    /// The room after a match (protocol 16, a lobby room whose match began: `keep` has a bit for each seat whose person is to come back, the seats that did not leave the match): what the room keeps of
+    /// itself, see LobbyReturn. Only in the phase Begun or Loading; an empty result (no map, no people) for any other room.
+    LobbyReturn make_return(uint8_t keep) const;
+    /// Puts a LobbyReturn into a FRESH lobby room (open, nobody in it, nothing planned yet): the map, the plan and the teams are the record's, every person of it holds its colour as a seat that is held
+    /// (no connection: the person's page comes back with its key, as after a lost link) for `hold_ms` from `now_ms` (0: the room's own hold), the earliest of them leads, and when the person takes the seat back
+    /// the room says `notice` to it once (a Chat message from kRoomSender; none when empty). False, with nothing changed, unless the room is fresh and the record is one that make_return could have made (a seat
+    /// twice, a name that is no name, a key that is zero or twice, a plan kind that does not exist).
+    bool restore_return(const LobbyReturn& record, uint32_t now_ms, uint32_t hold_ms, const std::string& notice);
 
 private:
     struct Guest {
@@ -314,6 +340,8 @@ private:
         ChatBudget removes;                      // the RemoveMsgs of this guest that could be done (flood.hpp: a burst of kRemoveBurst, then kRemovesPerSecond a second)
         uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
+        uint32_t hold_ms{0};                     // a lobby room: the hold of this seat when it is not the room's own (0: Config::hold_ms); a seat that restore_return gave to a person that is still in the match's game
+        std::string back_notice;                 // ... and what the room says to the person once, when it takes the seat back
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
         bool active{false};

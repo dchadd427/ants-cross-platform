@@ -139,6 +139,14 @@ void Room::set_lobby_services(LobbyServices services) {
     lobby_.set_map_choice([this](const std::string& name) { return services_.choose_map ? services_.choose_map(name) : std::string(); });       // (a server that offers no maps takes none of a plan)
 }
 
+bool Room::restore_return(const net::LobbyReturn& record, uint32_t now_ms, uint32_t hold_ms) {
+    if (!spec_.lobby || state_ != RoomState::Waiting) return false;
+    const std::string notice = std::string(net::kNoticeMatchOverFirst) + record.map + net::kNoticeMatchOverLast;
+    if (!lobby_.restore_return(record, now_ms, hold_ms, notice)) return false;
+    arrived_ = true;                                             // (the room has people: the manager must not take its place for another before the room has looked)
+    return true;
+}
+
 // The owner forgets a lobby room at once (nobody was in it for a while, or its place is needed): its clients are dropped, and the room goes without a word in the log or a result file (it did not end: no
 // match was begun, nobody played)
 void Room::forget(uint32_t now_ms) {
@@ -324,6 +332,14 @@ void Room::finish(const std::string& reason, uint32_t now_ms) {
     reason_ = reason;
     state_ = RoomState::Finished;
     ended_ms_ = now_ms;
+    if (spec_.lobby && session_) {                               // the room after the match (protocol 16): its persons are the seats that did not leave the match (a seat that was dropped, by its own Leave, by the vote or by the cap, is open again)
+        uint8_t keep = 0;
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const net::Attendance::State st = session_->attendance().state(seat);
+            if (st == net::Attendance::State::Present || st == net::Attendance::State::Absent || st == net::Attendance::State::CatchingUp) keep = static_cast<uint8_t>(keep | (1u << seat));
+        }
+        return_ = lobby_.make_return(keep);
+    }
     if (session_) session_->freeze();
     end_log(now_ms);
     record_discard();                                            // the match is over: nothing to bring back after a restart

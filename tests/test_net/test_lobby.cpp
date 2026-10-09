@@ -5306,6 +5306,116 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("N4.38 The Room After A Match (Protocol 16): A Lobby Room Makes A Record Of Itself (make_return: The Map, The Plan, The Teams, The Persons That Are To Come Back With Their Colours, Names, Keys And Places In The Order Of The Welcomes) And A Fresh Lobby Room Takes It (restore_return): Every Person Holds Its Colour As A Held Seat For A Hold Of Its Own, The Earliest Leads, The Person That Takes The Seat Back With Its Key Is Told Once By The Room, After It The Seat Is Held For The Room's Own Time; A Record That Is Not One Is Refused Whole, A Room That Is Not Fresh Or Not A Lobby Takes None")  {
+        using K = PlanKind;
+        std::string note = "Your match on TINY.LVL is over.";
+        LobbyReturn record;
+        SeatKey ann_key{}, cat_key{};
+        {   // what the record holds: the people who are to come back (not Bob: the seat is not in `keep`), the plan, the teams and the map; a room that is no lobby room makes an empty one
+            Room room(lobby_room_config(300));
+            room.host.set_map("SMALL.LVL");
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            ann_key = room.guests[ann].lobby->key();
+            cat_key = room.guests[cat].lobby->key();
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Hard}, 0, 1)));
+            room.run(100);
+            record = room.host.make_return(static_cast<uint8_t>((1u << 0) | (1u << 2) | (1u << 3)));       // (seat 3 holds nobody: nothing is made of it)
+            ASSERT_EQ(record.map, std::string("SMALL.LVL"));
+            ASSERT_TRUE(record.plan[0] == K::Open && record.plan[3] == K::Hard && record.team_a == 0 && record.team_b == 1);
+            ASSERT_EQ(record.people.size(), size_t{2});
+            ASSERT_TRUE(record.people[0].seat == 0 && record.people[0].name == "Ann" && record.people[0].key == ann_key && record.people[0].join_order == 1);
+            ASSERT_TRUE(record.people[1].seat == 2 && record.people[1].name == "Cat" && record.people[1].key == cat_key && record.people[1].join_order == 3);
+            ASSERT_TRUE(room.guests[bob].lobby->key() != ann_key);
+            Room plain(keyed_server_config(301));                                                          // (not a lobby room: nothing to keep)
+            plain.join_seat("Ann");
+            const LobbyReturn none = plain.host.make_return(0xFF);
+            ASSERT_TRUE(none.people.empty() && none.map.empty());
+        }
+        {   // a fresh lobby room takes it: the colours are held, the earliest leads, the plan is the record's, the room says nothing yet
+            Room room(lobby_room_config(310));
+            ASSERT_TRUE(room.host.restore_return(record, room.now, 5000, note));
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2"));
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));
+            ASSERT_EQ(room.host.map_name(), std::string("SMALL.LVL"));
+            ASSERT_TRUE(room.host.held(0) && room.host.held(2) && !room.host.held(1) && room.host.humans() == 2);
+            ASSERT_EQ(room.host.leader(), 0);
+            ASSERT_FALSE(room.host.restore_return(record, room.now, 5000, note));                          // (no longer fresh)
+            // Cat's page comes first: she takes her seat back (the Welcome is the seat's, with her key), is told once, and Ann (held) is still the leader
+            ClientLobby::Config cc = page_config("Cat");
+            cc.key = cat_key;
+            const size_t cat = join_with(room, cc);
+            room.run(300);
+            ASSERT_TRUE(room.guests[cat].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[cat].lobby->my_seat() == 2 && room.guests[cat].lobby->key() == cat_key);
+            ASSERT_FALSE(room.guests[cat].lobby->is_leader());
+            ASSERT_EQ(room.host.leader(), 0);
+            ASSERT_EQ(room.host.takeovers(), 1u);
+            ASSERT_EQ(notices_of(*room.guests[cat].lobby), std::vector<std::string>{note});
+            // her link ends and she comes again: the room's own hold applies now (a minute), and she is not told again
+            room.guests[cat].client_end->close();
+            room.run(300);
+            ASSERT_TRUE(room.host.held(2));
+            ClientLobby::Config again = page_config("Cat");
+            again.key = cat_key;
+            const size_t cat2 = join_with(room, again);
+            room.run(300);
+            ASSERT_TRUE(room.guests[cat2].lobby->my_seat() == 2 && !room.host.held(2));
+            ASSERT_TRUE(notices_of(*room.guests[cat2].lobby).empty());
+            // Ann does not come: her hold (5 s here, not the room's minute) ends, her colour opens, and the lead goes to Cat
+            room.run(5000);
+            ASSERT_FALSE(room.host.occupied(0));
+            ASSERT_EQ(room.host.hold_expiries(), 1u);
+            ASSERT_EQ(room.host.leader(), 2);
+            ASSERT_TRUE(room.host.occupied(2));
+        }
+        {   // hold 0: the room's own hold (a minute): nobody has lost a seat after 59 s and everybody has after 61 s
+            Room room(lobby_room_config(320));
+            ASSERT_TRUE(room.host.restore_return(record, room.now, 0, std::string()));
+            room.run(59000);
+            ASSERT_EQ(room.host.humans(), size_t{2});
+            room.run(2000);
+            ASSERT_EQ(room.host.humans(), size_t{0});
+        }
+        {   // a record that is not one: refused whole, the room stays fresh (and can take a good one)
+            const auto refused = [&](const std::function<void(LobbyReturn&)>& spoil) {
+                Room room(lobby_room_config(330));
+                LobbyReturn bad = record;
+                spoil(bad);
+                const bool taken = room.host.restore_return(bad, room.now, 1000, note);
+                return !taken && layout(room.host.room()).empty() && room.host.humans() == 0 && room.host.restore_return(record, room.now, 1000, note);
+            };
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[1].seat = 0; }));                            // two persons in one colour
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[1].seat = 4; }));                            // a colour that does not exist
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[0].key = SeatKey{}; }));                     // a key that is zero
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[1].key = r.people[0].key; }));               // two seats with one key
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[0].join_order = 0; }));                      // no place in the order of the Welcomes
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.people[1].join_order = r.people[0].join_order; }));  // the same place twice
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.plan[2] = static_cast<PlanKind>(kPlanKindLast + 1); }));
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.team_a = 2; r.team_b = 1; }));                      // a pair that is not a < b
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.team_a = 0; r.team_b = kNoTeam; }));                // half a pair
+            ASSERT_TRUE(refused([](LobbyReturn& r) { r.map = "bad\tname.lvl"; }));                          // a map name that is no name
+            Room not_fresh(lobby_room_config(331));
+            not_fresh.join_seat("Dee");
+            ASSERT_FALSE(not_fresh.host.restore_return(record, not_fresh.now, 1000, note));                // somebody is in it already
+            ASSERT_EQ(layout(not_fresh.host.room()), std::string("Dee@0"));
+            Room plain(keyed_server_config(332));                                                          // not a lobby room
+            ASSERT_FALSE(plain.host.restore_return(record, plain.now, 1000, note));
+            ASSERT_TRUE(layout(plain.host.room()).empty());
+        }
+        {   // a record without a map keeps the room's own; a record with no person is a plan alone and is taken
+            Room room(lobby_room_config(340));
+            room.host.set_map("GAUNTLET.LVL");
+            LobbyReturn nobody = record;
+            nobody.people.clear();
+            nobody.map.clear();
+            ASSERT_TRUE(room.host.restore_return(nobody, room.now, 1000, note));
+            ASSERT_EQ(room.host.map_name(), std::string("GAUNTLET.LVL"));
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));
+            ASSERT_EQ(room.host.humans(), size_t{0});
+        }
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

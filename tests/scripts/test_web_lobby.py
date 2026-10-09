@@ -307,8 +307,8 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("var LOBBY_KEY = 'ants.lobby';", script)
         self.assertEqual(sorted(set(re.findall(r"window\.sessionStorage\.\w+\(LOBBY_KEY", script))), ["window.sessionStorage.getItem(LOBBY_KEY", "window.sessionStorage.removeItem(LOBBY_KEY", "window.sessionStorage.setItem(LOBBY_KEY"])
         self.assertIn("if (!v || typeof v !== 'object' || !Net.publicRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;", script)
-        self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", script)       # (Back from a match: the room is the match's now, this page makes another)
-        self.assertIn("forgetSession();                           // (Back from the match makes a room again: this one is the match's now)", script)
+        self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", script)       # (Back from a match: the page asks for its room again with the key)
+        self.assertIn("saveSession();                             // (the tab keeps this room: the match's end brings everybody back to it, and the key of the seat is what takes the colour again)", script)
         # which page this is: an address that asks for the test room (a map, or a room with a create block or play=here) is the test room, everything else the lobby
         self.assertIn("if (asksMap || (asksRoom && (wantedBlock !== null || params.get('play') === 'here'))) {", script)
         self.assertIn("runLobby();", script)
@@ -376,7 +376,8 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("try { window.localStorage.setItem(entry.name, entry.text); }", start)
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", start)
         self.assertLess(start.index("window.localStorage.setItem(entry.name, entry.text)"), start.index("window.location.assign("))
-        self.assertLess(start.index("forgetSession();"), start.index("window.location.assign("))                 # (Back from the match makes another room)
+        self.assertNotIn("forgetSession();", start)                                                              # (the tab keeps the room: the end of the match brings the page back to it)
+        self.assertLess(start.index("saveSession();"), start.index("window.location.assign("))
         self.assertIn("c.on('starting', mine(onStarting));", script)
         # the Rejoin button of the strip at the top does the same for a match that still runs
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", script)

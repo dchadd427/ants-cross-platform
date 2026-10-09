@@ -966,7 +966,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const gameArgs = P2.joinArguments(new URL(want).search, true, 'play.test').args;
     check('... the game page reads that address as a join of this room and seat that asks for no name, and holds the seat (its own look at the storage finds the entry): it goes straight in', gameArgs.join(' ') === '--join-url wss://play.test/ws --room ' + code + ' --seat 0 --name Maya' && P2.asksForName(new URL(want).search) === false &&
           shell.holdsThisSeat(new URL(want).search, gameArgs, { length: Object.keys(env.storage.data).length, key: (i) => Object.keys(env.storage.data)[i] || null, getItem: (k) => (k in env.storage.data ? env.storage.data[k] : null), removeItem() {} }, Date.now()) === true);
-    check('the lobby does not leave the room at START: no Leave message, the socket stays open (the game\'s own Hello takes the seat over), and the tab forgets its room (Back makes a new one)', s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && env.session.data['ants.lobby'] === undefined);
+    check('the lobby does not leave the room at START: no Leave message, the socket stays open (the game\'s own Hello takes the seat over), and the tab keeps its room (the end of the match brings the page back to it with the key of the seat)', s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && JSON.parse(env.session.data['ants.lobby']).c === code);
     check('... the strip of the older match is gone: the page is on its way', env.$('rejoin').hidden);
     (env.win.listeners.storage || []).forEach((fn) => fn({}));
     check('... and a change of the storage from another tab does not bring the strip back for the entry that was just written (the page is on its way to that very match)', env.$('rejoin').hidden);
@@ -1004,7 +1004,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0, flags: 7 } });
     const code = helloRoom(s.sent[0]);
     same('the first Room that a page hears already says START was pressed: the page goes to the game page of its seat, as if it had seen the change', env.assigned, ['https://play.test/?join=/ws&room=' + code + '&seat=1&name=Sam&aspect=16:9']);
-    check('... with its key in the browser\'s storage, and the room forgotten by the tab', !!env.storage.data['ants.rejoin.' + code + '.1'] && env.session.data['ants.lobby'] === undefined);
+    check('... with its key in the browser\'s storage, and the room kept by the tab (the page comes back to it when the match is over)', !!env.storage.data['ants.rejoin.' + code + '.1'] && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && JSON.parse(env.session.data['ants.lobby']).c === code);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, flags: 7 }));
     check('... once (a second Room of the same wait leads nowhere else)', env.assigned.length === 1);
 }
@@ -1032,6 +1032,18 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('"Maya moved you to Blue." shows no strip (the colour and the toast say it)', env.$('banner').hidden);
     s.receive(chatFromRoom('No teams: the teams need a pair.'));
     check('... another line of the room is a strip of its own, with the server\'s words', !env.$('banner').hidden && env.$('banner-text').textContent === 'No teams: the teams need a pair.');
+}
+{   // the room after a match (protocol 16): the page that comes back with its key is told once by the room, and the strip is picture 8's, with the map's name
+    const chatFromRoom = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
+    const env = runLobby('', { 'ants.name': 'Sam' }, { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Sam', o: 0 }) } });
+    const s = env.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    check('a tab that comes back to its room with the key of its seat asks for that room and that seat (the Hello has the code and the key)', helloRoom(s.sent[0]) === 'abc234' && env.sockets.length === 1);
+    s.receive(chatFromRoom('Your match on TREASURE.LVL is over.'));
+    check('"Your match on TREASURE.LVL is over." is picture 8\'s strip, green, with the map\'s name and an OK button', !env.$('banner').hidden && env.$('banner-text').textContent === 'Welcome back. Your match on Treasure is over. Everything is as you left it: change what you like and press START for another.' && env.$('banner').className === 'banner' && env.$('banner-x').textContent === 'OK');
+    env.$('banner-x').click();
+    check('... which OK takes away', env.$('banner').hidden);
+    s.receive(chatFromRoom('Your match on SOMEWHERE.LVL is over.'));
+    check('... and a map that the page does not list is named as the room says it (the file name without .LVL)', env.$('banner-text').textContent.indexOf('Your match on SOMEWHERE is over.') !== -1);
 }
 {   // a refusal that the page has no word for: a link makes the page's own room; the page's own room that is refused says "try again" with a button that does
     const link = runLobby('?room=k7m2xq', {});

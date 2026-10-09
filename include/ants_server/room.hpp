@@ -58,6 +58,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -349,6 +350,15 @@ public:
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
     bool lobby_waiting() const noexcept { return spec_.lobby && state_ == RoomState::Waiting; }
+    /// The room after a match (protocol 16). A lobby room whose match ended by its rules (Finished) holds what the next room of its code needs: the map, the plan, the teams and the persons that did not leave the
+    /// match (net::LobbyReturn); null for every other room, and while the match runs. The manager takes it into its own keeping (mark_return_taken) when it sees it, because a finished room is forgotten
+    /// after its keep time and the people take longer than that to come back.
+    const net::LobbyReturn* lobby_return() const noexcept { return return_.has_value() ? &*return_ : nullptr; }
+    bool return_taken() const noexcept { return return_taken_; }
+    void mark_return_taken() noexcept { return_taken_ = true; }
+    /// Puts a record of a finished lobby room into this one, a FRESH lobby room (Waiting, nobody in it): its persons hold their colours as seats that wait for their keys for `hold_ms` (0: the room's own), the
+    /// plan and the teams are the record's, and each person that takes its seat back is told once that its match is over (net::kNoticeMatchOverFirst). False, with nothing changed, for any other room or a bad record.
+    bool restore_return(const net::LobbyReturn& record, uint32_t now_ms, uint32_t hold_ms);
     /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody) and that no Hello has reached since (the room reads it in its next pass: a lobby that a visitor was just
     /// sent to is not empty, whatever the room's last pass saw), and for how long (0 for every other room)
     bool empty_lobby() const noexcept { return lobby_waiting() && empty_ && !arrived_; }
@@ -441,6 +451,8 @@ private:
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
     bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
     bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)
+    std::optional<net::LobbyReturn> return_;          // a lobby room whose match ended by its rules: the room after it (see lobby_return)
+    bool return_taken_{false};
     uint32_t seen_activity_{0};              // a lobby room: HostLobby::activity() at the last pass, and since when it is what it is
     uint32_t active_ms_{0};
     uint32_t empty_since_ms_{0};

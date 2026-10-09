@@ -11257,6 +11257,261 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(reported);
     } TEST_END();
 
+    // A lobby room's match, played to its end: Pia (Green), Bob (Red) and Cy (Blue) join as pages, the plan puts an Easy bot in Black, START hands them to their games; Cy leaves the match on purpose (his seat is dropped),
+    // then Bob and Pia resign and the bot is alone (the match ends by its rules). Returns the three keys; `games` holds the games that played.
+    struct LobbyMatch {
+        net::SeatKey pia_key{}, bob_key{}, cy_key{};
+        Client* pia{nullptr};
+        Client* bob{nullptr};
+        Client* cy{nullptr};
+        Client* pia_game{nullptr};
+        Client* bob_game{nullptr};
+        Client* cy_game{nullptr};
+    };
+    const auto play_lobby_match = [](World& w, const std::string& code, bool cy_leaves, LobbyMatch& m) -> bool {
+        m.pia = &w.connect_page("Pia", code, lobby_block_of());
+        m.bob = &w.connect_page("Bob", code, lobby_block_of());
+        m.cy = &w.connect_page("Cy", code, lobby_block_of());
+        m.pia_key = m.pia->lobby->key();
+        m.bob_key = m.bob->lobby->key();
+        m.cy_key = m.cy->lobby->key();
+        w.run(300);
+        if (!m.pia->lobby->request_plan(plan_msg({K::Open, K::Open, K::Open, K::Easy}, net::kNoTeam, net::kNoTeam, "tiny.lvl"))) return false;
+        w.run(300);
+        if (!m.pia->lobby->request_start()) return false;
+        w.run(200);
+        m.pia_game = &w.connect_game("Pia", code, m.pia_key);
+        m.bob_game = &w.connect_game("Bob", code, m.bob_key);
+        m.cy_game = &w.connect_game("Cy", code, m.cy_key);
+        w.run(6500);                                                                      // (the first turn is sealed after the "Get ready" dialog: commands sent before it are not heard)
+        if (w.status(code).state != RoomState::Running || w.status(code).turns < 20) return false;
+        if (cy_leaves) {
+            m.cy_game->session->leave();                                                  // Cy leaves the match: his Drop is sealed, his seat is gone for good
+            w.run(500);
+        }
+        for (Client* c : {m.bob_game, m.pia_game}) {
+            sim::Command quit;
+            quit.type = sim::CommandType::Quit;
+            quit.issuer = c->lobby->my_seat();
+            if (!c->session->submit(quit)) return false;
+        }
+        for (int i = 0; i < 100 && w.status(code).state != RoomState::Finished; ++i) w.run(200);
+        return w.status(code).state == RoomState::Finished;
+    };
+
+    TEST_CASE("S3.166 The Room After A Match (Protocol 16): When A Lobby's Match Ends By Its Rules, The Page That Comes Back For Its Code With Its Key Finds The Lobby Again: Its Colour (Held For The Others Who Are On Their Way), The Plan As The Leader Left It, The Map, And The Lead; Each Person Who Takes The Seat Back Is Told Once That The Match Is Over; The Person Who Left The Match Is Not In It; The Same Keys Start The Next Match")  {
+        World w(lobby_limits());
+        LobbyMatch m;
+        ASSERT_TRUE(play_lobby_match(w, "back0001", true, m));
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);                                   // (the record is the manager's: the finished room is forgotten after half a minute)
+        // Pia's page comes with its key: the lobby is there again, she leads, the plan is the leader's
+        w.next_key = m.pia_key;
+        Client& pia = w.connect_page("Pia", "back0001", lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->phase() == net::ClientLobby::Phase::InRoom);
+        ASSERT_EQ(static_cast<int>(pia.lobby->my_seat()), 0);
+        ASSERT_TRUE(!pia.lobby->created());                                                     // (her seat, taken back: not a room that was made for her)
+        ASSERT_TRUE(pia.lobby->is_leader());
+        ASSERT_TRUE(pia.lobby->key() == m.pia_key);
+        const net::RoomMsg& room = pia.lobby->room();
+        ASSERT_TRUE(room.lobby() && !room.starting() && room.in_game == 0);
+        ASSERT_EQ(room.map_name, std::string("TINY.LVL"));
+        ASSERT_TRUE(room.plan[0] == K::Open && room.plan[1] == K::Open && room.plan[2] == K::Open && room.plan[3] == K::Easy);
+        ASSERT_TRUE(room.slots[0].state == net::SlotState::Client && room.slots[0].name == "Pia");
+        ASSERT_TRUE(room.slots[1].state == net::SlotState::Client && room.slots[1].name == "Bob");        // (held for Bob: he is on his way back from the results)
+        ASSERT_TRUE(room.slots[2].state == net::SlotState::Empty);                             // (Cy left the match: his colour is open)
+        ASSERT_TRUE(room.slots[3].state == net::SlotState::Empty);                             // (the plan's bot is seated again at START)
+        RoomStatus s = w.status("back0001");
+        ASSERT_TRUE(s.lobby && s.state == RoomState::Waiting && !s.starting);
+        ASSERT_EQ(s.plan, std::string("oooe -"));
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 0);                                   // (the record went into the room)
+        // she is told once, in the room's own words
+        size_t told = 0;
+        for (const net::ChatLine& line : pia.room_chat) told += line.notice() && line.text == "Your match on TINY.LVL is over." ? 1u : 0u;
+        ASSERT_EQ(static_cast<int>(told), 1);
+        // Bob's page: his seat, the notice, and he is not the leader
+        w.next_key = m.bob_key;
+        Client& bob = w.connect_page("Bob", "back0001", lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::InRoom && bob.lobby->my_seat() == 1 && !bob.lobby->created() && !bob.lobby->is_leader());
+        told = 0;
+        for (const net::ChatLine& line : bob.room_chat) told += line.notice() && line.text == "Your match on TINY.LVL is over." ? 1u : 0u;
+        ASSERT_EQ(static_cast<int>(told), 1);
+        // Cy's page, with the key of a seat that was dropped, is a newcomer: the open Blue, no notice
+        w.next_key = m.cy_key;
+        Client& cy = w.connect_page("Cy", "back0001", lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(cy.lobby->phase() == net::ClientLobby::Phase::InRoom && cy.lobby->my_seat() == 2 && !cy.lobby->is_leader());
+        ASSERT_TRUE(cy.lobby->key() != m.cy_key && !net::key_is_zero(cy.lobby->key()));
+        for (const net::ChatLine& line : cy.room_chat) ASSERT_FALSE(line.notice() && line.text.find("is over") != std::string::npos);
+        // the next match: Pia presses START, the games take their seats with the same keys, the plan's bot sits down again
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(200);
+        ASSERT_TRUE(w.status("back0001").starting);
+        w.connect_game("Pia", "back0001", m.pia_key);
+        w.connect_game("Bob", "back0001", m.bob_key);
+        w.connect_game("Cy", "back0001", cy.lobby->key());
+        w.run(3500);
+        s = w.status("back0001");
+        ASSERT_TRUE(s.state == RoomState::Running);
+        ASSERT_EQ(static_cast<int>(s.joined), 4);
+        ASSERT_TRUE(s.bots.size() == 1 && s.bots[0].seat == 3 && s.bots[0].level == "easy" && s.bots[0].fill);
+    } TEST_END();
+
+    TEST_CASE("S3.167 The Room After A Match Is The Room Of Its Code For Everybody: A Visitor Who Follows The Link First Is A Newcomer In It, Not The Host Of A New Room (Pia Is Held As The Leader), Gets No Notice, And Takes The Open Colour; A Game's Hello With A Key Is Still NoSuchRoom (The Match Is Over) And Does Not Spend The Record; A Match In Which Nobody Stayed Leaves No Record, And Neither Does A Room That Was Closed")  {
+        World w(lobby_limits());
+        LobbyMatch m;
+        ASSERT_TRUE(play_lobby_match(w, "back0002", true, m));
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+        // a game with Bob's key: the match of the key is over
+        Client& game = w.connect_game("Bob", "back0002", m.bob_key);
+        w.run(300);
+        ASSERT_TRUE(game.lobby->phase() == net::ClientLobby::Phase::Rejected && game.lobby->reject_reason() == net::RejectReason::NoSuchRoom);
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+        // Dee follows the link (the lobby block, no key, a name card first on the page): she is in the room, in the open colour, and Pia still leads it
+        Client& dee = w.connect_page("Dee", "back0002", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(dee.lobby->phase() == net::ClientLobby::Phase::InRoom);
+        ASSERT_TRUE(!dee.lobby->created() && !dee.lobby->is_leader());
+        ASSERT_EQ(static_cast<int>(dee.lobby->my_seat()), 2);
+        ASSERT_EQ(static_cast<int>(dee.lobby->room().leader), 0);                                // (Pia holds the lead: she is held, and she counts as present)
+        ASSERT_TRUE(dee.lobby->room().slots[0].name == "Pia" && dee.lobby->room().slots[1].name == "Bob");
+        ASSERT_TRUE(dee.lobby->room().plan[3] == K::Easy);
+        for (const net::ChatLine& line : dee.room_chat) ASSERT_FALSE(line.notice() && line.text.find("is over") != std::string::npos);
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 0);
+        // Pia comes back and takes the lead that she held
+        w.next_key = m.pia_key;
+        Client& pia = w.connect_page("Pia", "back0002", lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->my_seat() == 0 && pia.lobby->is_leader() && pia.lobby->key() == m.pia_key);
+        ASSERT_EQ(static_cast<int>(pia.lobby->room().leader), 0);
+        // a match in which nobody stayed: all three leave on purpose, the bot wins, and there is nobody to come back
+        const LobbyMatch none = [&]() {
+            LobbyMatch n;
+            n.pia = &w.connect_page("Pia", "back0003", lobby_block_of());
+            n.bob = &w.connect_page("Bob", "back0003", lobby_block_of());
+            n.pia_key = n.pia->lobby->key();
+            n.bob_key = n.bob->lobby->key();
+            w.run(300);
+            n.pia->lobby->request_plan(plan_msg({K::Open, K::Open, K::Open, K::Easy}));
+            w.run(300);
+            n.pia->lobby->request_start();
+            w.run(200);
+            n.pia_game = &w.connect_game("Pia", "back0003", n.pia_key);
+            n.bob_game = &w.connect_game("Bob", "back0003", n.bob_key);
+            w.run(3500);
+            for (Client* c : {n.pia_game, n.bob_game}) c->session->leave();
+            for (int i = 0; i < 100 && w.status("back0003").state != RoomState::Finished; ++i) w.run(200);
+            return n;
+        }();
+        ASSERT_TRUE(w.status("back0003").state == RoomState::Finished);
+        ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 0);
+        w.next_key = none.pia_key;
+        Client& stale = w.connect_page("Pia", "back0003", lobby_block_of());                    // (the key of a seat that was dropped: not a newcomer's place in a room that is not there: the old rule, a key never makes a room)
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(stale.lobby->phase() == net::ClientLobby::Phase::Rejected && stale.lobby->reject_reason() == net::RejectReason::NoSuchRoom);
+    } TEST_END();
+
+    TEST_CASE("S3.168 The Room After A Match Is Bounded: A Record Is Kept For lobby_return_keep_ms From The End Of The Match And Is Gone After It (A Page's Key Is Then NoSuchRoom, A Page's Link Makes A Fresh Lobby), A Person Who Does Not Come Back Holds Its Colour For lobby_return_hold_ms And Then It Is Open, At Most lobby_return_max Records Are Kept (The Oldest Goes First), A Full Pool Of Lobbies Leaves The Record For The Next Hello (NoSuchRoom Now), And lobby_return_keep_ms 0 Keeps None")  {
+        {   // the keep time, and the hold of the seats that do not come back
+            ServerLimits l = lobby_limits();
+            l.lobby_return_keep_ms = 8000;
+            l.lobby_return_hold_ms = 3000;
+            World w(l);
+            LobbyMatch m;
+        ASSERT_TRUE(play_lobby_match(w, "back0004", true, m));
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+            w.next_key = m.pia_key;
+            Client& pia = w.connect_page("Pia", "back0004", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->phase() == net::ClientLobby::Phase::InRoom && w.status("back0004").joined == 2);       // (Pia and Bob's held seat)
+            w.run(3500);                                                                          // (Bob did not come within the hold)
+            ASSERT_EQ(static_cast<int>(w.status("back0004").joined), 1);
+            ASSERT_TRUE(pia.lobby->room().slots[1].state == net::SlotState::Empty);
+            w.next_key = m.bob_key;                                                               // (his key now fits no seat: he is a newcomer)
+            Client& bob = w.connect_page("Bob", "back0004", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::InRoom && bob.lobby->my_seat() == 1 && bob.lobby->key() != m.bob_key);
+        }
+        {   // the record is gone after the keep time
+            ServerLimits l = lobby_limits();
+            l.lobby_return_keep_ms = 5000;
+            World w(l);
+            LobbyMatch m;
+        ASSERT_TRUE(play_lobby_match(w, "back0005", true, m));
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+            w.run(5500);
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 0);
+            w.next_key = m.pia_key;
+            Client& pia = w.connect_page("Pia", "back0005", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->phase() == net::ClientLobby::Phase::Rejected && pia.lobby->reject_reason() == net::RejectReason::NoSuchRoom);
+            Client& link = w.connect_page("Dee", "back0005", lobby_block_of());                   // (the link makes a fresh lobby, as in v0.12.0: the finished room is replaced)
+            w.run(300);
+            ASSERT_TRUE(link.lobby->phase() == net::ClientLobby::Phase::InRoom && link.lobby->created() && link.lobby->is_leader());
+            ASSERT_TRUE(link.lobby->room().slots[1].state == net::SlotState::Empty && w.status("back0005").joined == 1);
+        }
+        {   // lobby_return_keep_ms 0: no record at all
+            ServerLimits l = lobby_limits();
+            l.lobby_return_keep_ms = 0;
+            World w(l);
+            LobbyMatch m;
+            ASSERT_TRUE(play_lobby_match(w, "back0006", true, m));
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 0);
+        }
+        {   // two finished lobbies, room for one record: the older one goes
+            ServerLimits l = lobby_limits();
+            l.lobby_return_max = 1;
+            l.demo_rooms = 4;
+            World w(l);
+            LobbyMatch first;
+        ASSERT_TRUE(play_lobby_match(w, "back0007", true, first));
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+            LobbyMatch second;
+        ASSERT_TRUE(play_lobby_match(w, "back0008", true, second));
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+            w.next_key = first.pia_key;
+            Client& pia1 = w.connect_page("Pia", "back0007", lobby_block_of());
+            w.next_key = second.pia_key;
+            Client& pia2 = w.connect_page("Pia", "back0008", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia1.lobby->phase() == net::ClientLobby::Phase::Rejected && pia1.lobby->reject_reason() == net::RejectReason::NoSuchRoom);
+            ASSERT_TRUE(pia2.lobby->phase() == net::ClientLobby::Phase::InRoom && pia2.lobby->my_seat() == 0 && pia2.lobby->key() == second.pia_key);
+        }
+        {   // a pool of one lobby that somebody is in: the room after the match has no place now, and keeps its record for a Hello that finds one
+            ServerLimits l = lobby_limits();
+            l.demo_lobbies = 1;
+            World w(l);
+            LobbyMatch m;
+        ASSERT_TRUE(play_lobby_match(w, "back0009", true, m));
+            Client& other = w.connect_page("Dee", "other001", lobby_block_of());                  // (the pool's one place: a lobby that somebody is in is never given up)
+            w.run(300);
+            ASSERT_TRUE(other.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            w.next_key = m.pia_key;
+            Client& pia = w.connect_page("Pia", "back0009", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->phase() == net::ClientLobby::Phase::Rejected && pia.lobby->reject_reason() == net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(static_cast<int>(w.mgr.return_count()), 1);
+            other.lobby->leave();                                                                 // (Dee goes: her lobby is empty and gives its place up to the next Hello)
+            w.run(300);
+            w.next_key = m.pia_key;
+            Client& again = w.connect_page("Pia", "back0009", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(again.lobby->phase() == net::ClientLobby::Phase::InRoom && again.lobby->my_seat() == 0 && again.lobby->key() == m.pia_key);
+        }
+    } TEST_END();
+
     TEST_CASE("S3.152 A Lobby Room From The Control Interface's Door (create_room): Only With What A Lobby Needs, And Its Numbers In Range; It Is Served Like Any Other: A Page Is Seated In It And Its Plan Chooses The Server's Maps") {
         World w(lobby_limits());
         const auto lobby_spec = [](const std::string& code) {

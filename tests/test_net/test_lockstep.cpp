@@ -11025,7 +11025,10 @@ void run_protocol16_tests() {
             {kNoticeMapColours, "This map cannot be played with these colours."},
             {kNoticeNoPlace, "The server has no place for another match right now: try again in a minute."},
             {kNoticeStartsFailed, "The match could not start a few times in a row: try again in a minute."},
+            {kNoticeMatchOverFirst, "Your match on "},                                         // (the start of a line: the file of the map follows, then the end)
+            {kNoticeMatchOverLast, " is over."},                                               // (the end of a line: the room that is back after a match says it once to each person)
         };
+        ASSERT_TRUE(std::string(kNoticeMatchOverFirst).size() + kMaxMapNameChars + std::string(kNoticeMatchOverLast).size() <= kMaxChatChars);      // (the longest map name still makes a line that fits)
         for (const auto& w : words) {
             ASSERT_TRUE(w.first == w.second);
             ASSERT_TRUE(w.first.size() <= kMaxChatChars);

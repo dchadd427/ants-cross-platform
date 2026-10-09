@@ -68,6 +68,13 @@ struct ServerLimits {
     uint32_t lobby_hold_ms{net::kLobbyHoldMs};
     uint32_t lobby_start_wait_ms{net::kLobbyStartWaitMs};
     uint32_t lobby_silence_ms{net::kLobbySilenceMs};
+    // The room after a match (protocol 16): when the match that a lobby began ends by its rules, the manager keeps a record of the room (the map, the plan, the teams and the persons that did not leave the match, with their
+    // keys) for `lobby_return_keep_ms` from the end, `lobby_return_max` of them at most (the oldest goes first). A page's Hello for that code in this time makes the lobby again with the record in it: each person holds its
+    // colour as a seat that waits for its key for `lobby_return_hold_ms` (they are on their way from the game page, which is open as long as they read the results), the plan and the leader are as they were. 0: the keep time
+    // is no time (no record is kept), and the rooms are what they were in v0.12.0.
+    uint32_t lobby_return_keep_ms{10u * 60u * 1000u};
+    uint32_t lobby_return_hold_ms{5u * 60u * 1000u};
+    size_t lobby_return_max{256};
     // How long a public room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
     uint32_t demo_wait_ms{10u * 60u * 1000u};
     // The maps that a create block may choose (file names of the maps folder, e.g. "SMALL.LVL"; the block's map_name is compared with them in any case)
@@ -214,6 +221,8 @@ public:
     BusyCounts busy(uint32_t now_ms) const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
+    /// The records of finished lobbies that wait for their people (see ServerLimits::lobby_return_keep_ms)
+    size_t return_count() const noexcept { return returns_.size(); }
     size_t pending_count() const noexcept { return pending_.size(); }
     uint64_t rooms_created() const noexcept { return created_; }
     uint64_t connections_refused() const noexcept { return refused_; }
@@ -269,6 +278,13 @@ private:
     bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
     /// The same for a page's lobby block (protocol 16): the lobby room, when the server offers lobbies and one can be had (the pool has a free place, or the lobby that has been empty the longest gives its place up)
     bool make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    /// A place in the pool of lobbies for one more room (free, or made free by the lobby that nobody is in, or the one that nobody has used for a long time); false when there is none
+    bool lobby_place(uint32_t now_ms);
+    /// The specification of a lobby room (protocol 16) of this server with `code` and `map`
+    RoomSpec lobby_spec(const std::string& code, const std::string& map) const;
+    /// The room after a match: takes the record of a finished lobby room into the manager's keeping (once), and makes the lobby of its code again from it when a page comes for it (the people sit in it as held seats)
+    void capture_return(Room& room, uint32_t now_ms);
+    bool make_returned_lobby(const std::string& code, uint32_t now_ms);
     bool evict_empty_lobby(uint32_t now_ms);
     bool evict_idle_lobby(uint32_t now_ms);
     /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay
@@ -289,6 +305,11 @@ private:
     LiveBoard live_board_;                       // (and the board of the matches that they record while they run: before the rooms, which take their match off it when they go)
     bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;
+    struct Return {                              // the room after a match (protocol 16): kept by the code of the lobby that played it
+        net::LobbyReturn record;
+        uint32_t ended_ms{0};
+    };
+    std::map<std::string, Return> returns_;
     bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due
     uint32_t next_stale_retry_ms_{0};
     std::vector<Restoring> restoring_;           // the records that wait for their replay, newest first (after the rooms: destroyed before them, with the log budget and the store still there)

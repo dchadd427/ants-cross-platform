@@ -339,6 +339,10 @@ inline constexpr const char* kNoticeMapLost = "This map could not be loaded: cho
 inline constexpr const char* kNoticeMapColours = "This map cannot be played with these colours.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
+/// The notice of the room after a match (protocol 16, to a person whose page takes its colour back in it): "Your match on SMALL.LVL is over." (kNoticeMatchOverFirst, the map's file name as the room names it,
+/// kNoticeMatchOverLast; the page puts the map's own name in the sentence of its strip). Sent once to each person that comes back with its key, to nobody else.
+inline constexpr const char* kNoticeMatchOverFirst = "Your match on ";
+inline constexpr const char* kNoticeMatchOverLast = " is over.";
 
 struct RoomMsg {
     struct Slot {

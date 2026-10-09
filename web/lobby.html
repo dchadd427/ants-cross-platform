@@ -446,7 +446,7 @@ their music and their sound: only the window you are in is heard). The match is 
     <h3>The other colours</h3><p>A colour that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their colour. It asks first, and the colour opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another colour, their team goes along.</p>
-    <h3>START!</h3><p>The host starts the match with whoever is in. An open colour stays empty. When the match is over, Leave Game takes you back to the front page, where a new room is ready.</p>
+    <h3>START!</h3><p>The host starts the match with whoever is in. An open colour stays empty. When the match is over everybody comes back to this room as it was.</p>
     <h3>When the host leaves</h3><p>A room lasts while anybody is in it. If the host leaves, the player who has been in the room longest becomes the host, and everybody is told. When the last player leaves, the room closes about a minute later, and a link to a room that is gone starts a new room for whoever opens it.</p>
     <div class="sheets"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></div>
 </div></div>
@@ -1116,7 +1116,7 @@ their music and their sound: only the window you are in is heard). The match is 
             $('rejoin').hidden = true;
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
-            forgetSession();                           // (Back from the match makes a room again: this one is the match's now)
+            saveSession();                             // (the tab keeps this room: the match's end brings everybody back to it, and the key of the seat is what takes the colour again)
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);
         }
         function shownTeam(seat) {
@@ -1178,7 +1178,7 @@ their music and their sound: only the window you are in is heard). The match is 
             c.on('moved', mine(onMoved));
             c.on('swapped', mine(onSwapped));
             c.on('host', mine(function (e) { showBanner('host', { guest: !e.you, leaver: e.before, host: e.name }); }));
-            c.on('notice', mine(function (e) { var n = Rules.noticeKind(e.text); if (n.kind !== 'moved') showBanner(n.kind, { server: n.server }); }));      // ('The host moved you to Blue.' is on screen already, in the colour and the toast: no strip)
+            c.on('notice', mine(function (e) { var n = Rules.noticeKind(e.text); if (n.kind !== 'moved') showBanner(n.kind, { server: n.server, map: n.map }); }));      // ('The host moved you to Blue.' is on screen already, in the colour and the toast: no strip)
             c.on('refused', mine(onRefused));
             c.on('removed', mine(function () { startOwn('removed'); }));
             c.on('superseded', mine(function () { offline = 'none'; showBanner('away'); render(); }));
@@ -1538,7 +1538,7 @@ their music and their sound: only the window you are in is heard). The match is 
         $('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });
 
         // ---- the page comes and goes ----
-        window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });       // (Back from the match: the room is the match's now, this page makes another)
+        window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });       // (Back from the match: the page asks for its room again with the key; the room is back when the match is over)
         document.addEventListener('visibilitychange', function () { if (!document.hidden && client) client.wake(); });
         window.addEventListener('online', function () { if (client) client.wake(); });
         GRID.forEach(function (seat) { var li = el('li'); li.setAttribute('data-i', String(seat)); lis[seat] = li; $('slots').appendChild(li); });
