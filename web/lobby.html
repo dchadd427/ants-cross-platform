@@ -376,10 +376,6 @@
             document.getElementById('banner').hidden = false;
             return;
         }
-        var SEATS = [
-            { name: 'Green', css: 'green' }, { name: 'Red', css: 'red' },
-            { name: 'Blue', css: 'blue' }, { name: 'Black', css: 'black' }
-        ];
         // The maps of the original game and the room alphabet come from front/lobby_rules.js (tests/scripts/web_lobby_rules_check.js); the blocks below were written before it and still read them by these names
         var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;
         var mapByKey = Rules.mapByKey;
@@ -629,11 +625,6 @@
             if (cls) e.className = cls;
             if (text !== undefined) e.textContent = text;
             return e;
-        }
-        function button(text, cls, onclick) {
-            var b = document.createElement('button');
-            b.type = 'button'; b.className = cls; b.textContent = text; b.addEventListener('click', onclick);
-            return b;
         }
         function say(text) {
             var t = $('toast');

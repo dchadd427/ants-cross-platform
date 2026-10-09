@@ -3539,7 +3539,7 @@
     <!-- END replay glue -->
     <script>
         // ---- The game's data (index.data, about 15 MB) ----
-        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/lobby.html asked for the same file at the same
+        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; several games on one page (the front page used to frame two or four) asked for the same file at the same
         // moment and one of them was refused by the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the
         // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
         // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through

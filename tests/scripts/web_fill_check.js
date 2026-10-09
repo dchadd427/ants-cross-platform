@@ -118,8 +118,8 @@ for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'A
     // (the room's teams are read by the one function of ?teams=: the same table, whatever the parameter is called)
 }
 // The meeting of ?fill= and the mouse-wheel zoom in one page (web/shell.html carries both): the page cancels the wheel and Safari's pinch over the game's CANVAS only (nothing on window,
-// document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/four.html (the games' frames) has no wheel
-// handler of its own, the outer page scrolls as usual. The setup screen's chat input is drawn on the canvas by the game: nothing of the page's is added for it.
+// document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/lobby.html (the front page) has no wheel
+// handler of its own, the page scrolls as usual. The setup screen's chat input is drawn on the canvas by the game: nothing of the page's is added for it.
 for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]]) {
     const text = fs.readFileSync(path, 'utf8');
     const receivers = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"](wheel|mousewheel|DOMMouseScroll|gesturestart|gesturechange|gestureend)['"]/g)].map((m) => m[1] + ':' + m[2]);

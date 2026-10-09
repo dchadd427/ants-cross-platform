@@ -10,8 +10,8 @@
 //   5. web/lobby.html as a whole, run with a small fake of the browser's DOM, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server:
 //      a plain visit makes a room at once under the remembered or picked name (Hello's name, room, key and the session storage that keeps them), the pencil renames the host, a link of somebody
 //      else's room (?room=) and a typed code (Have a code?) ask for a name first and send nothing before it, START hands the seat to the game page (ants.rejoin.<room>.<seat>; no leave()), the
-//      Rejoin strip, a name that is refused starts nothing, and the line of numbers in the footer.
-//      the browser checks (web_home_check.py and the web_lobby_*_check.js against the server), and the block REJOIN has its own check, web_rejoin_block_check.js.
+//      Rejoin strip, a name that is refused starts nothing, and the line of numbers in the footer. What a fake DOM cannot say (the look, the phone widths, the pointer, the real focus and the real
+//      WebSocket) is the job of the browser checks (web_home_check.py and the web_lobby_*_check.js against the server), and the block REJOIN has its own check, web_rejoin_block_check.js.
 // tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -1133,7 +1133,10 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     const link = runLobby('?room=k7m2xq', {});
     link.type('name-step-input', bad);
     link.$('name-step-go').click();
-    check('... the card of a link to a room: no socket, and the same message', link.sockets.length === 0 && link.$('name-step-msg').textContent.length > 8 && !link.$('name-step').hidden);
+    check('the card of a link to a room with a bad name (' + JSON.stringify(bad).slice(0, 16) + '): no socket, the reason, the card stays and the field says it is wrong (aria-invalid)', link.sockets.length === 0 && link.$('name-step-msg').textContent.length > 8 && !link.$('name-step').hidden && link.$('name-step-input').getAttribute('aria-invalid') === 'true');
+    link.type('name-step-input', 'Zed');
+    link.$('name-step-go').click();
+    check('... and the field says it is no longer wrong when the name is good (aria-invalid goes back to false, the message is empty, the page joins)', link.sockets.length === 1 && link.$('name-step-input').getAttribute('aria-invalid') === 'false' && link.$('name-step-msg').textContent === '');
     const typed = runLobby('', {});
     typed.arrive();
     typed.$('havecode').click();

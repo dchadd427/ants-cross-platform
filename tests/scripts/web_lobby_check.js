@@ -333,6 +333,14 @@ try {
     // the game page's whitelists of a join (what START and Rejoin of the lobby hand to the game, and what every link that somebody shared carries)
     // -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     {
+        // a room code as a screen shows it (two groups of three) is Rules.codeText (front/lobby_rules.js, pinned by tests/scripts/web_lobby_rules_check.js); what is held here is that the game page says the same
+        {   // ANTS_PAGE.codeText and the rules' codeText say the same on every kind of text
+            const TEXTS = ['k7m2xq', 'K7M2XQ', 'abcdef', 'abcdefgh', 'A_b-12', 'A_b-1234', 'mid-room', 'k7m2xq9', 'k7m2xq9pz', 'k7m 2xq', 'a', 'x'.repeat(32), 'demo-small-2p-x7k2', '', null, undefined, 5, {}, ['k7m2xq']];
+            const differ = TEXTS.filter((t) => P.codeText(t) !== Rules.codeText(t));
+            check('the game page shows a code as the rules\' codeText does (six characters in two groups of three, any other text as it is, no text as nothing) (' + differ.length + ' of ' + TEXTS.length + ' differ)', differ.length === 0);
+            same('the game page\'s codeText: "k7m2xq" is "k7m 2xq", five, seven, eight and nine characters stay as they are, a value that is no text is nothing', [P.codeText('k7m2xq'), P.codeText('abcde'), P.codeText('k7m2xq9'), P.codeText('abcdefgh'), P.codeText('k7m2xq9pz'), P.codeText(null)], ['k7m 2xq', 'abcde', 'k7m2xq9', 'abcdefgh', 'k7m2xq9pz', '']);
+        }
+
         // the whitelist of the game page: a plan or a team that is not what the page makes never reaches the game's arguments
         {
             const rooms = (search) => P.joinArguments('?join=/ws&room=abc' + search, true, 'play.test').args;

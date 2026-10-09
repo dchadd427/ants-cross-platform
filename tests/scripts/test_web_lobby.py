@@ -103,8 +103,8 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.style, r"\.slots \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);")             # two columns on a wide page ...
         phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
         self.found(phone, r"\.slots \{ grid-template-columns: minmax\(0, 1fr\);")                                         # ... one column on a phone, in the same order
-        # the seats are the server's: Green 0, Red 1, Blue 2, Black 3
-        self.assertEqual(re.findall(r"\{ name: '(\w+)', css: '(\w+)' \}", script), [("Green", "green"), ("Red", "red"), ("Blue", "blue"), ("Black", "black")])
+        # the page keeps no table of the seats' names of its own (the colours' names, seats and cards come from front/lobby_rules.js: Green 0, Red 1, Blue 2, Black 3)
+        self.assertNotIn("var SEATS", script)
         # what a card is made of: text and attributes, never markup (a name is whatever a person typed), each control named for a screen reader and found again by the listeners through the same attributes
         for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
             self.assertNotIn(banned, self.page)

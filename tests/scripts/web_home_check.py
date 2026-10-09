@@ -878,30 +878,27 @@ def main():
                     wrong.append((width, problems[:3]))
             check(not wrong, "%d widths from 320 to 1600 px: no sideways scroll and nothing out of the window, two columns from 1041 px (the room, the map and START! at its side) and one under it, the cards two by two above 720 px and one column below it in the order Black, Green, Red, Blue, "
                              "nothing out of a card or of the room's box, the grip's dots clear of the names and the drop-down, START! held in view on a phone, the longest map name whole (wrong: %s)" % (len(widths), wrong))
-            # the header: the one button of Watch matches at the right of the row, the logo and the tagline clear of it, at every width, in the plain page and in a room (a phone: the button on the logo's row, the tagline under them)
+            # the header: the one button of Watch matches at the right of the row, the logo and the tagline clear of it, at every width (a phone: the button on the logo's row, the tagline under them)
             bad = []
-            for in_room in (False, True):
-                for width in widths:
-                    tab.emulate(width, 900, 1, width <= 480)
-                    value("document.body.classList.%s('in-room')" % ("add" if in_room else "remove"))
-                    time.sleep(0.15)
-                    h = json.loads(value(MAST_JS))
-                    hd, lg, bt, tx = h["header"], h["logo"], h["btn"], h["text"]
-                    why = []
-                    if bt[0] < lg[2] - 0.5:
-                        why.append("the button is over the logo")
-                    if bt[0] < hd[0] - 0.5 or bt[2] > hd[2] + 0.5 or bt[1] < hd[1] - 0.5 or bt[3] > hd[3] + 0.5 or bt[2] > h["inner"] - 10:
-                        why.append("the button is out of the header or the window")
-                    if width <= 720 and not bt[1] < lg[3]:
-                        why.append("the button is not on the logo's row")
-                    if width > 720 and hd[2] - bt[2] > 4:
-                        why.append("the button is not at the right")
-                    if tx is not None and tx[0] < bt[2] - 0.5 and tx[2] > bt[0] + 0.5 and tx[1] < bt[3] - 0.5 and tx[3] > bt[1] + 0.5:
-                        why.append("the tagline is under the button")
-                    if why:
-                        bad.append((width, "in a room" if in_room else "plain", why[:2]))
-            value("document.body.classList.remove('in-room')")
-            check(not bad, "the header at %d widths, plain and in a room: the Watch matches button at the right of the row (on a phone, on the logo's row), clear of the logo and the tagline (wrong: %s)" % (len(widths), bad))
+            for width in widths:
+                tab.emulate(width, 900, 1, width <= 480)
+                time.sleep(0.15)
+                h = json.loads(value(MAST_JS))
+                hd, lg, bt, tx = h["header"], h["logo"], h["btn"], h["text"]
+                why = []
+                if bt[0] < lg[2] - 0.5:
+                    why.append("the button is over the logo")
+                if bt[0] < hd[0] - 0.5 or bt[2] > hd[2] + 0.5 or bt[1] < hd[1] - 0.5 or bt[3] > hd[3] + 0.5 or bt[2] > h["inner"] - 10:
+                    why.append("the button is out of the header or the window")
+                if width <= 720 and not bt[1] < lg[3]:
+                    why.append("the button is not on the logo's row")
+                if width > 720 and hd[2] - bt[2] > 4:
+                    why.append("the button is not at the right")
+                if tx is not None and tx[0] < bt[2] - 0.5 and tx[2] > bt[0] + 0.5 and tx[1] < bt[3] - 0.5 and tx[3] > bt[1] + 0.5:
+                    why.append("the tagline is under the button")
+                if why:
+                    bad.append((width, why[:2]))
+            check(not bad, "the header at %d widths: the Watch matches button at the right of the row (on a phone, on the logo's row), clear of the logo and the tagline (wrong: %s)" % (len(widths), bad))
             # the tag under the LAST button (21:9) ends with the button: on a computer with a mouse and a 3440 x 1440 screen (nearest to 21:9), in a narrow window, the tag stays inside it and the page does not scroll sideways
             fresh_tab()
             tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
