@@ -1803,8 +1803,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_background_pump() {
     if (g_web_app != nullptr) g_web_app->background_pump();
 }
 
-// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button, the footer's Menu link, the picture selector's "Leave the match to change the picture?" once
-// the player has said yes): the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
+// For the page (web/shell.html): the player has left a network match on purpose (the header's Menu button and the footer's Menu link, once the player has said yes):
+// the game tells the server (Leave: the seat is dropped now, the others do not wait for it) and lets go of the key. The page navigates away right after. A closed tab and a
 // reload do not call it: the seat is held and the key kept, so that the player can come back. The page calls it only once the game runs (isReadyToPlay).
 extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {
     if (g_web_app != nullptr) g_web_app->leave_network_match();
@@ -1855,8 +1855,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
 // The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
-// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (0 4:3, 1 16:9, 2 16:10, 3 21:9: the
-// Aspect's own numbers), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
+// The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the selector, left to right: 0 4:3, 1 16:10, 2 16:9, 3 21:9: the
+// index in kAllAspects), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // Anything else, or no game: -1.

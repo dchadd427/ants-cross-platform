@@ -7,6 +7,7 @@
 //     match that was never switched (the lock-step peers compare it, and a switched player must not drift);
 //   * the pages: the setup screen, the room, the loading screen, the quick help and the results are the 960 x 540 page, centred in the 16:10 and the 21:9 canvases with black around, and
 //     the whole canvas in 4:3 and 16:9; a match that starts after the switch is the new shape's;
+//     (the pages are also compared with the 16:9 page, pixel for pixel; the quick help's button, the results and the pointer);
 //   * the guards: an application that was never started, and the shape it already has.
 // Usage: test_aspect_switch. Exit code 0 when every check passes.
 #include <SDL.h>
@@ -18,6 +19,7 @@
 
 #include "ants_app/application.hpp"
 #include "ants_app/canvas_layout.hpp"
+#include "ants_app/page_layout.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_assets/asset_archive.hpp"
@@ -110,6 +112,31 @@ bool black_outside(const Picture& p, const LayoutRect& inside_rect) {
             if (inside) continue;
             const uint8_t* px = p.at(x, y);
             if (px[0] != 0 || px[1] != 0 || px[2] != 0) return false;
+        }
+    }
+    return true;
+}
+
+/// The pointer is parked at a point of the picture on screen (the game draws its own cursor there): a frame compared with another shape's must have it in the same place of the page
+void park_pointer(Application& app) {
+    SDL_MouseMotionEvent motion{};
+    motion.type = SDL_MOUSEMOTION;
+    motion.x = 10;
+    motion.y = 10;
+    app.handle_mouse_motion(motion);
+}
+
+/// The picture `part` is the same as the part of `whole` that starts at (ox, oy): a page drawn in a wide canvas is the 960 x 540 page, pixel for pixel. The corner of the page where the
+/// version and the frame rate are written is left out (it is the one place that changes with the clock: the readout is blended text)
+bool region_equals(const Picture& whole, int32_t ox, int32_t oy, const Picture& part) {
+    if (ox < 0 || oy < 0 || ox + part.w > whole.w || oy + part.h > whole.h) return false;
+    const LayoutRect readout{part.w - 140, part.h - 16, 140, 16};
+    for (int32_t y = 0; y < part.h; ++y) {
+        for (int32_t x = 0; x < part.w; ++x) {
+            if (x >= readout.x && y >= readout.y) continue;
+            const uint8_t* a = whole.at(ox + x, oy + y);
+            const uint8_t* b = part.at(x, y);
+            if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2]) return false;
         }
     }
     return true;
@@ -255,6 +282,38 @@ std::vector<uint64_t> hashes_of_a_run(int ticks, int every) {
     return hashes;
 }
 
+/// The same, in a match that carries orders: three computer players (seats 1 - 3) play on TINY, their commands are the simulation's input
+std::vector<uint64_t> hashes_of_a_bot_run(int ticks, int every, bool with_bots) {
+    std::vector<uint64_t> hashes;
+    ApplicationConfig cfg = base_config(Aspect::Wide16x9);
+    cfg.start_in_map_select = true;
+    cfg.play_at_once = true;                                                                 // (the setup screen's START path: the bots are seated and run)
+    cfg.default_map_path = maps_dir() + "TINY.LVL";
+    if (with_bots) {
+        for (uint8_t seat = 1; seat <= 3; ++seat) {
+            ai::BotSpec spec;
+            spec.seat = seat;
+            spec.level = ai::Level::Medium;
+            cfg.bots.push_back(spec);
+        }
+    }
+    const QuietStdout quiet;
+    Application app;
+    if (!app.init(cfg) || app.state() != AppState::Playing || (app.bots() != nullptr) != with_bots) return {};
+    app.hud().dismiss_match_start_modal();
+    int next = 0;
+    for (int tick = 0; tick < ticks; ++tick) {
+        if (every > 0 && tick % every == 0) {
+            const Aspect to = kShapes4[next++ % 4];
+            if (!app.set_aspect(to)) return {};
+            app.render_frame();
+        }
+        app.update_simulation(0.05f);
+        hashes.push_back(app.sim().state_hash().total);
+    }
+    return hashes;
+}
+
 void test_simulation_untouched() {
     group("sim", "the simulation is the one it would have been: the state hash after every tick equals that of a match that was never switched");
     constexpr int kTicks = 120;
@@ -273,6 +332,19 @@ void test_simulation_untouched() {
     }
     check(same_switched, "switched every 7 ticks: the same hash at every tick");
     check(same_often, "switched before every tick: the same hash at every tick");
+
+    // a match with orders in it: the computer players' commands go in, and the hash is still the unswitched match's at every tick
+    constexpr int kBotTicks = 400;
+    const std::vector<uint64_t> alone = hashes_of_a_bot_run(kBotTicks, 0, false);
+    const std::vector<uint64_t> bots_still = hashes_of_a_bot_run(kBotTicks, 0, true);
+    const std::vector<uint64_t> bots_switched = hashes_of_a_bot_run(kBotTicks, 9, true);
+    const std::vector<uint64_t> bots_often = hashes_of_a_bot_run(kBotTicks, 1, true);
+    check(alone.size() == static_cast<size_t>(kBotTicks) && bots_still.size() == alone.size() && bots_switched.size() == alone.size() && bots_often.size() == alone.size(),
+          "four runs of " + std::to_string(kBotTicks) + " ticks on TINY (one without bots, three with)");
+    if (alone.size() != static_cast<size_t>(kBotTicks) || bots_still.size() != alone.size() || bots_switched.size() != alone.size() || bots_often.size() != alone.size()) return;
+    check(bots_still.back() != alone.back(), "the bots' orders change the match (the hash at the end is not the one of the match without them)");
+    check(bots_switched == bots_still, "with bots, switched every 9 ticks: the same hash at every tick");
+    check(bots_often == bots_still, "with bots, switched before every tick: the same hash at every tick");
 }
 
 // =====================================================================================================================================================
@@ -286,6 +358,9 @@ void test_pages() {
     if (!rig.ok) return;
     Application& app = rig.app;
     check(app.state() != AppState::Playing, "it is not in a match");
+    park_pointer(app);
+    const Picture reference = frame_of(app);                                                       // (the setup screen in 16:9: the page, which fills its canvas)
+    check(reference.w == 960 && reference.h == 540 && lit_share(reference) > 0.2, "the setup screen of the 16:9 canvas is the 960 x 540 page, drawn");
     for (const Aspect to : kShapes4) {
         check(app.set_aspect(to), nm(to) + ": set_aspect says yes (a page)");
         const CanvasLayout canvas = CanvasLayout::of(to);
@@ -294,10 +369,12 @@ void test_pages() {
         check(app.canvas() == canvas && logical_size_is(app, canvas.width, canvas.height), nm(to) + ": the canvas is the shape's");
         check(whole ? same_rect(page, canvas.rect()) : (page.w == 960 && page.h == 540 && page.x == (canvas.width - 960) / 2 && page.y == (canvas.height - 540) / 2), nm(to) + ": the page is " + (whole ? "the whole canvas" : "the 960 x 540 page, centred"));
         check(same_rect(app.picture(), page) && same_rect(app.renderer().picture(), page), nm(to) + ": the picture on screen is the page, in the application and in the renderer");
+        park_pointer(app);
         const Picture p = frame_of(app);
         const bool black_around = black_outside(p, page);
         check(black_around, nm(to) + ": nothing is drawn around the page");
         check(lit_share(p) > 0.2, nm(to) + ": the page is drawn");
+        if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the page is the 16:9 page, pixel for pixel, at its place in the canvas");
     }
     // a match that starts after the switch has the shape's own screen
     for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10}) {
@@ -310,6 +387,98 @@ void test_pages() {
         // and the same application switches inside that match, then back to a page: the page of the shape
         check(app.set_aspect(Aspect::Classic4x3), "... and goes to 4:3 in it");
         check_shape(app, Aspect::Classic4x3, "in the match that began in another shape");
+    }
+}
+
+// =====================================================================================================================================================
+// The quick help, the results and the pointer
+// =====================================================================================================================================================
+
+void test_other_pages_and_pointer() {
+    group("other pages", "the quick help and the results are pages too: the wide page, centred, drawn like the 16:9 one; the quick help's button stands where its page puts it; the pointer stays on the canvas");
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false);
+        check(rig.ok, "the application starts on its setup screen");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        app.finish_loading();                                                                         // (a game without a start menu: the quick help follows the loading screen)
+        check(app.state() == AppState::QuickHelp, "the quick help is up");
+        if (app.state() != AppState::QuickHelp) return;
+        park_pointer(app);
+        const Picture reference = frame_of(app);
+        check(lit_share(reference) > 0.2, "the quick help of the 16:9 canvas is drawn");
+        for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+            check(app.set_aspect(to), nm(to) + ": set_aspect says yes (quick help)");
+            const bool wide = to != Aspect::Classic4x3;
+            const QuickHelpLayout& q = QuickHelpLayout::of(wide);
+            const ButtonRect& up = app.quick_help_start_button().up_rect();
+            check(up.x == q.start.x && up.y == q.start.y && up.w == q.start.w && up.h == q.start.h, nm(to) + ": the START button stands where the " + (wide ? "wide" : "classic") + " quick help puts it");
+            const LayoutRect page = CanvasLayout::of(to).page();
+            check(same_rect(app.picture(), page), nm(to) + ": the picture on screen is the page");
+            park_pointer(app);
+            const Picture p = frame_of(app);
+            check(lit_share(p) > 0.2 && black_outside(p, page), nm(to) + ": the quick help is drawn, with nothing around the page");
+            if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the quick help is the 16:9 page, pixel for pixel, at its place in the canvas");
+        }
+    }
+    {
+        AppRig rig(Aspect::Wide16x9);
+        check(rig.ok, "a match starts");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        app.hud().dismiss_match_start_modal();
+        app.scorecard().show(app.sim().get_world_state().match_result, 0);                            // (a match that has ended: the results page)
+        app.update_results(0.0f);
+        check(app.scorecard().is_open() && !app.match_running(), "the results are up, the match is not on the screen");
+        park_pointer(app);
+        const Picture reference = frame_of(app);
+        check(lit_share(reference) > 0.2, "the results of the 16:9 canvas are drawn");
+        for (const Aspect to : {Aspect::Ultra21x9, Aspect::Wide16x10, Aspect::Classic4x3, Aspect::Wide16x9}) {
+            check(app.set_aspect(to), nm(to) + ": set_aspect says yes (results)");
+            const LayoutRect page = CanvasLayout::of(to).page();
+            check(same_rect(app.picture(), page) && app.scorecard().is_open(), nm(to) + ": the picture on screen is the page, the results stay up");
+            park_pointer(app);
+            const Picture p = frame_of(app);
+            check(lit_share(p) > 0.2 && black_outside(p, page), nm(to) + ": the results are drawn, with nothing around the page");
+            if (to == Aspect::Wide16x10 || to == Aspect::Ultra21x9) check(region_equals(p, page.x, page.y, reference), nm(to) + ": the results are the 16:9 page, pixel for pixel, at its place in the canvas");
+        }
+    }
+    // the pointer is a point of the picture on screen: it stays where it is on the canvas, and never outside the new picture (the nearest edge pixel)
+    {
+        AppRig rig(Aspect::Ultra21x9);
+        check(rig.ok, "a 21:9 match starts");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        app.hud().dismiss_match_start_modal();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = 1200;
+        motion.y = 500;
+        app.handle_mouse_motion(motion);
+        check(app.mouse_screen_x() == 1200 && app.mouse_screen_y() == 500, "the pointer is at (1200, 500) of the 21:9 canvas");
+        check(app.set_aspect(Aspect::Classic4x3), "21:9 to 4:3");
+        check(app.mouse_screen_x() == 639 && app.mouse_screen_y() == 479, "... the pointer is at the 4:3 picture's nearest corner pixel (639, 479), not outside it");
+        check(app.set_aspect(Aspect::Ultra21x9), "... and back to 21:9");
+        check(app.mouse_screen_x() == 639 && app.mouse_screen_y() == 479, "... it stays where it was");
+        check(app.set_aspect(Aspect::Wide16x10), "21:9 to 16:10");
+        check(app.mouse_screen_x() == 639 && app.mouse_screen_y() == 479, "... and on to 16:10: the same canvas point (inside it)");
+    }
+    {
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false);                             // the setup screen: a page, whose pointer is the page's own
+        check(rig.ok, "the setup screen starts");
+        if (!rig.ok) return;
+        Application& app = rig.app;
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = 300;
+        motion.y = 200;
+        app.handle_mouse_motion(motion);
+        check(app.set_aspect(Aspect::Ultra21x9), "16:9 to 21:9 (a page)");
+        check(app.mouse_screen_x() == 150 && app.mouse_screen_y() == 200, "... the pointer keeps its place on the canvas: the page's own x is 150 less (the page starts at x 150)");
+        check(app.set_aspect(Aspect::Wide16x10), "21:9 to 16:10 (a page)");
+        check(app.mouse_screen_x() == 300 && app.mouse_screen_y() == 170, "... on the 16:10 canvas it is at (300, 200), the page's own (300, 170) (the page starts at y 30)");
+        check(app.set_aspect(Aspect::Classic4x3), "16:10 to 4:3 (a page)");
+        check(app.mouse_screen_x() == 300 && app.mouse_screen_y() == 200, "... and on the 4:3 canvas, whose page is the whole canvas, (300, 200)");
     }
 }
 
@@ -400,6 +569,7 @@ int main(int argc, char* argv[]) {
     test_camera_and_zoom();
     test_simulation_untouched();
     test_pages();
+    test_other_pages_and_pointer();
     test_dialogs_and_catch_up();
     test_guards();
     std::printf("\naspect switch: %d checks, %d failures\n", g_checks, g_failures);

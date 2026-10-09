@@ -94,6 +94,8 @@ function runShell(path, search, stored, options) {
     const text = fs.readFileSync(path, 'utf8');
     const page = between(text, 'ANTS_PAGE_BEGIN', 'ANTS_PAGE_END', path);
     const selector = between(text, 'ANTS_SELECTOR_BEGIN', 'ANTS_SELECTOR_END', path);
+    const hook = text.match(/postRun: \[(function\(\) \{[\s\S]*?\n {12}\})\]/);                  // (the page's own postRun hook: run as it is written, not a copy of it)
+    if (!hook) throw new Error(path + ': the postRun hook of the Module was not found');
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen);
     const stage = element({ 'data-aspect': '16:9' });
@@ -123,10 +125,11 @@ function runShell(path, search, stored, options) {
     const holdsCalls = [];
     const holdsFn = options && options.holds !== undefined ? function (search, args, storage, now) { holdsCalls.push([search, args.indexOf('--join-url') !== -1, storage === win.localStorage, typeof now]); return typeof options.holds === 'function' ? options.holds() : options.holds; } : undefined;
     // (relayout is the page's box: it is sized, and the game's window system told, by the script outside these blocks; here it is a record)
-    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule; var holdsThisSeat = fakeHolds; var stageElement = fakeStage; var relayoutCalls = [];\n'
+    const code = 'var isReadyToPlay = ' + ready + '; var Module = fakeModule; var holdsThisSeat = fakeHolds; var stageElement = fakeStage; var relayoutCalls = []; var progressContainer = { style: {} }; function hideLoadingScreen() {}\n'
         + 'function relayout(force) { events.push("relayout"); relayoutCalls.push(force); }\n' + page + '\n' + selector
+        + '\nvar postRunHook = ' + hook[1] + ';'
         + '\nreturn { aspect: ANTS_ASPECT, source: ANTS_ASPECT_SOURCE, args: ANTS_ARGS, embed: ANTS_EMBED, key: ANTS_ASPECT_KEY, page: ANTS_PAGE, relayoutCalls: relayoutCalls, sync: antsSyncAspect, set: antsSetAspect,'
-        + ' setReady: function (on) { isReadyToPlay = on; }, now: function () { return ANTS_ASPECT; } };';
+        + ' postRun: postRunHook, ready: function () { return isReadyToPlay; }, setReady: function (on) { isReadyToPlay = on; }, now: function () { return ANTS_ASPECT; } };';
     const result = new Function('window', 'document', 'fakeModule', 'fakeHolds', 'fakeStage', 'events', code)(win, doc, fake, holdsFn, stage, events);
     result.storage = storage;
     result.win = win;
@@ -345,9 +348,17 @@ try {
         r.buttons[3].listeners.click();
         expect('shell.html selector, the game not ready yet: it is not told (an export called while the program compiles is undefined for good)', JSON.stringify(calls), '[]');
         expect('shell.html selector, the game not ready yet: the page changed all the same', r.now() + ' ' + r.args.slice(-2).join(' ') + ' ' + JSON.stringify(r.relayoutCalls), '21:9 --aspect 21:9 [true]');
-        r.setReady(true);
-        expect('shell.html, the postRun hook gives the game the shape that the page has now (it began with another)', r.sync() + ' ' + JSON.stringify(calls), '1 [3]');
+        r.postRun();                                                                 // (the page's own hook, as it is written in shell.html: the game is up)
+        expect('shell.html, the postRun hook gives the game the shape that the page has now (it began with another)', r.ready() + ' ' + JSON.stringify(calls), 'true [3]');
         expect('shell.html, ... and again: the same number, the game keeps it', r.sync() + ' ' + JSON.stringify(calls), '1 [3,3]');
+    }
+    // a name that is "--aspect" (a hand-made address) is a value, not the option: the press changes the option's own value, and the name and the option stay as they were
+    {
+        const r = runShell(shellPath, '?join=/ws&room=abc&seat=1&name=--aspect', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
+        const before = r.args.length;
+        r.buttons[3].listeners.click();
+        const nameAt = r.args.indexOf('--name');
+        expect('shell.html selector, a name that reads "--aspect": the name and the option are as they were; the option has the new shape', JSON.stringify([r.args.length === before, r.args[nameAt + 1], r.args.slice(-2), r.args.filter((a) => a === '--aspect').length]), '[true,"--aspect",["--aspect","21:9"],2]');
     }
     for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_set_aspect() { throw new Error('the game is gone'); } })], ['no Module at all', () => undefined]]) {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });

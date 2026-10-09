@@ -556,7 +556,7 @@ private:
     void push_chat_entry(std::string header, const std::string& message, uint8_t header_colour);
     void layout_chat_entry(ChatEntry& entry, int32_t top) const;
     void append_chat_display_lines(const ChatEntry& entry);
-    void relayout_chat();
+    void relayout_chat(int32_t old_view_h = -1);
     void update_chat_tasks();
     void chat_scroll_by(int32_t delta) noexcept;
     void start_chat_drag(int32_t x, int32_t y);

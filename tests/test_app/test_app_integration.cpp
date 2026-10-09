@@ -1009,7 +1009,7 @@ void run_suite_6_scorecard_and_audio_routing() {
 
         // Trigger scorecard to show
         ASSERT_EQ(app.state(), AppState::Playing);
-        ASSERT_TRUE(app.match_running());                                   // (the page's selector of the picture asks before it restarts a running match: ants_match_running)
+        ASSERT_TRUE(app.match_running());                                   // (the page's Menu button asks before it leaves a running match: ants_match_running)
         app.scorecard().show(app.sim().get_world_state().match_result, 0);
         ASSERT_TRUE(app.scorecard().is_open());
         ASSERT_FALSE(app.match_running());                                  // the results are not a running match

@@ -786,11 +786,11 @@ void test_chat_follows_layout() {
     check(end == 37 + 20 * 25 && wide_hud.chat_content_end() == end, "the start message (37 px) and 20 entries of 25 px make a log of 537 px (the end is one past the last row)");
     check(classic_hud.chat_follow_target() == end - 1 - 101, "classic: the log follows the newest entry: its window (101 px) ends at the newest row");
     check(wide_hud.chat_follow_target() == end - 1 - 161, "960 x 540: the window is 161 px high");
-    // a new layout puts the window inside the log again: the position that the 101 px window wanted is too far for the 161 px one
+    // a new layout (the picture's shape changes while the match runs) puts the window inside the log again: a window that ends at the newest row still ends there, whatever the height of the view
     classic_hud.set_layout(wide);
-    check(classic_hud.chat_follow_target() == end - 161, "a taller chat view pulls the follow position back to the log's end less 161");
+    check(classic_hud.chat_follow_target() == end - 1 - 161, "a taller chat view pulls the follow position back: the window (161 px) ends at the newest row");
     classic_hud.set_layout(ScreenLayout::classic());
-    check(classic_hud.chat_follow_target() == end - 161, "(and a layout that makes the view shorter does not push it forward: the follow task does that)");
+    check(classic_hud.chat_follow_target() == end - 1 - 101, "and a shorter one keeps the newest row in the window: the position moves forward (101 px)");
 }
 
 void test_ctrl_n_follows_layout() {

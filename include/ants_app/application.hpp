@@ -248,7 +248,7 @@ public:
     float get_current_fps() const noexcept { return current_fps_; }
 
     AppState state() const noexcept { return state_; }
-    /// A match is being played right now: the match screen is up and its results are not (the browser page asks before it restarts the game for another picture, see ants_match_running)
+    /// A match is being played right now: the match screen is up and its results are not (the web page's Menu button and footer link ask before they leave it, see ants_match_running)
     bool match_running() const noexcept { return state_ == AppState::Playing && !scorecard_.is_open(); }
     /// The desktop start menu: the model (the tests drive it with keys and the mouse like the window does), whether this run has one, and the window's title (a room's code is in it
     /// from the moment the player is in the room until the player is back at the menu)
@@ -447,7 +447,7 @@ public:
     /// the match now and no step is running. The web build asks the browser first whether the page is hidden (so a visibilitychange that was missed cannot leave the
     /// match without a driver). The page's timer for a quiet server calls it too (ants_background_pump).
     bool background_pump();
-    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link, the picture selector's "Leave the match?": ants_leave_match): the
+    /// The player leaves a network match ON PURPOSE and the page is about to navigate away (the web build's Menu button and link: ants_leave_match): the
     /// server is told (Leave: the seat is dropped at once and the others do not wait for it) and the key is let go of. Does nothing without a network game. A closed tab or a reload never gets here:
     /// its seat is held and its key kept, which is what lets it come back.
     void leave_network_match();

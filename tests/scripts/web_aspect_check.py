@@ -6,7 +6,7 @@ path /play.html, "/" being the front page, and the Play online checks of --four 
 else (the DevTools protocol is spoken with the WebSocket client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
-  * the page's own logic that needs no layout (`ANTS_PAGE` in web/shell.html): the address's `aspect` (only 16:9 and 4:3 count, anything else is ignored), the order address >
+  * the page's own logic that needs no layout (`ANTS_PAGE` in web/shell.html): the address's `aspect` (only 4:3, 16:10, 16:9 and 21:9 count, anything else is ignored), the order address >
     remembered choice > default (16:9 on every device, a phone held upright included), the box that is the largest whole number of canvas steps for a given area and device ratio and whose CSS size makes the browser's
     canvas exactly that many pixels even after the layout's rounding, where the box must stand so that the game's pointer is exact (`snapOffset`), the frame cap (60, 75 and 90 Hz
     are not touched, a jittery 60 Hz display is not capped, 120 / 144 / 165 / 240 Hz are held to 60 a second, decided by the median of the last 24 gaps: slow frames at the start do
@@ -515,9 +515,10 @@ class Tab:
     def ev(self, expression):
         return self.dt.evaluate(self.session, expression)
 
-    def emulate(self, width, height, dpr, mobile=False):
+    def emulate(self, width, height, dpr, mobile=False, touch=True):
         self.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": dpr, "mobile": mobile, "screenWidth": width, "screenHeight": height})
-        self.call("Emulation.setTouchEmulationEnabled", {"enabled": bool(mobile), "maxTouchPoints": 5})
+        if touch:                                                   # (a second "touch emulation off" makes Chromium report `hover: none` for the tab: the tag's test leaves the call out)
+            self.call("Emulation.setTouchEmulationEnabled", {"enabled": bool(mobile), "maxTouchPoints": 5})
 
     def open(self, url, wait=True, settle=1.5, timeout=None):
         navigation = self.call("Page.navigate", {"url": url})
@@ -1550,12 +1551,12 @@ def main():
         check(tab.geometry()["aspect"] == "4:3", "... and ?aspect=4:3 still gives the classic picture with the old key in the browser")
         tab.ev("try { localStorage.removeItem('ants.aspect'); } catch (e) {} 1")
 
-        # "fills your screen": under the shape nearest to the computer's screen (the headless browser's screen is what the emulation says), on a computer with a mouse. A tab of its own: once a tab
-        # has been emulated as a phone Chromium keeps `hover: none` for it, whatever is emulated after, and the tag is for a computer with a mouse
+        # "fills your screen": under the shape nearest to the computer's screen (the headless browser's screen is what the emulation says), on a computer with a mouse. A tab of its own that is never
+        # told "touch emulation off": once a tab has been emulated as a phone, or told that, Chromium keeps `hover: none` for it, and the tag is for a computer with a mouse
         print("[web aspect] the tag under the shape that fills the screen")
         tag_tab = Tab(browser)
         for w, h, want in ((1280, 720, "16:9"), (1440, 900, "16:10"), (2560, 1080, "21:9"), (1280, 1024, "4:3"), (1100, 1100, None)):
-            tag_tab.emulate(w, h, 1)
+            tag_tab.emulate(w, h, 1, touch=False)
             tag_tab.open(web)
             shown = tag_tab.ev("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('.seg .shape'), function (s) { var t = s.querySelector('.fit-tag'); return [s.querySelector('button').getAttribute('data-aspect'), !t.hidden && getComputedStyle(t).display !== 'none']; }).filter(function (x) { return x[1]; }).map(function (x) { return x[0]; }))")
             check(json.loads(shown) == ([want] if want else []), "a %d x %d screen: the tag \"fills your screen\" is under %s (%s)" % (w, h, want, shown))

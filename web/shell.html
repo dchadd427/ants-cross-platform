@@ -1844,6 +1844,7 @@
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
+        var ANTS_ASPECT_AT = -1;
         (function () {
             var fromAddress = null;
             var remembered = null;
@@ -1853,6 +1854,7 @@
             var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
+            ANTS_ASPECT_AT = ANTS_ARGS.length;                                       // (where the option stands: a name that is "--aspect" must not be taken for it)
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
             document.getElementById('game-stage').setAttribute('data-aspect', ANTS_ASPECT);
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
@@ -2708,7 +2710,7 @@
         // shape: its canvas, its screens, its view; the simulation is not touched). The choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and put in the address
         // (?aspect=, without a new entry in the history), so that a reload or a link has it; the rest of the address (the room of a match, the seat) stays.
         // ANTS_SELECTOR_BEGIN (tests/scripts/web_aspect_key_check.js clicks the buttons of this block and sees what it stores and where it goes)
-        // The player leaves a joined match ON PURPOSE (the selector's yes below, the Menu button and the footer's Menu link): the game tells the server (Leave: the seat is dropped at once, the others do
+        // The player leaves a joined match ON PURPOSE (the Menu button and the footer's Menu link, once the player has said yes): the game tells the server (Leave: the seat is dropped at once, the others do
         // not wait for it) and lets go of the key, and the page navigates in the same breath. A closed tab and a reload do not come here: their seat is held and their key kept, which is how they come
         // back. Only once the game runs (index.js binds an export at its first call: a call while the program is still compiled leaves it undefined for good).
         function antsLeaveMatch() {
@@ -2728,8 +2730,7 @@
             var shape = ANTS_PAGE.parseAspect(value);
             if (!shape || shape === ANTS_ASPECT) return;
             ANTS_ASPECT = shape;
-            var at = ANTS_ARGS.indexOf('--aspect');
-            if (at !== -1) ANTS_ARGS[at + 1] = shape;
+            if (ANTS_ASPECT_AT !== -1 && ANTS_ARGS[ANTS_ASPECT_AT] === '--aspect') ANTS_ARGS[ANTS_ASPECT_AT + 1] = shape;
             stageElement.setAttribute('data-aspect', shape);
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
                 b.setAttribute('aria-checked', b.getAttribute('data-aspect') === shape ? 'true' : 'false');
@@ -2766,7 +2767,7 @@
         // ANTS_SELECTOR_END
 
         // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's logo and Menu button and the footer's link go there in THIS tab (the owner: nothing opens a new tab by default). The game that is running
-        // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (as the picture's selector does: ants_match_running, and
+        // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (ants_match_running, and
         // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it).
         (function () {
             ['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {
