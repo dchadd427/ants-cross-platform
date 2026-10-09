@@ -578,6 +578,17 @@ void Grid::strip_pickups() noexcept {
     for (uint32_t y = 0; y < height_; ++y) {
         for (uint32_t x = 0; x < width_; ++x) {
             if (get_cell(x, y).is_powerup) clear_powerup(static_cast<int32_t>(x), static_cast<int32_t>(y));
+            TileCell& cell = get_cell_mut(x, y);
+            if (cell.is_food) {                                            // a food tile that no Block 2 object owns (community maps have them): it goes as the owned ones do
+                cell.interactive_id = TILE_EMPTY;
+                cell.interactive_owner = 255;
+                cell.timer_ticks = 0;
+                cell.is_food = false;
+                cell.is_obstacle_overlay = false;
+                cell.anchor_x = -1;
+                cell.anchor_y = -1;
+                if (y != 0) cell.static_solid = false;
+            }
         }
     }
 }

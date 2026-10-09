@@ -441,7 +441,7 @@ const M3 = (o) => model(mk([P('Juniper'), P('Sam'), P('Priya'), O], o));
 // 6. What the leader asks of the room: the plan (planWith) and a colour moved or exchanged (moveOf)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const PW = (room, change) => R.planWith(room, model(room), change);
-const plan = (map, kinds, teamA, teamB) => ({ map: map, kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB });
+const plan = (map, kinds, teamA, teamB, mode) => ({ map: map, kinds: kinds, teamA: teamA === undefined ? 255 : teamA, teamB: teamB === undefined ? 255 : teamB, mode: mode || 0 });   // (protocol 17: the room's own game mode goes back)
 const T3 = mk([P('Juniper'), P('Sam'), P('Priya'), O]);                                                  // three persons: Green, Red, Blue; Black open
 const T3t = mk([P('Juniper'), P('Sam'), P('Priya'), O], { teamA: 0, teamB: 2 });
 const TWO = mk([P('Juniper'), P('Sam'), O, O]);
@@ -469,7 +469,9 @@ const BOTS = mk([P('Juniper'), P('Sam'), O, O], { plan: [0, 0, 2, 3], teamA: 0, 
     ['teams that name a colour that does not play (Black is open)', T3, { sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 0])], ['teams with two persons only', TWO, { sides: [1, 1, 0, 0] }, plan('', [0, 0, 0, 0])],
     ['teams and the colour that makes the third player at once', TWO, { seat: 2, kind: 'easy', sides: [1, 0, 1, 0] }, plan('', [0, 0, 1, 0], 0, 2)], ['teams and the colour that makes the fourth', T3, { seat: 3, kind: 'hard', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 3], 0, 3)],
     ['teams that name a computer player that the same change makes Nobody', T3, { seat: 3, kind: 'nobody', sides: [1, 0, 0, 1] }, plan('', [0, 0, 0, 4])],
-    ['everything at once: map, colour, teams', T3, { map: 'small', seat: 3, kind: 'easy', sides: [1, 0, 1, 0] }, plan('SMALL.LVL', [0, 0, 0, 1], 0, 2)]
+    ['everything at once: map, colour, teams', T3, { map: 'small', seat: 3, kind: 'easy', sides: [1, 0, 1, 0] }, plan('SMALL.LVL', [0, 0, 0, 1], 0, 2)],
+    ['a room of game mode 187: the page does not change it (it has no control for it) and sends it back', mk([P('Juniper'), P('Sam'), P('Priya'), O], { mode: 1 }), { map: 'tiny' }, plan('TINY.LVL', [0, 0, 0, 0], undefined, undefined, 1)],
+    ['... also when only a colour changes', mk([P('Juniper'), P('Sam'), O, O], { mode: 1 }), { seat: 2, kind: 'easy' }, plan('', [0, 0, 1, 0], undefined, undefined, 1)]
 ].forEach(([label, room, change, want]) => {
     const before = JSON.stringify(room);
     const got = PW(room, change);

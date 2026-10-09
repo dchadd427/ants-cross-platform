@@ -114,7 +114,7 @@ bool valid_head(const Header& h, std::string& error) {
     } else if (h.hash_period == 0 || h.hash_period > kMaxTurns) {
         error = "the head's hash period is out of range";
     } else if (!sim::valid_game_mode(h.mode)) {
-        error = "the head's game mode is not one that this build knows";
+        error = "the head's game mode is not one that this build knows (the file may be of a newer build)";
     } else if (h.mode != 0 && h.sim_rules < kSimRulesMode187) {
         error = "the head names a game mode but not the simulation rules that go with it (a build that does not know the mode would play the match as another game)";
     } else if (h.sim_rules == kSimRulesMode187 && h.mode != static_cast<uint8_t>(sim::GameMode::Kills187)) {

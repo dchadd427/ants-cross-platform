@@ -7,6 +7,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_mode.hpp"
+#include "ants_sim/grid.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
@@ -253,6 +254,60 @@ int main() {
         ASSERT_EQ(ws.match_result.ants_left[1], 3u);
         ASSERT_EQ(ws.match_result.ants_left[0], 4u);                        // its three and the killer
         ASSERT_TRUE(ws.score_bubbles.empty());                             // a fight has many kills: no bubble and no cue for them
+    } TEST_END();
+
+    TEST_CASE("3.1b an ally's kill is no point (allied teams are not enemies) and the ants of a team that dropped out die with nobody to thank") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2, 3});          // (a fourth team keeps the match going when team 2 drops)
+        e.apply_command([] { Command c; c.type = CommandType::AllianceInvite; c.issuer = 0; c.other_player = 1; return c; }());
+        e.apply_command([] { Command c; c.type = CommandType::AllianceAccept; c.issuer = 1; c.other_player = 0; return c; }());
+        ASSERT_EQ(e.alliance_of(0), 1);
+        // an ant of team 1 whose last damage came from its ally, team 0 (a bomb or a fire does that; a melee hit does not reach an ally), dies
+        const uint32_t ally = e.spawn_unit(1, AntType::Combat, TileCoord{30, 30});
+        e.get_unit(ally).killer_team = 0;
+        e.kill_unit(ally);
+        for (int k = 0; k < 80; ++k) e.tick();
+        ASSERT_TRUE(e.get_unit(ally).removed);
+        ASSERT_EQ(e.get_world_state().player_stats[1].friendly_lost, 1u);
+        ASSERT_EQ(e.get_world_state().player_scores[0], 0);                 // no point for it
+        // the same death with an enemy of the last damage is one
+        const uint32_t foe = e.spawn_unit(2, AntType::Combat, TileCoord{30, 34});
+        e.get_unit(foe).killer_team = 0;
+        e.kill_unit(foe);
+        for (int k = 0; k < 80; ++k) e.tick();
+        ASSERT_TRUE(e.get_unit(foe).removed);
+        ASSERT_EQ(e.get_world_state().player_scores[0], 1);
+        // a wounded ant of team 2 (its last damage came from team 0), then team 2 drops out: its ants die and team 0 gets nothing for them
+        const uint32_t b = e.spawn_unit(2, AntType::Combat, TileCoord{21, 30});
+        e.get_unit(b).killer_team = 0;
+        const int32_t before = e.get_world_state().player_scores[0];
+        e.drop_player(2);
+        for (int k = 0; k < 120; ++k) e.tick();
+        ASSERT_TRUE(e.get_unit(b).removed);
+        ASSERT_EQ(e.get_world_state().player_scores[0], before);
+    } TEST_END();
+
+    TEST_CASE("1.3 the mode alone changes the hash: the same world built twice differs between 187 and the original's game, and equals itself") {
+        SimulationEngine a = small_world(GameMode::Kills187, {0, 1});
+        SimulationEngine b = small_world(GameMode::Kills187, {0, 1});
+        SimulationEngine plain = small_world(GameMode::HighestScore, {0, 1});
+        SimulationEngine plain2 = small_world(GameMode::HighestScore, {0, 1});
+        ASSERT_TRUE(a.state_hash() == b.state_hash());
+        ASSERT_TRUE(plain.state_hash() == plain2.state_hash());
+        ASSERT_TRUE(!(a.state_hash() == plain.state_hash()));
+    } TEST_END();
+
+    TEST_CASE("2.5 no food tile stays on the map in 187, owned by a Block 2 object or not") {
+        const LevelData level = load_map("TINY");
+        Grid g;
+        g.init_from_level(level);
+        TileCell& orphan = g.get_cell_mut(3u, 3u);                         // a food tile with no object (as a community map can have)
+        orphan.is_food = true;
+        orphan.interactive_id = 100;
+        g.strip_pickups();
+        for (uint32_t y = 0; y < g.height(); ++y) {
+            for (uint32_t x = 0; x < g.width(); ++x) ASSERT_TRUE(!g.get_cell(x, y).is_food && !g.get_cell(x, y).is_powerup);
+        }
+        ASSERT_EQ(g.get_cell(3u, 3u).interactive_id, TILE_EMPTY);
     } TEST_END();
 
     TEST_CASE("3.2 the same kill in the original's rules scores nothing") {
