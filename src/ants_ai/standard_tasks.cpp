@@ -343,6 +343,16 @@ void FightTask::start_fire_defence(TaskContext& c) {
     else ++raider_hunts_;
 }
 
+namespace {
+
+// An ant for the assault: one that stands idle with empty hands (nothing to harvest or no way to it), and, when the bot is far enough behind (pull), a Combat Ant wherever it is (it is a worker that
+// fights: it harvests between the blows). A worker on its way to a pile or carrying food is never taken: it kills nothing above two hit points and the food is what the assault is not for
+bool assault_ant(const AntView& a, bool pull) noexcept {
+    return (a.idle() && !a.holding && a.carried_points == 0) || (pull && a.type == sim::AntType::Combat);
+}
+
+}  // namespace
+
 // The bot's own fights, begun without a blow on an ant of its own (decisions 2 and 14 of the contest plan). The free ants (can_fight: they carry nothing, are healthy, take orders; the ants of a
 // pick-up, a raid, a wall or a bomb are never taken, nor the last ants) attack an enemy ant when their force is clearly stronger than what answers near it:
 //   hunt      (plan.hunt, every level) a KILL that is available of a WOUNDED ant: by kill_plan (the real blows: one lands per hit clip, only a Combat Ant's punch finishes an ant, so the plan is built on
@@ -361,7 +371,14 @@ void FightTask::start_offence(TaskContext& c) {
     const Standing& st = tactics_.standing;
     const bool pressure_fights = plan.catchup && st.tier >= plan.catchup_workers_tier;               // behind the leader enough: the skirmish opens for every level, and even trades are taken
     // (the war batch, plan.assault) free ants - nothing to harvest, the economy has nowhere to send them - go for the enemy ants: with the food gone the score is fixed and an ant at home earns nothing
-    const bool assault_on = plan.assault && now >= plan.assault_after && tactics_.surplus >= plan.assault_min && v.ticks_left() > 200;
+    // (plan.behind_war) a bot that is behind does not wait for the food to be gone: it begins sooner, asks for less of the odds, sends one more ant when it is far behind, takes ants that have work from the
+    // war tier plan.behind_free_tier on, and goes for the ants of the leader first
+    const uint8_t war = plan.behind_war ? st.war : 0;
+    const bool pull = war >= 1 && war >= plan.behind_free_tier;                                      // (from the war tier plan.behind_free_tier on the Combat Ants are taken off the piles for the assault)
+    const uint64_t assault_from = war >= 1 ? std::min<uint64_t>(plan.assault_after, plan.behind_assault_after) : plan.assault_after;
+    const bool assault_on = plan.assault && now >= assault_from && (tactics_.surplus >= plan.assault_min || pull) && v.ticks_left() > 200;
+    const uint32_t assault_odds = plan.assault_odds_percent * (100u - std::min<uint32_t>(80u, plan.behind_odds_ease * war)) / 100u;
+    const size_t assault_force = plan.assault_force + (war >= 2 ? 1u : 0u);
     if (!(plan.skirmish || plan.hunt || pressure_fights || assault_on) || !v.has_grid() || now < offence_pause_until_ || tactics_.guard_stance) return;     // (the leader of the last minute guards: no offence)
     const uint32_t odds_scale = plan.catchup && st.tier >= 3 ? 50u : pressure_fights ? 70u : 100u;
     if (v.mine().size() <= plan.fight_reserve + (v.eggs() == 0 ? 1u : 0u)) return;                  // the last ants stay out of every fight
@@ -395,10 +412,11 @@ void FightTask::start_offence(TaskContext& c) {
         return plan.hunt_leader_carriers && e.holding && leader >= 0 && e.team == leader;
     };
     // the force that can be called to a target: the pool within `reach`, a Combat Ant first, then the nearest, at most `force`
-    const auto form = [&](const AntView& e, int32_t reach, size_t force) {
+    const auto form = [&](const AntView& e, int32_t reach, size_t force, bool assault = false) {
         std::vector<const AntView*> near;
         for (const AntView* a : pool) {
-            if (a->tile.chebyshev_dist(e.tile) <= reach) near.push_back(a);
+            if (a->tile.chebyshev_dist(e.tile) > reach || (assault && !assault_ant(*a, pull))) continue;
+            near.push_back(a);
         }
         std::stable_sort(near.begin(), near.end(), [&](const AntView* x, const AntView* y) {
             const bool cx = x->type == sim::AntType::Combat;
@@ -436,6 +454,7 @@ void FightTask::start_offence(TaskContext& c) {
                         best = &e;
                         best_score = score;
                         best_hunt = true;
+                        best_assault = false;
                     }
                     continue;
                 }
@@ -443,15 +462,16 @@ void FightTask::start_offence(TaskContext& c) {
         }
         // the assault: the nearest enemy ant that the force of free ants outweighs (a raider, a wounded ant and a carrier first)
         if (assault_on && !running) {
-            const std::vector<const AntView*> near = form(e, plan.assault_reach, plan.assault_force);
-            if (near.size() >= plan.assault_min) {
+            const std::vector<const AntView*> near = form(e, plan.assault_reach, assault_force, true);
+            if (!near.empty() && near.size() >= plan.assault_min) {
                 Strength own;
                 for (const AntView* a : near) own.add(a->hp, blow_damage(a->type));
                 const Strength theirs = enemy_strength(v, e.tile, plan.skirmish_near, e.id, plan.skirmish_enemy_cap);
-                if (own.value() * 100u >= theirs.value() * plan.assault_odds_percent) {
+                if (own.value() * 100u >= theirs.value() * assault_odds) {
                     int32_t score = 100 - 3 * near.front()->tile.chebyshev_dist(e.tile) + (10 - static_cast<int32_t>(std::min<uint32_t>(e.hp, 10u))) * 8;
                     if (e.type == sim::AntType::Fire || e.type == sim::AntType::Bomber) score += 60;
                     if (e.holding) score += 40;
+                    if (war >= 1 && leader >= 0 && e.team == leader) score += 50;                     // the leader's ants: what he has not banked yet is what the bot can still take from him
                     if (best == nullptr || (!best_hunt && score > best_score)) {
                         best = &e;
                         best_score = score;
@@ -499,6 +519,9 @@ void FightTask::start_offence(TaskContext& c) {
     f.offence = true;
     f.hunt = best_hunt;
     f.assault = best_assault;
+    f.force = static_cast<uint32_t>(assault_force);
+    f.pull = pull;
+    f.abort_percent = std::min<uint32_t>(plan.skirmish_abort_percent, assault_odds * 8u / 10u);
     fights_.emplace(best->id, std::move(f));
     ++fights_started_;
     ++offence_started_;
@@ -582,7 +605,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             if (a != nullptr) own.add(a->hp, blow_damage(a->type));
         }
         const Strength theirs = enemy_strength(v, target->tile, plan.skirmish_near, target->id, plan.skirmish_enemy_cap);
-        const uint32_t abort_percent = f.assault ? std::min<uint32_t>(plan.skirmish_abort_percent, plan.assault_odds_percent * 8u / 10u) : plan.skirmish_abort_percent;
+        const uint32_t abort_percent = f.assault ? f.abort_percent : plan.skirmish_abort_percent;
         const bool weak = own.n > 0 && own.value() * 100u < theirs.value() * abort_percent;
         if (now > f.started + (f.hunt ? plan.hunt_ticks : f.assault ? plan.assault_ticks : plan.skirmish_ticks) || target->tile.chebyshev_dist(f.anchor) > (f.assault ? plan.assault_chase : plan.skirmish_chase) + (wounded ? 4 : 0) || (weak && !wounded)) {
             if (weak) {
@@ -638,7 +661,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
     }
     // more defenders: Combat Ants first, then the nearest
-    const size_t wanted = f.hunt ? plan.hunt_force : f.assault ? plan.assault_force : f.offence ? plan.skirmish_force : f.fire ? plan.defenders + (f.raider ? plan.raider_extra : plan.fire_defence_extra) : plan.defenders + (tactics_.guard_stance ? 1u : 0u);
+    const size_t wanted = f.hunt ? plan.hunt_force : f.assault ? f.force : f.offence ? plan.skirmish_force : f.fire ? plan.defenders + (f.raider ? plan.raider_extra : plan.fire_defence_extra) : plan.defenders + (tactics_.guard_stance ? 1u : 0u);
     if (f.defenders.size() < wanted) {
         std::vector<const AntView*> cands;
         for (const AntView& a : v.mine()) {
@@ -646,6 +669,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             if (f.ally && a.tile.chebyshev_dist(target->tile) > plan.ally_help_radius) continue;
             if (f.offence && a.tile.chebyshev_dist(target->tile) > (f.hunt ? plan.hunt_reach : f.assault ? plan.assault_reach : plan.skirmish_reach)) continue;
             if (f.fire && a.tile.chebyshev_dist(target->tile) > 20) continue;
+            if (f.assault && !assault_ant(a, f.pull)) continue;                  // (an assault is made of the free ants, and of the Combat Ants of a bot that is behind)
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) >= 3) continue;         // the ants of a pick-up, a raid or a fight are not taken
             cands.push_back(&a);
@@ -1541,6 +1565,7 @@ void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) co
         if (info == nullptr || !info->approach[c.seat].reachable() || info->cells.empty()) continue;
         const int32_t own_cost = info->approach[c.seat].cost;
         std::vector<const std::vector<int32_t>*> foes;                                   // the cost fields of the hills of the enemies that work the pile
+        bool leader_works = false;                                                       // (a bot that is behind) the leader is one of them: his food is what the mines are for
         for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
             const TeamRow& row = v.rows()[t];
             if (t == c.seat || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || !c.map.hill(t).present) continue;
@@ -1548,12 +1573,21 @@ void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) co
             bool works = ap.reachable() && static_cast<int64_t>(ap.cost) * 100 <= static_cast<int64_t>(own_cost) * plan.mine_percent;
             for (const AntView& e : v.others()) works = works || (e.team == t && e.tile.chebyshev_dist(p.anchor) <= 6);
             const std::vector<int32_t>& field = c.map.cost_field_of(t);
-            if (works && !field.empty()) foes.push_back(&field);
+            if (works && !field.empty()) {
+                foes.push_back(&field);
+                leader_works = leader_works || (plan.behind_war && tactics_.standing.war >= 1 && static_cast<int>(t) == tactics_.standing.leader);
+            }
         }
         if (foes.empty()) continue;
-        uint32_t standing = 0;                                                           // the mines that stand, or are being laid, near this pile
-        for (const BombView& b : v.bombs()) standing += b.owner == c.seat && b.tile.chebyshev_dist(p.anchor) <= 3 ? 1u : 0u;
-        for (const auto& j : jobs_) standing += j.second.tile.chebyshev_dist(p.anchor) <= 3 ? 1u : 0u;
+        const auto by_pile = [&](sim::TileCoord t) {                                     // within two tiles of a cell of the pile: where the mines of this pile are laid
+            for (const sim::TileCoord& q : info->cells) {
+                if (q.chebyshev_dist(t) <= 2) return true;
+            }
+            return false;
+        };
+        uint32_t standing = 0;                                                           // the mines that stand, or are being laid, at this pile
+        for (const BombView& b : v.bombs()) standing += b.owner == c.seat && by_pile(b.tile) ? 1u : 0u;
+        for (const auto& j : jobs_) standing += by_pile(j.second.tile) ? 1u : 0u;
         if (standing >= plan.mine_per_pile) continue;
         std::vector<Target> here;
         std::set<int64_t> seen;
@@ -1583,8 +1617,8 @@ void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) co
                     for (const std::vector<int32_t>* f : foes) {
                         if ((*f)[idx] >= 0 && (foe_cost < 0 || (*f)[idx] < foe_cost)) foe_cost = (*f)[idx];
                     }
-                    if (mine_cost < 0 || foe_cost < 0) continue;
-                    here.push_back(Target{t, (mine_cost - foe_cost) - 25 * ring});
+                    if (mine_cost < 0 || foe_cost < 0 || foe_cost > mine_cost) continue;               // only where the enemy is nearer than the bot (a mine in front of the own workers blocks their way: R7)
+                    here.push_back(Target{t, (mine_cost - foe_cost) - 25 * ring + (leader_works ? 40 : 0)});
                 }
             }
         }
@@ -1681,7 +1715,8 @@ void MineTask::step(TaskContext& c) {
             ++it;
         }
     }
-    if (!on || (plan.war_free_only && tactics_.surplus == 0)) return;
+    const bool behind_free = plan.behind_war && tactics_.standing.war >= 1 && tactics_.standing.war >= plan.behind_free_tier;      // (a bot far behind lays mines with ants that have work: it will not out-eat the leader)
+    if (!on || (plan.war_free_only && tactics_.surplus == 0 && !behind_free)) return;
     std::vector<Target> targets;
     collect_pile_targets(c, targets);
     if (targets.empty()) collect_gate_targets(c, targets);
@@ -2197,7 +2232,8 @@ void SabotageTask::step(TaskContext& c) {
         working_ = false;
         job_tile_ = sim::TileCoord{-1, -1};
     };
-    if (!plan.sabotage || !v.has_grid() || now < plan.sabotage_after || v.ticks_left() < 900 || tactics_.guard_stance) {
+    const uint64_t light_from = plan.behind_war && tactics_.standing.war >= 1 ? std::min<uint64_t>(plan.sabotage_after, plan.behind_sabotage_after) : plan.sabotage_after;       // (a bot that is behind lights sooner)
+    if (!plan.sabotage || !v.has_grid() || now < light_from || v.ticks_left() < 900 || tactics_.guard_stance) {
         give_back();
         release_escorts(c.ledger);
         return;

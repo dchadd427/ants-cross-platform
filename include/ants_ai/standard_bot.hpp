@@ -113,6 +113,8 @@ public:
     const AntLedger& ledger() const noexcept { return ledger_; }
     /// Times the stall detector sent the bot to the plain economy, and whether it is there at `tick`
     uint32_t stalls() const noexcept { return stalls_; }
+    /// The ticks that the bot spent at every war tier of Standing (0: not behind enough .. 3), counted at its looks
+    const std::array<uint32_t, 4>& war_ticks() const noexcept { return war_ticks_; }
     bool in_fallback() const noexcept { return fallback_until_ != 0; }
     uint64_t fallback_until() const noexcept { return fallback_until_; }
     /// The longest a fallback lasts (ticks): 8 minutes
@@ -269,6 +271,8 @@ private:
     // the stall detector
     uint64_t fallback_until_{0};                     // the plain economy runs until this tick (0: normal play)
     uint32_t stalls_{0};
+    std::array<uint32_t, 4> war_ticks_{};     // the ticks spent at every war tier (war_ticks)
+    uint64_t last_look_{0};                   // the tick of the last look that counted
     uint64_t progress_tick_{0};                      // the look at which the score last rose (the first look to begin with)
     int32_t last_score_{0};
     bool progress_known_{false};

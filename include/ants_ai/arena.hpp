@@ -186,6 +186,7 @@ struct ArenaSeatResult {
     uint32_t attack_orders{0};                 // of them, the attack orders (CantGoTally::Seat::attacks)
     uint32_t bombs_planted{0};                 // the bombs the seat's Bombers planted and the fire walls its Fire Ants lit (the engine's own match statistics)
     uint32_t fires_lit{0};
+    std::array<uint32_t, 4> war_ticks{};       // the ticks a standard bot spent at every war tier (StandardBot::war_ticks: not behind enough, 1 .. 3)
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile

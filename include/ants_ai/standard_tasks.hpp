@@ -110,6 +110,9 @@ private:
         bool fire{false};                    // the Fire Ant that lights fire walls on the ring round the own gate (plan.fire_defence): it is hunted while the walls stand
         bool raider{false};                  // (with fire) an enemy Fire or Bomber Ant near the own hill or a pile the own ants work (plan.raider_hunt): hunted whether or not walls stand
         bool assault{false};                 // (with offence) an assault of the free ants after the food (plan.assault): its own numbers
+        uint32_t force{0};                   // (with assault) the ants it was started with (plan.assault_force, one more for a bot that is far behind)
+        bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles (plan.behind_free_tier)
+        uint32_t abort_percent{0};           // (with assault) the odds below which it is called off (the odds it was started with, eased for a bot that is behind, less a fifth)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;
     };
@@ -337,8 +340,10 @@ private:
 ///                 tiles two steps round the pile where the enemy is nearer than the bot (the enemy's walking cost to the tile below the own), the enemy-most first, plan.mine_per_pile standing
 ///                 at a time. The engine's path finder goes round an own bomb and straight through an enemy's (an ant that steps on one loses 2 hit points, is thrown 4 tiles and loses its walk),
 ///                 so the mines sit where the enemy walks and the bot does not
-///   at the gate   with plan.mine_gate and no pile to mine: the open tiles of the ring round the gate of the best opponent (SabotageTask::ring_of), plan.mine_gate standing at a time
-/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up, a tile with an ant on it, within four tiles of the own hill. Every job is
+///   at the gate   with plan.mine_gate and no pile to mine: the open tiles of the ring round the gate of the best opponent (SabotageTask::ring_of), plan.mine_gate standing at a time. The fire-in
+///                 lights the same tiles: a tile with a mine is not lit (it is no open tile), so up to mine_gate of the eight stay mines while the others burn
+///   behind        (plan.behind_war) a bot far enough behind (war tier from plan.behind_free_tier) lays them although its economy needs the hands, and a pile that the leader works comes first
+/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up, a tile with an ant on it, within six tiles of the own hill. Every job is
 /// checked with the engine's own prediction (a cursor that shows the target cursor), as the counters' are.
 class MineTask final : public Task {
 public:

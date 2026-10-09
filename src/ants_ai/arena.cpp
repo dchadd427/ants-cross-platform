@@ -334,6 +334,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         if (const StandardBot* sb = dynamic_cast<const StandardBot*>(bot)) {
             r.style = style_name(sb->style());
             r.stalls = sb->stalls();
+            r.war_ticks = sb->war_ticks();
             r.expedition = read_expedition(sb->expedition());
         }
         read_seat_result(sim, b.seat, r);

@@ -79,6 +79,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.standing = standing_of(plan, view, *map);
     tactics_.guard_stance = tactics_.standing.guard;
     const Standing& st = tactics_.standing;
+    if (last_look_ != 0 && now > last_look_) war_ticks_[st.war] += static_cast<uint32_t>(std::min<uint64_t>(now - last_look_, 1000u));    // (the ticks the bot spent at every war tier, for the arena's report)
+    last_look_ = now;
     const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
@@ -105,7 +107,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     if (enemy_plays && view.ticks_left() > 2400) {
         // the war batch: Bomber Ants for the mines, Fire Ants for the fire-in (the power-ups that the flowers let fall and those on the map; the pick-up trips are the ordinary ones)
-        const bool war_now = !plan.war_free_only || tactics_.surplus > 0;
+        const bool war_now = !plan.war_free_only || tactics_.surplus > 0 || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_free_tier);
         if (war_now && (plan.mine_per_pile > 0 || plan.mine_gate > 0)) tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)], plan.war_bombers));
         if (plan.war_fires > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], plan.war_fires + (tactics_.wall_demand ? 1u : 0u)));
         if (plan.sabotage && plan.fire_extra > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<size_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], 1u + plan.fire_extra));

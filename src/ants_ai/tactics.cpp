@@ -140,6 +140,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.assault_after = 1800;
             p.raider_hunt = true;
             p.raider_radius = 4;
+            p.behind_war = true;
+            p.behind_tier1 = 45;
+            p.behind_tier2 = 100;
+            p.behind_tier3 = 180;
+            p.behind_free_tier = 3;
+            p.behind_odds_ease = 8;
+            p.behind_assault_after = 900;
             break;
         case Level::Medium:
             p.assault = true;
@@ -149,13 +156,20 @@ LevelPlan plan_for(Level level) noexcept {
             p.assault_after = 900;
             p.sabotage = true;
             p.sabotage_safe = false;
-            p.sabotage_after = 5400;                 // (Hard lights from tick 600: the walls cost the victim the food that he would still bring in; Medium's economy is slower, it waits for the last three minutes)
+            p.sabotage_after = 5400;                 // (Hard lights from tick 600: the walls cost the victim the food that he would still bring in; Medium's economy is slower, it waits until tick 5,400: the last 3.5 minutes on SMALL, 1.5 on TINY, 7.5 on TREASURE; from tick 1,800 when it is behind)
             p.war_fires = 2;
             p.raider_hunt = true;
             p.raider_radius = 5;
             p.war_free_only = true;
             p.war_bombers = 1;
             p.mine_gate = 2;
+            p.behind_war = true;
+            p.behind_tier1 = 25;
+            p.behind_tier2 = 55;
+            p.behind_tier3 = 105;
+            p.behind_free_tier = 3;
+            p.behind_odds_ease = 10;
+            p.behind_assault_after = 600;
             break;
         case Level::Hard:
             p.assault = true;
@@ -172,6 +186,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
             p.mine_per_pile = 3;
             p.mine_gate = 3;
+            p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
             break;
     }
     return p;
@@ -183,6 +198,7 @@ void without_war_batch(LevelPlan& p) noexcept {
     p.sabotage = p.level == Level::Hard && p.style == Style::Aggressive;
     p.sabotage_safe = true;
     p.sabotage_after = LevelPlan{}.sabotage_after;
+    p.behind_war = false;
 }
 
 namespace {
@@ -512,11 +528,16 @@ Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& 
         if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) {
             st.tier = st.pressure >= plan.catchup_tier3 ? 3 : st.pressure >= plan.catchup_tier2 ? 2 : st.pressure >= plan.catchup_tier1 ? 1 : 0;
         }
+        if (plan.behind_war && best >= static_cast<int32_t>(plan.behind_min_leader)) {
+            st.war = st.pressure >= plan.behind_tier3 ? 3 : st.pressure >= plan.behind_tier2 ? 2 : st.pressure >= plan.behind_tier1 ? 1 : 0;
+        }
     }
     if (plan.endgame && view.ticks_left() <= plan.endgame_ticks) {
         if (st.ahead) st.guard = true;                                                        // with the lead and little time left: protect it
         else if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) st.tier = 3;       // behind with little time left: all-in
+        if (!st.ahead && plan.behind_war && best >= static_cast<int32_t>(plan.behind_min_leader)) st.war = 3;
     }
+    st.tier = std::max(st.tier, st.war);                                                      // (the war tier is a tier of the catch-up too: raids for a smaller loot, the strike, the Combat Ants)
     return st;
 }
 
