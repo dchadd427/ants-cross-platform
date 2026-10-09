@@ -154,12 +154,21 @@ void test_sized_layouts() {
     check(ScreenLayout::with_size(600, 400) == ScreenLayout::classic() && ScreenLayout::with_size(639, 479).is_classic() && ScreenLayout::with_size(0, 0).is_classic(), "a smaller canvas gives the classic layout");
     check(ScreenLayout::with_size(1920, 1080).dx() == 1280 && ScreenLayout::with_size(1920, 1080).dy() == 600, "1920 x 1080: dx = 1280, dy = 600");
     check(ScreenLayout::with_size(800, 480).dx() == 160 && ScreenLayout::with_size(800, 480).dy() == 0, "a wider canvas of the same height only has dx");
+    // the four shapes of the live aspect switch (Classic 4:3, 16:10, 16:9, 21:9): the map views of the picture that was approved
+    struct Shape4 { int32_t w, h, view_w, view_h; };
+    for (const Shape4& sh : {Shape4{640, 480, 442, 440}, Shape4{960, 600, 762, 560}, Shape4{960, 540, 762, 500}, Shape4{1260, 540, 1062, 500}}) {
+        const ScreenLayout l = ScreenLayout::with_size(sh.w, sh.h);
+        const std::string at = std::to_string(sh.w) + " x " + std::to_string(sh.h) + ": ";
+        check(l.width == sh.w && l.height == sh.h && l.dx() == sh.w - 640 && l.dy() == sh.h - 480, at + "dx and dy are the canvas's difference from 640 x 480");
+        check(l.view().x == 16 && l.view().y == 21 && l.view().w == sh.view_w && l.view().h == sh.view_h, at + "the map view is " + std::to_string(sh.view_w) + " x " + std::to_string(sh.view_h));
+        check(l.is_classic() == (sh.w == 640), at + "only 640 x 480 is the classic layout");
+    }
 }
 
 void test_anchoring_invariants() {
     group("anchors", "the same relations hold in every size: the panel meets the edges, the view meets the panel and the bottom strip, nothing leaves the screen");
     for (const ScreenLayout& l : {ScreenLayout::classic(), ScreenLayout::with_size(800, 600), ScreenLayout::with_size(960, 540), ScreenLayout::with_size(1280, 720),
-                                  ScreenLayout::with_size(1920, 1080), ScreenLayout::with_size(2560, 1080)}) {
+                                  ScreenLayout::with_size(1920, 1080), ScreenLayout::with_size(2560, 1080), ScreenLayout::with_size(960, 600), ScreenLayout::with_size(1260, 540)}) {
         const std::string at = "at " + std::to_string(l.width) + " x " + std::to_string(l.height) + ": ";
         check(l.panel_fill().right() == l.width && l.panel_fill().bottom() == l.height, at + "the panel fill reaches the right and bottom edges");
         check(l.minimap().x - l.view().right() == 22 && l.view().x == 16 && l.view().y == 21, at + "the gap between the view and the minimap is the original's 22, the view's corner stays");
@@ -777,11 +786,11 @@ void test_chat_follows_layout() {
     check(end == 37 + 20 * 25 && wide_hud.chat_content_end() == end, "the start message (37 px) and 20 entries of 25 px make a log of 537 px (the end is one past the last row)");
     check(classic_hud.chat_follow_target() == end - 1 - 101, "classic: the log follows the newest entry: its window (101 px) ends at the newest row");
     check(wide_hud.chat_follow_target() == end - 1 - 161, "960 x 540: the window is 161 px high");
-    // a new layout puts the window inside the log again: the position that the 101 px window wanted is too far for the 161 px one
+    // a new layout (the picture's shape changes while the match runs) puts the window inside the log again: a window that ends at the newest row still ends there, whatever the height of the view
     classic_hud.set_layout(wide);
-    check(classic_hud.chat_follow_target() == end - 161, "a taller chat view pulls the follow position back to the log's end less 161");
+    check(classic_hud.chat_follow_target() == end - 1 - 161, "a taller chat view pulls the follow position back: the window (161 px) ends at the newest row");
     classic_hud.set_layout(ScreenLayout::classic());
-    check(classic_hud.chat_follow_target() == end - 161, "(and a layout that makes the view shorter does not push it forward: the follow task does that)");
+    check(classic_hud.chat_follow_target() == end - 1 - 101, "and a shorter one keeps the newest row in the window: the position moves forward (101 px)");
 }
 
 void test_ctrl_n_follows_layout() {

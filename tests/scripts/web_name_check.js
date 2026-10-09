@@ -1071,7 +1071,7 @@ const cardBlockText = (map, teams) => '&roommap=' + map + '&roomseats=4' + (team
     const link = inviteLinks(env)[0];
     copyOf(env, 0).click();
     const reloaded = runLobby('', env.storage.data, { session: env.session.data });
-    same('a reload (the picture\'s selector reloads the page): the same links', inviteLinks(reloaded), [link]);
+    same('a reload (the page is opened again): the same links', inviteLinks(reloaded), [link]);
     check('... and no note (they are the links that were copied)', reloaded.$('links-note').hidden);
     choose(reloaded, 2, 'friend');
     check('... and a change after the reload that changes the links brings the note (what was copied is remembered by the tab)', !reloaded.$('links-note').hidden && reloaded.param(inviteLinks(reloaded)[0], 'room') === env.param(link, 'room'));

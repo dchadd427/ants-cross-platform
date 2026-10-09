@@ -4,15 +4,17 @@ What you see in a match and how the game draws it: the 16:9 picture, the map vie
 
 ## 16:9 by default: a wider view with more of the map (desktop and web builds)
 
-The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. The desktop window is created in the picture's shape from the first moment.
+The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. Two more wide shapes are offered for other screens: `16:10` (960 x 600, laptops and 16:10 monitors) and `21:9` (1260 x 540, ultrawide monitors). The desktop window is created in the picture's shape from the first moment.
 
-| | `--aspect 4:3` | 16:9 (the default) |
-|---|---|---|
-| Canvas | 640 x 480 | 960 x 540 |
-| Map view, at (16, 21) | 442 x 440 pixels (13.8 x 13.75 tiles) | 762 x 500 pixels (23.8 x 15.6 tiles) |
-| Right panel and minimap | the original's places (minimap at (480, 35)) | pinned to the right edge, 320 px further right (minimap at (800, 35)) |
-| Chat log | 138 x 101 at (482, 299) | 138 x 161 (60 px taller) at (802, 299) |
-| The three bottom score boxes, x | 105, 254, 402 | 213, 468, 722 |
+| | `--aspect 4:3` | 16:10 | 16:9 (the default) | 21:9 |
+|---|---|---|---|---|
+| Canvas | 640 x 480 | 960 x 600 | 960 x 540 | 1260 x 540 |
+| Map view, at (16, 21) | 442 x 440 pixels (13.8 x 13.75 tiles) | 762 x 560 pixels (23.8 x 17.5 tiles) | 762 x 500 pixels (23.8 x 15.6 tiles) | 1062 x 500 pixels (33.2 x 15.6 tiles) |
+| Right panel and minimap | the original's places (minimap at (480, 35)) | pinned to the right edge, 320 px further right (minimap at (800, 35)) | the same as 16:10 | pinned to the right edge, 620 px further right (minimap at (1100, 35)) |
+| Chat log | 138 x 101 at (482, 299) | 138 x 221 (120 px taller) at (802, 299) | 138 x 161 (60 px taller) at (802, 299) | 138 x 161 at (1102, 299) |
+| The three bottom score boxes, x | 105, 254, 402 | 213, 468, 722 (60 px lower than 16:9) | 213, 468, 722 | 313, 668, 1022 |
+
+The shape can be changed **while a match runs**: in the browser the selector under the game (Classic 4:3, 16:10, 16:9, 21:9) switches at once, with no reload, no new connection and nothing asked; the simulation is not touched (a switched player's state hash after every tick is the one of a match that was never switched: `test_aspect_switch`). `Application::set_aspect` is the call. The world point in the middle of the view stays in the middle, the zoom that the player chose is kept and comes back where the new view offers it, and the pointer, the HUD and the screens follow. A native window keeps its size (the picture is fitted into it with bars, as for any window); nothing in the desktop game calls it yet.
 
 - The view shows about twice the area of the world at once. At the zoom 1 everybody who plays the same aspect sees the same area. The zoom is each player's own choice (see Mouse-wheel zoom below).
 - The frame is the original's own art, grown by repeating one line of its pieces: the top bar, the bottom strip and the left strip, and, in the right panel, the strip beside the map, the chat box and the right edge strip at one row (357, where all three are plain between their ant decorations). The clock box, the score boxes and the decorations are never stretched (`include/ants_app/shell_layout.hpp` lists the cuts). The bottom strip is widened at three plain cuts of its art, so that the three score boxes are spread evenly over it (they are laid out by slot).
@@ -23,6 +25,7 @@ The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's ow
   - the results screen (see Results Screen below);
   - the desktop start menu: its controls untouched, the title at the top, the buttons centred, the hint and the server line at the bottom;
   - the setup screen and the room have their own 16:9 version with a map preview (see [`CONTROLS.md`](CONTROLS.md)).
+  - in the 16:10 and 21:9 canvases these pages are the 960 x 540 page, **centred in the canvas with black around it** (`CanvasLayout::page()`; the frame-rate plate and the version stand in the page's corner); the match itself fills the whole canvas. Pages composed for the other shapes are future work.
 - The windows that open during a match (the options window, the quick help, the quit and alliance dialogs, "get ready") are centred over the map view, with the frame around them. The options window dims everything outside its card with the checker dither of its art: the whole picture, the frame and the panel included.
 - The web page's own handling of the picture (its selector, its fullscreen) is in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md).
 

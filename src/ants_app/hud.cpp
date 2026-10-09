@@ -121,9 +121,10 @@ void HUD::init(uint8_t local_player_id, bool announce) {
 }
 
 void HUD::set_layout(const ScreenLayout& layout) {
+    const int32_t old_view_h = layout_.chat_view().h;
     layout_ = layout;
     apply_layout();
-    relayout_chat();                                     // the chat view may have another height: the log's positions stay inside it
+    relayout_chat(old_view_h);                           // the chat view may have another height: the log's positions stay inside it
 }
 
 // The rectangles that the layout places, the one place that knows them: init() runs it at every new match and set_layout() when the layout changes, so a layout set earlier is
@@ -1856,8 +1857,12 @@ void HUD::append_chat_display_lines(const ChatEntry& entry) {
     }
 }
 
-// The measure changed: every label is measured again and the entries are restacked; the window's positions stay inside the new log
-void HUD::relayout_chat() {
+// The measure changed: every label is measured again and the entries are restacked; the window's positions stay inside the new log. When the view changed its height too (`old_view_h`, the
+// picture's shape changed) a window that was showing the newest line still shows it (a shorter view would otherwise leave the last rows below it)
+void HUD::relayout_chat(int32_t old_view_h) {
+    const int32_t old_bottom = std::max(0, chat_content_end_ - 1 - old_view_h);                    // (where AddLine puts the window: the newest line on its last row)
+    const bool pos_at_bottom = old_view_h >= 0 && chat_follow_pos_ >= old_bottom;
+    const bool target_at_bottom = old_view_h >= 0 && chat_follow_target_ >= old_bottom;
     chat_log_.clear();
     chat_line_colour_.clear();
     int32_t top = 0;
@@ -1868,8 +1873,9 @@ void HUD::relayout_chat() {
     }
     chat_content_end_ = top;
     const int32_t limit = std::max(0, chat_content_end_ - layout_.chat_view().h);
-    chat_follow_pos_ = std::min(chat_follow_pos_, limit);
-    chat_follow_target_ = std::min(chat_follow_target_, limit);
+    const int32_t bottom = std::max(0, chat_content_end_ - 1 - layout_.chat_view().h);
+    chat_follow_pos_ = pos_at_bottom ? bottom : std::min(chat_follow_pos_, limit);
+    chat_follow_target_ = target_at_bottom ? bottom : std::min(chat_follow_target_, limit);
     chat_drag_offset_ = std::min(chat_drag_offset_, limit);
 }
 

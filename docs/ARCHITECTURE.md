@@ -144,7 +144,7 @@ ants-cross-platform/
 │   │   ├── run_python_tests.py         # Runs those python tests side by side
 │   │   ├── process_state.py            # Helper: whether a process still runs
 │   │   ├── stack_command.py            # Helper: the server's command in docker-compose.stack.yml
-│   │   ├── test_web_aspect.sh          # The picture's shape (16:9, 4:3), the selector, fullscreen, the pointer
+│   │   ├── test_web_aspect.sh          # The picture's shape (the four shapes), the selector, fullscreen, the pointer
 │   │   ├── test_web_edge.sh            # The pointer of a fullscreen page (the bars, the pointer lock), the margin of
 │   │   │                               # a windowed one
 │   │   ├── test_web_hidden.sh          # The game in a hidden browser tab
