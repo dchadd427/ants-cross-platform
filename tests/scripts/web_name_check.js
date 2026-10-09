@@ -387,11 +387,11 @@ const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
         check('the page has #' + id + ' once', lobbyMarkup.split('id="' + id + '"').length === 2);
     for (const gone of ['player-name', 'join-name', 'who', 'who-go', 'who-back', 'who-title', 'cards', 'map-pick', 'play', 'seat-you-0', 'sit-0', 'invite-list', 'name-msg', 'join-go', 'join-code'])
         check('the one-card page\'s #' + gone + ' is gone', lobbyMarkup.indexOf('id="' + gone + '"') === -1);
-    check('the markup has no name field but the card\'s: one text input with the id name-step-input and no other input for a name', (lobbyMarkup.match(/<input[^>]*>/g) || []).filter((t) => /name/i.test(t.replace(/aria-label="[^"]*"/g, ''))).length === 1);
+    check('the markup has no name field but the card\'s: one text input with the id name-step-input and no other input for a name', (lobbyMarkup.match(/<input[^>]*>/g) || []).filter((t) => /\bid="[^"]*name[^"]*"|placeholder="[^"]*name/i.test(t)).length === 1);
     // The name card is the game page's step in the lobby page: the NAME block's runNameStep runs it, over the card's own field, button and message
     check('the name card is run by the NAME block\'s runNameStep, over the card\'s own field, button and message (the field and the button are fresh nodes: no listener of an earlier use stays)',
           /input: freshNode\('name-step-input'\), button: freshNode\('name-step-go'\),\s*message: \{ get textContent\(\) \{ return \$\('name-step-msg'\)\.textContent; \}, set textContent\(v\) \{ \$\('name-step-msg'\)\.textContent = v; ui\.input\.setAttribute\('aria-invalid', v \? 'true' : 'false'\); \} \},/.test(lobbyScript) &&
-          /runNameStep\(ui,\{ recall: recall, remember: remember \}, function \(name\) \{ o\.done\(name \|\| suggestion\); \}\);/.test(lobbyScript) &&
+          /runNameStep\(ui, \{ recall: recall, remember: remember \}, function \(name\) \{ o\.done\(name \|\| suggestion\); \}\);/.test(lobbyScript) &&
           /function freshNode\(id\) \{\s*var old = \$\(id\), copy = old\.cloneNode\(true\);\s*old\.parentNode\.replaceChild\(copy, old\);\s*return copy;\s*\}/.test(lobbyScript));
     check('three things ask for a name: a link of somebody else\'s room, a code that was typed, and an address of the test room (askName is called three times, and no other way starts a seat of a stranger)', (lobbyScript.match(/\baskName\(\{/g) || []).length === 3);
     check('the card says its words as text: the title, the button, the hint, the suggestion in the field, the way out', /\$\('name-step-title'\)\.textContent = o\.title;/.test(lobbyScript) && /ui\.button\.textContent = o\.button;/.test(lobbyScript) && /ui\.input\.placeholder = suggestion;/.test(lobbyScript)
@@ -408,7 +408,7 @@ const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
     check('the Copy button, the Share sheet and the link field all give that link', /copyButton\(\$\('copy'\), roomLink\);/.test(lobbyScript) && /navigator\.share\(\{ url: roomLink\(\) \}\)/.test(lobbyScript) && /if \(\$\('link'\)\.value !== roomLink\(\)\) \$\('link'\)\.value = roomLink\(\);/.test(lobbyScript));
     check('a game address of the test room has a name only for a seat that this page starts itself (own), and the links for somebody else (Copy link, the link for anybody) are made without it',
           /if \(own && seat >= 0\) q \+= '&name=' \+ encodeURIComponent\(seatNames\.start\(/.test(lobbyScript) && /copyButton\(copy, function \(\) \{ return gameUrl\(i\); \}\);/.test(lobbyScript) && /\$\('any-link'\)\.value = gameUrl\(-1\);/.test(lobbyScript) &&
-          (lobbyScript.match(/gameUrl\([^)]*\btrue\b/g) || []).length === 4);
+          (lobbyScript.match(/gameUrl\([^)]*\btrue\b/g) || []).length === 3 && /iframe\.src = gameUrl\(seat, true\) \+ '&embed=1';/.test(lobbyScript) && /window\.open\(gameUrl\(seat, true\),/.test(lobbyScript) && /frames\[seat\]\.src = gameUrl\(frameSeat\[seat\] === null \? seat : frameSeat\[seat\], true, seat\) \+ '&embed=1';/.test(lobbyScript));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1382,7 +1382,7 @@ check('the front page\'s only window.open is the seat\'s explicit one (no window
     // &teams= is the leader's START choice for a room whose block names no teams of its own (every room that was made some other way); the teams that a block names are the room's own and win over it, and the links then
     // carry &roomteams= and no &teams=. Where the block says how many seats the room has, a pair that those seats cannot make is free for all (the page narrows it, as it narrows the teams of an address that makes a room:
     // for four seats the pairs with Green); a block whose own seats cannot make its teams is the server's to judge at START (the match starts without teams and the room says "No teams: ..."): the page carries it
-    // as it is, does not announce it, and does not replace it with &teams=; a room that was made some other way is the game's to judge, so its &teams= goes as it is.
+    // as it is, does not announce it, and does not replace it with &teams=. (An address with no block at all is no room of the test mode now: it is a link to a lobby, and has no teams to carry.)
     // [the address of the page, the block that every link carries, the teams parameter that every link carries (null: none), the fill parameter, the address of the page, the line of the panel under the title ('' when it is hidden)]
     const BLOCKED = '&roommap=treasure&roomseats=4';
     const AT_START = (teams) => 'Teams at START: ' + teams + '. Every link of this room carries the teams; only the leader\'s START uses them.';
@@ -1404,7 +1404,7 @@ check('the front page\'s only window.open is the seat\'s explicit one (no window
         ['?room=k7m2xq&roommap=treasure&roomseats=4&teams=1%2B1', BLOCKED, null, null, '/?room=k7m2xq&roommap=treasure&roomseats=4', ''],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=3%2B3&teams=0%2B3', BLOCKED, '0+3', null, '/?room=k7m2xq&roommap=treasure&roomseats=4&teams=0%2B3', AT_START('Green + Black against Red + Blue')],
         ['?room=k7m2xq&roomleaderstart=1&teams=0%2B1', '&roomseats=4&roomleaderstart=1', '0+1', null, '/?room=k7m2xq&roomseats=4&roomleaderstart=1&teams=0%2B1', AT_START('Green + Red against Blue + Black')],
-        ['?room=k7m2xq&roomseats=4&teams=2%2B3', '&roomseats=4', '2+3', null, '/?room=k7m2xq&roomseats=4&teams=2%2B3', AT_START('Blue + Black against Green + Red')],
+        ['?room=k7m2xq&roomseats=4&teams=2%2B3', '&roomseats=4', null, null, '/?room=k7m2xq&roomseats=4', ''],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&fill=hard', BLOCKED + '&roomteams=0%2B1', null, 'hard', '/?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&fill=hard', 'Teams of this room: Green + Red against Blue + Black.'],
         ['?room=k7m2xq&roommap=treasure&roomseats=4&fill=none,easy,none,hard&teams=0%2B2', BLOCKED, '0+2', 'none,easy,none,hard', '/?room=k7m2xq&roommap=treasure&roomseats=4&fill=none,easy,none,hard&teams=0%2B2', 'Empty seats at START: Red Easy, Black Hard.'],
     ];

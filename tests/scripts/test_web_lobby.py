@@ -302,7 +302,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',", run)
         self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false }); },", run)
         self.assertIn("offline = 'join';", run)                                                                   # (the page behind the card waits with no names and no map)
-        self.assertIn("var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted : '';", run)
+        self.assertIn("var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';", run)      # (a room code is lower case: a link that came in capitals leads to the same room)
         # this tab's room and the seat's key live in the tab's session storage, a seat that a game holds in the browser's local storage; a stored room is believed only when it is shaped as the page writes it
         self.assertIn("var LOBBY_KEY = 'ants.lobby';", script)
         self.assertEqual(sorted(set(re.findall(r"window\.sessionStorage\.\w+\(LOBBY_KEY", script))), ["window.sessionStorage.getItem(LOBBY_KEY", "window.sessionStorage.removeItem(LOBBY_KEY", "window.sessionStorage.setItem(LOBBY_KEY"])

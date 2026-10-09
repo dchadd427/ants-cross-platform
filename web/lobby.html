@@ -634,7 +634,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // block has no map). web/shell.html's joinArguments reads each part through its own whitelist and gives the game --room-map, --room-seats, --room-teams and --room-leader-start.
         function roomBlockQuery(block) {
             if (!block || typeof block !== 'object') return '';
-            var map = typeof block.map === 'string' && mapByKey(block.map) ? block.map : '';
+            var map = typeof block.map === 'string' && mapByKey(block.map) ? mapByKey(block.map).key : '';
             var seats = block.seats === 2 || block.seats === 3 || block.seats === 4 ? block.seats : 4;
             var teams = validRoomTeams(block.teams);
             return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');
@@ -1489,7 +1489,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // ---- the way in ----
         function runLobby() {
             showRejoin();
-            var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted : '';
+            var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
             var stored = loadSession();
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 offline = 'join';

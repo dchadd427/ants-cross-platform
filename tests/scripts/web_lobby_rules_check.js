@@ -722,6 +722,256 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
 same('the page does not change the room it is shown or the switches it is given', (() => { const m = model(S5), c = ctx({ sides: [1, 0, 1, 0] }), a = JSON.stringify([m, c]); R.viewOf(m, c); return JSON.stringify([m, c]) === a; })(), true);
 same('a context with nothing in it is the plain host screen', R.viewOf(model(S2), {}).cards.map(show), view(S2).cards.map(show));
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 8. The sentences of the server (noticeKind) and every message strip of picture 15 (banner)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// the words of the C++ server, read from include/ants_net/protocol.hpp (the page matches what the server says, so the check holds it to the server's own text)
+const protocolPath = path.join(path.dirname(path.resolve(lobbyPath)), '..', 'include', 'ants_net', 'protocol.hpp');
+const protocolText = fs.existsSync(protocolPath) ? fs.readFileSync(protocolPath, 'utf8') : '';
+const said = (name) => { const m = new RegExp(name + ' = "((?:[^"\\\\]|\\\\.)*)"').exec(protocolText); return m ? m[1] : null; };
+const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams') };
+same('the sentences of the server\'s START, as protocol.hpp has them', SAID, {
+    late: '\'s game did not come in time.', lates: 'These games did not come in time: ', maplost: 'This map could not be loaded: choose another map.', mapcolours: 'This map cannot be played with these colours.',
+    noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: '
+});
+const PRIYA_LATE = 'Priya' + SAID.late;
+[
+    // [the line that the room said, the kind]
+    [PRIYA_LATE, 'late'], ['Sam' + SAID.late, 'late'], ['x' + SAID.late, 'late'], [SAID.lates + 'Priya, Sam.', 'late'], [SAID.lates + 'Priya.', 'late'], [SAID.lates, 'late'],
+    [SAID.noplace, 'noplace'], ['The server has no place for another match right now', 'noplace'], [SAID.noplace + ' (later)', 'noplace'], [SAID.startsfailed, 'startsfailed'], [SAID.maplost, 'maplost'], [SAID.mapcolours, 'mapcolours'],
+    // near misses are only notices: the sentences are matched whole, from the first letter
+    [SAID.maplost.slice(0, -1), 'notice'], [SAID.mapcolours.slice(0, -1), 'notice'], [SAID.maplost + ' ', 'notice'], [' ' + SAID.mapcolours, 'notice'], [SAID.mapcolours.toLowerCase(), 'notice'], [SAID.mapcolours + ' Later.', 'notice'],
+    [PRIYA_LATE.slice(0, -1), 'notice'], [PRIYA_LATE + ' Press START.', 'notice'], ['Priya’s game did not come in time.', 'notice'], ['These games did not come in time', 'notice'], ['These games did not come in time:', 'notice'],
+    ['  ' + SAID.noplace, 'notice'], ['the server has no place for another match right now', 'notice'], [SAID.startsfailed.slice(0, 20), 'notice'], ['The match could not start', 'notice'],
+    [SAID.noteams + 'the teams need a pair.', 'notice'], ['Hello', 'notice'], ['', 'notice']
+].forEach(([text, kind]) => same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is ' + kind + ', with the text as the room said it', R.noticeKind(text), { kind: kind, server: text }));
+same('noticeKind of what is no text is a notice with no words', [null, undefined, 42, {}].map((t) => R.noticeKind(t)), [{ kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }]);
+
+// picture 15, strip by strip: [kind, what the page knows (the arguments), the words, the colour of the strip ('' green, 'warn' gold), the button ('' none)]
+const ARGS_HOST = { guest: false, leaver: 'Leo', host: 'Sam' };
+const BANNERS = [
+    ['host', ARGS_HOST, 'Leo left, so you are the host now. The map, the colours and START are yours.', '', 'OK'],
+    ['host', { guest: true, leaver: 'Juniper', host: 'Sam' }, 'Juniper left. Sam is the host now.', '', 'OK'],
+    ['old', {}, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
+    ['old', { sameMap: true }, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
+    ['old', { sameMap: false }, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', '', 'OK'],
+    ['over', { map: 'Treasure' }, 'Welcome back. Your match on Treasure is over. Everything is as you left it: change what you like and press START for another.', '', 'OK'],
+    ['late', { server: PRIYA_LATE }, 'Priya\'s game did not come in time. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
+    ['late', { server: SAID.lates + 'Priya, Sam.' }, 'These games did not come in time: Priya, Sam. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
+    ['lateplayer', { host: 'Juniper' }, 'The match did not start, so everybody is back in the room. Juniper can press START to try again.', 'warn', 'OK'],
+    ['noplace', { server: SAID.noplace }, 'The server has no place for another match right now: try again in a minute. Everybody is back in the room.', 'warn', 'OK'],
+    ['startsfailed', { server: SAID.startsfailed }, 'The match could not start a few times in a row: try again in a minute. Everybody is back in the room.', 'warn', 'OK'],
+    ['maplost', { server: SAID.maplost }, 'This map could not be loaded: choose another map.', 'warn', 'OK'],
+    ['mapcolours', { server: SAID.mapcolours }, 'This map cannot be played with these colours.', 'warn', 'OK'],
+    ['full', {}, 'That room is full, so this one is yours now. Send the link on if you like.', '', 'OK'],
+    ['running', {}, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.', '', 'OK'],
+    ['removed', {}, 'The host removed you from the room, so this one is yours now. Send the link on if you like.', '', 'OK'],
+    ['lost', {}, 'Connection lost. Getting you back in…', 'warn', ''],
+    ['unreachable', {}, 'Cannot reach the game server. Check your connection; trying again…', 'warn', ''],
+    ['busy', {}, 'The server is full right now, so there is no room for you yet. Try again in a minute.', 'warn', 'Try again'],
+    ['away', {}, 'This room was opened in another window, so it is closed here.', 'warn', 'Use this window'],
+    ['version', {}, 'A newer version of Ants is out. Reload the page to update.', 'warn', 'Reload'],
+    ['notice', { server: 'Some other line of the room.' }, 'Some other line of the room.', 'warn', 'OK']
+];
+BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));
+same('picture 15 lists seventeen messages: these are their kinds', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('green is the page changing something for you (the host, an old room, a match that is over, a full room, a running match, a removal); gold is something that did not work', [R.META.host, R.META.old, R.META.over, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice].map((m) => m.tone)), ['', '', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn']);
+same('the kinds that have a strip: the seventeen of the picture and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notice', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
+same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true]);
+same('a button that is not OK or none says what it does, in words (the page does it; here the words are read): Try again, Use this window, Reload', Object.keys(R.META).filter((k) => R.META[k].btn !== '' && R.META[k].btn !== 'OK').sort(), Object.keys(R.ACTS).sort());
+same('what those buttons do', R.ACTS, { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' });
+same('the buttons are OK, Try again, Use this window, Reload or none', Object.keys(R.META).map((k) => R.META[k].btn).filter((b, i, a) => a.indexOf(b) === i).sort(), ['', 'OK', 'Reload', 'Try again', 'Use this window']);
+same('a strip that has no button is one that goes by itself (the connection is back): lost and unreachable', Object.keys(R.META).filter((k) => R.META[k].btn === '').sort(), ['lost', 'unreachable']);
+same('the line under the "Have a code?" field', [R.TEXT.noroom(), R.HINT.own, R.HINT.same, R.HINT.full, R.HINT.running], [
+    'There is no room with that code. Check it, or ask the host to send the link again.', 'That is your own room.', 'You are in that room already.', 'That room is full.', 'The match in that room has already started.'
+]);
+same('banner of a kind that has no strip of its own (the code field\'s) is a gold strip with OK', [R.banner('noroom', {}).tone, R.banner('noroom', {}).btn], ['warn', 'OK']);
+{
+    const args = { server: 'A sentence of the server.', host: 'H', leaver: 'L', guest: false, map: 'M' };
+    check('every banner has the four fields and words (nothing is undefined or empty)', Object.keys(R.META).every((k) => { const b = R.banner(k, args); return Object.keys(b).sort().join() === 'btn,kind,text,tone' && typeof b.text === 'string' && b.text.length > 10 && b.kind === k; }));
+    check('the banners that need to know nothing say their words without arguments (the others, which name a person, a map or the server\'s sentence, are given them)', ['old', 'full', 'running', 'removed', 'lost', 'unreachable', 'busy', 'away', 'version'].every((k) => { const b = attempt(() => R.banner(k)); return !b.threw && typeof b.value.text === 'string' && b.value.text.length > 10 && !/undefined/.test(b.value.text); }));
+    check('a banner about a person leaving names both: "L left" and the new host', R.banner('host', { guest: true, leaver: 'L', host: 'H' }).text === 'L left. H is the host now.');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. Random rooms: what must hold whatever the room is (a fixed seed, so the same rooms every time)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+function prng(seed) { return () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const rnd = prng(20251008);
+const pick = (a) => a[Math.floor(rnd() * a.length)];
+const NAMES_R = ['Juniper', 'Sam', 'Priya', 'Leo', 'Zed', 'a', '<b>', 'W'.repeat(32), 'Bot', 'x y', 'Maple'];
+function randomRoom() {
+    const kinds = ALL.map(() => pick(['person', 'person', 'open', 'bot', 'nobody']));
+    if (kinds.indexOf('person') < 0) kinds[Math.floor(rnd() * 4)] = 'person';
+    const persons = ALL.filter((s) => kinds[s] === 'person');
+    const plan = kinds.map((k) => (k === 'bot' ? 1 + Math.floor(rnd() * 3) : k === 'nobody' ? 4 : 0));
+    const seats = ALL.map((s) => (kinds[s] === 'person' ? P(NAMES_R[(s * 3 + Math.floor(rnd() * 11)) % 11]) : O));
+    const leader = pick(persons);
+    const play = ALL.filter((s) => kinds[s] === 'person' || kinds[s] === 'bot');
+    let teamA = 255, teamB = 255;
+    const r = rnd();
+    if (r < 0.4 && play.length >= 2) { const a = pick(play); const b = pick(play.filter((s) => s !== a)); teamA = Math.min(a, b); teamB = Math.max(a, b); }
+    else if (r < 0.5) { const a = Math.floor(rnd() * 3); teamA = a; teamB = a + 1 + Math.floor(rnd() * (3 - a)); }
+    const starting = rnd() < 0.2;
+    let inGame = 0;
+    if (starting) persons.forEach((s) => { if (rnd() < 0.5) inGame |= 1 << s; });
+    return mk(seats, { you: rnd() < 0.5 ? leader : pick(persons), leader: leader, plan: plan, teamA: teamA, teamB: teamB, starting: starting, inGame: inGame });
+}
+const props = {};
+const tally = { rooms: 0, views: 0, pairViews: 0, hostViews: 0, accepted: 0, refused: 0, exchanges: 0, moves: 0, mends: 0, teamed: 0 };
+const holds = (name, ok, detail) => { if (props[name] === undefined) props[name] = null; if (!ok && props[name] === null) props[name] = detail === undefined ? 'broken' : String(detail); };
+const strings = new Set();
+const collect = (x) => { if (typeof x === 'string') strings.add(x); else if (Array.isArray(x)) x.forEach(collect); else if (x && typeof x === 'object') Object.keys(x).forEach((k) => collect(x[k])); };
+const KINDS_OF = (room) => ALL.map((s) => (room.slots[s].state === C ? 'person' : room.plan[s] >= 1 && room.plan[s] <= 3 ? 'bot' : room.plan[s] === 4 ? 'nobody' : 'open'));
+const J = JSON.stringify;
+const JC = (x) => JSON.stringify(canon(x));
+for (let i = 0; i < 700; i++) {
+    const room = randomRoom();
+    const m = model(room);
+    const kinds = KINDS_OF(room);
+    tally.rooms++;
+    if (room.teamA !== 255) tally.teamed++;
+    const D = (extra) => 'room ' + J(room.slots.map((s) => s.name)) + ' plan ' + J(room.plan) + ' you ' + room.you + ' leader ' + room.leader + ' teams ' + room.teamA + ',' + room.teamB + (extra ? ' ' + extra : '');
+    // the model
+    holds('modelOf says what each colour is (a person, a computer player, nobody, open)', J(m.slots.map((s) => s.kind)) === J(kinds), D());
+    holds('modelOf: the page is a guest exactly when it is not the leader, and the leader is the leader', m.guest === (room.you !== room.leader) && m.leader === room.leader && m.starting === room.starting, D());
+    holds('modelOf: the switches are the room\'s pair or none', (room.teamA === 255 ? J(m.sides) === '[0,0,0,0]' : m.sides.filter((v) => v === 1).length === 2 && m.sides[room.teamA] === 1 && m.sides[room.teamB] === 1), D());
+    holds('startsAlone is true exactly when one colour plays (a person or a computer player)', R.startsAlone(m) === (kinds.filter((k) => k === 'person' || k === 'bot').length === 1), D());
+    holds('playing lists the persons and the computer players, in seat order', J(R.playing(m)) === J(ALL.filter((s) => kinds[s] === 'person' || kinds[s] === 'bot')), D());
+    // the views
+    for (const offline of [false, false, 'lost', 'none', 'join']) {
+        const o = { sides: ALL.map(() => pick([0, 0, 1, 2])), picked: pick([-1, -1, 0, 1, 2, 3]), removing: pick([-1, 0, 1, 2, 3, 7]), offline: offline, refusal: rnd() < 0.2 ? 'A refusal.' : '' };
+        const r = attempt(() => R.viewOf(m, o));
+        holds('viewOf does not throw for any room and context', !r.threw, r.threw);
+        if (r.threw) continue;
+        const v = r.value;
+        const ro = m.guest || m.starting || !!offline;
+        const Dv = D('ctx ' + J(o));
+        collect(v);
+        tally.views++;
+        if (!ro) tally.hostViews++;
+        if (!ro && R.playing(m).length >= 3 && R.pairOf(v.sides, R.playing(m))) tally.pairViews++;
+        holds('viewOf: four cards, in seat order, each with its colour', v.cards.length === 4 && v.cards.every((c, s) => c.seat === s && c.colour === R.COLOURS[s] && c.kind === m.slots[s].kind), Dv);
+        holds('viewOf: read-only (a player, START, no link): no dots, no drop-down, no Remove, no question, no buttons', !ro || v.cards.every((c) => !c.grip && c.mode === '' && !c.remove && !c.ask && c.teams === null), Dv);
+        holds('viewOf: the host of an open room can drag every card and set every colour that no person holds', ro || v.cards.every((c) => c.grip && (c.mode !== '') === (c.kind !== 'person')), Dv);
+        holds('viewOf: the pencil is on the page\'s own name, while the room is open and the link is there', v.cards.every((c, s) => c.pencil === (m.slots[s].kind === 'person' && !!m.slots[s].me && !m.starting && !offline)), Dv);
+        holds('viewOf: Remove is on persons that are neither the page nor the leader, never on a read-only screen; one question at a time, and it is the one that removing says', (() => {
+            const ask = v.cards.filter((c) => c.ask).map((c) => c.seat);
+            const okRemove = v.cards.every((c, s) => (c.remove || c.ask) === (!ro && m.slots[s].kind === 'person' && !m.slots[s].me && !m.slots[s].leader));
+            return okRemove && ask.length <= 1 && v.removing === (ask.length ? ask[0] : -1) && v.cards.every((c) => !(c.remove && c.ask));
+        })(), Dv);
+        const play = R.playing(m), can = play.length >= 3;
+        const shown = R.shownOf(v.sides, play);
+        holds('viewOf: the switches that it shows are mended ones (a pair at most, never three on a button, none for a colour that does not play)', J(R.sidesFix(v.sides, play)) === J(v.sides) && v.sides.every((x, s) => x === 0 || play.indexOf(s) >= 0), Dv);
+        holds('viewOf: the buttons are under the colours that play when three or four play, and only then', v.cards.every((c, s) => (c.teams !== null) === (!ro && can && play.indexOf(s) >= 0)), Dv);
+        holds('viewOf: a lit button is the one that shownOf says (a pair makes the other two light the other button), never more than two on a button', v.cards.every((c, s) => c.teams === null || c.teams.every((t) => t.pressed === (shown[s] === t.side))) && [1, 2].every((k) => v.cards.filter((c) => c.teams && c.teams[k - 1].pressed).length <= 2), Dv);
+        holds('viewOf: a dashed button is exactly one that a press would refuse (and a refusal says why)', v.cards.every((c, s) => c.teams === null || c.teams.every((t) => t.disabled === (R.pressSide(v.sides, play, s, t.side).refusal !== ''))), Dv);
+        holds('viewOf: a read-only card shows its team as a tab, only when it has one', v.cards.every((c, s) => c.tab === (ro && can && play.indexOf(s) >= 0 && shown[s] ? 'Team ' + shown[s] : '')), Dv);
+        holds('viewOf: a person\'s card shows the name as it is, every label starts with the colour', v.cards.every((c, s) => (m.slots[s].kind !== 'person' || c.who[0].text === m.slots[s].name) && c.label.indexOf(R.COLOURS[s].name + ': ') === 0), Dv);
+        holds('viewOf: a card says what a tap does only while a colour is picked', v.cards.every((c) => (o.picked >= 0 ? c.drop.indexOf('Tap to put ') === 0 : c.drop === '')), Dv);
+        holds('viewOf: the warning line is the refusal that the page has, in the warning colour', v.notes.teamsWarn === (o.refusal !== '') && (o.refusal === '' || v.notes.teams === o.refusal), Dv);
+        holds('viewOf: START and the map are off for a player, while START waits and without a room; START waits ("Getting ready") only after START', v.side.startDisabled === ro && v.side.mapDisabled === ro && v.side.startBusy === m.starting && (v.side.startLabel === 'Getting ready…') === m.starting, Dv);
+        holds('viewOf: the lines of the side are text, and there is one unless the page is joining', typeof v.side.plan === 'string' && typeof v.side.planShort === 'string' && (offline === 'join' || (v.side.plan !== '' && v.side.planShort !== '')), Dv);
+        holds('viewOf: the heading is "Joining a room" while joining, the host\'s room for a player, else "Your room"', v.heading === (offline === 'join' ? 'Joining a room' : m.guest ? R.hostName(m) + '’s room' : 'Your room'), Dv);
+    }
+    // the presses
+    for (let k = 0; k < 12; k++) {
+        const play = ALL.filter(() => rnd() < 0.8);
+        const sides = ALL.map(() => pick([0, 0, 1, 2, 1, 2, 3]));
+        const seat = Math.floor(rnd() * 4), button = 1 + Math.floor(rnd() * 2);
+        const fixed = R.sidesFix(sides, play), before = R.shownOf(fixed, play);
+        const res = R.pressSide(sides, play, seat, button);
+        const after = R.shownOf(res.sides, play);
+        const Dp = 'sides ' + J(sides) + ' play ' + J(play) + ' press ' + seat + ',' + button + ' -> ' + J(res);
+        const live = play.length >= 3 && play.indexOf(seat) >= 0;
+        if (live) { if (res.refusal === '') tally.accepted++; else tally.refused++; }
+        holds('pressSide: what comes back is a mended list, a list of its own, and never three lit on a button', J(R.sidesFix(res.sides, play)) === J(res.sides) && res.sides !== sides && [1, 2].every((b) => play.filter((s) => after[s] === b).length <= 2), Dp);
+        holds('pressSide: a press that is accepted always changes what is lit', !live || res.refusal !== '' || J(after) !== J(before), Dp);
+        holds('pressSide: a press that is refused changes nothing and says why in one of the two ways', !live || res.refusal === '' || (J(res.sides) === J(fixed) && (res.refusal === REFUSE_FULL(button) || res.refusal === REFUSE_OTHER(button))), Dp);
+        holds('pressSide: a colour that does not play, or fewer than three that play, is no press: nothing changes, nothing is said', live || (J(res.sides) === J(fixed) && res.refusal === ''), Dp);
+        holds('pressSide: a refusal is the press of a button that sideOpen says is closed, and only that', !live || (res.refusal !== '') === !R.sideOpen(fixed, play, seat, button), Dp);
+        holds('teamBytes: a pair that the room is told is two colours that play, the lower first, or two 255', (() => { const t = R.teamBytes(sides, play); return (t.teamA === 255 && t.teamB === 255) || (t.teamA < t.teamB && t.teamB < 4 && play.indexOf(t.teamA) >= 0 && play.indexOf(t.teamB) >= 0 && play.length >= 3); })(), Dp);
+        holds('teamsText: a line that names a pair names the colours of the pair, once', (() => { const t = R.teamsText(fixed, play, false); const pair = R.pairOf(fixed, play); return pair === null || (/^Teams: .* against .*\.$/.test(t) && play.every((s) => t.split(R.COLOURS[s].name).length === 2)); })(), Dp);
+    }
+    // the plans and the moves
+    for (let k = 0; k < 6; k++) {
+        const change = pick([undefined, {}, { map: pick(['tiny', 'small', 'medium', 'gauntlet', 'treasure', 'islands', 'nowhere']) }, { seat: Math.floor(rnd() * 4), kind: pick(R.KINDS) }, { sides: ALL.map(() => pick([0, 1, 2])) }, { seat: Math.floor(rnd() * 4), kind: pick(R.KINDS), sides: ALL.map(() => pick([0, 1, 1, 2])) }]);
+        const got = R.planWith(room, m, change);
+        const Dw = D('change ' + J(change) + ' -> ' + J(got));
+        const playAfter = ALL.filter((s) => kinds[s] === 'person' || (got.kinds[s] >= 1 && got.kinds[s] <= 3));
+        holds('planWith: four plan values, a map that is none or a file of the page, teams that the codec takes', got.kinds.length === 4 && got.kinds.every((x) => Number.isInteger(x) && x >= 0 && x <= 4) && (got.map === '' || R.MAPS.some((x) => x.file === got.map)) && N.validTeams(got.teamA, got.teamB) && attempt(() => N.encodePlan(got.map, got.kinds, got.teamA, got.teamB)).threw === undefined, Dw);
+        holds('planWith: a team that goes out is two colours that play, with three or four playing', (got.teamA === 255 && got.teamB === 255) || (playAfter.length >= 3 && playAfter.indexOf(got.teamA) >= 0 && playAfter.indexOf(got.teamB) >= 0), Dw);
+        holds('planWith: only the colour that was named changes its plan, and to the word that was said', J(got.kinds) === J(ALL.map((s) => (change && typeof change.seat === 'number' && change.seat === s ? R.KINDS.indexOf(change.kind) : room.plan[s]))), Dw);
+        holds('planWith: without a map the room\'s own stays (an empty name)', (change && change.map && change.map !== 'nowhere') || got.map === '', Dw);
+        const none = R.planWith(room, m, { sides: [0, 0, 0, 0] });
+        holds('planWith: the plan that clears the teams has none', none.teamA === 255 && none.teamB === 255 && J(none.kinds) === J(room.plan), Dw);
+    }
+    {
+        const same0 = R.planWith(room, m, {});
+        if (R.teamNeedsFix(room, m)) tally.mends++;
+        holds('teamNeedsFix is true exactly when the plan that the page would send as it is has other teams than the room\'s', R.teamNeedsFix(room, m) === (same0.teamA !== room.teamA || same0.teamB !== room.teamB), D('-> ' + J(same0)));
+        holds('planWith with no change is the room\'s plan (the map stays the room\'s: no name)', J(same0.kinds) === J(room.plan) && same0.map === '', D());
+    }
+    for (let k = 0; k < 6; k++) {
+        const from = Math.floor(rnd() * 4), to = Math.floor(rnd() * 4);
+        const op = R.moveOf(room, m, from, to);
+        const Dm = D('move ' + from + '->' + to + ' = ' + J(op));
+        if (from === to) { holds('moveOf: a colour onto itself is nothing', op === null, Dm); continue; }
+        const aPerson = kinds[from] === 'person', bPerson = kinds[to] === 'person';
+        if (aPerson || bPerson) {
+            tally.moves++;
+            holds('moveOf: a move that holds a person is asked of the room, with the person as `from` (the colours of the two are the two that were named)', op !== null && op.op === 'move' && kinds[op.from] === 'person' && ((op.from === from && op.to === to) || (op.from === to && op.to === from && !aPerson)) && (!aPerson || op.from === from), Dm);
+            continue;
+        }
+        tally.exchanges++;
+        holds('moveOf: two colours that no person holds exchange their plans, and nothing else changes', op !== null && op.op === 'plan' && op.plan.map === '' && ALL.every((s) => op.plan.kinds[s] === (s === from ? room.plan[to] : s === to ? room.plan[from] : room.plan[s])) && op.plan.kinds !== room.plan, Dm);
+        holds('moveOf: the team pair follows the colours (the same two plans, the lower colour first), none stays none', (() => {
+            const moved = (s) => (s === from ? to : s === to ? from : s);
+            if (room.teamA === 255) return op.plan.teamA === 255 && op.plan.teamB === 255;
+            return op.plan.teamA === Math.min(moved(room.teamA), moved(room.teamB)) && op.plan.teamB === Math.max(moved(room.teamA), moved(room.teamB));
+        })(), Dm);
+        holds('moveOf: the codec takes the plan that goes out', op !== null && N.validTeams(op.plan.teamA, op.plan.teamB), Dm);
+        const seatsOf = ALL.map((s) => (kinds[s] === 'person' ? P(room.slots[s].name) : O));
+        const room2 = mk(seatsOf, { you: room.you, leader: room.leader, plan: op.plan.kinds, teamA: op.plan.teamA, teamB: op.plan.teamB, starting: room.starting, inGame: room.inGame });
+        const back = R.moveOf(room2, model(room2), from, to);
+        holds('moveOf: the same exchange twice is what it was before (plans and team)', JC(back.plan) === JC({ map: '', kinds: room.plan, teamA: room.teamA, teamB: room.teamB }), Dm);
+        const flipped = R.moveOf(room, m, to, from);
+        holds('moveOf: dragged the other way it is the same exchange', JC(flipped) === JC(op), Dm);
+        holds('moveOf: a team that needed no mending needs none after the exchange, and the same the other way round', R.teamNeedsFix(room2, model(room2)) === R.teamNeedsFix(room, m), Dm);
+    }
+    {
+        const local = ALL.map(() => pick([0, 0, 1, 2]));
+        const got = R.reconcileSides(local, m);
+        const play = R.playing(m);
+        const server = R.sidesFix(m.sides, play);
+        holds('reconcileSides: a mended list; the room\'s pair when it holds one; else no pair', J(R.sidesFix(got, play)) === J(got) && (R.pairOf(server, play) ? J(got) === J(server) : R.pairOf(got, play) === null), D('local ' + J(local) + ' -> ' + J(got)));
+    }
+}
+Object.keys(props).forEach((name) => check('for 700 random rooms: ' + name, props[name] === null, props[name]));
+check('the random rooms reached every rule (screens of a host, a pair on a host\'s screen, presses taken and refused, moves, exchanges, teams to mend)', tally.rooms === 700 && tally.views >= 3000 && tally.hostViews >= 800 && tally.pairViews >= 100 && tally.accepted >= 1000 && tally.refused >= 300 && tally.exchanges >= 300 && tally.moves >= 800 && tally.mends >= 20 && tally.teamed >= 250, J(tally));
+check('the random runs held ' + Object.keys(props).length + ' rules at 700 rooms (a rule that never ran is a failure)', Object.keys(props).length >= 30 && Object.keys(props).every((k) => props[k] === null || typeof props[k] === 'string'), String(Object.keys(props).length));
+check('the random rooms were many and of every kind (the generator is not stuck)', strings.size > 150, String(strings.size));
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. The words of the screen: "player", never "friend" (the owner's rule), no stray blanks in the fixed lines
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const fixed = new Set();
+    const keep = (x) => { if (typeof x === 'string') fixed.add(x); else if (Array.isArray(x)) x.forEach(keep); else if (x && typeof x === 'object') Object.keys(x).forEach((k) => keep(x[k])); };
+    [S1, S2, S5, S14, S13, S13b, S4, S12].forEach((room) => [{}, { picked: 1 }, { removing: 1 }, { offline: 'lost' }, { offline: 'none' }, { offline: 'join' }, { refusal: 'A refusal.' }].forEach((o) => keep(R.viewOf(model(room), ctx(o)))));
+    BANNERS.forEach((b) => keep(R.banner(b[0], b[1])));
+    keep([R.TEXT.noroom(), R.HINT, R.ACTS, R.MAPS.map((x) => x.info), R.NAMES, R.nameCheck('é').why, R.nameCheck('a'.repeat(40)).why, R.nameCheck('Bot (x)').why, R.typedCode('').why, R.typedCode('!').why, R.teamsText([0, 0, 0, 0], [0, 1], false), R.teamsText([0, 0, 0, 0], ALL, false)]);
+    Object.keys(R.TEXT).forEach((k) => keep(R.TEXT[k]({ server: 'S.', host: 'H', leaver: 'L', guest: true, map: 'M' })));
+    const all = Array.from(fixed).concat(Array.from(strings));
+    check('no line of the screen says "friend" (the owner\'s rule: player)', all.every((s) => !/friend/i.test(s)), all.filter((s) => /friend/i.test(s)).join(' | '));
+    check('the fixed lines (the pictures\' words) have no stray blank: none at the ends or doubled', Array.from(fixed).filter((s) => s !== '' && (/^\s|\s$|\s\s/.test(s))).length === 0, Array.from(fixed).filter((s) => /^\s|\s$|\s\s/.test(s)).join('|'));
+    check('the fixed lines are plain text: no markup in them', Array.from(fixed).every((s) => !/[<>]/.test(s)));
+    check('the words use the characters of the pictures only: ASCII and the ellipsis, the apostrophe of a possessive and the middle dot', Array.from(fixed).every((s) => /^[\x20-\x7e…’·]*$/.test(s)), Array.from(fixed).filter((s) => !/^[\x20-\x7e…’·]*$/.test(s)).join('|'));
+}
+
 // ---- END OF SECTIONS ----
 for (const name of Object.keys(RAW)) if (typeof RAW[name] === 'function') check('the check called ' + name + '()', called[name] > 0);
 console.log('LobbyRules: ' + checks + ' checks, ' + failures + ' failed');
