@@ -346,11 +346,13 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.stub_lines(before + 6) - before, 6)                             # (the other match's entry is its own: it was not renewed with the first's)
 
     def test_the_cache_of_the_numbers_and_the_recorded_matches_is_not_the_lives(self):
-        before = self.stub_lines()
+        time.sleep(3.2)                                                                       # (an entry that an earlier test made is over)
+        live, replays = len(self.stub_requests("/live")), len(self.stub_requests("/replays"))
         self.assertEqual(self.ask("GET", "/live")[0], 200)
         self.assertEqual(self.ask("GET", "/live")[0], 200)
         self.assertEqual(self.ask("GET", "/replays")[0], 404)                                 # (the stand-in has no /replays: its 404 is not the list's entry, and /replays/<file> is not a live id)
-        self.assertEqual(self.stub_lines(before + 2) - before, 2)
+        self.assertEqual(len(self.stub_requests("/replays", replays + 1)) - replays, 1)       # the list of the recorded matches reached the server: it is not answered from the live list's entry
+        self.assertEqual(len(self.stub_requests("/live", live + 1)) - live, 1)                # and the two asks of the live list were one request (the requests are counted by their access lines: the stand-in's error line for the file it has not is no request)
 
     def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_snapshots_have_an_allowance_of_their_own(self):
         started = time.monotonic()
