@@ -178,6 +178,10 @@ struct ApplicationConfig {
     /// discarded. The whole map is shown (no fog). The match is played from the start at 1x; replay_control() pauses, changes the speed, jumps. A file that cannot be shown (damaged, other rules, no such map) leaves the
     /// game idle with replay_failure() saying why. The web page hands the file over through the in-memory file system (web/shell.html `?replay=`). Empty: a game as before.
     std::string replay_path;
+    /// --replay-live (with --replay): FILE is a copy of a match that is still being played (the site's live watching, docs/REPLAYS.md "Watching a replay"): the game follows it. It does not end at the last turn that the file
+    /// holds but waits there, and ReplayControl::Extend reads the file again when the page has put a longer copy of the same match in it; ReplayControl::LiveOver says that no more will come. The game stays kLiveHoldTurns
+    /// behind the newest turn. Only a file that is not complete is followed.
+    bool replay_live{false};
     /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
@@ -640,6 +644,7 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
     bool replay_mode_{false};                             // --replay: the game shows a recording
+    bool replay_live_{false};                             // --replay-live: it follows a recording that is still being made (until the file is complete or the page says LiveOver)
     std::unique_ptr<replay::Replay> replay_file_;         // its file (null: it could not be read)
     ants::assets::LevelData replay_level_;                // its map, as the file names it
     ReplayFailure replay_failure_{ReplayFailure::None};
@@ -807,6 +812,8 @@ private:
     bool replay_turn(bool picture);                                    // one turn: the orders due, the tick; false when the recording is at its end (the end is handled)
     void replay_ends();                                                // the last turn is played: the results (the match was over) or the note (it was not)
     void replay_jump_to(uint32_t turn);
+    uint32_t replay_limit() const noexcept;                            // the last turn that may be played now (the file's end; while following, kLiveHoldTurns short of it)
+    void replay_extend();                                              // --replay-live: the file is read again, and taken when it is the same match with more turns
     void replay_diverged(uint32_t turn);
     void report_replay_to_page();                                      // the web page learns what the game knows of the file (names, length, why not)
     void leave_replay();                                               // Quit and Leave Game: back to the page's list

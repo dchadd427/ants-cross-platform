@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Watching a replay on the web (run by ./run_tests.sh --fast and by the CI): the list page (web/watch.html), the game page in replay mode (web/shell.html, play.html?replay=<file>) and the code that
-they share (web/replay_page.js). The owner approved the pictures of the list and of the player (2026-10-08, the mock-up's second version); docs/REPLAYS.md "Watching" says what they do.
+"""Watching a replay, and a match that is being played, on the web (run by ./run_tests.sh --fast and by the CI): the list page (web/watch.html), the game page in replay mode (web/shell.html,
+play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code that they share (web/replay_page.js). docs/REPLAYS.md "Watching" says what they do.
 
-  - the shared code is RUN (node, when it is installed): the address of a replay, the day and the time in the visitor's zone, the length, the maps, the players, the chips (tests/scripts/web_replay_check.js);
-  - what needs no browser is read from the files: the one place of the "Watch replays" link on each page, the pieces of the player that the game's glue looks for by id, nothing made from text that a
-    recording carries (a name is text), the file's name shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
+  - the shared code is RUN (node, when it is installed): the address of a replay or of a live match, the day and the time in the visitor's zone, the length, the maps, the players, the chips, the
+    live tag and the verdict on an answer of the live door (tests/scripts/web_replay_check.js);
+  - what needs no browser is read from the files: the one place of the "Watch replays" link on each page (and "Watch live" on the front page), the pieces of the player that the game's glue looks for by id,
+    the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
+    shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
 import os
 import re
@@ -36,8 +38,19 @@ class TheLink(unittest.TestCase):
             self.assertIn('id="watch-link"', watch[0][1], name)
             self.assertNotIn("target=", watch[0][1], name)                                                 # (the site's own page: this tab)
             texts = [f[2] for f in found]
-            self.assertEqual(texts.index("Watch replays"), texts.index("Menu") + 1 if "Menu" in texts else 0, name)
+            before = "Watch live" if "Watch live" in texts else "Menu"                                      # (the front page has "Watch live" first, the game page "Menu")
+            self.assertEqual(texts.index("Watch replays"), texts.index(before) + 1 if before in texts else 0, name)
         self.assertIn('aria-current="page"', [f for f in footer_links(read("web", "watch.html")) if f[2] == "Watch replays"][0][1])
+        self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
+
+    def test_the_front_page_alone_has_watch_live_in_its_footer_and_it_goes_to_the_list(self):
+        live = [f for f in footer_links(read("web", "lobby.html")) if f[2] == "Watch live"]
+        self.assertEqual(len(live), 1)
+        self.assertEqual(live[0][0], "/watch.html")
+        self.assertIn('id="live-link"', live[0][1])
+        self.assertNotIn("target=", live[0][1])
+        for name in ("shell.html", "watch.html"):
+            self.assertNotIn("Watch live", [f[2] for f in footer_links(read("web", name))], name)
 
     def test_the_words_on_the_screens_say_player_never_friend(self):
         for path in (("web", "watch.html"), ("web", "replay_page.js")):
@@ -62,8 +75,19 @@ class TheListPage(unittest.TestCase):
         self.assertIn("fetch('/replays'", self.page)
         self.assertIn("/play.html?replay=", self.page)
         self.assertIn("'/replays/'", self.page)
-        for words in ("Matches to watch", "Nothing to watch yet", "The list can\u2019t be loaded right now", "This server doesn\u2019t keep replays", "Earlier versions", "Show them", "Hide them", "Show more", "Cut short"):
+        for words in ("Earlier matches", "Nothing to watch yet", "The list can\u2019t be loaded right now", "This server doesn\u2019t keep replays", "Earlier versions", "Show them", "Hide them", "Show more", "Cut short"):
             self.assertIn(words, self.page, words)
+
+    def test_the_live_box_looks_at_the_door_every_ten_seconds_and_says_what_the_picture_shows(self):
+        self.assertIn("fetch('/live'", self.page)
+        self.assertIn("LIVE_EVERY = 10000", self.page)
+        self.assertIn("/play.html?live=", self.page)
+        self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
+        for words in ("Live now", "Watch a match, live or again.", "Watch a match again.", "Matches that are being played show first.", "No match is on right now.", "so far", "Watch live",
+                      "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
+            self.assertIn(words, self.page, words)
+        self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
+        self.assertIn("fetch('/live', { cache: 'no-store', credentials: 'omit'", self.page)                  # (a public list: no cookies, never from the cache)
 
     def test_a_match_is_playable_only_when_its_rules_are_the_ones_of_this_version(self):
         self.assertIn("sim_rules", self.page)
@@ -87,9 +111,11 @@ class ThePlayerPage(unittest.TestCase):
 
     def test_everything_of_the_replay_is_hidden_unless_the_address_asks_for_a_replay(self):
         self.assertIn("body:not(.replay) .rep-only { display: none !important; }", self.page)
-        self.assertIn("if (/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' replay';", self.page)
-        self.assertIn("var ANTS_REPLAY_MODE = /(^|[?&])replay=/.test(window.location.search);", self.page)
+        self.assertIn("if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay';", self.page)
+        self.assertIn("var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);", self.page)
+        self.assertIn("var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);", self.page)    # (a replay's address wins over a live id)
         self.assertIn("window.AntsReplay.fileOf(window.location.search)", self.page)
+        self.assertIn("window.AntsReplay.liveIdOf(window.location.search)", self.page)
         self.assertLess(self.page.index('<script src="replay_page.js"></script>'), self.page.index("var ANTS_REPLAY_MODE"))
 
     def test_a_replay_has_no_pointer_lock_and_no_leave_the_game_question(self):
@@ -112,6 +138,55 @@ class ThePlayerPage(unittest.TestCase):
         self.assertIn("numbers only", glue)
         for bad in ("insertAdjacentHTML", "document.write", "outerHTML", "eval("):
             self.assertNotIn(bad, glue, bad)
+
+
+class TheLiveGlue(unittest.TestCase):
+    """play.html?live=<id>: the game plays a file that grows (docs/REPLAYS.md "Watching a replay"); the page asks the door for it again and again and tells the game each time it has more."""
+    page = read("web", "shell.html")
+    glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
+
+    def test_the_pieces_that_only_a_live_match_uses_are_all_there_once(self):
+        for ident in ("rtag-b", "livebox", "livenow", "b-live"):
+            self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
+        self.assertIn("body.live [data-dl], body.nodl [data-dl] { display: none !important; }", self.page)   # (no Download while there is no whole file)
+        for words in ("Jump to live", ">Live<", ">REPLAY<"):
+            self.assertIn(words, self.page, words)
+
+    def test_the_game_is_started_to_follow_the_file_and_told_each_time_there_is_more(self):
+        self.assertIn("live: 7, limit: 8, complete: 9", self.glue)                                           # (the game's ReplayValue: src/ants_app/application.cpp)
+        self.assertIn("extend: 5, liveOver: 6", self.glue)                                                   # (and its ReplayControl)
+        self.assertIn("ANTS_ARGS.push('--replay', '/replay.antsrep', '--replay-live');", self.glue)
+        self.assertIn("Module.FS.writeFile('/replay.antsrep', latest)", self.glue)
+        self.assertIn("command(DO.extend, 0)", self.glue)
+        self.assertIn("command(DO.liveOver, 0)", self.glue)
+        self.assertIn("FEED_MS = 4000", self.glue)
+        self.assertIn("setTimeout(feed, FEED_MS)", self.glue)
+
+    def test_it_asks_the_door_for_the_match_by_an_id_that_passed_the_shape_check_and_keeps_no_cache(self):
+        self.assertIn("fetch('/live/' + LIVE_ID, { cache: 'no-store', credentials: 'same-origin' })", self.glue)
+        self.assertIn("window.AntsReplay.liveIdOf(window.location.search)", self.page)                       # (an id that is not of the shape is no match: the card "That match isn’t live")
+        js = read("web", "replay_page.js")
+        self.assertIn(r"/^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/", js)
+        self.assertNotIn("'/live/' + window.location", self.glue)                                            # (never the raw address: only LIVE_ID)
+
+    def test_the_words_of_the_notes_and_the_cards_are_the_approved_ones(self):
+        for words in ("The live feed stopped. Trying again…", "The match is over. It is now in the list as a replay.", "The match is over.", "This match is over", "Watch the replay",
+                      "The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.", "That match isn’t live",
+                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are at the top of the list."):
+            self.assertIn(words, self.glue, words)
+
+    def test_a_match_that_became_a_replay_has_the_address_of_the_replay(self):
+        self.assertIn("window.history.replaceState(null, '', window.location.pathname + '?replay=' + encodeURIComponent(file))", self.glue)
+        self.assertIn("'/play.html?replay=' + encodeURIComponent(why)", self.glue)                           # (the card's button)
+        self.assertIn("R.liveVerdict(", self.glue)
+
+    def test_what_the_door_says_is_text_never_markup(self):
+        for bad in ("insertAdjacentHTML", "document.write", "outerHTML", "eval(", "new Function"):
+            self.assertNotIn(bad, self.glue, bad)
+        # the names and the map reach the page through the shared code (textContent and text nodes: tests/scripts/web_replay_check.js) and the header's own text nodes
+        self.assertIn("R.chipsOf(document, ", self.glue)
+        self.assertIn("document.createTextNode(R.mapTitle(map) || 'A match to watch')", self.glue)
+        self.assertNotRegex(self.glue, r"innerHTML\s*=[^;]*(?:LIVE_ID|latest|info\.|overEntry|why)")
 
 
 class TheFiles(unittest.TestCase):

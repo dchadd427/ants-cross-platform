@@ -9448,6 +9448,7 @@ void run_persist_review_process_tests_2() {
 
 #include "site_stats_tests.hpp"      // (the site statistics: a file of its own, in this translation unit)
 #include "replay_tests.hpp"          // (the replays that the server keeps: likewise)
+#include "bot_match_tests.hpp"      // (the server's own matches of computer players: likewise)
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The restore that never blocks the server (docs/NETWORK_PORT.md "Restart records", "Restoring"): S3.113 and on
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -11907,6 +11908,7 @@ int main() {
     run_persist_review_tests();
     run_site_stats_tests();
     run_replay_tests();
+    run_bot_match_tests();
     run_restore_tests();
 #if !defined(_WIN32) && defined(ANTS_SERVER_BINARY)
     run_persist_process_tests();

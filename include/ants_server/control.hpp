@@ -22,7 +22,10 @@
 //   GET    /replays/<file> -> 200 the .antsrep file (application/octet-stream); 404
 //   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404; 500 (the file is in the list but could not be deleted)
 //   (with --replay-port the server also has a PUBLIC, read-only door with no secret: GET /replays -> 200 {"replays": [...], "count", "keep_days"}, the newest 200 files that this build can read, each as above
-//   but without "readable", and "count" is the number of those files; GET /replays/<file> -> the file of one of them; 404 for everything else: handle_public_replays)
+//   but without "readable", and "count" is the number of those files; GET /replays/<file> -> the file of one of them; and the matches that run now (live_board.hpp): GET /live -> 200 {"live": [{"id", "map",
+//   "started" (seconds since 1970 UTC), "turns", "seconds", "players": ["Green (Ann)", "Red (Bot (Medium))"]}, ...], "count", "sim_rules"}, the newest 50 that have run 30 seconds, and GET /live/<id> -> the
+//   match so far as an incomplete .antsrep file with a `live` chunk (application/octet-stream, made at most once a second), or 404 {"error": "no such live match", "ended": bool, "replay": "<file>"}
+//   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
@@ -59,8 +62,9 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
 /// The routes of the replays that handle_control hands over (/replays and /replays/<file>; the secret is checked before)
 ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& request);
 
-/// The public door of the replays (ants_server --replay-port, ctl::HttpServer::listen_public): GET /replays (the newest 200 files that this build can read) and GET /replays/<file>, nothing else, no query. Every
-/// other request is 404. What a file or the list says of the players is a colour with the name that the player typed ("Green (Ann)"; the colour alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
+/// The public door of the replays (ants_server --replay-port, ctl::HttpServer::listen_public): GET /replays (the newest 200 files that this build can read), GET /replays/<file>, GET /live (the matches that run
+/// now) and GET /live/<id> (one of them so far), nothing else, no query. Every other request is 404 (a /live/<id> that cannot be given has the JSON body above). A server that keeps no replays has nothing to show.
+/// What a file or the list says of the players is a colour with the name that the player typed ("Green (Ann)"; the colour alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request);
 
 }  // namespace ants::server

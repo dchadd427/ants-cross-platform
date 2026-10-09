@@ -13,9 +13,11 @@
 //            gap = turns since the record before it (the first record: since first_turn); a chunk spans at most 30 s of game time and 4,096 commands
 //   hash  := u32 period, then u32 values: the low 32 bits of the state hash after period, 2 period, 3 period ... turns
 //   ENDS  := u32 total_turns, u8 flags (bit 0: the engine's rules ended the match), u64 state hash after the last turn; the last chunk, nothing follows it
+//   live  := u32 turns       (optional, lower case: an older reader skips it) only in an incomplete file, the snapshot of a match that is still being played (encode_snapshot): the turns it had run when the
+//            snapshot was made, which can be more than the last command and the last hash say
 //
-// Order: HEAD, then CMDS and hash chunks (the commands in turn order), then ENDS. A file without ENDS is incomplete (a copy that was cut short: the game writes a file whole, when the match is
-// over or left): it plays to its last full chunk. Turn t is the t-th call of the engine's tick(): the commands of turn t are applied, in the order they stand, and then the tick runs; commands at turn total_turns come after the
+// Order: HEAD, then CMDS and hash chunks (the commands in turn order), then live (snapshots only) or ENDS. A file without ENDS is incomplete (a copy that was cut short: the game writes a file whole, when the match is
+// over or left; or a snapshot of a match that still runs, which says so with its live chunk): it plays to its last full chunk, and a snapshot to its live turns. Turn t is the t-th call of the engine's tick(): the commands of turn t are applied, in the order they stand, and then the tick runs; commands at turn total_turns come after the
 // last tick (a Quit that ends a match). `engine_rules` is net::kProtocolVersion of the recorder: by the repository's own rule that number moves with every change of what a state hash can be,
 // so it IS the version of the rules, and a replay is played only by a build that has the same number (an older or newer file still has a readable header).
 //
@@ -79,7 +81,7 @@ struct Replay {
     std::vector<TimedCommand> commands;                // in the order they were applied
     std::vector<uint32_t> hashes;                      // hashes[i]: low 32 bits of the state hash after (i + 1) * head.hash_period turns
     bool complete{false};                              // the ENDS chunk was there
-    uint32_t total_turns{0};                           // the ticks that were run; an incomplete file: the last turn that it has
+    uint32_t total_turns{0};                           // the ticks that were run; an incomplete file: the last turn that it has (the largest of its last command, its hashes and its live chunk)
     bool match_over{false};                            // the engine's rules ended the match
     uint64_t final_hash{0};                            // the engine's state hash (StateHash::total) after the last turn and the last command; complete files only
 };
@@ -96,6 +98,11 @@ uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc = 0) noexcept;
 /// The bytes of the file. Empty with `error` set when the replay cannot be written: a command that the wire form cannot hold, a turn out of order or past the end, a text that is
 /// not printable, a file that would pass kMaxFileBytes.
 std::vector<uint8_t> encode(const Replay& replay, std::string& error);
+
+/// The bytes of a snapshot of a match that still runs: an INCOMPLETE replay (no ENDS; `replay.complete` must be false, the other end fields are not looked at) with the optional chunk `live` that says `turns`, the
+/// ticks the match had run when it was taken. `turns` must be at least the turn of the last command and at least hashes * period, and at most kMaxTurns (decode() refuses the file otherwise); empty with `error` set
+/// when that is not so, the replay is complete, or the file would be longer than kMaxFileBytes. decode() of it gives complete = false and total_turns = max(last command turn, hashes * period, turns).
+std::vector<uint8_t> encode_snapshot(const Replay& replay, uint32_t turns, std::string& error);
 
 /// Reads a file. True: `out` holds it (check `out.complete`: a file without ENDS is a replay that stops where it was cut). False: it is damaged, foreign, or made by a newer format, and `error`
 /// says what and in which chunk. Nothing of `out` is meaningful then.

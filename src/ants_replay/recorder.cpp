@@ -89,4 +89,21 @@ std::vector<uint8_t> Recorder::finish(const sim::SimulationEngine& engine, std::
     return bytes;
 }
 
+std::vector<uint8_t> Recorder::snapshot(std::string& error) const {
+    error.clear();
+    if (finished_) {
+        error = "the recording is finished already";
+        return {};
+    }
+    if (!failure_.empty()) {
+        error = failure_;
+        return {};
+    }
+    if (turns_ == 0) {
+        error = "no turn ran";
+        return {};
+    }
+    return encode_snapshot(replay_, turns_, error);
+}
+
 }  // namespace ants::replay

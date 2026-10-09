@@ -544,6 +544,10 @@
             display: none;
         }
 
+        /* behind the card of a replay that cannot be shown: the clay and the logo, with no loading words and no bar */
+        #splash-overlay.quiet .splash-status { visibility: hidden; }
+        #splash-overlay.quiet .progress-bar-container { display: none !important; }
+
         .splash-status {
             font-size: 16px;
             color: var(--ink);
@@ -1031,7 +1035,7 @@
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1115,10 +1119,36 @@
             .rbar.over .tl { height: 40px; } .rbar.over .tl .ticks { display: none; } .rbar.over .tl .track { top: 8px; }
             .rbar.over .tl .thumb { height: 30px; }
         }
+
+        /* ================= LIVE (docs/REPLAYS.md "Watching a live match"): the page opened as play.html?live=<id>, a match that is still being played. The bar and the header are the replay's; the red LIVE marks, the
+           notch at the present and the button that jumps to it are the new part. `live` is on <body> and `islive` on the bar while the page follows the match; `nodl` is on <body> when there is no file to download ================= */
+        .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
+        .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
+        .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
+        body.live [data-dl], body.nodl [data-dl] { display: none !important; }
+        .rtag.lv b { color: #ff8c84; }
+        .rtag.lv b::before { content: ""; display: inline-block; width: .8cqw; height: .8cqw; min-width: 7px; min-height: 7px; margin-right: .7cqw; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
+        .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
+        .rbar.islive .tl .edge { display: block; }
+        .rbar .livebox { grid-area: live; display: none; }
+        .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock live speed fsx"; }
+        .rbar.islive .livebox { display: flex; align-items: center; }
+        .rbar.islive .clock { min-width: 0; }
+        .livenow { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 14px; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; color: #ffc3bd; background: #3a0d11; border: 2px solid var(--edge); border-radius: 8px; box-shadow: inset 0 0 0 1px #9d0d17; }
+        .livenow::before, .jtl::before { content: ""; width: 10px; height: 10px; flex: none; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 0 1px #000, 0 0 6px rgba(255, 90, 79, .9); }
+        .rbar.over .livenow { background: rgba(58, 13, 17, .9); }
+        @media (max-width: 700px) {
+            .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "tl tl tl tl" "play clock live fsx" "speed speed speed speed"; }
+            .rbar.islive .clock { text-align: left; }
+        }
+        @media (max-height: 520px) {
+            .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock live speed fsx"; }
+            .rbar.over.islive .livenow, .rbar.over.islive .jtl { min-height: 32px; padding: 3px 10px; font-size: 14px; }
+        }
     </style>
 </head>
 <body>
-    <script>if (/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' replay';</script>
+    <script>if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay';</script>
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
@@ -1164,7 +1194,7 @@
         <div id="game-container">
             <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-            <div class="rtag rep-only" id="rtag" hidden><b>REPLAY</b><span id="rtag-s">1&times;</span></div>
+            <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
             <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
             <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
 
@@ -1191,7 +1221,7 @@
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
-            <div class="name-step-hint name-step-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</div>
+            <div class="name-step-hint name-step-notice">Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
     </div>
@@ -1220,8 +1250,9 @@
 
     <div class="rbar rep-only" id="rbar">
         <button class="btn rplay" type="button" id="b-play" title="Play or pause (Space)" aria-label="Play"></button>
-        <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Position in the match" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="rail" id="rail"><div class="track"><div class="fill" id="tl-fill"></div></div><div class="ticks" id="tl-ticks"></div><div class="thumb" id="tl-thumb"></div></div></div>
+        <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Position in the match" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="rail" id="rail"><div class="track"><div class="fill" id="tl-fill"></div><div class="edge"></div></div><div class="ticks" id="tl-ticks"></div><div class="thumb" id="tl-thumb"></div></div></div>
         <div class="clock" id="clock"><b id="t-now">0:00</b> <small id="t-all">/ 0:00</small></div>
+        <div class="livebox" id="livebox"><span class="livenow" id="livenow" hidden>Live</span><button class="btn sm jtl" type="button" id="b-live" hidden>Jump to live</button></div>
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
     </div>
@@ -1820,10 +1851,13 @@
         //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
         var ANTS_EMBED = false;
-        // Watching a replay: play.html?replay=<file> (docs/REPLAYS.md "Watching"). The name of the file is checked by web/replay_page.js (an address with replay= and no valid name is "that replay is gone"). The
-        // game gets nothing else from the address then (no room, no map, no bots, no name): its arguments are the 16:9 picture and --replay, which the page's replay block adds once the recording is here.
-        var ANTS_REPLAY_MODE = /(^|[?&])replay=/.test(window.location.search);
+        // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
+        // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
+        // no map, no bots, no name): its arguments are the 16:9 picture and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
+        var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
+        var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
+        var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
         (function () {
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
@@ -3000,25 +3034,41 @@
     </script>
     <!-- BEGIN replay glue (tests/scripts/test_web_replay.py reads it) -->
     <script>
-        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play.html?replay=<file>) ----
+        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play.html?replay=<file> or play.html?live=<id>) ----
         // The page fetches the recording from the server's public door (GET /replays/<file>, the shape of the name is checked first: web/replay_page.js), puts it in the game's file system as /replay.antsrep and starts
         // the game with --replay: the game plays the match from the file on its own engine, without the Fog of War and with every order of the HUD discarded (Application::replay_*). The game is the player; this
         // block is its remote control: the header (what is playing), the bar (play and pause, the timeline, the clock, the speed, fullscreen), the end of the match, and the cards for a file that cannot be shown.
         // It reads the game through two exported functions (ants_replay_get: the state, the turn, the length, the speed, how far a jump is; ants_replay_do: pause, speed, jump, again) and is told by the game, with
         // window.antsReplayReport(info), what the file is (its map, its players, which game made it) or why it cannot be shown.
+        // A match that is being played (?live=<id>) is a replay that is still growing, read over HTTP: the page gets the match so far from GET /live/<id> (the id's shape is checked first), starts the game with
+        // --replay and --replay-live, and every few seconds gets it again, writes the newer file over /replay.antsrep and tells the game (Extend), which takes it when it is the same match with more turns. The game
+        // plays up to its Limit (the end of what it holds, less two seconds) and waits there. The bar adds the red LIVE marks, the notch at the end of the file and "Jump to live". When the door says the match is over
+        // the page fetches the kept replay (a few tries), Extends once more and goes on as a replay of the whole match; a match that was not kept is told LiveOver and its recording ends where it ends.
         (function () {
             'use strict';
             if (!ANTS_REPLAY_MODE) return;
             var R = window.AntsReplay;
             var $ = function (id) { return document.getElementById(id); };
             var STATE = { playing: 2, paused: 3, jumping: 4, ended: 5, cut: 6, failed: 7 };       // include/ants_app/replay_view.hpp ReplayState
-            var VALUE = { state: 0, turn: 1, total: 2, speed: 3, jump: 4, failure: 5, target: 6 };  // ... ReplayValue
-            var DO = { toggle: 0, paused: 1, speed: 2, seek: 3, again: 4 };                         // ... ReplayControl
+            var VALUE = { state: 0, turn: 1, total: 2, speed: 3, jump: 4, failure: 5, target: 6, live: 7, limit: 8, complete: 9 };  // ... ReplayValue
+            var DO = { toggle: 0, paused: 1, speed: 2, seek: 3, again: 4, extend: 5, liveOver: 6 };  // ... ReplayControl
             var FAIL = { unreadable: 1, older: 2, newer: 3, nomap: 4, diverged: 5 };                // ... ReplayFailure
             var TPS = 20;                                                                          // turns per second
-            var FILE = ANTS_REPLAY_FILE;
+            var FEED_MS = 4000;                                                                    // a match that is being played is fetched again this often
+            var FILE = ANTS_REPLAY_FILE;     // the replay on show (a live match gets one when it is over and was kept)
+            var LIVE_ID = ANTS_LIVE_ID;
             var info = null;                 // what the game reported about the file
             var shown = null;                // the card that is up ('' none)
+            var liveOn = ANTS_LIVE_MODE && !!LIVE_ID;       // the page follows a match that is being played (the red marks, the notch, "Jump to live"); not for a replay, nor after the match is over
+            var atNow = false;               // the playhead is at the present (R.atLive)
+            var waitingNow = false;          // the feed has stopped and the playhead has caught up with what the game holds
+            var feedFailed = false;          // the last look at the match failed: the note over the picture says so until a look works
+            var overNote = '';               // the note over the picture of a match that ended while it was watched: 'kept' (it is now a replay) or 'plain' (it was not kept)
+            var overFile = '', overEntry = null;            // the card "This match is over": the kept replay, and what the list says of it (map, length, players)
+            var latest = null, applied = null;              // the newest bytes of the match that the page has, and the ones that the game's file holds
+            var overToSend = false;          // the game still has to be told (LiveOver) that no more will come
+            var headPending = false;         // the header of a match that became a replay waits for the game to hold the whole file (its length)
+            var startSeek = ANTS_LIVE_MODE;  // a live match opens at the present: the first moment that the game is there the page takes the playhead to the Limit when the game has not put it there
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
             var ICON = {
@@ -3050,35 +3100,54 @@
                 var text = ($('game-version') || {}).textContent || '';
                 return text.indexOf('@') === -1 && text ? text : (info && info.version ? 'v' + info.version : 'this version');
             }
-            function replayUrl() { return window.location.origin + '/play.html?replay=' + encodeURIComponent(FILE); }
+            function replayUrl() { return window.location.origin + (FILE ? '/play.html?replay=' + encodeURIComponent(FILE) : '/play.html?live=' + encodeURIComponent(LIVE_ID || '')); }
 
             // ---- the header: what is playing ----
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
+            // the length in the header of a replay: the file's own, else (a match that was watched live) what the game holds once it holds the whole file
+            function headLength() { return info && info.turns ? lengthSeconds() : (!headPending && isReadyToPlay && get(VALUE.complete) === 1 ? Math.floor(get(VALUE.total) / TPS) : 0); }
             function setHeader() {
                 var title = $('r-title'), meta = $('r-meta');
                 title.textContent = '';
                 meta.textContent = '';
-                if (!FILE) { title.textContent = 'A match to watch'; return; }
-                var map = info && info.map ? info.map : (/^ants-([A-Za-z0-9_]+)-/.exec(FILE) || [])[1] || '';
+                var file = shown === 'over' ? overFile : FILE;
+                if (!file && (!LIVE_ID || shown === 'notlive')) { title.textContent = 'A match to watch'; return; }
+                var map = shown === 'over' && overEntry && overEntry.map ? overEntry.map : info && info.map ? info.map : file ? (/^ants-([A-Za-z0-9_]+)-/.exec(file) || [])[1] || '' : R.liveMap(LIVE_ID);
                 title.appendChild(document.createTextNode(R.mapTitle(map) || 'A match to watch'));
                 var small = el('small');
-                var when = R.whenText(R.endedOf(FILE), new Date());
-                var parts = [];
-                if (when) parts.push(when);
-                if (info && info.turns) parts.push(R.lengthText(lengthSeconds()));
-                small.appendChild(document.createTextNode(parts.join(' · ')));
-                if (info && info.turns && !info.over) { small.appendChild(document.createTextNode(' ')); small.appendChild(el('span', 'pill cut', 'Cut short')); }
+                if (!file) {                                  // a match that is being played (or that was, and was not kept): when it began
+                    if (liveOn) { small.appendChild(el('span', 'pill lv', 'Live')); small.appendChild(document.createTextNode(' ')); }
+                    small.appendChild(document.createTextNode(R.startedText(R.startedOf(LIVE_ID), new Date())));
+                } else {
+                    var when = R.whenText(R.endedOf(file), new Date());
+                    var parts = [];
+                    if (when) parts.push(when);
+                    var seconds = shown === 'over' ? (overEntry ? overEntry.seconds : 0) : headLength();
+                    if (seconds) parts.push(R.lengthText(seconds));
+                    small.appendChild(document.createTextNode(parts.join(' · ')));
+                    if (shown !== 'over' && info && info.turns && !info.over) { small.appendChild(document.createTextNode(' ')); small.appendChild(el('span', 'pill cut', 'Cut short')); }
+                }
                 title.appendChild(small);
-                if (info && typeof info.roster === 'number') meta.appendChild(R.chipsOf(document, R.playersOf(info.roster, info.names)));
-                [].forEach.call(document.querySelectorAll('[data-dl]'), function (a) {
-                    a.setAttribute('href', '/replays/' + encodeURIComponent(FILE));
-                    a.setAttribute('download', FILE);
+                if (shown === 'over') { if (overEntry) meta.appendChild(R.chipsOf(document, overEntry.players)); }
+                else if (info && typeof info.roster === 'number') meta.appendChild(R.chipsOf(document, R.playersOf(info.roster, info.names)));
+                if (file) [].forEach.call(document.querySelectorAll('[data-dl]'), function (a) {
+                    a.setAttribute('href', '/replays/' + encodeURIComponent(file));
+                    a.setAttribute('download', file);
                 });
+            }
+            // the red marks of a live match, and Download (hidden while there is no whole file: a live match, or one that was not kept; the card of a match that is over has the kept file)
+            function liveClasses() {
+                document.body.classList.toggle('live', liveOn);
+                $('rbar').classList.toggle('islive', liveOn);
+                document.body.classList.toggle('nodl', ANTS_LIVE_MODE && !FILE && shown !== 'over');
             }
 
             // ---- the card for a file that cannot be shown ----
             function card(kind, why) {
                 var title, body = $('rm-body');
+                liveOn = false;                               // (a card is up: no feed, no red marks)
+                stopFeed();
+                liveClasses();
                 body.textContent = '';
                 var paragraph = function (parts, className) {
                     var p = el('p', className);
@@ -3116,6 +3185,17 @@
                     title = 'That replay is gone';
                     paragraph(['Matches are kept for 30 days. This one is older than that, or it was taken away.']);
                     all();
+                } else if (kind === 'over') {                 // the link of a match that has ended since (the replay is the file that the server kept)
+                    title = 'This match is over';
+                    paragraph(['The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.']);
+                    var watch = el('a', 'btn', 'Watch the replay');
+                    watch.href = '/play.html?replay=' + encodeURIComponent(why);
+                    buttons.appendChild(watch);
+                    all();
+                } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
+                    title = 'That match isn’t live';
+                    paragraph(['It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are at the top of the list.']);
+                    all();
                 } else {
                     title = 'This replay can’t be played here';
                     paragraph(['The match could not be set up on this page.']);
@@ -3128,8 +3208,26 @@
                 $('rm').hidden = false;
                 shown = kind;
                 $('rbar').hidden = true;
-                $('splash-overlay').style.display = 'none';
+                $('splash-overlay').classList.add('quiet');   // (the clay and the logo stay behind the card, as in the pictures; the loading words and the bar go)
+                if (kind === 'over') overFile = why;
+                liveClasses();                                // (Download is for the file of a match that is over)
                 setHeader();
+                if (kind === 'over') overHeader(2);
+            }
+            // the card of a match that is over says what the match was, as the header of a replay does: the public list knows it (a look, twice: the list is cached for a moment)
+            function overHeader(tries) {
+                var done = function (found) {
+                    if (shown !== 'over') return;
+                    if (found) { overEntry = found; setHeader(); } else if (tries > 1) setTimeout(function () { overHeader(tries - 1); }, 4000);
+                };
+                try {
+                    fetch('/replays', { cache: 'no-store', credentials: 'same-origin' }).then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
+                        var list = data && Array.isArray(data.replays) ? data.replays : [];
+                        var e = list.filter(function (x) { return x && x.file === overFile; })[0];
+                        done(e ? { map: typeof e.map === 'string' ? e.map : '', seconds: typeof e.seconds === 'number' && isFinite(e.seconds) ? Math.floor(e.seconds) : 0,
+                                   players: (Array.isArray(e.players) ? e.players : []).filter(function (p) { return typeof p === 'string'; }).slice(0, 4) } : null);
+                    }).catch(function () { done(null); });
+                } catch (e) { /* no list: the header says the map and the time */ }
             }
             function cardFor(failure, text) {
                 if (failure === FAIL.older) card('older');
@@ -3143,40 +3241,64 @@
                 for (var s = step; s < total; s += step) h += '<i class="tick' + (s % 300 === 0 ? ' m5' : '') + '" style="left:' + (100 * s / total) + '%"></i>';
                 $('tl-ticks').innerHTML = h;                      // (numbers only: nothing from the file)
             }
-            function paint(seconds, total) {
+            // `limit` is, for a live match, the last moment that can be played now: where "Jump to live" goes (the notch is at `total`, the end of the file, which is a little further)
+            function paint(seconds, total, limit) {
                 var p = total > 0 ? Math.min(1, seconds / total) * 100 : 0;
                 $('tl-fill').style.width = p + '%';
                 $('tl-thumb').style.left = p + '%';
                 $('t-now').textContent = R.lengthText(seconds);
-                $('t-all').textContent = '/ ' + R.lengthText(total);
+                $('t-all').textContent = liveOn ? (atNow ? '' : '/ ' + R.lengthText(limit)) : '/ ' + R.lengthText(total);
                 var tl = $('tl');
                 tl.setAttribute('aria-valuenow', String(Math.floor(seconds)));
                 tl.setAttribute('aria-valuemax', String(total));
-                tl.setAttribute('aria-valuetext', R.lengthText(seconds) + ' of ' + R.lengthText(total));
+                tl.setAttribute('aria-valuetext', R.lengthText(seconds) + (liveOn ? (atNow ? ', live' : ' of ' + R.lengthText(total) + ' so far') : ' of ' + R.lengthText(total)));
+            }
+            function limitTurn() {                            // the last turn that can be played now (the whole file for a replay, and for a game that does not say)
+                var limit = get(VALUE.limit);
+                return limit >= 0 ? limit : get(VALUE.total);
             }
             var ticked = -1;
             function tick() {
                 var ready = isReadyToPlay && get(VALUE.state) !== -1;
+                if (ready) sync();
                 var state = ready ? get(VALUE.state) : 0;
                 var total = ready ? Math.floor(get(VALUE.total) / TPS) : lengthSeconds();
                 if (ready && state === STATE.failed && !shown) { cardFor(get(VALUE.failure), info && info.text); return; }
                 if (shown) return;
+                if (liveOn && ready && get(VALUE.live) === 0) endLive();               // (the game stopped following by itself)
+                if (liveOn && ready && startSeek) {
+                    startSeek = false;
+                    if (limitTurn() - get(VALUE.turn) >= R.AT_LIVE * TPS) command(DO.seek, limitTurn());
+                }
+                if (headPending && ready && get(VALUE.complete) === 1) { headPending = false; setHeader(); }
                 if (total !== ticked) { ticked = total; ticks(total || 1); }
                 var turn = ready ? get(VALUE.turn) : 0;
                 var jumping = state === STATE.jumping;
                 var seconds = dragging ? dragTurn / TPS : jumping ? get(VALUE.target) / TPS : turn / TPS;
                 var speed = ready ? get(VALUE.speed) : 100;
                 var done = state === STATE.ended || state === STATE.cut;
-                var key = [ready, state, speed, Math.floor(seconds * 4), total, jumping ? get(VALUE.jump) : '', dragging].join('|');
+                var playing = state === STATE.playing;
+                var limit = ready ? limitTurn() / TPS : total;
+                var gap = Math.max(0, limit - seconds);
+                if (liveOn) atNow = R.atLive(atNow, gap, playing && !dragging);
+                waitingNow = liveOn && feedFailed && playing && gap < 0.5;
+                var key = [ready, state, speed, Math.floor(seconds * 4), total, jumping ? get(VALUE.jump) : '', dragging, liveOn, atNow, waitingNow, feedFailed, Math.floor(limit), overNote].join('|');
                 if (key === lastKey) return;
                 lastKey = key;
-                paint(seconds, total);
-                var running = state === STATE.playing;
+                paint(seconds, total, limit);
+                var running = playing && !waitingNow;
                 $('b-play').innerHTML = done ? ICON.again + '<span class="lbl">Watch again</span>' : running ? ICON.pause : ICON.play;
                 $('b-play').setAttribute('aria-label', done ? 'Watch again' : running ? 'Pause' : 'Play');
-                $('rtag-s').textContent = state === STATE.paused ? 'Paused' : (speed === 50 ? '½' : speed / 100) + '×';
+                $('rtag').classList.toggle('lv', liveOn);
+                $('rtag-b').textContent = liveOn ? 'LIVE' : 'REPLAY';
+                $('rtag-s').textContent = liveOn ? R.liveTag({ gap: gap, at: atNow, paused: state === STATE.paused, waiting: waitingNow, speed: R.speedText(speed) }) : state === STATE.paused ? 'Paused' : R.speedText(speed);
                 $('rtag').hidden = !ready || done;
-                $('endnote').hidden = state !== STATE.cut;
+                var note = state === STATE.cut ? 'The recording ends here. The match was left or closed before it ended.' : liveOn && feedFailed ? 'The live feed stopped. Trying again…'
+                         : overNote === 'kept' ? 'The match is over. It is now in the list as a replay.' : overNote === 'plain' ? 'The match is over.' : '';
+                $('endnote').hidden = !note;
+                if (note) $('endnote').textContent = note;
+                $('livenow').hidden = !(liveOn && atNow);
+                $('b-live').hidden = !(liveOn && !atNow);
                 [].forEach.call($('speed').querySelectorAll('button'), function (b) { b.setAttribute('aria-checked', String(Math.round(parseFloat(b.dataset.s) * 100) === speed)); });
                 $('rbar').style.opacity = ready ? '' : '.55';
                 $('rbar').style.pointerEvents = ready ? '' : 'none';
@@ -3197,7 +3319,8 @@
             }
             function toggle() {
                 var state = get(VALUE.state);
-                if (state === STATE.ended || state === STATE.cut) command(DO.again);
+                if (state === STATE.ended || state === STATE.cut) { overNote = ''; command(DO.again); }
+                else if (waitingNow) return;                                          // (the feed has stopped and the picture has all that there is: nothing to pause)
                 else if (state === STATE.playing || state === STATE.paused) command(DO.toggle);
                 lastKey = '';
                 tick();
@@ -3205,13 +3328,21 @@
             function seek(seconds) {
                 var total = get(VALUE.total);
                 var turn = Math.max(0, Math.min(total, Math.round(seconds * TPS)));
+                overNote = '';
+                atNow = false;                                    // (the viewer moved the playhead: it is at the present again when it gets there, R.atLive; the game holds a seek past its Limit at the Limit)
                 command(DO.seek, turn);
                 lastKey = '';
                 tick();
             }
             function turnAt(ev) {
                 var r = $('rail').getBoundingClientRect();
-                return Math.round(get(VALUE.total) * Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width))));
+                var turn = Math.round(get(VALUE.total) * Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width))));
+                return liveOn ? Math.min(turn, limitTurn()) : turn;
+            }
+            function jumpToLive() {
+                if (!liveOn || shown) return;
+                if (get(VALUE.state) === STATE.paused) command(DO.toggle);               // (Jump to live plays on from the present, as a pause that is left)
+                seek(limitTurn() / TPS);
             }
 
             // ---- fullscreen: the bar lies over the picture, so it moves into the picture's box while the page is fullscreen ----
@@ -3232,6 +3363,7 @@
             window.antsReplayReport = function (report) {
                 if (!report || typeof report !== 'object') return;
                 info = report;
+                headPending = false;                      // (a report after a live match became a replay says its length itself)
                 lastKey = '';
                 setHeader();
                 if (report.failure) cardFor(report.failure, report.text);
@@ -3240,6 +3372,7 @@
 
             // ---- the wiring ----
             $('b-play').addEventListener('click', toggle);
+            $('b-live').addEventListener('click', jumpToLive);
             $('speed').addEventListener('click', function (ev) {
                 var b = ev.target.closest('button');
                 if (b) { command(DO.speed, Math.round(parseFloat(b.dataset.s) * 100)); lastKey = ''; tick(); }
@@ -3289,10 +3422,113 @@
             }, true);
             ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) { document.addEventListener(name, wake, { passive: true }); });
 
+            // ---- a match that is being played: the feed ----
+            var feedTimer = 0, notLiveLooks = 0;
+            function same(a, b) {
+                if (a === b) return true;
+                if (!a || !b || a.length !== b.length) return false;
+                for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+                return true;
+            }
+            // GET /live/<id>: { kind: 'running', bytes }, { kind: 'ended', replay } (the kept file, '' when it was not kept), { kind: 'notlive' } or { kind: 'error' } (the feed fails); see R.liveVerdict
+            function snapshot() {
+                return fetch('/live/' + LIVE_ID, { cache: 'no-store', credentials: 'same-origin' }).then(function (response) {
+                    if (response.status === 200) {
+                        if (/^\s*text\/html/i.test(response.headers.get('content-type') || '')) return { kind: 'error' };        // (a page of some other kind, not the match)
+                        return response.arrayBuffer().then(function (buffer) { return buffer.byteLength ? { kind: 'running', bytes: new Uint8Array(buffer) } : { kind: 'error' }; });
+                    }
+                    if (response.status === 404) return response.json().then(function (body) { return R.liveVerdict(404, body); }, function () { return R.liveVerdict(404, null); });
+                    return R.liveVerdict(response.status, null);
+                }).catch(function () { return { kind: 'error' }; });
+            }
+            // the first look, before the game starts: a failure is tried three times; a match that is over (kept: its card, not kept: "isn't live") or not there is an answer
+            function firstSnapshot() {
+                var tries = 0;
+                return (function go() {
+                    return snapshot().then(function (got) {
+                        if (got.kind === 'running') return { bytes: got.bytes };
+                        if (got.kind === 'ended') return got.replay ? { error: 'over', replay: got.replay } : { error: 'notlive' };
+                        if (got.kind === 'notlive') return { error: 'notlive' };
+                        if (++tries >= 3) return { error: 'load', text: 'the match could not be loaded: check the connection and try again' };
+                        return new Promise(function (resolve) { setTimeout(resolve, 1500); }).then(go);
+                    });
+                })();
+            }
+            function stopFeed() { clearTimeout(feedTimer); feedTimer = 0; }
+            function feed() {
+                feedTimer = 0;
+                if (!liveOn || shown) return;
+                snapshot().then(function (got) {
+                    if (!liveOn || shown) return;
+                    if (got.kind === 'ended') { matchOver(got.replay); return; }
+                    if (got.kind === 'running') { feedFailed = false; notLiveLooks = 0; if (!same(latest, got.bytes)) latest = got.bytes; }
+                    else {
+                        feedFailed = true;
+                        if (got.kind === 'notlive' && ++notLiveLooks >= 8) { endLive(); return; }          // (the door has no such match for 30 seconds on: it is gone, as a match that was not kept is)
+                    }
+                    lastKey = '';
+                    feedTimer = setTimeout(feed, FEED_MS);
+                });
+            }
+            // the game's file system holds the newest file, and the game is told: written when the game is there (the first one is written as it starts), in order
+            function sync() {
+                if (latest && latest !== applied) {
+                    try { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; command(DO.extend, 0); } catch (e) { /* the file system does not answer: the next look tries again */ }
+                }
+                if (overToSend) { overToSend = false; command(DO.liveOver, 0); }
+            }
+            // the kept replay of a match that has ended, a few tries (it may take a moment to be in the store)
+            function fetchKept(file, tries) {
+                return fetch('/replays/' + file, { cache: 'no-store', credentials: 'same-origin' }).then(function (response) {
+                    if (!response.ok || /^\s*text\/html/i.test(response.headers.get('content-type') || '')) return null;
+                    return response.arrayBuffer().then(function (buffer) { return buffer.byteLength ? new Uint8Array(buffer) : null; });
+                }, function () { return null; }).then(function (bytes) {
+                    if (bytes || tries <= 1) return bytes;
+                    return new Promise(function (resolve) { setTimeout(resolve, 1500); }).then(function () { return fetchKept(file, tries - 1); });
+                });
+            }
+            function matchOver(file) {
+                if (!file) { endLive(); return; }
+                fetchKept(file, 5).then(function (bytes) { if (bytes && liveOn && !shown) keepAsReplay(file, bytes); else if (liveOn && !shown) endLive(); });
+            }
+            // the match is over and was kept: the page goes on with the recording of all of it, as a replay (the header loses LIVE, the file can be downloaded, the address is the replay's)
+            function keepAsReplay(file, bytes) {
+                stopFeed();
+                FILE = file;
+                ANTS_REPLAY_FILE = file;
+                liveOn = false;
+                feedFailed = false;
+                overNote = 'kept';
+                headPending = true;
+                info = info ? { map: info.map, roster: info.roster, names: info.names, version: info.version, game: info.game } : null;       // (what the live file said of its length and its end is not the file's now)
+                latest = bytes;
+                try { window.history.replaceState(null, '', window.location.pathname + '?replay=' + encodeURIComponent(file)); } catch (e) { /* the address stays as it is */ }
+                setHeader();
+                liveClasses();
+                lastKey = '';
+                tick();
+            }
+            // the match is over and was not kept (or the door has lost it): the game plays on to the end of what it holds and ends like a recording that was cut short
+            function endLive() {
+                stopFeed();
+                liveOn = false;
+                feedFailed = false;
+                overNote = 'plain';
+                overToSend = true;
+                setHeader();
+                liveClasses();
+                lastKey = '';
+                tick();
+            }
+
             // ---- the file: fetched now, handed to the game when it starts ----
             // The game starts when the data and the file are both here (antsAfterReplay, used by the data block below); a file that is not there or cannot be fetched is a card and the game does not start.
             var fetched;
-            if (!FILE) {
+            if (ANTS_LIVE_MODE) {
+                if (!LIVE_ID) fetched = Promise.resolve({ error: 'notlive' });
+                else if (!window.fetch || !window.Promise) fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the match' });
+                else fetched = firstSnapshot();
+            } else if (!FILE) {
                 fetched = Promise.resolve({ error: 'gone' });
             } else if (!window.fetch || !window.Promise) {
                 fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the recording' });
@@ -3305,16 +3541,28 @@
             }
             window.antsAfterReplay = function (start) {
                 fetched.then(function (got) {
-                    if (got.error === 'gone') { card('gone'); return; }
-                    if (got.error) { card('cant', got.text); return; }
-                    Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', got.bytes); });
-                    ANTS_ARGS.push('--replay', '/replay.antsrep');
+                    if (got.error) return;                    // (its card is up already)
+                    if (ANTS_LIVE_MODE) {
+                        Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; });          // (the newest file: the feed went on while the data came)
+                        ANTS_ARGS.push('--replay', '/replay.antsrep', '--replay-live');
+                    } else {
+                        Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', got.bytes); });
+                        ANTS_ARGS.push('--replay', '/replay.antsrep');
+                    }
                     start();
                 });
             };
-            // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen)
-            fetched.then(function (got) { if (got.error === 'gone') card('gone'); else if (got.error) card('cant', got.text); });
+            // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen); a live match is looked at again every few seconds from the first answer on
+            fetched.then(function (got) {
+                if (got.error === 'gone') card('gone');
+                else if (got.error === 'notlive') card('notlive');
+                else if (got.error === 'over') card('over', got.replay);
+                else if (got.error) card('cant', got.text);
+                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); }
+            });
             setHeader();
+            liveClasses();
+            $('watch-link').setAttribute('aria-current', 'page');   // (the footer says where the player is: the list of matches)
             window.antsReplayPlaceBar();
             setInterval(tick, 100);
             tick();

@@ -346,19 +346,24 @@ struct Viewer {
     ScratchRoot root;
     Application app;
     bool ok{false};
-    explicit Viewer(const std::vector<uint8_t>& bytes, const std::string& name = "match.antsrep") {
-        const fs::path file = root.path() / name;
-        {
-            std::ofstream out(file, std::ios::binary);
-            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        }
+    fs::path path;
+    explicit Viewer(const std::vector<uint8_t>& bytes, const std::string& name = "match.antsrep", bool live = false) {
+        path = root.path() / name;
+        put(bytes);
         ApplicationConfig cfg;
         cfg.headless = true;
         cfg.lan_port = 0;
         cfg.maps_dir = maps_dir();
-        cfg.replay_path = file.string();
+        cfg.replay_path = path.string();
+        cfg.replay_live = live;
         ok = app.init(cfg);
     }
+    // The file as the page leaves it: a newer copy of the match (the page writes it, then asks for Extend)
+    void put(const std::vector<uint8_t>& bytes) const {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
+    int value(ReplayValue what) const { return app.replay_value(what); }
     void frames(int n, float dt = 0.05f) {
         for (int i = 0; i < n; ++i) app.update_simulation(dt);
     }
@@ -1140,6 +1145,101 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(v.app.is_running());
         ASSERT_FALSE(v.app.sim().is_match_over());                                      // (no Quit command reached the engine)
         v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.7 A match that is still going on is followed: the game plays up to two seconds short of the newest turn and waits there, an Extend takes a longer copy of the same match and refuses any other, a whole copy ends the following") {
+        const Handmade made = make_handmade(600, true);
+        ASSERT_FALSE(made.bytes.empty());
+        // the copies of the match as a server makes them: the start data, the orders and the hashes up to some turn, no end
+        const auto copy_until = [&](uint32_t turns) {
+            replay::Replay r = made.file;
+            r.complete = false;
+            r.match_over = false;
+            r.final_hash = 0;
+            r.commands.erase(std::remove_if(r.commands.begin(), r.commands.end(), [&](const replay::TimedCommand& c) { return c.turn >= turns; }), r.commands.end());
+            r.hashes.resize(turns / r.head.hash_period);
+            r.total_turns = turns;
+            std::string error;
+            return replay::encode(r, error);
+        };
+        const std::vector<uint8_t> at300 = copy_until(300);
+        const std::vector<uint8_t> at500 = copy_until(500);
+        ASSERT_FALSE(at300.empty());
+        ASSERT_FALSE(at500.empty());
+        Viewer v(at300, "live.antsrep", true);
+        ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+        ASSERT_EQ(v.value(ReplayValue::Live), 1);
+        ASSERT_EQ(v.value(ReplayValue::Total), 300);
+        ASSERT_EQ(v.value(ReplayValue::Limit), 300 - static_cast<int>(kLiveHoldTurns));
+        ASSERT_EQ(v.value(ReplayValue::Complete), 0);
+        v.frames(2000);                                                                  // (it waits where it may play to: not ended, not cut short)
+        ASSERT_TRUE(v.state() == ReplayState::Playing);
+        ASSERT_EQ(v.turn(), 300u - kLiveHoldTurns);
+        v.app.replay_control(ReplayControl::Seek, 100000);                               // (a jump past what it may play goes to that turn)
+        v.frames(2);
+        ASSERT_EQ(v.turn(), 300u - kLiveHoldTurns);
+        // a copy that is longer: taken; the time that passed while it waited is not owed
+        v.put(at500);
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Total), 500);
+        ASSERT_EQ(v.value(ReplayValue::Limit), 500 - static_cast<int>(kLiveHoldTurns));
+        v.frames(3);
+        ASSERT_EQ(v.turn(), 300u - kLiveHoldTurns + 3u);
+        v.frames(2000);
+        ASSERT_EQ(v.turn(), 500u - kLiveHoldTurns);
+        // a copy that is shorter, one of another match, a damaged one and a missing one change nothing
+        v.put(at300);
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Total), 500);
+        const Handmade other = make_handmade(600, true, 22);
+        ASSERT_FALSE(other.bytes.empty());
+        v.put(other.bytes);
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Total), 500);                          // (longer, but another match: another seed)
+        std::vector<uint8_t> damaged = at500;
+        damaged[damaged.size() / 2] ^= 0xFFu;
+        v.put(damaged);
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Total), 500);
+        v.put({});
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Total), 500);
+        ASSERT_TRUE(v.app.replay_failure() == ReplayFailure::None && v.state() == ReplayState::Playing);
+        // going back and watching again are played from the start, and the playhead still stops at the limit
+        v.app.replay_control(ReplayControl::Seek, 100);
+        v.frames(1);
+        ASSERT_EQ(v.turn(), 100u);
+        v.app.replay_control(ReplayControl::Restart, 0);
+        v.frames(3000);
+        ASSERT_EQ(v.turn(), 500u - kLiveHoldTurns);
+        // the whole copy (the match is over): the following ends, the game plays on and ends on the results
+        v.put(made.bytes);
+        v.app.replay_control(ReplayControl::Extend, 0);
+        ASSERT_EQ(v.value(ReplayValue::Live), 0);
+        ASSERT_EQ(v.value(ReplayValue::Complete), 1);
+        ASSERT_EQ(v.value(ReplayValue::Limit), static_cast<int>(made.file.total_turns));
+        v.frames(3000);
+        ASSERT_TRUE(v.state() == ReplayState::Ended);
+        ASSERT_EQ(v.turn(), made.file.total_turns);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);                  // (the state after the last tick and the Quit that ends the match)
+        v.app.shutdown();
+        // no more will come (the match was not kept): the game plays to the end of what it holds and stops like a cut recording
+        Viewer w(at300, "live2.antsrep", true);
+        ASSERT_TRUE(w.ok);
+        w.frames(1000);
+        ASSERT_EQ(w.turn(), 300u - kLiveHoldTurns);
+        w.app.replay_control(ReplayControl::LiveOver, 0);
+        ASSERT_EQ(w.value(ReplayValue::Live), 0);
+        w.frames(1000);
+        ASSERT_TRUE(w.state() == ReplayState::CutShort);
+        ASSERT_EQ(w.turn(), 300u);
+        w.app.shutdown();
+        // a file that is whole is no match that goes on, whatever the option says
+        Viewer x(made.bytes, "whole.antsrep", true);
+        ASSERT_TRUE(x.ok);
+        ASSERT_EQ(x.value(ReplayValue::Live), 0);
+        ASSERT_EQ(x.value(ReplayValue::Limit), x.value(ReplayValue::Total));
+        x.app.shutdown();
     } TEST_END();
 
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

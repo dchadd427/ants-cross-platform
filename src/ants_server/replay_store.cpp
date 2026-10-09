@@ -185,6 +185,10 @@ bool ReplayStore::valid_file_name(const std::string& name) {
     return parse_name(name, parsed);
 }
 
+std::string ReplayStore::map_stem(const std::string& map_name) { return stem_of(map_name); }
+
+std::string ReplayStore::time_stamp(int64_t seconds) { return stamp_of(seconds); }
+
 bool ReplayStore::time_of_name(const std::string& name, int64_t& seconds) {
     ParsedName parsed;
     if (!parse_name(name, parsed)) return false;

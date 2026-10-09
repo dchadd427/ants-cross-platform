@@ -13,6 +13,7 @@
 #   ANTS_STAGING_SERVER_CTL_PORT=4011        the control interface (loopback)
 #   ANTS_SERVER_SECRET, ANTS_MAPS_DIR, ANTS_BUILD_ID, ANTS_DEMO_ROOMS, ANTS_DEMO_MAP, ANTS_DEMO_MAPS    as in docker-compose.stack.yml (the demo rooms of web/lobby.html are on here too)
 #   ANTS_REPLAY_DAYS, ANTS_REPLAY_MAX_MB, ANTS_REPLAY_PORT    as in docker-compose.stack.yml (the recorded matches, and their public list and files at /replays; the port 4020 is inside the container and not published)
+#   ANTS_BOT_MATCH_EVERY_MIN                                   as in docker-compose.stack.yml (the server's own match of computer players, 60 minutes by default)
 services:
   ants-beta:
     build:
@@ -41,7 +42,7 @@ services:
     stop_grace_period: 15s
     # as in docker-compose.stack.yml: the demo rooms of web/lobby.html are on (ANTS_DEMO_ROOMS is 1 to 255, see that file's header), a room's turn log is at most 4 MiB (--log-mb 4: see the note there),
     # and the matches are kept as replays (--replay-demo, ANTS_REPLAY_DAYS, ANTS_REPLAY_MAX_MB) with their public list and files on the replay port (ANTS_REPLAY_PORT, 0 = off): see the note there
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
     volumes:

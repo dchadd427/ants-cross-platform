@@ -356,7 +356,10 @@ uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc) noexcept {
     return ~c;
 }
 
-std::vector<uint8_t> encode(const Replay& r, std::string& error) {
+namespace {
+
+/// The writer of both kinds of file: `live_turns` null writes a replay as it is (complete or cut), else a snapshot (an incomplete replay and its live chunk)
+std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, std::string& error) {
     error.clear();
     if (!valid_head(r.head, error)) return {};
     if (r.total_turns > kMaxTurns) {
@@ -378,6 +381,10 @@ std::vector<uint8_t> encode(const Replay& r, std::string& error) {
     }
     if (r.complete && static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period > r.total_turns) {
         error = "the replay has more hashes than turns";
+        return {};
+    }
+    if (live_turns != nullptr && (*live_turns > kMaxTurns || *live_turns < last || static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period > *live_turns)) {
+        error = "the snapshot's turn count is more than a match can have, or less than its last command or its last hash";
         return {};
     }
 
@@ -422,6 +429,11 @@ std::vector<uint8_t> encode(const Replay& r, std::string& error) {
         for (const uint32_t h : r.hashes) put_u32(payload, h);
         put_chunk(out, "hash", payload);
     }
+    if (live_turns != nullptr) {
+        std::vector<uint8_t> payload;
+        put_u32(payload, *live_turns);
+        put_chunk(out, "live", payload);
+    }
     if (r.complete) {
         std::vector<uint8_t> payload;
         put_u32(payload, r.total_turns);
@@ -434,6 +446,18 @@ std::vector<uint8_t> encode(const Replay& r, std::string& error) {
         return {};
     }
     return out;
+}
+
+}  // namespace
+
+std::vector<uint8_t> encode(const Replay& r, std::string& error) { return encode_file(r, nullptr, error); }
+
+std::vector<uint8_t> encode_snapshot(const Replay& r, uint32_t turns, std::string& error) {
+    if (r.complete) {
+        error = "a snapshot is a replay without its end, and this one has it";
+        return {};
+    }
+    return encode_file(r, &turns, error);
 }
 
 bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
@@ -450,11 +474,13 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
     bool have_head = false;
     bool have_hashes = false;
     bool have_ends = false;
+    bool have_live = false;
+    uint32_t live_turns = 0;
     uint32_t last_turn = 0;
     size_t pos = kMagic.size();
     while (pos < size) {
         if (have_ends) {
-            error = "bytes after the ENDS chunk";
+            error = size - pos >= 4 && std::memcmp(data + pos, "live", 4) == 0 ? "live: a live chunk after the ENDS chunk (a snapshot has no end)" : "bytes after the ENDS chunk";
             return false;
         }
         const size_t at = pos;
@@ -564,6 +590,21 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
                 c.u32(v);
                 r.hashes.push_back(v);
             }
+        } else if (name == "live") {
+            Cursor c{payload, length};
+            if (have_live) {
+                error = "live: two live chunks";
+                return false;
+            }
+            if (length != 4 || !c.u32(live_turns)) {
+                error = "live: the wrong length";
+                return false;
+            }
+            if (live_turns > kMaxTurns) {
+                error = "live: more turns than a match can have";
+                return false;
+            }
+            have_live = true;
         } else if (name == "ENDS") {
             Cursor c{payload, length};
             uint8_t flags = 0;
@@ -582,6 +623,10 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
         error = "the file has no HEAD chunk";
         return false;
     }
+    if (have_live && have_ends) {
+        error = "live: a live chunk in a file that has its ENDS chunk (a snapshot has no end)";
+        return false;
+    }
     if (have_ends) {
         if (r.total_turns > kMaxTurns || last_turn > r.total_turns || static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period > r.total_turns) {
             error = "ENDS: the turn count does not fit the commands and the hashes";
@@ -589,7 +634,12 @@ bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {
         }
         r.complete = true;
     } else {
-        r.total_turns = std::max<uint32_t>(last_turn, static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period, kMaxTurns)));
+        const uint32_t hashed = static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period, kMaxTurns));
+        if (have_live && (live_turns < last_turn || live_turns < hashed)) {
+            error = "live: fewer turns than the file's last command or last hash";
+            return false;
+        }
+        r.total_turns = std::max({last_turn, hashed, live_turns});
         r.complete = false;
     }
     out = std::move(r);

@@ -71,6 +71,7 @@
 #include "ants_net/turnlog.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/live_board.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -127,6 +128,9 @@ struct RoomSpec {
     size_t max_connections{32};                              // the connections that the room keeps at once (everything that ever said Hello to it, and every connection that came back, until it is closed and
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
     bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
+    /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
+    /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
+    bool bots_only{false};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -196,6 +200,7 @@ struct RoomStatus {
     std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
     std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
     std::string room_teams;                 // the room's own teams, "A+B" ("" when it has none: the leader's START chooses): for the tests, not shown by the control interface
+    bool bots_only{false};                  // a match of computer players alone, the server's own (RoomSpec::bots_only): not a game that the site's statistics count
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick
@@ -301,6 +306,9 @@ public:
     /// The server's store of replays (replay_store.hpp; it must outlive the room): the match is recorded and kept there. Null (the default): the room records nothing, and `why_not` is what its status says. Set it
     /// right after the room is made, before its match is started.
     void set_replay_store(ReplayStore* store, const std::string& why_not = std::string());
+    /// The server's board of the matches that run (live_board.hpp; it must outlive the room): the room registers the recording of its match there when the match begins and takes it off when the recording becomes
+    /// a file or is dropped (and in its destructor). Null (the default): the match is not shown live. Set it right after the room is made, before its match is started.
+    void set_live_board(LiveBoard* board) noexcept { live_board_ = board; }
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
@@ -335,6 +343,8 @@ public:
     const std::string& code() const noexcept { return spec_.code; }
     /// Made by a visitor's create block (protocol 15): one of the server's public rooms
     bool public_room() const noexcept { return spec_.public_room; }
+    /// The server's own match of computer players alone (RoomSpec::bots_only)
+    bool bots_only() const noexcept { return spec_.bots_only; }
     /// A lobby room (protocol 16) ...
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms
@@ -397,6 +407,8 @@ private:
     // Replays kept on the server (replay_store.hpp)
     void replay_begin(const net::StartMsg& start);           // the recorder of the match is made and taps the referee's runner (begin_match: before the first turn)
     void replay_end();                                       // the match is over (finish, fail while it ran): the recording is made into a file and kept, or the status says why not
+    std::string replay_keep(replay::Recorder& recorder);     // the part of replay_end that makes the file and sets replay_file_ or replay_note_: the file's name, "" when the match is not kept
+    void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
@@ -442,6 +454,8 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
     std::unique_ptr<ai::BotController> bot_controller_;
     ReplayStore* replay_store_{nullptr};
+    LiveBoard* live_board_{nullptr};
+    std::string live_id_;                    // the recording's id on the live board ("": it is not there)
     std::unique_ptr<replay::Recorder> recorder_;     // the match so far (null: it is not recorded, or it is over)
     std::string replay_file_;                // the match was kept under this name ...
     uint64_t replay_bytes_{0};

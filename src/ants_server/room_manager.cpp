@@ -90,9 +90,11 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || restoring_has(spec.code))) return fail(409, "a room with this code exists");     // (a record that waits for its replay is a room)
     if (const std::string range = spec_range_error(spec); !range.empty()) return fail(400, range);
     // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
+    // A bots-only room (RoomSpec::bots_only; the server's own match of computer players) seats a bot at every seat of the room and nobody else, and holds no seat
+    if (spec.bots_only && (spec.bots.size() != spec.players || spec.lobby || spec.public_room || spec.reconnect)) return fail(400, "bots_only: every seat is a bot, and the room is no lobby, no public room and holds no seats");
     if (!spec.bots.empty()) {
         if (spec.fog) return fail(400, "bots cannot play with Fog of War: a bot would see through it");
-        if (spec.bots.size() >= spec.players) return fail(400, "bots: at least one of the room's players must be a person (players " + std::to_string(spec.players) + ", bots " + std::to_string(spec.bots.size()) + ")");
+        if (!spec.bots_only && spec.bots.size() >= spec.players) return fail(400, "bots: at least one of the room's players must be a person (players " + std::to_string(spec.players) + ", bots " + std::to_string(spec.bots.size()) + ")");
         uint8_t seats = 0;
         for (const ai::BotSpec& b : spec.bots) {
             if (b.seat >= sim::MAX_PLAYERS) return fail(400, "bots: a seat is 0 to 3");
@@ -121,6 +123,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     else if (!wants_replay) room->set_replay_store(nullptr, "the room was made with \"record\": false");
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
+    room->set_live_board(&live_board_);                           // (a room that records shows its match here once it has run 30 seconds)
     if (room->lobby()) room->set_lobby_services(lobby_services());
     rooms_.emplace(code, std::move(room));
     ++created_;
@@ -530,7 +533,14 @@ void RoomManager::update(uint32_t now_ms) {
         if (now_ms - lingering_[i].since_ms >= limits_.reject_linger_ms || !lingering_[i].connection->is_open()) lingering_.erase(lingering_.begin() + static_cast<std::ptrdiff_t>(i));
         else ++i;
     }
-    // 3. the rooms
+    // 3. the server's own match of computer players, when it is time
+    if (bot_every_ms_ != 0 && net::time_reached(now_ms, next_bot_match_ms_)) {
+        next_bot_match_ms_ = now_ms + bot_every_ms_;
+        std::string code, why;
+        if (start_bot_match(now_ms, code, why)) bot_notes_.push_back("bot match: room " + code + " started");
+        else bot_notes_.push_back("bot match: not started (" + why + ")");
+    }
+    // 4. the rooms
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
         if (it->second->expired(now_ms)) {
@@ -561,6 +571,7 @@ bool RoomManager::enable_restart_records(RestartConfig config, std::string& why)
 bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::string& why) {
     replays_.reset();
     replay_demo_ = include_demo;
+    live_board_.set_clock(config.clock_s);
     if (config.dir.empty()) return true;
     auto store = std::make_unique<ReplayStore>(std::move(config));
     if (!store->prepare(why)) return false;
@@ -568,8 +579,71 @@ bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::st
     return true;
 }
 
+void RoomManager::enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, uint32_t first_after_ms, uint32_t seed) {
+    bot_every_ms_ = every_minutes * 60u * 1000u;
+    next_bot_match_ms_ = now_ms + first_after_ms;
+    bot_rng_.seed(seed != 0 ? seed : std::random_device{}());
+}
+
+// The match: a map of the original's six that the store has, two to four standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, and a seed.
+// The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
+// match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
+bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why) {
+    code.clear();
+    if (replays_ == nullptr) {
+        why = "the server keeps no replays";
+        return false;
+    }
+    for (const auto& kv : rooms_) {
+        if (kv.second->bots_only() && (kv.second->state() == RoomState::Waiting || kv.second->state() == RoomState::Loading || kv.second->state() == RoomState::Running)) {
+            why = "the last one is still going";
+            return false;
+        }
+    }
+    static const char* const kMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
+    std::vector<std::string> maps;
+    for (const char* name : kMaps) {
+        MapEntry entry;
+        std::string ignored;
+        if (store_.find(name, entry, &ignored)) maps.push_back(name);
+    }
+    if (maps.empty()) {
+        why = "the server has none of the original's maps";
+        return false;
+    }
+    RoomSpec spec = default_spec();
+    spec.map = maps[bot_rng_() % maps.size()];
+    spec.players = static_cast<uint8_t>(2 + bot_rng_() % 3);
+    uint32_t need = spec.players;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {              // (a seat is taken with the chance need / seats left)
+        if (bot_rng_() % (sim::MAX_PLAYERS - seat) >= need) continue;
+        ai::BotSpec bot;
+        bot.seat = seat;
+        bot.level = bot_rng_() % 2 == 0 ? ai::Level::Medium : ai::Level::Hard;
+        spec.bots.push_back(bot);
+        --need;
+    }
+    spec.seed = (bot_rng_() & 0x7FFFFFFFu) + 1u;
+    spec.has_seed = true;
+    spec.bots_only = true;
+    spec.early_start = false;
+    spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
+    spec.wait_ms = 30u * 1000u;
+    spec.run_ms = 25u * 60u * 1000u;                                       // (the longest map's limit is 12 minutes: this is only the room's own guard)
+    spec.keep_ms = 30u * 1000u;
+    const CreateResult made = create_room(std::move(spec), now_ms);
+    if (!made.ok) {
+        why = made.error;
+        return false;
+    }
+    code = made.code;
+    return true;
+}
+
 std::vector<std::string> RoomManager::take_notices() {
     std::vector<std::string> notes = restart_ != nullptr ? restart_->take_notes() : std::vector<std::string>();
+    for (std::string& line : bot_notes_) notes.push_back(std::move(line));
+    bot_notes_.clear();
     if (replays_ != nullptr) {
         for (std::string& line : replays_->take_notes()) notes.push_back(std::move(line));
     }

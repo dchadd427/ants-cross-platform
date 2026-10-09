@@ -63,6 +63,23 @@ constexpr int kMaxSpeed100 = 1600;
 /// The turns that an engine has run
 uint32_t turn_of(const sim::SimulationEngine& sim) noexcept { return static_cast<uint32_t>(sim.current_tick()); }
 
+/// True when `later` is the match of `now` with at least as many turns: the same head (the start data and the game that made the file), and everything that `now` holds (the commands, the hashes) at the
+/// same places. A copy of a match that is going on only grows; anything else is another match, or a file that cannot be trusted to continue this one.
+bool continues(const replay::Replay& now, const replay::Replay& later) {
+    const replay::Header& a = now.head;
+    const replay::Header& b = later.head;
+    if (a.format_version != b.format_version || a.engine_rules != b.engine_rules || a.sim_rules != b.sim_rules || a.game_version != b.game_version || a.build_id != b.build_id || a.venue != b.venue ||
+        a.map_name != b.map_name || a.map_hash != b.map_hash || a.seed != b.seed || a.roster != b.roster || a.fog != b.fog || a.names != b.names || !(a.teams == b.teams) || a.recorder_seat != b.recorder_seat ||
+        a.hash_period != b.hash_period) {
+        return false;
+    }
+    if (later.total_turns < now.total_turns || later.commands.size() < now.commands.size() || later.hashes.size() < now.hashes.size()) return false;
+    for (size_t i = 0; i < now.commands.size(); ++i) {
+        if (now.commands[i].turn != later.commands[i].turn || !(now.commands[i].command == later.commands[i].command)) return false;
+    }
+    return std::equal(now.hashes.begin(), now.hashes.end(), later.hashes.begin());
+}
+
 #if defined(__EMSCRIPTEN__)
 /// A text for the page's JSON: printable ASCII, with the backslash and the quote escaped (the names of a file are printable ASCII already: the reader refuses any other)
 std::string json_text(const std::string& raw) {
@@ -182,6 +199,7 @@ void Application::prepare_replay() {
     replay_failure_ = ReplayFailure::None;
     replay_failure_text_.clear();
     replay_file_.reset();
+    replay_live_ = false;
     std::vector<uint8_t> bytes;
     {
         std::ifstream in(config_.replay_path, std::ios::binary);
@@ -218,6 +236,7 @@ void Application::prepare_replay() {
         replay_file_ = std::move(replay);
         return;
     }
+    replay_live_ = config_.replay_live && !replay->complete;               // (a file that is whole is no match that goes on)
     replay_file_ = std::move(replay);
 }
 
@@ -235,6 +254,9 @@ int Application::replay_value(ReplayValue what) const noexcept {
         case ReplayValue::State: return static_cast<int>(replay_state());
         case ReplayValue::Turn: return replay_mode_ ? static_cast<int>(turn_of(sim_)) : 0;
         case ReplayValue::Total: return replay_file_ ? static_cast<int>(replay_file_->total_turns) : 0;
+        case ReplayValue::Limit: return static_cast<int>(replay_limit());
+        case ReplayValue::Live: return replay_live_ ? 1 : 0;
+        case ReplayValue::Complete: return replay_file_ && replay_file_->complete ? 1 : 0;
         case ReplayValue::Speed: return static_cast<int>(replay_speed_ * 100.0f + 0.5f);
         case ReplayValue::JumpPercent: {
             if (!replay_jumping_ || replay_jump_target_ <= replay_jump_from_) return 0;
@@ -307,7 +329,7 @@ void Application::report_replay_to_page() {
 // The jump or the restart begins again from the first turn: the engine and everything the screen shows of the match are made new
 void Application::replay_jump_to(uint32_t turn) {
     if (!replay_file_ || replay_failure_ != ReplayFailure::None) return;
-    turn = std::min(turn, replay_file_->total_turns);
+    turn = std::min(turn, replay_limit());
     if (turn < turn_of(sim_)) start_replay();                        // (the match is played from its first turn again, the way a jump back has to go)
     if (turn == turn_of(sim_)) return;
     replay_jumping_ = true;
@@ -327,14 +349,44 @@ void Application::replay_control(ReplayControl what, int value) {
             replay_paused_ = false;
             start_replay();
             break;
+        case ReplayControl::Extend: replay_extend(); break;
+        case ReplayControl::LiveOver: replay_live_ = false; break;
     }
+}
+
+// The turns that may be played now: the file's end, and while the game follows a match that goes on, kLiveHoldTurns short of it (the picture would stand still between two copies of the match if it ran up to the newest turn)
+uint32_t Application::replay_limit() const noexcept {
+    if (!replay_file_) return 0;
+    const uint32_t total = replay_file_->total_turns;
+    if (!replay_live_) return total;
+    return total > kLiveHoldTurns ? total - kLiveHoldTurns : 0;
+}
+
+// --replay-live: the page has put a newer copy of the match in the file. It is taken when it is the same match with at least as many turns; a copy that is cut, damaged, another match or shorter changes nothing (the
+// page tries again with the next one). A copy that is whole ends the following: the match is over and the game plays on as it would play any recording. What was played stays played: the orders already given are a prefix
+// of the new copy's, so replay_next_ is still the place of the next one.
+void Application::replay_extend() {
+    if (!replay_live_ || !replay_file_ || replay_failure_ != ReplayFailure::None) return;
+    std::vector<uint8_t> bytes;
+    {
+        std::ifstream in(config_.replay_path, std::ios::binary);
+        if (in) {
+            bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            if (bytes.size() > replay::kMaxFileBytes) bytes.clear();
+        }
+    }
+    auto later = std::make_unique<replay::Replay>();
+    std::string why;
+    if (bytes.empty() || !replay::decode(bytes.data(), bytes.size(), *later, why) || !continues(*replay_file_, *later)) return;
+    if (later->complete) replay_live_ = false;
+    replay_file_ = std::move(later);
 }
 
 // What a turn of the file does: its orders in the order they stand, then the tick. A turn with a picture is what a frame shows (post_tick); a turn of a jump is only played (the sounds and news are told once at the end).
 bool Application::replay_turn(bool picture) {
     const replay::Replay& file = *replay_file_;
     const uint32_t turn = turn_of(sim_);
-    if (turn >= file.total_turns) return false;
+    if (turn >= replay_limit()) return false;
     for (; replay_next_ < file.commands.size() && file.commands[replay_next_].turn == turn; ++replay_next_) sim_.apply_command(file.commands[replay_next_].command);
     sim_.tick();
     const uint32_t done = turn + 1;
@@ -382,7 +434,7 @@ void Application::run_replay(float dt) {
             catch_up_backlog_ = true;                                      // (what the turns of the jump made is not told: the sounds are dropped, the news stay in the chat log)
             post_tick();
             tick_accumulator_ = 0.0f;
-            if (turn_of(sim_) >= file.total_turns) replay_ends();
+            if (!replay_live_ && turn_of(sim_) >= file.total_turns) replay_ends();
         }
         return;
     }
@@ -392,7 +444,8 @@ void Application::run_replay(float dt) {
         tick_accumulator_ -= 0.050f;
         if (!replay_turn(true) || sim_.is_match_over()) break;
     }
-    if (replay_failure_ == ReplayFailure::None && turn_of(sim_) >= file.total_turns && !replay_cut_ && !sim_.is_match_over()) replay_ends();
+    if (replay_live_ && turn_of(sim_) >= replay_limit()) tick_accumulator_ = 0.0f;       // (waiting for the next copy: the time that passes meanwhile is not owed, or the picture would rush when it comes)
+    if (replay_failure_ == ReplayFailure::None && !replay_live_ && turn_of(sim_) >= file.total_turns && !replay_cut_ && !sim_.is_match_over()) replay_ends();
 }
 
 // Quit and Leave Game: back to the page's list of matches (a native game ends)

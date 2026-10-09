@@ -155,6 +155,10 @@ public:
     /// The server's replays (null when it keeps none)
     ReplayStore* replay_store() noexcept { return replays_.get(); }
     const ReplayStore* replay_store() const noexcept { return replays_.get(); }
+    /// The matches that run now, which the public door shows live (live_board.hpp): the rooms that record register theirs here. Always there; empty on a server that keeps no replays. It takes its clock from the
+    /// replay configuration (enable_replays).
+    LiveBoard& live_board() noexcept { return live_board_; }
+    const LiveBoard& live_board() const noexcept { return live_board_; }
     /// The rooms that a visitor's create block makes are recorded too (false when the server keeps no replays)
     bool replays_include_demo() const noexcept { return replays_ != nullptr && replay_demo_; }
     /// Reads the records of the folder, newest first (by the time of their last write), and judges each one: a record that cannot be read is a line in the log and is deleted; one that cannot be restored
@@ -172,6 +176,14 @@ public:
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.
     size_t shutdown(uint32_t now_ms);
+    /// The server's own matches of computer players (docs/SERVER.md "Matches of computer players"): every `every_minutes` the manager makes one room whose seats are all bots (RoomSpec::bots_only), on one of
+    /// the original's six maps, with two to four standard bots of the Medium or Hard level on random seats, played at the normal speed. The first one begins `first_after_ms` after this call. Nothing is made while
+    /// the server keeps no replays (a match that nobody could watch or look at again), while a match of this kind still runs, or while the manager has no room for another room. `every_minutes` 0 switches it off.
+    /// `seed` 0: the choices come from the system's entropy; else from `seed` (the tests).
+    void enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, uint32_t first_after_ms = 60u * 1000u, uint32_t seed = 0);
+    bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
+    /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`
+    bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why);
     /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not) and the replays (files purged, a match that was not kept): once each, never a key
     std::vector<std::string> take_notices();
 
@@ -274,6 +286,7 @@ private:
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::unique_ptr<ReplayStore> replays_;       // (and the store of the replays that they keep)
+    LiveBoard live_board_;                       // (and the board of the matches that they record while they run: before the rooms, which take their match off it when they go)
     bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;
     bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due
@@ -287,6 +300,10 @@ private:
     uint64_t created_{0};
     uint64_t refused_{0};
     uint64_t code_counter_{0};
+    uint32_t bot_every_ms_{0};                   // the server's own matches of computer players: how often (0: none)
+    uint32_t next_bot_match_ms_{0};
+    std::mt19937 bot_rng_;
+    std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
 };
 
 }  // namespace ants::server

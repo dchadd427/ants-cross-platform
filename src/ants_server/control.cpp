@@ -378,9 +378,64 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
     return error_response(405, "method not allowed");
 }
 
-// The public door (ants_server --replay-port): the list and the files of the replays, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The players' names are
-// public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
+namespace {
+
+// GET /live/<id> that has no match to give: the page reads `ended` and `replay` to tell a match that is over (and, when it was kept, the file to fetch) from one that never was (or is forgotten)
+ctl::HttpResponse live_missing(bool ended, const std::string& replay_file) {
+    JsonValue o = JsonValue::make_object();
+    o.set("error", JsonValue::make_string("no such live match"));
+    o.set("ended", JsonValue::make_bool(ended));
+    o.set("replay", JsonValue::make_string(replay_file));
+    return json_response(404, o);
+}
+
+// GET /live and GET /live/<id> of the public door: the matches that run now (live_board.hpp), read only. A visitor names a match by its id and by nothing else: the id is checked for its shape before any lookup,
+// and no path, room code or address is ever made from a request or put in an answer.
+ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRequest& request) {
+    const ReplayStore* store = rooms.replay_store();
+    const LiveBoard& board = rooms.live_board();
+    const bool serving = request.method == "GET" && store != nullptr && request.query.empty();
+    if (request.path == "/live") {
+        if (!serving) return error_response(404, "not found");
+        JsonValue list = JsonValue::make_array();
+        for (const LiveMatch& m : board.list()) {
+            JsonValue e = JsonValue::make_object();
+            e.set("id", JsonValue::make_string(m.id));
+            e.set("map", JsonValue::make_string(m.map));
+            e.set("started", JsonValue::make_int(m.started));
+            e.set("turns", JsonValue::make_int(m.turns));
+            e.set("seconds", JsonValue::make_int(m.turns / net::kTurnsPerSecond));
+            JsonValue players = JsonValue::make_array();
+            for (const std::string& p : m.players) players.push_back(JsonValue::make_string(p));
+            e.set("players", std::move(players));
+            list.push_back(std::move(e));
+        }
+        JsonValue o = JsonValue::make_object();
+        o.set("count", JsonValue::make_int(static_cast<int64_t>(list.items().size())));
+        o.set("live", std::move(list));
+        o.set("sim_rules", JsonValue::make_int(replay::kSimRules));
+        return json_response(200, o);
+    }
+    const std::string id = request.path.substr(std::string("/live/").size());
+    if (!serving || !LiveBoard::valid_id(id)) return live_missing(false, std::string());
+    if (const std::vector<uint8_t>* snapshot = board.snapshot(id)) {
+        ctl::HttpResponse r;
+        r.status = 200;
+        r.content_type = "application/octet-stream";
+        r.body.assign(reinterpret_cast<const char*>(snapshot->data()), snapshot->size());
+        return r;
+    }
+    std::string file;
+    if (board.outcome(id, file)) return live_missing(true, store->find(file) != nullptr ? file : std::string());        // (a file that is not in the store any more, the owner deleted it, is not offered)
+    return live_missing(false, std::string());
+}
+
+}  // namespace
+
+// The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
+// players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
+    if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
     const ReplayStore* store = rooms.replay_store();
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
     if (request.path == "/replays") {

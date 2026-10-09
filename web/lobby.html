@@ -425,7 +425,7 @@
             <label class="lab" for="player-name">Your name</label>
             <input type="text" id="player-name" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="who-hint name-msg">
             <button id="who-go" type="button" class="btn big" hidden>Join</button>
-            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one.</span></span><span id="who-step-hint" hidden></span><span class="notice" id="who-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</span></p>
+            <p class="hint" id="who-hint"><span id="who-general"><span class="desk">The name your ants play under. Leave it empty for a random name. This browser remembers it.</span><span class="mob">Your ants play under this name. Empty: a random one.</span></span><span id="who-step-hint" hidden></span><span class="notice" id="who-notice">Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names.</span></p>
             <p class="msg" id="name-msg" role="alert"></p>
             <a id="who-back" class="btn sm who-back" href="/" hidden>&larr; Back to the front page</a>
         </section>
@@ -579,6 +579,7 @@ their music and their sound: only the window you are in is heard). The match is 
         <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
         <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
         <nav aria-label="Footer links">
+            <a href="/watch.html" id="live-link">Watch live</a>
             <a href="/watch.html" id="watch-link">Watch replays</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
             <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>

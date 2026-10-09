@@ -160,7 +160,7 @@ class TheLocations(unittest.TestCase):
             self.assertLessEqual(per_second, high, zone_name)                                 # ... and less than the game server's loop can serve
             self.assertIn("limit_req zone=%s burst=%d nodelay;" % (zone_name, burst), block, zone_name)
             self.assertIn("limit_req_status 503;", block, zone_name)
-        self.assertEqual(sorted(re.findall(r"limit_req_zone [^;]*\bzone=(\w+):", HEAD)), ["ants_busy", "ants_local", "ants_replay_files", "ants_replays", "ants_stats"])      # (a flood of one is not another's)
+        self.assertEqual(sorted(re.findall(r"limit_req_zone [^;]*\bzone=(\w+):", HEAD)), ["ants_busy", "ants_live", "ants_live_files", "ants_local", "ants_replay_files", "ants_replays", "ants_stats"])      # (a flood of one is not another's; the two of /live are tests/scripts/test_nginx_live.py's)
         self.assertNotIn("zone=ants_replays ", FILES)
         self.assertNotIn("zone=ants_replay_files ", LIST)
 
@@ -235,7 +235,7 @@ class TheLocations(unittest.TestCase):
         # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so)
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         for page in ("lobby.html", "shell.html"):
-            self.assertIn("Online matches are recorded and kept for %s days. The recordings are public and show the players&rsquo; names." % days, read("web", page), page)
+            self.assertIn("Online matches are recorded and kept for %s days. Anybody can watch them, live or later, and they show the players&rsquo; names." % days, read("web", page), page)
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 
