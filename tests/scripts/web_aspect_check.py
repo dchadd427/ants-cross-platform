@@ -2,7 +2,7 @@
 """The web page's picture in a REAL browser (widescreen milestone M5; opt-in; see tests/scripts/test_web_aspect.sh and docs/NETWORK_PORT.md).
 
 Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it, or `docker-compose.stack.yml`; --web is the site's address: the game page is opened at its own
-path /play.html, "/" being the front page, and the Play online checks of --four use "/"), a Chromium-based browser and Python 3; nothing
+path /play.html, "/" being the front page), a Chromium-based browser and Python 3; nothing
 else (the DevTools protocol is spoken with the WebSocket client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
@@ -11,7 +11,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     canvas exactly that many pixels even after the layout's rounding, where the box must stand so that the game's pointer is exact (`snapOffset`), the frame cap (60, 75 and 90 Hz
     are not touched, a jittery 60 Hz display is not capped, 120 / 144 / 165 / 240 Hz are held to 60 a second, decided by the median of the last 24 gaps: slow frames at the start do
     not decide, and a window that moves to a display of another rate is measured again), the arguments of the address (`joinArguments`: the door of a game server on this site only,
-    a room code, a seat, a name, embed) and what is not the game's data (`badDownload`: a web page, a size that is not the package's);
+    a room code, a seat, a name) and what is not the game's data (`badDownload`: a web page, a size that is not the package's);
   * the page at desktop sizes (1280 x 720, 1920 x 1080, 1440 x 900, a 21:9 window, a small one, a very narrow one) and on a phone, at device ratios 1, 2 and 3: the canvas the game
     makes has EXACTLY the shape of the picture (16:9, 4:3 for the classic picture, 16:10 or 21:9), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
@@ -35,8 +35,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
     body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
     file packager once and only for index.data, a promise that fails after the game runs (no card over it), and index.js asked for once with one ?v= (`--load-only`);
-    and (`--downloads N`, needs the game server behind /ws) N cold-cache runs of web/lobby.html (the front page, at /) with 2 and with
-    4 games on the page, every frame of which must start (the browser's cache refuses one of several equal downloads at the same moment: net::ERR_CACHE_WRITE_FAILURE).
+    and (`--downloads N`) N cold-cache runs of the game page (at /play.html), each of which must start (the browser's cache can refuse a download: net::ERR_CACHE_WRITE_FAILURE).
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check (a page that hangs, a browser that crashes, a script that raises:
 a page that came up and then misbehaved is a failure, never a skip); 3: the check could not be made because the environment is not there (no browser, the browser did not start,
@@ -309,11 +308,11 @@ PURE_CHECKS = r"""
     n++;
     if (wrong) bad.push(wrong + ' of ' + total + ' positions are not snapped as the rule says, for example ' + sample);
   })();
-  // the arguments of the address (?join= &room= &seat= &name= &embed=)
+  // the arguments of the address (?join= &room= &seat= &name=)
   var J = P.joinArguments;
   function ja(search, secure) { return J(search, !!secure, 'play.example').args; }
-  eq(J('', false, 'play.example'), { embed: false, args: [] }, 'no query: nothing is passed on');
-  eq(J('?join=/ws&room=abc&seat=2&name=Alice', false, 'play.example:8080'), { embed: false, args: ['--join-url', 'ws://play.example:8080/ws', '--room', 'abc', '--seat', '2', '--name', 'Alice'] }, 'a complete join');
+  eq(J('', false, 'play.example'), { args: [] }, 'no query: nothing is passed on');
+  eq(J('?join=/ws&room=abc&seat=2&name=Alice', false, 'play.example:8080'), { args: ['--join-url', 'ws://play.example:8080/ws', '--room', 'abc', '--seat', '2', '--name', 'Alice'] }, 'a complete join');
   eq(ja('?join=/ws', true), ['--join-url', 'wss://play.example/ws'], 'https: a secure WebSocket');
   ['/ws', '/ws/', '/ws/room-1', '/ws/a/b.c_d~e'].forEach(function (v) { eq(ja('?join=' + encodeURIComponent(v)), ['--join-url', 'ws://play.example' + v], 'the door ' + v + ' is accepted'); });
   ['/', '', '/w', '/wsx', '//ws', '//evil.example/ws', 'ws://evil.example/ws', 'http://evil.example/', 'evil.example/ws', '/ws//x', '/ws/../x', '/ws/..', '/ws?x=1', '/ws#f', '/ws/a b', '/ws\n', '/ws/%2e%2e/x', '/ws\\x', '/other/ws', '/WS'].forEach(function (v) {
@@ -331,9 +330,8 @@ PURE_CHECKS = r"""
   eq(ja('?join=/ws&name=' + 'n'.repeat(40)), ['--join-url', 'ws://play.example/ws', '--name', 'n'.repeat(32)], 'a name is cut at 32 characters');
   eq(ja('?join=/ws&name=%C3%AB%C3%AB'), ['--join-url', 'ws://play.example/ws'], 'a name with nothing printable left is left out');
   eq(ja('?join=/ws&name=%20%20'), ['--join-url', 'ws://play.example/ws'], 'a name of blanks is left out');
-  eq(J('?embed=1', false, 'h'), { embed: true, args: ['--audio-focus'] }, 'embed=1: a frame of another page (the sound follows its focus)');
-  ['0', 'true', '', '2', 'yes'].forEach(function (v) { eq(J('?embed=' + v, false, 'h'), { embed: false, args: [] }, 'embed=' + v + ' is not a frame'); });
-  eq(ja('?embed=1&join=/ws&room=r'), ['--audio-focus', '--join-url', 'ws://play.example/ws', '--room', 'r'], 'embed and join together');
+  ['1', '0', 'true', '', '2', 'yes'].forEach(function (v) { eq(J('?embed=' + v, false, 'h'), { args: [] }, 'embed=' + v + ' is nothing (the pages that were framed are gone: no frame, no audio argument)'); });
+  eq(ja('?embed=1&join=/ws&room=r'), ['--join-url', 'ws://play.example/ws', '--room', 'r'], 'embed and join together: the embed is left out');
   // the room's create block (protocol 15: the first Hello of a code that has no room makes the room out of it) and the platform word: each through its own test, only with a valid door, in the game's order: the door, the
   // room, --room-map, --room-seats, --room-teams, --room-leader-start, --platform, then the seat; the tested lower case text comes back, never the text of the address
   var BASE = ['--join-url', 'ws://play.example/ws', '--room', 'k7m2xq'];
@@ -628,17 +626,16 @@ def main():
     ap.add_argument("--shots", default="", help="a folder to save the screenshots in")
     ap.add_argument("--quick", action="store_true", help="fewer sizes (1280 x 720, a phone)")
     ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
-    ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of the front page (with --downloads N)")
+    ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of the game page (with --downloads N)")
     ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
     ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
     ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
     ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
     ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms a level a notch: 2, 0.71, 0.5, the map's limit; the middle button)")
     ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
-    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of web/lobby.html (the front page, at /) with 2 and with 4 games on the page (needs the game server behind /ws)")
+    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of the game page (at /play.html), each of which must start")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
     ap.add_argument("--exit-codes", action="store_true", help="only check this script's own exit statuses: a closed port is a skip (3), a page that hangs is a failure (1)")
-    ap.add_argument("--four", action="store_true", help="also check web/lobby.html (the front page, at /) (the page that plays seats in frames: the frames' shape, a bad ?aspect ignored, the remembered choice, frames of the picture's own size in a wide window); needs the game server behind /ws (the stack)")
     args = ap.parse_args()
     global READY_TIMEOUT
     READY_TIMEOUT = args.ready_timeout
@@ -669,30 +666,28 @@ def main():
         tab.emulate(1280, 720, 1)
         tab.open(web, settle=0.5)
         def cold_runs():
-            print("[web aspect] web/lobby.html (the front page, at /) with 2 and with 4 games on the page, cold cache, %d runs each: every frame must start" % args.downloads)
-            for seats in (2, 4):
-                for run in range(args.downloads):
-                    fresh = Browser(path)                                       # a browser of its own: nothing is cached
-                    try:
-                        t = Tab(fresh)
-                        t.emulate(1500, 900, 1)
-                        t.call("Page.navigate", {"url": site + "?map=tiny&players=%d&play=here" % seats})
-                        deadline = time.time() + 120
-                        states = []
-                        while time.time() < deadline:
-                            time.sleep(1.0)
-                            try:
-                                states = json.loads(t.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
-                                    try { var w = f.contentWindow; return { ready: !!w.isReadyToPlay, log: w.antsDownloadLog || [] }; } catch (e) { return { ready: false, log: [] }; } }))"""))
-                            except (RuntimeError, TimeoutError):
-                                states = []
-                            if len(states) == seats and all(x["ready"] for x in states):
-                                break
-                        retries = sum(1 for x in states for e in x["log"] if not e.get("ok"))
-                        check(len(states) == seats and all(x["ready"] for x in states), "%d seats, run %d: every frame started (%d of %d; %d download(s) were retried)" % (seats, run + 1, sum(1 for x in states if x["ready"]), seats, retries))
-                        t.close()
-                    finally:
-                        fresh.close()
+            print("[web aspect] web/shell.html (the game page, at /play.html), cold cache, %d runs: the game must start" % args.downloads)
+            for run in range(args.downloads):
+                fresh = Browser(path)                                           # a browser of its own: nothing is cached
+                try:
+                    t = Tab(fresh)
+                    t.emulate(1500, 900, 1)
+                    t.call("Page.navigate", {"url": web + "?map=tiny"})
+                    deadline = time.time() + 120
+                    state = {"ready": False, "log": []}
+                    while time.time() < deadline:
+                        time.sleep(1.0)
+                        try:
+                            state = json.loads(t.ev(r"""JSON.stringify({ ready: !!window.isReadyToPlay, log: window.antsDownloadLog || [] })"""))
+                        except (RuntimeError, TimeoutError):
+                            state = {"ready": False, "log": []}
+                        if state["ready"]:
+                            break
+                    retries = sum(1 for e in state["log"] if not e.get("ok"))
+                    check(state["ready"], "run %d: the game started (%d download(s) were retried)" % (run + 1, retries))
+                    t.close()
+                finally:
+                    fresh.close()
 
         if args.runs_only:
             tab.close()
@@ -1774,57 +1769,6 @@ def main():
         if args.wheel or not args.quick:
             wheel_checks()
 
-        if args.four:
-            print("[web aspect] web/lobby.html (the front page, at /): the games' frames (the game server must be behind /ws)")
-
-            def four_frames(query, w=1500, h=900, dpr=1, seconds=14):
-                tab.emulate(w, h, dpr)
-                tab.call("Page.navigate", {"url": site + query})
-                time.sleep(seconds)
-                return json.loads(tab.ev(r"""JSON.stringify(Array.prototype.map.call(document.querySelectorAll('iframe'), function (f) {
-                    var d = f.contentDocument, c = d && d.getElementById('canvas'), b = d && d.getElementById('game-container');
-                    var fr = f.getBoundingClientRect(), br = b && b.getBoundingClientRect();
-                    return { frame: [fr.width, fr.height], box: br && [br.width, br.height], backing: c && [c.width, c.height], aspect: d && d.getElementById('game-stage').getAttribute('data-aspect'), src: f.src,
-                             page: document.body.getAttribute('data-aspect'), select: document.querySelector('input[name=aspect]:checked').value };
-                }))"""))
-
-            def frames_check(label, frames, want, size=None):
-                check(len(frames) == 2, "%s: two games on the page (%d frames)" % (label, len(frames)))
-                shape = {"16:9": (16, 9), "4:3": (4, 3), "16:10": (8, 5), "21:9": (7, 3)}[want]
-                for f in frames:
-                    ok = f["backing"] is not None and f["backing"][0] * shape[1] == f["backing"][1] * shape[0] and f["aspect"] == want and ("aspect=" + want) in f["src"] and "junk" not in f["src"]
-                    ratio = f["frame"][0] / f["frame"][1]
-                    check(ok and abs(ratio - shape[0] / shape[1]) < 0.01 and f["page"] == want and f["select"] == want,
-                          "%s: a frame of %.0f x %.0f holds a %s picture (canvas %s, the page says %s)" % (label, f["frame"][0], f["frame"][1], want, f["backing"], f["page"]))
-                    if size:
-                        check(abs(f["frame"][0] - size[0]) < 0.5 and abs(f["frame"][1] - size[1]) < 0.5 and f["backing"] == list(size),
-                              "%s: the frame is exactly %d x %d CSS pixels and so is the canvas, one canvas pixel for each pixel of the screen, sharp (frame %s, canvas %s)" % (label, size[0], size[1], f["frame"], f["backing"]))
-
-            tab.emulate(1500, 900, 1)
-            tab.open(web)                                                  # (the page's origin, to reach its localStorage)
-            tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
-            frames = four_frames("?map=tiny&players=2&play=here")
-            frames_check("default", frames, "16:9")
-            check(all(f["frame"][0] < 700 for f in frames), "default in a window of 1500: the frames fill their column, about 651 CSS pixels (%s)" % [f["frame"] for f in frames])
-            tab.save_shot(args.shots, "four_16x9")
-            frames_check("?aspect=4:3", four_frames("?map=tiny&players=2&play=here&aspect=4:3"), "4:3", (640, 480))
-            tab.save_shot(args.shots, "four_4x3")
-            frames_check("a window of 2560 x 1440", four_frames("?map=tiny&players=2&play=here", 2560, 1440), "16:9", (960, 540))
-            tab.save_shot(args.shots, "four_16x9_native")
-            frames_check("?aspect=junk (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=junk"), "16:9")
-            frames_check("?aspect=3:2 (not a shape: ignored)", four_frames("?map=tiny&players=2&play=here&aspect=3:2"), "16:9")
-            frames_check("?aspect=16:10", four_frames("?map=tiny&players=2&play=here&aspect=16:10"), "16:10")
-            frames_check("?aspect=21:9", four_frames("?map=tiny&players=2&play=here&aspect=21:9"), "21:9")
-            tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")
-            frames_check("the choice that the game page remembered (4:3), no parameter", four_frames("?map=tiny&players=2&play=here"), "4:3", (640, 480))
-            frames_check("... and ?aspect=16:9 beats it", four_frames("?map=tiny&players=2&play=here&aspect=16:9"), "16:9")
-            tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
-            frames_check("a remembered value that is no shape is ignored", four_frames("?map=tiny&players=2&play=here"), "16:9")
-            tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
-            tab.ev("localStorage.setItem('ants.aspect', '4:3'); 1")
-            frames_check("a 4:3 that the old key 'ants.aspect' remembers is not read", four_frames("?map=tiny&players=2&play=here"), "16:9")
-            frames_check("... and ?aspect=4:3 still gives the classic picture", four_frames("?map=tiny&players=2&play=here&aspect=4:3"), "4:3", (640, 480))
-            tab.ev("localStorage.removeItem('ants.aspect'); 1")
         tab.close()
         if args.downloads > 0:
             cold_runs()

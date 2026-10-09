@@ -42,7 +42,7 @@
         background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
     .btn:hover { background-color: var(--teal-hi); }
     .btn:active { transform: translate(2px, 3px); box-shadow: var(--bevel), 1px 1px 0 var(--shadow); }
-    .btn.sm, .btn.small { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+    .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
     .btn.big { min-height: 64px; font-size: 28px; padding: 10px 26px; letter-spacing: .04em; }
     .btn.square { min-width: 44px; padding: 4px 0 8px; font-size: 30px; line-height: 1; }
     .btn[disabled] { cursor: default; filter: saturate(.45) brightness(.78); transform: none; }
@@ -73,8 +73,6 @@
     .joinbox { display: flex; gap: 10px; margin-top: 10px; }
     .hint { margin-top: 6px; font-size: 14px; color: #f2c48c; }
     .hint:empty { display: none; }
-    .morebox { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
-    .morebox span { font-size: 14px; color: var(--muted); }
     .invite-note .rt { display: inline-flex; flex-wrap: wrap; gap: 4px 16px; }
     .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px; padding: 10px 14px; background: var(--inset); border: 3px solid var(--frame-hi); border-radius: 4px; color: var(--cream); box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
     .banner span { flex: 1 1 220px; }
@@ -219,7 +217,6 @@
         .mast { min-height: 50px; margin-bottom: 10px; gap: 14px; } .mast img { width: 120px; } .mast .tag { font-size: 16px; } .mast .sub { font-size: 13px; }
         .mast { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo btn" "text text"; gap: 8px 14px; align-items: center; }   /* (the button stays on the logo's row, the tagline goes under them) */
         .mast h1 { grid-area: logo; } .mast p { grid-area: text; } .mast #watch-top { grid-area: btn; justify-self: end; margin-left: 0; }
-        .in-room .mast { row-gap: 0; }
         .panel { padding: 14px 14px 12px; }
         .head { margin-bottom: 10px; flex-wrap: wrap; }
         .invite { grid-template-columns: minmax(0, 1fr) auto; }
@@ -282,73 +279,6 @@
     .shape .seg input:focus-visible + label { outline: 3px solid var(--gold); outline-offset: 2px; }
     .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
 
-    /* ---- the room of the old addresses (?map=, ?play=here, a link with a create block) and of "Play every colour myself": the seats of one room as frames of this page or windows of their own ---- */
-    .lab { display: block; font-size: 16px; margin: 0 0 6px; color: var(--ink); }
-    .room { margin: 6px 0 22px; }
-    .room-top { display: flex; align-items: stretch; gap: 16px; margin-bottom: 14px; }
-    .room-title { flex: 1 1 auto; min-width: 0; margin: 0; padding: 10px 18px; font-size: 22px; font-weight: 500; line-height: 1.1; text-align: center; color: var(--gold); text-shadow: 0 2px 0 #0b2a22; overflow-wrap: anywhere;
-        background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
-    .room-top .btn { flex: 0 0 auto; }
-    #room-code { color: var(--gold); }
-    .roomrow { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 12px; }
-    .roomrow .lab { margin: 0; }
-    .roomrow input[type=text] { flex: 1 1 260px; min-width: 0; min-height: 44px; padding: 8px 14px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; color: var(--cream); background: var(--inset);
-        border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-    .room .hint { margin: 0 0 10px; max-width: 110ch; font-size: 14px; line-height: 1.35; color: var(--ink); }
-    .msg { margin-top: 8px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
-    .msg:empty { display: none; }
-    .roster { list-style: none; margin: 4px 0 16px; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-    .seatrow { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 12px; border-top: 1px solid #16352c; color: var(--cream); }
-    .seatrow:first-child { border-top: 0; }
-    .seatrow .who { min-width: 150px; font-size: 16px; }
-    .seatrow .state { color: #8fb3a6; font-size: 14px; min-width: 90px; }
-    .in-room .wrap { max-width: 1332px; }
-    .in-room .mast { min-height: 0; }
-    .in-room .mast p { display: none; }
-    .in-room .mast img { width: 120px; }
-
-    /* the state of the games as they report it, and the games themselves */
-    #sync { position: sticky; top: 0; z-index: 5; width: calc(100% - 60px); max-width: 1272px; margin: 0 auto 18px; padding: 9px 14px; font-size: 14.5px; color: var(--cream);
-        background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-    #sync.ok { color: #9ff0c4; }
-    #sync.bad { color: #fff; background: #5a1418; border-color: var(--bad-edge); }
-    #grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 22px; width: 100%; max-width: 1332px; margin: 0 auto; padding: 0 30px; }
-    /* The games lie by colour, whatever order the seats were started in, the way the four hills lie on the Small and Treasure maps: Black top left, Green top right,
-       Red bottom left, Blue bottom right. Each cell takes its place in the reading order of the grid from its seat number (data-seat, set when the seat starts
-       playing here); the grid fills row by row in that order, so fewer games keep the order Black, Green, Red, Blue without holes, and the one column of a narrow
-       screen shows them top to bottom in it. A CSS order, not a move in the DOM: a frame that is moved loads its game again and the seat would leave the match. */
-    .cell[data-seat="3"] { order: 0; }      /* Black */
-    .cell[data-seat="0"] { order: 1; }      /* Green */
-    .cell[data-seat="1"] { order: 2; }      /* Red */
-    .cell[data-seat="2"] { order: 3; }      /* Blue */
-    .cell { border: 2px solid var(--edge); background: #000; box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .cell.focus { box-shadow: 0 0 0 3px var(--gold), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .label { display: flex; justify-content: space-between; gap: 8px; padding: 4px 10px; font-size: 13px; background: var(--inset); color: #8fb3a6; }
-    .label .seat { color: var(--cream); }
-    .frame { position: relative; aspect-ratio: 16 / 9; }          /* the shape of the picture: 16:9 by default, 4:3, 16:10 or 21:9 with ?aspect= (data-aspect of the body) */
-    body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }
-    body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }
-    body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }
-    /* Where two frames fit side by side at the picture's OWN size (960 x 540 CSS pixels for 16:9, 960 x 600 for 16:10, 1260 x 540 for 21:9, 640 x 480 for 4:3: one canvas pixel for each
-       pixel of the screen, two at a device ratio of 2) the frames have exactly that size and the quick help and every text are sharp. A column is the frame and the 2 px border of its
-       cell on both sides (964, 1264 and 644), and the window needs the two columns, the gap (22), the page's padding (60) and a scrollbar (15): 2025, 2625 and 1385 px. In a narrower
-       window the frames fill their column as they always did (a size that is not a whole multiple of the picture's cannot be sharp: half of it, 480 x 270, is too small to read). */
-    @media (min-width: 2030px) {
-        body:not([data-aspect="4:3"]):not([data-aspect="21:9"]) #grid { grid-template-columns: repeat(2, 964px); justify-content: center; max-width: none; }
-    }
-    @media (min-width: 2630px) {
-        body[data-aspect="21:9"] #grid { grid-template-columns: repeat(2, 1264px); justify-content: center; max-width: none; }
-    }
-    @media (min-width: 1390px) {
-        body[data-aspect="4:3"] #grid { grid-template-columns: repeat(2, 644px); justify-content: center; max-width: none; }
-    }
-    iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
-    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #849688; border: 1px solid #000; }
-    .dot.green { background: #48b870; } .dot.red { background: #e0584a; } .dot.blue { background: #4a8ae0; } .dot.black { background: #101010; border-color: #888; }
-    .frames-note { width: 100%; max-width: 1332px; margin: 18px auto 0; padding: 0 30px; font-size: 13.5px; line-height: 1.4; }
-    @media (max-width: 760px) { #grid { grid-template-columns: minmax(0, 1fr); } }
-    @media (max-width: 700px) { .room-top { flex-direction: column; } #sync { width: calc(100% - 36px); } #grid { padding: 0 18px; } .frames-note { padding: 0 18px; } }
-
     /* a long room code or name in a strip never runs over the edge of a phone */
     #rejoin-note, #banner-text { min-width: 0; overflow-wrap: anywhere; }
 
@@ -373,10 +303,9 @@
                 <button class="btn" type="button" id="copy">Copy link</button>
                 <button class="btn share" type="button" id="share" hidden>Share</button>
             </div>
-            <div class="invite-note"><span id="invite-line">Players who open this link take the next free colour.</span><span class="rt"><button type="button" id="havecode">Have a code?</button><button type="button" id="more">More ways to play</button></span></div>
+            <div class="invite-note"><span id="invite-line">Players who open this link take the next free colour.</span><span class="rt"><button type="button" id="havecode">Have a code?</button></span></div>
             <div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>
             <p class="hint" id="joinhint" role="status"></p>
-            <div class="morebox" id="morebox" hidden><span>For testing:</span><button class="btn sm" type="button" id="more-here">Play every colour myself, in this page</button><button class="btn sm" type="button" id="more-windows">Play every colour in separate windows</button></div>
 
             <ul class="slots" id="slots" aria-label="The four colours"></ul>
             <p class="slots-note" id="slots-note" role="status"></p>
@@ -395,40 +324,7 @@
             </div>
         </aside>
     </div>
-
-    <!-- The room of the old addresses and of "Play every colour myself": the seats of one room as frames of this page or windows of their own (the test mode of the games; nothing of the lobby above) -->
-    <section id="room-panel" class="room" hidden>
-        <div class="room-top">
-            <h2 class="room-title">Room <code id="room-code">...</code> &middot; <span id="room-map"></span></h2>
-            <button id="new-room" type="button" class="btn small">New match</button>
-        </div>
-        <div class="roomrow"><label class="lab" for="any-link">Link for anybody (they get the first free seat)</label></div>
-        <div class="roomrow">
-            <input type="text" id="any-link" readonly>
-            <button id="copy-any" type="button" class="btn small">Copy</button>
-        </div>
-        <div class="roomrow">
-            <button id="play-tab" type="button" class="btn">Play in this tab</button>
-            <button id="all-here" type="button" class="btn">All seats on this page</button>
-            <button id="all-windows" type="button" class="btn">All seats in separate windows</button>
-        </div>
-        <p class="hint">Play in this tab takes the first free seat for you, in this tab, as Join does (you are the first to connect, so you lead the room). The Back button of your browser brings this room back. The other two buttons play every seat yourself, in frames of this page or in windows of their own.</p>
-        <div id="seat-rows" class="roster seats"></div>
-        <p class="msg" id="popup-hint" hidden>The browser blocked some of the windows: allow pop-ups for this site, or use the buttons of the seats.</p>
-        <p class="hint">The first player to connect leads the room (not necessarily the green seat): its setup screen has the START button, and pressing it starts the match with the players who are in, once at least 2 are. Everybody else waits for the match to start.</p>
-        <p class="hint" id="fill-hint" hidden></p>
-        <p class="hint">In the waiting room, press <strong>T</strong> (or click the line at the bottom left of the setup screen) to say something to everybody in the room: Enter sends it, Esc closes the line; while it is open the screen's own keys (S, Q, X, Enter) do nothing.</p>
-        <p class="hint">A window that is hidden or covered is not drawn (the browser stops drawing it), but its game goes on playing: it follows the messages of the game server. The match does not wait for it and nobody is told that it lags. Bring it to the front to see the game again. A computer that sleeps, or a phone that locks its screen, stops every page it has: the others play on, they are told after 3 seconds that the seat is lagging, and after 30 seconds without a sign of life it is dropped from the match and cannot come back; a tab that the browser freezes loses its connection when it wakes up, and its seat is lost.</p>
-    </section>
 </main>
-
-<div id="sync" hidden>Waiting for the games to connect and start...</div>
-
-<div id="grid" role="region" aria-label="The games on this page"></div>
-
-<p id="frames-note" class="frames-note" hidden>Every window runs the whole simulation; the server only orders the commands and acts as the referee. Each game tells this page its tick and state hash every 100 ticks (5 seconds):
-when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
-their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.</p>
 
 <footer class="bar" id="footer-bar"><div class="bar-in">
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
@@ -480,39 +376,10 @@ their music and their sound: only the window you are in is heard). The match is 
             document.getElementById('banner').hidden = false;
             return;
         }
-        var SEATS = [
-            { name: 'Green', css: 'green' }, { name: 'Red', css: 'red' },
-            { name: 'Blue', css: 'blue' }, { name: 'Black', css: 'black' }
-        ];
-        // The maps of the original game, the room alphabet and the names come from front/lobby_rules.js (tests/scripts/web_lobby_rules_check.js); the blocks below were written before it and still read them by these names
-        var MAPS = Rules.MAPS;
+        // The maps of the original game and the room alphabet come from front/lobby_rules.js (tests/scripts/web_lobby_rules_check.js); the blocks below were written before it and still read them by these names
         var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;
         var mapByKey = Rules.mapByKey;
         var codeText = Rules.codeText;
-        var names = Rules.NAMES.slice().sort(function () { return 0.5 - Math.random(); });
-
-        // SEATNAMES_BEGIN (tests/scripts/web_name_check.js runs this block)
-        // The name that each seat plays under on this page. The name that was typed goes to the FIRST seat that this page starts (the player's own seat: the one hosted from here, or the one joined here);
-        // every other seat that the page starts (playing every seat on one page is a way of testing) keeps a random name, and with no typed name every seat has a random one. typed() is the name in
-        // the field when a seat starts ('' for none); peek(seat) is the name a row shows, start(seat) the name a seat starts with (and the claim of the first start).
-        function makeSeatNames(typed, random) {
-            var started = false;
-            var first = -1;
-            var claimed = '';
-            return {
-                peek: function (seat) { return first === seat ? claimed : random[seat]; },
-                start: function (seat) {
-                    if (!started) {
-                        started = true;
-                        var name = typed();
-                        if (name) { first = seat; claimed = name; }
-                    }
-                    return first === seat ? claimed : random[seat];
-                },
-                typedSeat: function () { return first; }
-            };
-        }
-        // SEATNAMES_END
 
         // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the blocks of the picture's shape and the selector's listener below)
         function $(id) { return document.getElementById(id); }
@@ -585,28 +452,15 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // NAME_END
 
-        // The fill level of an address or of the settings: only these three words, in any case (anything else is no fill; what comes back is the lower case word that was tested, it is never put into a link as it came)
+        // The level of a computer player in an address: only these three words, in any case (anything else is none; what comes back is the lower case word that was tested, it is never put into a link as it came)
         // FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of values)
         function validFill(value) { var word = typeof value === 'string' ? value.toLowerCase() : ''; return word === 'easy' || word === 'medium' || word === 'hard' ? word : ''; }
-        // The plan of a room's START (protocol 13): one level for every seat, or four words for the seats 0 - 3 (none or a level each; the first is the leader's and counts for nothing), in any case. What comes back is
-        // the tested lower case text ('' for no bots at all), never the text of the address.
-        function validFillPlan(value) {
-            var words = typeof value === 'string' ? value.toLowerCase().split(',') : [];
-            if (words.length === 1) return validFill(words[0]);
-            if (words.length !== 4) return '';
-            var levels = words.map(function (w) { return w === 'none' ? 'none' : validFill(w); });
-            if (levels.indexOf('') !== -1) return '';
-            return levels.every(function (l) { return l === 'none'; }) ? '' : levels.join(',');
-        }
         // FILL_END
 
         // LOBBY_BEGIN (tests/scripts/web_lobby_check.js runs this block on a table)
-        // What the addresses of the old pages mean. A match of the old addresses is a room on the game server that the TEST ROOM below makes: a random code (a name, nothing more) and a create block
-        // (the map, the seats and the teams: roomBlockQuery; an address may ask for 2 to 4 seats); with &players=1 an address plays a game on THIS computer (no game server and no room: the game
-        // page at its own path, LOCAL_PAGE, with its local parameters, which web/shell.html's ANTS_PAGE.localArguments reads through a whitelist), which is also what START of a lobby with nobody else does.
+        // A game on THIS computer (no game server and no room: the game page at its own path, LOCAL_PAGE, with its local parameters, which web/shell.html's ANTS_PAGE.localArguments reads through a whitelist) is
+        // what START of a lobby with nobody else does.
         var LOCAL_PAGE = 'play.html';
-        // 1 .. 4 from a text (a remembered value, the address's &players=), else `fallback`
-        function playersChoice(text, fallback) { return text === '1' || text === '2' || text === '3' || text === '4' ? Number(text) : fallback; }
         // What the three levels are called in an address: the three words, none for none
         function soloSeatsText(levels) { return [0, 1, 2].map(function (i) { return validFill(levels[i]) || 'none'; }).join(','); }
         // The query of a game on this computer: ?map=<key>[&bots=<levels>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
@@ -617,114 +471,21 @@ their music and their sound: only the window you are in is heard). The match is 
             var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
             return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
         }
-        // The empty seats of the Host card of the earlier pages (protocol 13): a level for each seat after the leader's (Red, Blue, Black: the seats 1 - 3 of the room). They were remembered under ants-four-fill as
-        // four words for the seats 0 - 3 (the leader's seat is none), or, as the first versions wrote it, one word for every seat; an address's &fill= says the same. `levels` is [Red, Blue, Black], '' for none.
-        function hostSeats(stored) {
-            var words = typeof stored === 'string' ? stored.split(',') : [];
-            if (words.length === 4 && words.every(function (w) { return w.toLowerCase() === 'none' || validFill(w) !== ''; })) return [validFill(words[1]), validFill(words[2]), validFill(words[3])];
-            var one = words.length === 1 ? validFill(words[0]) : '';
-            return [one, one, one];
-        }
-        // What a room that an address asks for wants of START, as an address holds it (the game's --fill-bots): '' for no bots, one word when every seat that the room has gets the same level, else four words; the seats
-        // beyond the room's `players` are none
-        function hostFillText(levels, players) {
-            var l = Array.isArray(levels) ? levels : [];
-            var seats = [0, 1, 2].map(function (i) { return i + 1 < players ? validFill(l[i]) : ''; });
-            if (!(seats[0] || seats[1] || seats[2])) return '';
-            var existing = seats.slice(0, Math.max(0, players - 1));
-            if (existing.every(function (l) { return l === existing[0]; })) return existing[0];
-            return 'none,' + seats.map(function (l) { return l || 'none'; }).join(',');
-        }
-        // The seats' colours, and a team as a person reads it ("Green + Red against Blue + Black": the pair first, then the other seats that play, `seats` being the seats that play)
-        var SEAT_COLOURS = ['Green', 'Red', 'Blue', 'Black'];
-        function teamTitle(pair, seats) {
-            var rest = seats.filter(function (s) { return s !== pair[0] && s !== pair[1]; });
-            return SEAT_COLOURS[pair[0]] + ' + ' + SEAT_COLOURS[pair[1]] + ' against ' + rest.map(function (s) { return SEAT_COLOURS[s]; }).join(' + ');
-        }
-        function hostTeamText(pair, players) { return teamTitle(pair, [0, 1, 2, 3].filter(function (s) { return s < players; })); }
-        // The teams that a room of `players` can have (the game's room_team_choices): free for all; three players: Green + Red, Green + Blue or Red + Blue as a team; four: Green with Red, Blue or Black.
-        // The value is what the address and the game's --teams take: ffa or A+B (seats 0 - 3).
-        function hostTeamChoices(players) {
-            var out = [{ value: 'ffa', text: 'Free for all' }];
-            var pairs = players === 4 ? [[0, 1], [0, 2], [0, 3]] : players === 3 ? [[0, 1], [0, 2], [1, 2]] : [];
-            pairs.forEach(function (pair) { out.push({ value: pair[0] + '+' + pair[1], text: hostTeamText(pair, players) }); });
-            return out;
-        }
-        // The team that is chosen: `wanted` when it is one of the choices of the room, else free for all
-        function hostTeam(wanted, players) {
-            var choices = hostTeamChoices(players);
-            for (var i = 0; i < choices.length; i++) if (choices[i].value === wanted) return wanted;
-            return 'ffa';
-        }
-        // The teams of a room as the page shows them. With four seats a pair that has no Green is the same two teams as the pair of the other two seats, which has ("1+2" is Red + Blue against Green + Black, "0+3":
-        // the game's room_team_choices lists the pairs with Green); a block of a hand-made address or of the command line can name either, and the room plays both. Any other pair, and a pair that its seats cannot
-        // make, comes back as it is (`teams` is validRoomTeams's text or '': the lower seat first).
-        function shownRoomTeams(teams, players) {
-            var m = /^([1-3])\+([1-3])$/.exec(teams);
-            if (!m || players !== 4) return teams;
-            var rest = [0, 1, 2, 3].filter(function (s) { return String(s) !== m[1] && String(s) !== m[2]; });
-            return rest[0] + '+' + rest[1];
-        }
-        // The teams of an address (?teams= and ?roomteams=): two different seats 0 - 3 as A+B (a "+" that came as a blank is one), the lower seat first (a pair has one spelling, as in the create block: "1+0" is "0+1"),
-        // else none ('' : free for all). The tested text comes back, never the address's.
-        function validRoomTeams(value) {
-            var m = typeof value === 'string' ? /^([0-3])[+ ]([0-3])$/.exec(value) : null;
-            if (!m || m[1] === m[2]) return '';
-            return m[1] < m[2] ? m[1] + '+' + m[2] : m[2] + '+' + m[1];
-        }
-        // The CREATE BLOCK of a room (protocol 15), as the page holds it: { map: one of the six keys, or '' for the server's own, seats: 2 - 4, teams: A+B or '' for free for all, leaderStart: a full room waits for its
-        // leader's START instead of starting by itself }. It is what the game server makes the room of when it has none of the code, and the first Hello of a code is the one that is read, so EVERY link that this page
-        // makes for a room that it made carries the block (the invitations and START, the room panel's links, the address of a Join and of the panel itself): a room that has ended is made again by the next Hello
-        // that brings one. A room that was made some other way has none (null): its links carry none and the game sends none, so a code that no room has is answered "There is no such room on this server."
-        // The text that goes after &room=<code> in a link: &roommap=<key>&roomseats=<n>[&roomteams=<A%2BB>][&roomleaderstart=1] (a "+" is encoded: an address reads a bare one as a blank; no &roommap= when the
-        // block has no map). web/shell.html's joinArguments reads each part through its own whitelist and gives the game --room-map, --room-seats, --room-teams and --room-leader-start.
-        function roomBlockQuery(block) {
-            if (!block || typeof block !== 'object') return '';
-            var map = typeof block.map === 'string' && mapByKey(block.map) ? mapByKey(block.map).key : '';
-            var seats = block.seats === 2 || block.seats === 3 || block.seats === 4 ? block.seats : 4;
-            var teams = validRoomTeams(block.teams);
-            return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');
-        }
-        // The create block that an address carries (the links of this page make them: ?room=<code>&roommap=<key>&roomseats=<2-4>[&roomteams=A+B][&roomleaderstart=1]), read as the game page reads it: each part through
-        // its own test (the map by its key in any case, the seats 2 - 4, the teams as validRoomTeams, the flag exactly "1"), the tested text and never the address's. null when none of the four says anything (a room
-        // that was made some other way: the page sends no block); else a block of tested parts, what is missing or no good being the server's own (no map, four seats, free for all, not the leader's start).
-        function roomBlockOf(search) {
-            var q;
-            try { q = new URLSearchParams(search); } catch (e) { return null; }
-            var key = (q.get('roommap') || '').toLowerCase();
-            var map = mapByKey(key) ? key : '';
-            var seats = /^[2-4]$/.test(q.get('roomseats') || '') ? Number(q.get('roomseats')) : 0;
-            var teams = validRoomTeams(q.get('roomteams'));
-            var leaderStart = q.get('roomleaderstart') === '1';
-            if (!map && !seats && !teams && !leaderStart) return null;
-            return { map: map, seats: seats || 4, teams: teams, leaderStart: leaderStart };
-        }
-        // What a plan of START says in words: "Medium bots" (one level for every seat) or "Red Easy, Black Hard" (the seats that the room has and that get a bot). `plan` is the tested text of validFillPlan.
-        function hostPlanText(plan, players) {
-            var words = plan ? plan.split(',') : [];
-            if (words.length === 1) return words[0].charAt(0).toUpperCase() + words[0].slice(1) + ' bots';
-            var parts = [];
-            for (var seat = 1; seat < players && seat < words.length; seat++) {
-                if (words[seat] !== 'none') parts.push(SEAT_COLOURS[seat] + ' ' + words[seat].charAt(0).toUpperCase() + words[seat].slice(1));
-            }
-            return parts.join(', ');
-        }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Each game passes it
-        // on (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
+        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Every hand-off to a game
+        // (START, Rejoin, a game for one) carries it as ?aspect= in the game's address.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
         // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks another shape again.
         // The footer tags "fills your screen" under the shape nearest to the computer's screen (the CSS shows the tag only where there is a mouse).
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
         var aspect = '16:9';
-        var aspectFromAddress = false;
         (function () {
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             var remembered = recall(ASPECT_KEY);
-            if (isShape(asked)) { aspect = asked; aspectFromAddress = true; }
+            if (isShape(asked)) aspect = asked;
             else if (isShape(remembered)) aspect = remembered;
             document.body.setAttribute('data-aspect', aspect);
             $('aspect-' + shapeId(aspect)).checked = true;
@@ -819,7 +580,7 @@ their music and their sound: only the window you are in is heard). The match is 
             var remembered = nameCheck(recall(NAME_KEY));
             window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);
         });
-        window.addEventListener('storage', function () { if (!legacyRoom) showRejoin(); });
+        window.addEventListener('storage', function () { showRejoin(); });
 
 
         // ================================================================================================================================================================================================
@@ -864,11 +625,6 @@ their music and their sound: only the window you are in is heard). The match is 
             if (cls) e.className = cls;
             if (text !== undefined) e.textContent = text;
             return e;
-        }
-        function button(text, cls, onclick) {
-            var b = document.createElement('button');
-            b.type = 'button'; b.className = cls; b.textContent = text; b.addEventListener('click', onclick);
-            return b;
         }
         function say(text) {
             var t = $('toast');
@@ -1470,7 +1226,6 @@ their music and their sound: only the window you are in is heard). The match is 
             $('share').hidden = false;
             $('share').addEventListener('click', function () { try { navigator.share({ url: roomLink() }).catch(function () { /* the sheet was closed */ }); } catch (e) { /* no share sheet */ } });
         }
-        $('more').addEventListener('click', function () { $('morebox').hidden = !$('morebox').hidden; });
         $('havecode').addEventListener('click', function () {
             $('joinbox').hidden = !$('joinbox').hidden;
             $('joinhint').textContent = '';
@@ -1518,17 +1273,6 @@ their music and their sound: only the window you are in is heard). The match is 
             });
             p.connect();
         }
-        // The two ways to play every colour yourself leave the lobby for the test room of the old addresses (frames of this page, windows of their own)
-        function testRoom(query) {
-            var key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;
-            handing = true;
-            if (client) client.leave();
-            forgetSession();
-            window.location.assign(new URL('./?map=' + key + query, window.location.href).href);
-        }
-        $('more-here').addEventListener('click', function () { testRoom('&play=here'); });
-        $('more-windows').addEventListener('click', function () { testRoom(''); });
-
         // ---- how it works ----
         var howOpener = null;
         function openHow() { howOpener = document.activeElement; $('how').hidden = false; $('how-close').focus(); }
@@ -1544,6 +1288,7 @@ their music and their sound: only the window you are in is heard). The match is 
         GRID.forEach(function (seat) { var li = el('li'); li.setAttribute('data-i', String(seat)); lis[seat] = li; $('slots').appendChild(li); });
 
         // ---- the way in ----
+        var wanted = new URLSearchParams(window.location.search).get('room');      // (a room code in the address: a link to somebody's room)
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
@@ -1563,370 +1308,16 @@ their music and their sound: only the window you are in is heard). The match is 
             }
         }
 
-        var room = '';
-        var legacyRoom = false;             // the test room is shown (the lobby is not)
-        var roomBlock = null;               // the room's create block (roomBlockQuery) when this page made the room or its address carries one: every link of the room carries it; null for a room that was made some other way (no block is sent)
-        var fill = '';                      // the bots that the leader's START seats in the empty seats: '', one level for every seat, or four words for the seats 0 - 3 (every link of the room carries it: the page cannot know who connects first)
-        var roomTeams = '';                 // the room's teams: '' (free for all) or A+B, two seats 0 - 3: the ones that its create block names, else what the address asked for (the leader's START makes those)
-        var teamsInBlock = false;           // the create block names them: the room makes them every time and the links carry &roomteams= and no &teams= (the block is enough)
-        var seatCount = 4;                  // the seats of this room (its create block says how many; a room that was made some other way is shown with four)
-        var roomMap = '';
-        var inFrame = [false, false, false, false];
-        var frames = [null, null, null, null];          // the iframe of each seat that plays on this page
-        var frameSeat = [null, null, null, null];       // the seat that the game in each frame plays now, as it reports it: the leader of a room can put a player in another colour (protocol 14), and a game that
-                                                        // comes back has to ask for the seat that holds its key (null: it reported nothing yet, it plays the seat that it was opened for)
-        var wins = [null, null, null, null];            // the window of each seat that plays in a window of its own
-        var cells = [], labels = [], rows = [];
-
-        // ---- the state of the match as the games report it (frames post to this page, windows on the broadcast channel "ants-sync") ----
-        var state, byTick, agreedTick, diverged, startedAt, reported;
-        function resetMatch() {
-            state = SEATS.map(function () { return { tick: -1, hash: '', at: 0 }; });
-            byTick = {};
-            agreedTick = -1;
-            diverged = null;
-            reported = false;
-            startedAt = Date.now();
-            show('Waiting for the games to connect and start...');
-        }
-        var syncBox = $('sync');
-        function show(text, cls) { syncBox.textContent = text; syncBox.className = cls || ''; }
-
-        function onSync(seat, tick, hash, shown) {
-            if (!(seat >= 0 && seat < SEATS.length) || typeof tick !== 'number' || !/^[0-9a-f]{16}$/.test(hash)) return;
-            if (!(shown >= 0 && shown < SEATS.length)) shown = seat;      // (the label and the row that show the report are the frame's: a game that the leader put in another colour reports the seat it plays now)
-            if (tick < state[seat].tick) resetMatch();                // a seat that reports an earlier tick than before: a new match began
-            $('sync').hidden = false;                                  // (games of this room that were opened some other way report too)
-            $('frames-note').hidden = false;
-            reported = true;
-            state[seat] = { tick: tick, hash: hash, at: Date.now() };
-            if (labels[shown]) labels[shown].textContent = 'tick ' + tick + ' \u00b7 ' + hash.slice(0, 8);
-            setRowState(shown, 'tick ' + tick);
-            var row = byTick[tick] || (byTick[tick] = []);
-            row[seat] = hash;
-            var complete = 0, same = true, first = null;
-            for (var k = 0; k < SEATS.length; k++) {
-                if (row[k]) { complete++; if (first === null) first = row[k]; else if (row[k] !== first) same = false; }
-            }
-            if (!same) {
-                diverged = tick;
-                var parts = [];
-                for (var j = 0; j < Math.max(seatCount, row.length); j++) parts.push(SEATS[j].name + ' ' + (row[j] || '-').slice(0, 8));      // (an explicit loop: a sparse array has holes that map() skips)
-                show('OUT OF STEP at tick ' + tick + ': ' + parts.join(' \u00b7 '), 'bad');
-            } else if (complete >= 2) {
-                if (tick > agreedTick) agreedTick = tick;
-                if (diverged === null) show('In step: ' + (complete >= seatCount ? 'all ' + seatCount + ' games' : complete + ' of the ' + seatCount + ' games') + ' agree at tick ' + agreedTick + ' (' + Math.floor(agreedTick / 20) + ' seconds of play), state hash ' + first.slice(0, 8), 'ok');
-            } else if (agreedTick < 0 && diverged === null) {
-                // only one game reports to this page (the other seats play on other computers or pages): it plays; the server's referee checks everybody
-                show('Playing: ' + SEATS[seat].name + ' at tick ' + tick + ' (' + Math.floor(tick / 20) + ' seconds). The other seats play elsewhere; the game server checks that every game stays in step.', 'ok');
-            }
-            Object.keys(byTick).forEach(function (t) { if (Number(t) < tick - 2000) delete byTick[t]; });   // keep the recent ones only
-        }
-        window.addEventListener('message', function (e) {
-            if (e.origin !== window.location.origin || !e.data || e.data.ants !== 'sync') return;
-            var shown = -1;
-            for (var k = 0; k < SEATS.length; k++) {
-                if (e.source && frames[k] && frames[k].contentWindow === e.source && e.data.seat >= 0 && e.data.seat < SEATS.length) { frameSeat[k] = e.data.seat; shown = k; }
-            }
-            onSync(e.data.seat, e.data.tick, String(e.data.hash), shown);
-        });
-        var channel = null;
-        try {
-            if (typeof BroadcastChannel !== 'undefined') {
-                channel = new BroadcastChannel('ants-sync');
-                channel.onmessage = function (e) {
-                    var m = e.data;
-                    if (!m || m.ants !== 'sync' || m.room !== room || !room) return;      // only the games of this room
-                    onSync(m.seat, m.tick, String(m.hash));
-                };
-            }
-        } catch (e) { channel = null; }
-
-        setInterval(function () {
-            if (room && !reported && diverged === null) {
-                var waited = Math.round((Date.now() - startedAt) / 1000);
-                show('Waiting for the games to connect and start (' + waited + ' s)...' + (waited > 90 ? ' Is the game server reachable at /ws, and does it allow this map?' : ''));
-            }
-        }, 1000);
-
-        // ---- the seats: on this page (a frame), in a window of its own, or a link for somebody else ----
-        // A link to the game page of this site (never taken from the path of this page: a path that starts with // would leave the site). `own`: the game is one of this page's own (a frame, a window): it
-        // carries the picture's shape and the NAME of its seat (the name always has its parameter, empty or not: the name was chosen on this page). A link for somebody else carries no name: the game
-        // page asks whoever opens it what they want to be called. `nameSeat` (a game that the leader put in another colour, protocol 14): the seat whose NAME the game keeps, the one of its row; the link
-        // asks for `seat`, where its key is.
-        function gameUrl(seat, own, nameSeat) {
-            var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);       // (the create block of a room that this page made is in every link: a room that has ended is made again by it)
-            if (fill) q += '&fill=' + fill;                // (the game takes it as --fill-bots; it matters for the leader only)
-            if (roomTeams && !teamsInBlock) q += '&teams=' + encodeURIComponent(roomTeams);       // (and --teams: the same; the teams that the block names need no parameter, the room makes them itself)
-            if (seat >= 0) q += '&seat=' + seat;
-            if (own && seat >= 0) q += '&name=' + encodeURIComponent(seatNames.start(nameSeat === undefined ? seat : nameSeat));
-            if (own || aspectFromAddress) q += '&aspect=' + aspect;
-            return new URL('./' + q, window.location.href).href;
-        }
-        // What a seat shows of itself: its colour's dot, its colour, and the name that it plays under (text only: a typed name may hold < > &)
-        function fillWho(holder, seat, strong) {
-            while (holder.firstChild) holder.removeChild(holder.firstChild);
-            var dot = document.createElement('span');
-            dot.className = 'dot ' + SEATS[seat].css;
-            var colour = document.createElement(strong ? 'strong' : 'span');
-            if (!strong) colour.className = 'seat';
-            colour.textContent = SEATS[seat].name;
-            holder.appendChild(dot);
-            holder.appendChild(colour);
-            holder.appendChild(document.createTextNode(' \u00b7 ' + seatNames.peek(seat)));
-        }
-        var seatWho = [null, null, null, null];         // the elements that show a seat's name (the row's and the cell's), to be shown again when the seat takes the typed name
-        function showSeatNames(seat) { (seatWho[seat] || []).forEach(function (holder) { fillWho(holder.el, seat, holder.strong); }); }
-        function setRowState(seat, text) { if (rows[seat]) rows[seat].state.textContent = text; }
-        function playHere(seat) {
-            if (!inFrame[seat] && !readName().ok) return false;       // a bad name starts nothing (the field says why)
-            if (inFrame[seat]) {                     // again: reconnect that seat (a frame whose game lost its connection, or a room that was made again), as the seat that its game plays now
-                if (frames[seat]) frames[seat].src = gameUrl(frameSeat[seat] === null ? seat : frameSeat[seat], true, seat) + '&embed=1';
-                setRowState(seat, 'on this page (reconnected)');
-                return true;
-            }
-            inFrame[seat] = true;
-            var cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.setAttribute('data-seat', String(seat));      // the place on the page comes from the seat number (CSS above), not from the order the seats were started in
-            var label = document.createElement('div');
-            label.className = 'label';
-            var who = document.createElement('span');
-            var info = document.createElement('span');
-            info.className = 'info';
-            info.textContent = 'connecting...';
-            label.appendChild(who);
-            label.appendChild(info);
-            var frame = document.createElement('div');
-            frame.className = 'frame';
-            var iframe = document.createElement('iframe');
-            iframe.setAttribute('allow', 'autoplay; fullscreen');
-            iframe.setAttribute('title', SEATS[seat].name + ' player');
-            iframe.src = gameUrl(seat, true) + '&embed=1';              // (the seat takes its name here: the first seat of this page takes the typed one)
-            (seatWho[seat] = seatWho[seat] || []).push({ el: who, strong: false });
-            showSeatNames(seat);
-            frames[seat] = iframe;
-            frame.appendChild(iframe);
-            cell.appendChild(label);
-            cell.appendChild(frame);
-            $('grid').appendChild(cell);
-            cells[seat] = cell;
-            labels[seat] = info;
-            iframe.addEventListener('load', function () { iframe.contentWindow.addEventListener('focus', function () { setFocus(seat); }); });
-            setRowState(seat, 'on this page');
-            $('sync').hidden = false;
-            $('frames-note').hidden = false;
-            return true;
-        }
-        function openWindow(seat) {
-            if (!(wins[seat] && !wins[seat].closed) && !inFrame[seat] && !readName().ok) return false;     // a bad name starts nothing (the field says why)
-            if (wins[seat] && !wins[seat].closed) {   // already open: bring it to the front (opening it again would reload that seat's game and drop it from the match)
-                try { wins[seat].focus(); } catch (e) { /* the browser decides */ }
-                return true;
-            }
-            var w = window.open(gameUrl(seat, true), 'ants-seat-' + seat + '-' + room, 'popup=yes,width=980,height=660');
-            if (!w) { $('popup-hint').hidden = false; return false; }
-            showSeatNames(seat);
-            wins[seat] = w;
-            setRowState(seat, 'in a window');
-            $('sync').hidden = false;
-            $('frames-note').hidden = false;
-            return true;
-        }
-
-        function setFocus(i) { cells.forEach(function (c, k) { if (c) c.classList.toggle('focus', k === i); }); }
-        window.addEventListener('blur', function () {            // focus moved into a frame (or away from the page)
-            setTimeout(function () {
-                var active = document.activeElement;
-                for (var k = 0; k < SEATS.length; k++) {
-                    if (cells[k] && cells[k].contains(active)) { setFocus(k); return; }
-                }
-            }, 0);
-        });
-
-        // The test room's panel of a room. `block` is its create block ({ map, seats, teams, leaderStart }: a room that this page made, or one that its address's block names), or null for a room that was made some other way (the
-        // panel shows four seats and trusts nothing else of it; the page sends no block and no link carries one); `play` 'here' plays every seat on this page; `fillPlan` and `teams` are the choices that the leader's
-        // START makes (the bots, and the teams of a room whose block has none), which every link of the room carries.
-        function startRoom(code, block, play, fillPlan, teams) {
-            room = code;
-            roomBlock = block;
-            fill = validFillPlan(fillPlan);
-            seatCount = block ? block.seats : SEATS.length;
-            var mapName = block && mapByKey(block.map) ? mapByKey(block.map).name : '';
-            // The room's teams: the ones that its create block names (the server makes them for every start), else what the address asked for. A block that names teams that its seats cannot make is the
-            // server's to judge at the start (the match starts without teams and the room says "No teams: ..."): the address's teams do not replace them, and the page does not announce them.
-            var named = block ? block.teams : '';
-            var shown = shownRoomTeams(named, seatCount);
-            teamsInBlock = shown !== '' && hostTeam(shown, seatCount) === shown;
-            roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));
-            try {                                   // the address names the room: a reload, a bookmark or a copied address come back to it (with its create block, so that a room that has ended is made again)
-                history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/') + '?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '') + (roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '') + (aspectFromAddress ? '&aspect=' + aspect : ''));
-            } catch (e) { /* not essential */ }
-            roomMap = mapName;
-            var seats = SEATS.slice(0, seatCount);
-            resetMatch();
-            legacyRoom = true;
-            $('lobby').hidden = true;                // the room takes the place of the lobby
-            $('rejoin').hidden = true;
-            document.body.classList.add('in-room');   // (and the header is a smaller one)
-            $('room-panel').hidden = false;
-            $('room-code').textContent = codeText(room);        // (the code as a screen shows it: two groups of three; the links and the fields keep the plain code)
-            $('room-map').textContent = (mapName ? mapName + ' map' : block ? 'the server\'s own map' : 'a room made some other way') + ', ' + seatCount + ' players';
-            var fillHint = $('fill-hint');
-            fillHint.hidden = !fill && !roomTeams;
-            var hint = '';
-            if (fill) hint += 'Empty seats at START: ' + hostPlanText(fill, seatCount) + '. When the leader presses START, every seat that is still empty gets a bot of its level (shown as "Bot (Easy)", "Bot (Medium)" or "Bot (Hard)") and the match begins, even if the leader is alone. ';
-            if (roomTeams) {
-                var teamText = hostTeamText([Number(roomTeams.charAt(0)), Number(roomTeams.charAt(2))], seatCount);
-                hint += teamsInBlock ? 'Teams of this room: ' + teamText + '. They are part of the room (set when it was made), so the match starts with them every time: when the room fills up as well as at START. '
-                                     : 'Teams at START: ' + teamText + '. ';
-            }
-            if (fill || (roomTeams && !teamsInBlock)) hint += 'Every link of this room carries ' + (fill && roomTeams && !teamsInBlock ? 'the bots and the teams' : fill ? 'the bots' : 'the teams') + '; only the leader\'s START uses them.';
-            fillHint.textContent = hint;
-            $('any-link').value = gameUrl(-1);
-            copyButton($('copy-any'), function () { return gameUrl(-1); });
-            var holder = $('seat-rows');
-            seats.forEach(function (seat, i) {
-                var row = document.createElement('div');
-                row.className = 'seatrow';
-                var who = document.createElement('span');
-                who.className = 'who';
-                (seatWho[i] = seatWho[i] || []).push({ el: who, strong: true });
-                showSeatNames(i);
-                var st = document.createElement('span');
-                st.className = 'state';
-                st.textContent = 'not started';
-                row.appendChild(who);
-                row.appendChild(st);
-                row.appendChild(button('Play here', 'btn small', function () { playHere(i); }));
-                row.appendChild(button('Open a window', 'btn small', function () { openWindow(i); }));
-                var copy = button('Copy link', 'btn small', function () {});
-                copyButton(copy, function () { return gameUrl(i); });
-                row.appendChild(copy);
-                holder.appendChild(row);
-                rows[i] = { state: st };
-            });
-            $('all-here').addEventListener('click', function () {
-                if (!readName().ok) return;           // (a bad name starts nothing: one message, not one per seat)
-                seats.forEach(function (s, i) { playHere(i); });
-            });
-            $('all-windows').addEventListener('click', function () {
-                // the seats that are not open yet (a browser lets one click open one window unless pop-ups are allowed for the site: click again after allowing them)
-                $('popup-hint').hidden = true;
-                for (var i = 0; i < seats.length; i++) {
-                    if (inFrame[i] || (wins[i] && !wins[i].closed)) continue;
-                    if (!openWindow(i)) break;
-                }
-            });
-            if (play === 'here') seats.forEach(function (s, i) { playHere(i); });
-        }
-
-        // ---- the test room: what the old addresses say ----
-        // ?room=<code>&roommap=... (a link with a create block, which the earlier pages made) or &play=here: the room's panel at once. With the create block (&roommap=<key>&roomseats=<2-4>[&roomteams=A+B][&roomleaderstart=1]:
-        //               roomBlockOf) it is a room that an earlier page made: the panel says its map and seats and every link carries the block. A plain ?room=<code> is the link of a lobby room (the name card, then the lobby)
-        // ?map=<name>   host a match on that map at once, in a room of a new code and a create block of its own (&players=2|3|4, default 4; &fill=easy|medium|hard seats bots of that level in every empty seat at the
-        //               leader's START, or four words for the seats 0 - 3 (none,none,easy,hard); &teams=A+B (two seats 0 - 3) makes them a team, in the room's block, for every start; &play=here plays every seat on
-        //               this page); with &players=1 a game on this computer (&fill= is then the level of all three opponents)
-        // ?fill=... &teams=...   with ?room=: the same choices for the leader's START (its links carry them); &teams= is for a room whose block names no teams of its own, which is every room that was made some other way
-        // nothing       the lobby
-        // (the old addresses work as they did; "Play every colour myself" of the lobby leads to them)
-        var params = new URLSearchParams(window.location.search);
-        // The name the old addresses play under: the one this browser remembers (the name card of an address asks for it first), else a random one for each seat
-        function readName() { var checked = nameCheck(recall(NAME_KEY)); return checked.ok ? checked : { ok: true, name: '' }; }
-        var seatNames = makeSeatNames(function () { var checked = nameCheck(recall(NAME_KEY)); return checked.ok ? checked.name : ''; }, names);
-        function youName() { var checked = nameCheck(recall(NAME_KEY)); return checked.ok && checked.name ? checked.name : names[0]; }
-        // A game on this computer, for an address that asks for one: this tab goes to the game page (never a new tab) with the map, the opponents, the name and the picture's shape (the game page's own parameters)
-        function startLocal(mapKey, levels) {
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);
-        }
-        // What an address that names a map makes: a game on this computer with &players=1 (&fill= is then the level of all three opponents), else a room of 2 to 4 seats with the plan (&fill=) and the teams
-        // (&teams=) as text. The room has a new code (a name, nothing more) and a create block of the map, the seats and the teams, which every link of it carries; the teams are the block's, so that the room makes them
-        // for every start, the one when it fills up too. Nothing is remembered: the choices that the card remembers are the card's own.
-        function create(mapKey, play, n, fillPlan, teams) {
-            var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
-            var players = playersChoice(String(n), 4);
-            if (players === 1) {
-                var level = validFill(fillPlan);
-                startLocal(m.key, [level, level, level]);
-                return;
-            }
-            var seats = hostSeats(validFillPlan(fillPlan));
-            var roomTeam = hostTeam(validRoomTeams(teams), players);
-            startRoom(newCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');
-        }
-        var wanted = params.get('room');
-        var wantedBlock = roomBlockOf(window.location.search);            // (null when the address carries no create block: the room was made some other way)
-        var wantedMap = params.get('map');
-        var wantedPlayersText = params.get('players');
-        var wantedPlayers = playersChoice(wantedPlayersText, 4);          // (an address that names no players hosts 4, as it always did; &players=1 plays on this computer)
-        var wantedFill = validFillPlan(params.get('fill'));
-        var wantedTeams = validRoomTeams(params.get('teams'));
-        var asksRoom = !!(wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted));
-        var asksMap = !asksRoom && !!(wantedMap && mapByKey(wantedMap.toLowerCase()));
-        function fromAddress() {                    // what the address asks for, once the name step (if there is one) is done
-            if (wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted)) {
-                // &teams= is for a room that has no teams of its own: narrowed to the room's seat count (hostTeam) when its block says it (a pair that three seats cannot make is
-                // free for all); a room that the page did not make is the game's to judge. The teams that the block names win in startRoom.
-                var askedTeams = wantedBlock ? hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '') : wantedTeams;
-                startRoom(wanted, wantedBlock, params.get('play') === 'here' ? 'here' : '', wantedFill, askedTeams);
-            } else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {
-                create(wantedMap.toLowerCase(), params.get('play') === 'here' ? 'here' : '', wantedPlayers, wantedFill, wantedTeams);
-            }
-        }
-        // An address that asks for a match is the page of somebody who was sent a link: they are asked for a name first, every time, even when this browser remembers one (the owner: "when joining a link
-        // from somebody else, it should ask you first what you want your name to be"), and nothing starts before. The test mode ?play=here starts every seat at once and asks nobody.
-        function runTestRoom() {
-            if (params.get('play') === 'here') { fromAddress(); return; }
-            var asksSolo = asksMap && wantedPlayers === 1;
-            askName({
-                title: asksRoom ? 'Join the match ' + codeText(wanted) : asksSolo ? 'Play a game on this computer' : 'Host a match',
-                button: asksRoom ? 'Join' : asksSolo ? 'Play' : 'Host',
-                hint: (asksRoom ? 'The name your ants play under in this match: the seat that you play from this page takes it.' : asksSolo ? 'The name your ants play under in the game on this computer.' : 'The name your ants play under in the match that you host from this page.') +
-                    ' Leave it empty for a random name. This browser remembers it.',
-                notice: !asksSolo,                   // (a game on this computer is not recorded by the server: the notice is about online matches)
-                backText: '\u2190 Back to the front page',
-                done: fromAddress,
-                back: function () { window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/')); }
-            });
-        }
-        // The game page of a seat that plays in THIS tab: the first free seat of the room, under the name of the card (the game page does not ask for it again), with the room's create block when this page made the
-        // room or its address carries one (null: a code that somebody else made, which gets none), the bots that the leader's START seats and the teams of a room whose block names none
-        function joinUrl(code, block, name, fillPlan, teams) {
-            var q = '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fillPlan ? '&fill=' + fillPlan : '') + (teams ? '&teams=' + encodeURIComponent(teams) : '') + '&name=' + encodeURIComponent(name) + (aspectFromAddress ? '&aspect=' + aspect : '');
-            return new URL('./' + q, window.location.href).href;
-        }
-        $('play-tab').addEventListener('click', function () {
-            var checked = readName();
-            if (!checked.ok || !room) return;
-            window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));       // (the teams that the block names travel in the block)
-        });
-        $('new-room').addEventListener('click', function () {
-            // the front page again (the address is rebuilt from this page's own origin, never taken from the path: a path that starts with // would leave the site)
-            window.location.assign(window.location.origin + window.location.pathname.replace(/^\/+/, '/'));
-        });
-
-
         // SELECTOR_BEGIN
         SHAPE_ORDER.forEach(function (shape) {
             $('aspect-' + shapeId(shape)).addEventListener('change', function () {
-                // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby takes it at once, the test room's page reloads with it: the games of a room start again with the new picture
+                // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape
                 if (!$('aspect-' + shapeId(shape)).checked) return;
                 var value = shape;
-                var before = $('aspect-' + shapeId(aspect));
                 if (value === aspect) { remember(ASPECT_KEY, value); return; }
-                if (!room) {                         // the lobby has no game open: the next game is the new shape
-                    aspect = value;
-                    remember(ASPECT_KEY, value);
-                    document.body.setAttribute('data-aspect', value);
-                    return;
-                }
-                if (room && !window.confirm('Changing the picture restarts the games on this page: the seats leave the match they are in. Continue?')) { before.checked = true; return; }
+                aspect = value;
                 remember(ASPECT_KEY, value);
-                try {
-                    var url = new URL(window.location.href);
-                    url.searchParams.set('aspect', value);
-                    window.location.assign(url.href);
-                } catch (e) { before.checked = true; }
+                document.body.setAttribute('data-aspect', value);
             });
         });
         // SELECTOR_END
@@ -2031,13 +1422,8 @@ their music and their sound: only the window you are in is heard). The match is 
         if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
         else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
 
-        // ---- which page this is ----
-        if (asksMap || (asksRoom && (wantedBlock !== null || params.get('play') === 'here'))) {
-            document.body.classList.add('in-room');
-            runTestRoom();
-        } else {
-            runLobby();
-        }
+        // ---- go ----
+        runLobby();
     })();
     </script>
 </body>

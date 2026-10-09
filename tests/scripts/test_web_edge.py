@@ -136,7 +136,7 @@ class TheWindowedMargin(PageCase):
 
     def test_the_motion_is_handed_over_and_a_leave_beyond_the_margin_or_over_a_control_is_too(self):
         move = self.listener("pointermove", 1)
-        for needle in ("handingOver", "ANTS_EMBED", "e.pointerType === 'touch'", "isLocked()", "isFullscreen()", "windowedPointer(", "primeFocusOverTheGame(e)"):
+        for needle in ("handingOver", "e.pointerType === 'touch'", "isLocked()", "isFullscreen()", "windowedPointer(", "primeFocusOverTheGame(e)"):
             self.assertIn(needle, move)
         function = re.search(r"function windowedPointer\(x, y, target, buttons\) \{\n(.*?)\n        \}\n", self.page, re.S)
         self.assertIsNotNone(function)
@@ -146,11 +146,11 @@ class TheWindowedMargin(PageCase):
 
     def test_the_canvas_leave_towards_the_margin_is_not_passed_on_but_a_leave_out_of_the_window_is(self):
         leave = self.listener("mouseleave", 1)
-        for needle in ("handingOver", "ANTS_EMBED", "e.target !== canvas", "!e.relatedTarget", "isLocked()", "isFullscreen()", "e.stopPropagation()"):
+        for needle in ("handingOver", "e.target !== canvas", "!e.relatedTarget", "isLocked()", "isFullscreen()", "e.stopPropagation()"):
             self.assertIn(needle, leave)
         self.assertIn("ANTS_PAGE.overControl(e.relatedTarget)", leave)
         self.assertIn("document.documentElement.addEventListener('mouseleave'", self.page)       # out of the browser window: gone
-        self.found(self.page, r"documentElement\.addEventListener\('mouseleave', function \(\) \{[^\n]*\n[^\n]*\n\s*if \(!ANTS_EMBED && !isFullscreen\(\) && edgeForwarded\) handLeaveToGame\(\);")
+        self.found(self.page, r"documentElement\.addEventListener\('mouseleave', function \(\) \{[^\n]*\n[^\n]*\n\s*if \(!isFullscreen\(\) && edgeForwarded\) handLeaveToGame\(\);")
 
     def test_a_scroll_or_a_resize_under_a_pointer_that_did_not_move_is_looked_at_again(self):
         self.assertIn("window.addEventListener('scroll', windowedAgain, { passive: true });", self.page)

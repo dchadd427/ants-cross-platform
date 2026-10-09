@@ -279,7 +279,7 @@ class Player:
 
     # ---- the page
     def game_url(self, room):
-        """The room's link for this seat, as the front page makes it for a window of its own (web/lobby.html, gameUrl): the code, the room's create block, the seat, the name, the shape."""
+        """The game page's address for this seat: the code, the room's create block, the seat, the name, the shape (the form that the front page's test room used to make; the game page still reads it)."""
         return "%s?join=/ws&room=%s%s%s&name=%s&aspect=16:9" % (self.web, room, ROOM_BLOCK, "&seat=%d" % self.seat if self.link_seat else "", self.name)
 
     def address_seats(self):

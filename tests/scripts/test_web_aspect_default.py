@@ -5,12 +5,11 @@ pages now remember the choice under `ants.aspect.v2` and do not read the old key
 player picks Classic 4:3 again.
 
   - the pages' own code is RUN (node, when it is installed) on a table of addresses and of what a browser had stored, among them an old `ants.aspect` = 4:3 that must not give 4:3, and
-    the selectors' clicks, which must write the new key and nothing else (tests/scripts/web_aspect_key_check.js). The front page's selector is run in its two modes: in the lobby (the room
-    view) a pick keeps the match, changes the page at once and the hand-off address to the game carries the shape; in the legacy test room (the old addresses ?map=, ?play=here ...) a pick
-    still asks and reloads the page with ?aspect=;
+    the selectors' clicks, which must write the new key and nothing else (tests/scripts/web_aspect_key_check.js). The front page's selector: a pick keeps the match, changes the page at once and the hand-off
+    address to the game carries the shape (the page has no game open, so a pick never asks and never reloads);
   - what needs no browser is read from the files: the new key is the one constant of each page and no call reads or writes the old key; the markup and the style of both pages start with
-    the 16:9 picture (the game page's box, its selector and the front page's "Screen" buttons in its footer, and the frames of the legacy test room); the front page's hand-offs to the game
-    (START, Rejoin, a game for one, the test room's links) pass the page's live shape on.
+    the 16:9 picture (the game page's box, its selector and the front page's "Screen" buttons in its footer); the front page's hand-offs to the game
+    (START, Rejoin, a game for one) pass the page's live shape on.
 The same cases in a real browser: tests/scripts/web_aspect_check.py (opt-in, against a running page).
 """
 import os
@@ -82,12 +81,9 @@ class PagesStartWith16x9(unittest.TestCase):
         self.assertNotIn("window.confirm", block)                                                        # no "Leave the match to change the picture?"
         self.assertIn("antsSetAspect(value);", block)
 
-    def test_the_front_page_frames_and_buttons_start_with_16_9(self):
+    def test_the_front_page_buttons_start_with_16_9(self):
         page = read(LOBBY)
-        self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", page)                       # (the frames of the legacy test room; the lobby has none)
-        self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', page)
-        self.assertIn('body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }', page)
-        self.assertIn('body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }', page)
+        self.assertNotIn(".frame {", page)                                                                 # (the lobby has no games in frames: the test room that had them is gone)
         self.assertIn("var aspect = '16:9';", page)
         self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', page)), 4)                   # (the picture's four buttons, nothing else)
         self.assertIn('<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label>', page)        # 16:9 is the one that is checked
@@ -145,14 +141,13 @@ class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);", page)                              # START (onStarting)
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", page)         # the Rejoin button
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);", page)                               # START with nobody else (startAlone)
-        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);", page)                  # the old ?players=1 address
         block = page[page.index("// SELECTOR_BEGIN"):page.index("// SELECTOR_END")]
         self.assertIn("aspect = value;", block)                                                                                            # (a pick in the lobby changes the live variable, which the calls above read)
 
-    def test_the_games_of_the_test_room_carry_the_shape_too(self):
+    def test_every_game_address_of_the_page_is_one_of_those_three_builders(self):
         page = read(LOBBY)
-        self.assertIn("if (own || aspectFromAddress) q += '&aspect=' + aspect;", page)                                                       # the room's own games always, the links for other players when the address named it
-        self.assertIn("(aspectFromAddress ? '&aspect=' + aspect : '')", page)                                                                # the address of the test room (a reload comes back to it) and the join link of "Play in this tab"
+        self.assertNotIn("aspectFromAddress", page)                                                                                          # (the links for other players that carried the shape only when the address named it were the test room's)
+        self.assertEqual(len(re.findall(r"'&aspect=' \+", page)), 2)                                                                          # (rejoinQuery and localGameQuery: START's hand-off is rejoinQuery)
 
     def test_the_two_builders_name_one_of_the_four_shapes_only(self):
         page = read(LOBBY)
