@@ -51,6 +51,10 @@ public:
     /// the final state hash and whether the rules ended the match. Call it after the last command and the last tick of the match. Whatever the recorder is told afterwards is ignored.
     std::vector<uint8_t> finish(const sim::SimulationEngine& engine, std::string& error);
 
+    /// The match so far as an incomplete file with the chunk `live` (encode_snapshot): what a viewer needs to watch a match that still runs. Empty, with `error`, when the recording failed, is finished, or no turn ran.
+    /// It changes nothing in the recorder (the engine is not read, and the recording goes on). The server makes one at most once a second for a match (ants_server/live_board.hpp).
+    std::vector<uint8_t> snapshot(std::string& error) const;
+
     /// The replay as it stands (for the tests)
     const Replay& replay() const noexcept { return replay_; }
 

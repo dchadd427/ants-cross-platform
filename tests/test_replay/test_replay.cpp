@@ -311,7 +311,15 @@ std::vector<Command> orders_at(const sim::SimulationEngine& engine, uint32_t tur
     return out;
 }
 
-Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false) {
+/// Asks the recorder for a snapshot after every `every` turns (and notes the engine's state hash then): what the server does for a match that still runs
+struct SnapshotTap {
+    uint32_t every{0};
+    std::vector<std::vector<uint8_t>> files;
+    std::vector<uint32_t> turns;
+    std::vector<uint64_t> hashes;
+};
+
+Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false, SnapshotTap* tap = nullptr) {
     Played p;
     sim::SimulationEngine engine;
     engine.set_fog_of_war_enabled(fog);
@@ -333,6 +341,12 @@ Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster
         engine.clear_news_events();
         engine.clear_audio_events();
         rec.on_tick(engine);
+        if (tap != nullptr && tap->every != 0 && (turn + 1) % tap->every == 0) {
+            std::string why;
+            tap->files.push_back(rec.snapshot(why));
+            tap->turns.push_back(turn + 1);
+            tap->hashes.push_back(engine.state_hash().total);
+        }
     }
     p.hash = engine.state_hash().total;
     p.over = engine.is_match_over();
@@ -1274,6 +1288,184 @@ int main(int argc, char* argv[]) {
         // and the replay of that match, played by the player, ends there too
         const Outcome o = play(p.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.hash == line->hash);
+    } TEST_END();
+
+    // ---- the snapshot of a match that still runs: the optional chunk `live` ----------------------------------------------------------
+
+    TEST_CASE("RP8.1 A Snapshot Is An Incomplete Replay With A Lower Case Chunk `live` (The Turns Run When It Was Made): Read Back With Its Commands And Hashes, Its Turn Count The Largest Of The Last Command, The Last Hash And The Chunk; An Older Reader Skips The Chunk") {
+        Replay s = synthetic_small();                                              // commands up to turn 301, three hashes (300 turns)
+        s.complete = false;
+        s.total_turns = 0;
+        s.match_over = false;
+        s.final_hash = 0;
+        std::string error;
+        const std::vector<uint8_t> bytes = encode_snapshot(s, 450, error);
+        ASSERT_FALSE(bytes.empty());
+        const std::vector<Chunk> chunks = chunks_of(bytes);
+        ASSERT_TRUE(chunks.size() == 4 && chunks[0].tag == "HEAD" && chunks[1].tag == "CMDS" && chunks[2].tag == "hash" && chunks[3].tag == "live");
+        ASSERT_EQ(chunks[3].payload, (std::vector<uint8_t>{0xC2, 0x01, 0x00, 0x00}));        // 450, little endian
+        ASSERT_EQ(count_chunks(bytes, "ENDS"), 0u);
+        Decoded d = decoded(bytes);
+        ASSERT_TRUE(d.ok && !d.replay.complete && !d.replay.match_over && d.replay.final_hash == 0);
+        ASSERT_EQ(d.replay.total_turns, 450u);
+        ASSERT_TRUE(same_head(d.replay.head, s.head) && d.replay.hashes == s.hashes && d.replay.commands.size() == s.commands.size());
+        for (size_t i = 0; i < s.commands.size(); ++i) ASSERT_TRUE(d.replay.commands[i].turn == s.commands[i].turn && d.replay.commands[i].command == s.commands[i].command);
+        ASSERT_EQ(encode_snapshot(d.replay, 450, error), bytes);                   // (read and written again: the same bytes, and the same every time)
+        ASSERT_EQ(encode_snapshot(s, 450, error), bytes);
+        // the turn count is the largest of the three, and the writer refuses a turn count below the others
+        ASSERT_EQ(decoded(encode_snapshot(s, 301, error)).replay.total_turns, 301u);     // = the last command (the hashes say 300)
+        ASSERT_TRUE(encode_snapshot(s, 300, error).empty() && contains(error, "snapshot"));       // below the last command
+        Replay hashed;                                                             // three hashes, no commands
+        hashed.head = head_for(tiny, "TINY", 1, 0x03);
+        hashed.hashes = {1, 2, 3};
+        ASSERT_EQ(decoded(encode_snapshot(hashed, 300, error)).replay.total_turns, 300u);
+        ASSERT_EQ(decoded(encode_snapshot(hashed, 380, error)).replay.total_turns, 380u);
+        ASSERT_TRUE(encode_snapshot(hashed, 299, error).empty() && !error.empty());      // below the last hash
+        Replay bare;
+        bare.head = head_for(tiny, "TINY", 1, 0x03);
+        ASSERT_EQ(decoded(encode_snapshot(bare, 0, error)).replay.total_turns, 0u);
+        ASSERT_EQ(decoded(encode_snapshot(bare, kMaxTurns, error)).replay.total_turns, kMaxTurns);
+        ASSERT_TRUE(encode_snapshot(bare, kMaxTurns + 1, error).empty() && !error.empty());
+        // a replay with its end is not a snapshot
+        Replay whole = synthetic_small();
+        ASSERT_TRUE(whole.complete);
+        ASSERT_TRUE(encode_snapshot(whole, 400, error).empty() && contains(error, "end"));
+        // an older reader skips a lower case chunk it does not know: the same file with the chunk under another name is the file as it was before the chunk, which reads up to its last command and hash
+        std::vector<Chunk> older = chunks;
+        older[3].tag = "lixe";
+        d = decoded(file_of(older));
+        ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.total_turns == 301 && d.replay.commands.size() == s.commands.size());
+        ASSERT_TRUE(chunks[3].tag[0] >= 'a' && chunks[3].tag[0] <= 'z');                    // (lower case: not critical)
+    } TEST_END();
+
+    TEST_CASE("RP8.2 The Reader Is Strict About The Chunk `live`: Two Of Them, A Wrong Length, A Turn Count Below The Last Command Or The Last Hash Or Above A Match's Limit, And One In A File That Has Its ENDS Chunk Are Refused With The Chunk Named; Every Flipped Byte And Every Cut Of A Snapshot Is Found Or Is A Shorter Replay") {
+        Replay s = synthetic_small();
+        s.complete = false;
+        std::string error;
+        const std::vector<Chunk> base = chunks_of(encode_snapshot(s, 450, error));
+        ASSERT_TRUE(base.size() == 4 && base[3].tag == "live");
+        const auto turns_payload = [](uint32_t v) { return std::vector<uint8_t>{static_cast<uint8_t>(v), static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v >> 16), static_cast<uint8_t>(v >> 24)}; };
+        const auto refused_with = [&](const std::vector<Chunk>& chunks, const std::string& part) {
+            const Decoded d = decoded(file_of(chunks));
+            if (d.ok || !contains(d.error, part)) std::cout << "\n    reads: " << (d.ok ? "ok" : d.error) << "\n";
+            return !d.ok && contains(d.error, part);
+        };
+        std::vector<Chunk> c = base;
+        c.push_back(base[3]);
+        ASSERT_TRUE(refused_with(c, "live: two"));
+        for (const size_t length : {size_t{0}, size_t{1}, size_t{3}, size_t{5}, size_t{8}}) {
+            c = base;
+            c[3].payload.assign(length, 7);
+            ASSERT_TRUE(refused_with(c, "live: the wrong length"));
+        }
+        c = base;
+        c[3].payload = turns_payload(300);                                          // the last command is at turn 301
+        ASSERT_TRUE(refused_with(c, "live"));
+        c[3].payload = turns_payload(301);
+        ASSERT_TRUE(decoded(file_of(c)).ok);                                        // (exactly the last command: fine)
+        c = {base[0], base[2], base[3]};                                            // no commands, three hashes
+        c[2].payload = turns_payload(299);
+        ASSERT_TRUE(refused_with(c, "live"));
+        c[2].payload = turns_payload(300);
+        ASSERT_TRUE(decoded(file_of(c)).ok);
+        c = base;
+        c[3].payload = turns_payload(kMaxTurns + 1);
+        ASSERT_TRUE(refused_with(c, "live: more turns"));
+        c[3].payload = turns_payload(0xFFFFFFFFu);
+        ASSERT_TRUE(refused_with(c, "live"));
+        // a live chunk in a file that has its end: before the ENDS chunk and after it
+        const std::vector<Chunk> ends = chunks_of(encoded(synthetic_small()));      // HEAD, CMDS, hash, ENDS
+        c = ends;
+        c.insert(c.end() - 1, base[3]);
+        ASSERT_TRUE(refused_with(c, "live") && refused_with(c, "ENDS"));
+        c = ends;
+        c.push_back(base[3]);
+        ASSERT_TRUE(refused_with(c, "live") && refused_with(c, "ENDS"));
+        // any other chunk after the end is "bytes after the ENDS chunk": the chunk's name is said for ours only
+        c = ends;
+        c.push_back(Chunk{"zzzz", {}});
+        const Decoded other = decoded(file_of(c));
+        ASSERT_TRUE(!other.ok && contains(other.error, "after the ENDS") && !contains(other.error, "live"));
+        // every flipped byte of a snapshot is found, and a cut one is refused or is a shorter replay of the same match
+        const std::vector<uint8_t> bytes = encode_snapshot(s, 450, error);
+        const Decoded whole = decoded(bytes);
+        ASSERT_TRUE(whole.ok);
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            std::vector<uint8_t> broken = bytes;
+            broken[i] = static_cast<uint8_t>(broken[i] ^ 0x5Au);
+            const Decoded d = decoded(broken);
+            ASSERT_TRUE(d.ok ? !same(d.replay, whole.replay) : !d.error.empty());
+        }
+        const size_t head_end = 8 + 12 + base[0].payload.size();
+        for (size_t length = 0; length < bytes.size(); ++length) {
+            const Decoded d = decoded(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(length)));
+            if (length < head_end) {
+                ASSERT_FALSE(d.ok);
+            } else {
+                ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.total_turns < 450u);      // (cut before the whole live chunk: it has not got the turns that the chunk says)
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("RP8.3 Recorder::snapshot: A Match That Runs Is Snapshotted Again And Again Without Changing The Recording; Each Snapshot Plays On The Real Map Up To Its Turns With Every Hash Right And Ends In The State The Match Was In, And Its Commands And Hashes Are The Start Of The Final File's; Nothing For A Recording That Failed, Is Finished Or Has Run No Turn") {
+        SnapshotTap tap;
+        tap.every = 90;
+        const Played p = play_scripted(tiny, 31, 450, 0x0F, sim::StartTeams{}, false, &tap);
+        const Played plain = play_scripted(tiny, 31, 450);
+        ASSERT_FALSE(p.file.empty());
+        ASSERT_EQ(p.file, plain.file);                                              // (a recorder that was asked for snapshots writes the same file: it is not changed)
+        ASSERT_EQ(tap.files.size(), 5u);                                            // after 90, 180, 270, 360 and 450 turns
+        for (size_t k = 0; k < tap.files.size(); ++k) {
+            const uint32_t turns = tap.turns[k];
+            ASSERT_EQ(turns, 90u * static_cast<uint32_t>(k + 1));
+            ASSERT_FALSE(tap.files[k].empty());
+            const Decoded d = decoded(tap.files[k]);
+            ASSERT_TRUE(d.ok && !d.replay.complete);
+            ASSERT_EQ(d.replay.total_turns, turns);                                 // (the snapshot's own count, whatever the last command or hash say)
+            ASSERT_EQ(count_chunks(tap.files[k], "live"), 1u);
+            ASSERT_EQ(count_chunks(tap.files[k], "ENDS"), 0u);
+            // the start of the final file: the same head, the commands given before the snapshot's turn, the hashes taken by then
+            ASSERT_TRUE(same_head(d.replay.head, p.replay.head));
+            size_t expected = 0;
+            while (expected < p.replay.commands.size() && p.replay.commands[expected].turn < turns) ++expected;
+            ASSERT_EQ(d.replay.commands.size(), expected);
+            for (size_t i = 0; i < expected; ++i) ASSERT_TRUE(d.replay.commands[i].turn == p.replay.commands[i].turn && d.replay.commands[i].command == p.replay.commands[i].command);
+            ASSERT_EQ(d.replay.hashes.size(), static_cast<size_t>(turns / 100));
+            ASSERT_TRUE(std::equal(d.replay.hashes.begin(), d.replay.hashes.end(), p.replay.hashes.begin()));
+            // it plays on the real map up to its turns: every hash it holds is right, and the state is the one the match was in
+            const Outcome o = play(d.replay, tiny.level);
+            ASSERT_TRUE(o.ran && o.ok && !o.complete);
+            ASSERT_EQ(o.turns, turns);
+            ASSERT_EQ(o.hashes_checked, turns / 100);
+            ASSERT_EQ(o.hash, tap.hashes[k]);
+        }
+        ASSERT_TRUE(decoded(tap.files.back()).replay.commands.size() == p.replay.commands.size());         // (the last snapshot is the whole match so far: all its commands)
+        // a recording that cannot be a file, one that is finished and one with no turn give nothing, and say why
+        sim::SimulationEngine engine;
+        engine.init(tiny.level, 1, 0x0F);
+        std::string error;
+        Recorder fresh(head_for(tiny, "TINY", 1, 0x0F));
+        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "no turn"));
+        fresh.on_command(make_command(CommandType::Hatch, 0, 0, 0, {}));
+        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "no turn"));    // (a command before the first tick is not a turn)
+        engine.tick();
+        fresh.on_tick(engine);
+        const std::vector<uint8_t> one = fresh.snapshot(error);
+        ASSERT_FALSE(one.empty());
+        const Decoded first = decoded(one);
+        ASSERT_TRUE(first.ok && !first.replay.complete && first.replay.total_turns == 1 && first.replay.commands.size() == 1);
+        ASSERT_TRUE(fresh.turns() == 1 && fresh.commands() == 1 && fresh.failure().empty() && !fresh.finished());        // (it changed nothing)
+        ASSERT_FALSE(fresh.finish(engine, error).empty());
+        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "finished"));
+        Recorder spoiled(head_for(tiny, "TINY", 1, 0x0F));
+        engine.tick();
+        spoiled.on_tick(engine);
+        ASSERT_FALSE(spoiled.snapshot(error).empty());
+        net::TurnMsg late;
+        late.turn = 9;                                                              // a turn that was not seen: the recording is lost
+        spoiled.on_turn(late, engine);
+        ASSERT_FALSE(spoiled.failure().empty());
+        ASSERT_TRUE(spoiled.snapshot(error).empty() && error == spoiled.failure());
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
