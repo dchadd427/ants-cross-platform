@@ -9,7 +9,8 @@
 #   ANTS_ARENA_BIN         the arena program (default /usr/local/bin/bot_arena)
 #   ANTS_ARENA_ONCE=1      play one match and exit with the program's exit code (the check of the CI, or a cron job on a host)
 #   ANTS_ARENA_SEED=N      the random choices (map, number of bots, the seats they sit on, levels, the match seed) come from N, so that the same N plays the same matches; not set: from the
-#                          clock (the start line of the log says which N that was, so that a whole run can be played again)
+#                          clock (in the loop, the start line of the log says which N that was, so that the run can be played again with the same bash; the "match:" line of each match is
+#                          the portable way to play it again)
 #
 # Every match is logged with its map, seats and seed: the same arguments played again give the same match bit for bit (bot_arena --map MAP --seeds SEED --seat ...).
 # The arena's own store deletes nothing; the game server's store purges its folder (ANTS_REPLAY_DAYS, ANTS_REPLAY_MAX_MB, the oldest first), these files with the others.
