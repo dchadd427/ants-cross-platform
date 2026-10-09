@@ -225,14 +225,16 @@
         .invite { grid-template-columns: minmax(0, 1fr) auto; }
         .invite input { display: none; }
         .invite .btn { min-height: 48px; } .invite #copy { width: 100%; }
-        .slots { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
-        .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 44px; min-height: calc(41px * var(--k) + 26px); padding: 16px 4px 10px 8px; gap: 2px 10px; }
+        .slots { grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+        body:not(.guest) .slots { padding: 0 clamp(0px, calc((100vw - 340px) * .32), 16px); }          /* the host's cards stop short of the panel's edge: a strip each side where a thumb can scroll (a touch that starts on the dots never scrolls the page); 16 px at 390 px, 6 px at 360, none at 340 and under */
+        .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 44px; min-height: calc(41px * var(--k) + 22px); padding: 14px 4px 8px 8px; gap: 2px 10px; }
         .slot .antbox { grid-column: 1; } .slot .txt { grid-column: 2; }
         .slot .grip { position: static; grid-column: 3; grid-row: 1; align-self: start; margin-top: -8px; width: 44px; height: 44px; }      /* the dots get a column of their own, so they never sit on a name or a drop-down */
         body.guest .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr); padding-right: 12px; }
-        .pname, .pname input { font-size: 21px; } .pname { min-height: 46px; }
-        .teamset button { flex: 1 1 0; max-width: 112px; min-height: 40px; }
-        .mode { max-width: none; min-height: 42px; font-size: 18px; margin: 2px 0 2px; }
+        .pstat { font-size: 13px; min-height: 18px; } .teamset { margin-top: 6px; }
+        .pname, .pname input { font-size: 21px; } .pname { min-height: 38px; }
+        .teamset button { flex: 1 1 0; max-width: 112px; min-height: 34px; }
+        .mode { max-width: none; min-height: 38px; font-size: 17px; margin: 0; padding: 6px 34px 6px 10px; background-position: right 6px center; }
         .grid { gap: 18px; }
         .side { display: contents; }
         .side .maprow { grid-row: auto; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 4px 14px; }
