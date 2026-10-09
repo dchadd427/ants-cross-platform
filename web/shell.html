@@ -265,6 +265,17 @@
             --stage-max: 960px;
         }
 
+        /* 16:10 (the canvas is 960 x 600) and 21:9 (1260 x 540: 7 x 3 is its shape in the smallest whole numbers) take the page's column, as 16:9 does */
+        #game-stage[data-aspect="16:10"] {
+            --ar-w: 8;
+            --ar-h: 5;
+        }
+
+        #game-stage[data-aspect="21:9"] {
+            --ar-w: 7;
+            --ar-h: 3;
+        }
+
         #game-container {
             position: relative;
             flex: 0 0 auto;
@@ -354,7 +365,7 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* The picture's shape, under the game: the selector of "16:9 / Classic 4:3" (it reloads the page with ?aspect= and is remembered by the browser) and the fullscreen mouse.
+        /* The picture's shape, under the game: the selector of "Classic 4:3 / 16:10 / 16:9 / 21:9" (a press changes the picture at once, the game runs on; the browser remembers the choice) and the fullscreen mouse.
            Each choice is a pair of the game's two-state buttons (Fog of War On / Off), the chosen one pressed in. */
         .view-bar {
             display: flex;
@@ -394,6 +405,33 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* a shape's button with its "fills your screen" tag (shown under the shape nearest to the computer's screen, only where there is a mouse: the script un-hides it) */
+        .seg .shape {
+            position: relative;
+            display: inline-flex;
+        }
+
+        .fit-tag {
+            position: absolute;
+            left: 50%;
+            top: 100%;
+            transform: translateX(-50%);
+            margin-top: 6px;
+            white-space: nowrap;
+            font-size: 13px;
+            line-height: 1.2;
+            color: var(--ink);
+            pointer-events: none;
+        }
+
+        .fit-tag[hidden] {
+            display: none;
+        }
+
+        .view-bar.has-fit-tag {
+            margin-bottom: 28px;
+        }
+
         .seg button[aria-checked="true"] {
             color: #f6dc86;
             background: #102b25;
@@ -412,6 +450,14 @@
         @media (hover: none) {
             .lock-part {
                 display: none;
+            }
+
+            .fit-tag {
+                display: none;
+            }
+
+            .view-bar.has-fit-tag {
+                margin-bottom: 10px;
             }
         }
 
@@ -1160,8 +1206,10 @@
     <div class="view-bar" id="view-bar">
         <span id="view-bar-label">Picture</span>
         <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
-            <button type="button" role="radio" id="aspect-16-9" data-aspect="16:9" aria-checked="true" title="The wide picture (960 x 540)">16:9</button>
-            <button type="button" role="radio" id="aspect-4-3" data-aspect="4:3" aria-checked="false" title="The original's picture (640 x 480)">Classic 4:3</button>
+            <span class="shape"><button type="button" role="radio" id="aspect-4-3" data-aspect="4:3" aria-checked="false" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</button><span class="fit-tag" hidden>fills your screen</span></span>
+            <span class="shape"><button type="button" role="radio" id="aspect-16-10" data-aspect="16:10" aria-checked="false" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</button><span class="fit-tag" hidden>fills your screen</span></span>
+            <span class="shape"><button type="button" role="radio" id="aspect-16-9" data-aspect="16:9" aria-checked="true" title="16:9: the wide picture (960 x 540)">16:9</button><span class="fit-tag" hidden>fills your screen</span></span>
+            <span class="shape"><button type="button" role="radio" id="aspect-21-9" data-aspect="21:9" aria-checked="false" title="21:9: ultrawide monitors (1260 x 540)">21:9</button><span class="fit-tag" hidden>fills your screen</span></span>
         </div>
         <span id="lock-bar-label" class="lock-part">Fullscreen mouse</span>
         <div class="seg lock-part" role="radiogroup" aria-labelledby="lock-bar-label">
@@ -1198,7 +1246,7 @@
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
                         <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
-                        <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture. Choose it under the game (the game restarts), or add&#8197;<kbd>?aspect=4:3</kbd>&#8197;to the address (<kbd>?aspect=16:9</kbd>&#8197;for the wide one).&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
+                        <li><strong>Picture:</strong>&#8197;16:9 by default;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and&#8197;<em>16:10</em>&#8197;and&#8197;<em>21:9</em>&#8197;suit laptop and ultrawide screens (a wider or taller picture shows more of the map). Press a shape under the game: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=4:3</kbd>,&#8197;<kbd>?aspect=16:10</kbd>,&#8197;<kbd>?aspect=16:9</kbd>&#8197;or&#8197;<kbd>?aspect=21:9</kbd>&#8197;to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
                     </ul>
                 </div>
             </details>
@@ -1219,7 +1267,7 @@
                 <div class="info-content">
                     <ul>
                         <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed. In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch); it stops when the pointer goes farther, onto a button or a link of the page, or out of the window.</li>
-                        <li><strong>Fullscreen:</strong>&#8197;the Fullscreen button in the header. The black bars of a screen that is not 16:9 count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, under the game, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
+                        <li><strong>Fullscreen:</strong>&#8197;the Fullscreen button in the header. The black bars of a screen that is not the picture's shape count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, under the game, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
                         <li class="note"><strong>Esc in fullscreen:</strong>&#8197;in Chrome and Edge Esc goes to the game (deselect, close a dialog) and&#8197;<em>holding</em>&#8197;it leaves fullscreen; in Safari and Firefox Esc gives the mouse back first (Safari leaves fullscreen with it). <em>Free</em>&#8197;under the game gives the browser's plain fullscreen.</li>
                         <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
                         <li><strong>Jump to an ant:</strong>&#8197;<kbd>Ctrl</kbd>+<kbd>N</kbd>&#8197;/&#8197;<kbd>Ctrl</kbd>+<kbd>P</kbd>&#8197;select the next / previous ant and scroll to it;&#8197;<kbd>Ctrl</kbd>+<kbd>H</kbd>&#8197;selects your anthill.</li>
@@ -1309,8 +1357,9 @@
 
         // ANTS_PAGE_BEGIN (tests/scripts/web_aspect_key_check.js runs everything from here to ANTS_PAGE_END on a table of addresses and of what the browser remembered)
         // The page's own logic that needs no browser (ANTS_PAGE; tests/scripts/web_aspect_check.py calls these in a real one).
-        //   aspect  the shape of the picture: "16:9" (the game's fixed canvas of 960 x 540) or "4:3" (the original's 640 x 480); nothing else is a shape
-        //   fitBox  the picture's box: the largest whole number of canvas steps (16 x 9, or 4 x 3 for the classic picture) that fits an area, in device pixels
+        //   aspect  the shape of the picture: "4:3" (the original's 640 x 480), "16:10" (960 x 600), "16:9" (the default, 960 x 540) or "21:9" (1260 x 540); nothing else is a shape
+        //   shapeNumber / shapeForScreen  the shape's place in the selector (the number that the game's ants_set_aspect takes), and the shape nearest to a screen (the selector's "fills your screen")
+        //   fitBox  the picture's box: the largest whole number of canvas steps (8 x 5, 16 x 9, 7 x 3 or 4 x 3, the shape in the smallest whole numbers) that fits an area, in device pixels
         //   limiter the frame cap (a rolling median of the display's gaps)
         //   snapOffset where the box must stand for an exact pointer
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
@@ -1320,13 +1369,37 @@
         //   badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
-            var SHAPES = { '16:9': { w: 16, h: 9 }, '4:3': { w: 4, h: 3 } };
+            // Each shape in the smallest whole numbers: the game's canvas is a whole number of steps of it (640 x 480 is 160 steps of 4 x 3, 960 x 600 is 120 of 8 x 5, 960 x 540 is 60 of 16 x 9,
+            // 1260 x 540 is 180 of 7 x 3). SHAPE_ORDER is the selector's, left to right, and the game's (kAllAspects in include/ants_app/canvas_layout.hpp)
+            var SHAPES = { '4:3': { w: 4, h: 3 }, '16:10': { w: 8, h: 5 }, '16:9': { w: 16, h: 9 }, '21:9': { w: 7, h: 3 } };
+            var SHAPE_ORDER = ['4:3', '16:10', '16:9', '21:9'];
 
             function parseAspect(text) {
                 return (typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text)) ? text : null;
             }
 
-            // Which shape the page shows: the address (?aspect=16:9 or ?aspect=4:3; anything else is ignored), else the choice that the selector remembered (under ANTS_ASPECT_KEY below), else 16:9
+            // The shape's place in SHAPE_ORDER (what the game's ants_set_aspect takes), -1 for a text that is no shape
+            function shapeNumber(aspect) {
+                return SHAPE_ORDER.indexOf(parseAspect(aspect));
+            }
+
+            // The shape nearest to a screen of screenW x screenH (the selector tags it "fills your screen"): the one whose width over height is the closest to the screen's, as a ratio of ratios (a
+            // 1440 x 900 screen is 16:10, a 1920 x 1080 one 16:9, a 3440 x 1440 one 21:9, a 1280 x 1024 one 4:3), or null when no shape is within 8 per cent of the screen's (a 32:9 screen, a
+            // square one, a number that is none): the picture would not fill it, so nothing is said
+            function shapeForScreen(screenW, screenH) {
+                if (!(screenW > 0 && screenH > 0 && isFinite(screenW) && isFinite(screenH))) return null;
+                var screenRatio = screenW / screenH;
+                var best = null;
+                var bestOff = Infinity;
+                SHAPE_ORDER.forEach(function (name) {
+                    var ratio = SHAPES[name].w / SHAPES[name].h;
+                    var off = Math.max(ratio / screenRatio, screenRatio / ratio) - 1;
+                    if (off < bestOff) { bestOff = off; best = name; }
+                });
+                return bestOff <= 0.08 ? best : null;
+            }
+
+            // Which shape the page shows: the address (?aspect=4:3, 16:10, 16:9 or 21:9; anything else is ignored), else the choice that the selector remembered (under ANTS_ASPECT_KEY below), else 16:9
             // on every device (a phone held upright included: the picture is 16:9 as wide as the screen, and turning the phone sideways makes it bigger).
             function resolveAspect(fromAddress, remembered) {
                 var a = parseAspect(fromAddress);
@@ -1349,7 +1422,8 @@
             }
 
             // The box of the picture inside an area of availW x availH CSS pixels at device ratio dpr: backing = k whole steps of the shape (16 x 9 or 4 x 3), the biggest that
-            // fits (at least one), cssW / cssH = the CSS size to give the box. The canvas then has exactly the shape of its picture, so the game's logical canvas fills it.
+            // fits (at least one), cssW / cssH = the CSS size to give the box. The canvas then has exactly the shape of its picture, so the game's logical canvas fills it (the scale of
+            // the logical canvas to the box is the same on both axes).
             function fitBox(availW, availH, dpr, aspect) {
                 var shape = SHAPES[parseAspect(aspect) || '16:9'];
                 var ratio = dpr > 0 && isFinite(dpr) ? dpr : 1;
@@ -1721,7 +1795,7 @@
                 return go();
             }
 
-            return { parseAspect: parseAspect, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
+            return { parseAspect: parseAspect, shapeNumber: shapeNumber, shapeForScreen: shapeForScreen, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
                      marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
@@ -1763,10 +1837,10 @@
             }
         })();
 
-        // The shape of this page's picture, passed on to the game as --aspect (the game validates it too). The stage's data-aspect gives the box its shape in CSS.
+        // The shape of this page's picture, passed on to the game as --aspect (the game validates it too); the selector changes it while the game runs (antsSetAspect below). The stage's data-aspect gives the box its shape in CSS.
         // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/lobby.html reads and writes the same key). The key of the first versions of the page was
         // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
-        // with the 16:9 picture until its player picks Classic 4:3 again. ?aspect=4:3 in the address works as ever.
+        // with the 16:9 picture until its player picks another shape again. ?aspect=4:3 (16:10, 16:9, 21:9) in the address works as ever.
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
@@ -1979,6 +2053,7 @@
                 // Game engine is initialized: the game is running already, so the loading screen goes away (nobody has to click anything to start; the sound follows the
                 // first press, see the audio block below)
                 isReadyToPlay = true;
+                antsSyncAspect();                                            // (a picture that was chosen while the game was starting)
                 clearTimeout(window.antsStartWatchdog);
                 progressContainer.style.display = 'none';
                 hideLoadingScreen();
@@ -2629,8 +2704,9 @@
             });
         });
 
-        // The selector: the choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and the page reloads with ?aspect= (the game's picture is made when it starts).
-        // Other parts of the address (the room of a match, the seat) stay.
+        // The selector: a press changes the picture AT ONCE, in the match that is running: no reload, no "Leave the match?", no new connection (the game's ants_set_aspect gives the running game the new
+        // shape: its canvas, its screens, its view; the simulation is not touched). The choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and put in the address
+        // (?aspect=, without a new entry in the history), so that a reload or a link has it; the rest of the address (the room of a match, the seat) stays.
         // ANTS_SELECTOR_BEGIN (tests/scripts/web_aspect_key_check.js clicks the buttons of this block and sees what it stores and where it goes)
         // The player leaves a joined match ON PURPOSE (the selector's yes below, the Menu button and the footer's Menu link): the game tells the server (Leave: the seat is dropped at once, the others do
         // not wait for it) and lets go of the key, and the page navigates in the same breath. A closed tab and a reload do not come here: their seat is held and their key kept, which is how they come
@@ -2638,32 +2714,52 @@
         function antsLeaveMatch() {
             try { if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match(); } catch (e) { /* the game does not answer: the seat is held */ }
         }
+        // Give the running game the shape that the page has (the number is the shape's place in the selector). Before the game runs there is nothing to tell: it starts with the page's shape (the
+        // arguments below, and the postRun hook asks once more for a game that began with the shape before). -1 says that the game did not answer, 0 that it does not know the shape.
+        function antsSyncAspect() {
+            try {
+                if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_set_aspect) return Module._ants_set_aspect(ANTS_PAGE.shapeNumber(ANTS_ASPECT));
+            } catch (e) { /* the game does not answer: it keeps the shape it has */ }
+            return -1;
+        }
+        // Change the shape of the picture: the page's own state (the stage's shape in CSS, the pressed button, the arguments of a game that has not started, the address), the game's picture, and the
+        // box (which tells the game's window system, with a `resize`, the pixels of the new box: the game's canvas has exactly the shape of its picture, so no black bar of its own shows).
+        function antsSetAspect(value) {
+            var shape = ANTS_PAGE.parseAspect(value);
+            if (!shape || shape === ANTS_ASPECT) return;
+            ANTS_ASPECT = shape;
+            var at = ANTS_ARGS.indexOf('--aspect');
+            if (at !== -1) ANTS_ARGS[at + 1] = shape;
+            stageElement.setAttribute('data-aspect', shape);
+            document.querySelectorAll('.seg button[data-aspect]').forEach(function (b) {
+                b.setAttribute('aria-checked', b.getAttribute('data-aspect') === shape ? 'true' : 'false');
+            });
+            antsSyncAspect();
+            relayout(true);
+            try {
+                var url = new URL(window.location.href);
+                url.searchParams.set('aspect', shape);
+                url.search = url.search.replace('aspect=' + encodeURIComponent(shape), 'aspect=' + shape);       // (the colon needs no escape in a query)
+                window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+            } catch (e) { /* the address stays as it is: the browser remembers the choice */ }
+        }
         (function () {
             var remember = function (value) { try { window.localStorage.setItem(ANTS_ASPECT_KEY, value); } catch (e) { /* private window: not remembered */ } };
+            // "fills your screen": under the shape nearest to the computer's screen (the CSS shows it only where there is a mouse)
+            var fits = null;
+            try { fits = ANTS_PAGE.shapeForScreen(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
+            if (fits) {
+                document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {
+                    var tag = button.parentNode && button.parentNode.querySelector ? button.parentNode.querySelector('.fit-tag') : null;
+                    if (tag) tag.hidden = button.getAttribute('data-aspect') !== fits;
+                });
+                document.getElementById('view-bar').classList.add('has-fit-tag');
+            }
             document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {
                 button.addEventListener('click', function () {
                     var value = button.getAttribute('data-aspect');
-                    if (value === ANTS_ASPECT) { remember(value); return; }           // (the same picture: nothing to restart; the choice is remembered)
-                    // The game restarts to change its picture (it is made when the game starts). A browser that holds the key of its seat in the room (the match began: holdsThisSeat) takes a plain reload: nothing
-                    // is asked, the game is not told to leave (Leave drops the seat and lets go of the key, and the page would come back as a stranger in another match), the seat is held and the page takes it
-                    // again in the SAME match. Otherwise the restart loses something and asks first: a room that is still waiting (no key yet: a reload there is a new visit, and the seat that Leave frees at once
-                    // is the one that the address asks for) or a match that is being played here (the game says so: ants_match_running); yes leaves for good.
-                    var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
-                    var keyed = false;
-                    try { keyed = joined && typeof holdsThisSeat === 'function' && holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now()); } catch (e) { /* no storage: no key to rely on */ }
-                    var playing = false;
-                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (e) { /* the game does not answer: it is not running a match */ }
-                    var loses = !keyed && (joined || playing);
-                    if (loses && !window.confirm('Leave the match to change the picture?')) return;
-                    remember(value);
-                    var url;
-                    try {
-                        url = new URL(window.location.href);
-                        url.searchParams.set('aspect', value);
-                        url.search = url.search.replace('aspect=' + encodeURIComponent(value), 'aspect=' + value);       // (the colon needs no escape in a query)
-                    } catch (e) { return; }
-                    if (loses) antsLeaveMatch();                                      // (the player said yes: the seat is dropped now, not held for a page that is gone)
-                    window.location.assign(url.href);
+                    remember(value);                                                  // (also the same picture: the choice is remembered)
+                    antsSetAspect(value);
                 });
             });
         })();

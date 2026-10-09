@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **Change the shape of the picture while you play.** The buttons under the game (Classic 4:3, 16:10, 16:9, 21:9) switch at once: no reload, no "Leave the match?" question, and a joined match keeps its seat and its room. A wider or taller picture shows more of the map.
+- **Two new shapes:** 16:10 for laptops and 16:10 monitors, 21:9 for ultrawide monitors (`?aspect=16:10` and `?aspect=21:9` in the browser, `--aspect` on the desktop). A small "fills your screen" tag stands under the shape nearest to your computer's screen.
+- In 16:10 and 21:9 the setup screen, the room, the loading screen, the help and the results are for now the 16:9 page, centred with black around it; the match fills the whole picture.
+- The front page's own selector still has 16:9 and Classic 4:3.
+
+**Rules / network:** none: the simulation and the protocol are untouched (a switched player's state hash after every tick is the one of a match that was never switched).
+
+**Details:** [view and HUD](docs/VIEW_AND_HUD.md), [play in the browser](docs/PLAY_IN_BROWSER.md)
+
 ## v0.12.0 - 2026-10-08 - The server's lobby rooms (network protocol 16; no page uses them yet)
 
 **For players:**

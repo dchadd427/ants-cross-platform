@@ -2,16 +2,18 @@
 
 // The canvas (widescreen work, milestone M2): the picture that the window shows, and how it sits in the window.
 //
-// The game draws into SDL's LOGICAL canvas (SDL_RenderSetLogicalSize): a fixed size of its own, 960 x 540 (16:9, the default of a game that is started from the command line) or 640 x 480 (the original's, `--aspect 4:3`),
-// which SDL scales into the window by the largest scale that fits, centred, with bars where the shapes differ (nearest-neighbour filtering). The scale is a whole number when
+// The game draws into SDL's LOGICAL canvas (SDL_RenderSetLogicalSize): a size of its own that the picture's shape gives, 960 x 540 (16:9, the default of a game that is started from the command line), 960 x 600 (16:10, for
+// laptops and 16:10 monitors), 1260 x 540 (21:9, ultrawide monitors) or 640 x 480 (the original's, `--aspect 4:3`), which SDL scales into the window by the largest scale that fits, centred, with bars where the
+// shapes differ (nearest-neighbour filtering). The shape can be changed while a match runs (Application::set_aspect). The scale is a whole number when
 // the window is a multiple of the canvas (1920 x 1080 shows 960 x 540 at 2x, 3840 x 2160 at 4x) and fractional otherwise (2560 x 1440 at 2.667x, 1280 x 720 at 1.333x); a window of
 // another shape has bars (2880 x 1800 shows 960 x 540 at 3x with bars of 90 rows above and below). Everybody who asks for the same aspect sees exactly the same world area, so
-// no room has to cap it. Fitting the canvas to the shape of the monitor is a later option: a CanvasLayout is any size, not only these two.
+// no room has to cap it, and the wider shapes show more of the map, as 16:9 does against 4:3 (the map view is 442 x 440, 762 x 500, 762 x 560 and 1062 x 500). A CanvasLayout is any size, not only these four.
 //
 // This header is pure (no SDL). `CanvasLayout::fit` is SDL's own arithmetic for a logical size (SDL_render.c, UpdateLogicalSize, the letterbox policy), so that the program can
 // say where the picture is in the window without asking SDL (the screenshot, the window's first size) and the tests can compare it with SDL itself.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -20,11 +22,16 @@
 
 namespace ants::app {
 
-/// The shapes of picture that can be asked for (`--aspect`, the settings key `aspect`)
+/// The shapes of picture that can be asked for (`--aspect`, the settings key `aspect`, the page's selector). The canvas of each is 60 steps of its shape (960 x 540, 960 x 600, 1260 x 540) except the original's own.
 enum class Aspect : uint8_t {
     Classic4x3,     // the original's 640 x 480 (`--aspect 4:3`; the aspect of a config that is made by hand, as the tests do: the default of a game is kPlatformDefaultAspect, 16:9)
-    Wide16x9        // 960 x 540
+    Wide16x9,       // 960 x 540
+    Wide16x10,      // 960 x 600: the same width as 16:9 and 60 rows more, for a laptop or a 16:10 monitor
+    Ultra21x9       // 1260 x 540: the same height as 16:9 and 300 columns more, for an ultrawide monitor
 };
+
+/// Every shape, from the narrowest to the widest (the order of the page's selector)
+inline constexpr std::array<Aspect, 4> kAllAspects = {Aspect::Classic4x3, Aspect::Wide16x10, Aspect::Wide16x9, Aspect::Ultra21x9};
 
 /// The aspect of a game that is started from the command line when neither `--aspect` nor the settings say: 16:9 on a desktop (the owner's priority, 2026-10-02: "The default should be
 /// 16x9") and in the web build (milestone M5: the page's game box is 16:9; the page passes the shape it shows as `--aspect`, `?aspect=4:3` on its address asks for the classic one).
@@ -41,21 +48,46 @@ inline constexpr Aspect kPlatformDefaultAspect = kDesktopDefaultAspect;
 inline constexpr int32_t kWideCanvasWidth = 960;
 inline constexpr int32_t kWideCanvasHeight = 540;
 
-constexpr int32_t canvas_width_of(Aspect aspect) noexcept { return aspect == Aspect::Wide16x9 ? kWideCanvasWidth : ScreenLayout::kClassicWidth; }
-constexpr int32_t canvas_height_of(Aspect aspect) noexcept { return aspect == Aspect::Wide16x9 ? kWideCanvasHeight : ScreenLayout::kClassicHeight; }
-inline const char* aspect_name(Aspect aspect) noexcept { return aspect == Aspect::Wide16x9 ? "16:9" : "4:3"; }
+inline constexpr int32_t kLaptopCanvasHeight = 600;      // 16:10
+inline constexpr int32_t kUltrawideCanvasWidth = 1260;   // 21:9
 
-/// The text of `--aspect` and of the settings key: "16:9" or "4:3" and nothing else (no other shape exists yet). False with a message that says so for anything else.
+constexpr int32_t canvas_width_of(Aspect aspect) noexcept {
+    switch (aspect) {
+        case Aspect::Wide16x9:
+        case Aspect::Wide16x10: return kWideCanvasWidth;
+        case Aspect::Ultra21x9: return kUltrawideCanvasWidth;
+        case Aspect::Classic4x3: break;
+    }
+    return ScreenLayout::kClassicWidth;
+}
+constexpr int32_t canvas_height_of(Aspect aspect) noexcept {
+    switch (aspect) {
+        case Aspect::Wide16x9:
+        case Aspect::Ultra21x9: return kWideCanvasHeight;
+        case Aspect::Wide16x10: return kLaptopCanvasHeight;
+        case Aspect::Classic4x3: break;
+    }
+    return ScreenLayout::kClassicHeight;
+}
+inline const char* aspect_name(Aspect aspect) noexcept {
+    switch (aspect) {
+        case Aspect::Wide16x9: return "16:9";
+        case Aspect::Wide16x10: return "16:10";
+        case Aspect::Ultra21x9: return "21:9";
+        case Aspect::Classic4x3: break;
+    }
+    return "4:3";
+}
+
+/// The text of `--aspect`, of the settings key and of the page's `?aspect=`: "4:3", "16:10", "16:9" or "21:9" and nothing else. False with a message that says so for anything else.
 inline bool parse_aspect(const std::string& text, Aspect& out, std::string& why) {
-    if (text == "16:9") {
-        out = Aspect::Wide16x9;
-        return true;
+    for (const Aspect aspect : kAllAspects) {
+        if (text == aspect_name(aspect)) {
+            out = aspect;
+            return true;
+        }
     }
-    if (text == "4:3") {
-        out = Aspect::Classic4x3;
-        return true;
-    }
-    why = "\"" + text + "\": only 16:9 and 4:3 for now";
+    why = "\"" + text + "\": only 4:3, 16:10, 16:9 and 21:9";
     return false;
 }
 
@@ -82,6 +114,14 @@ struct CanvasLayout {
     constexpr bool operator==(const CanvasLayout& o) const noexcept { return width == o.width && height == o.height; }
     constexpr bool operator!=(const CanvasLayout& o) const noexcept { return !(*this == o); }
     constexpr LayoutRect rect() const noexcept { return LayoutRect{0, 0, width, height}; }
+
+    /// Where the PAGES stand: the setup screen and the room, the loading screen, the quick help, the results and the start menu are made for the canvases of 640 x 480 and of 960 x 540 and for no other
+    /// (setup_layout.hpp, page_layout.hpp, results_layout.hpp). A canvas of 960 x 540 or more that is not that size (16:10: 960 x 600, 21:9: 1260 x 540) shows the 960 x 540 page centred in it, with the
+    /// black of the canvas around it; the match screen is always the whole canvas. Every other canvas is its own page.
+    constexpr LayoutRect page() const noexcept {
+        const bool bigger = width >= kWideCanvasWidth && height >= kWideCanvasHeight && (width != kWideCanvasWidth || height != kWideCanvasHeight);
+        return bigger ? centred(kWideCanvasWidth, kWideCanvasHeight) : rect();
+    }
 
     /// Where a picture of w x h pixels sits when it is centred in the canvas (a 640 x 480 picture in a 960 x 540 canvas is at (160, 30): the match of a classic layout; every screen outside a match is the whole canvas)
     constexpr LayoutRect centred(int32_t w, int32_t h) const noexcept { return LayoutRect{(width - w) / 2, (height - h) / 2, w, h}; }

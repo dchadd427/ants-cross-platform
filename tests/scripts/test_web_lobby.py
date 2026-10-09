@@ -294,20 +294,21 @@ class TheGamePage(PageCase):
         self.assertIn("e.preventDefault()", block)
 
     def test_a_yes_leaves_for_good_through_the_games_export_and_nothing_else_does(self):
-        # (the review's M2: a player who leaves on purpose through the Menu button, the footer's link or the picture selector dropped nothing: the seat was held for the pause cap and the others waited;
-        # a closed tab and a reload must stay held, so only a confirmed click calls it)
+        # (the review's M2: a player who leaves on purpose through the Menu button or the footer's link dropped nothing: the seat was held for the pause cap and the others waited;
+        # a closed tab and a reload must stay held, so only a confirmed click calls it. The picture selector used to be a third place: it changes the picture inside the running game now,
+        # asks nothing and never leaves, so the seat and the room stay)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
         self.assertIn("else if ((joined || playing) && !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) antsLeaveMatch();", block)          # (a click that opens another tab leaves this one as it is)
-        self.assertEqual(len(re.findall(r"antsLeaveMatch\(\)", self.page)), 3)                                  # the function, the Menu handler, the selector's yes
+        self.assertEqual(len(re.findall(r"antsLeaveMatch\(\)", self.page)), 2)                                  # the function, the Menu handler: nothing else leaves
         selector = self.page[self.page.index("ANTS_SELECTOR_BEGIN"):self.page.index("// ANTS_SELECTOR_END")]
         self.assertIn("function antsLeaveMatch() {", selector)                                                    # (inside the block that node runs)
         self.assertIn("if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match();", selector)
-        # (the picture selector leaves only where a reload would lose something: a browser that holds the key of its seat in the room reloads, keeps the seat and comes back to the same match)
-        self.assertIn("var loses = !keyed && (joined || playing);", selector)
-        self.assertIn("keyed = joined && typeof holdsThisSeat === 'function' && holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now());", selector)
-        self.assertIn("if (loses) antsLeaveMatch();", selector)
-        self.assertLess(selector.index("window.confirm('Leave the match to change the picture?')"), selector.index("if (loses) antsLeaveMatch();"))
+        # (the picture selector changes the picture in place: it neither asks nor leaves nor reloads, in a joined match or any other)
+        switch = selector[selector.index("function antsSetAspect(value) {"):]
+        self.assertNotIn("antsLeaveMatch", switch)
+        self.assertNotIn("confirm", switch)
+        self.assertNotIn("location.assign", switch)
         self.assertEqual(len(re.findall(r"Module\._ants_leave_match\(\)", self.page)), 1)                         # (the one place that calls it: nothing on unload, pagehide or visibilitychange)
         app = read("src", "ants_app", "application.cpp")
         self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {', app)

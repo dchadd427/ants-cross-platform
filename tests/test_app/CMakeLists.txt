@@ -474,6 +474,40 @@ target_link_libraries(test_canvas_layout PRIVATE ants_test_paths)
 add_test(NAME test_canvas_layout COMMAND test_canvas_layout)
 set_tests_properties(test_canvas_layout PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# Live aspect switch: Application::set_aspect changes the shape of the picture while the game runs (4:3, 16:10, 16:9, 21:9): the layouts, the camera and the zoom, the pages, the simulation untouched
+add_executable(test_aspect_switch
+    test_aspect_switch.cpp
+)
+
+target_include_directories(test_aspect_switch PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_aspect_switch PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_aspect_switch PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_aspect_switch PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_aspect_switch PRIVATE ants_test_paths)
+
+add_test(NAME test_aspect_switch COMMAND test_aspect_switch)
+set_tests_properties(test_aspect_switch PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Wide match screen (M3 of the widescreen work): the anchoring model of the frame's 14 pieces, the cuts in the art, the composed picture, the HUD at 960 x 540, the view, the pages and dialogs, the picture per screen, the 16:9 default
 add_executable(test_wide_hud
     test_wide_hud.cpp
