@@ -98,6 +98,14 @@
         .note p { max-width: 62ch; color: #d7e5de; }
         .note b { font-weight: 500; color: #fff; }
 
+        /* ---- live now: the matches that are being played, above the older ones (the red is the one of the player's LIVE marks) ---- */
+        .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
+        .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
+        .entry .when .pill.lv { display: inline-block; }
+        .entry.liveentry { border-left: 6px solid #9d0d17; }
+        .livep { margin-bottom: 26px; }
+        .livep .note { padding-top: 0; }
+
         /* ---- footer: the emerald bar of the match screen, as at the foot of the front page ---- */
         .bar { margin: 24px 0 0; padding: 16px 30px 18px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); position: relative; z-index: 2; }
         .bar-in { max-width: 1280px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
@@ -134,14 +142,18 @@
 <div class="screen">
 <main class="wrap">
     <header class="mast">
-        <h1 class="sr">Ants (1998): watch replays</h1>
+        <h1 class="sr">Ants (1998): watch live and replays</h1>
         <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
-        <p><span class="tag">Watch a match again.</span><span class="sub" id="sub">Every match played here that ran 30 seconds or more is kept for 30 days, with the names the players typed.</span></p>
+        <p><span class="tag" id="tag">Watch a match, live or again.</span><span class="sub" id="sub">Matches that are being played show first. Every match that ran 30 seconds or more is kept for 30 days, with the names the players typed.</span></p>
         <span class="grow"></span>
         <a class="btn sm" href="/">Play a match</a>
     </header>
+    <section class="panel livep" id="live-panel" aria-labelledby="live-h" hidden>
+        <div class="head"><h2 id="live-h">Live now</h2><span class="count" id="live-count"></span></div>
+        <div id="live-body"></div>
+    </section>
     <section class="panel" aria-labelledby="list-h">
-        <div class="head"><h2 id="list-h">Matches to watch</h2><span class="count" id="list-count" aria-live="polite"></span></div>
+        <div class="head"><h2 id="list-h">Earlier matches</h2><span class="count" id="list-count" aria-live="polite"></span></div>
         <div id="list-body" aria-live="polite"></div>
     </section>
 </main>
@@ -168,7 +180,8 @@
     var R = window.AntsReplay;
     var PAGE_SIZE = 10;                       // matches shown at first, and each time "Show more" is pressed
     var $ = function (id) { return document.getElementById(id); };
-    var state = { current: [], older: [], shown: PAGE_SIZE, olderOpen: false, count: 0, capped: false };
+    var LIVE_EVERY = 10000;                   // the list of the matches that are being played is looked at again every 10 seconds while the page is in front
+    var state = { current: [], older: [], shown: PAGE_SIZE, olderOpen: false, count: 0, capped: false, live: null };       // live: null (not known, or no live matches on this server), else the matches that are being played
 
     function el(tag, className, text) {
         var node = document.createElement(tag);
@@ -185,11 +198,9 @@
     function pluralMatches(n) { return n + (n === 1 ? ' match' : ' matches'); }
 
     // ---- one match of the list ----
-    function entryNode(e, old) {
-        var now = new Date();
-        var li = el('li', old ? 'entry old' : 'entry');
+    function pictureNode(map) {                                  // the map's picture (a blank square for a map that is not one of the six)
         var tv = el('figure', 'tv');
-        var key = R.mapKey(e.map);
+        var key = R.mapKey(map);
         if (key) {
             var img = el('img');
             img.src = 'front/preview_' + key + '.png';
@@ -199,7 +210,12 @@
         } else {
             tv.appendChild(el('div', 'blank'));
         }
-        li.appendChild(tv);
+        return tv;
+    }
+    function entryNode(e, old) {
+        var now = new Date();
+        var li = el('li', old ? 'entry old' : 'entry');
+        li.appendChild(pictureNode(e.map));
         var length = R.lengthText(e.seconds);
         var info = el('div', 'info');
         info.appendChild(el('h3', '', R.mapTitle(e.map)));
@@ -237,6 +253,85 @@
         var ul = el('ul', old ? 'entries older-list' : 'entries');
         list.forEach(function (e) { ul.appendChild(entryNode(e, old)); });
         return ul;
+    }
+
+    // ---- a match that is being played (the box above the list) ----
+    function liveEntryNode(e) {
+        var length = R.lengthText(e.seconds);
+        var li = el('li', 'entry liveentry');
+        li.appendChild(pictureNode(e.map));
+        var info = el('div', 'info');
+        info.appendChild(el('h3', '', R.mapTitle(e.map)));
+        var when = el('p', 'when');
+        when.appendChild(el('span', 'pill lv', 'Live'));
+        when.appendChild(el('span', 'l', ' · ' + length + ' so far'));
+        info.appendChild(when);
+        li.appendChild(info);
+        var len = el('div', 'len');
+        len.appendChild(el('span', 'lab', 'So far'));
+        len.appendChild(el('b', '', length));
+        li.appendChild(len);
+        li.appendChild(R.chipsOf(document, e.players));
+        var acts = el('div', 'acts');
+        var watch = el('a', 'btn', 'Watch live');
+        watch.href = '/play.html?live=' + encodeURIComponent(e.id);          // (the id has the server's shape: R.liveEntriesOf let nothing else through)
+        acts.appendChild(watch);
+        li.appendChild(acts);
+        return li;
+    }
+    function renderLive() {
+        var panel = $('live-panel'), body = $('live-body'), count = $('live-count');
+        body.textContent = '';
+        if (state.live === null) { panel.hidden = true; count.textContent = ''; return; }
+        panel.hidden = false;
+        var n = state.live.length;
+        if (n === 0) {
+            count.textContent = '';
+            var note = el('div', 'note');
+            var p = el('p');
+            p.appendChild(el('b', '', 'No match is on right now.'));
+            p.appendChild(document.createTextNode(' Players’ matches show up here while they are played, and the computer players start one every hour.'));
+            note.appendChild(p);
+            body.appendChild(note);
+            return;
+        }
+        count.textContent = pluralMatches(n);
+        var ul = el('ul', 'entries');
+        state.live.forEach(function (e) { ul.appendChild(liveEntryNode(e)); });
+        body.appendChild(ul);
+        body.appendChild(el('p', 'legend', 'A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players.'));
+    }
+    // The title says what the page has: the matches that are being played and the kept ones, or (a server with no door for live matches, which answers 404: it keeps no replays, or it is an older one) the kept ones only
+    function intro(withLive) {
+        $('tag').textContent = withLive ? 'Watch a match, live or again.' : 'Watch a match again.';
+        $('sub').textContent = (withLive ? 'Matches that are being played show first. E' : 'E') + 'very match' + (withLive ? '' : ' played here') + ' that ran 30 seconds or more is kept for 30 days, with the names the players typed.';
+    }
+    function noLive() {
+        state.live = null;
+        intro(false);
+        renderLive();
+    }
+    var liveTimer = 0, liveRound = 0, liveStop = false;
+    function lookLive() {
+        var mine = ++liveRound;
+        clearTimeout(liveTimer);
+        liveTimer = 0;
+        var done = function () { if (mine === liveRound && !liveStop && !document.hidden) liveTimer = setTimeout(lookLive, LIVE_EVERY); };
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var cut = setTimeout(function () { if (controller) controller.abort(); }, 8000);
+        var request;
+        try { request = fetch('/live', { cache: 'no-store', credentials: 'omit', signal: controller ? controller.signal : undefined }); } catch (e) { clearTimeout(cut); done(); return; }
+        request.then(function (response) {
+            if (mine !== liveRound || liveStop) return;
+            if (response.status === 404) { noLive(); return; }          // (looked at again: the door may come back)
+            if (!response.ok) return;                                // (a feed that fails: the box keeps what it shows, or stays away, and the next look comes)
+            return response.json().then(function (data) {
+                if (mine !== liveRound || liveStop || !data || typeof data !== 'object' || !Array.isArray(data.live)) return;
+                state.live = R.liveEntriesOf(data);
+                intro(true);
+                renderLive();
+            });
+        }).catch(function () { /* the same: the next look comes */ }).then(function () { clearTimeout(cut); done(); });
     }
 
     // ---- the page ----
@@ -306,6 +401,10 @@
         body.appendChild(notice(['The list can’t be loaded right now.', 'Try again in a moment.'], 'Try again'));
     }
     function nothingKept() {
+        liveStop = true;                                         // (nothing is kept, so nothing is being played: no more looks, and no box)
+        liveRound++;
+        clearTimeout(liveTimer);
+        noLive();
         $('list-count').textContent = '';
         $('sub').textContent = '';
         var body = $('list-body');
@@ -344,6 +443,9 @@
     if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
     else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
     load();
+    // the matches that are being played: looked at now, then every 10 seconds while the page is in front (a hidden page asks nothing, and asks again as soon as it is shown)
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { liveRound++; clearTimeout(liveTimer); liveTimer = 0; } else if (!liveStop) lookLive(); });
+    if (typeof fetch === 'function' && !document.hidden) lookLive();
 })();
 </script>
 </body>

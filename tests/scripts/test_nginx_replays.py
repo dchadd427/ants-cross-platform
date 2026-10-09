@@ -235,7 +235,7 @@ class TheLocations(unittest.TestCase):
         # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so)
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         for page in ("lobby.html", "shell.html"):
-            self.assertIn("Online matches are recorded and kept for %s days. The recordings are public and show the players&rsquo; names." % days, read("web", page), page)
+            self.assertIn("Online matches are recorded and kept for %s days. Anybody can watch them, live or later, and they show the players&rsquo; names." % days, read("web", page), page)
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 
