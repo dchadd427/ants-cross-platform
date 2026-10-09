@@ -582,25 +582,29 @@ class TheImageAndTheCi(PageCase):
 
 
 class TheDocuments(unittest.TestCase):
-    def test_the_browser_page_and_the_notes_say_where_the_one_card_is_and_what_it_does(self):
+    def test_the_browser_page_and_the_notes_say_where_the_lobby_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "**one card for every game, New match**", "**You**", "**Sit here**", "**Friend**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "/four.html", "`--start-when`", "**Menu**",
-                       "`/stats`", "`web/front/`", "`tools/front_page_art/`"):
+        for needle in ("`/play.html?map=", "## The front page: a room that is ready when the page opens", "### Your room", "### START!", "### The notices", "### The old test room", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
+                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "**More ways to play**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
+                       "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The card**", "**Invitations**", "**The leader's game starts the match**", "`ants-match`", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
         readme = read("README.md")
         self.assertNotIn("web/four.html", readme + page)
-        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):         # (the pages that the card replaced)
-            self.assertNotIn(stale, readme + page + notes, stale)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card",                       # (the pages that the earlier card replaced)
+                      "one card for every game", "**Sit here**", "**Friend**", "**The card", "New match**", "Invitations**", "`ants-match`"):                                                              # (the earlier front page's card: the lobby replaced it)
+            self.assertNotIn(stale, readme + page, stale)
+        for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card"):
+            self.assertNotIn(stale, notes, stale)
 
     def test_the_browser_page_says_what_a_code_is_and_what_the_create_block_and_its_parameters_are(self):
         # protocol 15: a code is only a name (six characters, shown in two groups of three) and the room's choices are the create block that every link carries
         page = read("docs", "PLAY_IN_BROWSER.md")
         for needle in ("### The room's code and its create block", "(#the-rooms-code-and-its-create-block)", "is **only a name**", "`abcdefghjkmnpqrstuvwxyz23456789`", "`k7m 2xq`", "`k7m2xq`",
-                       "There is no such room on this server.", "**every link of a room that this page made carries the block, right after the code**", "**with none it is a room that was made some other way**",
-                       "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`&roomteams=0%2B1`"):
+                       "There is no such room on this server.", "a code that was made some other way", "A typed or pasted code ignores blanks and capital letters",
+                       "`&roomteams=A%2BB`", "`&roomleaderstart=1`", "`&platform=`", "`0%2B1`"):
             self.assertIn(needle, page, needle)
         table = page[page.index("| Parameter | Value | The game's argument |"):]
         table = table[:table.index("\n\n")]

@@ -6,8 +6,8 @@
 //   - the Room messages are built as bytes and read by web/front/lobby_net.js (the codec of the same protocol), so a table row is a message that a server can send;
 //   - every exported function of lobby_rules.js must be called by this check (a function that no table reaches is a failure);
 //   - the random runs use a fixed seed: the same rooms every time.
-// usage: node web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html [Original-Ants/Maps]     (exit 0: every check holds; every failure is printed; the folder of the level
-// files is found next to web/ when it is not given)
+// usage: node web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html [repository folder]     (exit 0: every check holds; every failure is printed; the level files of
+// Original-Ants/Maps, the pictures of web/front and include/ants_net/protocol.hpp are found in the repository folder, which is the one above web/ when it is not given)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -15,9 +15,11 @@ const path = require('path');
 const rulesPath = process.argv[2];
 const lobbyPath = process.argv[3];
 const shellPath = process.argv[4];
-if (!rulesPath || !lobbyPath || !shellPath) { console.log('usage: web_lobby_rules_check.js lobby_rules.js lobby.html shell.html [Original-Ants/Maps]'); process.exit(2); }
-const mapsDir = process.argv[5] || path.join(path.dirname(path.resolve(lobbyPath)), '..', 'Original-Ants', 'Maps');
-const frontDir = path.join(path.dirname(path.resolve(lobbyPath)), 'front');
+if (!rulesPath || !lobbyPath || !shellPath) { console.log('usage: web_lobby_rules_check.js lobby_rules.js lobby.html shell.html [repository folder]'); process.exit(2); }
+const repoDir = path.resolve(process.argv[5] || path.join(path.dirname(path.resolve(lobbyPath)), '..'));
+const mapsDir = path.join(repoDir, 'Original-Ants', 'Maps');
+const frontDir = path.join(repoDir, 'web', 'front');
+process.on('uncaughtException', (e) => { console.log('FAIL the check stopped on an error: ' + (e && e.stack || e)); process.exit(1); });
 
 let checks = 0;
 let failures = 0;
@@ -726,7 +728,7 @@ same('a context with nothing in it is the plain host screen', R.viewOf(model(S2)
 // 8. The sentences of the server (noticeKind) and every message strip of picture 15 (banner)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // the words of the C++ server, read from include/ants_net/protocol.hpp (the page matches what the server says, so the check holds it to the server's own text)
-const protocolPath = path.join(path.dirname(path.resolve(lobbyPath)), '..', 'include', 'ants_net', 'protocol.hpp');
+const protocolPath = path.join(repoDir, 'include', 'ants_net', 'protocol.hpp');
 const protocolText = fs.existsSync(protocolPath) ? fs.readFileSync(protocolPath, 'utf8') : '';
 const said = (name) => { const m = new RegExp(name + ' = "((?:[^"\\\\]|\\\\.)*)"').exec(protocolText); return m ? m[1] : null; };
 const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams') };

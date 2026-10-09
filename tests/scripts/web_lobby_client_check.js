@@ -4,6 +4,7 @@
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
 // usage: node web_lobby_client_check.js web/front/lobby_net.js     (exit 0: every check holds; failures are printed)
 'use strict';
+const fs = require('fs');
 const path = require('path');
 
 const modulePath = process.argv[2];
@@ -405,6 +406,109 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     check('(no tries)', w.sockets.length === 1);
     c.wake();
     check('(not even when the page wakes)', w.sockets.length === 1);
+}
+
+// ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
+// The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
+// with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
+// to) and to a Hello written out by hand here: type 1, protocol 16, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+
+{
+    const golden = {};
+    for (const raw of fs.readFileSync(path.join(__dirname, '..', 'data', 'lobby_messages.txt'), 'utf8').split('\n')) {
+        const parts = raw.trim().split(/\s+/);
+        if (parts[0] === 'hello' && parts.length === 3) golden[parts[1]] = parts[2];
+    }
+    check('the golden file has the three Hello lines of a page (new room, with a key, no block)', ['page-new-room', 'page-with-key', 'page-no-block'].every((n) => typeof golden[n] === 'string'));
+    const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
+    const byHand = (name, code, o) => {
+        o = o || {};
+        const w = [1, 16, 0];
+        str8(w, name);
+        w.push(0, 0, 255);
+        str8(w, code);
+        str8(w, '');
+        for (const b of (o.key || new Uint8Array(16))) w.push(b);
+        w.push(0, 0, 0, 0, o.platform || 0, 1);
+        if (o.map !== undefined) for (const b of block(o.map)) w.push(b);
+        return Uint8Array.from(w);
+    };
+    const hello = (extra) => { const w = world(); const c = client(w, extra); c.connect(); w.last().open(); return { w, c, hex: hex(w.last().sent[0]), length: w.last().sent[0].length }; };
+    const CREATE_SUFFIX = '0c54524541535552452e4c564c04ffff03';                       // the create block of the map TREASURE.LVL: 0c + the name + 04 ffff 03
+    const make = hello({});
+    same('without join the Hello carries the create block: the line of the C++ encoder (page-new-room)', make.hex, golden['page-new-room']);
+    same('... and the Hello written out by hand', make.hex, hex(byHand('Priya', 'k7m2xq', { map: 'TREASURE.LVL' })));
+    check('... which ends with the block of the map', make.hex.endsWith(CREATE_SUFFIX));
+    const join = hello({ join: true });
+    same('with join: true the Hello has no create block: it is the line of page-new-room without its block', join.hex, golden['page-new-room'].slice(0, golden['page-new-room'].length - CREATE_SUFFIX.length));
+    same('... and the Hello written out by hand, without a block', join.hex, hex(byHand('Priya', 'k7m2xq')));
+    same('... and the Hello that the codec writes for a page with no create block', join.hex, hex(N.encodeHello({ name: 'Priya', room: 'k7m2xq' })));
+    check('... it is 17 bytes shorter, the map\'s name (12 characters) and its four bytes more the length byte', join.length === make.length - 17 && make.length - join.length === block('TREASURE.LVL').length);
+    check('... the map that was given is not in it', join.hex.indexOf('54524541535552452e4c564c') < 0 && !join.hex.endsWith('03'));
+    same('join: false is no join: the block is there', hello({ join: false }).hex, make.hex);
+    same('no option is no join: the block is there', hello({ join: undefined }).hex, make.hex);
+    same('only true is a join (the library says === true): 1, "true" and {} are not, the block is there', [hello({ join: 1 }).hex, hello({ join: 'true' }).hex, hello({ join: {} }).hex], [make.hex, make.hex, make.hex]);
+    same('a join with a map that is none is the same Hello (the map is the block\'s, and there is no block)', hello({ join: true, map: 'tiny' }).hex, join.hex);
+    same('the name goes in a join Hello as in the other (printable ASCII, cut to 32)', hello({ join: true, name: 'José ' + 'x'.repeat(40) }).hex, hex(N.encodeHello({ name: 'Jos ' + 'x'.repeat(28), room: 'k7m2xq' })));
+    // the line of the golden file with the key and the platform of a browser on Linux: the block of an empty map is 00 04 ffff 03
+    const keyed = { name: 'Sam', code: 'abc234', key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux, map: '' };
+    same('with a key and a platform, without join: the line of the C++ encoder (page-with-key)', hello(keyed).hex, golden['page-with-key']);
+    same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
+    same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
+    same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
+    check('a Hello without a block has no key, no platform: zeros', /^0110000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+
+    {   // the way back of a page that joined: every Hello it sends has the key and no block
+        const w = world();
+        const c = client(w, { join: true });
+        c.connect();
+        w.last().open();
+        const key = seq(0x60);
+        w.last().receive(welcome(1, key, 0));
+        w.last().receive(room([[C, 'Priya'], [C, 'Priya2'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+        check('the Welcome of a page that joined says that its Hello made no room', events(c, 'welcome')[0].created === false && !c.isLeader() && c.status === 'online');
+        w.last().drop();
+        w.advance(500);
+        w.last().open();
+        same('the Hello of the way back has the key and still no block', hex(w.last().sent[0]), hex(byHand('Priya2', 'k7m2xq', { key: key })));
+        same('... (the page goes by the name that the room shows)', hex(w.last().sent[0]), hex(N.encodeHello({ name: 'Priya2', room: 'k7m2xq', key: key })));
+        w.last().drop();
+        w.advance(1000);
+        w.last().open();
+        same('and the next way back is the same', hex(w.last().sent[0]), hex(byHand('Priya2', 'k7m2xq', { key: key })));
+    }
+    {   // a code that nobody holds: NoSuchRoom, and nothing is made
+        const w = world();
+        const c = client(w, { join: true });
+        c.connect();
+        w.last().open();
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        check('NoSuchRoom to a join without a key is the answer: refused, with that reason, the socket closed', c.status === 'refused' && events(c, 'refused').length === 1 && events(c, 'refused')[0].reason === N.REJECT.NoSuchRoom && w.sockets.length === 1 && w.sockets[0].closed);
+        w.advance(100000);
+        check('... and the page does not try again by itself, nor make the room', w.sockets.length === 1 && w.sockets[0].sent.length === 1);
+    }
+    {   // the room that a joined page held is gone: asked again without the key, still without a block, so it is not made
+        const w = world();
+        const c = client(w, { join: true, key: seq(0x11) });
+        c.connect();
+        w.last().open();
+        same('a join with a key shows the key and has no block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq', { key: seq(0x11) })));
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        check('NoSuchRoom to a key: the room is gone, the key is forgotten, a new socket is opened', events(c, 'gone').length === 1 && c.key === null && w.sockets.length === 2 && w.sockets[0].closed);
+        w.last().open();
+        same('the Hello that asks again has no key and still no block (a joiner does not make the room that was gone)', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        check('the second NoSuchRoom is final', c.status === 'refused' && events(c, 'refused')[0].reason === N.REJECT.NoSuchRoom && w.sockets.length === 2);
+    }
+    {   // a page that does not join makes the room again with the block (as before)
+        const w = world();
+        const c = client(w, { key: seq(0x11) });
+        c.connect();
+        w.last().open();
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        w.last().open();
+        same('without join the Hello that asks again has the block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq', { map: 'TREASURE.LVL' })));
+    }
 }
 
 // ---- leaving on purpose -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

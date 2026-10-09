@@ -80,7 +80,7 @@ How network play works (a room on the local network, a server's room, bots): [`M
 | `--loopback` | none | off | With `--host`: accept only this machine (two copies on one computer). The room's announcement stays on this machine too. |
 | `--lan-port` | `N` | `4001` | The UDP port on which an open room announces itself to the local network. Both machines must use the same one. `--lan-list` listens on it too. |
 | `--no-lan` | none | off | Do not announce the room on the local network (guests then need the address). |
-| `--start-when` | `N`, 1 to 4 | off | The leader of a server's room presses START itself once N players are in it (also when the room's create block asked for a full room to wait for its leader). The web front page's card gives it to the game of a match, and a headless test client uses it. |
+| `--start-when` | `N`, 1 to 4 | off | The leader of a server's room presses START itself once N players are in it (also when the room's create block asked for a full room to wait for its leader). The web page's old test-room addresses (`&start=`) give it to the game of a match, and a headless test client uses it; the lobby does not (the server starts its match when every person's game is in). |
 | `--say` | `TEXT` | none | A test hook for headless clients: says the line once in the waiting room. |
 
 ### `--fill-bots`, `--start-when` and `--say` in detail
@@ -90,7 +90,7 @@ How network play works (a room on the local network, a server's room, bots): [`M
 - The start menu's Host panel sets it (a row for each seat after yours: "Red at START" and so on), and `--start-menu --fill-bots none,easy,none,hard` starts the panel's rows as it says. A player who joins through the menu fills nothing. The web page's `?fill=` gives it to the game of the room's leader (`web/shell.html`).
 - The setup screen's status line says what START will do, for example "Press START: the empty seats get Medium bots."
 - More: [`BOTS.md`](BOTS.md#running-bots) and [`NETWORK_PORT.md`](NETWORK_PORT.md#the-screens-and-the-applications-hooks).
-- `--start-when`: when this game leads a server's room (the first player who joined) it presses START itself once N players are in the room, and again every second until the match starts. 1 is for a leader with `--fill-bots`, who can start alone. The web front page's card gives it to the game of a match (1 + its Friend rows), and a headless test client uses it. Nobody needs it to play from the menus: the leader clicks START.
+- `--start-when`: when this game leads a server's room (the first player who joined) it presses START itself once N players are in the room, and again every second until the match starts. 1 is for a leader with `--fill-bots`, who can start alone. The old test-room addresses of the web front page give it to the game of a match (`&start=<people>`), and a headless test client uses it; the lobby does not, because the server starts its match when every person's game is in. Nobody needs it to play from the menus: the leader clicks START.
 - `--say`: the line is said as soon as two players are in the room. Everybody in a room can chat before the match. The lines go to the log on stderr (`Room chat: Name: text`), to the chat box of the 16:9 setup screen and, on the classic 640 x 480 screen, which has no box, to the status line for five seconds.
 - To say a line yourself press **T** or click the chat box. **Enter** sends it and **Esc** closes it. A held Enter never starts a room's match (the original acts on a held Enter: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.61), while the setup screen of a local game is the original's own and a held Enter still starts it. The keys, the 400 ms guard after the box closes and the box itself: [`NETWORK_PORT.md`](NETWORK_PORT.md#the-chat-box-of-the-169-setup-screen).
 
@@ -137,7 +137,7 @@ How network play works (a room on the local network, a server's room, bots): [`M
 
 ## Testing, headless and screenshots
 
-These options are for the tests and for screenshots. `--say` (in the Network table) is a test hook too, and so is `--start-when`, which the web front page's card also uses.
+These options are for the tests and for screenshots. `--say` (in the Network table) is a test hook too, and so is `--start-when`, which the old test-room addresses of the web front page also use.
 
 | Option | Argument | Default | Meaning |
 |---|---|---|---|

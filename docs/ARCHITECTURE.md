@@ -195,9 +195,9 @@ ants-cross-platform/
 ├── web/                                # The web build's page files
 │   ├── shell.html                      # The game page in the front page's look (WebAssembly shell: loading screen,
 │   │                                   # hidden-tab timer, sound unlock, the picture's box, touch guards)
-│   ├── lobby.html                      # The front page: one card (the seats, the invitations and START), a code
-│   │                                   # to join, rejoin a running match
-│   ├── front/                          # The front page's pictures (made by tools/front_page_art), its font Libre
+│   ├── lobby.html                      # The front page: the lobby, a room on the game server (four colours,
+│   │                                   # a code and link, the map, START), a code to join, rejoin a running match
+│   ├── front/                          # The front page's pictures and rules (lobby_rules.js, lobby_net.js; art made by tools/front_page_art), its font Libre
 │   │                                   # Franklin (SIL Open Font License, licence beside it) and classic.css, the
 │   │                                   # look that the other pages link
 │   ├── favicon.ico                     # Site icon

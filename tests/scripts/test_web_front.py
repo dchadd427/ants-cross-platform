@@ -249,9 +249,9 @@ class TheWayIntoTheImage(unittest.TestCase):
         self.assertIn('mkdir -p "${DIST_DIR}/front"', script)
         self.assertIn('cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"', script)
 
-    def test_the_ci_looks_for_a_picture_and_the_font_in_the_image(self):
+    def test_the_ci_looks_for_the_pictures_the_font_the_scripts_and_the_stylesheet_in_the_image(self):
         ci = read(".github", "workflows", "ci.yml")
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html watch\.html replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/classic\.css")
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html watch\.html replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/classic\.css")
 
     def test_git_does_not_ignore_the_pictures(self):
         ignore = read(".gitignore")

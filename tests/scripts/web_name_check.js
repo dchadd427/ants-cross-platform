@@ -968,6 +968,8 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
           shell.holdsThisSeat(new URL(want).search, gameArgs, { length: Object.keys(env.storage.data).length, key: (i) => Object.keys(env.storage.data)[i] || null, getItem: (k) => (k in env.storage.data ? env.storage.data[k] : null), removeItem() {} }, Date.now()) === true);
     check('the lobby does not leave the room at START: no Leave message, the socket stays open (the game\'s own Hello takes the seat over), and the tab forgets its room (Back makes a new one)', s.sent.every((b) => b[0] !== NET0.MSG.Leave) && !s.closed && env.session.data['ants.lobby'] === undefined);
     check('... the strip of the older match is gone: the page is on its way', env.$('rejoin').hidden);
+    (env.win.listeners.storage || []).forEach((fn) => fn({}));
+    check('... and a change of the storage from another tab does not bring the strip back for the entry that was just written (the page is on its way to that very match)', env.$('rejoin').hidden);
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 3 }));
     check('what the room says after that is not heard (the page has gone: one hand-over only)', env.assigned.length === 1);
@@ -1218,7 +1220,10 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     const step = runLobby('?map=small&players=4', {});
     step.type('name-step-input', bad);
     step.$('name-step-go').click();
-    check('the card of an address that hosts a match with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') makes no room and says why', !step.roomStarted() && step.$('name-step-msg').textContent.length > 8 && step.replaced.length === 0 && !step.$('name-step').hidden && step.frames().length === 0);
+    check('the card of an address that hosts a match with a bad name (' + JSON.stringify(bad).slice(0, 16) + ') makes no room and says why', !step.roomStarted() && step.$('name-step-msg').textContent.length > 8 && step.replaced.length === 0 && !step.$('name-step').hidden && step.frames().length === 0 && step.$('name-step-input').getAttribute('aria-invalid') === 'true');
+    step.type('name-step-input', 'Zed');
+    step.$('name-step-go').click();
+    check('... and the field says it is no longer wrong when the name is good (aria-invalid goes back to false and the message is empty)', step.roomStarted() && step.$('name-step-input').getAttribute('aria-invalid') === 'false' && step.$('name-step-msg').textContent === '');
     const link = runLobby('?room=k7m2xq', {});
     link.type('name-step-input', bad);
     link.$('name-step-go').click();

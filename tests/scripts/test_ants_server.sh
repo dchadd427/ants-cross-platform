@@ -461,7 +461,7 @@ for p in $PLAN_PIDS; do kill "$p" 2> /dev/null; done
 for p in $PLAN_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" > /dev/null
 
-# the front page's one card, START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
+# the links of the earlier front page's one card (and of today's old test-room addresses), START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
 # for You, a Friend and Nobody) and --start-when 1. A room for four started by its leader alone seats the bots at the seats 0 and 1 (a bot at Green too), the leader holds seat 2, seat 3 stays empty
 CARD="E2E-CARD-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$CARD\",\"seed\":19}" "$CTL/rooms"

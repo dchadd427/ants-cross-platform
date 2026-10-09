@@ -3,7 +3,7 @@
 
 usage: web_routes_check.py --web http://127.0.0.1:19980/
 
-The front page and the game page share the address "/": the owner made the Play online page the front page (one card for every game), and every address that the game
+The front page and the game page share the address "/": the owner made the Play online page the front page (the lobby now), and every address that the game
 page ever had keeps opening it. The rules (docker/nginx.conf):
   /                                     the lobby (lobby.html), unless the query has join=<something> (a match on the game server: the games of the lobby's links and of every link shared before)
                                         or embed=1 (a frame of the lobby): those open the game page (index.html), as "/" always did

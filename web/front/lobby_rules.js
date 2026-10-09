@@ -67,7 +67,11 @@
     var CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
     function makeCode(values) {
         var out = '';
-        for (var i = 0; i < 6; i++) out += CODE_CHARS.charAt(Math.floor(Number(values[i])) % CODE_CHARS.length);
+        var n = CODE_CHARS.length;
+        for (var i = 0; i < 6; i++) {
+            var v = Math.floor(Number(values[i]));
+            out += CODE_CHARS.charAt(isFinite(v) ? ((v % n) + n) % n : 0);        // (a number that is negative, or no number, still gives a symbol)
+        }
         return out;
     }
     function codeText(code) {

@@ -333,6 +333,9 @@
     @media (max-width: 760px) { #grid { grid-template-columns: minmax(0, 1fr); } }
     @media (max-width: 700px) { .room-top { flex-direction: column; } #sync { width: calc(100% - 36px); } #grid { padding: 0 18px; } .frames-note { padding: 0 18px; } }
 
+    /* a long room code or name in a strip never runs over the edge of a phone */
+    #rejoin-note, #banner-text { min-width: 0; overflow-wrap: anywhere; }
+
     </style>
 </head>
 <body>
@@ -734,7 +737,7 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // REJOINKEY_END
 
-        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above and the block LOBBY, whose codeText the words use)
+        // REJOIN_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block, after the one above, with the codeText of front/lobby_rules.js)
         // THE WAY BACK to a match that is still running (the Rejoin strip at the top of the front page): where the keys are looked for, what the button says and where it goes.
         // This site's game server as the game page joins it (web/shell.html, ANTS_PAGE.joinArguments: the scheme of the page, its host, the door /ws): what an entry's "s" says when the game page wrote it
         function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }
