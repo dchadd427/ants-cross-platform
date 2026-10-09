@@ -221,6 +221,18 @@ run_worker_bot_suite() {
     fi
 }
 
+# The players' maps (Community-Maps/): every one loads, plays every roster it can host and is deterministic (the sweep's own verdict), and every one passes the rule that took it in
+# (tools/community_maps.py verify reads the sweep's report; docs/TESTING.md). Under ASan + UBSan (unoptimised) a play of 100 ticks is enough to meet the memory the sweep touches.
+run_community_maps_suite() {
+    local report="$BUILD_DIR/community_sweep.json" log="$BUILD_DIR/community_sweep.log" ticks=600
+    [ "$RUN_ASAN" -eq 1 ] && ticks=100
+    if ! "./$BUILD_DIR/map_sweep" Community-Maps --ticks "$ticks" --jobs 2 --out "$report" > "$log" 2>&1; then
+        tail -40 "$log"
+        return 1
+    fi
+    python3 tools/community_maps.py verify Community-Maps "$report"
+}
+
 define_suites() {
     # 1. asset decoders
     suite "1"      assets 1 "test_assets"                "Native Asset Decoder Tests (test_assets)"                  "ASSET DECODER SUITES (ants_assets)"                                                '"./$BUILD_DIR/tests/test_assets/test_assets"'
@@ -252,6 +264,7 @@ define_suites() {
     suite "2.16"   sim    1 "test_lan"                   "LAN Discovery (test_lan)"                                  "LAN DISCOVERY SUITE (room announcements, browser, datagram codec)"                 '"./$BUILD_DIR/tests/test_net/test_lan"'
     suite "2.17"   sim    1 "test_ws"                    "WebSocket Transport (test_ws)"                             "WEBSOCKET TRANSPORT SUITE (RFC 6455 codec, handshake, real-socket echo)"           '"./$BUILD_DIR/tests/test_net/test_ws"'
     suite "2.18"   sim    0 "map_sweep"                  "Map Sweep (map_sweep --selftest)"                          "MAP SWEEP SELF-TEST (six shipped maps: loads, determinism, faults)"                '"./$BUILD_DIR/map_sweep" --selftest' "cost=9"
+    suite "2.18.1" sim    0 "map_sweep"                  "Community Maps (map_sweep over Community-Maps)"            "COMMUNITY MAPS (the players' maps: every one loads, plays and is deterministic, and passes the rule that took it in)" 'run_community_maps_suite' "cost=40"
     suite "2.19"   sim    0 "test_server"                "Dedicated Server (test_server)"                            "DEDICATED SERVER SUITE (map store, rooms, the door, control calls, real sockets)"  'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_server"' "cost=29"
     suite "2.19.1" sim    0 "test_rejoin"                "Way Back of a NetGame (test_rejoin)"                       "WAY BACK SUITE (a NetGame comes back to its match by itself: real NetGames over loopback sockets against a real room manager)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_rejoin"' "cost=12"
     suite "2.19.2" sim    1 "test_replay_store"          "Replay Store (test_replay_store)"                          "REPLAY STORE SUITE (the matches that the server keeps: file names, the 30 days, the size limit, the free space, a folder with other things in it)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_server/test_replay_store"' 'cost=2'

@@ -201,7 +201,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     def test_the_other_suites_of_the_runner_are_steps_of_the_linux_and_macos_jobs(self):
         for job in ("linux", "macos"):
             block = "\n".join(job_block(job))
-            for needle in ("build/map_sweep --selftest", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
+            for needle in ("build/map_sweep --selftest", "build/map_sweep Community-Maps --ticks 600", "python3 tools/community_maps.py verify Community-Maps", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
                            "tests/scripts/test_ants_server.sh --list-parts", "tests/scripts/test_ants_server.sh --part", "python3 tools/check_version_consistency.py",
                            "python3 tests/scripts/run_python_tests.py", "ctest --test-dir build"):
                 self.assertIn(needle, block, "%s: no step runs `%s`" % (job, needle))
@@ -214,6 +214,8 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("python3 tools/check_version_consistency.py", self.runner)
         self.assertIn("test_start_game.sh", self.runner)
         self.assertIn("map_sweep\" --selftest", self.runner)
+        self.assertIn("map_sweep\" Community-Maps", self.runner)
+        self.assertIn("python3 tools/community_maps.py verify Community-Maps", self.runner)
         self.assertIn("bot_arena\" --selftest", self.runner)
         self.assertIn("replay_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)

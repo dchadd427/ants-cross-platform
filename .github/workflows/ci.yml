@@ -91,6 +91,8 @@ jobs:
         run: |
           status=0
           build/map_sweep --selftest || status=1
+          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { tail -40 build/community_sweep.log; status=1; }
+          python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1
           exit $status
@@ -197,6 +199,8 @@ jobs:
         run: |
           status=0
           build/map_sweep --selftest || status=1
+          build/map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json > build/community_sweep.log 2>&1 || { tail -40 build/community_sweep.log; status=1; }
+          python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1
           exit $status
