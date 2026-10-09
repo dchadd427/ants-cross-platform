@@ -2,8 +2,8 @@
 """The bot arena of the stack (docker/arena_loop.sh, the stage `arena` of Dockerfile.server, the service ants-arena of docker-compose.stack.yml; docs/BOTS.md "On the game server").
 
 The script is run with a stand-in for bot_arena that only writes down its arguments (no build is needed), so the choices of the loop are checked: a match of two to four standard
-bots on one of the six maps, the same seed giving the same match, the folder and the maps folder it passes, the exit code that ONCE returns, the clamped interval, and a stop on
-SIGTERM that does not wait for the end of the pause. The Dockerfile, the stack file and the CI are read as text: the server stays the last stage of the Dockerfile (a build without
+bots on two to four of the four seats and one of the six maps, every map, seat and level coming up (no colour is always in the match or always gets the Hard bot), the same seed
+giving the same match, the folder and the maps folder it passes, the exit code that ONCE returns, the clamped interval, and a stop on SIGTERM that does not wait for the end of the pause. The Dockerfile, the stack file and the CI are read as text: the server stays the last stage of the Dockerfile (a build without
 --target must make the server), the arena has no network and the security options of the server, and the CI builds the stage and plays a match with it.
 """
 import os
@@ -57,6 +57,18 @@ class Loop(unittest.TestCase):
             runs = [r for r in f.read().split("--\n") if r]
         return runs[-1].split("\n")[:-1]
 
+    def many(self, seeds):
+        """The arguments of one match for each seed: [(map, [(seat, level), ...]), ...]."""
+        matches = []
+        for seed in seeds:
+            done = self.once(seed)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            args = self.last_args()
+            seats = args[6:-3]
+            self.assertEqual(seats[0::2], ["--seat"] * (len(seats) // 2))
+            matches.append((args[3], [tuple(spec.split("=standard:")) for spec in seats[1::2]]))
+        return matches
+
     def test_the_script_is_executable_and_valid_bash(self):
         self.assertTrue(os.stat(SCRIPT).st_mode & stat.S_IXUSR, "docker/arena_loop.sh must be executable (the image runs it as its entrypoint)")
         self.assertEqual(subprocess.run(["bash", "-n", SCRIPT]).returncode, 0)
@@ -77,14 +89,38 @@ class Loop(unittest.TestCase):
             seats = args[6:-3]
             self.assertEqual(seats[0::2], ["--seat"] * (len(seats) // 2))
             self.assertIn(len(seats) // 2, (2, 3, 4))
-            for i, spec in enumerate(seats[1::2]):
-                self.assertRegex(spec, r"^%d=standard:(medium|hard)$" % i)
+            numbers = []
+            for spec in seats[1::2]:
+                self.assertRegex(spec, r"^[0-3]=standard:(medium|hard)$")
+                numbers.append(int(spec[0]))
+            self.assertEqual(numbers, sorted(set(numbers)), "each seat once, in the order of the seats")
             seen_maps.add(args[3])
             seen_seats.add(len(seats) // 2)
             self.assertIn("match: --map " + args[3] + " --seeds " + args[5], done.stdout)         # (the log says how to play it again)
         # (which maps and how many seats come up depends on the random numbers of the bash that runs the script: only that there is variety is claimed)
         self.assertGreaterEqual(len(seen_maps), 3)
         self.assertGreaterEqual(len(seen_seats), 2)
+
+    def test_no_colour_is_always_in_the_match_or_always_gets_the_hard_bot(self):
+        # (120 fixed seeds; each claim fails with a chance far below one in a billion if the choices are fair, so what the bash of the machine draws does not matter)
+        matches = self.many(range(1, 121))
+        levels = {seat: set() for seat in "0123"}
+        absent = {seat: 0 for seat in "0123"}
+        for _, seats in matches:
+            for seat, level in seats:
+                levels[seat].add(level)
+            for seat in "0123":
+                if seat not in [s for s, _ in seats]:
+                    absent[seat] += 1
+        for seat in "0123":
+            self.assertEqual(levels[seat], {"medium", "hard"}, "seat %s gets both levels" % seat)
+            self.assertGreater(absent[seat], 0, "seat %s is left out of some matches (Green too)" % seat)
+            self.assertLess(absent[seat], len(matches), "seat %s plays in some matches" % seat)
+        self.assertEqual({len(seats) for _, seats in matches}, {2, 3, 4})
+        self.assertEqual({m for m, _ in matches}, MAPS)
+        pairs = {tuple(s for s, _ in seats) for _, seats in matches if len(seats) == 2}
+        self.assertGreaterEqual(len(pairs), 5, "the two bots of a small match sit on many different pairs of seats, not always Green and Red: %s" % sorted(pairs))
+        self.assertGreaterEqual(len({tuple(level for _, level in seats) for _, seats in matches if len(seats) == 2}), 4, "all four mixes of levels come up for two bots")
 
     def test_the_same_seed_is_the_same_match_and_another_seed_another(self):
         self.once(7)
@@ -132,7 +168,7 @@ class Loop(unittest.TestCase):
     def test_the_loop_plays_at_once_then_waits_and_stops_on_sigterm(self):
         proc = self.loop(ANTS_ARENA_EVERY_MIN="60")
         out = self.stop(proc)
-        self.assertIn("starting: a match every 60 minutes into /out/replays", out)
+        self.assertIn("starting: a match every 60 minutes into /out/replays (random choices from seed 1)", out)
         self.assertIn("match done", out)
         with open(self.record) as f:
             self.assertEqual(f.read().count("--\n"), 1)                      # (one match, the next one in an hour)

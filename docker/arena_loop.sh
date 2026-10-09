@@ -8,7 +8,8 @@
 #   ANTS_ARENA_MAPS_DIR    where the maps are (default /maps)
 #   ANTS_ARENA_BIN         the arena program (default /usr/local/bin/bot_arena)
 #   ANTS_ARENA_ONCE=1      play one match and exit with the program's exit code (the check of the CI, or a cron job on a host)
-#   ANTS_ARENA_SEED=N      the random choices (map, number of bots, levels, the match seed) come from N, so that the same N plays the same match; not set: from the clock
+#   ANTS_ARENA_SEED=N      the random choices (map, number of bots, the seats they sit on, levels, the match seed) come from N, so that the same N plays the same matches; not set: from the
+#                          clock (the start line of the log says which N that was, so that a whole run can be played again)
 #
 # Every match is logged with its map, seats and seed: the same arguments played again give the same match bit for bit (bot_arena --map MAP --seeds SEED --seat ...).
 # The arena's own store deletes nothing; the game server's store purges its folder (ANTS_REPLAY_DAYS, ANTS_REPLAY_MAX_MB, the oldest first), these files with the others.
@@ -31,24 +32,30 @@ if (( EVERY < 5 )); then log "ANTS_ARENA_EVERY_MIN=$EVERY is less than 5: using 
 if (( EVERY > 1440 )); then log "ANTS_ARENA_EVERY_MIN=$EVERY is more than 1440: using 1440"; EVERY=1440; fi
 
 case ${ANTS_ARENA_SEED:-} in
-    '') RANDOM=$(( $(date +%s) & 32767 )) ;;
-    *[!0-9]*|??????????*) log "ANTS_ARENA_SEED='${ANTS_ARENA_SEED}' is not a whole number of nine digits or less: taking the clock"; RANDOM=$(( $(date +%s) & 32767 )) ;;
-    *) RANDOM=$((10#${ANTS_ARENA_SEED} & 32767)) ;;
+    '') STREAM=$(( $(date +%s) & 32767 )) ;;
+    *[!0-9]*|??????????*) log "ANTS_ARENA_SEED='${ANTS_ARENA_SEED}' is not a whole number of nine digits or less: taking the clock"; STREAM=$(( $(date +%s) & 32767 )) ;;
+    *) STREAM=$((10#${ANTS_ARENA_SEED} & 32767)) ;;
 esac
+RANDOM=$STREAM
 
-MAPS=(TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS)       # the six maps of the original game
+MAPS=(TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS)       # the six maps of the original game (each has four hills: any seat can play on any of them)
 LEVELS=(medium hard)                                     # (a match of two to four standard bots; two easy bots do hardly anything worth watching)
 
-# One match: a map, two to four bots on seats 0 to 3, a seed. Returns the program's exit code.
+# One match: a map, two to four bots on seats chosen from 0 to 3 (green, red, blue, black), a level for each, a seed. Returns the program's exit code.
+# Every choice is uniform and independent of the others: Green is not always in the match, and no seat is more likely than another to get a Hard bot.
 play_one() {
-    local map seats seed i level code
+    local map count need seat seed level code
     local -a args=()
     map=${MAPS[RANDOM % ${#MAPS[@]}]}
-    seats=$((2 + RANDOM % 3))
+    count=$((2 + RANDOM % 3))
     seed=$(( ((RANDOM << 15) | RANDOM) + 1 ))
-    for ((i = 0; i < seats; i++)); do
-        level=${LEVELS[RANDOM % ${#LEVELS[@]}]}
-        args+=(--seat "$i=standard:$level")
+    need=$count
+    for ((seat = 0; seat < 4; seat++)); do               # (a seat is taken with the chance need / seats left: every set of `count` seats is as likely as any other)
+        if (( RANDOM % (4 - seat) < need )); then
+            level=${LEVELS[RANDOM % ${#LEVELS[@]}]}
+            args+=(--seat "$seat=standard:$level")
+            need=$((need - 1))
+        fi
     done
     log "match: --map $map --seeds $seed ${args[*]}"
     "$BIN" --maps-dir "$MAPS_DIR" --map "$map" --seeds "$seed" "${args[@]}" --save-replays "$DIR" --quiet
@@ -65,7 +72,7 @@ fi
 stop=0
 sleeper=0
 trap 'stop=1; [ "$sleeper" -gt 0 ] && kill "$sleeper" 2>/dev/null' TERM INT
-log "starting: a match every $EVERY minutes into $DIR"
+log "starting: a match every $EVERY minutes into $DIR (random choices from seed $STREAM)"
 while (( stop == 0 )); do
     play_one
     (( stop )) && break
