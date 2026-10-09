@@ -10,11 +10,13 @@
 #include "ants_net/attendance.hpp"
 #include "ants_net/turnlog.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_test_paths.hpp"
 
 #include <algorithm>
 #include <bitset>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -11092,6 +11094,195 @@ void run_protocol16_tests() {
             RoomMsg other = room;
             other.slots[1].name += "x";
             ASSERT_TRUE(seating_hash(other) != seating_hash(room));
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.111 Protocol 16, The Lobby Page's Messages: tests/data/lobby_messages.txt Holds Byte For Byte What The Encoders Write For What A Lobby Page Sends (The Hello, The Colour Move, The Plan, The Name, The Removal, START) And Hears (Welcome, Reject, Room, Chat, Ping); Each Line Is Made From Its Fields, Decodes And Encodes Again To The Same Bytes, And A Room's Guard Is Its seating_hash (The Page's Codec Is Held To The Same File By tests/scripts/web_lobby_net_check.js)") {
+        struct Sample {
+            std::string kind;
+            std::string name;
+            std::vector<uint8_t> bytes;
+        };
+        std::vector<Sample> samples;
+        const auto add = [&samples](const char* kind, const char* name, std::vector<uint8_t> bytes) { samples.push_back(Sample{kind, name, std::move(bytes)}); };
+        const auto key_of = [](uint8_t first) {
+            SeatKey k{};
+            for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(first + i);
+            return k;
+        };
+        const auto seat = [](SlotState st, const char* name, uint16_t rtt, uint8_t platform) {
+            RoomMsg::Slot s;
+            s.state = st;
+            s.name = name;
+            s.rtt_ms = rtt;
+            s.platform = platform;
+            return s;
+        };
+        const uint8_t lobby_block = kCreateLeaderStarts | kCreateLobby;
+        {   // what a page says first: its Hello (client kind 1) with the lobby block, with and without a key, with a platform, and without any block
+            HelloMsg h;
+            h.name = "Priya"; h.room = "k7m2xq"; h.client_kind = kClientPage; h.create = CreateBlock{"TREASURE.LVL", 4, kNoTeam, kNoTeam, lobby_block};
+            add("hello", "page-new-room", encode(h));
+            HelloMsg k;
+            k.name = "Sam"; k.room = "abc234"; k.key = key_of(1); k.client_kind = kClientPage; k.platform = kPlatformBrowser | kOsLinux; k.create = CreateBlock{"", 4, kNoTeam, kNoTeam, lobby_block};
+            add("hello", "page-with-key", encode(k));
+            HelloMsg n;
+            n.room = "xx"; n.client_kind = kClientPage;
+            add("hello", "page-no-block", encode(n));
+            HelloMsg g;
+            g.name = "Bob"; g.room = "p_q-9"; g.client_kind = kClientGame;
+            add("hello", "game-joins", encode(g));
+        }
+        add("leave", "leave", encode_leave());
+        add("pong", "pong", encode_pong(PingMsg{0x01020304u, 0x0A0B0C0Du}));
+        add("ping", "ping", encode_ping(PingMsg{0xFFFFFFFFu, 7u}));
+        add("seatmove", "move-1-to-3", encode(SeatMoveMsg{1, 3, 0xDEADBEEFu}));
+        add("seatmove", "move-3-to-0", encode(SeatMoveMsg{3, 0, 1u}));
+        {
+            PlanMsg a;
+            a.map_name = "ISLANDS.LVL"; a.plan = {PlanKind::Open, PlanKind::Easy, PlanKind::Hard, PlanKind::Nobody};
+            add("plan", "plan-ffa", encode(a));
+            PlanMsg b;
+            b.plan = {PlanKind::Open, PlanKind::Medium, PlanKind::Open, PlanKind::Medium}; b.team_a = 0; b.team_b = 1;
+            add("plan", "plan-teams-keep-map", encode(b));
+            PlanMsg c;
+            c.map_name = "TREASURE.LVL"; c.plan = {PlanKind::Nobody, PlanKind::Nobody, PlanKind::Open, PlanKind::Open}; c.team_a = 2; c.team_b = 3;
+            add("plan", "plan-teams-2-3", encode(c));
+        }
+        add("name", "name-plain", encode(NameMsg{"Priya"}));
+        add("name", "name-32-chars-with-spaces", encode(NameMsg{"Sam the Great, 3rd of his name!!"}));
+        add("name", "name-one-char", encode(NameMsg{"Z"}));
+        add("remove", "remove-2", encode(RemoveMsg{2, 1u}));
+        add("remove", "remove-0", encode(RemoveMsg{0, 0xFFFFFFFFu}));
+        {
+            StartRequestMsg a;
+            a.fill = {FillLevel::None, FillLevel::Easy, FillLevel::Medium, FillLevel::Hard}; a.team_a = 0; a.team_b = 1;
+            add("startrequest", "start-teams", encode(a));
+            add("startrequest", "start-ffa-nobody", encode(StartRequestMsg{}));
+        }
+        add("chat", "chat-plain", encode(ChatMsg{0, false, "hello there"}));
+        {   // what a page hears
+            WelcomeMsg created;
+            created.player = 0; created.players = 4; created.key = key_of(0x11); created.flags = kWelcomeCreated;
+            add("welcome", "welcome-created", encode(created));
+            WelcomeMsg joined;
+            joined.player = 2; joined.players = 4; joined.key = key_of(0xA0);
+            add("welcome", "welcome-joined", encode(joined));
+            WelcomeMsg back;
+            back.player = 3; back.players = 4; back.key = key_of(0x40); back.flags = kWelcomeRejoin;
+            add("welcome", "welcome-rejoin", encode(back));
+        }
+        {
+            const char* const reasons[] = {"reject-full", "reject-version", "reject-match-running", "reject-kicked", "reject-bad-request", "reject-no-such-room", "reject-dropped", "reject-rejoin-failed", "reject-superseded"};
+            for (int r = 1; r <= 9; ++r) add("reject", reasons[r - 1], encode(RejectMsg{static_cast<RejectReason>(r)}));
+        }
+        std::vector<std::pair<std::string, RoomMsg>> rooms;
+        {
+            RoomMsg m;
+            m.slots[0] = seat(SlotState::Client, "Priya", 12, 0); m.slots[1] = seat(SlotState::Client, "Sam", 40, kPlatformBrowser | kOsMacos); m.slots[2] = seat(SlotState::Bot, "Bot (Medium)", 0, 0); m.slots[3] = seat(SlotState::Empty, "", kRttUnknown, 0);
+            m.map_name = "TREASURE.LVL"; m.you = 1; m.leader = 0; m.flags = kRoomLeaderStarts | kRoomLobby; m.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Medium, PlanKind::Open};
+            rooms.emplace_back("room-lobby-waiting", m);
+            RoomMsg s;
+            s.slots[0] = seat(SlotState::Client, "Priya", 12, 0); s.slots[1] = seat(SlotState::Client, "Sam", 40, 0); s.slots[2] = seat(SlotState::Client, "Juniper", kRttUnknown, 0); s.slots[3] = seat(SlotState::Bot, "Bot (Hard)", 0, 0);
+            s.map_name = "ISLANDS.LVL"; s.you = 2; s.leader = 1; s.team_a = 0; s.team_b = 2; s.flags = kRoomLeaderStarts | kRoomLobby | kRoomStarting; s.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Open, PlanKind::Hard}; s.in_game = 0x05;
+            rooms.emplace_back("room-lobby-starting", s);
+            RoomMsg a;
+            a.slots[0] = seat(SlotState::Client, "Priya", 12, 0); a.slots[1] = seat(SlotState::Empty, "", kRttUnknown, 0); a.slots[2] = seat(SlotState::Empty, "", kRttUnknown, 0); a.slots[3] = seat(SlotState::Empty, "", kRttUnknown, 0);
+            a.you = 0; a.leader = 0; a.flags = kRoomLeaderStarts | kRoomLobby; a.plan = {PlanKind::Open, PlanKind::Nobody, PlanKind::Easy, PlanKind::Open};
+            rooms.emplace_back("room-lobby-alone-no-map", a);
+            RoomMsg p;
+            p.slots[0] = seat(SlotState::Client, "A", kRttUnknown, 0); p.slots[1] = seat(SlotState::Client, "B", 5, 0); p.slots[2] = seat(SlotState::Client, "C", 6, 0); p.slots[3] = seat(SlotState::Client, "D", 7, 0);
+            p.map_name = "SMALL.LVL"; p.you = 255; p.leader = kNoLeader; p.team_a = 0; p.team_b = 1;
+            rooms.emplace_back("room-plain-not-a-lobby", p);
+        }
+        for (const auto& r : rooms) add("room", r.first.c_str(), encode(r.second));
+        add("chat", "chat-notice-from-room", encode(ChatMsg{kRoomSender, false, "Priya's game did not come in time."}));
+        add("chat", "chat-notice-fits", encode(ChatMsg{kRoomSender, false, std::string(kNoticeStartsFailed)}));
+        add("other", "begin", encode_begin());
+        add("ping", "ping-from-server", encode_ping(PingMsg{12345u, 99999u}));
+
+        const auto hex = [](const std::vector<uint8_t>& bytes) {
+            static const char* const digits = "0123456789abcdef";
+            std::string s;
+            for (const uint8_t b : bytes) {
+                s.push_back(digits[b >> 4]);
+                s.push_back(digits[b & 15]);
+            }
+            return s;
+        };
+        if (std::getenv("ANTS_WRITE_LOBBY_MESSAGES") != nullptr) {      // the file again after a layout changed: redirect this output to tests/data/lobby_messages.txt (the header comment is kept by hand)
+            std::cout << "\n";
+            for (const Sample& s : samples) std::cout << s.kind << " " << s.name << " " << hex(s.bytes) << "\n";
+            for (const auto& r : rooms) {
+                char buf[16];
+                std::snprintf(buf, sizeof buf, "%08x", static_cast<unsigned>(seating_hash(r.second)));
+                std::cout << "hash " << r.first << " " << buf << "\n";
+            }
+            return;
+        }
+        // the file, line by line: <kind> <name> <hex>, and `hash <room> <8 hex digits>`
+        std::map<std::string, std::pair<std::string, std::string>> file;     // name -> kind, hex
+        std::map<std::string, std::string> hashes;
+        std::ifstream in(std::string(TEST_DATA_DIR) + "/lobby_messages.txt");
+        ASSERT_TRUE(in.good());
+        for (std::string line; std::getline(in, line);) {
+            if (line.empty() || line[0] == '#') continue;
+            const size_t a = line.find(' ');
+            const size_t b = line.find(' ', a + 1);
+            ASSERT_TRUE(a != std::string::npos && b != std::string::npos && line.find(' ', b + 1) == std::string::npos);
+            const std::string first = line.substr(0, a);
+            const std::string second = line.substr(a + 1, b - a - 1);
+            const std::string third = line.substr(b + 1);
+            if (first == "hash") {
+                ASSERT_TRUE(hashes.emplace(second, third).second);
+            } else {
+                ASSERT_TRUE(file.emplace(second, std::make_pair(first, third)).second);         // (a name once)
+            }
+        }
+        std::vector<std::string> problems;
+        for (const Sample& s : samples) {
+            const auto it = file.find(s.name);
+            if (it == file.end()) problems.push_back(s.name + ": not in the file");
+            else if (it->second.first != s.kind) problems.push_back(s.name + ": the kind is " + it->second.first + ", not " + s.kind);
+            else if (it->second.second != hex(s.bytes)) problems.push_back(s.name + ": the encoder writes " + hex(s.bytes) + ", the file has " + it->second.second);
+        }
+        for (const auto& line : file) {
+            bool known = false;
+            for (const Sample& s : samples) known = known || s.name == line.first;
+            if (!known) problems.push_back(line.first + ": in the file, made by no sample");
+        }
+        for (const auto& r : rooms) {
+            char buf[16];
+            std::snprintf(buf, sizeof buf, "%08x", static_cast<unsigned>(seating_hash(r.second)));
+            const auto it = hashes.find(r.first);
+            if (it == hashes.end() || it->second != buf) problems.push_back(r.first + ": the seating hash is " + buf + ", the file has " + (it == hashes.end() ? std::string("none") : it->second));
+        }
+        ASSERT_EQ(hashes.size(), rooms.size());
+        for (const std::string& problem : problems) std::cout << "\n    " << problem;
+        ASSERT_TRUE(problems.empty());
+        // every line decodes with the decoder of its message and encodes again to the same bytes (what a page makes is what the server reads, what the server makes is what a page reads)
+        for (const Sample& s : samples) {
+            bool ok = false;
+            if (s.kind == "hello") { HelloMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes && (s.name == "game-joins" ? m.client_kind == kClientGame : m.client_kind == kClientPage); }
+            else if (s.kind == "leave") ok = s.bytes == std::vector<uint8_t>{static_cast<uint8_t>(MsgType::Leave)};
+            else if (s.kind == "ping" || s.kind == "pong") { PingMsg m; ok = decode_ping(s.bytes.data(), s.bytes.size(), m) && (s.kind == "ping" ? encode_ping(m) : encode_pong(m)) == s.bytes; }
+            else if (s.kind == "seatmove") { SeatMoveMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "plan") { PlanMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "name") { NameMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "remove") { RemoveMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "startrequest") { StartRequestMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "chat") { ChatMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "welcome") { WelcomeMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "reject") { RejectMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "room") { RoomMsg m; ok = decode(s.bytes, m) && encode(m) == s.bytes; }
+            else if (s.kind == "other") ok = s.bytes == encode_begin() && peek_type(s.bytes) == MsgType::Begin;
+            if (!ok) std::cout << "\n    " << s.name << ": the decoder or the encoder of its kind does not take these bytes";
+            ASSERT_TRUE(ok);
+        }
+        // the page's Hello is the page's alone: a lobby block with a game's client kind is no Hello, and a page's Hello is no game's
+        {
+            HelloMsg m;
+            ASSERT_TRUE(decode(samples[0].bytes, m) && m.client_kind == kClientPage && m.create.has_value() && m.create->lobby() && m.create->leader_starts() && m.create->seats == 4);
         }
     } TEST_END();
 }
