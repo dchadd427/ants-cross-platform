@@ -337,6 +337,37 @@ int main() {
         ASSERT_EQ(g.get_cell(3u, 3u).interactive_id, TILE_EMPTY);
     } TEST_END();
 
+    TEST_CASE("2.7 an orphan food tile is cleared in every field that an owned one is: no owner, no timer, no obstacle, no anchor, no solid bit for an ant to meet (row 0 keeps its solid bit, as the owned food's clearing leaves it)") {
+        const LevelData level = load_map("TINY");
+        Grid g;
+        g.init_from_level(level);
+        const auto make_orphan = [&g](uint32_t x, uint32_t y) {
+            TileCell& c = g.get_cell_mut(x, y);
+            c.is_food = true;
+            c.interactive_id = 100;
+            c.interactive_owner = 2;
+            c.timer_ticks = 7;
+            c.is_obstacle_overlay = true;
+            c.anchor_x = static_cast<int16_t>(x);
+            c.anchor_y = static_cast<int16_t>(y);
+            c.static_solid = true;
+        };
+        make_orphan(3u, 3u);
+        make_orphan(5u, 0u);
+        g.strip_pickups();
+        for (const uint32_t y : {3u, 0u}) {
+            const TileCell& c = g.get_cell(y == 3u ? 3u : 5u, y);
+            ASSERT_FALSE(c.is_food);
+            ASSERT_EQ(c.interactive_id, TILE_EMPTY);
+            ASSERT_EQ(c.interactive_owner, 255);
+            ASSERT_EQ(c.timer_ticks, 0u);
+            ASSERT_FALSE(c.is_obstacle_overlay);
+            ASSERT_EQ(c.anchor_x, -1);
+            ASSERT_EQ(c.anchor_y, -1);
+            ASSERT_EQ(c.static_solid, y == 0u);                              // (the owned food's clearing never clears row 0)
+        }
+    } TEST_END();
+
     TEST_CASE("3.2 the same kill in the original's rules scores nothing") {
         SimulationEngine e = small_world(GameMode::HighestScore, {0, 1});
         kill_pair(e, 0, 1);

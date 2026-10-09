@@ -1449,7 +1449,7 @@ int main(int argc, char* argv[]) {
                 Replay later_build = p.replay;
                 later_build.head.mode = unknown;
                 later_build.head.sim_rules = unknown == 2 ? uint16_t{3} : uint16_t{255};
-                ASSERT_TRUE(refused(later_build, "game mode"));
+                ASSERT_TRUE(refused(later_build, "game mode") && refused(later_build, "newer build"));        // (the text tells a person what the file probably is)
             }
             std::string error;
             ASSERT_TRUE(!encode(p.replay, error).empty() && !encode(original.replay, error).empty());     // (and the two that belong together are written)
