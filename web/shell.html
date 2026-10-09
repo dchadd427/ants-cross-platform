@@ -953,6 +953,13 @@
             }
         }
 
+        /* The header holds its eight buttons in one row from 1140 px; between 701 and 1139 px it keeps the seven it had (a ninth of the width would make two rows) and the footer's Watch matches is the way */
+        @media (min-width: 701px) and (max-width: 1139px) {
+            #watch-btn {
+                display: none;
+            }
+        }
+
         /* A window that is wide and short (a phone on its side): one slim row of header buttons and a small bar, so that the picture gets the height */
         @media (min-width: 701px) and (max-height: 520px) {
             body {
@@ -1158,6 +1165,7 @@
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
+            <a href="/watch.html" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Watch matches: the ones being played now and the ones kept for 30 days (opens in a new tab: a match that is being played here goes on)">Watch matches</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
             <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
             <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
@@ -1167,6 +1175,7 @@
             <details class="more">
                 <summary><span class="btn sm">More</span></summary>
                 <div class="more-list">
+                    <a href="/watch.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="Watch matches: the ones being played now and the ones kept for 30 days (opens in a new tab: a match that is being played here goes on)">Watch matches</a>
                     <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
                     <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
                     <button type="button" class="btn sm" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
@@ -1359,7 +1368,7 @@
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
-                <a href="/watch.html" id="watch-link">Watch replays</a>
+                <a href="/watch.html" target="_blank" rel="noopener noreferrer" id="watch-link">Watch matches</a>
                 <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
                 <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
                 <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -3563,6 +3572,7 @@
             setHeader();
             liveClasses();
             $('watch-link').setAttribute('aria-current', 'page');   // (the footer says where the player is: the list of matches)
+            $('watch-link').removeAttribute('target'); $('watch-link').removeAttribute('rel');   // (and nothing is being played here, so it goes in this tab, like "All matches")
             window.antsReplayPlaceBar();
             setInterval(tick, 100);
             tick();

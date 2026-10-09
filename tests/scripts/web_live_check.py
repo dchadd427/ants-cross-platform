@@ -283,7 +283,8 @@ def main():
             check(tab.ev("(" + SHOWN + ")('livenow')") is True and tab.ev("(" + SHOWN + ")('b-live')") is False, "the red Live mark is up, 'Jump to live' is not (there is nothing to jump to)")
             check(tab.ev("[].every.call(document.querySelectorAll('[data-dl]'), function (a) { return getComputedStyle(a).display === 'none'; })") is True, "no Download while the file is not whole")
             check(tab.ev("document.querySelector('#r-title .pill.lv') !== null && document.getElementById('r-title').textContent.indexOf('Treasure') === 0"), "the header says Treasure and that it is live")
-            check(tab.ev("document.getElementById('watch-link').getAttribute('aria-current')") == "page", "the footer's 'Watch replays' is marked")
+            check(tab.ev("document.getElementById('watch-link').getAttribute('aria-current')") == "page", "the footer's 'Watch matches' is marked")
+            check(tab.ev("document.getElementById('watch-link').hasAttribute('target')") is False, "and it goes to the list in this tab (nothing is being played here: a match played is not left by it)")
             shot(tab, "watching")
             tab.ev("(function () { __stub.state = 3; __stub.turn = Math.max(0, Module._ants_replay_get(8) - 50 * 20); })()")             # paused, 50 seconds behind
             check(until(tab, "/^Paused · \\d+:\\d\\d behind$/.test(" + TAG + ")") is True, "paused behind: 'Paused · m:ss behind' (it is: %r)" % tab.ev(TAG))

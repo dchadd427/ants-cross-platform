@@ -51,6 +51,7 @@
     .mast { display: flex; align-items: center; gap: 22px; min-height: 68px; margin-bottom: 10px; }
     .mast img { width: 168px; height: auto; display: block; }
     .mast p { display: grid; gap: 2px; line-height: 1.2; }
+    .mast #watch-top { margin-left: auto; flex: 0 0 auto; }
     .mast .tag { font-size: 20px; } .mast .sub { font-size: 15px; }
     .rejoin { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px; padding: 10px 14px; background: var(--inset); border: 3px solid var(--gold); border-radius: 4px; color: var(--cream); box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
     .rejoin span { flex: 1 1 220px; }
@@ -216,6 +217,9 @@
         :root { --k: 2; }
         .wrap { padding: 14px 16px 0; }
         .mast { min-height: 50px; margin-bottom: 10px; gap: 14px; } .mast img { width: 120px; } .mast .tag { font-size: 16px; } .mast .sub { font-size: 13px; }
+        .mast { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo btn" "text text"; gap: 8px 14px; align-items: center; }   /* (the button stays on the logo's row, the tagline goes under them) */
+        .mast h1 { grid-area: logo; } .mast p { grid-area: text; } .mast #watch-top { grid-area: btn; justify-self: end; margin-left: 0; }
+        .in-room .mast { row-gap: 0; }
         .panel { padding: 14px 14px 12px; }
         .head { margin-bottom: 10px; flex-wrap: wrap; }
         .invite { grid-template-columns: minmax(0, 1fr) auto; }
@@ -359,7 +363,7 @@
     <div class="banner" id="banner" role="status" hidden><span id="banner-text"></span><button class="btn sm" type="button" id="banner-x">OK</button></div>
     <div class="rejoin" id="rejoin" hidden><span id="rejoin-note"></span><button class="btn sm" type="button" id="rejoin-go">Rejoin it</button></div>
 
-    <header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1><p><span class="tag">Four colonies, one picnic.</span><span class="sub">The 1998 ant war game, rebuilt for your browser.</span></p></header>
+    <header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1><p><span class="tag">Four colonies, one picnic.</span><span class="sub">The 1998 ant war game, rebuilt for your browser.</span></p><a class="btn sm" href="/watch.html" id="watch-top" title="Watch matches: the ones being played now and the ones kept for 30 days">Watch matches</a></header>
 
     <div class="grid" id="lobby">
         <section class="panel" aria-labelledby="room-h">
@@ -430,7 +434,7 @@ their music and their sound: only the window you are in is heard). The match is 
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
     <p class="notice" id="footer-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
-    <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/watch.html" id="live-link">Watch live</a><a href="/watch.html" id="watch-link">Watch replays</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
+    <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/watch.html" id="watch-link">Watch matches</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
     <span class="grow"></span>
     <span class="shape">Screen <span class="seg" role="radiogroup" aria-label="Picture shape"><span class="opt"><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</label><span class="fit-tag" id="fit-4-3" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-10" value="16:10"><label for="aspect-16-10" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</label><span class="fit-tag" id="fit-16-10" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label><span class="fit-tag" id="fit-16-9" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-21-9" value="21:9"><label for="aspect-21-9" title="21:9: ultrawide monitors (1260 x 540)">21:9</label><span class="fit-tag" id="fit-21-9" hidden>fills your screen</span></span></span></span></div>
 </div></footer>

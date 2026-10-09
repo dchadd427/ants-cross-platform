@@ -172,7 +172,7 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("<title>Ants (1998) — beta.playants.org (staging)</title>", pages["index"])
         self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
-        self.assertIn("<title>Watch replays — Ants (1998) (staging)</title>", pages["watch"])
+        self.assertIn("<title>Watch matches — Ants (1998) (staging)</title>", pages["watch"])
         # the footer of the pages is the emerald bar: the label stands in front of the version (and the build), in the same box. The game page's and the replays' footer is that one box; the front page's
         # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links, and at the right the Screen buttons)
         for name in ("index", "watch"):

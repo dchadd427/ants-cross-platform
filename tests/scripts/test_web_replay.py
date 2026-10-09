@@ -4,7 +4,7 @@ play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code tha
 
   - the shared code is RUN (node, when it is installed): the address of a replay or of a live match, the day and the time in the visitor's zone, the length, the maps, the players, the chips, the
     live tag and the verdict on an answer of the live door (tests/scripts/web_replay_check.js);
-  - what needs no browser is read from the files: the one place of the "Watch replays" link on each page (and "Watch live" on the front page), the pieces of the player that the game's glue looks for by id,
+  - what needs no browser is read from the files: the one place of the "Watch matches" link on each page (and its button in the header of the front page and of the game page), the pieces of the player that the game's glue looks for by id,
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
@@ -23,34 +23,86 @@ def read(*parts):
         return f.read()
 
 
+def block(text, opening):
+    """The {...} that starts at `opening` (a media query or a rule's selector and its brace), braces matched."""
+    start = text.index(opening)
+    depth, i = 0, text.index("{", start)
+    first = i
+    while True:
+        depth += text[i] == "{"
+        depth -= text[i] == "}"
+        if depth == 0:
+            return text[first:i + 1]
+        i += 1
+
+
 def footer_links(page):
     nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', page, re.S).group(1)
     return re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
 
 
 class TheLink(unittest.TestCase):
-    def test_every_page_with_the_footer_links_to_the_list_in_its_own_tab_second_after_the_menu(self):
-        for name, page in (("the game page", read("web", "shell.html")), ("the front page", read("web", "lobby.html")), ("the list page", read("web", "watch.html"))):
+    """ONE link to the matches, "Watch matches", for the live ones and the earlier ones alike (it was "Watch live" and "Watch replays", two links to the same page): in the footer of the front page,
+    the game page and the list, and as a button in the header of the front page and of the game page."""
+
+    def test_every_page_with_the_footer_links_to_the_list_once_by_one_name(self):
+        for name, page, before in (("the game page", read("web", "shell.html"), "Menu"), ("the front page", read("web", "lobby.html"), "How it works"), ("the list page", read("web", "watch.html"), None)):
             found = footer_links(page)
-            watch = [f for f in found if f[2] == "Watch replays"]
+            watch = [f for f in found if f[2] == "Watch matches"]
             self.assertEqual(len(watch), 1, name)
             self.assertEqual(watch[0][0], "/watch.html", name)
             self.assertIn('id="watch-link"', watch[0][1], name)
-            self.assertNotIn("target=", watch[0][1], name)                                                 # (the site's own page: this tab)
             texts = [f[2] for f in found]
-            before = "Watch live" if "Watch live" in texts else "Menu"                                      # (the front page has "Watch live" first, the game page "Menu")
-            self.assertEqual(texts.index("Watch replays"), texts.index(before) + 1 if before in texts else 0, name)
-        self.assertIn('aria-current="page"', [f for f in footer_links(read("web", "watch.html")) if f[2] == "Watch replays"][0][1])
+            self.assertEqual(texts.index("Watch matches"), texts.index(before) + 1 if before in texts else 0, name)      # (after the Menu link, or after "How it works" on the front page; the first on the list page)
+            self.assertFalse({"Watch live", "Watch replays"} & set(texts), name)                                      # (the two old names are gone: one link)
+        self.assertIn('aria-current="page"', [f for f in footer_links(read("web", "watch.html")) if f[2] == "Watch matches"][0][1])
         self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
+        self.assertIn("<title>Watch matches \u2014 Ants (1998)@@SITE_TITLE@@</title>", read("web", "watch.html"))   # (the tab's title agrees with the link)
 
-    def test_the_front_page_alone_has_watch_live_in_its_footer_and_it_goes_to_the_list(self):
-        live = [f for f in footer_links(read("web", "lobby.html")) if f[2] == "Watch live"]
-        self.assertEqual(len(live), 1)
-        self.assertEqual(live[0][0], "/watch.html")
-        self.assertIn('id="live-link"', live[0][1])
-        self.assertNotIn("target=", live[0][1])
-        for name in ("shell.html", "watch.html"):
-            self.assertNotIn("Watch live", [f[2] for f in footer_links(read("web", name))], name)
+    def test_the_site_own_tab_on_the_front_page_and_the_list_and_a_new_tab_on_the_game_page(self):
+        for name, page in (("the front page", read("web", "lobby.html")), ("the list page", read("web", "watch.html"))):
+            watch = [f for f in footer_links(page) if f[2] == "Watch matches"][0]
+            self.assertNotIn("target=", watch[1], name)                                                    # (the site's own page: this tab)
+        game = read("web", "shell.html")
+        watch = [f for f in footer_links(game) if f[2] == "Watch matches"][0]
+        self.assertIn('target="_blank"', watch[1])                                                         # (a match that is being played here goes on: the way back to the menu asks first, this link does not leave)
+        self.assertIn('rel="noopener noreferrer"', watch[1])
+        glue = game[game.index("<!-- BEGIN replay glue"):game.index("<!-- END replay glue")]
+        self.assertIn("$('watch-link').removeAttribute('target');", glue)                                  # (a replay is watched in this tab, like "All matches": nothing is being played; only in the replay glue: a match played keeps the new tab)
+        self.assertIn("$('watch-link').removeAttribute('rel');", glue)
+        self.assertNotIn("removeAttribute('target')", game.replace(glue, ""))
+
+    def test_the_header_of_the_front_page_has_the_button_at_the_right(self):
+        lobby = read("web", "lobby.html")
+        header = re.search(r'<header class="mast">(.*?)</header>', lobby, re.S).group(1)
+        self.assertEqual(re.findall(r'<a class="btn sm" href="/watch.html" id="watch-top"[^>]*>Watch matches</a>', header).__len__(), 1)
+        self.assertTrue(header.rstrip().endswith("Watch matches</a>"))                                      # (after the logo and the tagline: the right of the row)
+        self.assertIn(".mast #watch-top { margin-left: auto;", lobby)
+        phone = block(lobby, "@media (max-width: 720px)")
+        self.assertIn('grid-template-areas: "logo btn" "text text"', phone)                                # (a phone: the button on the logo's row, the tagline under them; the rule is the phone's, not the page's)
+        self.assertNotIn('grid-template-areas: "logo btn"', lobby.replace(phone, ""))
+        self.assertIn(".mast #watch-top { grid-area: btn; justify-self: end; margin-left: 0; }", phone)
+        self.assertNotIn('id="live-link"', lobby)
+
+    def test_the_header_of_the_game_page_has_the_button_after_menu_and_more_has_it_first(self):
+        game = read("web", "shell.html")
+        actions = re.search(r'<div class="header-actions">(.*?)</header>', game, re.S).group(1)
+        links = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', actions)
+        self.assertEqual([t for _, _, t in links][:3], ["Menu", "Watch matches", "Sprites and sounds"])
+        wide = links[1]
+        self.assertEqual(wide[0], "/watch.html")
+        self.assertIn('id="watch-btn"', wide[1])
+        self.assertIn('wide-only', wide[1])                                                                 # (a narrow window has Menu, Full and More only)
+        self.assertIn('target="_blank"', wide[1])
+        more = re.search(r'<div class="more-list">(.*?)</div>', actions, re.S).group(1)
+        first = re.findall(r'<(?:a|button)\b([^>]*)>([^<]+)</(?:a|button)>', more)[0]
+        self.assertEqual(first[1], "Watch matches")
+        self.assertIn('href="/watch.html"', first[0])
+        self.assertIn('target="_blank"', first[0])
+        self.assertNotIn("wide-only", first[0])
+        replay = re.search(r'<div class="header-actions rep-only">(.*?)</header>', game, re.S).group(1)
+        self.assertNotIn("Watch matches", replay)                                                           # (a replay's header keeps "All matches": no second way to the list)
+        self.assertIn("body.replay .header-actions:not(.rep-only)", game)                                   # (and the ordinary header is not shown there)
 
     def test_the_words_on_the_screens_say_player_never_friend(self):
         for path in (("web", "watch.html"), ("web", "replay_page.js")):

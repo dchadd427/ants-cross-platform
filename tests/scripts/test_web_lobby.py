@@ -326,13 +326,14 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
     def test_the_footer_links_the_name_card_the_aspect_choice_and_the_test_room_buttons_are_there(self):
-        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo and nothing else: the links are in the footer")
+        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Watch matches: the other links are in the footer")
         self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
+        self.assertIn('<a class="btn sm" href="/watch.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
-        self.assertEqual(re.findall(r">(How it works|Watch live|Watch replays|Sprites and sounds|Changelog|GitHub|Feedback)</(?:a|button)>", nav),
-                         ["How it works", "Watch live", "Watch replays", "Sprites and sounds", "Changelog", "GitHub", "Feedback"])
-        for needle in ('href="/watch.html" id="live-link"', 'href="/watch.html" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+        self.assertEqual(re.findall(r">(How it works|Watch matches|Sprites and sounds|Changelog|GitHub|Feedback)</(?:a|button)>", nav),
+                         ["How it works", "Watch matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback"])
+        for needle in ('href="/watch.html" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
                        'href="https://github.com/dchadd427/ants-cross-platform/issues"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
