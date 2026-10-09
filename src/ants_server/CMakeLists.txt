@@ -8,6 +8,7 @@ add_library(ants_server_core STATIC
     restart_record.cpp
     site_stats.cpp
     replay_store.cpp
+    live_board.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include

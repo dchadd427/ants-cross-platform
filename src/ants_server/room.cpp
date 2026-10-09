@@ -124,7 +124,9 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
     std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
 }
 
-Room::~Room() = default;
+Room::~Room() {
+    live_end(std::string());                                     // (the live board holds a pointer to the recorder, which goes with the room)
+}
 
 bool Room::expired(uint32_t now_ms) const noexcept {
     return forgotten_ || ((state_ == RoomState::Finished || state_ == RoomState::Failed) && now_ms - ended_ms_ >= spec_.keep_ms);
@@ -678,6 +680,7 @@ void Room::set_replay_store(ReplayStore* store, const std::string& why_not) {
 // sealed (the bots' too), and only watches. The names are the Start's, what the room showed everybody: a person's seat has what was typed (replay_person_name: a seat that was given no name is left empty, and the
 // readers show the colour), a computer player's seat has its display name ("Bot (Medium)"). Nothing else of the room is in the file: no address, room code, key or chat.
 void Room::replay_begin(const net::StartMsg& start) {
+    live_end(std::string());
     recorder_.reset();
     if (replay_store_ == nullptr || session_ == nullptr) return;
     replay::Header head;
@@ -699,6 +702,12 @@ void Room::replay_begin(const net::StartMsg& start) {
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
         if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
     });
+    if (live_board_ != nullptr) live_id_ = live_board_->begin(*recorder_);       // (from now on a visitor can watch the match once it has run 30 seconds: live_board.hpp)
+}
+
+void Room::live_end(const std::string& kept_file) {
+    if (live_board_ != nullptr && !live_id_.empty()) live_board_->end(live_id_, kept_file);
+    live_id_.clear();
 }
 
 // The match is over, or the room failed or was closed (it may never have started): a match that was recorded is written as a file and handed to the store when it ran 600 turns (kReplayMinTurns),
@@ -710,29 +719,35 @@ void Room::replay_end() {
     }
     std::unique_ptr<replay::Recorder> recorder = std::move(recorder_);
     if (session_ != nullptr) session_->runner().set_on_executed(nullptr);
-    if (replay_store_ == nullptr || sim_ == nullptr) return;
-    if (recorder->turns() == 0) {
+    const std::string kept = replay_store_ != nullptr && sim_ != nullptr ? replay_keep(*recorder) : std::string();
+    live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
+}
+
+// The file's name when the match was kept, else empty (and the status says why)
+std::string Room::replay_keep(replay::Recorder& recorder) {
+    if (recorder.turns() == 0) {
         replay_note_ = "no match was played";
-        return;
+        return std::string();
     }
-    if (recorder->turns() < kReplayMinTurns) {
+    if (recorder.turns() < kReplayMinTurns) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
-        return;
+        return std::string();
     }
     std::string error;
-    const std::vector<uint8_t> bytes = recorder->finish(*sim_, error);
+    const std::vector<uint8_t> bytes = recorder.finish(*sim_, error);
     if (bytes.empty()) {
         replay_note_ = "the match could not be written as a replay: " + error;
         replay_store_->report("room " + spec_.code + ": the match could not be written as a replay: " + error);
-        return;
+        return std::string();
     }
     const ReplaySave saved = replay_store_->save(bytes);
-    if (saved.kept) {
-        replay_file_ = saved.file;
-        replay_bytes_ = saved.bytes;
-    } else {
+    if (!saved.kept) {
         replay_note_ = saved.note;
+        return std::string();
     }
+    replay_file_ = saved.file;
+    replay_bytes_ = saved.bytes;
+    return saved.file;
 }
 
 RoomSpec room_spec_of(const RestartHead& h) {

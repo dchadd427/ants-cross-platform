@@ -62,3 +62,20 @@ target_include_directories(test_replay_store PRIVATE
 
 add_test(NAME test_replay_store COMMAND test_replay_store)
 set_tests_properties(test_replay_store PROPERTIES COST 3)
+
+# The board of the matches that run now (ants_server/live_board.hpp): the id of a match, the list, the snapshot's cache and the memory of the matches that ended. No network and no room: recorders that the test feeds
+add_executable(test_live_board
+    test_live_board.cpp
+)
+
+target_link_libraries(test_live_board PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_live_board PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_live_board COMMAND test_live_board)
+set_tests_properties(test_live_board PROPERTIES COST 3)

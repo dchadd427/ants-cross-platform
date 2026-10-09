@@ -71,6 +71,7 @@
 #include "ants_net/turnlog.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/live_board.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -301,6 +302,9 @@ public:
     /// The server's store of replays (replay_store.hpp; it must outlive the room): the match is recorded and kept there. Null (the default): the room records nothing, and `why_not` is what its status says. Set it
     /// right after the room is made, before its match is started.
     void set_replay_store(ReplayStore* store, const std::string& why_not = std::string());
+    /// The server's board of the matches that run (live_board.hpp; it must outlive the room): the room registers the recording of its match there when the match begins and takes it off when the recording becomes
+    /// a file or is dropped (and in its destructor). Null (the default): the match is not shown live. Set it right after the room is made, before its match is started.
+    void set_live_board(LiveBoard* board) noexcept { live_board_ = board; }
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
@@ -397,6 +401,8 @@ private:
     // Replays kept on the server (replay_store.hpp)
     void replay_begin(const net::StartMsg& start);           // the recorder of the match is made and taps the referee's runner (begin_match: before the first turn)
     void replay_end();                                       // the match is over (finish, fail while it ran): the recording is made into a file and kept, or the status says why not
+    std::string replay_keep(replay::Recorder& recorder);     // the part of replay_end that makes the file and sets replay_file_ or replay_note_: the file's name, "" when the match is not kept
+    void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
     // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
@@ -442,6 +448,8 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
     std::unique_ptr<ai::BotController> bot_controller_;
     ReplayStore* replay_store_{nullptr};
+    LiveBoard* live_board_{nullptr};
+    std::string live_id_;                    // the recording's id on the live board ("": it is not there)
     std::unique_ptr<replay::Recorder> recorder_;     // the match so far (null: it is not recorded, or it is over)
     std::string replay_file_;                // the match was kept under this name ...
     uint64_t replay_bytes_{0};
