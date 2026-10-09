@@ -167,7 +167,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(w.mgr.create_room(spec_of("BM-PLAIN", 2), w.now).ok && !w.status("BM-PLAIN").bots_only);
     } TEST_END();
 
-    TEST_CASE("S3.183 The Timer's Match Is Free For All Or A Match Of Teams, Any Way To Seat Them Equally Likely And Never Teams For Two; The Teams Are Drawn Last, So A Seed Still Chooses The Rest As Before") {
+    TEST_CASE("S3.183 The Timer's Match Is Free For All Or A Match Of Teams, Every Way To Seat Them Comes Up And Never Teams For Two; The Teams Are Drawn Last, So The First Match Of A Seed Chooses The Rest As Before") {
         ReplayClock clock;
         std::string why;
         std::set<std::string> seen;                                          // "<bots> <teams>" of every match that the seeds made
@@ -229,5 +229,23 @@ void run_bot_match_tests() {
         s = v.status("BM-THREE");
         ASSERT_EQ(s.teams, std::string("1+2"));
         ASSERT_TRUE(s.allies[1] == 2 && s.allies[2] == 1 && s.allies[0] == 4);                          // (Green plays alone)
+
+        for (const sim::StartTeams& teams : {sim::StartTeams{true, 2, 3}, sim::StartTeams{true, 0, 3}, sim::StartTeams{true, 0, 2}}) {     // seats that are not the first ones: Green, Blue and Black play, Red does not
+            World gap;
+            ASSERT_TRUE(gap.mgr.enable_replays(replay_config("botmatch-teams-gap", &clock), false, why));
+            RoomSpec spec = bots_only_spec("BM-GAP", 3);
+            spec.bots[0].seat = 0;
+            spec.bots[1].seat = 2;
+            spec.bots[2].seat = 3;
+            spec.teams = teams;
+            ASSERT_TRUE(gap.mgr.create_room(spec, gap.now).ok);
+            ASSERT_TRUE(run_until(gap, [&] { return gap.status("BM-GAP").state == RoomState::Running; }, 12000));
+            s = gap.status("BM-GAP");
+            ASSERT_EQ(s.teams, sim::start_teams_text(teams));
+            ASSERT_TRUE(s.allies[teams.a] == teams.b && s.allies[teams.b] == teams.a && s.allies[1] == 4);
+            for (uint8_t seat : {uint8_t{0}, uint8_t{2}, uint8_t{3}}) {
+                if (seat != teams.a && seat != teams.b) ASSERT_EQ(s.allies[seat], uint8_t{4});          // (the seat that is left plays alone)
+            }
+        }
     } TEST_END();
 }

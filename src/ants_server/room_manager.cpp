@@ -587,8 +587,8 @@ void RoomManager::enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, ui
 
 // The match: a map of the original's six that the store has, two to four standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, a seed, and
 // the teams: free for all or any way to make teams of the seats that play (roster_team_choices: with four, the three ways to split them in two, which on a map whose hills sit at the corners of a square are top
-// against bottom, left against right and across the corners; with three, any two of them and the third alone; with two, free for all), each choice as likely as any other. The teams are drawn last, so a seed
-// still chooses the same map, seats, levels and seed as before. The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
+// against bottom, left against right and across the corners (TINY, SMALL, TREASURE and ISLANDS; MEDIUM's hills sit north, east, south and west and GAUNTLET's along a diagonal); with three, any two of them and the third
+// alone; with two, free for all), each choice for the seats that play as likely as any other. The teams are drawn last, so the first match of a seed still chooses the same map, seats, levels and seed as before. The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
 // match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
 bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why) {
     code.clear();
