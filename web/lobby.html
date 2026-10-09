@@ -263,10 +263,9 @@
     @media (pointer: coarse) { .grip { width: 44px; height: 44px; right: 2px; top: 8px; } }
     /* ---- the pieces that the page has and the pictures do not draw ---- */
     .mast h1 { display: block; font-size: inherit; font-weight: inherit; line-height: 0; }
-    .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }              /* the label of a staging site, in front of the version */
-    .bar .stats { display: flex; align-items: baseline; flex-wrap: wrap; }
-    .bar .stats .live { align-self: center; }
-    #stats-played::before { content: " \00b7 "; white-space: pre; }
+    .bar strong { font-weight: 500; color: var(--gold); margin-right: 10px; }              /* the label of a site, in front of the version */
+    /* the line of numbers flows as one text, as the phone picture draws it ("... 5 players online · 31 games / played (5 today)"): the dot that joins the two parts keeps a no-break space before it (a line never begins with it) and a space after it */
+    #stats-played::before { content: "\00a0\00b7\0020"; }
     #stats-played:empty { display: none; }
     .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }

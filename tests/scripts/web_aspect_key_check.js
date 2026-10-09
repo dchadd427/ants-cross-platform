@@ -1,13 +1,18 @@
 // Runs the pages' OWN code that decides the shape of the picture and remembers the player's choice, on a table of addresses and of what a browser had remembered
-// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the block of the shape and the listeners of the picture's two buttons).
+// (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the block of the picture's shape, the selector's
+// listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // 16:9 is the default everywhere: only the choice of the selector (the key `ants.aspect.v2`) or ?aspect= in the address gives another picture (the game page has four shapes, 4:3, 16:10, 16:9 and
-// 21:9; the front page, which is not changed, has two). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser starts 16:9 once), and
-// the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat stay): what it
-// stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
+// 21:9; the front page has two, its footer's "Screen" buttons "16:9" and "4:3"). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
+// starts 16:9 once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
+// stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
+// The front page has two modes, and its selector does what each needs: the LOBBY (the room view, the front page itself; the frames are gone) keeps the match and the room, changes the shape of the
+// page at once, remembers it, and the address of the hand-off to the game (START, Rejoin, a game for one) carries it (`aspect=`); the legacy TEST ROOM (the old addresses ?map=, ?play=here, a link
+// with a create block: its games sit in frames of the page) asks first and reloads the page with ?aspect=, as before.
 // tests/scripts/test_web_aspect_default.py runs this with node (the quick tier); tests/scripts/web_aspect_check.py is the opt-in check in a real browser.
 // usage: node web_aspect_key_check.js web/shell.html web/lobby.html     (exit 0: every row holds; every differing row is printed)
 'use strict';
 const fs = require('fs');
+const nodePath = require('path');
 
 const NEW_KEY = 'ants.aspect.v2';
 const OLD_KEY = 'ants.aspect';
@@ -145,12 +150,16 @@ function runShell(path, search, stored, options) {
 }
 const checkedString = (shape) => SHELL_SHAPES.map((s) => s + '=' + (s === shape ? 'true' : 'false')).join(' ');
 
-// web/lobby.html
+// web/lobby.html. options.room: the page is in the legacy test room (the page's own `room` is the code of a room that the old addresses made; in the lobby it is '' for good)
 function runLobby(path, search, stored, options) {
     const text = fs.readFileSync(path, 'utf8');
     const helpers = between(text, 'HELPERS_BEGIN', 'HELPERS_END', path);
+    const fill = between(text, 'FILL_BEGIN', 'FILL_END', path);
+    const lobby = between(text, 'LOBBY_BEGIN', 'LOBBY_END', path);
     const shape = between(text, 'SHAPE_BEGIN', 'SHAPE_END', path);
+    const rejoin = between(text, 'REJOIN_BEGIN', 'REJOIN_END', path);
     const selector = between(text, 'SELECTOR_BEGIN', 'SELECTOR_END', path);
+    const rules = require(nodePath.resolve(nodePath.dirname(path), 'front', 'lobby_rules.js'));       // (what the page reads its maps, its default map and codeText from)
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline));
     const radios = radioGroup(['16:9', '4:3']);
@@ -160,8 +169,14 @@ function runLobby(path, search, stored, options) {
         getElementById(id) { if (id === 'aspect-16-9') return radios['16:9']; if (id === 'aspect-4-3') return radios['4:3']; throw new Error('the page asked for #' + id); },
     };
     const inRoom = options && options.room ? "'k7m2xq'" : "''";
-    const code = 'var room = ' + inRoom + ';\n' + helpers + shape + selector + '\nreturn { aspect: aspect, fromAddress: aspectFromAddress, key: ASPECT_KEY };';
-    const result = new Function('window', 'document', code)(win, doc);
+    // handoff: the address of the game page that START (and the Rejoin button) open, built as the page builds it, with the page's `aspect` as it is NOW (onStarting and the Rejoin button pass the variable);
+    // solo: the address of a game for one on this computer (startAlone passes the variable too)
+    const code = 'var room = ' + inRoom + ';\n'
+        + 'var MAPS = Rules.MAPS; var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY; var mapByKey = Rules.mapByKey; var codeText = Rules.codeText;\n'
+        + helpers + fill + lobby + shape + rejoin + selector
+        + '\nreturn { aspect: aspect, fromAddress: aspectFromAddress, key: ASPECT_KEY, now: function () { return aspect; },'
+        + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, aspect); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, aspect); } };';
+    const result = new Function('window', 'document', 'Rules', code)(win, doc, rules);
     result.storage = storage;
     result.win = win;
     result.radios = radios;
@@ -412,50 +427,96 @@ try {
         expect('lobby.html, ' + label + ' (the address names it)', r.fromAddress, source === 'address');
         expect('lobby.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('lobby.html, the key', r.key, NEW_KEY);
+        expect('lobby.html, ' + label + ' (the START hand-off names it)', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=' + aspect);
+        expect('lobby.html, ' + label + ' (a game for one names it)', r.solo('Ann').endsWith('&aspect=' + aspect), true);
     }
     for (const [label, search, stored, aspect, source] of lobbyIgnores) {
         const r = runLobby(lobbyPath, search, stored);
         expect('lobby.html, ' + label + ' (the shape: the front page has two)', r.aspect, aspect);
         expect('lobby.html, ' + label + ' (the button that is checked)', shown(r), aspect);
         expect('lobby.html, ' + label + ' (the address names it)', r.fromAddress, source === 'address');
+        expect('lobby.html, ' + label + ' (the START hand-off names the shape that is shown)', r.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=' + aspect), true);
     }
+
+    // THE LOBBY (the room view, the front page itself: the page's `room` is '' and no game of it sits in a frame): a pick changes the shape of the page AT ONCE, with no reload and no question, so that the
+    // room and the match stay; it is remembered under the new key and nothing else; the hand-off to the game (START, Rejoin, a game for one) carries the shape that is picked
     {
         const r = runLobby(lobbyPath, '', { [OLD_KEY]: '4:3' });
-        pick(r, '4:3');                                                              // the player picks Classic 4:3
+        pick(r, '4:3');                                                              // the player picks 4:3
         expect('lobby.html selector, 4:3 picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
         expect('lobby.html selector, 4:3 picked: the old key is untouched', r.storage.data[OLD_KEY], '4:3');
-        expect('lobby.html selector, 4:3 picked: the page reloads with ?aspect=4:3', r.win.assigned.length === 1 && /[?&]aspect=(4:3|4%3A3)(&|$)/.test(r.win.assigned[0]), true);
+        expect('lobby.html selector, 4:3 picked: no reload, nothing is asked (the match and the room stay)', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
+        expect('lobby.html selector, 4:3 picked: the page has the shape at once', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + shown(r), '4:3 4:3 4:3');
+        expect('lobby.html selector, 4:3 picked: the START hand-off carries it', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=4:3');
+        expect('lobby.html selector, 4:3 picked: ... and so does a game for one', r.solo('Ann').endsWith('&aspect=4:3'), true);
         const again = runLobby(lobbyPath, '', r.storage.data);
-        expect('lobby.html selector, the next visit', again.aspect + ' ' + shown(again), '4:3 4:3');
-    }
-    {
-        const r = runLobby(lobbyPath, '', {});
-        r.radios['16:9'].listeners.change();                                         // the same picture again (a change event that names the shape that is already there): remembered, nothing to restart
-        expect('lobby.html selector, 16:9 again: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
-        expect('lobby.html selector, 16:9 again: no reload', r.win.assigned.length, 0);
-    }
-    {
-        const r = runLobby(lobbyPath, '', {}, { room: true, decline: true });        // in a room it asks first; No: nothing is written, the buttons go back
-        pick(r, '4:3');
-        expect('lobby.html selector in a room: it asks', r.win.asked.length, 1);
-        expect('lobby.html selector in a room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
-        expect('lobby.html selector in a room, answered No: no reload', r.win.assigned.length, 0);
-        expect('lobby.html selector in a room, answered No: 16:9 is checked again', shown(r), '16:9');
-    }
-    {
-        const r = runLobby(lobbyPath, '', {}, { room: true });                       // in a room, answered Yes: remembered and reloaded
-        pick(r, '4:3');
-        expect('lobby.html selector in a room, answered Yes: remembered and reloaded', JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length, JSON.stringify([[NEW_KEY, '4:3']]) + ' 1');
+        expect('lobby.html selector, the next visit', again.aspect + ' ' + shown(again) + ' ' + again.fromAddress, '4:3 4:3 false');
     }
     {
         const r = runLobby(lobbyPath, '', { [NEW_KEY]: '4:3' });                     // 4:3 is there: picking 16:9 gives the default picture back
         pick(r, '16:9');
-        expect('lobby.html selector, 16:9 picked over 4:3: remembered, the page reloads with ?aspect=16:9', JSON.stringify(r.storage.writes) + ' ' + /[?&]aspect=(16:9|16%3A9)(&|$)/.test(r.win.assigned[0] || ''), JSON.stringify([[NEW_KEY, '16:9']]) + ' true');
+        expect('lobby.html selector, 16:9 picked over 4:3: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
+        expect('lobby.html selector, 16:9 picked over 4:3: no reload, nothing is asked', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
+        expect('lobby.html selector, 16:9 picked over 4:3: the page has the shape at once, and the hand-off carries it', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + shown(r) + ' ' + r.handoff('k7m2xq', 1, 'Ann'), '16:9 16:9 16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=16:9');
+    }
+    {
+        const r = runLobby(lobbyPath, '', {});
+        r.radios['16:9'].listeners.change();                                         // the same picture again (a change event that names the shape that is already there): remembered, nothing to change
+        expect('lobby.html selector, 16:9 again: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
+        expect('lobby.html selector, 16:9 again: no reload, nothing is asked, the shape is the same', r.win.assigned.length + ' ' + r.win.asked.length + ' ' + r.now() + ' ' + r.body.attributes['data-aspect'], '0 0 16:9 16:9');
+    }
+    {
+        const r = runLobby(lobbyPath, '', {});                                       // one pick after another: each is its own change, the last wins, each is remembered, no reload ever
+        pick(r, '4:3'); pick(r, '16:9'); pick(r, '4:3');
+        expect('lobby.html selector, three picks (4:3, 16:9, 4:3): each is remembered, the last wins, no reload, no question', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + r.win.assigned.length + ' ' + r.win.asked.length,
+               JSON.stringify([[NEW_KEY, '4:3'], [NEW_KEY, '16:9'], [NEW_KEY, '4:3']]) + ' 4:3 0 0');
+    }
+    {
+        const r = runLobby(lobbyPath, '?aspect=4:3', {});                            // the address asked for 4:3: a pick of 16:9 is the player's own choice and the hand-off follows it
+        pick(r, '16:9');
+        expect('lobby.html selector, the address says 4:3 and 16:9 is picked: remembered, no reload, the hand-off carries 16:9', JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length + ' ' + r.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), JSON.stringify([[NEW_KEY, '16:9']]) + ' 0 true');
+    }
+    {
+        const r = runLobby(lobbyPath, '', THROWS);                                   // a private window: the pick still changes the page, nothing breaks, nothing reloads
+        pick(r, '4:3');
+        expect('lobby.html selector without storage: the page changes all the same (no reload)', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + r.win.assigned.length + ' ' + r.win.asked.length, '4:3 4:3 0 0');
+    }
+
+    // THE LEGACY TEST ROOM (the old addresses ?map=, ?play=here, a link with a create block: the page's `room` is the room's code and its games sit in frames of the page): a new shape starts the games again,
+    // so it asks first; No: nothing is written, the buttons go back; Yes: the shape is remembered and the page reloads at its own address with ?aspect=
+    {
+        const r = runLobby(lobbyPath, '?room=k7m2xq&roommap=treasure&roomseats=4', {}, { room: true, decline: true });
+        pick(r, '4:3');
+        expect('lobby.html selector in the test room: it asks', r.win.asked.length, 1);
+        expect('lobby.html selector in the test room, answered No: nothing is written', JSON.stringify(r.storage.writes), '[]');
+        expect('lobby.html selector in the test room, answered No: no reload', r.win.assigned.length, 0);
+        expect('lobby.html selector in the test room, answered No: 16:9 is checked again, and it is the shape still', shown(r) + ' ' + r.now(), '16:9 16:9');
+    }
+    {
+        const r = runLobby(lobbyPath, '?room=k7m2xq&roommap=treasure&roomseats=4', {}, { room: true });          // answered Yes: remembered and reloaded at the room's address with the shape added
+        pick(r, '4:3');
+        expect('lobby.html selector in the test room, answered Yes: it asked once, the shape is remembered and the page reloads once', r.win.asked.length + ' ' + JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length, '1 ' + JSON.stringify([[NEW_KEY, '4:3']]) + ' 1');
+        const url = new URL(r.win.assigned[0] || 'https://example.test/');
+        expect('lobby.html selector in the test room, answered Yes: the reload keeps the room\'s address and adds ?aspect=4:3', [url.searchParams.get('room'), url.searchParams.get('roommap'), url.searchParams.get('roomseats'), url.searchParams.get('aspect')].join(' '), 'k7m2xq treasure 4 4:3');
+        const again = runLobby(lobbyPath, '', r.storage.data);
+        expect('lobby.html selector in the test room, the next visit', again.aspect + ' ' + shown(again), '4:3 4:3');
+    }
+    {
+        const r = runLobby(lobbyPath, '?map=treasure&name=Ann&aspect=4:3', { [NEW_KEY]: '4:3' }, { room: true });     // 4:3 is there: picking 16:9 gives the default picture back, with a reload that replaces ?aspect=4:3
+        pick(r, '16:9');
+        const url = new URL(r.win.assigned[0] || 'https://example.test/');
+        expect('lobby.html selector in the test room, 16:9 picked over 4:3: it asked, remembered and reloaded with ?aspect=16:9 (the one parameter, the others kept)', r.win.asked.length + ' ' + JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length + ' ' + url.searchParams.getAll('aspect').join(',') + ' ' + url.searchParams.get('map') + ' ' + url.searchParams.get('name'),
+               '1 ' + JSON.stringify([[NEW_KEY, '16:9']]) + ' 1 16:9 treasure Ann');
+    }
+    {
+        const r = runLobby(lobbyPath, '?room=k7m2xq', {}, { room: true });
+        r.radios['16:9'].listeners.change();                                         // the same picture again in the test room: remembered, nothing to restart, no question
+        expect('lobby.html selector in the test room, 16:9 again: remembered, no question, no reload', JSON.stringify(r.storage.writes) + ' ' + r.win.asked.length + ' ' + r.win.assigned.length, JSON.stringify([[NEW_KEY, '16:9']]) + ' 0 0');
     }
 } catch (e) {
     console.log('FAIL ' + e.message);
     failed++;
 }
 
-if (failed === 0) console.log('web aspect key: ' + table.length + ' rows x 2 pages, ' + shellOnly.length + ' rows of the game page\'s two other shapes, and the selectors, 0 failures');
+if (failed === 0) console.log('web aspect key: ' + table.length + ' rows x 2 pages, ' + shellOnly.length + ' rows of the game page\'s two other shapes, and the selectors (the game page\'s, the lobby\'s and the test room\'s), 0 failures');
 process.exit(failed === 0 ? 0 : 1);

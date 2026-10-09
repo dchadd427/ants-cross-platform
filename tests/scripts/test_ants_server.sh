@@ -97,30 +97,29 @@ wait_ticks() {
 cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
 if part_enabled options; then
-# the Play online page tells the players what the room's leader can do (protocol 7), in its setup hint, its join hint and the line under the room's title
-check "web/lobby.html says that the first player in the room can start early with START once at least 2 players are in (setup, join and room hints)" "$([ "$(grep -c 'first player in the room can start' "$ROOT/web/lobby.html")" -ge 3 ]; echo $?)"
-# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the front page's one card offers four seats with a group of five buttons each (Friend, Easy, Medium,
-# Hard, Nobody), Sit here and a Team 1 and a Team 2 switch, remembers them, and every link of the room carries the plan as ?fill=<plan> (and &start=<people>), validated; the game page turns exactly those texts into --fill-bots,
-# --teams and --start-when (and nothing else: an address cannot put another word on the command line)
+# the lobby tells the players what the room's host can do (protocol 7: the first player in the room leads it and starts the match with whoever is in): on the host's own colour, in the line that the others read, in
+# "How it works", and in the hint of the test room (the old addresses), where the leader is the first player to connect
+check "web/lobby.html and web/front/lobby_rules.js say what the host can do: the host's colour says 'Host. You start the match.', the others read that the host starts the match when everybody is in, How it works says that the host starts the match with whoever is in, and the test room keeps its hint that the first player to connect leads the room" "$(grep -qF 'Host. You start the match.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'starts the match when everybody is in.' "$ROOT/web/front/lobby_rules.js" && grep -qF 'The host starts the match with whoever is in.' "$ROOT/web/lobby.html" && [ "$(grep -c 'The first player to connect leads the room' "$ROOT/web/lobby.html")" -ge 1 ]; echo $?)"
+# bots fill the empty seats (protocol 11, a level for each seat and the room's teams since protocol 13): the lobby has a card for each of the four colours; the host gives a free colour to Open, an Easy, Medium or Hard bot or
+# Nobody with a select, presses Team 1 or Team 2 under a player, and every change goes to the room as a plan (the room tells everybody, so nothing is remembered by the page); the old addresses' links carry the plan as
+# ?fill=<plan> (and &start=<people>), validated, and the game page turns exactly those texts into --fill-bots, --teams and --start-when (and nothing else: an address cannot put another word on the command line)
 FOUR_PAGE="$ROOT/web/lobby.html"
 SHELL_PAGE="$ROOT/web/shell.html"
 FILL_FORM=1
-if grep -qF 'id="seat-0-friend"' "$FOUR_PAGE" && grep -qF 'id="seat-1-easy"' "$FOUR_PAGE" && grep -qF 'id="seat-2-medium"' "$FOUR_PAGE" && grep -qF 'id="seat-3-hard"' "$FOUR_PAGE" && grep -qF 'id="seat-3-nobody"' "$FOUR_PAGE" && grep -qF 'id="sit-3"' "$FOUR_PAGE" && grep -qF 'id="team-0-1"' "$FOUR_PAGE" && grep -qF 'id="team-3-2"' "$FOUR_PAGE" \
-    && grep -qF "remember(CARD_KEY, cardText(card));" "$FOUR_PAGE" && grep -qF "var card = cardParse(recall(CARD_KEY)) || cardFromOld({" "$FOUR_PAGE"; then FILL_FORM=0; fi
-check 'web/lobby.html offers four seats with Friend, Easy, Medium, Hard and Nobody for each, Sit here and the Team 1 and Team 2 switches on its one card, and remembers them' "$FILL_FORM"
+if grep -qF "[['open', 'Open'], ['easy', 'Easy bot'], ['medium', 'Medium bot'], ['hard', 'Hard bot'], ['nobody', 'Nobody']]" "$FOUR_PAGE" && grep -qF "'Team ' + t.side" "$FOUR_PAGE" && grep -qF "client.setPlan(" "$FOUR_PAGE" \
+    && grep -qF "var GRID = [3, 0, 1, 2];" "$ROOT/web/front/lobby_rules.js" && grep -qF "data-remove" "$FOUR_PAGE"; then FILL_FORM=0; fi
+check 'web/lobby.html has a card for each of the four colours (Black, Green, Red, Blue in the order of the hills) with Open, Easy bot, Medium bot, Hard bot and Nobody for a free colour, the Team 1 and Team 2 buttons, Remove, and sends every change to the room as a plan' "$FILL_FORM"
 FILL_LINKS=1
 if grep -qF "if (fill) q += '&fill=' + fill" "$FOUR_PAGE" && grep -qF "if (roomTeams && !teamsInBlock) q += '&teams=' + encodeURIComponent(roomTeams)" "$FOUR_PAGE" && grep -qF "validFillPlan(params.get('fill'))" "$FOUR_PAGE" && grep -qF "validRoomTeams(params.get('teams'))" "$FOUR_PAGE" \
-    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE" && grep -qF "(plan ? '&fill=' + plan : '')" "$FOUR_PAGE" \
-    && grep -qF "'&start=' + cardPeople(state)" "$FOUR_PAGE" && grep -qF "Starts at once, in this tab. Bots gather food, raid and fight back." "$FOUR_PAGE"; then FILL_LINKS=0; fi
-check "web/lobby.html puts the plan into every game link of a room and into its own address as &fill=<plan> (and &teams=A+B for a room whose create block names no teams), the card's START and invitations carry &fill=<plan>&start=<people>, the address is read through validFillPlan and validRoomTeams, and the line under START says what the bots do (gather food, raid and fight back)" "$FILL_LINKS"
-# the room's teams are a part of its create block (protocol 15, they were a word of the code in protocol 13): the card puts them into the block of the room that it makes, the page reads the block of an
-# address (roomBlockOf), and the links carry &teams= only for a room whose block names none
+    && grep -qF "(fill ? '&fill=' + fill : '')" "$FOUR_PAGE" && grep -qF "(roomTeams && !teamsInBlock ? '&teams=' + encodeURIComponent(roomTeams) : '')" "$FOUR_PAGE"; then FILL_LINKS=0; fi
+check "web/lobby.html puts the plan into every game link of the test room (the old addresses) and into its own address as &fill=<plan> (and &teams=A+B for a room whose create block names no teams), and reads the address through validFillPlan and validRoomTeams" "$FILL_LINKS"
+# the room's teams are a part of its create block (protocol 15, they were a word of the code in protocol 13): the test room (the old addresses) reads the block of an address (roomBlockOf), and its links carry
+# &teams= only for a room whose block names none (the lobby has no create block of its own: its room's teams are the plan that the host sends)
 TEAM_BLOCK=1
 if grep -qF "var wantedBlock = roomBlockOf(window.location.search);" "$FOUR_PAGE" && grep -qF "var roomTeam = hostTeam(validRoomTeams(teams), players);" "$FOUR_PAGE" \
-    && grep -qF "startRoom(randomCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');" "$FOUR_PAGE" \
     && grep -qF "var shown = shownRoomTeams(named, seatCount);" "$FOUR_PAGE" && grep -qF "roomTeams = teamsInBlock ? shown : (named ? '' : validRoomTeams(teams));" "$FOUR_PAGE" && grep -qF "joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams)" "$FOUR_PAGE" \
-    && grep -qF "hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '')" "$FOUR_PAGE" && grep -qF "roomBlockQuery(cardBlock(state)) + '&seat='" "$FOUR_PAGE"; then TEAM_BLOCK=0; fi
-check "web/lobby.html puts the teams that the Team 1 and Team 2 switches make into the room's create block (roommap, roomseats and roomteams in every link; the card's room is always for four seats), reads the block of an address (roomBlockOf), lets the block's teams win over the address's &teams=, and narrows an address's &teams= to the seats that the block names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_BLOCK"
+    && grep -qF "hostTeam(wantedTeams, wantedBlock.seats).replace('ffa', '')" "$FOUR_PAGE"; then TEAM_BLOCK=0; fi
+check "web/lobby.html's test room reads the create block of an address (roomBlockOf, roomblock and roomseats and roomteams in every link), lets the block's teams win over the address's &teams=, and narrows an address's &teams= to the seats that the block names (tests/scripts/web_name_check.js and web_lobby_check.js run it)" "$TEAM_BLOCK"
 FILL_SHELL=1
 if grep -qF "out.args.push('--fill-bots', fill)" "$SHELL_PAGE" && grep -qF "var fill = antsFillPlanArg(q.get('fill'));" "$SHELL_PAGE" && grep -qF "out.args.push('--teams', teams)" "$SHELL_PAGE" && grep -qF "var teams = antsTeamsArg(q.get('teams'));" "$SHELL_PAGE" \
     && grep -qF "out.args.push('--start-when', start)" "$SHELL_PAGE" && grep -qF "var start = antsStartArg(q.get('start'));" "$SHELL_PAGE"; then FILL_SHELL=0; fi

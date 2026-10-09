@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The line of numbers in the front page's header (run by ./run_tests.sh --fast and by the CI). The owner: "Game stats would be cool on the page. How many games played / in progress etc."
+"""The line of numbers in the front page's footer (run by ./run_tests.sh --fast and by the CI). The owner: "Game stats would be cool on the page. How many games played / in progress etc."
 
 "3 matches being played - 7 players online - 1,284 games played (21 today)": the numbers come from the game server through this site's own address /stats ({"now":{"matches","players"},
 "online":{"day","total"},"local":{"day","total"},"since"}); a site that has no /stats is asked for /busy ({"matches","players"}) and the line then shows the live part only; when neither
@@ -7,9 +7,9 @@ answers there is no line (no text of an error). The page looks at once and every
 
   - the block STATS of web/lobby.html is RUN (node, when it is installed) on tables, with a fake clock, a fake visibility and fake answers of the site (tests/scripts/web_stats_check.js), and
     the page as a whole in the fake browser of tests/scripts/web_name_check.js (what it asks, what it shows, when it looks);
-  - what needs no browser is read from the files: the line is hidden in the markup until numbers come, the block has its markers and no markup or storage, the page asks only its own /stats
-    and /busy with no cache and no cookies, the dot is green only while a match is played, the two parts wrap as units with no dot at the end or the start of a line, and on a phone the line
-    takes the place of the slogan and shows the live part only (the header must not grow: the START! button stays on the first screen of a 390 x 844 phone).
+  - what needs no browser is read from the files: the line stands in the footer and is hidden in the markup until numbers come, the block has its markers and no markup or storage, the page
+    asks only its own /stats and /busy with no cache and no cookies, the dot is green only while a match is played, and the separator between the two parts is drawn by the style (it is
+    not there when only /busy answered).
 """
 import os
 import re
@@ -32,12 +32,15 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.page = read(LOBBY)
         self.style = self.page[:self.page.index("</style>")]
 
-    def test_the_line_is_in_the_header_under_the_banner_and_hidden_until_numbers_come(self):
-        line = '<p class="stats" id="stats" hidden><span id="stats-dot" class="live" aria-hidden="true"></span><span class="parts"><span class="partsrow"><span id="stats-live"></span> <span id="stats-played"></span></span></span></p>'                      # (the space is for the text of the line: "online 1,284", not "online1,284"; a flex row draws none of it)
-        self.assertIn(line, self.page)
-        header = self.page[self.page.index('<header class="top">'):self.page.index("</header>")]
-        self.assertLess(header.index('<h1 class="banner">'), header.index('id="stats"'))
-        self.assertLess(header.index('id="stats"'), header.index('<p class="lead">'))
+    def test_the_line_is_in_the_footer_before_the_version_row_and_hidden_until_numbers_come(self):
+        line = '<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>'       # (the separator between the two parts is the style's)
+        self.assertEqual(self.page.count(line), 1)
+        footer = self.page[self.page.index('<footer class="bar">'):self.page.index("</footer>")]
+        self.assertIn(line, footer)
+        self.assertLess(footer.index('id="stats"'), footer.index('<div class="bar-row">'))                        # (above the version line, the footer links and the Screen buttons)
+        # hidden until numbers come: the attribute is in the markup, and the style's own display for the line must not undo it
+        self.assertIn("[hidden] { display: none !important; }", self.style)
+        self.assertNotRegex(self.style, r"\.bar \.stats \{[^}]*display:")                                         # (the line is one text that flows and wraps, as the phone picture draws it: no flex row of parts)
 
     def test_the_block_has_its_markers_once_and_makes_no_markup_and_reads_no_storage(self):
         self.assertEqual(self.page.count("// STATS_BEGIN"), 1)
@@ -69,21 +72,9 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.assertRegex(self.style, r"\.live\.on \{[^}]*background: #44e08a;")
         self.assertIn("$('stats-dot').className = words.on ? 'live on' : 'live';", self.page)
 
-    def test_on_a_phone_the_line_takes_the_place_of_the_slogan_and_shows_the_live_part_only(self):
-        phone = self.style[self.style.index("@media (max-width: 700px) {"):]
-        for needle in (".intro p:not(.lead):not(.stats), .links { display: none; }", "#stats-played { display: none; }", ".stats:not([hidden]) + .lead { display: none; }", ".stats .partsrow { flex-wrap: nowrap; }"):
-            self.assertIn(needle, phone, needle)
-
-    def test_the_parts_wrap_as_units_and_the_dot_between_them_is_clipped_where_it_would_begin_a_line(self):
-        # the dot is a pseudo-element in the left space of the second part; the first part's space and the row's negative margin are the same size, an outer box with overflow hidden
-        # cuts that space off, so a part that begins a line shows no dot (a dot at the end of the first line, or at the start of the second, looked like a mistake on a tablet)
-        row = re.search(r"\.stats \.partsrow \{ display: flex; flex-wrap: wrap; gap: 2px 0; margin-left: -(\d+)px; \}", self.style)
-        space = re.search(r"\.stats \.partsrow > span \{ position: relative; padding-left: (\d+)px; \}", self.style)
-        self.assertTrue(row and space, "the row and its parts")
-        self.assertEqual(row.group(1), space.group(1))
-        self.assertIn(".stats .parts { min-width: 0; overflow: hidden; }", self.style)
-        self.assertRegex(self.style, r'#stats-played::before \{ content: "\\00b7"; position: absolute; left: \d+px; \}')
-        self.assertIn("#stats-played:empty { display: none; }", self.style)                  # (nothing but /busy: no totals, and no dot of theirs)
+    def test_the_separator_between_the_two_parts_is_the_styles_and_is_not_there_without_the_second_part(self):
+        self.assertIn('#stats-played::before { content: "\\00a0\\00b7\\0020"; }', self.style)                   # (the dot between "... online" and "... played": a no-break space before it, so that a line never begins with it, and a space after it)
+        self.assertIn("#stats-played:empty { display: none; }", self.style)                  # (nothing but /busy: no totals, and no separator of theirs)
         self.assertNotIn("stats-sep", self.page)
 
 

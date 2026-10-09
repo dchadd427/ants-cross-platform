@@ -1,4 +1,4 @@
-// Runs the front page's OWN code for the line of numbers in its header (the owner: "Game stats would be cool on the page. How many games played / in progress etc."): the block STATS_BEGIN ..
+// Runs the front page's OWN code for the line of numbers in its footer (the owner: "Game stats would be cool on the page. How many games played / in progress etc."): the block STATS_BEGIN ..
 // STATS_END of web/lobby.html, on tables and with a fake clock, a fake page visibility and fake answers of the site:
 //   * statsOf: the answer of /stats ({"now":{"matches","players"},"online":{"day","total"},"local":{"day","total"},"since"}): the live numbers and the sums (games played = online.total + local.total, today =
 //     online.day + local.day), and every other shape (not an object, a missing part, a negative or fractional or non-numeric number, a text that is no date as the only thing wrong) as null or as it is allowed;

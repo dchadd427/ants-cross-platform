@@ -11,7 +11,7 @@ page ever had keeps opening it. The rules (docker/nginx.conf):
   /play.html[?map=...&bots=...]         the game page, at an explicit path of its own (the games on this computer: the lobby's Play button)
   /index.html, /lobby.html              the two files themselves
 Every html answer has the headers that every page of the site has always had: Cache-Control "no-cache, must-revalidate" (exactly one line), the two cross-origin headers, an ETag (a conditional
-request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the field of the name (id="player-name"),
+request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the room (id="lobby"; the build writes it with or without quotes),
 the game page has the stage (id="game-stage"; the build writes it with or without quotes).
 /stats, /stats/local                  the numbers of the front page: a GET and a POST that go to the game server (only what nginx itself refuses is checked here: other methods, a query)
 /front/classic.css, the font          the Classic look's own files: served as files (an unknown address falls back to the game page, so the type is checked), the stylesheet with the pages' revalidation
@@ -26,7 +26,7 @@ import re
 import sys
 import urllib.parse
 
-LOBBY = re.compile(r'id="?player-name"?')
+LOBBY = re.compile(r'id="?lobby"?[ >]')
 GAME = re.compile(r'id="?game-stage"?')
 
 
@@ -80,11 +80,11 @@ def main():
     for path in lobby_paths:
         status, headers, names, body = get(path)
         page_headers("the lobby at " + path, status, headers, names)
-        check(bool(LOBBY.search(body)) and not GAME.search(body), "the lobby at %s is the front page (its name field, not the game's stage)" % path)
+        check(bool(LOBBY.search(body)) and not GAME.search(body), "the lobby at %s is the front page (its room, not the game's stage)" % path)
     for path in game_paths:
         status, headers, names, body = get(path)
         page_headers("the game page at " + path, status, headers, names)
-        check(bool(GAME.search(body)) and not LOBBY.search(body), "the game page at %s is the game (its stage, not the lobby's name field)" % path)
+        check(bool(GAME.search(body)) and not LOBBY.search(body), "the game page at %s is the game (its stage, not the lobby's room)" % path)
 
     print("[web routes] the old Play online address redirects for good, with its query")
     for query in ("", "?room=abc", "?room=k7m2xq&roommap=small&roomseats=2&roomteams=0%2B1&fill=medium&aspect=4:3", "?map=tiny&players=2&fill=easy&play=here", "?map=treasure&players=1&fill=hard", "?name=Ann%20%26%20Bob&x=%3Cb%3E", "?"):

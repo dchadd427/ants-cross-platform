@@ -173,9 +173,15 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertIn("<title>Ants (1998) — beta.playants.org (staging)</title>", pages["index"])
         self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
         self.assertIn("<title>Watch replays — Ants (1998) (staging)</title>", pages["watch"])
-        # the footer of both pages is the emerald bar: the label stands in front of the version (and the build), in the same box
-        for name in ("index", "lobby", "watch"):
+        # the footer of the pages is the emerald bar: the label stands in front of the version (and the build), in the same box. The game page's and the replays' footer is that one box; the front page's
+        # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links, and at the right the Screen buttons)
+        for name in ("index", "watch"):
             self.assertRegex(pages[name], r'<footer class="bar">\s*<div class="bar-in">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
+        footer = pages["lobby"][pages["lobby"].index('<footer class="bar">'):pages["lobby"].index("</footer>")]
+        self.assertRegex(footer, r'<div class="bar-row">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
+        self.assertEqual(footer.count('id="site-label"'), 1)
+        self.assertEqual(pages["lobby"].count('id="site-label"'), 1)                          # (the label is in the footer only)
+        self.assertLess(footer.index('id="site-label"'), footer.index('<nav aria-label="Footer links">'))
         for page in pages.values():
             self.assertNotIn("@@SITE_", page)
 

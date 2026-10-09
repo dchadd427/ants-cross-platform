@@ -318,6 +318,8 @@ class TheRealDockerfileReplayed(Scratch):
             self.assertRegex(text, r'id="?game-version"?>%s<' % re.escape(version), name)
             self.assertRegex(text, r'id="?game-build-id"?>abc1234<', name)
             self.assertNotIn("@@", text, name)
+            self.assertNotIn("site-label", text, name)
+            self.assertNotIn("(staging)", text, name)
             self.assertNotIn("staging", text.lower(), name)
 
     def test_the_build_id_comes_from_the_build_argument_else_from_the_checkout_else_from_the_date(self):
