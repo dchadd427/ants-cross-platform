@@ -1042,7 +1042,7 @@
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1058,18 +1058,15 @@
         .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
         .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
 
-        /* on the picture: what the page says over the game (small, so that the game's own bars stay clear) */
+        /* on the picture: what the page says over the game (small, so that the game's own bars stay clear). The REPLAY tag is not here: it rides with the bar (below), so nothing of it lies over the game */
         body.replay #game-container { container-type: inline-size; }
-        .rtag { position: absolute; top: 1.4cqw; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 1cqw; padding: .12cqw 1cqw; font-size: max(10px, 1.2cqw); line-height: 1.5; white-space: nowrap; color: var(--cream); background: rgba(5, 10, 8, .86); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
-        .rtag b { font-weight: 500; letter-spacing: .16em; color: var(--gold); }
-        .rtag span { font-variant-numeric: tabular-nums; }
         .endnote { position: absolute; left: 3%; right: 3%; width: fit-content; margin: 0 auto; top: 4cqw; z-index: 4; padding: .7cqw 1.6cqw; font-size: max(11px, 1.5cqw); line-height: 1.35; text-align: center; color: var(--cream); background: var(--inset); border: 3px solid var(--gold); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); pointer-events: none; }
         .veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 10, 8, .55); z-index: 4; }
         .veil .card { display: grid; gap: 10px; justify-items: center; padding: 14px 24px 16px; min-width: min(78%, 330px); font-size: max(12px, 1.8cqw); color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
 
         /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
-        .rbar { width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 22px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
+        .rbar { position: relative; width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
         body:not(.replay) .rbar { display: none; }
         .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; }
         .rbar .rplay svg { width: 24px; height: 24px; fill: currentColor; display: block; }
@@ -1089,6 +1086,18 @@
         .rbar .fsx { grid-area: fsx; display: none; min-width: 44px; padding: 6px 10px; }
         .rbar .fsx svg { width: 22px; height: 22px; fill: currentColor; display: block; }
 
+        /* the REPLAY / LIVE tag: just above the bar, in the room that the bar's top margin makes (never over the picture); in fullscreen it lies over the picture's bottom edge with the bar and goes with it. Its sizes are
+           pixels: it is outside the picture's box, whose width the picture's own sizes follow */
+        .rtag { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 8px; padding: 1px 10px; font-size: 13px; line-height: 1.5; white-space: nowrap; color: var(--cream); background: rgba(5, 10, 8, .86); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+        .rtag b { font-weight: 500; letter-spacing: .16em; color: var(--gold); }
+        .rtag span { font-variant-numeric: tabular-nums; }
+        /* the tab on the bar's top edge (fullscreen only): a tap hides the bar, like a swipe down on it */
+        .rtab { display: none; }
+        .rtab svg { width: 20px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; }
+        /* the strip along the bottom edge of a fullscreen page where a finger calls the bar back (a tap, or a swipe up); nothing is drawn on it, and it is there only while the bar is away and the last touch was a finger */
+        .redge { position: absolute; left: 0; right: 0; bottom: 0; height: calc(56px + env(safe-area-inset-bottom, 0px)); z-index: 59; touch-action: none; }
+        .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+
         /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
         .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
         .rm-card p b { font-weight: 500; color: #fff; }
@@ -1102,6 +1111,10 @@
         /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
         .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease; }
         .rbar.over.idle { opacity: 0; pointer-events: none; }
+        .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
+        .rbar.over .rtag { left: 14px; transform: none; font-size: 14px; }
+        .rbar.over .rtab { display: flex; position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); width: 60px; height: 20px; align-items: center; justify-content: center; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-bottom: 0; border-radius: 9px 9px 0 0; cursor: pointer; touch-action: manipulation; }
+        .rbar.over .rtab:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         .rbar.over .fsx { display: inline-flex; }
         .rbar.over .tl .tick { background: #486a5f; } .rbar.over .tl .tick.m5 { background: var(--muted); }
 
@@ -1110,14 +1123,17 @@
             body.replay header { flex-wrap: wrap; }
             .rhead { order: 3; flex: 1 1 100%; }
             .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
-            .rbar { margin: 18px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
+            .rtag { font-size: 12px; bottom: calc(100% + 5px); }
+            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
             .rbar .clock { text-align: left; font-size: 19px; }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
         }
         /* a phone on its side, or any short window: the title keeps one row, and in fullscreen the bar is one thin row */
         @media (max-height: 520px) {
             #r-meta { display: none; }
-            .rbar { width: 100%; max-width: 1280px; }
+            .rbar { width: 100%; max-width: 1280px; margin-top: 43px; }
+            .rtag { font-size: 11px; bottom: calc(100% + 5px); }
+            .rbar.over .rtag { font-size: 13px; }
             .rhead h2 { font-size: 20px; } .rhead h2 small { font-size: 13px; }
             .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
             .rbar.over .clock { text-align: right; font-size: 16px; min-width: 0; }
@@ -1134,7 +1150,7 @@
         .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
         body.live [data-dl], body.nodl [data-dl] { display: none !important; }
         .rtag.lv b { color: #ff8c84; }
-        .rtag.lv b::before { content: ""; display: inline-block; width: .8cqw; height: .8cqw; min-width: 7px; min-height: 7px; margin-right: .7cqw; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
+        .rtag.lv b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
         .rbar.islive .tl .edge { display: block; }
         .rbar .livebox { grid-area: live; display: none; }
@@ -1203,7 +1219,6 @@
         <div id="game-container">
             <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-            <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
             <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
             <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
 
@@ -1218,6 +1233,8 @@
             </div>
         </div>
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
+        <div class="redge rep-only" id="redge" hidden></div>
+        <div class="rnote rep-only" id="rnote" role="status" hidden>Swipe up from the bottom edge to bring the bar back</div>
     </div>
 
     <div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>
@@ -1258,12 +1275,14 @@
     </div>
 
     <div class="rbar rep-only" id="rbar">
+        <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
         <button class="btn rplay" type="button" id="b-play" title="Play or pause (Space)" aria-label="Play"></button>
         <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Position in the match" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="rail" id="rail"><div class="track"><div class="fill" id="tl-fill"></div><div class="edge"></div></div><div class="ticks" id="tl-ticks"></div><div class="thumb" id="tl-thumb"></div></div></div>
         <div class="clock" id="clock"><b id="t-now">0:00</b> <small id="t-all">/ 0:00</small></div>
         <div class="livebox" id="livebox"><span class="livenow" id="livenow" hidden>Live</span><button class="btn sm jtl" type="button" id="b-live" hidden>Jump to live</button></div>
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
+        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
@@ -3355,17 +3374,43 @@
             }
 
             // ---- fullscreen: the bar lies over the picture, so it moves into the picture's box while the page is fullscreen ----
+            // The bar goes away by itself 3 seconds after the last touch of it while the match plays (it stays while the match is paused), and a swipe down on it or a tap on its tab hides it at once. A FINGER on the
+            // picture never calls it (a tap or a drag of the map would put it over the picture's bottom edge every time); a finger calls it from the strip along the bottom edge (#redge: a tap, or a swipe up), which
+            // is there only while the bar is away and the last touch was a finger (the strip would keep a mouse from the game's edge). A mouse, a pen and the keys call it as ever.
+            var EDGE_SWIPE = 24, BAR_SWIPE = 36, TAP_SLOP = 12;                 // CSS pixels
+            var touchSeen = false, noteShown = false, noteTimer = 0, swiped = false;
             window.antsReplayPlaceBar = function () {
                 var bar = $('rbar');
                 var over = isFullscreen();
                 if (over && bar.parentNode !== stageElement) { stageElement.appendChild(bar); bar.classList.add('over'); wake(); }
                 else if (!over && bar.parentNode === stageElement) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
             };
+            function syncEdge() {
+                var bar = $('rbar');
+                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));
+            }
             function wake() {
                 var bar = $('rbar');
                 bar.classList.remove('idle');
                 clearTimeout(idleTimer);
-                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(function () { bar.classList.add('idle'); }, 3000);
+                clearTimeout(noteTimer);
+                $('rnote').hidden = true;
+                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
+                syncEdge();
+            }
+            function hideBar() {                                                  // (only in fullscreen: the bar of the page is always there)
+                var bar = $('rbar');
+                if (!bar.classList.contains('over')) return;
+                clearTimeout(idleTimer);
+                if (dragging) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline is a touch of the bar: it looks again)
+                bar.classList.add('idle');
+                syncEdge();
+                if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
+                    noteShown = true;
+                    $('rnote').hidden = false;
+                    clearTimeout(noteTimer);
+                    noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000);
+                }
             }
 
             // ---- what the game tells the page ----
@@ -3429,7 +3474,43 @@
                     toggle();
                 }
             }, true);
-            ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) { document.addEventListener(name, wake, { passive: true }); });
+            ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
+                document.addEventListener(name, function (ev) {
+                    var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';
+                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
+                    if (touch && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;               // (a finger on the picture never calls the bar)
+                    if (touch && swiped) return;                                                                              // (nor does the finger that has just swiped it away: until it is lifted)
+                    wake();
+                }, { passive: true });
+            });
+            ['pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, function () { swiped = false; }, { passive: true }); });
+            // a finger on the strip: a tap, or a swipe up, calls the bar
+            var edgeFrom = null;
+            $('redge').addEventListener('pointerdown', function (ev) {
+                edgeFrom = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
+                try { $('redge').setPointerCapture(ev.pointerId); } catch (e) { /* the moves come while the finger is over the strip */ }
+            });
+            $('redge').addEventListener('pointermove', function (ev) {
+                if (edgeFrom && ev.pointerId === edgeFrom.id && edgeFrom.y - ev.clientY >= EDGE_SWIPE) { edgeFrom = null; wake(); }
+            });
+            $('redge').addEventListener('pointerup', function (ev) {
+                var from = edgeFrom;
+                edgeFrom = null;
+                if (from && ev.pointerId === from.id && Math.abs(ev.clientX - from.x) < TAP_SLOP && Math.abs(ev.clientY - from.y) < TAP_SLOP) wake();
+            });
+            $('redge').addEventListener('pointercancel', function () { edgeFrom = null; });
+            // a swipe down on the bar (anywhere but the timeline, which has its own drag), or a tap on its tab, hides it
+            var barFrom = null;
+            $('rbar').addEventListener('pointerdown', function (ev) {
+                barFrom = ev.pointerType === 'touch' && !$('tl').contains(ev.target) ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY } : null;
+            });
+            $('rbar').addEventListener('pointermove', function (ev) {
+                if (!barFrom || ev.pointerId !== barFrom.id) return;
+                var down = ev.clientY - barFrom.y;
+                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; swiped = true; hideBar(); }
+            });
+            ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
+            $('b-tab').addEventListener('click', hideBar);
 
             // ---- a match that is being played: the feed ----
             var feedTimer = 0, notLiveLooks = 0;
