@@ -128,7 +128,7 @@ void SiteStats::add(Series& series, int64_t now_hour) noexcept {
 }
 
 void SiteStats::count_ended(const RoomStatus& ended) {
-    if (ended.ticks >= kMinTicks) count_online();
+    if (!ended.bots_only && ended.ticks >= kMinTicks) count_online();       // (the server's own match of computer players is no game that anybody played)
 }
 
 void SiteStats::count_online() {

@@ -52,7 +52,7 @@ class TheMarkup(unittest.TestCase):
         self.assertEqual(len(re.findall(r"\bstartGame\(\)", page)), 1)                      # only the definition: function startGame()
 
     def test_both_name_screens_say_that_online_matches_are_recorded(self):
-        words = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names."      # (the owner chose "Add the line", 2026-10-08; live watching changed its second sentence)
+        words = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names."      # (live watching changed its second sentence)
         self.assertEqual(read(LOBBY).count(words), 1)
         self.assertEqual(read(SHELL).count(words), 1)
         self.assertIn('<span class="notice" id="who-notice">' + words + "</span>", read(LOBBY))     # (under the hint of the field; only the step of a game on this computer hides it, by script)

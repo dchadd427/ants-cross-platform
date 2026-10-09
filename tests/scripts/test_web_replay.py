@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Watching a replay, and a match that is being played, on the web (run by ./run_tests.sh --fast and by the CI): the list page (web/watch.html), the game page in replay mode (web/shell.html,
-play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code that they share (web/replay_page.js). The owner approved the pictures of the list and of the player (2026-10-08, the
-mock-up's second version) and of the live match's pages; docs/REPLAYS.md "Watching" says what they do.
+play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code that they share (web/replay_page.js). docs/REPLAYS.md "Watching" says what they do.
 
   - the shared code is RUN (node, when it is installed): the address of a replay or of a live match, the day and the time in the visitor's zone, the length, the maps, the players, the chips, the
     live tag and the verdict on an answer of the live door (tests/scripts/web_replay_check.js);

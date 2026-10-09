@@ -200,6 +200,7 @@ struct RoomStatus {
     std::string teams;                      // the teams that the match started with, "ffa" or "A+B" (protocol 13; "" before the match), and the referee's own alliances by seat now (4: none): for the tests, not shown by
     std::array<uint8_t, 4> allies{4, 4, 4, 4};     // the control interface
     std::string room_teams;                 // the room's own teams, "A+B" ("" when it has none: the leader's START chooses): for the tests, not shown by the control interface
+    bool bots_only{false};                  // a match of computer players alone, the server's own (RoomSpec::bots_only): not a game that the site's statistics count
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick

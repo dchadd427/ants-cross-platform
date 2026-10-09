@@ -34,7 +34,7 @@ public:
     using Clock = std::function<int64_t()>;
     explicit SiteStats(Clock clock = Clock());
 
-    /// A room that ended (RoomManager::take_ended tells each once): an online game when its match ran at least kMinTicks (RoomStatus::ticks), nothing otherwise
+    /// A room that ended (RoomManager::take_ended tells each once): an online game when its match ran at least kMinTicks (RoomStatus::ticks) and had a person in it, nothing otherwise (the server's own match of computer players, RoomStatus::bots_only, is not counted)
     void count_ended(const RoomStatus& ended);
     /// One online game
     void count_online();

@@ -1044,6 +1044,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.teams = sim::start_teams_text(start_teams_);
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) s.allies[seat] = sim_->alliance_of(seat);
     }
+    s.bots_only = spec_.bots_only;
     s.bot_controller = bot_controller_ != nullptr;
     s.bot_start_hold = bot_controller_ != nullptr ? bot_controller_->start_hold() : 0u;
     if (bot_controller_ != nullptr) {

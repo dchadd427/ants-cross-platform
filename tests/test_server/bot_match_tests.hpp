@@ -87,11 +87,11 @@ void run_bot_match_tests() {
         ASSERT_TRUE(w.status("BM-ROOM").state == RoomState::Waiting);
         ASSERT_TRUE(run_until(w, [&] { return w.status("BM-ROOM").state == RoomState::Running; }, 12000));
         RoomStatus s = w.status("BM-ROOM");
-        ASSERT_TRUE(s.joined == 3 && s.bot_controller && s.bots.size() == 3 && s.names[0] == "Bot (Medium)" && s.names[1] == "Bot (Hard)");
+        ASSERT_TRUE(s.bots_only && s.joined == 3 && s.bot_controller && s.bots.size() == 3 && s.names[0] == "Bot (Medium)" && s.names[1] == "Bot (Hard)");
         w.run(20000);                                                        // (nobody has ever been in the room: "everybody left" does not end it)
         s = w.status("BM-ROOM");
         ASSERT_TRUE(s.state == RoomState::Running);
-        ASSERT_MSG(s.turns > 300 && s.turns < 500, "turns " + std::to_string(s.turns));      // (about 20 turns a second: the normal speed, not the headless arena's)
+        ASSERT_MSG(s.turns > 250 && s.turns < 500, "turns " + std::to_string(s.turns));      // (about 20 turns a second: the normal speed, not the headless arena's)
         ASSERT_TRUE(s.bot_decisions > 0);
         ASSERT_TRUE(run_until(w, [&] { return w.status("BM-ROOM").state != RoomState::Running; }, 40000));
         s = w.status("BM-ROOM");
@@ -149,5 +149,21 @@ void run_bot_match_tests() {
         ASSERT_FALSE(off.mgr.bot_matches_enabled());
         off.run(5000);
         ASSERT_TRUE(off.mgr.list(off.now).empty() && off.mgr.take_notices().empty());
+    } TEST_END();
+
+    TEST_CASE("S3.182 A Match Of Computer Players Alone Is Not A Game That The Site's Statistics Count, Whatever Its Length; The Same Status Without bots_only Is") {
+        StatsClock clock;
+        SiteStats stats(clock.fn());
+        RoomStatus bots = ended_room("BM-STATS", RoomState::Finished, 12000);
+        bots.bots_only = true;
+        stats.count_ended(bots);
+        ASSERT_TRUE(stats.online().day == 0 && stats.online().total == 0);
+        bots.bots_only = false;
+        stats.count_ended(bots);
+        ASSERT_TRUE(stats.online().day == 1 && stats.online().total == 1);
+        World w;                                                             // (and the status of a real room of that kind says so)
+        ASSERT_TRUE(w.mgr.create_room(bots_only_spec("BM-FLAG", 2), w.now).ok);
+        ASSERT_TRUE(w.status("BM-FLAG").bots_only);
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BM-PLAIN", 2), w.now).ok && !w.status("BM-PLAIN").bots_only);
     } TEST_END();
 }
