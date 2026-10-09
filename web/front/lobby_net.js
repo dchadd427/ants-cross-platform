@@ -272,7 +272,8 @@
     }
 
     // ---- the client ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
+    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
+    // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. A link makes the room again, as a page that came back does.)
     //   'status' (status)           idle -> connecting -> online; offline (reconnecting); refused, removed, superseded, closed (final)
     //   'welcome' ({ seat, created, rejoin })   the room took us (created: our Hello made it); the key is not in it (rejoinEntry() is how a page hands it to the game)
     //   'room' (room)               every Room message, then the events of diffRooms for it
@@ -300,6 +301,7 @@
         this.name = printableOnly(opts.name, MAX_NAME);
         this.platform = validPlatform(opts.platform) ? opts.platform : 0;
         this.keyBytes = isKey(opts.key) ? new Uint8Array(opts.key) : null;      // a copy: the caller's array is the caller's; read it with .key (a copy again)
+        this.joinOnly = opts.join === true;                          // a Hello with no lobby block: the room of the code is joined and never made (a code that somebody typed: no such room is NoSuchRoom)
         this.WS = 'WebSocket' in opts ? opts.WebSocket : (typeof WebSocket !== 'undefined' ? WebSocket : null);
         this.setTimer = opts.setTimeout || function (fn, ms) { return setTimeout(fn, ms); };
         this.clearTimer = opts.clearTimeout || function (id) { clearTimeout(id); };
@@ -383,7 +385,7 @@
             self.heard = self.now();
             self.arm(self.silenceMs);
             try {
-                ws.send(encodeHello({ name: self.name, room: self.code, key: self.keyBytes, platform: self.platform, create: { map: self.map } }));
+                ws.send(encodeHello({ name: self.name, room: self.code, key: self.keyBytes, platform: self.platform, create: self.joinOnly ? null : { map: self.map } }));
                 self.helloSent = true;
             } catch (e) {
                 self.giveUpSocket();                                // (the link went between its opening and our first word: the way back)
