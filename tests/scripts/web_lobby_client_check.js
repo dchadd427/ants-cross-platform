@@ -527,7 +527,23 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
         w.last().drop();
         w.advance(500);
         w.last().open();
-        same('a link whose socket was lost before any Welcome asks again without a block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+        same('a link whose socket was lost before it opened asks again without a block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+    }
+    {   // the Hello went and no Welcome came (the socket was lost, or the server said nothing): the next Hello is the first still
+        const w = world();
+        const c = client(w, { joinFirst: true });
+        c.connect();
+        w.last().open();
+        w.last().drop();
+        w.advance(500);
+        w.last().open();
+        same('a link whose Hello went and whose socket was lost before the Welcome asks again without a block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+        w.advance(8000);
+        check('... and one whose Hello was not answered for 8 seconds is given up (closed, offline)', c.status === 'offline' && w.sockets[1].closed);
+        w.advance(30000);
+        check('... and asked again on a new socket', w.sockets.length >= 3);
+        w.last().open();
+        same('... again without a block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
     }
     {   // the room took the page; later the room is lost: the page makes it again
         const w = world();
@@ -557,6 +573,11 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
         w.last().receive(reject(N.REJECT.NoSuchRoom));
         w.last().open();
         same('both options: a joiner that is asked again has no block, as with join alone', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+        w.last().receive(welcome(1, seq(0x60), 0));
+        w.last().receive(room([[C, 'Priya'], [C, 'Priya'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        w.last().open();
+        same('... and after a Welcome too: join wins, so a room that is lost is still not made', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
     }
 }
 

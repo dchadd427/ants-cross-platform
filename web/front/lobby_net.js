@@ -272,7 +272,7 @@
     }
 
     // ---- the client ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
+    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, joinFirst, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
     // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. joinFirst: true is that for the first Hello only, a link that
     // was sent: once the room has taken us, a room that is lost (a restart) is made again, as a page that came back does.)
     //   'status' (status)           idle -> connecting -> online; offline (reconnecting); refused, removed, superseded, closed (final)

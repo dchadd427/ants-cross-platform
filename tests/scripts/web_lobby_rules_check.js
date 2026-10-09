@@ -771,7 +771,7 @@ const BANNERS = [
     ['full', {}, 'That room is full, so this one is yours now. Send the link on if you like.', '', 'OK'],
     ['running', {}, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.', '', 'OK'],
     ['removed', {}, 'The host removed you from the room, so this one is yours now. Send the link on if you like.', '', 'OK'],
-    ['nolink', {}, 'There is no room with that code, so this one is yours now. Send the link on if you like.', '', 'OK'],      // (the owner's picture of a link to a code that no room has, proposal B, Oct 9)
+    ['nolink', {}, 'There is no room with that code, so this one is yours now. Send the link on if you like.', '', 'OK'],      // (a link to a code that no room has)
     ['lost', {}, 'Connection lost. Getting you back in…', 'warn', ''],
     ['unreachable', {}, 'Cannot reach the game server. Check your connection; trying again…', 'warn', ''],
     ['busy', {}, 'The server is full right now, so there is no room for you yet. Try again in a minute.', 'warn', 'Try again'],
