@@ -215,15 +215,16 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
 
     def test_a_finger_on_the_picture_never_calls_the_bar(self):
         for line in ("var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';",
-                     "if (touch && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;",
-                     "if (touch && swiped) return;"):
+                     "if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;",
+                     "if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;"):
             self.assertIn(line, self.glue, line)
         self.assertNotIn("document.addEventListener(name, wake", self.glue)                                  # (the old wiring: every touch, anywhere, called the bar)
         self.assertIn("idleTimer = setTimeout(hideBar, 3000);", self.glue)                                   # (a bar that plays still goes by itself after 3 seconds)
 
     def test_the_bar_is_called_from_the_bottom_edge_and_hidden_by_a_swipe_or_the_tab(self):
         for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));",    # (the strip: only for a finger, only while the bar is away)
-                     "edgeFrom.y - ev.clientY >= EDGE_SWIPE", "ev.pointerType === 'touch' && !$('tl').contains(ev.target)",
+                     "edgeFrom.y - ev.clientY >= EDGE_SWIPE", "$('redge').addEventListener('click', wake);",           # (a TAP calls the bar in its click: a bar called earlier takes the click)
+                     "ev.pointerType === 'touch' && $('rbar').classList.contains('over') && !$('tl').contains(ev.target)",
                      "down >= BAR_SWIPE", "$('b-tab').addEventListener('click', hideBar);"):
             self.assertIn(line, self.glue, line)
         self.assertIn('<div class="redge rep-only" id="redge" hidden></div>', self.page)
@@ -231,6 +232,8 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
         self.assertIn(".rbar.over { touch-action: none; }", self.page)
         self.assertIn("Swipe up from the bottom edge to bring the bar back", self.page)                      # (the note of the first time)
         self.assertIn("noteShown", self.glue)
+        self.assertNotIn("TAP_SLOP", self.glue)                                                              # (no tap logic on pointerup any more: see the click)
+        self.assertRegex(self.page, r"@media \(max-width: 700px\)[^@]*?\.rbar\.over \.rtab \{ left: auto; right: 14px; transform: none; \}")   # (a phone upright: the tab at the right end, clear of the tag)
 
 
 class TheLiveGlue(unittest.TestCase):

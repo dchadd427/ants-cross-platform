@@ -447,6 +447,11 @@ def main():
                     check(tab.ev(note_up) is False, "and the note does not come a second time in this visit")
                     touch(tab, [(w / 2, h - 20)])                                 # a tap there
                     check(until(tab, "!" + idle, 3) is True, "a tap on the bottom edge calls it too")
+                    bx, by = (lambda r: (r[0], r[1]))(tab.ev("(function () { var r = document.querySelector('#speed button[data-s=\"2\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()"))
+                    check(until(tab, idle, 6) is True and by > h - 56, "the bar is away again (its 2x button lies in the strip along the bottom edge)")
+                    touch(tab, [(bx, by)])                                        # a tap on the strip where the 2x button will be: the bar comes up and the tap is not a click on the button
+                    time.sleep(0.6)
+                    check(tab.ev(idle) is False and tab.ev("__stub.speed") == 100, "a tap on the strip over a button calls the bar and does not press the button (the speed is %r)" % tab.ev("__stub.speed"))
                     tab.ev("__stub.state = 3")                                    # the match is paused: the bar stays
                     time.sleep(4.0)
                     check(tab.ev(idle) is False, "paused: the bar stays up")
@@ -469,6 +474,25 @@ def main():
                     tab.ev("__stub.state = 2")
                     check(until(tab, idle, 6) is True and tab.ev(edge_up) is False, "after a mouse the bar goes by itself and leaves no strip over the game's edge")
                     shot(tab, "fs-mouse")
+                tab.close()
+            # a phone upright in fullscreen: the tag at the bar's left end and the tab at its right end must not lie on each other, with a short tag (a replay, paused) and a long one (a live match)
+            apart = ("(function () { var a = document.getElementById('rtag').getBoundingClientRect(), b = document.getElementById('b-tab').getBoundingClientRect();"
+                     " return [a.left, a.right, b.left, b.right, window.innerWidth, a.right <= b.left || b.right <= a.left, b.left >= 0 && b.right <= window.innerWidth && a.left >= 0, getComputedStyle(document.getElementById('b-tab')).display]; })()")
+            for label, address, wait_for in (("a phone upright, a replay paused", "/play.html?replay=" + KEPT, "Paused"), ("a phone upright, a live match", "/play.html?live=" + ID, "about")):
+                fresh(kept_at=1.0) if address.find("replay=") != -1 else fresh()
+                tab = new_tab(390, 844, 2, True)
+                open_page(tab, address)
+                until(tab, READY)
+                time.sleep(1.0)
+                if wait_for == "Paused":
+                    tab.ev("__stub.state = 3")
+                until(tab, "document.getElementById('rtag-s').textContent.indexOf('%s') !== -1" % wait_for, 6)
+                fx, fy = centre(tab, "fullscreen-btn-r")
+                tab.tap(fx, fy)
+                check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "%s: the bar lies over the picture in fullscreen" % label)
+                a = tab.ev(apart)
+                check(a[7] != "none" and a[5] is True and a[6] is True, "%s: the tag (x %d to %d) and the tab (x %d to %d) lie apart, inside the %d px screen" % ((label, a[0], a[1], a[2], a[3], a[4])))
+                shot(tab, "fs-phone-" + ("paused" if wait_for == "Paused" else "live"))
                 tab.close()
     except (RuntimeError, TimeoutError, ConnectionError) as e:
         check(False, "the browser or the page broke down: %s" % e)

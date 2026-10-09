@@ -1096,7 +1096,7 @@
         .rtab svg { width: 20px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; }
         /* the strip along the bottom edge of a fullscreen page where a finger calls the bar back (a tap, or a swipe up); nothing is drawn on it, and it is there only while the bar is away and the last touch was a finger */
         .redge { position: absolute; left: 0; right: 0; bottom: 0; height: calc(56px + env(safe-area-inset-bottom, 0px)); z-index: 59; touch-action: none; }
-        .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+        .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; width: max-content; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
 
         /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
         .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
@@ -1124,6 +1124,7 @@
             .rhead { order: 3; flex: 1 1 100%; }
             .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
             .rtag { font-size: 12px; bottom: calc(100% + 5px); }
+            .rbar.over .rtab { left: auto; right: 14px; transform: none; }          /* (the tag at the left can be long, and a phone upright has no room for the tab in the middle) */
             .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
             .rbar .clock { text-align: left; font-size: 19px; }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
@@ -3377,8 +3378,8 @@
             // The bar goes away by itself 3 seconds after the last touch of it while the match plays (it stays while the match is paused), and a swipe down on it or a tap on its tab hides it at once. A FINGER on the
             // picture never calls it (a tap or a drag of the map would put it over the picture's bottom edge every time); a finger calls it from the strip along the bottom edge (#redge: a tap, or a swipe up), which
             // is there only while the bar is away and the last touch was a finger (the strip would keep a mouse from the game's edge). A mouse, a pen and the keys call it as ever.
-            var EDGE_SWIPE = 24, BAR_SWIPE = 36, TAP_SLOP = 12;                 // CSS pixels
-            var touchSeen = false, noteShown = false, noteTimer = 0, swiped = false;
+            var EDGE_SWIPE = 24, BAR_SWIPE = 36;                                    // CSS pixels
+            var touchSeen = false, noteShown = false, noteTimer = 0, swiped = -1;      // swiped: the pointer that has just swiped the bar away (-1: none)
             window.antsReplayPlaceBar = function () {
                 var bar = $('rbar');
                 var over = isFullscreen();
@@ -3395,6 +3396,7 @@
                 clearTimeout(idleTimer);
                 clearTimeout(noteTimer);
                 $('rnote').hidden = true;
+                swiped = -1;
                 if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
                 syncEdge();
             }
@@ -3457,6 +3459,7 @@
                 if (!dragging) return;
                 dragging = false;
                 seek(turnAt(ev) / TPS);
+                wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
             });
             tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; });
             tl.addEventListener('keydown', function (ev) {
@@ -3478,13 +3481,14 @@
                 document.addEventListener(name, function (ev) {
                     var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';
                     if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
-                    if (touch && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;               // (a finger on the picture never calls the bar)
-                    if (touch && swiped) return;                                                                              // (nor does the finger that has just swiped it away: until it is lifted)
+                    if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
+                    if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)
                     wake();
                 }, { passive: true });
             });
-            ['pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, function () { swiped = false; }, { passive: true }); });
-            // a finger on the strip: a tap, or a swipe up, calls the bar
+            ['pointerup', 'pointercancel'].forEach(function (name) { document.addEventListener(name, function (ev) { if (ev.pointerId === swiped) swiped = -1; }, { passive: true }); });
+            // a finger on the strip: a tap, or a swipe up, calls the bar. A TAP calls it in its click, the last event of the tap: the bar is under the finger from then on, and a tap that called it earlier would be
+            // followed by a click on whatever the bar has under the finger (a speed button, Play, the way out of fullscreen). A swipe makes no click.
             var edgeFrom = null;
             $('redge').addEventListener('pointerdown', function (ev) {
                 edgeFrom = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
@@ -3493,21 +3497,18 @@
             $('redge').addEventListener('pointermove', function (ev) {
                 if (edgeFrom && ev.pointerId === edgeFrom.id && edgeFrom.y - ev.clientY >= EDGE_SWIPE) { edgeFrom = null; wake(); }
             });
-            $('redge').addEventListener('pointerup', function (ev) {
-                var from = edgeFrom;
-                edgeFrom = null;
-                if (from && ev.pointerId === from.id && Math.abs(ev.clientX - from.x) < TAP_SLOP && Math.abs(ev.clientY - from.y) < TAP_SLOP) wake();
-            });
+            $('redge').addEventListener('pointerup', function () { edgeFrom = null; });
             $('redge').addEventListener('pointercancel', function () { edgeFrom = null; });
+            $('redge').addEventListener('click', wake);
             // a swipe down on the bar (anywhere but the timeline, which has its own drag), or a tap on its tab, hides it
             var barFrom = null;
             $('rbar').addEventListener('pointerdown', function (ev) {
-                barFrom = ev.pointerType === 'touch' && !$('tl').contains(ev.target) ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY } : null;
+                barFrom = ev.pointerType === 'touch' && $('rbar').classList.contains('over') && !$('tl').contains(ev.target) ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY } : null;
             });
             $('rbar').addEventListener('pointermove', function (ev) {
                 if (!barFrom || ev.pointerId !== barFrom.id) return;
                 var down = ev.clientY - barFrom.y;
-                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; swiped = true; hideBar(); }
+                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; hideBar(); swiped = ev.pointerId; }
             });
             ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
             $('b-tab').addEventListener('click', hideBar);
