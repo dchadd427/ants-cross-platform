@@ -185,6 +185,7 @@ private:
     static ExpeditionTask::Params expedition_params(const LevelPlan& plan) {
         ExpeditionTask::Params p;
         p.fly_on = plan.island_fly_on;
+        p.timed_row = plan.island_timed_row;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {

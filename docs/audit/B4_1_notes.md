@@ -400,7 +400,7 @@ The keys are those of `apply_tune` in `tools/bot_arena.cpp`; every one sets a fi
 
 The can't-go key (`docs/BOTS.md`, "The can't-go loop"): `cg` (0: the bot as it was before the can't-go fixes: it orders what the engine refuses; for the tournaments that ask what the fixes cost or win).
 
-The island keys (`docs/BOTS.md` "Islands"): `islands` (0: the standard bot as it was before the island machinery), `expedition`, `ferry`, `iswim` (Swimmers wanted), `ifly` (the expedition's Bomber flies on with the crew), `ibuild` (Swimmers that dig; 0 in the level plans), `ibridge` (ants to a bridge), `iguard`, `iferrypile` (Swimmers of the ferry at one pile).
+The island keys (`docs/BOTS.md` "Islands"): `islands` (0: the standard bot as it was before the island machinery), `expedition`, `ferry`, `iswim` (Swimmers wanted), `ifly` (the expedition's Bomber flies on with the crew), `itimed` (Hard: the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks; 0 is the row as it was), `ibuild` (Swimmers that dig; 0 in the level plans), `ibridge` (ants to a bridge), `iguard`, `iferrypile` (Swimmers of the ferry at one pile).
 
 ## Draft of the CHANGELOG entry (the coordinator moves `VERSION`, `CHANGELOG.md`, `STATUS.md` and the README's version line)
 

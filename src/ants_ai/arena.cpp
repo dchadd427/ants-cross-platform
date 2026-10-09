@@ -15,7 +15,7 @@ namespace ants::ai {
 
 namespace {
 
-constexpr uint64_t kTurnTicks = 2;                       // a turn of a lock-step room is 100 ms
+constexpr uint64_t kTurnTicks = 2;                       // the arena's model of a room's turn: 100 ms, as a room's was before protocol 8 (a room today seals one every tick, so for the timed clicks the arena is the harder case)
 constexpr uint64_t kEndSlackTicks = 200;                 // the engine ends a match by its clock; this only bounds a loop that never would
 constexpr uint64_t kFlowerScanPeriod = 4;                // a droplet falls for 16 ticks and a pick-up animation lasts longer than 4: a look every 4 ticks counts each once
 
@@ -56,6 +56,11 @@ public:
         sim::CommandResult r;
         r.status = sim::CommandResult::Status::Applied;
         return r;
+    }
+    /// The first turn boundary at least `delay` ticks after `now` (what flush() will do with a command submitted now)
+    uint64_t applied_at(uint64_t now) const override {
+        const uint64_t due = now + delay_;
+        return due + (kTurnTicks - due % kTurnTicks) % kTurnTicks;
     }
     /// After every tick, BEFORE the bots look: applies what is due at a turn boundary
     void flush() {

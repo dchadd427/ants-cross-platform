@@ -104,6 +104,7 @@ public:
         if (room_.session_ != nullptr && room_.session_->submit_bot(seat_, command)) result.status = sim::CommandResult::Status::Applied;
         return result;
     }
+    uint64_t applied_at(uint64_t now) const override { return room_.session_ != nullptr ? room_.session_->turns_sealed() : now; }
 
 private:
     Room& room_;
