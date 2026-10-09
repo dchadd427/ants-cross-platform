@@ -479,7 +479,7 @@ void print_usage(std::FILE* to) {
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
         "  --save-replays DIR keep every match that was played as a replay file (.antsrep) in DIR, named as the game server names its own (ants-MAP-DATE-TIMEZ.antsrep; docs/REPLAYS.md): the\n"
-        "                     players are \"Bot (Level)\". Pointed at the replay folder of a game server, the matches show in the site's list of replays (Watch replays) like any other\n"
+        "                     players are \"Bot (Level)\". Pointed at the replay folder of a game server, the matches show in the site's list of replays (Watch matches) like any other\n"
         "  --threads N        matches at the same time (default 1)\n"
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"

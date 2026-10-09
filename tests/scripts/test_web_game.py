@@ -6,8 +6,8 @@ the teal bevelled buttons with their red shadow, the black inset boxes, the game
   - the colours are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
     text, where the front page (the lobby, drawn as the owner's approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
     sheen) and their edges are bevelled on all four sides (the bevel tokens), on the front page, this page, the changelog pages' style sheet and Sprites and sounds
-  - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the seven controls in their order, and "More" for a narrow window (a <details>, no script) with
-    the other five
+  - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
+    the other six
   - the loading screen (the logo, the same ids and messages, a teal bar), the failure cards (classes, not colours written into the script), the bottom controls (the same buttons and ids), the footer
     (the version and the build where the Dockerfile and the CI look for them), the embed mode (only the game) and the pictures that the page names
   - every text is at least 4.5:1 against its background, in every state of the buttons and boxes (the browser check, tests/scripts/web_home_check.py part game, measures the page itself)
@@ -344,7 +344,7 @@ class TheLookIsTheFrontPages(PageCase):
 
 
 class TheHeader(PageCase):
-    CONTROLS = (("menu-btn", "/", "Menu"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog.html", "Changelog"), ("reset-btn", None, "Reset"),
+    CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/watch.html", "Watch matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog.html", "Changelog"), ("reset-btn", None, "Reset"),
                 ("fullscreen-btn", None, "Fullscreen"), (None, GITHUB, "GitHub"), (None, GITHUB + "/issues", "Feedback"))
 
     def header(self):
@@ -358,10 +358,10 @@ class TheHeader(PageCase):
         self.assertLess(self.header().index('id="logo-link"'), self.header().index('id="menu-btn"'))          # (at the left of the header)
         self.assertEqual(len(re.findall(r"<h1[ >]", self.page)), 1)                                           # (the page keeps its heading: for a screen reader)
 
-    def test_the_seven_controls_are_there_in_their_old_order_in_the_teal_style(self):
+    def test_the_eight_controls_are_there_in_their_order_in_the_teal_style(self):
         row = self.header()[self.header().index('<div class="header-actions">'):self.header().index('<details class="more">')]
         found = re.findall(r'<(a|button) ([^>]*)>(.*?)</\1>', row, re.S)
-        self.assertEqual(len(found), 7)
+        self.assertEqual(len(found), 8)
         for (tag, attrs, text), (ident, href, label) in zip(found, self.CONTROLS):
             self.assertIn('class="btn sm', attrs, label)
             self.assertEqual(re.sub(r"<[^>]+>", "", text) if label != "Fullscreen" else re.search(r'<span class="btn-text">([^<]*)</span>', text).group(1), label)
@@ -370,18 +370,18 @@ class TheHeader(PageCase):
             if href:
                 self.assertIn('href="%s"' % href, attrs, label)
                 if href != "/":
-                    self.assertIn('target="_blank" rel="noopener noreferrer"', attrs, label)                      # (only the links that leave the game open a new tab)
+                    self.assertIn('target="_blank" rel="noopener noreferrer"', attrs, label)                      # (only the Menu leaves in this tab, and asks first; Watch matches opens a new tab so that a match that is being played goes on)
                 else:
                     self.assertNotIn("target=", attrs)
-        # the five that "More" holds in a narrow window are the ones that the wide row marks
-        self.assertEqual([("wide-only" in attrs) for _, attrs, _ in found], [False, True, True, True, False, True, True])
+        # the six that "More" holds in a narrow window are the ones that the wide row marks
+        self.assertEqual([("wide-only" in attrs) for _, attrs, _ in found], [False, True, True, True, True, False, True, True])
         self.assertIn('<span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span>', row)
 
-    def test_more_holds_the_other_five_with_the_same_targets_and_needs_no_script(self):
+    def test_more_holds_the_other_six_with_the_same_targets_and_needs_no_script(self):
         more = re.search(r'<details class="more">\s*<summary><span class="btn sm">More</span></summary>\s*<div class="more-list">(.*?)</div>\s*</details>', self.header(), re.S)
         self.assertIsNotNone(more)
         found = re.findall(r'<(a|button) ([^>]*)>(.*?)</\1>', more.group(1), re.S)
-        wanted = [c for c in self.CONTROLS if c[2] in ("Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback")]
+        wanted = [c for c in self.CONTROLS if c[2] in ("Watch matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback")]
         self.assertEqual([text for _, _, text in found], [c[2] for c in wanted])
         row = self.header()[self.header().index('<div class="header-actions">'):self.header().index('<details class="more">')]
         for (tag, attrs, text), (_, href, label) in zip(found, wanted):
@@ -403,7 +403,9 @@ class TheHeader(PageCase):
         self.assertRegex(narrow, r"\.wide-only \{\s*display: none;")
         self.assertRegex(narrow, r"\.more \{\s*display: block;")
         self.assertRegex(narrow, r"\.logo img \{\s*width: 88px;")
-        self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's five")
+        self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's six")
+        self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn \{\s*display: none;")          # (eight buttons need 1140 px for one row; between 701 and 1139 the header keeps the seven it had, and the footer link is the way)
+        self.assertEqual(self.style.count("#watch-btn"), 1)
         # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons and a smaller logo
         self.assertIn("@media (max-width: 440px)", self.style)
         self.assertIn("@media (max-width: 380px)", self.style)
@@ -478,13 +480,13 @@ class TheFooter(PageCase):
     def test_the_links_are_the_front_pages_and_the_menu_comes_first(self):
         nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.page, re.S).group(1)
         found = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
-        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/watch.html", "Watch replays"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
+        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/watch.html", "Watch matches"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
         self.assertIn('id="menu-link"', found[0][1])
         self.assertNotIn("target=", found[0][1])
-        self.assertIn('id="watch-link"', found[1][1])                                                           # (the replays are the site's own page: this tab, not a new one)
-        self.assertNotIn("target=", found[1][1])
+        self.assertIn('id="watch-link"', found[1][1])                                                           # (a new tab: a match that is being played here goes on; test_web_replay.py)
+        self.assertIn('target="_blank"', found[1][1])
         lobby_nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.lobby, re.S).group(1)
-        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], ["Watch live"] + [text for _, _, text in found[1:]])     # (the front page alone has "Watch live": test_web_replay.py)
+        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links, one "Watch matches": test_web_replay.py)
 
 
 class TheEmbedModeIsOnlyTheGame(PageCase):
