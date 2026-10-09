@@ -177,7 +177,7 @@ class SiteLabelInThePages(unittest.TestCase):
         # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links, and at the right the Screen buttons)
         for name in ("index", "watch"):
             self.assertRegex(pages[name], r'<footer class="bar">\s*<div class="bar-in">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
-        footer = pages["lobby"][pages["lobby"].index('<footer class="bar">'):pages["lobby"].index("</footer>")]
+        footer = pages["lobby"][pages["lobby"].index('<footer class="bar" id="footer-bar">'):pages["lobby"].index("</footer>")]
         self.assertRegex(footer, r'<div class="bar-row">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
         self.assertEqual(footer.count('id="site-label"'), 1)
         self.assertEqual(pages["lobby"].count('id="site-label"'), 1)                          # (the label is in the footer only)

@@ -51,7 +51,8 @@ const block = between(lobbyText, 'REJOIN_BEGIN', 'REJOIN_END', lobbyPath);
 const rulesFile = path.join(path.dirname(path.resolve(lobbyPath)), 'front', 'lobby_rules.js');
 const Rules = (() => { const root = {}; new Function('self', fs.readFileSync(rulesFile, 'utf8'))(root); return root.AntsLobbyRules; })();
 check('the page takes codeText from the rules script, once, outside the blocks (the REJOIN block uses it as a free name)', typeof Rules.codeText === 'function' && lobbyText.split('var codeText = Rules.codeText;').length === 2 && block.indexOf('codeText') !== -1 && block.indexOf('var codeText') === -1 && keyBlock.indexOf('codeText') === -1);
-const R = new Function('codeText', keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery, codeText: codeText };')(Rules.codeText);
+const shapesBlock = between(lobbyText, 'SHAPES_BEGIN', 'SHAPES_END', lobbyPath);                      // (the table of the four shapes: rejoinQuery names its shape through it)
+const R = new Function('codeText', shapesBlock + '\n' + keyBlock + '\n' + block + '\nreturn { REJOIN_PREFIX: REJOIN_PREFIX, REJOIN_MAX_AGE_MS: REJOIN_MAX_AGE_MS, REJOIN_FUTURE_MS: REJOIN_FUTURE_MS, rejoinServer: rejoinServer, rejoinParse: rejoinParse, rejoinOffer: rejoinOffer, rejoinWords: rejoinWords, rejoinQuery: rejoinQuery, codeText: codeText };')(Rules.codeText);
 
 // the game page's own ANTS_PAGE (the same fakes as tests/scripts/web_lobby_check.js: it reads the address, the storage and two elements while it runs)
 function loadShell() {
@@ -253,10 +254,10 @@ check('the query keeps the plain code whatever the words show (no blank in it)',
 same('the query: the name is encoded, whatever it holds', R.rejoinQuery({ room: 'r', seat: 3, t: 1 }, 'A&B=c d#e', '4:3'), '?join=/ws&room=r&seat=3&name=A%26B%3Dc%20d%23e&aspect=4:3');
 same('the query: the room is encoded too, whatever the function is given (the page only offers rooms that need no encoding)', R.rejoinQuery({ room: 'a b&c=d#e', seat: 1, t: 1 }, 'Ann', '16:9'), '?join=/ws&room=a%20b%26c%3Dd%23e&seat=1&name=Ann&aspect=16:9');
 same('the query: no name is a name that was chosen (empty), so the game page does not ask for one', R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '16:9'), '?join=/ws&room=r&seat=0&name=&aspect=16:9');
-same('the query: a shape that is not 4:3 is 16:9', [R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', 'wide'), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', undefined), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '4:3 ')].map((q) => q.slice(q.indexOf('&aspect='))), ['&aspect=16:9', '&aspect=16:9', '&aspect=16:9']);
+same('the query: a shape that is none of the four is 16:9, and each of the four is itself', [R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', 'wide'), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', undefined), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '4:3 '), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '16:10'), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '21:9'), R.rejoinQuery({ room: 'r', seat: 0, t: 1 }, '', '3:2')].map((q) => q.slice(q.indexOf('&aspect='))), ['&aspect=16:9', '&aspect=16:9', '&aspect=16:9', '&aspect=16:10', '&aspect=21:9', '&aspect=16:9']);
 {
     const P = loadShell();
-    for (const [name, shape] of [['Ann', '16:9'], ['', '4:3'], ['Maria Elena', '16:9'], ['A&B=c', '4:3']]) {
+    for (const [name, shape] of [['Ann', '16:9'], ['', '4:3'], ['Maria Elena', '16:9'], ['A&B=c', '4:3'], ['Ann', '16:10'], ['Ann', '21:9']]) {
         const q = R.rejoinQuery({ room: 'k7m2xq', seat: 2, t: 1 }, name, shape);
         const got = P.joinArguments(q, true, 'play.test');
         const args = got.args;

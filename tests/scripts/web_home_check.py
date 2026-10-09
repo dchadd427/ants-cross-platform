@@ -3,7 +3,7 @@
 
 The front page is the owner's lobby (web/lobby.html, the pictures he approved; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen 16:9, which is the default, or 4:3). A visitor who
+Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen: Classic 4:3, 16:10, 16:9, which is the default, or 21:9). A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
@@ -572,7 +572,9 @@ def main():
                 buttons: ['copy', 'havecode', 'more'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
                 joinbox: document.getElementById('joinbox').hidden, morebox: document.getElementById('morebox').hidden,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
-                aspect: [document.getElementById('aspect-16-9').checked, document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')],
+                aspect: ['4-3', '16-10', '16-9', '21-9'].map(function (id) { return document.getElementById('aspect-' + id).checked; }).concat([document.body.getAttribute('data-aspect')]),
+                tags: Array.prototype.map.call(document.querySelectorAll('.fit-tag'), function (t) { return [t.id, t.hidden, getComputedStyle(t).display]; }), screenSize: [screen.width, screen.height],
+                shapeLabels: Array.prototype.map.call(document.querySelectorAll('.shape .seg label'), function (l) { return l.textContent; }),
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
@@ -720,7 +722,16 @@ def main():
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
 
             # the picture's shape: 16:9 is the default, 4:3 is chosen under Screen and remembered
-            check(info["aspect"] == [True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and 4:3 is not (%s)" % info["aspect"])
+            check(info["aspect"] == [False, False, True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and the other three are not (%s)" % info["aspect"])
+            check(info["shapeLabels"] == ["Classic 4:3", "16:10", "16:9", "21:9"], "Screen offers Classic 4:3, 16:10, 16:9 and 21:9, left to right (%s)" % info["shapeLabels"])
+            # "fills your screen": under the shape nearest to this computer's screen (None when no shape is within 8 per cent), shown only where there is a mouse
+            sw, sh = info["screenSize"]
+            ratios = {"4-3": 4 / 3, "16-10": 8 / 5, "16-9": 16 / 9, "21-9": 7 / 3}
+            near = min(ratios, key=lambda k: max(ratios[k] / (sw / sh), (sw / sh) / ratios[k])) if sw > 0 and sh > 0 else None
+            if near and max(ratios[near] / (sw / sh), (sw / sh) / ratios[near]) - 1 > 0.08:
+                near = None
+            check([t[0][4:] for t in info["tags"] if not t[1]] == ([near] if near else []), "the tag \"fills your screen\" is under the shape nearest to the %d x %d screen (%s) and under no other (%s)" % (sw, sh, near, info["tags"]))
+            check(all(t[2] == "none" for t in info["tags"] if t[1]), "a hidden tag takes no room")
             real_click("label[for=aspect-4-3]")
             chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-4-3').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])"))
             check(chosen == [True, False, "4:3", "4:3"] and lobby()["code"] == st["code"], "a press on 4:3 chooses it (the page keeps its room) and the browser remembers it (%s)" % (chosen,))
@@ -741,10 +752,25 @@ def main():
             tab.open(web + "?aspect=4:3", wait=False)
             time.sleep(1.5)
             check(value("[document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')]") == [True, "4:3"], "?aspect=4:3 in the address chooses 4:3")
-            tab.open(web + "?aspect=21:9", wait=False)
+            for asked in ("16:10", "21:9"):
+                tab.open(web + "?aspect=" + asked, wait=False)
+                time.sleep(1.5)
+                dashed = asked.replace(":", "-")
+                check(value("[document.getElementById('aspect-%s').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]" % dashed) == [True, False, asked], "?aspect=%s in the address chooses %s" % (asked, asked))
+            tab.open(web + "?aspect=3:2", wait=False)
             time.sleep(1.5)
-            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=21:9 is not a shape the page offers: ignored, 16:9")
-            tab.ev("localStorage.removeItem('ants.aspect'); 1")
+            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=3:2 is not a shape the page offers: ignored, 16:9")
+            for picked in ("16:10", "21:9"):                        # the two shapes that were added: pressed, remembered, and the next visit starts with them (the game page reads the same key)
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                dashed = picked.replace(":", "-")
+                real_click("label[for=aspect-%s]" % dashed)
+                chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-%s').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])" % dashed))
+                check(chosen == [True, False, picked, picked], "a press on %s chooses it and the browser remembers it (%s)" % (picked, chosen))
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                check(value("[document.getElementById('aspect-%s').checked, document.body.getAttribute('data-aspect')]" % dashed) == [True, picked], "... and the next visit starts with %s chosen" % picked)
+            tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.removeItem('ants.aspect'); 1")
 
             # a new tab makes a new room each time: the codes are letters and numbers
             for _ in range(7):
@@ -851,6 +877,19 @@ def main():
                     wrong.append((width, problems[:3]))
             check(not wrong, "%d widths from 320 to 1600 px: no sideways scroll and nothing out of the window, two columns from 1041 px (the room, the map and START! at its side) and one under it, the cards two by two above 720 px and one column below it in the order Black, Green, Red, Blue, "
                              "nothing out of a card or of the room's box, the grip's dots clear of the names and the drop-down, START! held in view on a phone, the longest map name whole (wrong: %s)" % (len(widths), wrong))
+            # the tag under the LAST button (21:9) ends with the button: on a computer with a mouse and a 3440 x 1440 screen (nearest to 21:9), in a narrow window, the tag stays inside it and the page does not scroll sideways
+            fresh_tab()
+            tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
+            tab.open(web, wait=False)
+            front_ready()
+            wrong_tag = []
+            for width in (320, 360, 370, 440, 480, 600, 720):
+                tab.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})
+                time.sleep(0.3)
+                m = json.loads(value("JSON.stringify({sw: document.documentElement.scrollWidth, iw: document.documentElement.clientWidth, tag: (function () { var t = document.querySelector('.fit-tag:not([hidden])'); if (!t) return null; var r = t.getBoundingClientRect(); return [t.id, Math.round(r.left), Math.round(r.right)]; })()})"))
+                if m["sw"] > m["iw"] or not m["tag"] or m["tag"][0] != "fit-21-9" or m["tag"][1] < 0 or m["tag"][2] > m["iw"]:
+                    wrong_tag.append((width, m))
+            check(not wrong_tag, "a computer with a mouse and a 3440 x 1440 screen, windows of 320 to 720 px: the tag under 21:9 stays inside the page and the page does not scroll sideways (against the width that a scrollbar leaves) (wrong: %s)" % (wrong_tag,))
             tab.emulate(1366, 900, 1)
             time.sleep(0.4)
             shot("home_front_1366")

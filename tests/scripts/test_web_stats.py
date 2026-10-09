@@ -35,7 +35,7 @@ class TheMarkupAndTheStyle(unittest.TestCase):
     def test_the_line_is_in_the_footer_before_the_version_row_and_hidden_until_numbers_come(self):
         line = '<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>'       # (the separator between the two parts is the style's)
         self.assertEqual(self.page.count(line), 1)
-        footer = self.page[self.page.index('<footer class="bar">'):self.page.index("</footer>")]
+        footer = self.page[self.page.index('<footer class="bar" id="footer-bar">'):self.page.index("</footer>")]
         self.assertIn(line, footer)
         self.assertLess(footer.index('id="stats"'), footer.index('<div class="bar-row">'))                        # (above the version line, the footer links and the Screen buttons)
         # hidden until numbers come: the attribute is in the markup, and the style's own display for the line must not undo it

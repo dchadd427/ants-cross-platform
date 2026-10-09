@@ -182,7 +182,7 @@
     .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 2px 10px; border-radius: 2px; color: #fff; }
     .bar .grow { flex: 1 1 40px; }
     .live { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; vertical-align: -1px; }
-    .shape { display: inline-flex; align-items: center; gap: 8px; }
+    .shape { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }                  /* in a window too narrow for the label and four buttons the label sits above them */
 
     .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; max-width: min(520px, 92vw); text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
     .how { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); overflow: auto; }
@@ -263,7 +263,13 @@
     #stats-played:empty { display: none; }
     .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
-    .shape .seg { position: relative; display: inline-flex; gap: 8px; }                     /* the picture's shape: radio buttons that look like the game's two-state buttons */
+    .shape .seg { position: relative; display: inline-flex; gap: 8px; }                     /* the picture's four shapes: radio buttons that look like the game's two-state buttons */
+    .shape .opt { position: relative; display: inline-flex; }                               /* a shape's button with its "fills your screen" tag */
+    .fit-tag { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: #cfe3da; pointer-events: none; }
+    .fit-tag[hidden] { display: none; }
+    .bar.has-fit-tag { padding-bottom: 34px; }                                              /* room under the buttons for the tag */
+    .shape .opt:last-child .fit-tag { left: auto; right: 0; transform: none; }              /* the last button's tag ends with the button: centred it would stick out of the bar on a narrow window */
+    @media (hover: none) { .fit-tag { display: none; } .bar.has-fit-tag { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); } }     /* the tag is for a computer with a mouse: a phone or a tablet has no use for it (after the rules above, which it overrides) */
     .shape .seg input { position: absolute; left: 0; top: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
     .shape .seg label { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 3px 10px; font-size: 14px; line-height: 1.1; cursor: pointer;
         background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }
@@ -315,14 +321,19 @@
     .cell.focus { box-shadow: 0 0 0 3px var(--gold), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
     .label { display: flex; justify-content: space-between; gap: 8px; padding: 4px 10px; font-size: 13px; background: var(--inset); color: #8fb3a6; }
     .label .seat { color: var(--cream); }
-    .frame { position: relative; aspect-ratio: 16 / 9; }          /* the shape of the picture: 16:9 by default, 4:3 with ?aspect=4:3 (data-aspect of the body) */
+    .frame { position: relative; aspect-ratio: 16 / 9; }          /* the shape of the picture: 16:9 by default, 4:3, 16:10 or 21:9 with ?aspect= (data-aspect of the body) */
     body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }
-    /* Where two frames fit side by side at the picture's OWN size (960 x 540 CSS pixels for 16:9, 640 x 480 for 4:3: one canvas pixel for each pixel of the screen, two at a
-       device ratio of 2) the frames have exactly that size and the quick help and every text are sharp. A column is the frame and the 2 px border of its cell on both sides
-       (964 and 644), and the window needs the two columns, the gap (22), the page's padding (60) and a scrollbar (15): 2025 and 1385 px. In a narrower window the frames fill
-       their column as they always did (a size that is not a whole multiple of the picture's cannot be sharp: half of it, 480 x 270, is too small to read). */
+    body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }
+    body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }
+    /* Where two frames fit side by side at the picture's OWN size (960 x 540 CSS pixels for 16:9, 960 x 600 for 16:10, 1260 x 540 for 21:9, 640 x 480 for 4:3: one canvas pixel for each
+       pixel of the screen, two at a device ratio of 2) the frames have exactly that size and the quick help and every text are sharp. A column is the frame and the 2 px border of its
+       cell on both sides (964, 1264 and 644), and the window needs the two columns, the gap (22), the page's padding (60) and a scrollbar (15): 2025, 2625 and 1385 px. In a narrower
+       window the frames fill their column as they always did (a size that is not a whole multiple of the picture's cannot be sharp: half of it, 480 x 270, is too small to read). */
     @media (min-width: 2030px) {
-        body:not([data-aspect="4:3"]) #grid { grid-template-columns: repeat(2, 964px); justify-content: center; max-width: none; }
+        body:not([data-aspect="4:3"]):not([data-aspect="21:9"]) #grid { grid-template-columns: repeat(2, 964px); justify-content: center; max-width: none; }
+    }
+    @media (min-width: 2630px) {
+        body[data-aspect="21:9"] #grid { grid-template-columns: repeat(2, 1264px); justify-content: center; max-width: none; }
     }
     @media (min-width: 1390px) {
         body[data-aspect="4:3"] #grid { grid-template-columns: repeat(2, 644px); justify-content: center; max-width: none; }
@@ -415,13 +426,13 @@
 when the seats that report agree, the machines are in step (a seat that plays on another computer cannot report to this page). Click a window of this page to play it (the others stop
 their music and their sound: only the window you are in is heard). The match is the original's clock: when it ends each window shows its results screen.</p>
 
-<footer class="bar"><div class="bar-in">
+<footer class="bar" id="footer-bar"><div class="bar-in">
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
     <p class="notice" id="footer-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/watch.html" id="live-link">Watch live</a><a href="/watch.html" id="watch-link">Watch replays</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
     <span class="grow"></span>
-    <span class="shape">Screen <span class="seg" role="radiogroup" aria-label="Picture shape"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">4:3</label></span></span></div>
+    <span class="shape">Screen <span class="seg" role="radiogroup" aria-label="Picture shape"><span class="opt"><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</label><span class="fit-tag" id="fit-4-3" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-10" value="16:10"><label for="aspect-16-10" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</label><span class="fit-tag" id="fit-16-10" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label><span class="fit-tag" id="fit-16-9" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-21-9" value="21:9"><label for="aspect-21-9" title="21:9: ultrawide monitors (1260 x 540)">21:9</label><span class="fit-tag" id="fit-21-9" hidden>fills your screen</span></span></span></span></div>
 </div></footer>
 </div>
 
@@ -499,11 +510,35 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // SEATNAMES_END
 
-        // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the block of the picture's shape and the selector's listener below)
+        // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the blocks of the picture's shape and the selector's listener below)
         function $(id) { return document.getElementById(id); }
         function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         // HELPERS_END
+        // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block; web/shell.html's ANTS_PAGE has the same table and the same rule)
+        // THE FOUR SHAPES of the picture, left to right as the footer's selector shows them, each in the smallest whole numbers (the game page's own four: 640 x 480 is 160 steps of 4 x 3, 960 x 600 is
+        // 120 of 8 x 5, 960 x 540 is 60 of 16 x 9, 1260 x 540 is 180 of 7 x 3). isShape(text) says whether a text names one (an address, a remembered value), shapeOr169(text) is that shape or 16:9
+        // (every link that the page makes carries one of the four), shapeId(shape) is the end of the ids of its button and its tag (aspect-16-10, fit-16-10), and shapeForScreen(w, h) the shape
+        // nearest to a screen of w x h (the footer tags it "fills your screen"): the one whose width over height is the closest to the screen's, as a ratio of ratios (a 1440 x 900 screen is 16:10,
+        // a 1920 x 1080 one 16:9, a 3440 x 1440 one 21:9, a 1280 x 1024 one 4:3), or null when no shape is within 8 per cent of the screen's (a 32:9 screen, a square one, a number that is none).
+        var SHAPE_ORDER = ['4:3', '16:10', '16:9', '21:9'];
+        var SHAPES = { '4:3': { w: 4, h: 3 }, '16:10': { w: 8, h: 5 }, '16:9': { w: 16, h: 9 }, '21:9': { w: 7, h: 3 } };
+        function isShape(text) { return typeof text === 'string' && Object.prototype.hasOwnProperty.call(SHAPES, text); }
+        function shapeOr169(text) { return isShape(text) ? text : '16:9'; }
+        function shapeId(shape) { return shape.replace(':', '-'); }
+        function shapeForScreen(screenW, screenH) {
+            if (!(screenW > 0 && screenH > 0 && isFinite(screenW) && isFinite(screenH))) return null;
+            var screenRatio = screenW / screenH;
+            var best = null;
+            var bestOff = Infinity;
+            SHAPE_ORDER.forEach(function (name) {
+                var ratio = SHAPES[name].w / SHAPES[name].h;
+                var off = Math.max(ratio / screenRatio, screenRatio / ratio) - 1;
+                if (off < bestOff) { bestOff = off; best = name; }
+            });
+            return bestOff <= 0.08 ? best : null;
+        }
+        // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
         // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
@@ -571,12 +606,12 @@ their music and their sound: only the window you are in is heard). The match is 
         // What the three levels are called in an address: the three words, none for none
         function soloSeatsText(levels) { return [0, 1, 2].map(function (i) { return validFill(levels[i]) || 'none'; }).join(','); }
         // The query of a game on this computer: ?map=<key>[&bots=<levels>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
-        // address any other way), the shape is 16:9 or 4:3. `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none.
+        // address any other way), the shape is one of the four (shapeOr169). `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none.
         function localGameQuery(mapKey, levels, name, shape) {
             var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
             var seats = Array.isArray(levels) ? [validFill(levels[0]), validFill(levels[1]), validFill(levels[2])] : [validFill(levels), validFill(levels), validFill(levels)];
             var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
-            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
+            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
         }
         // The empty seats of the Host card of the earlier pages (protocol 13): a level for each seat after the leader's (Red, Blue, Black: the seats 1 - 3 of the room). They were remembered under ants-four-fill as
         // four words for the seats 0 - 3 (the leader's seat is none), or, as the first versions wrote it, one word for every seat; an address's &fill= says the same. `levels` is [Red, Blue, Black], '' for none.
@@ -672,10 +707,11 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect=16:9 or ?aspect=4:3 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Each game passes it
+        // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Each game passes it
         // on (?aspect= of its address) and the frames of the games have that shape. Links made for other people carry it only when this address names it.
         // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
-        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks Classic 4:3 again.
+        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: every browser starts with 16:9 until its player picks another shape again.
+        // The footer tags "fills your screen" under the shape nearest to the computer's screen (the CSS shows the tag only where there is a mouse).
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
         var aspect = '16:9';
@@ -684,10 +720,16 @@ their music and their sound: only the window you are in is heard). The match is 
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             var remembered = recall(ASPECT_KEY);
-            if (asked === '16:9' || asked === '4:3') { aspect = asked; aspectFromAddress = true; }
-            else if (remembered === '16:9' || remembered === '4:3') aspect = remembered;
+            if (isShape(asked)) { aspect = asked; aspectFromAddress = true; }
+            else if (isShape(remembered)) aspect = remembered;
             document.body.setAttribute('data-aspect', aspect);
-            $(aspect === '4:3' ? 'aspect-4-3' : 'aspect-16-9').checked = true;
+            $('aspect-' + shapeId(aspect)).checked = true;
+            var fits = null;
+            try { fits = shapeForScreen(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
+            if (fits) {
+                $('fit-' + shapeId(fits)).hidden = false;
+                $('footer-bar').classList.add('has-fit-tag');
+            }
         })();
         // SHAPE_END
 
@@ -753,7 +795,7 @@ their music and their sound: only the window you are in is heard). The match is 
         // The query of the game page that the button opens, as the page's other join links make it (the door /ws, the room, the name always present, empty or not: it was chosen on this page, and the
         // picture's shape) with the seat of the entry. No key: the game page looks it up.
         function rejoinQuery(offer, name, shape) {
-            return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9');
+            return '?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + shapeOr169(shape);
         }
         // REJOIN_END
         // The strip is there only while an entry is offered; it is looked at again when another tab changes the storage (the match may have ended meanwhile). A page that comes back from the browser's
@@ -1861,11 +1903,12 @@ their music and their sound: only the window you are in is heard). The match is 
 
 
         // SELECTOR_BEGIN
-        ['aspect-16-9', 'aspect-4-3'].forEach(function (id) {
-            $(id).addEventListener('change', function () {
+        SHAPE_ORDER.forEach(function (shape) {
+            $('aspect-' + shapeId(shape)).addEventListener('change', function () {
                 // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby takes it at once, the test room's page reloads with it: the games of a room start again with the new picture
-                var value = $('aspect-4-3').checked ? '4:3' : '16:9';
-                var before = $(aspect === '4:3' ? 'aspect-4-3' : 'aspect-16-9');
+                if (!$('aspect-' + shapeId(shape)).checked) return;
+                var value = shape;
+                var before = $('aspect-' + shapeId(aspect));
                 if (value === aspect) { remember(ASPECT_KEY, value); return; }
                 if (!room) {                         // the lobby has no game open: the next game is the new shape
                     aspect = value;
