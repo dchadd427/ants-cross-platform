@@ -817,10 +817,11 @@ def main():
             fill_name_card(tab, "Iris")
             ok = front_ready()
             st = lobby()
-            check(ok and not open_name_card(tab) and st["heading"] == "Your room" and st["banner"]["shown"] and st["banner"]["text"] == "That room is gone, because everybody left, so this one is yours now. Send the link on if you like." and st["banner"]["button"] == "OK" and "warn" not in st["banner"]["cls"],
-                  "Join with a name: the room is not there, so this one is the visitor's own, under that name, and a green strip says so (%r)" % st["banner"]["text"])
-            check(card_of(st, "green")["name"] == "Iris" and code_of(st) == "qqqqqq" and (server.room("qqqqqq") or {}).get("lobby") is True and (server.room("qqqqqq") or {}).get("leader") == 0,
-                  "... the link's code is made again, for the visitor: a lobby on the server with Iris its leader (%s)" % {k: (server.room("qqqqqq") or {}).get(k) for k in ("lobby", "state", "leader")})
+            check(ok and not open_name_card(tab) and st["heading"] == "Your room" and st["banner"]["shown"] and st["banner"]["text"] == "There is no room with that code, so this one is yours now. Send the link on if you like." and st["banner"]["button"] == "OK" and "warn" not in st["banner"]["cls"],
+                  "Join with a name: the link only joins and the room is not there, so this one is the visitor's own, under that name, and a green strip says so (%r)" % st["banner"]["text"])
+            own_code = code_of(st)
+            check(card_of(st, "green")["name"] == "Iris" and own_code != "qqqqqq" and server.room("qqqqqq") is None and (server.room(own_code) or {}).get("lobby") is True and (server.room(own_code) or {}).get("leader") == 0,
+                  "... the link's code is not made: the server has no room qqqqqq, and the visitor's room has a new code, a lobby with Iris its leader (%s)" % {k: (server.room(own_code) or {}).get(k) for k in ("lobby", "state", "leader")})
             shot("home_front_gone_strip")
             contrast("1440 px with the strip at the top", least=40)
             real_click("#banner-x")

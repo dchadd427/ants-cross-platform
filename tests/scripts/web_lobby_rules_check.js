@@ -771,6 +771,7 @@ const BANNERS = [
     ['full', {}, 'That room is full, so this one is yours now. Send the link on if you like.', '', 'OK'],
     ['running', {}, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.', '', 'OK'],
     ['removed', {}, 'The host removed you from the room, so this one is yours now. Send the link on if you like.', '', 'OK'],
+    ['nolink', {}, 'There is no room with that code, so this one is yours now. Send the link on if you like.', '', 'OK'],      // (the owner's picture of a link to a code that no room has, proposal B, Oct 9)
     ['lost', {}, 'Connection lost. Getting you back in…', 'warn', ''],
     ['unreachable', {}, 'Cannot reach the game server. Check your connection; trying again…', 'warn', ''],
     ['busy', {}, 'The server is full right now, so there is no room for you yet. Try again in a minute.', 'warn', 'Try again'],
@@ -779,11 +780,11 @@ const BANNERS = [
     ['notice', { server: 'Some other line of the room.' }, 'Some other line of the room.', 'warn', 'OK']
 ];
 BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));
-same('picture 15 lists seventeen messages: these are their kinds', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
-same('green is the page changing something for you (the host, an old room, a match that is over, a full room, a running match, a removal); gold is something that did not work', [R.META.host, R.META.old, R.META.over, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice].map((m) => m.tone)), ['', '', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn']);
-same('the kinds that have a strip: the seventeen of the picture and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notice', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('picture 15 lists seventeen messages, and the link to a code with no room is the eighteenth: these are their kinds', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'nolink', 'noplace', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('green is the page changing something for you (the host, an old room, a match that is over, a full room, a running match, a removal, a link to a code with no room); gold is something that did not work', [R.META.host, R.META.old, R.META.over, R.META.full, R.META.running, R.META.removed, R.META.nolink].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice].map((m) => m.tone)), ['', '', '', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn']);
+same('the kinds that have a strip: the eighteen of the pictures and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'nolink', 'noplace', 'notice', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
 same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
 same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true]);
 same('... but "moved" is the one kind that says nothing: no strip and no words (the page drops it)', [('moved' in R.META), ('moved' in R.TEXT)], [false, false]);
@@ -798,7 +799,7 @@ same('banner of a kind that has no strip of its own (the code field\'s) is a gol
 {
     const args = { server: 'A sentence of the server.', host: 'H', leaver: 'L', guest: false, map: 'M' };
     check('every banner has the four fields and words (nothing is undefined or empty)', Object.keys(R.META).every((k) => { const b = R.banner(k, args); return Object.keys(b).sort().join() === 'btn,kind,text,tone' && typeof b.text === 'string' && b.text.length > 10 && b.kind === k; }));
-    check('the banners that need to know nothing say their words without arguments (the others, which name a person, a map or the server\'s sentence, are given them)', ['old', 'full', 'running', 'removed', 'lost', 'unreachable', 'busy', 'away', 'version'].every((k) => { const b = attempt(() => R.banner(k)); return !b.threw && typeof b.value.text === 'string' && b.value.text.length > 10 && !/undefined/.test(b.value.text); }));
+    check('the banners that need to know nothing say their words without arguments (the others, which name a person, a map or the server\'s sentence, are given them)', ['old', 'full', 'running', 'removed', 'nolink', 'lost', 'unreachable', 'busy', 'away', 'version'].every((k) => { const b = attempt(() => R.banner(k)); return !b.threw && typeof b.value.text === 'string' && b.value.text.length > 10 && !/undefined/.test(b.value.text); }));
     check('a banner about a person leaving names both: "L left" and the new host', R.banner('host', { guest: true, leaver: 'L', host: 'H' }).text === 'L left. H is the host now.');
 }
 

@@ -293,14 +293,14 @@ class TheFrontPageMarkup(PageCase):
     def test_a_plain_visit_makes_a_room_on_treasure_with_a_new_code_a_reload_takes_the_seat_back_and_a_link_asks_for_a_name_first(self):
         script = self.script
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", script)
-        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()", script)      # (the Hello of a new room asks for the default map)
+        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()", script)      # (the Hello of a new room asks for the default map)
         run = script[script.index("function runLobby() {"):script.index("var room = '';")]
         self.assertIn("connect({ code: newCode(), name: myName(), own: true });", run)                            # a plain visit: a room of a new code
         self.assertIn("} else if (stored) {", run)
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run)       # a reload: the same room and the key of the seat
         self.assertIn("if (wantedCode && !(stored && stored.code === wantedCode)) {", run)                        # a link: the name card first, unless this tab holds that room already
         self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',", run)
-        self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false }); },", run)
+        self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false, joinFirst: true }); },", run)      # (a link only joins until the room has taken the page: a code with no room is not made)
         self.assertIn("offline = 'join';", run)                                                                   # (the page behind the card waits with no names and no map)
         self.assertIn("var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';", run)      # (a room code is lower case: a link that came in capitals leads to the same room)
         # this tab's room and the seat's key live in the tab's session storage, a seat that a game holds in the browser's local storage; a stored room is believed only when it is shaped as the page writes it

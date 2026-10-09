@@ -509,6 +509,55 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
         w.last().open();
         same('without join the Hello that asks again has the block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq', { map: 'TREASURE.LVL' })));
     }
+    {   // joinFirst (a link that was sent): the first Hello only joins, as a typed code does; once the room has taken the page, the page is like any other
+        const w = world();
+        const c = client(w, { joinFirst: true });
+        c.connect();
+        w.last().open();
+        same('with joinFirst the first Hello has no block, as with join', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        check('NoSuchRoom to it is the answer: refused, with that reason, nothing made, no second try', c.status === 'refused' && events(c, 'refused').length === 1 && events(c, 'refused')[0].reason === N.REJECT.NoSuchRoom && w.sockets.length === 1);
+        w.advance(100000);
+        check('... not even later', w.sockets.length === 1 && w.sockets[0].sent.length === 1);
+    }
+    {   // a socket that never got as far as the Welcome: the next Hello is the first still
+        const w = world();
+        const c = client(w, { joinFirst: true });
+        c.connect();
+        w.last().drop();
+        w.advance(500);
+        w.last().open();
+        same('a link whose socket was lost before any Welcome asks again without a block', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+    }
+    {   // the room took the page; later the room is lost: the page makes it again
+        const w = world();
+        const c = client(w, { joinFirst: true });
+        c.connect();
+        w.last().open();
+        const key = seq(0x60);
+        w.last().receive(welcome(1, key, 0));
+        w.last().receive(room([[C, 'Priya'], [C, 'Priya2'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+        check('the Welcome says that the Hello made no room (the page joined)', events(c, 'welcome')[0].created === false && !c.isLeader() && c.status === 'online');
+        w.last().drop();
+        w.advance(500);
+        w.last().open();
+        same('the Hello of the way back has the key and the block (the page has a seat now)', hex(w.last().sent[0]), hex(byHand('Priya2', 'k7m2xq', { key: key, map: 'TREASURE.LVL' })));
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        check('NoSuchRoom to the key: the room is gone, the key is forgotten, a new socket is opened', events(c, 'gone').length === 1 && c.key === null && w.sockets.length === 3 && w.sockets[1].closed);
+        w.last().open();
+        same('the Hello that asks again has no key and the block: a page that had a seat makes the room again', hex(w.last().sent[0]), hex(byHand('Priya2', 'k7m2xq', { map: 'TREASURE.LVL' })));
+        w.last().receive(welcome(0, seq(0x70), 2));
+        check('... and is welcomed to a room that its Hello made', events(c, 'welcome')[1].created === true);
+    }
+    {   // join: true wins over joinFirst: the page never makes a room
+        const w = world();
+        const c = client(w, { join: true, joinFirst: true, key: seq(0x11) });
+        c.connect();
+        w.last().open();
+        w.last().receive(reject(N.REJECT.NoSuchRoom));
+        w.last().open();
+        same('both options: a joiner that is asked again has no block, as with join alone', hex(w.last().sent[0]), hex(byHand('Priya', 'k7m2xq')));
+    }
 }
 
 // ---- leaving on purpose -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

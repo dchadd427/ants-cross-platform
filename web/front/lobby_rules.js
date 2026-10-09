@@ -328,6 +328,7 @@
         maplost: function (a) { return a.server; },
         mapcolours: function (a) { return a.server; },
         removed: function () { return 'The host removed you from the room, so this one is yours now. Send the link on if you like.'; },
+        nolink: function () { return 'There is no room with that code, so this one is yours now. Send the link on if you like.'; },
         full: function () { return 'That room is full, so this one is yours now. Send the link on if you like.'; },
         running: function () { return 'The match in that room has already started, so this room is yours instead. Send the link on if you like.'; },
         busy: function () { return 'The server is full right now, so there is no room for you yet. Try again in a minute.'; },
@@ -346,7 +347,7 @@
         running: 'The match in that room has already started.'
     };
     var META = {
-        host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, over: { tone: '', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
+        host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, nolink: { tone: '', btn: 'OK' }, over: { tone: '', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
         startsfailed: { tone: 'warn', btn: 'OK' }, maplost: { tone: 'warn', btn: 'OK' }, mapcolours: { tone: 'warn', btn: 'OK' }, full: { tone: '', btn: 'OK' }, running: { tone: '', btn: 'OK' },
         removed: { tone: '', btn: 'OK' }, lost: { tone: 'warn', btn: '' }, unreachable: { tone: 'warn', btn: '' }, busy: { tone: 'warn', btn: 'Try again' }, away: { tone: 'warn', btn: 'Use this window' },
         version: { tone: 'warn', btn: 'Reload' }, notice: { tone: 'warn', btn: 'OK' }

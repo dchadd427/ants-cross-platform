@@ -273,7 +273,8 @@
 
     // ---- the client ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
-    // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. A link makes the room again, as a page that came back does.)
+    // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. joinFirst: true is that for the first Hello only, a link that
+    // was sent: once the room has taken us, a room that is lost (a restart) is made again, as a page that came back does.)
     //   'status' (status)           idle -> connecting -> online; offline (reconnecting); refused, removed, superseded, closed (final)
     //   'welcome' ({ seat, created, rejoin })   the room took us (created: our Hello made it); the key is not in it (rejoinEntry() is how a page hands it to the game)
     //   'room' (room)               every Room message, then the events of diffRooms for it
@@ -301,7 +302,8 @@
         this.name = printableOnly(opts.name, MAX_NAME);
         this.platform = validPlatform(opts.platform) ? opts.platform : 0;
         this.keyBytes = isKey(opts.key) ? new Uint8Array(opts.key) : null;      // a copy: the caller's array is the caller's; read it with .key (a copy again)
-        this.joinOnly = opts.join === true;                          // a Hello with no lobby block: the room of the code is joined and never made (a code that somebody typed: no such room is NoSuchRoom)
+        this.joinOnly = opts.join === true || opts.joinFirst === true;     // a Hello with no lobby block: the room of the code is joined and never made (a code that somebody typed: no such room is NoSuchRoom)
+        this.joinOnce = opts.joinFirst === true && opts.join !== true;     // ... but only until the room has welcomed us (a link): after that a room that is lost is made again
         this.WS = 'WebSocket' in opts ? opts.WebSocket : (typeof WebSocket !== 'undefined' ? WebSocket : null);
         this.setTimer = opts.setTimeout || function (fn, ms) { return setTimeout(fn, ms); };
         this.clearTimer = opts.clearTimeout || function (id) { clearTimeout(id); };
@@ -441,6 +443,7 @@
             this.seat = m.player;
             this.keyBytes = m.key;
             this.created = m.created;
+            if (this.joinOnce) this.joinOnly = false;                // we have a seat: a room that is lost later is made again (the Hello of 'gone' carries the block)
             this.onlineSince = this.now();
             this.setStatus('online');
             if (this.final()) return;

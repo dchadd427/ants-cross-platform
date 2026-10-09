@@ -823,7 +823,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     env.$('name-step-input').key('Enter');
     check('Enter with a good name joins: the card goes away, the page connects (one socket) and the browser remembers the name', env.$('name-step').hidden && env.sockets.length === 1 && env.storage.data['ants.name'] === 'Zed');
     const hello = env.last().open().sent[0];
-    check('... the Hello is the name that was typed, in the room of the link, with the lobby block (a room that is gone is made again, as the owner\'s picture 9 shows) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq')) && env.replaced.length === 0, hex(hello));
+    check('... the Hello is the name that was typed, in the room of the link, with no lobby block (a link only joins: a code with no room is not made, the owner\'s picture of Oct 9, B) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && env.replaced.length === 0, hex(hello));
 }
 {
     const env = runLobby('?room=k7m2xq', {});
@@ -834,9 +834,19 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
 }
 {   // a link whose room is gone, full, running or a seat that was refused: a room of the visitor's own, under the same name, with the strip's sentence
     const link = (name) => { const e = runLobby('?room=k7m2xq', {}); e.type('name-step-input', name); e.$('name-step-go').click(); return e; };
+    const none = link('Zed');
+    check('a link is a Hello that only joins (no lobby block), so that a code with no room is not made', none.sockets.length === 1 && hex(none.last().open().sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })));
+    none.last().receive(reject(6));
+    const mine = none.last().open().sent[0];
+    check('a link to a code that no room has (NoSuchRoom): the page makes a room of its own under the same name (a new code, no key, the lobby block), and the strip says why with the page\'s own sentence', none.sockets.length === 2 && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.$('banner').hidden === false && none.$('banner-text').textContent === 'There is no room with that code, so this one is yours now. Send the link on if you like.' && none.$('banner-x').textContent === 'OK', none.$('banner-text').textContent);
+    check('... its address is the plain page again (the link is no longer in the bar) and no strip says that the server is full', none.replaced.length === 1 && none.replaced[0][2] === '/' && !/full/.test(none.$('banner-text').textContent));
     const gone = link('Zed');
+    gone.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    gone.last().receive(reject(6));
+    const again = gone.last().open().sent[0];
+    check('a link whose room took the page and is lost later (a restart) makes the room again, as before: no key, the lobby block, the same code', gone.sockets.length === 2 && hex(again) === hex(helloBytes('Zed', 'k7m2xq')), hex(again));
     gone.arrive({ flags: 2, seats: [[C, 'Zed'], [E, ''], [E, ''], [E, '']] });
-    same('a link to a room that has gone (the Hello made a new one): the strip says so, with the page\'s own sentence', [gone.$('banner').hidden, gone.$('banner-text').textContent, gone.$('banner-x').textContent], [false, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 'OK']);
+    same('... and the strip says that the room is gone, with the page\'s own sentence', [gone.$('banner').hidden, gone.$('banner-text').textContent, gone.$('banner-x').textContent], [false, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 'OK']);
     const joined = link('Zed');
     joined.arrive({ seat: 1, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     check('a link to a room that is there joins it: no strip, the room is the host\'s', joined.$('banner').hidden && joined.$('room-h').textContent === 'Maya’s room' && joined.$('code').textContent === 'k7m 2xq');

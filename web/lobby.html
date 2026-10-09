@@ -1155,6 +1155,7 @@ their music and their sound: only the window you are in is heard). The match is 
             else if (e.reason === R.RejoinFailed || e.reason === R.Dropped) startOwn('running');
             else if (e.reason === R.VersionMismatch) { offline = 'none'; showBanner('version'); render(); }
             else if (e.reason === 0) { offline = 'none'; showBanner('unreachable'); render(); }      // (the page cannot open a socket at all: no WebSocket, or an address that none takes)
+            else if (e.reason === R.NoSuchRoom && lastParams && lastParams.joinFirst && client && client.joinOnly) startOwn('nolink');      // (a link only joins: a code that no room has leaves the visitor in a room of their own. A server whose lobbies are all in use answers a Hello that makes a room, never this one)
             else if (e.reason === R.NoSuchRoom || ownRoom) { offline = 'none'; showBanner('busy'); render(); }      // (the button asks the server again: the one strip with a way to try again that is true for a refusal)
             else startOwn('running');                  // (a refusal that nothing here knows: the room of that code is not one that this page can be in, so the page makes its own)
         }
@@ -1186,10 +1187,10 @@ their music and their sound: only the window you are in is heard). The match is 
         }
         function makeClient(p) {
             return new Net.LobbyClient({
-                url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()
+                url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()
             });
         }
-        // Connect this page to the room of p: { code, name, own, key (a seat to take back), join (a room that must exist) }
+        // Connect this page to the room of p: { code, name, own, key (a seat to take back), join (a room that must exist), joinFirst (a room that must exist for the first Hello: a link) }
         function connect(p) {
             if (client) { var before = client; client = null; before.leave(); }
             lastParams = p;
@@ -1553,7 +1554,7 @@ their music and their sound: only the window you are in is heard). The match is 
                 render();
                 askName({
                     title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',
-                    done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false }); },
+                    done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false, joinFirst: true }); },
                     back: function () { stripRoom(); var own = loadSession(); if (own && own.own) connect({ code: own.code, key: own.key, name: own.name || myName(), own: true }); else { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); } }
                 });
             } else if (stored) {
