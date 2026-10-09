@@ -105,6 +105,23 @@ std::vector<StartTeams> room_team_choices(uint8_t players) {
     return choices;
 }
 
+std::vector<StartTeams> roster_team_choices(uint8_t roster) {
+    std::vector<StartTeams> choices{StartTeams{}};
+    std::array<uint8_t, MAX_PLAYERS> seats{};
+    size_t count = 0;
+    for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) {
+        if (((roster >> seat) & 1u) != 0) seats[count++] = seat;
+    }
+    if (count == 3) {
+        choices.push_back(StartTeams{true, seats[0], seats[1]});
+        choices.push_back(StartTeams{true, seats[0], seats[2]});
+        choices.push_back(StartTeams{true, seats[1], seats[2]});
+    } else if (count == 4) {
+        for (size_t other = 1; other < 4; ++other) choices.push_back(StartTeams{true, seats[0], seats[other]});
+    }
+    return choices;
+}
+
 std::string start_teams_title(const StartTeams& teams, uint8_t roster) {
     if (!teams.set) return "Free for all";
     const auto plays = [roster](uint8_t seat) { return seat < 4 && ((roster >> seat) & 1u) != 0; };
