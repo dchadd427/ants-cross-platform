@@ -234,7 +234,7 @@ function mk(seats, o) {
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0);
+    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
     const m = N.decode(Uint8Array.from(w));
     if (m === null) throw new Error('the check built a Room message that the codec refuses: ' + JSON.stringify([seats, o]));
     return m;

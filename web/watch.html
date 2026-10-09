@@ -412,13 +412,16 @@
         body.appendChild(notice(['This server doesn’t keep replays.', 'Matches played here are not saved.'], 'Play a match', '/'));
     }
 
-    // What the server's public list gives (docs/SERVER.md "Replays"): { replays: [{ file, ended, map, players, seconds, finished, game, sim_rules }], count, keep_days, sim_rules }. A match is playable when
-    // it needs the rules that this server's build plays; the others are the "Earlier versions" (an entry with no number is one that nobody can tell: it is shown there too).
+    // What the server's public list gives (docs/SERVER.md "Replays"): { replays: [{ file, ended, map, players, seconds, finished, game, mode, sim_rules }], count, keep_days, sim_rules }. A match is playable when
+    // it needs the rules that this server's build plays; the others are the "Earlier versions" (an entry with no number is one that nobody can tell: it is shown there too). The build plays the rules of game
+    // mode 187 as well (replay.hpp kSimRulesMode187: 2, and the entry says "mode": "187"): a match of that mode is as playable as the original's game, and the page shows no difference.
+    var RULES_187 = 2;
+    function playable(e, rules) { return rules !== 0 && (e.sim_rules === rules || (e.sim_rules === RULES_187 && e.mode === '187')); }
     function show(data) {
         var rules = typeof data.sim_rules === 'number' ? data.sim_rules : 0;
         var list = (data.replays || []).filter(function (e) { return e && typeof e.file === 'string' && R.FILE_RE.test(e.file); });
-        state.current = list.filter(function (e) { return rules !== 0 && e.sim_rules === rules; });
-        state.older = list.filter(function (e) { return !(rules !== 0 && e.sim_rules === rules); });
+        state.current = list.filter(function (e) { return playable(e, rules); });
+        state.older = list.filter(function (e) { return !playable(e, rules); });
         state.capped = typeof data.count === 'number' && data.count > list.length;
         state.shown = PAGE_SIZE;
         render();

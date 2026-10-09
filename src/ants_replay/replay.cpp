@@ -26,6 +26,7 @@ constexpr uint32_t kFieldRecorderSeat = 13;
 constexpr uint32_t kFieldVenue = 14;
 constexpr uint32_t kFieldHashPeriod = 15;
 constexpr uint32_t kFieldSimRules = 16;               // optional (a reader that does not know it skips it)
+constexpr uint32_t kFieldMode = 17;                   // the game mode, one byte; written only when it is not 0 (a reader that does not know it skips it and refuses the file by its sim_rules, which is kSimRulesMode187 then)
 
 const std::array<uint32_t, 256>& crc_table() {
     static const std::array<uint32_t, 256> table = [] {
@@ -112,6 +113,12 @@ bool valid_head(const Header& h, std::string& error) {
         error = "the head's recorder seat does not exist";
     } else if (h.hash_period == 0 || h.hash_period > kMaxTurns) {
         error = "the head's hash period is out of range";
+    } else if (!sim::valid_game_mode(h.mode)) {
+        error = "the head's game mode is not one that this build knows";
+    } else if (h.mode != 0 && h.sim_rules < kSimRulesMode187) {
+        error = "the head names a game mode but not the simulation rules that go with it (a build that does not know the mode would play the match as another game)";
+    } else if (h.sim_rules == kSimRulesMode187 && h.mode != static_cast<uint8_t>(sim::GameMode::Kills187)) {
+        error = "the head names the simulation rules of a game mode but not the mode";
     } else {
         for (const std::string& name : h.names) {
             if (!printable(name)) {
@@ -156,6 +163,7 @@ std::vector<uint8_t> head_payload(const Header& h) {
     std::vector<uint8_t> period;
     put_u32(period, h.hash_period);
     put_field(p, kFieldHashPeriod, period.data(), period.size());
+    if (h.mode != 0) put_byte_field(p, kFieldMode, h.mode);       // (before sim_rules, only for a mode that is not the original's game: every other file is what it was)
     if (h.sim_rules != 0) {
         std::vector<uint8_t> rules;
         put_u16(rules, h.sim_rules);
@@ -307,6 +315,10 @@ bool read_head(const uint8_t* payload, size_t size, Header& h, std::string& erro
                 if (length != 2 || !f.u16(h.sim_rules) || h.sim_rules == 0) { error = field + " has the wrong length or is 0"; return false; }
                 break;
             }
+            case kFieldMode:
+                if (length != 1 || bytes[0] == 0 || !sim::valid_game_mode(bytes[0])) { error = field + " is not a game mode that this build knows (the original's game has no field)"; return false; }
+                h.mode = bytes[0];
+                break;
             default:
                 if (id >= kFieldName0 && id < kFieldName0 + sim::MAX_PLAYERS) {
                     if (!known_text(bytes, length, h.names[id - kFieldName0])) { error = field + " is not printable text"; return false; }
@@ -347,7 +359,12 @@ uint16_t sim_rules_of(const Header& head) noexcept {
     return 0;
 }
 
-bool plays_here(const Header& head) noexcept { return sim_rules_of(head) == kSimRules; }
+bool plays_here(const Header& head) noexcept {
+    const uint16_t wanted = sim_rules_for_mode(head.mode);                  // (0 for a mode that this build does not know: nothing equals it)
+    return wanted != 0 && sim_rules_of(head) == wanted;
+}
+
+std::string played_rules_text() { return std::to_string(kSimRules) + " and " + std::to_string(kSimRulesMode187); }
 
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc) noexcept {
     const std::array<uint32_t, 256>& table = crc_table();

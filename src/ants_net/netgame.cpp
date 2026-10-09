@@ -1359,6 +1359,13 @@ void NetGame::set_fog(bool fog) {
     room_.you = seat_;
 }
 
+void NetGame::set_mode(uint8_t mode) {
+    if (role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return;
+    host_lobby_->set_mode(mode);
+    room_ = host_lobby_->room();
+    room_.you = seat_;
+}
+
 bool NetGame::add_bot(uint8_t seat, const std::string& name) {
     if (role_ != Role::Host || phase_ != Phase::Room || !host_lobby_) return false;
     if (host_lobby_->fog()) {

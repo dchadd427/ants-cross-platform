@@ -8,7 +8,8 @@
 //
 //   file  := magic chunk*                  magic = 89 41 52 50 4C 0D 0A 1A (a transfer that changes line ends is noticed)
 //   chunk := tag[4] u32 length payload u32 crc32(tag + payload)       a tag whose first letter is UPPER case is critical (a reader that does not know it refuses the file), lower case is skipped
-//   HEAD  := u16 format_version, u16 engine_rules, then fields { varint id, varint length, bytes }; unknown ids are skipped
+//   HEAD  := u16 format_version, u16 engine_rules, then fields { varint id, varint length, bytes }; unknown ids are skipped (field 16: sim_rules, u16; field 17: the game mode, u8, written only when it is not 0 (the
+//            original's game) and then always with sim_rules 2, so that a build that skips field 17 refuses the file for its rules number)
 //   CMDS  := u32 first_turn, u32 count, then count records { varint gap, the command in its wire form (ants_sim/command.hpp, 8 + 4 n bytes) }
 //            gap = turns since the record before it (the first record: since first_turn); a chunk spans at most 30 s of game time and 4,096 commands
 //   hash  := u32 period, then u32 values: the low 32 bits of the state hash after period, 2 period, 3 period ... turns
@@ -51,6 +52,16 @@ inline constexpr uint8_t kNoSeat = 255;
 /// recorded it (the head's field `sim_rules`) and plays on a build with the same number, whatever the network protocol did meanwhile: a protocol bump that leaves the simulation alone strands no file.
 /// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
 inline constexpr uint16_t kSimRules = 1;
+/// The rules number of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and this number in field 16. A build that
+/// predates the mode skips field 17 and refuses the file for its rules number (it plays kSimRules only), so no older build plays a 187 match as the original's game; every file of mode 0 keeps kSimRules and plays
+/// wherever it did. A change of the original's rules after this takes the next number that is neither of these two (the static_assert below stops the one that would collide).
+inline constexpr uint16_t kSimRulesMode187 = 2;
+static_assert(kSimRulesMode187 != kSimRules, "a mode of its own has rules of its own");
+
+/// The rules number that a match of game mode `mode` is recorded under (0: no mode of that number exists)
+constexpr uint16_t sim_rules_for_mode(uint8_t mode) noexcept {
+    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRules : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};
+}
 
 /// What the start of the match was: with the commands it is the whole match.
 struct Header {
@@ -65,10 +76,16 @@ struct Header {
     uint32_t seed{0};
     uint8_t roster{0};                                 // bit p: seat p takes part
     bool fog{false};
+    uint8_t mode{0};                                   // sim::GameMode as a byte (head field 17, written only when it is not 0): the rules the match was played by; set_mode() keeps it and sim_rules together
     std::array<std::string, sim::MAX_PLAYERS> names;   // printable ASCII, at most 32 characters (the game makes a '?' of any other); empty: the colour word
     sim::StartTeams teams;                             // the teams that the match started with (applied before the first tick)
     uint8_t recorder_seat{kNoSeat};                    // the seat of the machine that wrote the file (kNoSeat: none)
     uint32_t hash_period{kHashPeriodTurns};
+    /// The game mode of the match and the rules number that goes with it (sim_rules_for_mode): what a recorder stamps from the Start of a match
+    void set_mode(uint8_t game_mode) noexcept {
+        mode = game_mode;
+        sim_rules = sim_rules_for_mode(game_mode);
+    }
 };
 
 struct TimedCommand {
@@ -89,8 +106,10 @@ struct Replay {
 /// The rules number of the simulation that `head` needs: its own `sim_rules`, else (a file made before the field) the one that the table of protocol numbers gives, else 0 (unknown: no build claims
 /// it). The table (replay.cpp) holds the protocol numbers that are known to play a match out the same way, each proved with a reference file played under the newer engine.
 uint16_t sim_rules_of(const Header& head) noexcept;
-/// True when this build plays `head`'s match exactly as it was played: sim_rules_of(head) == kSimRules
+/// True when this build plays `head`'s match exactly as it was played: its rules number is the one of its game mode (kSimRules with mode 0, kSimRulesMode187 with mode 1). The numbers of the modes that this build plays,
+/// as a sentence for a refusal: "1 and 2".
 bool plays_here(const Header& head) noexcept;
+std::string played_rules_text();
 
 /// CRC-32 (IEEE 802.3, the one of zlib and PNG: CRC-32 of "123456789" is 0xCBF43926); `crc` is the value so far (0 to start)
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc = 0) noexcept;

@@ -875,9 +875,9 @@ def answer_text(peer):
     m = peer.answer()
     return 'none' if m is None else 'welcome' if m[0] == 2 else 'reject-%d' % m[1]
 def created(m): return m is not None and (m[19] & 2) != 0                          # (the Welcome: type, player, players, the key, the flags)
-def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes and the games
+def lobby_room(peer):                                                              # the Room message ends with the flags, four plan bytes, the games and the game mode (protocol 17)
     m = peer.wait_for((12,), 3.0)
-    return m is not None and (m[-6] & 2) != 0
+    return m is not None and (m[-7] & 2) != 0
 out = {}
 a = Peer('Ada', 'lob00001', 1, LOBBY); wa = welcomed(a)
 out['page_makes_lobby'] = 'yes' if wa is not None and created(wa) and wa[1] == 0 and wa[3:19] != bytes(16) else 'no'
@@ -1481,7 +1481,7 @@ import sys, json
 d = json.load(sys.stdin)
 r = d["replays"][0] if d["replays"] else {}
 ok = sorted(d) == ["count", "keep_days", "replays", "sim_rules"] and d["sim_rules"] >= 1 and d["count"] == 1 and len(d["replays"]) == 1 and d["keep_days"] == 30
-ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "players", "rules", "seconds", "sim_rules", "turns"]
+ok = ok and sorted(r) == ["bytes", "ended", "file", "finished", "game", "map", "mode", "players", "rules", "seconds", "sim_rules", "turns"]
 ok = ok and r["file"] == sys.argv[1] and r["map"] == "TINY.LVL" and r["players"] in (["Green (Typed1)", "Red (Typed2)"], ["Green (Typed2)", "Red (Typed1)"]) and r["finished"] is False and r["turns"] >= 600
 ok = ok and sys.argv[2] not in json.dumps(d)
 sys.exit(0 if ok else 1)' "$1" "$RP_CODE"

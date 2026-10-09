@@ -434,7 +434,7 @@ function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.pus
 const KEY = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x30 + i));
 const welcome = (player, key, flags) => Uint8Array.from([2, player, 4].concat(Array.from(key || KEY), [flags === undefined ? 2 : flags]));
 const reject = (reason) => Uint8Array.from([3, reason]);
-// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame }
+// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame, mode }
 function roomMessage(seats, o) {
     o = o || {};
     const w = [12];
@@ -442,7 +442,7 @@ function roomMessage(seats, o) {
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0);
+    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
     return Uint8Array.from(w);
 }
 // What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)

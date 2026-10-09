@@ -2116,7 +2116,7 @@ int main(int argc, char* argv[]) {
         }
         // the options that only set something up: the menu comes
         const std::vector<std::vector<std::string>> setting_up = {
-            {"--name", "Bob"}, {"--settings", "s.ini"}, {"--seed", "5"}, {"--fullscreen"}, {"--frames", "9"}, {"--show-grid"}, {"--team-name", "1", "Bob"}, {"-N1Bob"}, {"--title", "T"},
+            {"--name", "Bob"}, {"--game-mode", "187"}, {"--settings", "s.ini"}, {"--seed", "5"}, {"--fullscreen"}, {"--frames", "9"}, {"--show-grid"}, {"--team-name", "1", "Bob"}, {"-N1Bob"}, {"--title", "T"},
             {"--window-pos", "10,10"}, {"--window-size", "800,600"}, {"--grid", "2x2"}, {"--cell", "1"}, {"--display", "0"}, {"--audio-focus"}, {"--port", "4005"}, {"--loopback"},
             {"--lan-port", "5000"}, {"--no-lan"}, {"--start-when", "2"}, {"--server", "play.example.org:4001"}, {"--unknown-option"}};
         for (const auto& args : setting_up) {
@@ -2207,6 +2207,60 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(c.startup_error, std::string("--alone cannot be used with --bot: a game for one has no other player."));
         c = parse({"--bot", "9", "--alone"});
         ASSERT_TRUE(c.startup_error.find("--bot 9") == 0);                                     // (the first mistake is the one that is told)
+    } TEST_END();
+
+    TEST_CASE("M9.3c Command line: --game-mode highest-score|187 is the rules of the games this machine makes (off by default: the original's game); it only sets something up (the menu still comes), takes exactly the two words, and is refused with --replay (the file says which game was played), --join, --join-url and --room (the host of the room chooses), each with the reason") {
+        const auto parse = [](std::vector<std::string> args) {
+            std::vector<std::string> full = {"ants"};
+            full.insert(full.end(), args.begin(), args.end());
+            std::vector<char*> arg_ptrs;
+            for (std::string& a : full) arg_ptrs.push_back(a.data());
+            arg_ptrs.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(full.size()), arg_ptrs.data());
+        };
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        ApplicationConfig c = parse({});
+        ASSERT_TRUE(c.game_mode == 0 && !c.game_mode_given && c.startup_error.empty());
+        c = parse({"--game-mode", "highest-score"});
+        ASSERT_TRUE(c.game_mode == 0 && c.game_mode_given && c.startup_error.empty());
+        c = parse({"--game-mode", "187"});
+        ASSERT_TRUE(c.game_mode == 1 && c.game_mode_given && c.startup_error.empty());
+        c = parse({"--map", tiny, "--play", "--alone", "--game-mode", "187"});
+        ASSERT_TRUE(c.game_mode == 1 && c.alone && c.play_at_once && c.startup_error.empty());
+        c = parse({"--game-mode", "187", "--map", tiny, "--bot", "1:easy"});
+        ASSERT_TRUE(c.game_mode == 1 && c.bots.size() == 1 && c.startup_error.empty());                 // (bots play it too: no rule against them)
+#if !defined(__EMSCRIPTEN__)
+        ASSERT_TRUE(parse({"--game-mode", "187"}).start_menu);                                           // (the option sets something up: a native game started with it shows the menu, whose games play by it)
+#endif
+        c = parse({"--host", "4002", "--game-mode", "187"});
+        ASSERT_TRUE(c.game_mode == 1 && c.net_role == ApplicationConfig::NetRole::Host && c.startup_error.empty());         // (the room's host chooses: its Start carries the mode to every guest)
+        // the two words only: no number, no other spelling, no empty word, no word with a blank, and a value that is missing
+        for (const char* bad : {"0", "1", "2", "255", "", "187 ", " 187", "Highest-Score", "HIGHEST-SCORE", "kills", "highest_score", "highest-score ", "0x1", "1.0", "-1"}) {
+            c = parse({"--game-mode", bad});
+            if (c.startup_error.empty()) std::cout << "\n    '" << bad << "' was accepted";
+            ASSERT_TRUE(c.startup_error.find("--game-mode") == 0 && c.startup_error.find("the game types are highest-score and 187") != std::string::npos);
+            ASSERT_TRUE(c.game_mode == 0 && !c.game_mode_given);                                         // (a word that is not one changes nothing)
+        }
+        c = parse({"--game-mode"});
+        ASSERT_EQ(c.startup_error, std::string("--game-mode needs highest-score or 187"));
+        // the first mistake is the one that is told
+        c = parse({"--bot", "9", "--game-mode", "2"});
+        ASSERT_TRUE(c.startup_error.find("--bot 9") == 0);
+        // the options of a game whose rules another machine chooses
+        const std::string refusal_start = "--game-mode ";
+        for (const auto& args : std::vector<std::vector<std::string>>{{"--replay", "x.antsrep", "--game-mode", "187"}, {"--game-mode", "187", "--replay", "x.antsrep"},
+                                                                    {"--join", "127.0.0.1:4001", "--game-mode", "187"}, {"--game-mode", "187", "--join", "127.0.0.1:4001"},
+                                                                    {"--join-url", "ws://x/ws", "--game-mode", "187"}, {"--game-mode", "187", "--join-url", "ws://x/ws"},
+                                                                    {"--room", "abc", "--game-mode", "187"}, {"--game-mode", "187", "--room", "abc"}}) {
+            c = parse(args);
+            if (c.startup_error.empty()) std::cout << "\n    no error for " << args[0] << " " << args[1];
+            ASSERT_TRUE(c.startup_error.find("--game-mode ") == 0 && (c.startup_error.find("cannot be") != std::string::npos));
+        }
+        c = parse({"--replay", "x.antsrep", "--game-mode", "187"});
+        ASSERT_EQ(c.startup_error, std::string("--game-mode cannot be combined with --replay: the file says which game was played."));
+        // a mode of the original's game is no choice either: the same refusals (a replay or a room of another host is not played by this machine's word)
+        c = parse({"--join", "127.0.0.1:4001", "--game-mode", "highest-score"});
+        ASSERT_TRUE(c.startup_error.find("--game-mode ") == 0);
     } TEST_END();
 
     TEST_CASE("M9.2 Command line: --server is read as HOST[:PORT] (it overrides the settings key and the default); a bad one is a start error with the reason and the text; a missing value too; the rig of start_game.sh shows no menu") {

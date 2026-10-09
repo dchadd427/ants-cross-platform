@@ -83,6 +83,7 @@ struct RoomSpec {
     std::string code;                       // the room's code (net::valid_room_code, not empty): what a client puts in its Hello
     std::string map;                        // the map's file name in the map store
     bool fog{false};                        // the Fog of War option of the match
+    uint8_t mode{0};                        // the game mode of the match (protocol 17; sim::GameMode as a byte: 0 the original's highest score, 1 "187"; the control key "mode"): a byte above sim::kLastGameMode is refused. A lobby room has 0: its leader's plan decides
     uint8_t players{2};                     // 2 .. 4: the match starts when this many seats are taken (and takes no more)
     bool early_start{true};                 // the room's leader (the first player who joined) may start the match before all the seats are taken: with at least two players there
                                             // (the roster is then the seats that are taken). False: the room has no leader and starts only when every seat is taken. Demo rooms have it on.
@@ -175,6 +176,7 @@ struct RoomStatus {
     std::string code;
     std::string map;
     bool fog{false};
+    uint8_t mode{0};                        // the game mode that the room's match is (or will be) played by (sim::GameMode as a byte)
     uint8_t expected{0};
     bool early_start{true};                 // the room allows the leader's early start
     bool public_room{false};                // made by a visitor's create block (protocol 15): for the tests, not shown by the control interface

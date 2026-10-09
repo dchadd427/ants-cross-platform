@@ -160,8 +160,12 @@ public:
 
     void set_map(const std::string& map_name);
     void set_fog(bool fog);
+    /// The rules of the room's match (protocol 17; sim::GameMode as a byte, 0 the original's highest score). The owner of the lobby chooses it, like the fog option; in a lobby room the leader's plan (PlanMsg::mode)
+    /// does. Only while the room is open, and a byte above sim::kLastGameMode is not taken. start() puts it in the Start message.
+    void set_mode(uint8_t mode);
     const std::string& map_name() const noexcept { return room_.map_name; }
     bool fog() const noexcept { return room_.fog; }
+    uint8_t mode() const noexcept { return room_.mode; }
     /// The seat of the room's leader (kNoLeader when there is none: a host that holds a seat, a room without early start, nobody has joined yet)
     uint8_t leader() const noexcept { return room_.leader; }
     /// How many StartRequest messages were heard and not acted on: from a guest that is not the leader (every guest of a host that holds a seat), after the room started loading,

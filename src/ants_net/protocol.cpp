@@ -84,6 +84,16 @@ bool valid_map_name(const std::string& name) noexcept {
     return tail == ".LVL" || tail == ".lvl";
 }
 
+bool parse_game_mode_name(const std::string& text, uint8_t& mode) noexcept {
+    for (uint8_t candidate = 0; candidate <= sim::kLastGameMode; ++candidate) {
+        if (text == sim::game_mode_name(static_cast<sim::GameMode>(candidate))) {
+            mode = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool valid_room_code(const std::string& code) noexcept {
     if (code.empty()) return true;                                                    // no room: a LAN or direct host
     if (code.size() > kMaxRoomCodeChars) return false;
@@ -444,6 +454,7 @@ std::vector<uint8_t> encode(const RoomMsg& m) {
     w.u8(m.flags);
     for (const PlanKind kind : m.plan) w.u8(static_cast<uint8_t>(kind));
     w.u8(m.in_game);
+    w.u8(m.mode);                                                                       // (protocol 17: at the end)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
@@ -471,8 +482,9 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     std::array<uint8_t, sim::MAX_PLAYERS> plan{};
     for (uint8_t& kind : plan) kind = r->u8();
     m.in_game = r->u8();
+    m.mode = r->u8();
     // an empty map name = the host has not chosen a map yet
-    if (!r->done() || fog > 1 || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
+    if (!r->done() || fog > 1 || !sim::valid_game_mode(m.mode) || (!m.map_name.empty() && !valid_map_name(m.map_name)) || (m.you != 255 && m.you >= sim::MAX_PLAYERS)) return false;
     // the leader: nobody (255), or a seat that a person holds as a guest (a server's room has no host in a seat; a bot, an empty seat or the host of a LAN room never leads)
     if (m.leader != kNoLeader && (m.leader >= sim::MAX_PLAYERS || m.slots[m.leader].state != SlotState::Client)) return false;
     // the room's own teams (protocol 15): none, or two seats, the lower first; and no rule bit that this build does not know
@@ -509,6 +521,7 @@ std::vector<uint8_t> encode(const StartMsg& m) {
     w.u8(m.team_a);
     w.u8(m.team_b);
     for (const uint8_t platform : m.platforms) w.u8(platform);                          // (protocol 15: at the end, so that a record of an older protocol reads with four zero bytes more)
+    w.u8(m.mode);                                                                       // (protocol 17: after them, so that a record of protocol 15 or 16 reads with one zero byte more)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, StartMsg& out) {
@@ -533,9 +546,10 @@ bool decode(const uint8_t* data, size_t size, StartMsg& out) {
     m.team_a = r->u8();
     m.team_b = r->u8();
     for (uint8_t& platform : m.platforms) platform = r->u8();
+    m.mode = r->u8();
     int players = 0;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) players += (m.roster >> p) & 1;
-    if (!r->done() || fog > 1 || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
+    if (!r->done() || fog > 1 || !sim::valid_game_mode(m.mode) || !valid_map_name(m.map_name) || (m.roster & 0xF0) != 0 || players < 2) return false;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (!valid_platform(m.platforms[p]) || (m.platforms[p] != kPlatformUnknown && (m.roster & (1u << p)) == 0)) return false;     // (a seat that plays says what it runs on or nothing; one that does not play says nothing)
     }
@@ -747,6 +761,7 @@ std::vector<uint8_t> encode(const PlanMsg& m) {
     for (const PlanKind kind : m.plan) w.u8(static_cast<uint8_t>(kind));
     w.u8(m.team_a);
     w.u8(m.team_b);
+    w.u8(m.mode);                                                                       // (protocol 17)
     return out;
 }
 bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
@@ -759,7 +774,8 @@ bool decode(const uint8_t* data, size_t size, PlanMsg& out) {
     for (uint8_t& kind : plan) kind = r->u8();
     m.team_a = r->u8();
     m.team_b = r->u8();
-    if (!r->done() || (!m.map_name.empty() && !valid_map_name(m.map_name))) return false;      // exactly the type, a map, four kinds and two team bytes
+    m.mode = r->u8();
+    if (!r->done() || !sim::valid_game_mode(m.mode) || (!m.map_name.empty() && !valid_map_name(m.map_name))) return false;      // exactly the type, a map, four kinds, two team bytes and the mode
     for (size_t seat = 0; seat < plan.size(); ++seat) {
         if (plan[seat] > kPlanKindLast) return false;
         m.plan[seat] = static_cast<PlanKind>(plan[seat]);

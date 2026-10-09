@@ -66,6 +66,7 @@ constexpr size_t kMaxBuildIdChars = 64;
 constexpr size_t kMaxStartBytes = 2048;
 constexpr uint16_t kLastProtocolWithoutStartTeams = 12;           // (protocol 13 added the two team bytes to the Start message)
 constexpr uint16_t kLastProtocolWithoutStartPlatforms = 14;       // (protocol 15 added the four platform bytes at the end of it)
+constexpr uint16_t kLastProtocolWithoutStartMode = 16;            // (protocol 17 added the mode byte at the very end of it)
 constexpr size_t kMaxBots = sim::MAX_PLAYERS;
 
 bool printable(const std::string& s, size_t max_chars, bool allow_empty) {
@@ -201,19 +202,24 @@ bool decode_restart_head(const uint8_t* payload, size_t size, RestartHead& out, 
     const uint8_t* start_bytes = r.take(start_len);
     if (start_bytes == nullptr) return bad("the head of the record is cut short");
     if (!net::decode(start_bytes, start_len, h.start)) {
-        // the Start of an older protocol lacks what later ones added at its end (protocol 13: the two team bytes, 15: four platform bytes): with them added as "no teams" and "not told" it reads,
-        // and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why). Only the layouts that a release wrote are read, each for its own protocols: the
-        // Start of protocol 12 has neither, the Start of protocols 13 and 14 has the team bytes only
+        // the Start of an older protocol lacks what later ones added at its end (protocol 13: the two team bytes, 15: four platform bytes, 17: the mode byte): with them added as "no teams", "not told" and
+        // "the original's mode" it reads, and judge_record then refuses the record for its protocol (kept for a day, the room fails and says why). Only the layouts that a release wrote are read, each
+        // for its own protocols: the Start of protocol 12 has none of them, the Start of protocols 13 and 14 has the team bytes only, the Start of protocols 15 and 16 has the platforms too
         bool read = false;
         const uint16_t protocol = h.identity.protocol;
         const bool lacks_teams = protocol == kLastProtocolWithoutStartTeams;
-        if (lacks_teams || (protocol > kLastProtocolWithoutStartTeams && protocol <= kLastProtocolWithoutStartPlatforms)) {
+        const bool lacks_platforms = lacks_teams || (protocol > kLastProtocolWithoutStartTeams && protocol <= kLastProtocolWithoutStartPlatforms);
+        const bool lacks_mode = lacks_platforms || (protocol > kLastProtocolWithoutStartPlatforms && protocol <= kLastProtocolWithoutStartMode);
+        if (lacks_mode) {
             std::vector<uint8_t> widened(start_bytes, start_bytes + start_len);
             if (lacks_teams) {
                 widened.push_back(net::kNoTeam);
                 widened.push_back(net::kNoTeam);
             }
-            for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) widened.push_back(net::kPlatformUnknown);
+            if (lacks_platforms) {
+                for (size_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) widened.push_back(net::kPlatformUnknown);
+            }
+            widened.push_back(static_cast<uint8_t>(sim::GameMode::HighestScore));
             read = net::decode(widened.data(), widened.size(), h.start);
         }
         if (!read) return bad("the start message in the record is not one");

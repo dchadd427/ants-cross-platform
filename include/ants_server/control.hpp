@@ -4,8 +4,9 @@
 // The HTTP server (ants::ctl::HttpServer) checks the bearer secret before this function is ever called; everything here is JSON in, JSON out.
 //
 //   POST   /rooms          {"map": "File name.lvl", "players": 2, "fog": false, "early_start": true, "code": "ROOM-1", "seed": 123, "wait_seconds": 120, "load_seconds": 60, "keep_seconds": 600,
-//                           "max_run_seconds": 7200, "reconnect": true, "hold_vote_seconds": 30, "max_pause_seconds": 1800, "max_catch_up_seconds": 300, "resume_countdown_seconds": 10, "record": true}
-//                          -> 201 {"code": "...", "state": "waiting", ...}   (code and seed are optional: the server draws them; "early_start" is true unless it says false: the room's
+//                           "max_run_seconds": 7200, "mode": "187", "reconnect": true, "hold_vote_seconds": 30, "max_pause_seconds": 1800, "max_catch_up_seconds": 300, "resume_countdown_seconds": 10, "record": true}
+//                          -> 201 {"code": "...", "state": "waiting", ...}   (code and seed are optional: the server draws them; "mode" (protocol 17, optional) is the game mode of the room's match, the word
+//                          "highest-score" (the default: the original's game) or "187" (docs/GAMEPLAY.md), anything else is a 400; "early_start" is true unless it says false: the room's
 //                          leader, the first player who joined, may then start the match with the players who are there, two at least, protocol 7. "reconnect" (protocol 10): the room
 //                          holds the seat of a player whose connection is lost, pauses the match for everybody and takes the player back with its key; what the server was started with
 //                          (on unless --no-reconnect) unless the body says; "hold_vote_seconds" 5 .. 3600 (default 30): the others may vote on going on without a seat once it has been
@@ -18,7 +19,7 @@
 //   DELETE /rooms/<code>   -> 200 the status after the close; 404
 //   GET    /stats          -> 200 {"rooms": n, "pending": n, "created": n, "refused": n, "log_bytes": n, "log_budget_bytes": n}
 //   GET    /replays[?limit=N]    -> 200 {"enabled": bool, "count", "bytes", "keep_days", "max_bytes", "replays": [{"file", "bytes", "ended" (seconds since 1970 UTC), "readable", "map", "players": ["Green (Ann)", "Red", "Blue (Bot (Medium))"],
-//                                    "turns", "seconds", "finished", "game", "rules"}, ...]} the newest N (default 200, at most 1000) of the matches that the server keeps (replay_store.hpp)
+//                                    "turns", "seconds", "finished", "game", "mode" ("highest-score" | "187"), "rules", "sim_rules"}, ...]} the newest N (default 200, at most 1000) of the matches that the server keeps (replay_store.hpp)
 //   GET    /replays/<file> -> 200 the .antsrep file (application/octet-stream); 404
 //   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404; 500 (the file is in the list but could not be deleted)
 //   (with --replay-port the server also has a PUBLIC, read-only door with no secret: GET /replays -> 200 {"replays": [...], "count", "keep_days"}, the newest 200 files that this build can read, each as above
@@ -27,7 +28,7 @@
 //   match so far as an incomplete .antsrep file with a `live` chunk (application/octet-stream, made at most once a second), or 404 {"error": "no such live match", "ended": bool, "replay": "<file>"}
 //   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); 404 for everything else: handle_public_replays)
 //
-// A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "expected", "joined", "early_start", "leader": seat | null (while the room waits or
+// A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
 // "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "paused": bool (the match is held: a seat is missing, or the countdown
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",

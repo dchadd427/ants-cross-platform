@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 16 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 17 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a colour move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
@@ -41,7 +41,7 @@ function room(seats, o) {
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0);
+    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
     return Uint8Array.from(w);
 }
 // the independent builder agrees with the C++ bytes of one golden Room message (tests/data/lobby_messages.txt, room-lobby-alone-no-map)
@@ -181,6 +181,29 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('a guard that is not the seating\'s sends nothing (0, a number, a string)', c.remove(1, 0) === false && c.remove(1, 12345) === false && c.move(1, 3, '1') === false && w.last().sent.length === base + 3);
     check('without a guard the room as it is now counts (as before)', c.remove(2) && hex(w.last().sent[base + 3]) === hex(N.encodeRemove(2, after)));
     check('a guard does not make a request possible that is not: the leader cannot be removed', c.remove(0, after) === false && w.last().sent.length === base + 4);
+}
+
+// ---- the game mode of a plan (protocol 17): the page asks for the original's game (none, or 0) or for 187 (1), and nothing else ------------------------------------------------------------------------
+
+{
+    const w = world();
+    const c = client(w, { name: 'Priya' });
+    c.connect();
+    w.last().open();
+    w.last().receive(welcome(0, seq(0x40), 2));
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    const lastSent = () => w.last().sent[w.last().sent.length - 1];
+    const none = { map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 };
+    check('a plan with no mode is the original\'s game: its last byte is 0', c.setPlan(none) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255)) && lastSent()[lastSent().length - 1] === 0);
+    check('... and so is mode 0', c.setPlan(Object.assign({}, none, { mode: 0 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 0)) && lastSent()[lastSent().length - 1] === 0);
+    check('mode 1 ("187") is the last byte of the plan, nothing else moves', c.setPlan(Object.assign({}, none, { mode: 1 })) && hex(lastSent()) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255, 1)) && lastSent()[lastSent().length - 1] === 1 &&
+          hex(lastSent().slice(0, lastSent().length - 1)) === hex(N.encodePlan('', [0, 0, 0, 0], 255, 255).slice(0, -1)));
+    const count = w.last().sent.length;
+    check('a mode that the codec does not know (2, 255, -1, 1.5, "1", null, NaN) is refused and sends nothing', [2, 255, -1, 1.5, '1', null, NaN].every((m) => c.setPlan(Object.assign({}, none, { mode: m })) === false) && w.last().sent.length === count);
+    check('the room\'s mode is what the Room message says, and a plan of the page does not change what it shows', c.room.mode === 0);
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, mode: 1 }));
+    check('a Room message of mode 1 is read with its mode', c.room.mode === 1);
+    check('a plan after it that names no mode asks for the original\'s game again (the page decides the mode with every plan)', c.setPlan(none) && lastSent()[lastSent().length - 1] === 0);
 }
 
 // ---- a page that is not the leader ------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -411,7 +434,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, protocol 16, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, protocol 17, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
 
 {
     const golden = {};
@@ -423,7 +446,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
     const byHand = (name, code, o) => {
         o = o || {};
-        const w = [1, 16, 0];
+        const w = [1, 17, 0];
         str8(w, name);
         w.push(0, 0, 255);
         str8(w, code);
@@ -456,7 +479,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^0110000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', /^0111000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();

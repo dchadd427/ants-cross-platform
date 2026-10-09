@@ -96,6 +96,7 @@ struct Machine {
             const bool ok = !corrupt_map && level.load_lvl(maps_dir() + s.map_name) && hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
+                sim.set_game_mode(s.game_mode());                         // (protocol 17: the Start says the rules, before the first init)
                 sim.init(level, s.seed, s.roster);
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
                 sim::apply_start_teams(sim, s.teams());                   // (after the names, as the application does: the News Flash names the players)
@@ -1228,7 +1229,7 @@ void run_room_chat_tests() {
 // Protocol 12: the first turn of a match is sealed kMatchStartDelayMs after the match began (the "Get ready to play!" dialog of every machine), on a game of the local network too
 void run_start_delay_tests() {
     TEST_CASE("N3.22 Protocol 12, The Start Of A Match On The Local Network: No Machine Runs A Tick For 5 s After The Match Began, Nobody Waits Or Is Told Anything Meanwhile (No Stall, No Lag, No Election, No Notice), Then Every Machine's First Tick Comes And The Match Is Identical; A Guest Of Protocol 11 Is Refused By The Host's Door") {
-        ASSERT_EQ(kProtocolVersion, 16);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34; 14 added the SeatMove; 15 the platform and the create block; 16 the lobby room)
+        ASSERT_EQ(kProtocolVersion, 17);                                  // (12 added the start delay: no message; 13 changed the StartRequest and the Start: N2.100, N3.34; 14 added the SeatMove; 15 the platform and the create block; 16 the lobby room; 17 the game mode)
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
@@ -2008,6 +2009,68 @@ void run_seat_move_tests() {
             ASSERT_EQ(garbage, size_t{0});
             ASSERT_TRUE(net.phase() == NetGame::Phase::Room && net.is_leader());
         }
+    } TEST_END();
+
+    TEST_CASE("N3.41 Protocol 17, The Game Mode Of A Game On The Local Network: The Host Sets It In The Room (Every Guest Is Shown It; A Mode This Build Does Not Know And A Call After The Start Change Nothing), The Start Carries It To Every Machine, Each Makes Its Engine With It Before The First Init, And Three Machines Play It 20 Seconds Identical (No Food On The Map); A Room Left At The Original's Mode Plays The Original's Game") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 2));
+        Machine& host = *t.machines[0];
+        ASSERT_EQ(host.net.room().mode, 0);
+        host.net.set_mode(static_cast<uint8_t>(sim::kLastGameMode + 1));            // (a mode that is not known is not taken)
+        ASSERT_EQ(host.net.room().mode, 0);
+        host.net.set_mode(static_cast<uint8_t>(sim::GameMode::Kills187));
+        ASSERT_EQ(host.net.room().mode, 1);
+        ASSERT_TRUE(t.run_until([&]() { return t.machines[1]->net.room().mode == 1 && t.machines[2]->net.room().mode == 1; }, 3000));
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "TINY.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(61, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
+        host.net.set_mode(0);                                                       // (after the start: the room is closed to it)
+        ASSERT_EQ(host.net.start_info().mode, 1);
+        for (auto& m : t.machines) {
+            ASSERT_EQ(m->net.start_info().mode, 1);
+            ASSERT_TRUE(m->sim.game_mode() == sim::GameMode::Kills187);
+        }
+        std::array<uint32_t, sim::MAX_PLAYERS> ants{};
+        for (const auto& a : host.sim.get_world_state().ants) {
+            if (a.player_id < sim::MAX_PLAYERS) ++ants[a.player_id];
+        }
+        for (uint8_t seat = 0; seat < 3; ++seat) ASSERT_TRUE(ants[seat] > 0);                  // (the map's own start: every seat of the roster has its ants)
+        ASSERT_EQ(ants[3], 0u);
+        for (const auto& cell : host.sim.get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        uint32_t next_order_ms = t.now + 500;
+        t.run(20000, [&](uint32_t now) {
+            if (now < next_order_ms) return;
+            next_order_ms = now + 700;
+            for (uint8_t seat = 0; seat < 3; ++seat) {
+                Machine& m = *t.machines[seat];
+                std::vector<uint32_t> mine;
+                for (const auto& a : m.sim.get_world_state().ants) {
+                    if (a.player_id == seat) mine.push_back(a.id);
+                }
+                if (mine.empty()) continue;
+                const uint32_t pick = mine[(now / 700 + seat) % mine.size()];
+                m.net.submit(order(seat, pick, static_cast<int16_t>((now / 10 + seat * 7) % 40), static_cast<int16_t>((now / 30 + seat * 11) % 40)));
+            }
+        });
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        for (auto& m : t.machines) ASSERT_FALSE(m->net.desynced());
+        // the same room left at the original's mode starts with the food on the map
+        Table plain;
+        ASSERT_TRUE(make_room(plain, 2));
+        Machine& plain_host = *plain.machines[0];
+        ASSERT_EQ(plain_host.net.room().mode, 0);
+        ASSERT_TRUE(plain_host.net.start_match(61, hash));
+        ASSERT_TRUE(plain.run_until([&]() { return everybody_running(plain); }, kUntilRunning));
+        for (auto& m : plain.machines) {
+            ASSERT_EQ(m->net.start_info().mode, 0);
+            ASSERT_TRUE(m->sim.game_mode() == sim::GameMode::HighestScore);
+        }
+        bool food = false;
+        for (const auto& cell : plain_host.sim.get_world_state().cells) food = food || cell.is_food;
+        ASSERT_TRUE(food);
     } TEST_END();
 }
 

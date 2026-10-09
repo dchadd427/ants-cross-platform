@@ -32,6 +32,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("state", JsonValue::make_string(room_state_name(s.state)));
     o.set("map", JsonValue::make_string(s.map));
     o.set("fog", JsonValue::make_bool(s.fog));
+    o.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(s.mode))));       // "highest-score" or "187"
     o.set("expected", JsonValue::make_int(s.expected));
     o.set("joined", JsonValue::make_int(s.joined));
     o.set("early_start", JsonValue::make_bool(s.early_start));
@@ -223,6 +224,14 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
         }
         spec.fog = v->as_bool_or(false);
     }
+    if (const JsonValue* v = body.find("mode")) {             // the game mode: the word (docs/SERVER.md); anything else is refused, never played as another mode
+        uint8_t mode = 0;
+        if (!v->is_string() || !net::parse_game_mode_name(v->str(), mode)) {
+            error = "\"mode\" must be \"highest-score\" or \"187\"";
+            return false;
+        }
+        spec.mode = mode;
+    }
     if (const JsonValue* v = body.find("early_start")) {
         if (!v->is_bool()) {
             error = "\"early_start\" must be true or false";
@@ -311,6 +320,7 @@ JsonValue replay_entry_json(const ReplayEntry& e, bool owner) {
         o.set("seconds", JsonValue::make_int(e.turns / net::kTurnsPerSecond));
         o.set("finished", JsonValue::make_bool(e.finished));
         o.set("game", JsonValue::make_string(e.game));
+        o.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(e.mode))));       // "highest-score" or "187"
         o.set("rules", JsonValue::make_int(e.rules));
         o.set("sim_rules", JsonValue::make_int(e.sim_rules));
     }

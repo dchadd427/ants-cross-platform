@@ -145,6 +145,13 @@ class TheListPage(unittest.TestCase):
         self.assertIn("sim_rules", self.page)
         self.assertRegex(self.page, r"\.sim_rules\s*(?:===|!==|==|!=)")
 
+    def test_a_match_of_game_mode_187_is_playable_as_well_with_its_own_rules_number_and_its_mode(self):
+        # replay.hpp: kSimRulesMode187 = 2 and the list entry says "mode": "187"; an entry of rules 2 that does not say the mode is not one of that game
+        self.assertIn("var RULES_187 = 2;", self.page)
+        header = read("include", "ants_replay", "replay.hpp")                                                # (the page's number is the header's, or the game of a mode would move to "Earlier versions")
+        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 2;")
+        self.assertRegex(self.page, r"e\.sim_rules\s*===\s*RULES_187\s*&&\s*e\.mode\s*===\s*'187'")
+
     def test_nothing_that_a_recording_carries_becomes_markup(self):
         for bad in (".innerHTML", "document.write", "insertAdjacentHTML", "outerHTML", "eval(", "new Function"):
             self.assertNotIn(bad, self.page, bad)

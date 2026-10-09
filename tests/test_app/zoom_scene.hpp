@@ -567,6 +567,7 @@ struct Peer {
                 const bool ok = level.load_lvl(maps_dir() + st.map_name) && net::hash_file(maps_dir() + st.map_name, hash) && hash == st.map_hash;
                 if (ok) {
                     sim.set_fog_of_war_enabled(st.fog);
+                    sim.set_game_mode(st.game_mode());
                     sim.init(level, st.seed, st.roster);
                     sim::apply_start_teams(sim, st.teams());
                 }

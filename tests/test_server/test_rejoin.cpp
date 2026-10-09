@@ -460,6 +460,7 @@ struct Machine {
             const bool ok = !fail_load && level.load_lvl(maps_dir() + s.map_name) && net::hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
+                sim.set_game_mode(s.game_mode());
                 sim.init(level, s.seed, s.roster);
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
                 sim::apply_start_teams(sim, s.teams());                   // (after the names, as the application does: the News Flash names the players)
