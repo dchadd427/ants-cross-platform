@@ -96,7 +96,7 @@ public:
     sim::CommandResult submit(const sim::Command& c) override {
         log.push_back(Entry{sim_.current_tick(), applied_at(sim_.current_tick()), c});
         sim::CommandResult r;
-        r.status = sim::CommandResult::Status::Applied;
+        r.status = refuse ? sim::CommandResult::Status::Ignored : sim::CommandResult::Status::Applied;     // (a room that is paused, an order with no ant to take it)
         return r;
     }
     uint64_t applied_at(uint64_t now) const override {
@@ -104,6 +104,7 @@ public:
         return even_ ? due + due % 2 : due;
     }
     void set_lag(uint32_t lag) noexcept { lag_ = lag; }
+    bool refuse{false};
     std::vector<Entry> log;
 
 private:
@@ -1563,4 +1564,64 @@ void run_controller_tests() {
             ASSERT_EQ(st.rejected, 0u);
         }
     } TEST_END();
+
+    TEST_CASE("AI2.29 The First Click Of A Chain Goes Before The Other Orders That Are Due On Its Tick, Whatever Their Age: Two Urgent Clicks Of Other Ants Proposed Before The Chain At The Same Look Leave After Its First Click (And In The Order They Were Proposed), At Every Reaction Time And With Every Lag; The Chain Is Whole")
+    {
+        for (const uint32_t lag : {0u, 3u}) {
+            for (uint32_t seed = 1; seed <= 5; ++seed) {
+                sim::SimulationEngine sim;
+                build_world(sim, seed);
+                TimedSink sink(sim, lag, lag > 0);
+                BotController c(sim, seed);
+                c.set_start_hold(0);
+                const std::vector<uint32_t> mine = ants_of(sim, 0);
+                bool proposed = false;
+                ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                    if (proposed) return;
+                    proposed = true;
+                    o.move({mine[1]}, TileCoord{40, 40}, Priority::Urgent);
+                    o.move({mine[2]}, TileCoord{41, 40}, Priority::Urgent);
+                    o.chain(mine[0], steps_of({{20, 0, 0}, {21, 10, 11}}));
+                });
+                ASSERT_TRUE(bot != nullptr);
+                run_ticks(sim, c, 120);
+                ASSERT_EQ(sink.log.size(), 4u);
+                ASSERT_TRUE(sink.log[0].command.ants == std::vector<uint32_t>{mine[0]} && sink.log[0].command.tile_x == 20);
+                ASSERT_TRUE(sink.log[1].command.ants == std::vector<uint32_t>{mine[1]} && sink.log[2].command.ants == std::vector<uint32_t>{mine[2]});
+                ASSERT_TRUE(sink.log[0].sent == sink.log[1].sent && sink.log[1].sent == sink.log[2].sent);                 // (the same tick: the order inside it is the point)
+                ASSERT_TRUE(sink.log[3].command.ants == std::vector<uint32_t>{mine[0]} && sink.log[3].command.tile_x == 21);
+                ASSERT_EQ(bot->count(Bot::Fate::Expired) + bot->count(Bot::Fate::Superseded), 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI2.30 A Sink That Does Not Accept A Click Ends Its Chain: When The First Click Is Answered Ignored (A Room That Is Paused) The Rest Is Dropped (Fate::Expired); When A Later One Is, The Ones After It Are; Nothing Is Left In The Queue Either Way")
+    {
+        for (const bool first : {true, false}) {
+            sim::SimulationEngine sim;
+            build_world(sim, 6);
+            TimedSink sink(sim, 0, false);
+            sink.refuse = first;
+            BotController c(sim, 7);
+            c.set_start_hold(0);
+            const uint32_t ant = ants_of(sim, 0)[0];
+            bool proposed = false;
+            ScriptBot* bot = seat_script(c, sim, spec_of(0, Level::Hard), sink, [&](const BotView&, Orders& o) {
+                if (proposed) return;
+                proposed = true;
+                o.chain(ant, steps_of({{20, 0, 0}, {21, 10, 11}, {22, 10, 11}, {23, 10, 11}}));
+            });
+            ASSERT_TRUE(bot != nullptr);
+            if (!first) {
+                for (int i = 0; i < 100 && sink.log.empty(); ++i) run_ticks(sim, c, 1);
+                ASSERT_EQ(sink.log.size(), 1u);
+                sink.refuse = true;                                                                          // (the second click is submitted and refused)
+            }
+            run_ticks(sim, c, 120);
+            ASSERT_EQ(sink.log.size(), first ? 1u : 2u);
+            ASSERT_EQ(bot->count(Bot::Fate::Expired), first ? 3u : 2u);
+            ASSERT_EQ(c.pending(0), 0u);
+        }
+    } TEST_END();
+
 }

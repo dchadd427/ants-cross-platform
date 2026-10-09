@@ -15,7 +15,7 @@ namespace ants::ai {
 
 namespace {
 
-constexpr uint64_t kTurnTicks = 2;                       // a turn of a lock-step room is 100 ms
+constexpr uint64_t kTurnTicks = 2;                       // the arena's model of a room's turn: 100 ms, as a room's was before protocol 8 (a room today seals one every tick, so for the timed clicks the arena is the harder case)
 constexpr uint64_t kEndSlackTicks = 200;                 // the engine ends a match by its clock; this only bounds a loop that never would
 constexpr uint64_t kFlowerScanPeriod = 4;                // a droplet falls for 16 ticks and a pick-up animation lasts longer than 4: a look every 4 ticks counts each once
 

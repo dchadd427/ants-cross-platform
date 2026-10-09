@@ -372,8 +372,9 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
     // is the first that the engine finds a path for
     release_timed(sim, s, tick);
 
-    // 3. release what is due and paid for: the highest priority first, first come first served inside a class; an ant that was ordered a moment ago is left
-    // alone unless the order is urgent
+    // 3. release what is due and paid for: the highest priority first, first come first served inside a class, except that the first click of a timed chain goes before the others of its class
+    // (the engine finds paths in the order in which the orders reach it, one a tick: an order that was sent first would start the walk of the chain's ant a tick late and the second click would
+    // come too early); an ant that was ordered a moment ago is left alone unless the order is urgent
     while (s.tokens_milli >= kToken) {
         size_t best = s.queue.size();
         for (size_t i = 0; i < s.queue.size(); ++i) {
@@ -381,7 +382,8 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
             if (p.release > tick) continue;
             if (best != s.queue.size()) {
                 const Pending& b = s.queue[best];
-                if (!(p.priority > b.priority || (p.priority == b.priority && p.seq < b.seq))) continue;
+                const bool head = p.chain != 0, best_head = b.chain != 0;      // (only the first step of a chain is in the queue with a release time: the others have kNever)
+                if (!(p.priority > b.priority || (p.priority == b.priority && ((head && !best_head) || (head == best_head && p.seq < b.seq))))) continue;
             }
             if (p.priority != Priority::Urgent) {
                 bool held = false;
@@ -404,7 +406,7 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
         if (is_rejection(result.status)) ++s.stats.rejected;
         if (chain != 0) {                                                               // the first step of a chain: the others are counted from the moment it is applied
             Chain& ch = s.chains[chain];
-            ch.state = is_rejection(result.status) ? Chain::State::Broken : Chain::State::Live;
+            ch.state = result.accepted() ? Chain::State::Live : Chain::State::Broken;           // (a sink that refuses, a room that is paused, an order with no ant to take it: nothing to time)
             ch.applied = applies;
         }
         s.bot->on_command(c, Bot::Fate::Sent, tick);
@@ -471,10 +473,8 @@ void BotController::release_timed(const sim::SimulationEngine& sim, Seat& s, uin
             s.last_order[ch.ant] = tick;
             const sim::CommandResult result = s.sink->submit(c);
             ++s.stats.released;
-            if (is_rejection(result.status)) {
-                ++s.stats.rejected;
-                ch.state = Chain::State::Broken;
-            }
+            if (is_rejection(result.status)) ++s.stats.rejected;
+            if (!result.accepted()) ch.state = Chain::State::Broken;
             ch.applied = applies;
             ++ch.next_step;
             s.bot->on_command(c, Bot::Fate::Sent, tick);

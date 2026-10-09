@@ -39,6 +39,7 @@ struct Run {
     bool timed_off{false};
     int fire_ants{0};                    // ants of the seat that are Fire ants at the end (a hat that was taken by a click that came late)
     bool active_at_end{false};
+    uint64_t inactive_from{0};           // the first tick from which the expedition is over, after it began (0: still on, or never began)
     size_t crew_at_end{0};
     int lost{0};                         // ants of the seat that died or drowned (the ants of the start: nobody hatches here)
     uint32_t burns{0};                   // ants of the seat that started to burn (the engine's duds)
@@ -49,7 +50,7 @@ struct Run {
     int32_t score{0};
 };
 
-Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}, uint32_t latency = 0, uint64_t skew = 0) {
+Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::function<void(LevelPlan&)>& tweak = {}, uint32_t latency = 0, int64_t skew = 0, const std::function<void(Match&, int)>& hook = {}) {
     Match m;
     m.latency = latency;
     m.expedition = true;
@@ -66,7 +67,9 @@ Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::functio
     for (int t = 1; t <= ticks; ++t) {
         m.tick();
         const ExpeditionTask& ex = m.bot(seat)->expedition();
+        if (hook) hook(m, t);
         if (r.route.empty() && !ex.route().empty()) r.route = ex.route();
+        if (!r.route.empty() && r.inactive_from == 0 && !ex.active()) r.inactive_from = static_cast<uint64_t>(t);
         uint32_t sw = 0;
         std::set<uint32_t> now;
         for (const auto& a : m.sim.get_world_state().ants) {
@@ -113,6 +116,24 @@ Run play(Level level, uint8_t seat, uint32_t seed, int ticks, const std::functio
     return r;
 }
 
+
+// ---- the timed row when something goes wrong (AI17.44 - AI17.46) --------------------------------------------------------------------------------------------
+
+// The Swimmer token of the row that is nearest to the tile in front of it (the one the first chain in goes for), as the power-up of the engine's grid (`map`: the analysis of the first tick)
+sim::TileCoord nearest_swimmer(Match& m, const MapInfo& map, uint8_t seat) {
+    const ExpeditionTask& ex = m.bot(seat)->expedition();
+    const TokenGroup& g = m.island(seat).info().token_groups()[static_cast<size_t>(ex.group())];
+    const sim::TileCoord front = g.entrances[static_cast<size_t>(ex.entrance())].tile;
+    sim::TileCoord best{-1, -1};
+    int32_t near = 1 << 20;
+    for (const uint32_t member : g.members) {
+        const sim::TileCoord t = map.powerups()[member].tile;
+        if (!m.sim.grid().has_powerup_at(t) || m.sim.grid().get_powerup_type(t) != 5 || t.chebyshev_dist(front) >= near) continue;
+        near = t.chebyshev_dist(front);
+        best = t;
+    }
+    return best;
+}
 
 // ---- the timed chains row by row (AI17.40) ----------------------------------------------------------------------------------------------------------------
 
@@ -1064,5 +1085,80 @@ void run_island_expedition_tests() {
         const Run medium = play(Level::Medium, 2, 3, 1800, {}, 3);
         const Run easy = play(Level::Easy, 2, 3, 1800, {}, 3);
         ASSERT_EQ(medium.chains_in + medium.chains_out + easy.chains_in + easy.chains_out, 0u);
+    } TEST_END();
+
+    TEST_CASE("AI17.44 An Ant Whose Swimmer Is Taken From Under It Comes Out Of The Row: Another Team Takes The Swimmer Token That The First Chain In Is Going For, 20 Ticks After The Chain Was Ordered (Hard, Seats 1 And 2, Seeds 1 And 2, The Arena's Delay Of 3 Ticks); The Ant Stands Behind The Fire Hats With Nothing To Take, Is Brought Out Over Them, And The Bot Has The Two Swimmers That Are Left By Tick 1,600, Nobody Lost, No Chain Counted As Missed")
+    {
+        for (const uint8_t seat : std::initializer_list<uint8_t>{1, 2}) {
+            for (const uint32_t seed : {1u, 2u}) {
+                int ordered_at = 0;
+                bool snatched = false;
+                std::unique_ptr<MapInfo> map0;                                                       // (the map of the first tick: the list of its power-ups changes as they are taken)
+                const Run r = play(Level::Hard, seat, seed, 1600, {}, 3, 0, [&](Match& m, int t) {
+                    if (t == 1) map0 = std::make_unique<MapInfo>(m.sim);
+                    const ExpeditionTask& ex = m.bot(seat)->expedition();
+                    if (ordered_at == 0 && ex.chains_in() >= 1) ordered_at = t;
+                    if (ordered_at != 0 && !snatched && t == ordered_at + 20) {
+                        const sim::TileCoord token = nearest_swimmer(m, *map0, seat);
+                        if (token.x >= 0) m.sim.grid_mut().clear_powerup(token.x, token.y);
+                        snatched = token.x >= 0;
+                    }
+                });
+                ASSERT_TRUE(snatched);
+                ASSERT_EQ(r.swimmers, 2u);                                                           // (the two that are left; with the ant shut in behind the hats the row stood still)
+                ASSERT_TRUE(r.second_swimmer > 0 && r.chains_in == 3 && r.chains_out >= 3);                  // (the first chain in, the way out of the ant that found nothing, and the two Swimmers)
+                ASSERT_TRUE(!r.timed_off && r.chain_misses == 0 && r.given_up == 0);
+                ASSERT_EQ(r.lost + r.drowned, 0);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI17.45 A Crew That Is Too Short For The Swimmers Is Given Up At Once, Not After 2,400 Ticks: After The First Chain In Two Of The Plain Ants Of The Island Of The Row Die (Hard, Seats 0 And 1, Seed 1, The Arena's Delay Of 3 Ticks); The Bot Takes The Swimmers That The Rest Reach, A Bomber That Is Left Takes Nothing Behind The Hats, And The Expedition Is Over Within 400 Ticks Of The Last Swimmer")
+    {
+        for (const uint8_t seat : std::initializer_list<uint8_t>{0, 1}) {
+            int ordered_at = 0;
+            bool killed = false;
+            const Run r = play(Level::Hard, seat, 1, 3000, {}, 3, 0, [&](Match& m, int t) {
+                const ExpeditionTask& ex = m.bot(seat)->expedition();
+                if (ordered_at == 0 && ex.chains_in() >= 1) ordered_at = t;
+                if (ordered_at == 0 || killed || t < ordered_at + 5 || t > ordered_at + 120) return;                // (as soon as two plain ants besides the chained one stand on the island of the row)
+                const MapInfo map(m.sim);
+                std::vector<uint32_t> victims;
+                const uint32_t chained = [&]() {                                                       // (the ant that stands on the tile in front of the row is the one that the chain was ordered for)
+                    const TokenGroup& g = m.island(seat).info().token_groups()[static_cast<size_t>(ex.group())];
+                    const sim::TileCoord front = g.entrances[static_cast<size_t>(ex.entrance())].tile;
+                    uint32_t best = 0;
+                    int32_t near = 1 << 20;
+                    for (const auto& a : m.sim.get_world_state().ants) {
+                        const sim::TileCoord at{a.tile_x, a.tile_y};
+                        if (a.player_id == seat && at.chebyshev_dist(front) < near) {
+                            near = at.chebyshev_dist(front);
+                            best = a.id;
+                        }
+                    }
+                    return best;
+                }();
+                for (const auto& a : m.sim.get_world_state().ants) {
+                    if (a.player_id != seat || a.id == chained || a.raw_type != sim::AntType::Worker || map.ant_component(seat, sim::TileCoord{a.tile_x, a.tile_y}) != ex.route().back()) continue;
+                    if (victims.size() < 2) victims.push_back(a.id);
+                }
+                for (const uint32_t id : victims) m.sim.kill_unit(id);
+                killed = victims.size() == 2;
+            });
+            ASSERT_TRUE(killed);
+            ASSERT_EQ(r.swimmers, 2u);                                                                   // (the chained ant and one more: a Bomber that flies on takes nothing behind the hats)
+            ASSERT_TRUE(r.second_swimmer > 0 && r.inactive_from > r.second_swimmer && r.inactive_from <= r.second_swimmer + 400);
+            ASSERT_TRUE(r.given_up == 1 && !r.active_at_end);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI17.46 A Click That Comes Late Counts As A Miss Too: When The Sink Says That It Applies A Click 3 Ticks Earlier Than It Does (Every Command Released Subtracts 3), The Second Click Of A Chain Is Applied Too Late And The Ant Takes A Fire Hat; After Two Of Them The Row Goes Back To One Ant A Hat (Two Chains In, Two Misses, No Third), And The Bot Still Has Two Swimmers By Tick 2,500 (Hard, Seats 0 To 3, Seed 1, The Arena's Delay Of 3 Ticks), Nobody Lost")
+    {
+        for (uint8_t seat = 0; seat < 4; ++seat) {
+            const Run r = play(Level::Hard, seat, 1, 2500, {}, 3, -3);
+            ASSERT_TRUE(r.timed_off && r.chain_misses == 2 && r.chains_in == 2);
+            ASSERT_TRUE(r.second_swimmer > 0 && r.first_swimmer > 0);
+            ASSERT_EQ(r.lost + r.drowned, 0);
+        }
     } TEST_END();
 }

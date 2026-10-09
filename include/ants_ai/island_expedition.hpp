@@ -46,7 +46,7 @@ public:
         bool timed_row{false};               // (Hard) timed clicks through the hats of the row: one ant for a Swimmer, the Fire hats stay (see "timed" above)
         uint32_t chain_slack{1};             // a click of a chain is applied from the ticks that the model gives to that many more (the window of the cancel is 3 ticks wide; the early edge is the harmless one)
         uint32_t chain_ticks{90};            // an ant that a chain was ordered for is left alone this long (the chain takes about 60 ticks); then it has made its token or the chain missed
-        uint32_t chain_misses_max{2};        // chains that missed (the ant stood in front of the row with nothing taken) before the row goes back to one ant for every hat
+        uint32_t chain_misses_max{2};        // chains in a row that missed (the ant took a hat, or stood still with nothing taken) before the row goes back to one ant for every hat; a Swimmer taken by a chain ends the run
     };
 
     ExpeditionTask(TaskId id, Tactics& tactics) : ExpeditionTask(id, tactics, Params{}) {}
@@ -80,7 +80,8 @@ public:
     uint32_t duds() const noexcept { return duds_; }
     uint32_t taken() const noexcept { return taken_; }
     uint32_t swimmers_taken() const noexcept { return swimmers_taken_; }
-    /// Timed clicks: chains ordered to take a Swimmer, chains ordered to bring one out over the hats, chains that missed (nothing taken), and whether the row went back to the old way
+    /// Timed clicks: chains ordered to take a Swimmer, chains ordered to bring an ant out over the hats (again after one that did not come out), chains in that missed (a hat taken, or nothing), and whether
+    /// the row went back to the old way
     uint32_t chains_in() const noexcept { return chains_in_; }
     uint32_t chains_out() const noexcept { return chains_out_; }
     uint32_t chain_misses() const noexcept { return chain_misses_; }
@@ -142,6 +143,12 @@ private:
     bool crew_hopeless(const TaskContext& context) const;
     bool timed_on() const noexcept { return params_.timed_row && !timed_off_; }
     bool chains_now() const noexcept { return timed_on() && row_timed_; }
+    /// An ant in the row behind hats comes out over them by a chain, also when the row has gone back to one ant for every hat since it went in
+    bool exit_chains() const noexcept { return params_.timed_row && row_timed_; }
+    void start_chain(uint32_t ant, uint64_t now);
+    void end_chain(uint32_t ant);
+    void strand(const AntView& ant);
+    bool hats_before_swimmer(const BotView& view) const;
     bool chain_guarded(uint32_t ant, uint64_t now) const;
     bool chain_row(const BotView& view, const std::vector<sim::TileCoord>& walk, sim::TileCoord entrance) const;
     bool chain_steps(const BotView& view, sim::TileCoord from, const std::vector<sim::TileCoord>& along, sim::TileCoord goal, std::vector<ChainStep>& steps) const;
@@ -164,6 +171,7 @@ private:
     std::set<uint32_t> crew_;                // the ants that fly and take tokens (plain ants when they were taken)
     std::set<uint32_t> done_;                // crew ants that took a token: they walk out of the row and are free (timed: and stay the task's until they are out)
     std::map<uint32_t, uint64_t> chained_;   // timed: ant -> the look at which a chain was ordered for it (in over the hats to a token, or out over them)
+    std::set<uint32_t> chain_sent_;          // ... the ants of which a click of that chain has left (a chain that never left is no miss of the timing: the ant stands where it stood)
     bool row_timed_{false};                  // timed: the chosen row can be worked by chains (the hats before its first Swimmer lie on a line with the tile in front of it)
     uint32_t stage_ant_{0};                  // timed: the crew ant that walks to the tile in front of the row to start a chain from
     uint64_t stage_since_{0};
@@ -182,6 +190,7 @@ private:
     uint32_t chains_in_{0};
     uint32_t chains_out_{0};
     uint32_t chain_misses_{0};
+    uint32_t miss_run_{0};                   // the chains in a row that missed (chain_misses_max of them end the timed row)
     bool timed_off_{false};                  // the row has gone back to one ant for every hat (chains missed)
     uint32_t planned_{0};
     uint32_t given_up_{0};

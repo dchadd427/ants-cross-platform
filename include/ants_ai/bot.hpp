@@ -151,7 +151,7 @@ public:
     /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// The clicks of ONE ant at moments that are counted from the moment the click before is APPLIED (the sink's own tick of it, CommandSink::applied_at): a person who clicks again the moment the ant
-    /// stands on a tile. What the controller does with them is in Intent (chain). The first step is an ordinary click; the later ones leave the budget alone but are paid for from it (the bucket may go into debt).
+    /// stands on a tile. What the controller does with them is in Intent (chain). The first step is an ordinary click (the reaction delay, the queue, the budget); every later one skips those but is paid for all the same: it leaves at its moment even when the bucket is empty, and the bucket goes into debt, which holds back the ordinary orders afterwards.
     void chain(uint32_t ant, const std::vector<ChainStep>& steps, Priority priority = Priority::Urgent);
     /// A special order (bomb, defuse, fire, extinguish, bridge, thief raid) of ONE ant: the HUD sends it for a single selected ant only
     void special(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
