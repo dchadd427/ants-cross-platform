@@ -154,7 +154,7 @@ Every save writes the whole file beside it and then gives it its name (a replace
 
 | Key | What it holds |
 |---|---|
-| `aspect` | `16:9` (the default of a desktop game) or `4:3` (the original's picture). Read at the start; the command line's `--aspect` wins. A value that is neither is reported and ignored. |
+| `aspect` | `16:9` (the default of a desktop game), `4:3` (the original's picture), `16:10` or `21:9`. Read at the start; the command line's `--aspect` wins. A value that is none of these is reported and ignored. |
 | `zoom` | A number from 0.05 to 2 (written with three digits: `0.841`, `1.41`): the level of the map view's zoom that the wheel changed last. Written at every change, read at the start; the match starts at the nearest level of its map. `--zoom` wins; anything else is reported and ignored. |
 | `prediction` | `on` or `off` (`yes` / `no`, `true` / `false` and `1` / `0` do as well; absent: off): whether a match of the network shows the player's own orders at once. Read at the start; `--prediction` and `--no-prediction` win. A value that is none of these is reported and ignored. Nothing in the game writes it. |
 | `name` | Your name, from the start menu. Written when you leave the field, change the panel, press Continue, Join or Host, or end the program, not at every key. `--name` beats it for that run. |

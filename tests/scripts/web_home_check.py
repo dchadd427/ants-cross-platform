@@ -572,7 +572,9 @@ def main():
                 buttons: ['copy', 'havecode', 'more'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
                 joinbox: document.getElementById('joinbox').hidden, morebox: document.getElementById('morebox').hidden,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
-                aspect: [document.getElementById('aspect-16-9').checked, document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')],
+                aspect: ['4-3', '16-10', '16-9', '21-9'].map(function (id) { return document.getElementById('aspect-' + id).checked; }).concat([document.body.getAttribute('data-aspect')]),
+                tags: Array.prototype.map.call(document.querySelectorAll('.fit-tag'), function (t) { return [t.id, t.hidden, getComputedStyle(t).display]; }), screenSize: [screen.width, screen.height],
+                shapeLabels: Array.prototype.map.call(document.querySelectorAll('.shape .seg label'), function (l) { return l.textContent; }),
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
@@ -720,7 +722,16 @@ def main():
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
 
             # the picture's shape: 16:9 is the default, 4:3 is chosen under Screen and remembered
-            check(info["aspect"] == [True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and 4:3 is not (%s)" % info["aspect"])
+            check(info["aspect"] == [False, False, True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and the other three are not (%s)" % info["aspect"])
+            check(info["shapeLabels"] == ["Classic 4:3", "16:10", "16:9", "21:9"], "Screen offers Classic 4:3, 16:10, 16:9 and 21:9, left to right (%s)" % info["shapeLabels"])
+            # "fills your screen": under the shape nearest to this computer's screen (None when no shape is within 8 per cent), shown only where there is a mouse
+            sw, sh = info["screenSize"]
+            ratios = {"4-3": 4 / 3, "16-10": 8 / 5, "16-9": 16 / 9, "21-9": 7 / 3}
+            near = min(ratios, key=lambda k: max(ratios[k] / (sw / sh), (sw / sh) / ratios[k])) if sw > 0 and sh > 0 else None
+            if near and max(ratios[near] / (sw / sh), (sw / sh) / ratios[near]) - 1 > 0.08:
+                near = None
+            check([t[0][4:] for t in info["tags"] if not t[1]] == ([near] if near else []), "the tag \"fills your screen\" is under the shape nearest to the %d x %d screen (%s) and under no other (%s)" % (sw, sh, near, info["tags"]))
+            check(all(t[2] == "none" for t in info["tags"] if t[1]), "a hidden tag takes no room")
             real_click("label[for=aspect-4-3]")
             chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-4-3').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])"))
             check(chosen == [True, False, "4:3", "4:3"] and lobby()["code"] == st["code"], "a press on 4:3 chooses it (the page keeps its room) and the browser remembers it (%s)" % (chosen,))
@@ -741,10 +752,25 @@ def main():
             tab.open(web + "?aspect=4:3", wait=False)
             time.sleep(1.5)
             check(value("[document.getElementById('aspect-4-3').checked, document.body.getAttribute('data-aspect')]") == [True, "4:3"], "?aspect=4:3 in the address chooses 4:3")
-            tab.open(web + "?aspect=21:9", wait=False)
+            for asked in ("16:10", "21:9"):
+                tab.open(web + "?aspect=" + asked, wait=False)
+                time.sleep(1.5)
+                dashed = asked.replace(":", "-")
+                check(value("[document.getElementById('aspect-%s').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]" % dashed) == [True, False, asked], "?aspect=%s in the address chooses %s" % (asked, asked))
+            tab.open(web + "?aspect=3:2", wait=False)
             time.sleep(1.5)
-            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=21:9 is not a shape the page offers: ignored, 16:9")
-            tab.ev("localStorage.removeItem('ants.aspect'); 1")
+            check(value("[document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect')]") == [True, "16:9"], "?aspect=3:2 is not a shape the page offers: ignored, 16:9")
+            for picked in ("16:10", "21:9"):                        # the two shapes that were added: pressed, remembered, and the next visit starts with them (the game page reads the same key)
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                dashed = picked.replace(":", "-")
+                real_click("label[for=aspect-%s]" % dashed)
+                chosen = json.loads(value("JSON.stringify([document.getElementById('aspect-%s').checked, document.getElementById('aspect-16-9').checked, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])" % dashed))
+                check(chosen == [True, False, picked, picked], "a press on %s chooses it and the browser remembers it (%s)" % (picked, chosen))
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                check(value("[document.getElementById('aspect-%s').checked, document.body.getAttribute('data-aspect')]" % dashed) == [True, picked], "... and the next visit starts with %s chosen" % picked)
+            tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.removeItem('ants.aspect'); 1")
 
             # a new tab makes a new room each time: the codes are letters and numbers
             for _ in range(7):

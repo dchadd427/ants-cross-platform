@@ -151,7 +151,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertEqual(self.page.count("var codeText = Rules.codeText;"), 1)                                           # (the rules script's, defined once, outside the blocks: the check hands it to the block)
         self.assertNotIn("var codeText", self.block + self.keys)
         self.assertNotIn("Rejoin your match", self.page)                                                                 # (the older button, which named the room)
-        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + (shape === '4:3' ? '4:3' : '16:9')", self.block)       # (the address keeps the plain code and has no create block: the room is there)
+        self.assertIn("'?join=/ws&room=' + encodeURIComponent(offer.room) + '&seat=' + offer.seat + '&name=' + encodeURIComponent(name) + '&aspect=' + shapeOr169(shape)", self.block)       # (the address keeps the plain code and has no create block: the room is there)
         self.assertNotIn("roomBlockQuery", self.block)
 
     def test_start_hands_the_seat_over_with_the_key_in_the_storage_and_the_lobby_never_leaves_at_start(self):

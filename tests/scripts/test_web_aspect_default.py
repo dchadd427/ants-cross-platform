@@ -86,21 +86,35 @@ class PagesStartWith16x9(unittest.TestCase):
         page = read(LOBBY)
         self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", page)                       # (the frames of the legacy test room; the lobby has none)
         self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', page)
+        self.assertIn('body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }', page)
+        self.assertIn('body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }', page)
         self.assertIn("var aspect = '16:9';", page)
-        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', page)), 2)                   # (the picture's two buttons, nothing else)
-        self.assertIn('<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>', page)        # 16:9 is the one that is checked
-        self.assertIn('<input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">4:3</label>', page)
+        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', page)), 4)                   # (the picture's four buttons, nothing else)
+        self.assertIn('<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label>', page)        # 16:9 is the one that is checked
+        self.assertEqual(len(re.findall(r'value="[0-9:]+" checked>', page)), 1)
+
+    def test_the_front_page_selector_has_the_four_shapes_in_the_game_pages_order_with_its_hover_texts(self):
+        page, shell = read(LOBBY), read(SHELL)
+        bar = shell[shell.index('<div class="view-bar" id="view-bar">'):shell.index('id="lock-bar-label"')]
+        game = [(shape, title, label) for shape, title, label in re.findall(r'data-aspect="([0-9:]+)" aria-checked="(?:true|false)" title="([^"]+)">([^<]+)</button>', bar)]
+        row = page[page.index('<span class="shape">Screen'):page.index('</footer>')]
+        front = re.findall(r'<input type="radio" name="aspect" id="aspect-[0-9-]+" value="([0-9:]+)"(?: checked)?><label for="aspect-[0-9-]+" title="([^"]+)">([^<]+)</label>', row)
+        self.assertEqual([shape for shape, _, _ in front], ["4:3", "16:10", "16:9", "21:9"])
+        self.assertEqual(front, game)                                                                     # the same names and the same hover texts as the game page's own buttons
+        shapes = lambda text: re.search(r"var SHAPES = (\{.*?\});\n", text, re.S).group(1)
+        self.assertEqual(shapes(page), shapes(shell))                                                     # (the table of the shapes is the game page's)
 
     def test_the_front_page_buttons_are_the_screen_buttons_at_the_right_of_the_footer(self):
-        """The picture draws the footer as the version line, the footer links and, at the right, "Screen" with the buttons "16:9" and "4:3" (the space that grows pushes them to the right)."""
+        """The picture draws the footer as the version line, the footer links and, at the right, "Screen" with the buttons (the space that grows pushes them to the right; where the row is full they wrap to a line of their own)."""
         page = read(LOBBY)
-        footer = page[page.index('<footer class="bar">'):page.index("</footer>")]
+        footer = page[page.index('<footer class="bar" id="footer-bar">'):page.index("</footer>")]
         row = footer[footer.index('<div class="bar-row">'):]
         self.assertLess(row.index('id="game-version-line"'), row.index('<nav aria-label="Footer links">'))
         self.assertLess(row.index('</nav>'), row.index('<span class="grow"></span>'))
         self.assertLess(row.index('<span class="grow"></span>'), row.index('<span class="shape">Screen <span class="seg" role="radiogroup" aria-label="Picture shape">'))
-        self.assertLess(row.index('id="aspect-16-9"'), row.index('id="aspect-4-3"'))                        # 16:9 first, as drawn
-        self.assertEqual(row.count('name="aspect"'), 2)                                                    # (both buttons are in that one place)
+        order = [row.index('id="aspect-%s"' % shape) for shape in ("4-3", "16-10", "16-9", "21-9")]
+        self.assertEqual(order, sorted(order))                                                             # Classic 4:3, 16:10, 16:9, 21:9, as drawn
+        self.assertEqual(row.count('name="aspect"'), 4)                                                    # (all four buttons are in that one place)
 
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
@@ -140,9 +154,10 @@ class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
         self.assertIn("if (own || aspectFromAddress) q += '&aspect=' + aspect;", page)                                                       # the room's own games always, the links for other players when the address named it
         self.assertIn("(aspectFromAddress ? '&aspect=' + aspect : '')", page)                                                                # the address of the test room (a reload comes back to it) and the join link of "Play in this tab"
 
-    def test_the_two_builders_name_one_of_the_two_shapes_only(self):
+    def test_the_two_builders_name_one_of_the_four_shapes_only(self):
         page = read(LOBBY)
-        self.assertEqual(page.count("'&aspect=' + (shape === '4:3' ? '4:3' : '16:9')"), 2)                                                   # (rejoinQuery and localGameQuery)
+        self.assertEqual(page.count("'&aspect=' + shapeOr169(shape)"), 2)                                                                   # (rejoinQuery and localGameQuery)
+        self.assertNotIn("(shape === '4:3' ? '4:3' : '16:9')", page)                                                                          # (no builder is left that knows two shapes)
 
 
 class TheQuickHelpStartThatTheBrowserCheckTaps(unittest.TestCase):

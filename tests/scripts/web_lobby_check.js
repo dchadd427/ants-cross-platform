@@ -61,6 +61,7 @@ same('the page takes its list of maps, its default map and mapByKey from the rul
 const lobbyBlock = between(lobbyText, 'LOBBY_BEGIN', 'LOBBY_END', lobbyPath);
 const lobbyCode = [
     aliases.join('\n'),
+    between(lobbyText, 'SHAPES_BEGIN', 'SHAPES_END', lobbyPath),                 // (the table of the four shapes: localGameQuery names its shape through it)
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     lobbyBlock,
     'return { MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, playersChoice: playersChoice, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill, validFillPlan: validFillPlan, hostSeats: hostSeats, hostFillText: hostFillText, hostTeamChoices: hostTeamChoices, hostTeam: hostTeam, hostTeamText: hostTeamText, shownRoomTeams: shownRoomTeams, validRoomTeams: validRoomTeams, hostPlanText: hostPlanText, roomBlockQuery: roomBlockQuery, roomBlockOf: roomBlockOf, SEAT_COLOURS: SEAT_COLOURS, teamTitle: teamTitle };',
@@ -149,8 +150,8 @@ try {
     same('localGameQuery: a key that is no map is Treasure (the default of everything)', [L.localGameQuery('nowhere', '', 'Bob', '16:9'), L.localGameQuery('', '', 'Bob', '16:9'), L.localGameQuery(undefined, '', 'Bob', '16:9'), L.localGameQuery('TREASURE', '', 'Bob', '16:9')],
          ['?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9']);
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
-    same('localGameQuery: the shape is 16:9 or 4:3 and nothing else', [L.localGameQuery('tiny', '', 'B', '4:3'), L.localGameQuery('tiny', '', 'B', '21:9'), L.localGameQuery('tiny', '', 'B', undefined), L.localGameQuery('tiny', '', 'B', '4:3&x=1')],
-         ['?map=tiny&name=B&aspect=4:3', '?map=tiny&name=B&aspect=16:9', '?map=tiny&name=B&aspect=16:9', '?map=tiny&name=B&aspect=16:9']);
+    same('localGameQuery: the shape is one of the four (4:3, 16:10, 16:9, 21:9) and nothing else', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
+         ['4:3', '16:10', '16:9', '21:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9'].map((shape) => '?map=tiny&name=B&aspect=' + shape));
     {
         const q = (levels) => L.localGameQuery('small', levels, 'Bob', '16:9');
         const tail = '&name=Bob&aspect=16:9';
@@ -293,7 +294,7 @@ try {
         for (const m of L.MAPS) {
             for (const level of ['', 'easy', 'medium', 'hard']) {
                 for (const name of ['', 'Bob', 'Ann & <b>Bob</b>', 'x'.repeat(32), 'with space', 'A=B&C=D']) {
-                    for (const shape of ['16:9', '4:3']) {
+                    for (const shape of ['16:9', '4:3', '16:10', '21:9']) {
                         const query = L.localGameQuery(m.key, level, name, shape);
                         const args = local(query);
                         const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(level ? bots(level) : ['--alone']), '--name', name || 'Player'];
@@ -314,7 +315,7 @@ try {
             for (const a of WORDS) for (const b of WORDS) for (const c of WORDS) {
                 const levels = [a, b, c];
                 for (const name of ['', 'Bob', 'Ann & <b>Bob</b>', 'A=B&C=D']) {
-                    for (const shape of ['16:9', '4:3']) {
+                    for (const shape of ['16:9', '4:3', '16:10', '21:9']) {
                         const query = L.localGameQuery(m.key, levels, name, shape);
                         const args = local(query);
                         const want = ['--map', 'Original-Ants/Maps/' + FILES[m.key], '--play', ...(levels.some(Boolean) ? botArgs(levels) : ['--alone']), '--name', name || 'Player'];

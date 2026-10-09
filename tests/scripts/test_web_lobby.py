@@ -352,8 +352,9 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
         self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
         # the picture's shape: a pair of buttons of the footer, 16:9 first and checked until the page reads another
-        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9">16:9</label>')
-        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3">4:3</label>')
+        self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture \(960 x 540\)">16:9</label>')
+        for shape, name in (("4-3", "Classic 4:3"), ("16-10", "16:10"), ("21-9", "21:9")):
+            self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-%s" value="[0-9:]+"><label for="aspect-%s" title="[^"]+">%s</label>' % (shape, shape, name))
         # the test room (the old addresses and "Play every colour myself"): its panel, hidden until an address or those buttons open it
         self.assertIn('<section id="room-panel" class="room" hidden>', self.markup)
         for ident in ("play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint"):
@@ -443,7 +444,7 @@ class TheFrontPageMarkup(PageCase):
         ids = re.findall(r'\sid="([^"]+)"', self.markup)
         self.assertEqual(sorted(i for i in set(ids) if ids.count(i) > 1), [], "an id that is used twice")
         asked = set(re.findall(r"\$\('([\w-]+)'\)", self.script)) | set(re.findall(r"getElementById\('([\w-]+)'\)", self.script)) | set(re.findall(r"freshNode\('([\w-]+)'\)", self.script))
-        asked |= {"aspect-16-9", "aspect-4-3"}                                                              # (asked for through a condition and through a list)
+        asked |= {"aspect-%s" % shape for shape in ("4-3", "16-10", "16-9", "21-9")} | {"fit-%s" % shape for shape in ("4-3", "16-10", "16-9", "21-9")}      # (asked for through the table of shapes)
         self.assertEqual(sorted(asked - set(ids)), [], "the script asks for an element that is not in the page")
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():

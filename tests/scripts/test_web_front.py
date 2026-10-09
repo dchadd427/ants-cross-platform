@@ -701,11 +701,21 @@ class ThePageUsesTheArt(unittest.TestCase):
             self.assertIsNone(sheet.value(".shape .seg input", prop), prop)
         for tag in re.findall(r'<input type="radio"[^>]*>', self.page):
             self.assertNotRegex(tag, r"tabindex|hidden|disabled")
-            self.assertRegex(self.page, r'<label for="%s">' % re.search(r'id="([^"]+)"', tag).group(1))      # (each one has the label that is its button)
-        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', self.page)), 2)
+            self.assertRegex(self.page, r'<label for="%s"[ >]' % re.search(r'id="([^"]+)"', tag).group(1))      # (each one has the label that is its button)
+        self.assertEqual(len(re.findall(r'<input type="radio" name="aspect"', self.page)), 4)             # (the four shapes of the game page's selector, in its order)
         self.assertIn('role="radiogroup" aria-label="Picture shape"', self.page)
         self.assertEqual(sheet.value(".shape .seg input:focus-visible + label", "outline"), "3px solid var(--gold)")        # the focused button shows it
         self.assertIsNotNone(sheet.value(".shape .seg input:checked + label", "background"))                                 # and so does the chosen one
+
+    def test_the_footer_tags_the_shape_nearest_the_screen_only_for_a_mouse_and_leaves_room_for_the_tag(self):
+        """The picture draws "fills your screen" under one shape's button (the script un-hides one tag, and the footer gets the room for it); a phone or a tablet (no hover) shows no tag and no extra room."""
+        tags = re.findall(r'<span class="fit-tag" id="fit-([0-9-]+)" hidden>fills your screen</span>', self.page)
+        self.assertEqual(tags, ["4-3", "16-10", "16-9", "21-9"])                                         # every tag starts hidden, one per shape, left to right
+        self.assertEqual(self.style.count(".fit-tag[hidden] { display: none; }"), 1)
+        self.assertIn(".bar.has-fit-tag { padding-bottom: 34px; }", self.style)
+        self.assertRegex(self.style, r"@media \(hover: none\) \{ \.fit-tag \{ display: none; \} \.bar\.has-fit-tag \{ padding-bottom: 14px; \} \}")
+        self.assertIn('<footer class="bar" id="footer-bar">', self.page)
+        self.assertEqual(Sheet(self.style).value(".shape", "flex-wrap"), "wrap")                         # a 320 px window: the label above the four buttons, nothing pushed past the edge
 
 
 class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
@@ -771,10 +781,11 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
         padding = int(re.search(r"padding: 0 (\d+)px", grid).group(1))
         border = int(re.search(r"\.cell \{ border: (\d+)px", self.style).group(1))
         scrollbar = 15
-        for shape, columns, picture in (("16:9", 964, 960), ("4:3", 644, 640)):
+        ONLY_THE_DEFAULT_COLUMNS = r':not\(\[data-aspect="4:3"\]\):not\(\[data-aspect="21:9"\]\)'          # (16:9 and 16:10 are 960 wide: one rule)
+        for shape, columns, picture in (("16:9", 964, 960), ("16:10", 964, 960), ("21:9", 1264, 1260), ("4:3", 644, 640)):
             self.assertEqual(picture + 2 * border, columns)
             need = 2 * columns + gap + 2 * padding + scrollbar
-            at = re.search(r"@media \(min-width: (\d+)px\) \{\s*body%s #grid \{ grid-template-columns: repeat\(2, %dpx\);" % (r':not\(\[data-aspect="4:3"\]\)' if shape == "16:9" else r'\[data-aspect="4:3"\]', columns), self.style)
+            at = re.search(r"@media \(min-width: (\d+)px\) \{\s*body%s #grid \{ grid-template-columns: repeat\(2, %dpx\);" % ({"16:9": ONLY_THE_DEFAULT_COLUMNS, "16:10": ONLY_THE_DEFAULT_COLUMNS, "21:9": r'\[data-aspect="21:9"\]', "4:3": r'\[data-aspect="4:3"\]'}[shape], columns), self.style)
             self.assertIsNotNone(at, shape)
             self.assertGreaterEqual(int(at.group(1)), need, "the window of %s px cannot hold two %s games (%d px needed)" % (at.group(1), shape, need))
             self.assertLess(int(at.group(1)) - need, 20, "the breakpoint of the %s games is far above what they need (%d px)" % (shape, need))
@@ -782,6 +793,8 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
     def test_the_cells_keep_the_cells_border_and_the_frame_is_the_pictures_own_shape(self):
         self.assertIn(".frame { position: relative; aspect-ratio: 16 / 9; }", self.style)
         self.assertIn('body[data-aspect="4:3"] .frame { aspect-ratio: 4 / 3; }', self.style)
+        self.assertIn('body[data-aspect="16:10"] .frame { aspect-ratio: 16 / 10; }', self.style)
+        self.assertIn('body[data-aspect="21:9"] .frame { aspect-ratio: 21 / 9; }', self.style)
         for seat, place in (("3", "0"), ("0", "1"), ("1", "2"), ("2", "3")):                       # Black, Green, Red, Blue: the way the four hills lie
             self.assertIn('.cell[data-seat="%s"] { order: %s; }' % (seat, place), self.style)
 
