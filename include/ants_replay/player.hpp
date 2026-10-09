@@ -50,6 +50,11 @@ struct Outcome {
     uint32_t hashes_checked{0};
     uint32_t first_bad_turn{0};     // the turns played when the first hash that differs was taken (0: none differed)
     std::array<int32_t, sim::MAX_PLAYERS> scores{};     // the score box of each seat when the replay ended (own score plus the ally's; 0 for a seat that does not play)
+    /// What the results screen is built from, as the engine stood when the replay ended (the same value that the match's own screen gets): each seat's counted numbers (`stats[seat]`: score, friendly_lost,
+    /// enemy_killed, new_hatched, bombs_planted, bombs_defused, fires_lit), the alliances, the quitter and `present_mask` (the seats that play and did not drop). Only meaningful when `ran`. food_deposited,
+    /// food_stolen, food_lost and bridges_built are in the state hash and never counted, so they are 0 here.
+    sim::MatchResult result;
+    uint8_t dropped_mask{0};        // bit s: seat s left the match (quit, dropped, 60 s without a sign of life) before it ended; such a seat has no row in `result.rows()`
 };
 
 /// Plays `replay` on `level` (the map that load_map found). A file of other simulation rules than this build's (plays_here) is refused: it would play out differently, and `error` names both numbers.

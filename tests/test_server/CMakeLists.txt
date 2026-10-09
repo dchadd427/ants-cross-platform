@@ -63,6 +63,24 @@ target_include_directories(test_replay_store PRIVATE
 add_test(NAME test_replay_store COMMAND test_replay_store)
 set_tests_properties(test_replay_store PROPERTIES COST 3)
 
+# The match history (ants_server/history_store.hpp): the record of a match that was played again, its JSON file, the store on a real folder, the filters and sorts of the list, the feeder that counts the replay store's matches
+# one at a time (real recordings of the shipped TINY map) and the control interface's /history calls in front of a room manager. No network and no room that runs a match
+add_executable(test_history_store
+    test_history_store.cpp
+)
+
+target_link_libraries(test_history_store PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_history_store PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_history_store COMMAND test_history_store)
+set_tests_properties(test_history_store PROPERTIES COST 6)
+
 # The board of the matches that run now (ants_server/live_board.hpp): the id of a match, the list, the snapshot's cache and the memory of the matches that ended. No network and no room: recorders that the test feeds
 add_executable(test_live_board
     test_live_board.cpp

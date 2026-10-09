@@ -3,7 +3,8 @@
 // room code is, short and unrecorded matches are not kept (and the status says why),
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
 // public one) answer as they should. The live door (S3.176 - S3.178: GET /live and GET /live/<id> in front of real rooms: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map,
-// the id says where the file is when the match ends, no room code is anywhere). The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
+// the id says where the file is when the match ends, no room code is anywhere). The match history in front of real rooms (S3.185: a recording is counted when no room runs a match, the record is the match, both
+// doors list it, the owner's delete holds); its own rules are test_history_store.cpp. The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
 // the cache, the memory of ended matches) test_live_board.cpp. Included by test_server.cpp, which holds the harness (TEST_CASE, ASSERT_*, World, PWorld, Client) and calls run_replay_tests().
 #pragma once
 
@@ -1033,5 +1034,88 @@ void run_replay_tests() {
         const int before = reads;
         w.reset();
         ASSERT_TRUE(reads > before);
+    } TEST_END();
+
+    TEST_CASE("S3.185 The Matches Of Rooms Reach The Match History: A Recording Is Counted Only While No Room Runs A Match (Two Kept Before The History Began Wait Until The Third Is Over), The Record Is The Match (Map, Names By Seat, Format, Seconds, A Winner), Both Doors List It, And What The Owner Deletes Is Not Counted Again From Its Recording") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("history-rooms", &clock), false, why));
+        auto play_to_the_end = [&](const char* code) {
+            if (!w.mgr.create_room(spec_of(code, 3), w.now).ok) return false;
+            w.connect("Ann", code, 2);
+            w.connect("Bob", code);
+            w.connect("Cat", code, 3, {40, 20});
+            w.run(1800);
+            if (w.status(code).state != RoomState::Running) return false;
+            for (int guard = 0; guard < 4000 && w.status(code).state == RoomState::Running; ++guard) w.run(250);
+            return w.status(code).state == RoomState::Finished && w.status(code).replay_kept;
+        };
+        ASSERT_TRUE(play_to_the_end("HIS-1"));                                                             // (kept when the server has no history yet: the recordings of the last 30 days, when a server starts)
+        const std::string file1 = w.status("HIS-1").replay_file;
+        clock.now = kReplayT0 + 3600;
+        ASSERT_TRUE(play_to_the_end("HIS-2"));
+        const std::string file2 = w.status("HIS-2").replay_file;
+        ASSERT_TRUE(file1 != file2 && w.mgr.replay_store()->count() == 2);
+        // a third match runs while the history begins: nothing is counted for as long as it runs
+        clock.now = kReplayT0 + 7200;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("HIS-3", 3), w.now).ok);
+        w.connect("Ann", "HIS-3", 2);
+        w.connect("Bob", "HIS-3");
+        w.connect("Cat", "HIS-3", 3, {40, 20});
+        w.run(1800);
+        ASSERT_TRUE(w.status("HIS-3").state == RoomState::Running);
+        HistoryConfig hc;
+        hc.dir = (fs::path(temp_dir_for("history-rooms-records")) / "history").string();            // (a folder of its own: temp_dir_for makes its folder new)
+        ASSERT_TRUE(w.mgr.enable_history(hc, why));
+        ASSERT_TRUE(w.mgr.history_store() != nullptr && w.mgr.history_store()->enabled() && w.mgr.history_store()->count() == 0);
+        w.run(5000);                                                                                      // (twenty paces of the feeder)
+        ASSERT_TRUE(w.status("HIS-3").state == RoomState::Running);
+        ASSERT_EQ(w.mgr.history_store()->count(), static_cast<size_t>(0));
+        ASSERT_TRUE(replay_json_of(replay_call(w.mgr, "GET", "/history")).get("count").as_int_or(-1) == 0);
+        for (int guard = 0; guard < 4000 && w.status("HIS-3").state == RoomState::Running; ++guard) w.run(250);
+        ASSERT_TRUE(w.status("HIS-3").state == RoomState::Finished);
+        // ... and when it is over the three are counted, one at a time
+        for (int guard = 0; guard < 80 && w.mgr.history_store()->count() < 3; ++guard) w.run(250);
+        const HistoryStore& history = *w.mgr.history_store();
+        ASSERT_EQ(history.count(), static_cast<size_t>(3));
+        const std::string extension = ".antsrep";
+        ASSERT_TRUE(file1.size() > extension.size() && file2.size() > extension.size() && file1.compare(file1.size() - extension.size(), extension.size(), extension) == 0);
+        const std::string id1 = file1.substr(0, file1.size() - extension.size());                        // (the recording's name without ".antsrep")
+        const std::string id2 = file2.substr(0, file2.size() - extension.size());
+        ASSERT_TRUE(history.find(id1) != nullptr && history.find(id2) != nullptr && history_recording_file(id1) == file1);
+        // a record is the match
+        const HistoryRecord& rec = *history.find(id1);
+        ASSERT_TRUE(rec.map == "TINY.LVL" && rec.game == "v0.0.0-test" && rec.ended_s == kReplayT0 && rec.finished && rec.quitter == -1 && !rec.computers_only);
+        ASSERT_EQ(rec.format, std::string("ffa3"));
+        ASSERT_TRUE(rec.seats.size() == 3 && rec.rows.size() == 3);
+        ASSERT_TRUE(rec.seats[0].seat == 0 && rec.seats[0].name == "Bob" && rec.seats[1].seat == 2 && rec.seats[1].name == "Ann" && rec.seats[2].seat == 3 && rec.seats[2].name == "Cat");
+        ASSERT_TRUE(rec.seats[0].bot.empty() && rec.seats[1].bot.empty() && rec.seats[2].bot.empty());
+        ASSERT_TRUE(rec.draw || rec.rows[0].winner);
+        ASSERT_TRUE(rec.turns > 100 && rec.seconds() == rec.turns / 20);
+        ASSERT_EQ(history.find(id2)->ended_s, kReplayT0 + 3600);
+        // the numbers are the engine's own, counted from the file: the same as a play of the stored recording
+        {
+            const StoredReplay f = load_stored(*w.mgr.replay_store(), file1);
+            replay::Outcome played;
+            ASSERT_TRUE(f.ok && plays_out(f.rep, played));
+            ASSERT_EQ(rec.turns, f.rep.total_turns);
+            ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), ctl::to_json(history_record_to_json(make_history_record(id1, kReplayT0, f.rep, played), true)));
+        }
+        // both doors list it, the newest first, with the state of the recording
+        const ctl::JsonValue listed = replay_json_of(replay_call(w.mgr, "GET", "/history"));
+        ASSERT_TRUE(listed.get("count").as_int_or(0) == 3 && listed.get("history").size() == 3 && listed.get("history").at(0).get("id").str() != id1 && listed.get("history").at(2).get("id").str() == id1);
+        ASSERT_TRUE(listed.get("history").at(2).get("recording").str() == "watch" && listed.get("history").at(2).get("file").str() == file1);
+        const ctl::HttpResponse open = public_call(w.mgr, "GET", "/history/" + id1);
+        ASSERT_EQ(open.status, 200);
+        ASSERT_TRUE(replay_json_of(open).get("id").str() == id1 && replay_json_of(open).get("recording").str() == "watch" && replay_json_of(open).get("seats").size() == 3);
+        ASSERT_EQ(public_call(w.mgr, "GET", "/history").status, 200);
+        ASSERT_EQ(public_call(w.mgr, "DELETE", "/history/" + id1).status, 404);                           // (the public door cannot delete)
+        ASSERT_TRUE(history.find(id1) != nullptr);
+        // the owner takes one out; its recording is still kept, and the match is not counted again from it
+        ASSERT_EQ(replay_call(w.mgr, "DELETE", "/history/" + id1).status, 200);
+        ASSERT_TRUE(history.find(id1) == nullptr && history.count() == 2 && history.marker_count() == 1);
+        w.run(5000);
+        ASSERT_TRUE(history.find(id1) == nullptr && history.count() == 2 && w.mgr.replay_store()->count() == 3);
     } TEST_END();
 }
