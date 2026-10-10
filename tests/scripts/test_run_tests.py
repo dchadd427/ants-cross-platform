@@ -348,7 +348,8 @@ class ParallelResources(StubRunner):
 
     def test_a_suite_takes_as_many_job_slots_as_its_weight(self):
         w = 'touch "$MARK_DIR/w.up"; sleep 0.6; touch "$MARK_DIR/w.done"'
-        z = '[ ! -e "$MARK_DIR/w.up" ] || [ -e "$MARK_DIR/w.done" ] || exit 1'
+        # (Z waits up to two seconds for W to have started: on a slow machine W's mark can come after Z's first look, and then the control below passes by luck.)
+        z = 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -e "$MARK_DIR/w.up" ] && break; sleep 0.1; done; [ ! -e "$MARK_DIR/w.up" ] || [ -e "$MARK_DIR/w.done" ] || exit 1'
         table = self.suites('suite "W" sim 1 "-" "Heavy" "W" \'%s\' "weight=2"' % w, 'suite "Z" sim 1 "-" "Light" "Z" \'%s\'' % z)
         self.assertEqual(self.run_script(["--jobs", "2"], table).returncode, 0)
         for name in os.listdir(self.marks):
