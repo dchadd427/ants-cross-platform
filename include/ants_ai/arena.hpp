@@ -187,6 +187,12 @@ struct ArenaSeatResult {
     uint32_t bombs_planted{0};                 // the bombs the seat's Bombers planted and the fire walls its Fire Ants lit (the engine's own match statistics)
     uint32_t fires_lit{0};
     std::array<uint32_t, 4> war_ticks{};       // the ticks a standard bot spent at every war tier (StandardBot::war_ticks: not behind enough, 1 .. 3)
+    uint32_t fire_hunts{0};                    // the stand batch: hunts of an enemy Fire Ant that fired the gate in (FightTask::fire_hunts)
+    uint32_t mines_planted{0};                 // ... the mines the Bombers laid (MineTask::planted)
+    uint32_t ramp_unjams{0};                   // ... the ants sent aside off the ramp (GateTask::ramp_unjams)
+    uint32_t rushes{0};                        // ... the rushes begun (RushTask::rushes_started),
+    uint32_t rush_ticks{0};                    //     the ticks they lasted
+    uint32_t rush_attacks{0};                  //     and the ants they ordered at an enemy ant (one count a member and order)
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile

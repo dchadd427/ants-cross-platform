@@ -968,6 +968,7 @@ void run_contest_tests() {
                 for (int i = 0; i < 3; ++i) sim.grid_mut().place_firewall(static_cast<uint32_t>(ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(ring[static_cast<size_t>(i)].y), 1);
                 sim.spawn_unit(1, sim::AntType::Fire, ring[0]);
                 LevelPlan p = plan_for(Level::Hard);
+                p.fire_duel = false;                                                                                                      // (with the duel the own Fire Ant strikes it off its tile: AI25.2)
                 p.fire_defence_hold = hold;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
                 rig.run(600);
@@ -989,6 +990,7 @@ void run_contest_tests() {
             light();
             sim.spawn_unit(1, sim::AntType::Fire, ring[0]);
             LevelPlan p = plan_for(Level::Hard);
+            p.fire_duel = false;                                                                                                      // (with the duel the own Fire Ant strikes it off its tile: AI25.2)
             p.fire_defence_hold = 200;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
             rig.run(600);

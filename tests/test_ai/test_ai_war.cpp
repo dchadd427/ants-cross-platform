@@ -222,6 +222,7 @@ void run_war_tests() {
             LevelPlan gate = plan;
             gate.mine_per_pile = 0;
             gate.mine_gate = 2;
+            without_stand_batch(gate);                                                                        // (the stand batch lays more at the gate of a leader, AI25.5)
             sim::SimulationEngine sim;
             empty_field(sim, 244);
             sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14, 10});
@@ -757,6 +758,7 @@ void run_war_tests() {
             mp.war_bombers = 1;
             mp.mine_per_pile = 2;
             mp.mine_gate = 0;
+            without_stand_batch(mp);                                                                          // (the stand batch asks for the Bomber from tier 1: AI25.5)
             ASSERT_TRUE(mp.war_free_only);
             struct Row { int32_t deficit; uint8_t war; uint8_t bombers; };
             for (const Row& row : {Row{0, 0, 0}, Row{1100, 2, 0}, Row{1700, 3, 1}}) {
@@ -830,6 +832,7 @@ void run_war_tests() {
             //     laid although nobody is free, at tier 2 they are not. Four workers on a pile far away (nobody is free), the Bomber of the bot walks about
             LevelPlan mp = plan_for(Level::Medium);
             mp.assault = mp.raider_hunt = mp.sabotage = false;
+            without_stand_batch(mp);                                                                      // (the stand batch lays the gate mines from tier 2 on, AI25.5)
             ASSERT_TRUE(mp.war_free_only && mp.mine_gate >= 1 && mp.mine_per_pile == 0);
             for (const int32_t deficit : {1700, 2800}) {                                                  // (the war tiers 2 and 3 of Medium at tick 3,200: the bot has banked 400 points of it by then, 1,792 points can still be earned)
                 sim::SimulationEngine sim;

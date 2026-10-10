@@ -335,6 +335,12 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.style = style_name(sb->style());
             r.stalls = sb->stalls();
             r.war_ticks = sb->war_ticks();
+            r.fire_hunts = sb->fight().fire_hunts();
+            r.mines_planted = sb->mines().planted();
+            r.ramp_unjams = sb->gate().ramp_unjams();
+            r.rushes = sb->rush().rushes_started();
+            r.rush_ticks = static_cast<uint32_t>(sb->rush().rush_ticks());
+            r.rush_attacks = sb->rush().attacks_ordered();
             r.expedition = read_expedition(sb->expedition());
         }
         read_seat_result(sim, b.seat, r);
