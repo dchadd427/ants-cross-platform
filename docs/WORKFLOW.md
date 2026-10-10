@@ -10,7 +10,7 @@ How a change travels from a commit to a release: which tests run when, how work 
 | **Full** | for every pull request, and every push to `main` and `staging`: GitHub Actions runs it on its own machines; this is the one full gate | everything: all suites of `./run_tests.sh`, the E2E runner, the script suites (start script, server end to end), ctest on Linux (GCC), macOS (Apple clang) and Windows (MSVC 2022 and 2026), the web and the server image | open the pull request, watch the run (`.github/workflows/ci.yml`) | CI about 10 to 15 minutes |
 | **Deep** | only for changes to the network protocol, the simulation's rules or fairness (what a player can see or do), and now and then on a schedule | mutation checks (`tools/mutate.py`, below), AddressSanitizer + UBSan (`./run_tests.sh --asan`, locally: **CI has no sanitizer job**), soak runs (`map_sweep`, `bot_arena` tournaments, `test_lockstep`), the opt-in browser checks (`tests/scripts/test_web_aspect.sh`, `test_web_hidden.sh`), an independent review | by hand, as the change needs | as long as it takes |
 
-`./run_tests.sh --fast` is the answer to "did I break something obvious"; it does not run the slow suites (the lock-step soak, the server, the worker bot, the network application, the E2E runner, the script suites): CI does, for every pull request, and `./run_tests.sh --sim` (or a single test program) runs the suites of one area when a change is in that area. `./run_tests.sh --list` shows what a choice of options runs. The other options are `--all` (everything, the default), `--assets`, `--sim`, `--app`, `--e2e`, `--tools` (the repository checks), `--asan`, `--clean`, `-j` / `--jobs N` and `--serial` (below), `-v` (the E2E runner lists every passing test) and `-h`; `--fast` combines with them (`--sim --fast`).
+`./run_tests.sh --fast` is the answer to "did I break something obvious"; it does not run the slow suites (the lock-step soak, the server, the worker bot, the network application, the E2E runner, the script suites): CI does, for every pull request, and `./run_tests.sh --sim` (or a single test program) runs the suites of one area when a change is in that area. The options (`--sim`, `--app`, `--tools`, `--list`, `--asan`, `--jobs N`, ... and how `--fast` combines with them) are in [`TESTING.md`](TESTING.md) ("Running Specific Suites").
 
 **CI is the one full gate.** Before a batch is merged, the green CI run on the exact commit of its pull request stands in for a local full `./run_tests.sh`, the local Docker builds and the GCC 12 container (CI builds both images; the server image is Debian 12 with GCC 12). A local full run or a local Docker build stays available and is used when CI cannot show something: a hang that needs a debugger, a change to a Dockerfile that must be tried before it is pushed, AddressSanitizer and UBSan.
 
@@ -36,7 +36,7 @@ A new test must fail without the code it tests (change the code back and see it 
 
 ## Deploy from CI and the staging site
 
-**The deploy job** (`deploy` in `ci.yml`) runs for a push to `main` (a merged pull request), or to `staging`, after the other jobs of the run passed. It waits for an idle game server (below), then calls the Portainer webhook of the stack that follows the branch, but only when the push changed something that the site serves or runs (`tools/deploy_filter.py`, tested by `tests/scripts/test_deploy_filter.py`):
+**The deploy job** (`deploy` in `ci.yml`) runs for a push to `main` (a merged pull request), or to `staging`, after the other jobs of the run passed (five on `main`, four on `staging`, which has no MSVC 2022 build). It waits for an idle game server (below), then calls the Portainer webhook of the stack that follows the branch, but only when the push changed something that the site serves or runs (`tools/deploy_filter.py`, tested by `tests/scripts/test_deploy_filter.py`):
 
 - **counts:** a file that a Dockerfile copies from the build context and `.dockerignore` lets through (the sources, `cmake/`, `include/`, `web/`, `asset_catalog/`, `Original-Ants/`, `docker/nginx.conf`, `CHANGELOG.md`, `docs/CHANGELOG_ARCHIVE.md`, `tools/changelog_to_html.py`, `VERSION`, `CMakeLists.txt`), the Dockerfiles, `.dockerignore`, and the stack file of the site (`docker-compose.stack.yml`; for staging `docker-compose.staging.yml`);
 - **does not count:** documents (`README.md`, `AGENTS.md`, `docs/` except the changelog archive), `.github/`, `tests/`, the other tools, the other compose files. A push of those only is skipped, because a deploy restarts the site.
@@ -63,21 +63,7 @@ The version is the single line of the file [`VERSION`](../VERSION) (`MAJOR.MINOR
 
 ## The changelog
 
-[`CHANGELOG.md`](../CHANGELOG.md) is short, one entry per release, newest first, in a fixed template (it is also at the top of that file):
-
-```text
-## vX.Y.Z - YYYY-MM-DD - title
-
-**For players:**
-- 1 - 6 bullets: what a player or the owner of a server sees or can do now
-
-**Rules / network:** only if the rules of the simulation or the network protocol changed: what, and the protocol number
-
-**Fixes:**
-- optional, one line each
-
-**Details:** [commits](link to the commit range), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
-```
+[`CHANGELOG.md`](../CHANGELOG.md) is short, one entry per release, newest first, in a fixed template that is at the top of that file (copy it from there).
 
 An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that goes live writes its entry (the same template, for players) under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry with the pull request's version ("Version policy", above); a pull request that goes nowhere has no entry. The detailed history of every release up to v0.1.0 is [`docs/CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) (frozen). The site builds both files into `changelog.html` (the short page, the default) and `changelog_archive.html` with `tools/changelog_to_html.py`, linked to each other and from the game page.
 

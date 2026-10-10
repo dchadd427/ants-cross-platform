@@ -228,7 +228,7 @@ What the image serves:
 |---|---|
 | `/` | the front page (the game page when the address has `?join=`) |
 | `/play.html` | the game page ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#the-game-page-and-its-addresses)) |
-| `/asset_catalog/` | the asset catalog ([`ASSET_CATALOG.md`](ASSET_CATALOG.md)) |
+| `/asset_catalog/` | the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#interactive-asset-catalog)) |
 | `/changelog.html` | the short changelog, built from `CHANGELOG.md` when the image is built |
 | `/changelog_archive.html` | the detailed history, built from `docs/CHANGELOG_ARCHIVE.md` |
 

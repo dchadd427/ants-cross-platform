@@ -537,7 +537,7 @@ class TheRosterAnts(unittest.TestCase):
                     self.assertEqual(colours[one] & colours[other], set(), "%s and %s share no colour of their body" % (one, other))
 
     def test_the_black_row_is_the_catalogs_pictures_of_the_sprites_as_they_are(self):
-        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/ASSET_CATALOG.md): they show that the reader above, and the tool's, read the right indices and the right palette
+        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/PLAY_IN_BROWSER.md, "Interactive Asset Catalog"): they show that the reader above, and the tool's, read the right indices and the right palette
         _width, _height, rows = read_png_pixels(os.path.join(FRONT, "ants.png"), alpha=True)
         black = list(self.SHIFT).index("black")
         for column, number in enumerate(self.order):

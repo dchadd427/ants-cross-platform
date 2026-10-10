@@ -26,7 +26,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 
 **Playing**
 
-- [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the 16:9 picture in the browser, hidden tabs, sound
+- [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the 16:9 picture in the browser, hidden tabs, sound, the asset catalog (a page of every sprite, sound and animation of `ants.chd`)
 - [How the game plays](docs/GAMEPLAY.md): the data files, the 20 Hz simulation, the six kinds of ant and their abilities, movement, food, power-ups, combat, the anthill, the start and end of a match, fog of war
 - [View and HUD](docs/VIEW_AND_HUD.md): the 16:9 view, mouse-wheel zoom, edge scrolling and the minimap, the HUD, messages and the chat log, the results screen, sound and music
 - [Controls](docs/CONTROLS.md): the start menu, the setup screen, options and settings, the mouse controls, the keyboard
@@ -40,7 +40,6 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Build and run](docs/BUILD_AND_RUN.md): prerequisites, building, the launch scripts, sanitizers, Docker
 - [The dedicated server](docs/SERVER.md): `ants_server`, its options, the control interface, reconnecting, the Docker stack
 - [Testing and CI](docs/TESTING.md): the test suites and tiers, the browser checks, continuous integration
-- [Asset catalog](docs/ASSET_CATALOG.md): a web page of every sprite, sound and animation of `ants.chd`
 - [Workflow](docs/WORKFLOW.md): branches, pull requests, releases and the deploy; the rules for contributors are in [`AGENTS.md`](AGENTS.md)
 
 **How it works**
@@ -51,7 +50,6 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design, the protocol and the measurements
 - [`BOTS.md`](docs/BOTS.md): the computer players, their levels and how they are tested
 - [`AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md): what differs from the original, on purpose or not
-- [`TABLE4_ANIMATION_REFERENCE.md`](docs/TABLE4_ANIMATION_REFERENCE.md): the animation table of the archive
 
 ## Reverse Engineering & Historical Preservation
 
