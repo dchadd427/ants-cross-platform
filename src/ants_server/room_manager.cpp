@@ -631,12 +631,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
     for (const ai::BotSpec& bot : spec.bots) roster = static_cast<uint8_t>(roster | (1u << bot.seat));
     const std::vector<sim::StartTeams> team_choices = sim::roster_team_choices(roster);
     spec.teams = team_choices[bot_rng_() % team_choices.size()];                // (the room starts with them: Room::update, sim::start_teams_for; the replay's head and the live match carry them)
-    spec.bots_only = true;
-    spec.early_start = false;
-    spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
-    spec.wait_ms = 30u * 1000u;
-    spec.run_ms = 25u * 60u * 1000u;                                       // (the longest map's limit is 12 minutes: this is only the room's own guard)
-    spec.keep_ms = 30u * 1000u;
+    make_bots_only(spec);
     const CreateResult made = create_room(std::move(spec), now_ms);
     if (!made.ok) {
         why = made.error;

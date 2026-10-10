@@ -129,9 +129,14 @@ struct RoomSpec {
                                                              // nobody uses it): a flood is refused beyond this. 32 for every room the server makes; the control interface has no key for it
     bool record_replay{true};                                // the match is kept as a replay when the server keeps replays (the control key "record": false switches it off for the room)
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
-    /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
+    /// played at the normal speed like any other. The server's timer makes such a room, and so does the control interface (`"bots_only": true`, docs/SERVER.md "The room specification"); it holds no seats
+    /// (`reconnect` false), so no restart record is kept for it.
     bool bots_only{false};
 };
+
+/// Makes `spec` a room of computer players alone with the numbers of the server's own match: nobody is waited for (no early start, 30 seconds to start, 25 minutes as the room's own guard, kept 30 seconds
+/// after the end) and no seat is held. The caller still seats a bot at every seat that plays (`bots`, as many as `players`), and may change a number afterwards.
+void make_bots_only(RoomSpec& spec) noexcept;
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
 inline constexpr uint32_t kMinVoteAfterMs = 5u * 1000u;

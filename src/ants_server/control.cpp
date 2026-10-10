@@ -42,6 +42,10 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
         o.set("starting", JsonValue::make_bool(s.starting));        // the leader's START waits for every person's game
         o.set("plan", JsonValue::make_string(s.plan));              // the leader's plan: a letter for each colour and the teams ("omne 0+1")
     }
+    if (s.bots_only) {                                              // a match of computer players alone: the keys exist for such a room only, so the status of every other room is what it was
+        o.set("bots_only", JsonValue::make_bool(true));
+        o.set("teams", JsonValue::make_string(s.room_teams.empty() ? "ffa" : s.room_teams));      // the room's own teams, "A+B" or "ffa"
+    }
     o.set("seat_moves", JsonValue::make_int(s.seat_moves));
     o.set("ignored_seat_moves", JsonValue::make_int(s.ignored_seat_moves));
     JsonValue players = JsonValue::make_array();
@@ -182,6 +186,16 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
         return false;
     }
     RoomSpec spec = out;                                    // the caller's defaults (the server's own: RoomManager::default_spec); only what the body says is changed
+    // A match of computer players alone (RoomSpec::bots_only), the server's own kind of match for the owner to start by hand: it takes make_bots_only's numbers, and what the body names wins over them
+    bool bots_only = false;
+    if (const JsonValue* v = body.find("bots_only")) {
+        if (!v->is_bool()) {
+            error = "\"bots_only\" must be true or false";
+            return false;
+        }
+        bots_only = v->as_bool_or(false);
+    }
+    if (bots_only) make_bots_only(spec);
     const JsonValue* map = body.find("map");
     if (map == nullptr || !map->is_string() || map->str().empty()) {
         error = "\"map\" (the map file name) is required";
@@ -229,6 +243,10 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
             return false;
         }
         spec.early_start = v->as_bool_or(true);
+        if (bots_only && spec.early_start) {
+            error = "\"early_start\" is for a room with people: a room of computer players alone ('bots_only') has nobody to start it";
+            return false;
+        }
     }
     // Reconnect (protocol 10): whether the room holds the seats of players whose connections are lost (the server's default when the body says nothing), how long a seat must have been away
     // before the others may vote on going on without it, and how long the match's pauses may last in all
@@ -272,6 +290,35 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
             }
             spec.bots.push_back(parsed);
         }
+    }
+    // A room of computer players alone: a bot at every seat that plays (two to four; the players are those bots unless the body counts them itself), and the teams of the match ("ffa", or "A+B" for two seats that
+    // play, as the create block of a visitor's room writes them). A room with people lets its leader choose the teams, so the key is for this kind of room only.
+    const JsonValue* teams = body.find("teams");
+    if (bots_only) {
+        if (body.find("bots") == nullptr || spec.bots.size() < 2 || spec.bots.size() > sim::MAX_PLAYERS) {
+            error = "\"bots_only\" needs \"bots\": a bot for every seat that plays, two to four of them";
+            return false;
+        }
+        if (body.find("players") == nullptr) spec.players = static_cast<uint8_t>(spec.bots.size());
+        if (teams != nullptr) {
+            sim::StartTeams parsed;
+            std::string teams_why;
+            if (!teams->is_string() || !sim::parse_start_teams(teams->str(), parsed, teams_why)) {
+                error = "\"teams\" must be \"ffa\" or \"A+B\", two different seats (0 to 3), as in \"0+3\"" + (teams->is_string() && !teams_why.empty() ? ": " + teams_why : std::string());
+                return false;
+            }
+            uint8_t roster = 0;
+            for (const ai::BotSpec& bot : spec.bots) roster = static_cast<uint8_t>(roster | (1u << (bot.seat & 3u)));
+            const sim::StartTeamsPlan plan = sim::plan_start_teams(parsed, roster);
+            if (!plan.why.empty()) {                                // (a pair that the seats cannot make is refused now, not left to the start, which would play the match without teams)
+                error = "\"teams\": " + plan.why;
+                return false;
+            }
+            spec.teams = parsed;
+        }
+    } else if (teams != nullptr) {
+        error = "\"teams\" is for a room of computer players alone (\"bots_only\": true): the leader of a room with people chooses its teams";
+        return false;
     }
     // Replays: the match is kept on the server unless the body says "record": false (a server that keeps none keeps none whatever the body says)
     if (const JsonValue* v = body.find("record")) {

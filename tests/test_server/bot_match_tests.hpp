@@ -248,4 +248,99 @@ void run_bot_match_tests() {
             }
         }
     } TEST_END();
+
+    TEST_CASE("S3.185 The Control Interface Starts A Match Of Computer Players Alone (\"bots_only\": a bot for every seat that plays, the players are those bots, the teams are \"ffa\" or a pair of seats that play) And Says So In The Room's Status; Every Wrong Body Is A 400 That Names The Key And Makes No Room; A Room With People Is As It Was") {
+        World w;
+        const auto call = [&](const std::string& body) {
+            ctl::HttpRequest rq;
+            rq.method = "POST";
+            rq.path = "/rooms";
+            rq.body = body;
+            return handle_control(w.mgr, rq, w.now);
+        };
+        const auto parse = [](const ctl::HttpResponse& r) {
+            ctl::JsonValue v;
+            std::string why;
+            ctl::parse_json(r.body, v, &why);
+            return v;
+        };
+        const std::string four = R"("bots":[{"seat":0,"bot":"hard"},{"seat":1,"bot":"hard"},{"seat":2,"bot":"hard"},{"seat":3,"bot":"hard"}])";
+        // Two against two, top against bottom on TINY (Green and Blue against Red and Black), all Hard: the room is made at once and says what it is
+        ctl::HttpResponse r = call(R"({"map":"TINY.LVL","code":"CTL-FOUR","bots_only":true,"teams":"0+2","seed":7,)" + four + "}");
+        ASSERT_EQ(r.status, 201);
+        ctl::JsonValue v = parse(r);
+        ASSERT_TRUE(v.get("bots_only").as_bool_or(false) && v.get("teams").str() == "0+2" && v.get("expected").as_int_or(0) == 4);
+        ASSERT_TRUE(!v.get("early_start").as_bool_or(true) && !v.get("reconnect").as_bool_or(true));
+        ASSERT_EQ(v.get("players").items().size(), size_t{4});
+        for (const ctl::JsonValue& p : v.get("players").items()) ASSERT_TRUE(p.get("bot").as_bool_or(false) && p.get("name").str() == "Bot (Hard)");
+        RoomStatus s = w.status("CTL-FOUR");
+        ASSERT_TRUE(s.bots_only && s.room_teams == "0+2");
+        ASSERT_TRUE(run_until(w, [&] { return w.status("CTL-FOUR").state == RoomState::Running; }, 12000));      // (nobody is waited for)
+        s = w.status("CTL-FOUR");
+        ASSERT_EQ(s.teams, std::string("0+2"));
+        ASSERT_TRUE(s.allies[0] == 2 && s.allies[2] == 0 && s.allies[1] == 3 && s.allies[3] == 1);
+        ASSERT_EQ(s.bots.size(), size_t{4});
+        for (const RoomStatus::Bot& b : s.bots) ASSERT_TRUE(b.level == "hard" && !b.fill);
+        // The members of the list tell the same
+        ctl::HttpRequest list;
+        list.method = "GET";
+        list.path = "/rooms";
+        size_t listed_bots_only = 0;
+        const ctl::JsonValue listed = parse(handle_control(w.mgr, list, w.now));
+        for (const ctl::JsonValue& room : listed.get("rooms").items()) listed_bots_only += room.get("bots_only").as_bool_or(false) ? 1u : 0u;
+        ASSERT_EQ(listed_bots_only, size_t{1});
+        // No teams: free for all; three bots on seats that are not the first ones are three players, and the body need not count them
+        r = call(R"({"map":"TINY.LVL","code":"CTL-FFA","bots_only":true,"bots":[{"seat":0,"bot":"hard"},{"seat":2,"bot":"medium"},{"seat":3,"bot":"hard"}]})");
+        ASSERT_EQ(r.status, 201);
+        v = parse(r);
+        ASSERT_TRUE(v.get("teams").str() == "ffa" && v.get("expected").as_int_or(0) == 3);
+        ASSERT_TRUE(run_until(w, [&] { return w.status("CTL-FFA").state == RoomState::Running; }, 12000));
+        ASSERT_EQ(w.status("CTL-FFA").teams, std::string("ffa"));
+        r = call(R"({"map":"TINY.LVL","code":"CTL-THREE","bots_only":true,"teams":"2+3","bots":[{"seat":0,"bot":"hard"},{"seat":2,"bot":"medium"},{"seat":3,"bot":"hard"}]})");      // (two of three: the third plays alone)
+        ASSERT_EQ(r.status, 201);
+        ASSERT_EQ(parse(r).get("teams").str(), std::string("2+3"));
+        r = call(R"({"map":"TINY.LVL","code":"CTL-FALSE","bots_only":false,"players":3,"bots":[{"seat":0,"bot":"hard"}]})");        // "false" is a room with people, as without the key: its status has neither key
+        ASSERT_EQ(r.status, 201);
+        v = parse(r);
+        ASSERT_TRUE(!v.has("bots_only") && !v.has("teams"));
+        r = call(R"({"map":"TINY.LVL","code":"CTL-NUMBERS","bots_only":true,"wait_seconds":90,"max_run_seconds":120,"seed":0,)" + four + "}");     // what the body names wins over the numbers of the server's own match
+        ASSERT_EQ(r.status, 201);
+        const size_t rooms_before = w.mgr.room_count();
+
+        // Every wrong body: a 400 that names the key, and no room
+        const std::pair<std::string, std::string> wrong[] = {
+            {R"("bots_only":"yes",)" + four, "\"bots_only\" must be true or false"},
+            {R"("bots_only":1,)" + four, "\"bots_only\" must be true or false"},
+            {R"("bots_only":true)", "\"bots_only\" needs \"bots\""},
+            {R"("bots_only":true,"bots":[])", "\"bots_only\" needs \"bots\""},
+            {R"("bots_only":true,"bots":[{"seat":1,"bot":"hard"}])", "\"bots_only\" needs \"bots\""},
+            {R"("bots_only":true,"bots":[{"seat":0,"bot":"hard"},{"seat":1,"bot":"hard"},{"seat":2,"bot":"hard"},{"seat":3,"bot":"hard"},{"seat":3,"bot":"hard"}])", "\"bots_only\" needs \"bots\""},
+            {R"("bots_only":true,"early_start":true,)" + four, "\"early_start\""},
+            {R"("bots_only":true,"reconnect":true,)" + four, "bots_only"},
+            {R"("bots_only":true,"players":3,)" + four, "bots_only"},
+            {R"("bots_only":true,"fog":true,)" + four, "Fog of War"},
+            {R"("bots_only":true,"bots":[{"seat":0,"bot":"hard"},{"seat":0,"bot":"hard"}])", "seat 0 has a bot already"},
+            {R"("bots_only":true,"teams":"0+0",)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":"0+4",)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":"01",)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":"",)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":3,)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":null,)" + four, "\"teams\""},
+            {R"("bots_only":true,"teams":"1+3","bots":[{"seat":0,"bot":"hard"},{"seat":1,"bot":"hard"},{"seat":2,"bot":"hard"}])", "\"teams\""},      // (Black does not play)
+            {R"("bots_only":true,"teams":"0+1","bots":[{"seat":0,"bot":"hard"},{"seat":1,"bot":"hard"}])", "\"teams\""},                          // (two players as a team would be the whole match)
+            {R"("teams":"0+1",)" + four, "\"teams\" is for a room of computer players alone"},
+            {R"("teams":"0+1","players":3,"bots":[{"seat":2,"bot":"hard"}])", "\"teams\" is for a room of computer players alone"},
+            {R"("bots_only":false,"teams":"ffa")", "\"teams\" is for a room of computer players alone"},
+        };
+        for (const auto& bad : wrong) {
+            r = call(R"({"map":"TINY.LVL",)" + bad.first + "}");
+            ASSERT_MSG(r.status == 400, bad.first);
+            const std::string why = parse(r).get("error").str();
+            ASSERT_MSG(why.find(bad.second) != std::string::npos, bad.first + " -> " + why);
+        }
+        ASSERT_EQ(w.mgr.room_count(), rooms_before);
+        // A room with people is as it was: every seat a bot is still refused without the key
+        r = call(R"({"map":"TINY.LVL","players":2,"bots":[{"seat":0,"bot":"hard"},{"seat":1,"bot":"hard"}]})");
+        ASSERT_TRUE(r.status == 400 && parse(r).get("error").str().find("at least one") != std::string::npos);
+    } TEST_END();
 }

@@ -27,6 +27,15 @@ const char* room_state_name(RoomState state) noexcept {
     return "unknown";
 }
 
+void make_bots_only(RoomSpec& spec) noexcept {
+    spec.bots_only = true;
+    spec.early_start = false;
+    spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
+    spec.wait_ms = 30u * 1000u;
+    spec.run_ms = 25u * 60u * 1000u;                                       // (the longest map's limit is 12 minutes: this is only the room's own guard)
+    spec.keep_ms = 30u * 1000u;
+}
+
 static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     net::HostLobby::Config cfg;
     cfg.host_name = "Server";
