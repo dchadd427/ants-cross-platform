@@ -956,6 +956,27 @@ The ladder (Hard, Medium, Easy and Easy, seeds 1 to 12 in all twelve arrangement
 
 What each rule did alone (Hard against Hard, SMALL, two against two): assault +11 points (1,005 / 994) and 42 attack orders a match; fire-in +12 (990 / 978); raider hunt in the radius of 6 tiles -7 (995 / 1,002; 4.7 attack orders a match, an enemy Fire Ant seldom comes) and at the piles -170; mines with the Bomber taken at the start -24 to -77, the same mines for an ant with nothing to harvest +1 (995 / 994, 10 bombs); two wanted Bombers on ISLANDS -74 (1,361 / 1,435), one wanted Bomber 0. The shipped values are those that cost nothing against bots that do not fight, tuned level by level: nothing here is better for the score, everything is more to see.
 
+### The stand batch (release build)
+
+How it was measured: `bot_arena`, two bots of one level, seat 0 with `--tune stand=0` (the bots as they were) against seat 2 with the plan that ships, both with a style (`styled=1`), seeds 1 to 250 in both seat arrangements (500 matches a cell), the arena's command latency of 3 ticks; banked food of the shipped seat minus the old seat, with the standard error of the mean. The share of matches won outright is the shipped seat's against the old one's.
+
+| map | Hard: banked | Hard: wins | Medium: banked | Medium: wins |
+|---|---|---|---|---|
+| TREASURE | +310 +- 48 | 330 : 170 | +300 +- 20 | 392 : 106 |
+| SMALL | +131 +- 30 | 300 : 199 | +27 +- 12 | 268 : 231 |
+| MEDIUM | +6 +- 26 | 253 : 246 | +1 +- 6 | 243 : 252 |
+| GAUNTLET | +10 +- 14 | 275 : 225 | 0 +- 13 | 249 : 245 |
+| ISLANDS | +1 +- 10 | 250 : 250 | 0 +- 14 | 249 : 249 |
+| TINY | 0 +- 4 | 250 : 250 | 0 +- 3 | 236 : 236 |
+
+Easy plays the duel and the ramp unjam only, and in these 3,000 matches they all but never fire: every Easy cell is level to the point. Where the batch fires, a shipped seat a match: TREASURE (Hard) 6.6 hunts of an enemy Fire Ant that fired the gate in, 17.7 mines, 0.13 rushes; SMALL 3.0 hunts, 18.9 mines, 0.16 rushes; Medium on TREASURE 4.2 hunts and 42 mines. Kills a match, shipped minus old: Hard TREASURE +1.04, SMALL +0.75, GAUNTLET +0.43; Medium TREASURE +1.87. The thieves raid the shipped seat 69 (Hard) and 49 (Medium) points a match less on TREASURE.
+
+*Piece by piece* (Hard, banked difference of the variant against the same plan; 400 matches a cell unless said):
+- **The duel took the Fire Ant of the walls**: the thieves raided the shipped seat 110 +- 28 points a match more on TREASURE than the bot as it was (8 +- 15 without the duel), so on TREASURE the batch scored 129 +- 80 points a match worse than the bot as it was (banked -22 +- 56) while it won 103 +- 34 on SMALL (500 matches a cell). With the Fire Ant of the thief hole spared while a thief threatens, TREASURE is +214 +- 47 (seeds 1 to 250, wins 311 : 189).
+- **The draft** (every ant that can strike joins the hunt) cost food on SMALL and TREASURE and won nothing the duel did not; the duel alone: SMALL +173 +- 43 (wins 121 : 79).
+- **The rush with Workers**, at every threshold tried (deficit 200, 400 and 600, from tick 3,600 or 4,800): -75 +- 33 on MEDIUM, -63 +- 48 on TREASURE and -34 +- 36 on SMALL against the same bot without a rush, and the wins did not move (199 : 201 on MEDIUM). A Worker kills nothing above two hit points and a bot that is behind is usually behind for good. Hence typed ants only (`rush_workers` off): MEDIUM and TREASURE are then level with the bot without a rush, and the rush fires 0.03 to 0.23 times a match. A rush from war tier 2 at Hard: TREASURE -43 +- 53.
+- **The count of mines** (200 seeds in both arrangements, Hard against Hard of the plan before the change, 3 at a pile and at home, 3 at the gate): 6 at a pile TREASURE -12 +- 50, SMALL +2 +- 38, MEDIUM -1 +- 37; the same touching -26 +- 51; 6 at home +19 +- 50 (wins 212 : 187); 6 at home touching +35 +- 53; 6 at a pile touching, 8 at home two apart and 8 at the gate +56 +- 50 (wins 213 : 187); 10 at a pile touching and 12 at home two apart (the gate rows changed nothing: its ring is also the fire-in's) TREASURE +106 +- 50 (wins 228 : 172), GAUNTLET +14 +- 16, MEDIUM +15 +- 30, SMALL -15 +- 35, 2.1 to 9.8 bombs a match more and 0.1 to 0.4 kills more. 20 at home: no further gain (MEDIUM -20 +- 30). A second Bomber (`wbomb` 2) changed nothing: the maps give one. Medium, against the plan with 2 at home: 8 at home two apart TREASURE +208 +- 25 (wins 281 : 116, 25 bombs a match more, 1.2 kills more, raided 23 less), SMALL -10 +- 13; mines at the piles for Medium nothing (TREASURE -11 +- 23, SMALL -19 +- 13); 14 at home nothing more.
+
 ## Roadmap
 
 Each step is a release with the full test suite.
