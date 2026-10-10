@@ -4,6 +4,7 @@ namespace ants::replay {
 
 Recorder::Recorder(Header head) {
     head.format_version = kFormatVersion;
+    if (head.mode != 0 && head.sim_rules < kSimRulesMode187) head.sim_rules = sim_rules_for_mode(head.mode);       // (a match of another game mode is recorded under the rules number that goes with it, whoever made the head)
     replay_.head = std::move(head);
     if (replay_.head.hash_period == 0 || replay_.head.hash_period > kMaxTurns) fail("the head's hash period is out of range");       // (on_tick divides by it)
 }

@@ -72,14 +72,15 @@ std::string rules_refusal(const Header& head) {
     const uint16_t needs = sim_rules_of(head);
     const std::string made_by = head.game_version.empty() ? std::string("a game of unknown version") : head.game_version;
     if (needs == 0) {
-        return "recorded by " + made_by + " with network protocol " + std::to_string(head.engine_rules) + ", whose simulation this build does not know; this build plays simulation rules " + std::to_string(kSimRules) +
+        return "recorded by " + made_by + " with network protocol " + std::to_string(head.engine_rules) + ", whose simulation this build does not know; this build plays simulation rules " + played_rules_text() +
                ": open it with the game that made it";
     }
-    return "recorded by " + made_by + " with simulation rules " + std::to_string(needs) + "; this build plays simulation rules " + std::to_string(kSimRules) + ": open it with the game that made it";
+    return "recorded by " + made_by + " with simulation rules " + std::to_string(needs) + "; this build plays simulation rules " + played_rules_text() + ": open it with the game that made it";
 }
 
 void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog) {
     engine.set_fog_of_war_enabled(fog);
+    engine.set_game_mode(static_cast<sim::GameMode>(replay.head.mode));       // (before init, like every machine of the match did; plays_here and the head's checks have made sure that the mode is one this build knows)
     engine.init(level, replay.head.seed, replay.head.roster);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());

@@ -237,6 +237,20 @@ The score is the food your ants have deposited at your hill, plus the loot your 
 
 Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.47 (the end rules) and 5.49 (the results and their ranking).
 
+## 187 (a game type of the remake)
+
+The room's **game type** is either *Highest score* (the original's game, everything above) or **187**, the remake's own: a fight with no food. The type is chosen with the room, is the same on every machine and is written into the replay (`GameMode`, `include/ants_sim/game_mode.hpp`). A match that does not ask for it plays exactly as before and keeps its state hash.
+
+In 187, on any map:
+
+- **No food and no power-ups.** Every food pile and power-up of the map is taken off when the match starts and the flower droppers are switched off (the plants stay as scenery). Nothing can turn an ant into another type, so the ants are the ones the map starts with.
+- **The start is the map's own.** The start markers, the starting ants and the starting eggs are those of the map, as in any match. The eggs are the lives of a team: a team that loses its last ant hatches one egg at once, as in the original, but the hatch costs 187 no points (the score is the kills and the hatch must not eat them). A player cannot hatch an egg by hand: that needs 200 points as always, and a score of kills never gets there.
+- **The score is the kills.** Every enemy ant that a team kills is one point, shown in the score boxes and added across an alliance as always. The kill goes to the team whose hit was the last on the ant, as the original counts "Enemy Ants Killed" (a push into the water counts); an ally's bomb or fire is no kill, and the ants of a team that dropped out die for nobody. Nothing else scores, and a kill makes no bubble and no cue (a fight has many).
+- **The match ends** when the clock runs out, when nobody has an ant left, or when **one side is left**: every other side has no ant (no egg and no hatch either), and the last side standing wins outright, whatever the kill counts are. An alliance whose two teams are both alive is one side. A match of one team has nobody to beat and does not end by this rule.
+- **The results** rank the side that is left first, then the rest by kills (an alliance's rows are added; a tie goes to the team of the screen, as in the original); the winner cue plays for the first row's team and its ally. The ants that each team has left are counted for the results page.
+
+The original ends a match by the best score and never lets a score of 0 win, which is why 187 has its own end rule. Code: `SimulationEngine::set_game_mode`, `SimulationEngineImpl::end_rule_187`, `MatchResult::standing`; tests: suite 2.9.2 (`tests/test_sim/test_game_mode.cpp`). The mode is hashed (only when it is not the original's), so a replay of a 187 match is refused by a build that does not know it (docs/REPLAYS.md).
+
 ## Ant Animation in Real Time
 
 Every clip that an ant plays steps at the moment a frame ends, as the original's real-time player does: walking on every terrain, standing, swimming, diving, climbing, harvesting, can't-go and all the actions.

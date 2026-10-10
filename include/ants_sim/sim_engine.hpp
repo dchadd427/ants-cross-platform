@@ -10,6 +10,7 @@
 #include "ants_sim/prng.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/match_stats.hpp"
+#include "ants_sim/game_mode.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/ant_unit.hpp"
 
@@ -362,6 +363,9 @@ struct WorldState {
     uint8_t dropped_mask{0};
     MatchResult match_result;
 
+    /// The rules of the match (set_game_mode before init): the HUD and the results page word themselves by it
+    GameMode game_mode{GameMode::HighestScore};
+
     // Authentic Fog of War State
     bool fog_of_war_enabled{false};
     std::vector<uint8_t> fog_revealed{}; // size: width * height (1 = revealed, 0 = shrouded)
@@ -485,6 +489,12 @@ public:
     void set_match_time_remaining_ms(uint32_t ms);
     bool is_match_over() const;
     PlayerMatchStats get_player_stats(uint8_t player_id) const;
+
+    /// The rules of the next match (default HighestScore, the original's game). Like every other setting of a room it is chosen before init() and read by it:
+    /// 187 takes the food and the power-ups off the map (the start, the ants and the eggs stay the map's own), counts kills as the score and ends
+    /// the match when one side is left (docs/GAMEPLAY.md, "187"). init() keeps it, so an engine that is re-initialised plays the same rules again.
+    void set_game_mode(GameMode mode);
+    GameMode game_mode() const noexcept;
 
     // Fog of War
     void set_fog_of_war_enabled(bool enabled);

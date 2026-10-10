@@ -549,7 +549,13 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     post_news(255, drowned ? strings::kAntDrowned : strings::kAntDead);
     if (a.player_id < MAX_PLAYERS) {
         stats_.get_player_stats_mut(a.player_id).friendly_lost++;
-        if (killer != kNoKiller && killer != a.player_id) stats_.get_player_stats_mut(killer).enemy_killed++;
+        if (killer != kNoKiller && killer != a.player_id) {
+            PlayerMatchStats& k = stats_.get_player_stats_mut(killer);
+            k.enemy_killed++;
+            // 187: the score is the number of kills (no bubble and no cue: a fight has many). The team of the last damage gets the kill, as the original counts "Enemy Ants Killed",
+            // except that an ally's bomb or fire is no kill of an enemy and the ants of a team that dropped out die with nobody to thank
+            if (game_mode_ == GameMode::Kills187 && !stats_.are_allies(killer, a.player_id) && (dropped_mask_ & (1u << a.player_id)) == 0) k.score++;
+        }
     }
     const TileCoord tile = pixel_tile(a);
     occ_move(a, TileCoord{-1, -1});

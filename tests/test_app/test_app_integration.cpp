@@ -1993,6 +1993,26 @@ void run_suite_7_input_controls() {
             ASSERT_TRUE(app.bots() != nullptr && app.bots()->stats(1).released > 0);                       // (the bots played)
             app.shutdown();
         }
+        {   // the same game in 187 (--game-mode 187): the teams are made at the start there too, on the engine that has no food; the match goes on with them
+            ApplicationConfig cfg = config({bot(1), bot(2), bot(3)}, LocalTeams{true, 0, 1});
+            cfg.game_mode = 1;
+            cfg.game_mode_given = true;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.sim().game_mode() == ants::sim::GameMode::Kills187);
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(allies_of(app), std::string("1032"));                                                // 0 + 1 and 2 + 3, before the first tick
+            for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+            app.hud().dismiss_match_start_modal();
+            app.update_simulation(0.05f);
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 2u);
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_TRUE(app.sim().current_tick() > 100);
+            ASSERT_TRUE(app.sim().game_mode() == ants::sim::GameMode::Kills187);
+            ASSERT_EQ(allies_of(app), std::string("1032"));                                                // (the bots never break a team)
+            app.shutdown();
+        }
         {   // the first seat of the pair is the one that invites: 3+2 makes the same two teams, and the News Flash names Black first
             Application app;
             ASSERT_TRUE(app.init(config({bot(1), bot(2), bot(3)}, LocalTeams{true, 3, 2})));

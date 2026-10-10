@@ -131,6 +131,12 @@ void HostLobby::set_fog(bool fog) {
     broadcast_room();
 }
 
+void HostLobby::set_mode(uint8_t mode) {
+    if (phase_ != Phase::Room || !sim::valid_game_mode(mode) || mode == room_.mode) return;         // (a mode that this build does not know is never taken: it would be played as another)
+    room_.mode = mode;
+    broadcast_room();
+}
+
 bool HostLobby::has_bot() const noexcept {
     for (const auto& s : room_.slots) {
         if (s.state == SlotState::Bot) return true;
@@ -366,6 +372,7 @@ bool HostLobby::start(uint32_t seed, uint64_t map_hash, uint32_t now_ms, const s
     start_.map_name = room_.map_name;
     start_.map_hash = map_hash;
     start_.fog = room_.fog;
+    start_.mode = room_.mode;                                    // (protocol 17: the rules of the match, the same on every machine)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Empty) continue;
         start_.roster = static_cast<uint8_t>(start_.roster | (1u << s));
@@ -821,7 +828,7 @@ void HostLobby::rename(uint8_t seat, const std::string& raw) {
     broadcast_room();
 }
 
-// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams. The room is shown to everybody when something changed.
+// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams, the game mode. The room is shown to everybody when something changed.
 void HostLobby::apply_plan(const PlanMsg& plan) {
     bool changed = false;
     if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)
@@ -838,6 +845,10 @@ void HostLobby::apply_plan(const PlanMsg& plan) {
     if (room_.team_a != plan.team_a || room_.team_b != plan.team_b) {
         room_.team_a = plan.team_a;
         room_.team_b = plan.team_b;
+        changed = true;
+    }
+    if (room_.mode != plan.mode) {                               // (protocol 17; the decoder refused a mode above sim::kLastGameMode)
+        room_.mode = plan.mode;
         changed = true;
     }
     if (!changed) return;
@@ -931,6 +942,7 @@ bool ClientLobby::request_seat_move(uint8_t from, uint8_t to) {
 
 bool ClientLobby::request_plan(const PlanMsg& plan) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
+    if (!sim::valid_game_mode(plan.mode)) return false;          // (a mode that this build does not know is no wish: the room would throw the sender out for it)
     return conn_->send(encode(plan));
 }
 

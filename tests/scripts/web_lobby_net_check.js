@@ -56,6 +56,7 @@ const sends = {
     'plan-ffa': () => N.encodePlan('ISLANDS.LVL', [N.PLAN.Open, N.PLAN.Easy, N.PLAN.Hard, N.PLAN.Nobody], 255, 255),
     'plan-teams-keep-map': () => N.encodePlan('', [N.PLAN.Open, N.PLAN.Medium, N.PLAN.Open, N.PLAN.Medium], 0, 1),
     'plan-teams-2-3': () => N.encodePlan('TREASURE.LVL', [N.PLAN.Nobody, N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Open], 2, 3),
+    'plan-187': () => N.encodePlan('TINY.LVL', [N.PLAN.Open, N.PLAN.Hard, N.PLAN.Open, N.PLAN.Nobody], 255, 255, 1),
     'name-plain': () => N.encodeName('Priya'),
     'name-32-chars-with-spaces': () => N.encodeName('Sam the Great, 3rd of his name!!'),
     'name-one-char': () => N.encodeName('Z'),
@@ -86,19 +87,23 @@ const E = N.SLOT.Empty, C = N.SLOT.Client, B = N.SLOT.Bot;
 const roomWant = {
     'room-lobby-waiting': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0x12), slot(B, 'Bot (Medium)', 0, 0), slot(E, '', 0xFFFF, 0)], map: 'TREASURE.LVL', fog: false, you: 1, leader: 0, teamA: 255, teamB: 255,
-        flags: 3, plan: [0, 0, 2, 0], inGame: 0, lobby: true, starting: false, leaderStarts: true
+        flags: 3, plan: [0, 0, 2, 0], inGame: 0, mode: 0, lobby: true, starting: false, leaderStarts: true
     },
     'room-lobby-starting': {
         slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(C, 'Juniper', 0xFFFF, 0), slot(B, 'Bot (Hard)', 0, 0)], map: 'ISLANDS.LVL', fog: false, you: 2, leader: 1, teamA: 0, teamB: 2,
-        flags: 7, plan: [0, 0, 0, 3], inGame: 5, lobby: true, starting: true, leaderStarts: true
+        flags: 7, plan: [0, 0, 0, 3], inGame: 5, mode: 0, lobby: true, starting: true, leaderStarts: true
     },
     'room-lobby-alone-no-map': {
         slots: [slot(C, 'Priya', 12, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: '', fog: false, you: 0, leader: 0, teamA: 255, teamB: 255,
-        flags: 3, plan: [0, 4, 1, 0], inGame: 0, lobby: true, starting: false, leaderStarts: true
+        flags: 3, plan: [0, 4, 1, 0], inGame: 0, mode: 0, lobby: true, starting: false, leaderStarts: true
     },
     'room-plain-not-a-lobby': {
         slots: [slot(C, 'A', 0xFFFF, 0), slot(C, 'B', 5, 0), slot(C, 'C', 6, 0), slot(C, 'D', 7, 0)], map: 'SMALL.LVL', fog: false, you: 255, leader: 255, teamA: 0, teamB: 1,
-        flags: 0, plan: [0, 0, 0, 0], inGame: 0, lobby: false, starting: false, leaderStarts: false
+        flags: 0, plan: [0, 0, 0, 0], inGame: 0, mode: 0, lobby: false, starting: false, leaderStarts: false
+    },
+    'room-lobby-187': {
+        slots: [slot(C, 'Priya', 12, 0), slot(C, 'Sam', 40, 0), slot(E, '', 0xFFFF, 0), slot(E, '', 0xFFFF, 0)], map: 'TINY.LVL', fog: false, you: 0, leader: 0, teamA: 255, teamB: 255,
+        flags: 3, plan: [0, 0, 0, 0], inGame: 0, mode: 1, lobby: true, starting: false, leaderStarts: true
     }
 };
 for (const name of Object.keys(roomWant)) {
@@ -164,30 +169,40 @@ check('welcome flags 3 is refused', N.decode(mutate('welcome-created', 19, 3)) =
 {
     const room = bytesOf('room-lobby-waiting');
     const r = Array.from(room);
-    const tail = r.length - (1 + 4 + 1); // flags is 5 bytes before the end: flags, plan x4, in_game
-    check('the tail of the room message is where the check thinks', r[r.length - 6] === 3 && r[r.length - 1] === 0);
+    const tail = r.length - (1 + 4 + 1 + 1); // flags is 6 bytes before the end: flags, plan x4, in_game, mode (protocol 17)
+    check('the tail of the room message is where the check thinks', r[r.length - 7] === 3 && r[r.length - 1] === 0 && r[r.length - 2] === 0);
     const with_ = (i, v) => { const c = Uint8Array.from(room); c[i] = v; return c; };
     const L = r.length;
     check('room: a state above 3', N.decode(with_(1, 4)) === null);
-    check('room: a plan value of 5', N.decode(with_(L - 3, 5)) === null);
-    check('room: a plan value in a room that is no lobby (flags 1)', N.decode((() => { const c = Uint8Array.from(room); c[L - 6] = 1; return c; })()) === null);
-    check('room: starting without lobby (flags 5)', N.decode(with_(L - 6, 5)) === null);
-    check('room: lobby without leader-starts (flags 2)', N.decode(with_(L - 6, 2)) === null);
-    check('room: an unknown flag bit', N.decode(with_(L - 6, 11)) === null);
-    check('room: a game for a seat that holds nobody (seat 3)', N.decode(with_(L - 1, 8)) === null);
-    check('room: a game for a bot (seat 2)', N.decode(with_(L - 1, 4)) === null);
-    check('room: a game for a person (seat 1)', N.decode(with_(L - 1, 2)) !== null);
-    check('room: an in_game bit above 3', N.decode(with_(L - 1, 16)) === null);
-    check('room: you = 4', N.decode(with_(L - 10, 4)) === null);
-    check('room: you = 255 is fine', N.decode(with_(L - 10, 255)) !== null);
-    check('room: a leader that is a bot (seat 2)', N.decode(with_(L - 9, 2)) === null);
-    check('room: a leader that holds nobody (seat 3)', N.decode(with_(L - 9, 3)) === null);
-    check('room: no leader is fine', N.decode(with_(L - 9, 255)) !== null);
-    check('room: teams 1,0 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 1; c[L - 7] = 0; return c; })()) === null);
-    check('room: teams 0,4 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 0; c[L - 7] = 4; return c; })()) === null);
-    check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 0; c[L - 7] = 255; return c; })()) === null);
-    check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 8] = 1; c[L - 7] = 3; return c; })()) !== null);
-    check('room: fog = 2', N.decode(with_(L - 11, 2)) === null);
+    check('room: a plan value of 5', N.decode(with_(L - 4, 5)) === null);
+    check('room: a plan value in a room that is no lobby (flags 1)', N.decode((() => { const c = Uint8Array.from(room); c[L - 7] = 1; return c; })()) === null);
+    check('room: starting without lobby (flags 5)', N.decode(with_(L - 7, 5)) === null);
+    check('room: lobby without leader-starts (flags 2)', N.decode(with_(L - 7, 2)) === null);
+    check('room: an unknown flag bit', N.decode(with_(L - 7, 11)) === null);
+    check('room: a game for a seat that holds nobody (seat 3)', N.decode(with_(L - 2, 8)) === null);
+    check('room: a game for a bot (seat 2)', N.decode(with_(L - 2, 4)) === null);
+    check('room: a game for a person (seat 1)', N.decode(with_(L - 2, 2)) !== null);
+    check('room: an in_game bit above 3', N.decode(with_(L - 2, 16)) === null);
+    check('room: you = 4', N.decode(with_(L - 11, 4)) === null);
+    check('room: you = 255 is fine', N.decode(with_(L - 11, 255)) !== null);
+    check('room: a leader that is a bot (seat 2)', N.decode(with_(L - 10, 2)) === null);
+    check('room: a leader that holds nobody (seat 3)', N.decode(with_(L - 10, 3)) === null);
+    check('room: no leader is fine', N.decode(with_(L - 10, 255)) !== null);
+    check('room: teams 1,0 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 1; c[L - 8] = 0; return c; })()) === null);
+    check('room: teams 0,4 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 0; c[L - 8] = 4; return c; })()) === null);
+    check('room: teams 0,255 are refused', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 0; c[L - 8] = 255; return c; })()) === null);
+    check('room: teams 1,3 are fine', N.decode((() => { const c = Uint8Array.from(room); c[L - 9] = 1; c[L - 8] = 3; return c; })()) !== null);
+    check('room: fog = 2', N.decode(with_(L - 12, 2)) === null);
+    check('room: the mode byte 1 (187) is fine and decodes as the mode', (N.decode(with_(L - 1, 1)) || {}).mode === 1);
+    check('room: the mode byte 2 is refused', N.decode(with_(L - 1, 2)) === null);
+    check('room: the mode byte 255 is refused', N.decode(with_(L - 1, 255)) === null);
+    check('room: every mode byte above the last is refused, never read as another mode', Array.from({ length: 254 }, (_, i) => i + 2).every((v) => N.decode(with_(L - 1, v)) === null) && N.LAST_GAME_MODE === 1);
+    check('room: protocol 16 (no mode byte) is no Room message', N.decode(room.subarray(0, L - 1)) === null);
+    // the encoder of a plan never builds a message with a mode that the codec does not know (the server would refuse it): it throws, for every value outside 0 .. LAST_GAME_MODE and for what is no whole number
+    const planWith = (m) => N.encodePlan('', [0, 0, 0, 0], 255, 255, m);
+    const throwsRange = (m) => { try { planWith(m); return false; } catch (e) { return e instanceof RangeError; } };
+    check('plan: a mode above the last (2, 3, 255), below 0 or no whole number throws a RangeError', [2, 3, 255, 256, -1, 1.5, '1', null, NaN, Infinity].every(throwsRange));
+    check('plan: no mode, 0 and 1 are fine, and the mode is the last byte', [undefined, 0, 1].every((m) => !throwsRange(m)) && planWith(undefined)[planWith(undefined).length - 1] === 0 && planWith(1)[planWith(1).length - 1] === 1);
 }
 // a name with a character outside printable ASCII, a platform byte out of range, a platform on a bot
 {

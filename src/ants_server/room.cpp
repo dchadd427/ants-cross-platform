@@ -118,6 +118,7 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
     active_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
+    lobby_.set_mode(spec_.mode);
     lobby_.set_before_start([this](const net::StartMsg&, uint32_t now) { record_open(now); });      // the match is fixed (the start message, the keys): its record is made before the Start is sent to anybody
     for (const ai::BotSpec& bot : spec_.bots) {                  // the room's own bots sit down before anybody comes (the lobby refuses what the specification should not have asked: fog, a full room)
         if (lobby_.add_bot(bot.seat, ai::bot_display_name(bot))) bot_specs_.push_back(bot);
@@ -286,6 +287,7 @@ void Room::begin_match(uint32_t now_ms) {
     const net::StartMsg& start = lobby_.start_info();
     sim_ = std::make_unique<sim::SimulationEngine>();
     sim_->set_fog_of_war_enabled(start.fog);
+    sim_->set_game_mode(start.game_mode());                      // (protocol 17: the rules of the match, before init like every client)
     sim_->init(level_, start.seed, start.roster);                // exactly what every client does with the same values
     roster_ = start.roster;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
@@ -693,6 +695,7 @@ void Room::replay_begin(const net::StartMsg& start) {
     head.seed = start.seed;
     head.roster = start.roster;
     head.fog = start.fog;
+    head.set_mode(start.mode);                                   // (field 17 and the rules number that goes with the mode, when it is not the original's game)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((start.roster & (1u << seat)) == 0) continue;
         head.names[seat] = lobby_.room().slots[seat].state == net::SlotState::Bot ? ascii_text(start.names[seat], replay::kMaxTextBytes / 2) : replay_person_name(start.names[seat]);
@@ -756,6 +759,7 @@ RoomSpec room_spec_of(const RestartHead& h) {
     spec.code = h.code;
     spec.map = h.map;
     spec.fog = h.fog;
+    spec.mode = h.start.mode;
     spec.players = h.players;
     spec.early_start = h.early_start;
     spec.public_room = h.public_room;
@@ -827,6 +831,7 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     from_record_ = true;
     sim_ = std::make_unique<sim::SimulationEngine>();
     sim_->set_fog_of_war_enabled(start.fog);
+    sim_->set_game_mode(start.game_mode());                      // (the record's Start has the mode: a record of protocol 17 is the only one that is restored)
     sim_->init(level_, start.seed, start.roster);                // exactly what begin_match does, and every client
     uint8_t bot_mask = 0;
     for (const ai::BotSpec& b : bot_specs_) bot_mask = static_cast<uint8_t>(bot_mask | (1u << b.seat));
@@ -1017,6 +1022,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.code = spec_.code;
     s.map = lobby_waiting() ? lobby_.map_name() : map_.name;           // (a lobby room's plan names the map before the room has loaded it)
     s.fog = spec_.fog;
+    s.mode = lobby_.mode();
     s.expected = spec_.players;
     s.early_start = spec_.early_start;
     s.public_room = spec_.public_room;

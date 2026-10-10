@@ -1,4 +1,4 @@
-// The front page's side of network protocol 16 (docs/NETWORK_PORT.md "Protocol 16"): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
+// The front page's side of network protocol 17 (docs/NETWORK_PORT.md "Protocol 16" and "Protocol 17"): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -10,7 +10,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 16;                                             // kProtocolVersion
+    var PROTOCOL = 17;                                             // kProtocolVersion
+    var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
     var NO_TEAM = 255, NO_LEADER = 255, ROOM_SENDER = 255;
@@ -130,11 +131,14 @@
         return h !== 0 ? h : 1;
     }
     function encodeSeatMove(from, to, guard) { return new Writer().u8(MSG.SeatMove).u8(from).u8(to).u32(guard).done(); }
-    // the leader's plan: the map ('' keeps the room's), what each colour is (PLAN.*) and the teams (NO_TEAM twice, or two seats a < b)
-    function encodePlan(map, kinds, teamA, teamB) {
+    // the leader's plan: the map ('' keeps the room's), what each colour is (PLAN.*), the teams (NO_TEAM twice, or two seats a < b) and, since protocol 17, the game mode (0, the original's game, when none is given;
+    // a mode that is not 0 .. LAST_GAME_MODE is a mistake of the caller and throws: the server would refuse the message, and it is never sent as another mode)
+    function encodePlan(map, kinds, teamA, teamB, mode) {
+        var gameMode = mode === undefined ? 0 : mode;
+        if (!isWhole(gameMode) || gameMode < 0 || gameMode > LAST_GAME_MODE) throw new RangeError('game mode ' + mode);
         var w = new Writer().u8(MSG.Plan).str8(map || '');
         for (var i = 0; i < PLAYERS; i++) w.u8(kinds[i]);
-        return w.u8(teamA).u8(teamB).done();
+        return w.u8(teamA).u8(teamB).u8(gameMode).done();
     }
     function encodeName(name) { return new Writer().u8(MSG.Name).str8(name).done(); }
     function encodeRemove(seat, guard) { return new Writer().u8(MSG.Remove).u8(seat).u32(guard).done(); }
@@ -174,10 +178,11 @@
             if (!validPlatform(slot.platform) || (slot.platform !== 0 && slot.state !== SLOT.Host && slot.state !== SLOT.Client)) return null;
             slots.push(slot);
         }
-        var m = { type: 'room', slots: slots, map: r.str8(), fog: r.u8(), you: r.u8(), leader: r.u8(), teamA: r.u8(), teamB: r.u8(), flags: r.u8(), plan: [], inGame: 0 };
+        var m = { type: 'room', slots: slots, map: r.str8(), fog: r.u8(), you: r.u8(), leader: r.u8(), teamA: r.u8(), teamB: r.u8(), flags: r.u8(), plan: [], inGame: 0, mode: 0 };
         for (var k = 0; k < PLAYERS; k++) m.plan.push(r.u8());
         m.inGame = r.u8();
-        if (!r.done() || m.fog > 1 || (m.map !== '' && !validMapName(m.map)) || (m.you !== 255 && m.you >= PLAYERS)) return null;
+        m.mode = r.u8();                                             // (protocol 17: the last byte; 0 the original's highest score, 1 "187")
+        if (!r.done() || m.mode > LAST_GAME_MODE || m.fog > 1 || (m.map !== '' && !validMapName(m.map)) || (m.you !== 255 && m.you >= PLAYERS)) return null;
         if (m.leader !== NO_LEADER && (m.leader >= PLAYERS || slots[m.leader].state !== SLOT.Client)) return null;
         if ((m.teamA !== NO_TEAM || m.teamB !== NO_TEAM) && (m.teamA >= m.teamB || m.teamB >= PLAYERS)) return null;
         if ((m.flags & ~(ROOM_LEADER_STARTS | ROOM_LOBBY | ROOM_STARTING)) !== 0) return null;
@@ -256,7 +261,7 @@
                 events.push({ type: 'host', seat: next.leader, name: next.slots[next.leader].name, you: next.leader === next.you, before: before });
             }
         }
-        var planChanged = prev.map !== next.map || prev.teamA !== next.teamA || prev.teamB !== next.teamB;
+        var planChanged = prev.map !== next.map || prev.teamA !== next.teamA || prev.teamB !== next.teamB || prev.mode !== next.mode;
         for (s = 0; s < PLAYERS; s++) { if (prev.plan[s] !== next.plan[s]) planChanged = true; }
         if (planChanged) events.push({ type: 'plan' });
         if (!prev.starting && next.starting) events.push({ type: 'starting' });
@@ -527,16 +532,17 @@
         if (guard !== undefined && guard !== now) return false;
         return this.send('move', encodeSeatMove(from, to, now));
     };
-    // The plan as the leader wants it: { map ('' keeps the room's), kinds [4] (PLAN.*), teamA, teamB }
+    // The plan as the leader wants it: { map ('' keeps the room's), kinds [4] (PLAN.*), teamA, teamB, mode (protocol 17: 0 the original's highest score, 1 "187"; none is 0, as the page has no other) }
     LobbyClient.prototype.setPlan = function (plan) {
         var r = this.room;
         if (!this.canAct() || !this.isLeader() || r.starting || !plan || typeof plan !== 'object') return false;
         var map = plan.map === undefined ? '' : plan.map;
         if (typeof map !== 'string' || (map !== '' && !validMapName(map)) || !validTeams(plan.teamA, plan.teamB)) return false;
+        if (plan.mode !== undefined && (!isWhole(plan.mode) || plan.mode < 0 || plan.mode > LAST_GAME_MODE)) return false;
         var kinds = plan.kinds;
         if (!kinds || kinds.length !== PLAYERS) return false;
         for (var i = 0; i < PLAYERS; i++) { if (!isWhole(kinds[i]) || kinds[i] < PLAN.Open || kinds[i] > PLAN.Nobody) return false; }
-        return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB));
+        return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));
     };
     LobbyClient.prototype.rename = function (name) {
         if (!this.canAct() || this.room.starting || !validPersonName(name)) return false;
@@ -572,7 +578,7 @@
     };
 
     return {
-        PROTOCOL: PROTOCOL, MSG: MSG, REJECT: REJECT, SLOT: SLOT, PLAN: PLAN, FILL: FILL, OS: OS, PLATFORM_BROWSER: PLATFORM_BROWSER, PLAYERS: PLAYERS,
+        PROTOCOL: PROTOCOL, LAST_GAME_MODE: LAST_GAME_MODE, MSG: MSG, REJECT: REJECT, SLOT: SLOT, PLAN: PLAN, FILL: FILL, OS: OS, PLATFORM_BROWSER: PLATFORM_BROWSER, PLAYERS: PLAYERS,
         NO_TEAM: NO_TEAM, NO_LEADER: NO_LEADER, ROOM_SENDER: ROOM_SENDER, MAX_NAME: MAX_NAME, MAX_CHAT: MAX_CHAT,
         validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform,
         encodeHello: encodeHello, encodeLeave: encodeLeave, encodePong: encodePong, encodePing: function (nonce, sentMs) { return encodePing(MSG.Ping, nonce, sentMs); },

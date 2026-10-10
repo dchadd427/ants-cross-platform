@@ -240,6 +240,7 @@ bool ReplayStore::summarize(const std::vector<uint8_t>& bytes, ReplayEntry& out,
     out.rules = rep.head.engine_rules;
     out.sim_rules = replay::sim_rules_of(rep.head);
     out.game = rep.head.game_version;
+    out.mode = rep.head.mode;
     out.turns = rep.total_turns;
     out.finished = rep.match_over;
     out.players.clear();

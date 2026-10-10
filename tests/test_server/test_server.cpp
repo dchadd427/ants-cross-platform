@@ -255,6 +255,7 @@ struct Client {
                 const bool ok = !fail_load && level.load_from_file(maps + "/" + s.map_name) && net::hash_file(maps + "/" + s.map_name, hash) && hash == s.map_hash;
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
+                    sim.set_game_mode(s.game_mode());                         // (the mode of the Start, before the first init: what the application does)
                     sim.init(level, s.seed, s.roster);
                     sim::apply_start_teams(sim, s.teams());                   // (the teams of the Start, before the first tick: what the application does)
                     map_w = level.width();
@@ -767,6 +768,7 @@ void RClient::update(uint32_t now_ms, const std::string& maps, LinkSource& w) {
                 const bool ok = !fail_load && level.load_from_file(maps + "/" + s.map_name) && net::hash_file(maps + "/" + s.map_name, hash) && hash == s.map_hash;
                 if (ok) {
                     sim.set_fog_of_war_enabled(s.fog);
+                    sim.set_game_mode(s.game_mode());                         // (the mode of the Start, before the first init: what the application does)
                     sim.init(level, s.seed, s.roster);
                     sim::apply_start_teams(sim, s.teams());                   // (the teams of the Start, before the first tick: what the application does)
                     if (tamper) tamper(sim);
@@ -5987,8 +5989,8 @@ void run_bot_tests() {
     TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves), 14 (The Release Before The Create Block) Or 16 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{16});                  // (15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{17}, uint16_t{1}, uint16_t{0}}) {
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{17});                  // (16 was the protocol of v0.12.0: a Start, a Room and a Plan without the mode byte; 15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, uint16_t{18}, uint16_t{1}, uint16_t{0}}) {      // (16: v0.12.0, whose Hello is the Hello of 17 byte for byte: the number alone refuses it; 18: a client from the future)
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;
@@ -6011,7 +6013,7 @@ void run_bot_tests() {
                 bytes.pop_back();                                                                // (the client kind ends a Hello that has no block, and the platform byte before it: what is left is the layout of 14)
                 bytes.pop_back();
                 net::HelloMsg again;
-                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 16 reader takes it for no Hello at all)
+                ASSERT_FALSE(net::decode(bytes, again));                                          // (a protocol 17 reader takes it for no Hello at all)
                 old_ends.second->send(bytes);
                 w.run(300);
                 ASSERT_EQ(reject_on(old_ends.second), static_cast<int>(net::RejectReason::VersionMismatch));
@@ -6900,6 +6902,7 @@ uint64_t replay_hash(const RestartLoaded& rec, size_t turns) {
     if (!level.load_from_file(maps_dir() + "/" + rec.head.map)) throw std::runtime_error("map");
     sim::SimulationEngine sim;
     sim.set_fog_of_war_enabled(rec.head.start.fog);
+    sim.set_game_mode(rec.head.start.game_mode());
     sim.init(level, rec.head.start.seed, rec.head.start.roster);
     sim::apply_start_teams(sim, rec.head.start.teams());
     for (size_t i = 0; i < turns && i < rec.turns.size(); ++i) {
@@ -7902,7 +7905,7 @@ void run_persist_server_tests_4() {
         ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));                           // (the bots kept their teams to the end)
     } TEST_END();
 
-    TEST_CASE("S3.128 A Record Of Protocol 12, 13 Or 14 (Its Start Message Lacks What Later Protocols Added: The Team Bytes, The Platform Bytes) Is Read As The Start That Its Release Wrote And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart (Run Through With A Record Of Protocol 12; The Parser Reads The Other Two The Same Way) It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout Under A Protocol That Did Not Write It (11, Or 13 Under 12, Or 15) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
+    TEST_CASE("S3.128 A Record Of Protocol 12, 13, 14, 15 Or 16 (Its Start Message Lacks What Later Protocols Added: The Team Bytes, The Platform Bytes, The Game Mode) Is Read As The Start That Its Release Wrote And Refused For Its Protocol, Like A Record Of Any Other Protocol: At The Restart (Run Through With A Record Of Protocol 12; The Parser Reads The Other Two The Same Way) It Is Not Restored (Nothing Of It Is Replayed), Its Room Is A Failed Room That Names The Protocols, The File Is Kept Whole For A Day (Not Deleted As Corrupt) And The Log Says So; An Old Layout Under A Protocol That Did Not Write It (11, Or 13 Under 12, Or 15 Under 14, Or 17) Stays Unreadable; The Same Record In This Build's Layout Is Restored") {
         PWorld w("persist-126");
         w.start_server(500);
         const auto crash = [](PWorld& world, const char* code) {                               // a match that is played for a while, and a server that dies with its record
@@ -7917,7 +7920,7 @@ void run_persist_server_tests_4() {
         ASSERT_TRUE(rec.ok() && rec.head.start.team_a == net::kNoTeam && rec.head.identity.protocol == net::kProtocolVersion);
         const std::vector<uint8_t> start = net::encode(rec.head.start);                        // the Start inside the head, in this build's layout
         // the record as protocol `protocol` with the old layout wrote it: the Start without what later protocols added at its end (`lacking` bytes: protocol 12's has neither the two team bytes nor the four
-        // platform bytes of protocol 15, protocol 13's and 14's lack the platform bytes), its length in front of it, and the protocol in the identity
+        // platform bytes of protocol 15 nor the mode byte of protocol 17 (7), protocol 13's and 14's lack the platform bytes and the mode (5), protocol 15's and 16's lack the mode (1)), its length in front of it, and the protocol in the identity
         const auto old_layout = [&](uint16_t protocol, size_t lacking) {
             std::vector<uint8_t> payload(bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].first + 5), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second - 4));
             const auto found = std::search(payload.begin(), payload.end(), start.begin(), start.end());
@@ -7934,30 +7937,47 @@ void run_persist_server_tests_4() {
             record.insert(record.end(), bytes.begin() + static_cast<std::ptrdiff_t>(frames[0].second), bytes.end());
             return record;
         };
-        const std::vector<uint8_t> v12 = old_layout(12, 6);
-        {   // the parser: protocol 12's record reads, as a Start without teams and without platforms (the rest of it is what this build reads), and that is what the refusal judges
+        const std::vector<uint8_t> v12 = old_layout(12, 7);
+        {   // the parser: protocol 12's record reads, as a Start without teams, without platforms and without a game mode (the rest of it is what this build reads), and that is what the refusal judges
             const RestartLoaded old = parse_restart_record(v12.data(), v12.size());
             ASSERT_TRUE(old.ok() && old.head.identity.protocol == 12);
             ASSERT_TRUE(old.head.start.team_a == net::kNoTeam && old.head.start.team_b == net::kNoTeam && old.head.start.roster == rec.head.start.roster && old.head.start.seed == rec.head.start.seed);
             for (const uint8_t platform : old.head.start.platforms) ASSERT_EQ(platform, net::kPlatformUnknown);
             ASSERT_TRUE(old.turn_count == rec.turn_count && old.turn_count > 100 && !old.checks.empty() && old.head.code == "OLD-1" && old.head.players == 2);
+            ASSERT_EQ(old.head.start.mode, 0);                                                 // (a record of a release before the game modes is a match of the original's rules)
             // the layout of protocols 13 and 14 (the team bytes, no platforms) reads for them: the same record of a release that wrote it
             for (const uint16_t protocol : {uint16_t{13}, uint16_t{14}}) {
-                const std::vector<uint8_t> v = old_layout(protocol, 4);
+                const std::vector<uint8_t> v = old_layout(protocol, 5);
                 const RestartLoaded r = parse_restart_record(v.data(), v.size());
                 ASSERT_TRUE(r.ok() && r.head.identity.protocol == protocol);
                 ASSERT_TRUE(r.head.start.team_a == net::kNoTeam && r.head.start.team_b == net::kNoTeam && r.head.start.roster == rec.head.start.roster && r.head.start.seed == rec.head.start.seed);
                 for (const uint8_t platform : r.head.start.platforms) ASSERT_EQ(platform, net::kPlatformUnknown);
+                ASSERT_EQ(r.head.start.mode, 0);
+            }
+            // the layout of protocols 15 and 16 (the teams and the platforms, no game mode) reads for them: the platforms are the record's own, the mode is 0
+            for (const uint16_t protocol : {uint16_t{15}, uint16_t{16}}) {
+                const std::vector<uint8_t> v = old_layout(protocol, 1);
+                const RestartLoaded r = parse_restart_record(v.data(), v.size());
+                ASSERT_TRUE(r.ok() && r.head.identity.protocol == protocol);
+                ASSERT_TRUE(r.head.start.team_a == rec.head.start.team_a && r.head.start.team_b == rec.head.start.team_b && r.head.start.roster == rec.head.start.roster && r.head.start.seed == rec.head.start.seed);
+                ASSERT_TRUE(r.head.start.platforms == rec.head.start.platforms);
+                ASSERT_EQ(r.head.start.mode, 0);
+                ASSERT_TRUE(r.turn_count == rec.turn_count && !r.checks.empty() && r.head.code == "OLD-1");
             }
             // each old layout is no Start of any other protocol: it is read only for the releases that wrote it
-            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{13}, uint16_t{14}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
-                const std::vector<uint8_t> not_12 = old_layout(other, 6);                      // (protocol 12's layout under another number)
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_12 = old_layout(other, 7);                      // (protocol 12's layout under another number)
                 const RestartLoaded r = parse_restart_record(not_12.data(), not_12.size());
                 ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
             }
-            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{12}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
-                const std::vector<uint8_t> not_13 = old_layout(other, 4);                      // (the layout of 13 and 14 under another number)
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{12}, uint16_t{15}, uint16_t{16}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_13 = old_layout(other, 5);                      // (the layout of 13 and 14 under another number)
                 const RestartLoaded r = parse_restart_record(not_13.data(), not_13.size());
+                ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
+            }
+            for (const uint16_t other : {uint16_t{1}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, static_cast<uint16_t>(net::kProtocolVersion), static_cast<uint16_t>(net::kProtocolVersion + 1)}) {
+                const std::vector<uint8_t> not_15 = old_layout(other, 1);                      // (the layout of 15 and 16 under another number: protocol 17's Start has the mode byte)
+                const RestartLoaded r = parse_restart_record(not_15.data(), not_15.size());
                 ASSERT_TRUE(!r.ok() && r.why.find("start message") != std::string::npos);
             }
         }
@@ -7979,11 +7999,63 @@ void run_persist_server_tests_4() {
             kept_logged = kept_logged || (n.find("OLD-1") != std::string::npos && n.find("refused") != std::string::npos && n.find("24 hours") != std::string::npos);
         }
         ASSERT_TRUE(logged && kept_logged);
+        {   // a record of protocol 16 (the layout without the game mode) is read and refused for its protocol like the others: its room fails and names the protocols, the record is kept whole
+            PWorld v16("persist-126c");
+            v16.start_server(500);
+            const std::vector<uint8_t> record16 = old_layout(16, 1);
+            write_all_bytes(v16.record_path("OLD-1"), record16);
+            v16.start_server(500);
+            ASSERT_TRUE(v16.report.items.size() == 1 && v16.report.items[0].outcome == RestoreItem::Outcome::Ended && v16.report.count(RestoreItem::Outcome::Restored) == 0 && v16.report.count(RestoreItem::Outcome::Unreadable) == 0);
+            ASSERT_TRUE(v16.report.items[0].note.find("network protocol 16") != std::string::npos && v16.report.items[0].note.find("this server speaks protocol " + std::to_string(net::kProtocolVersion)) != std::string::npos);
+            ASSERT_TRUE(v16.status("OLD-1").state == RoomState::Failed && !v16.status("OLD-1").restored);
+            ASSERT_TRUE(v16.record_files().empty());
+            ASSERT_TRUE(read_all_bytes(fs::path(v16.restart.dir) / "refused" / fs::path(v16.record_path("OLD-1")).filename()) == record16);
+        }
         PWorld control("persist-126b");                                                        // the same match, as this build writes it: restored
         control.start_server(500);
         crash(control, "NEW-1");
         control.start_server(500);
         ASSERT_TRUE(control.report.count(RestoreItem::Outcome::Restored) == 1 && control.status("NEW-1").restored);
+    } TEST_END();
+
+    TEST_CASE("S3.187 A Match Of Game Mode 187 Survives A Restart Of The Server (Protocol 17): The Mode Is In The Start Of The Record's Head (A Room Made With The Mode Keeps It, Every Machine Played It), The Restored Room Plays It Again From The Record (Its State Is That Of An Independent Replay Of The Record Made With The Mode, And Is Not That Of The Original's Game), Says It In Its Status, And The Machines That Come Back With Their Keys Go On In Sync; A Machine That Starts From Nothing Is Sent The Start With The Mode") {
+        PWorld w("persist-187");
+        w.start_server(500);
+        RoomSpec spec = held_spec("G-187", 2);
+        spec.mode = 1;
+        std::vector<RClient*> m = play_room(w, spec, 12000);
+        RoomStatus s = w.status("G-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.reconnect && s.record_kept && static_cast<int>(s.mode) == 1 && !s.restored);
+        for (RClient* p : m) ASSERT_TRUE(p->sim.game_mode() == sim::GameMode::Kills187 && p->lobby->start_info().mode == 1);
+        RestartLoaded rec = w.read_record("G-187");
+        ASSERT_TRUE(rec.ok() && !rec.torn && rec.head.start.mode == 1 && rec.head.start.game_mode() == sim::GameMode::Kills187 && rec.head.identity.protocol == net::kProtocolVersion);
+        for (const RestartCheck& c : rec.checks) {                                           // the checkpoints are the machines' own states: the referee's hash (the server's engine of mode 187) and the machines' agree
+            for (RClient* p : m) {
+                const auto at = p->hash_at.find(uint64_t{c.turn} + 1);
+                if (at != p->hash_at.end()) ASSERT_EQ(at->second, c.hash);
+            }
+        }
+        const uint32_t sealed_at_stop = s.turns;
+        w.stop_server(true);
+        w.run(3000);
+        rec = w.read_record("G-187");
+        ASSERT_TRUE(rec.ok() && rec.turns.size() == sealed_at_stop && rec.head.start.mode == 1);
+        w.start_server(500);
+        ASSERT_EQ(w.report.items.size(), size_t{1});
+        ASSERT_TRUE(w.report.items[0].outcome == RestoreItem::Outcome::Restored && w.report.items[0].code == "G-187" && w.report.items[0].turns == sealed_at_stop);
+        s = w.status("G-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.turns == sealed_at_stop && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(status_to_json(s).get("mode").str(), std::string("187"));
+        ASSERT_EQ(s.restored_hash, replay_hash(rec, rec.turns.size()));                      // the state that the room stands at is that of an independent replay of the record, made with the mode
+        RestartLoaded as_original = rec;                                                     // (the same turns played as the original's game are another state)
+        as_original.head.start.mode = 0;
+        ASSERT_TRUE(replay_hash(as_original, rec.turns.size()) != s.restored_hash);
+        ASSERT_TRUE(w.until([&]() { return !w.status("G-187").paused; }, 90000));
+        ASSERT_TRUE(w.until([&]() { return m[0]->session->mode() == net::ClientSession::Mode::Normal && m[1]->session->mode() == net::ClientSession::Mode::Normal; }, 3000));
+        w.run(6000);
+        s = w.status("G-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns > sealed_at_stop + 100 && s.rejoins == 2 && static_cast<int>(s.mode) == 1);
+        for (RClient* p : m) ASSERT_TRUE(!p->lost && !p->session->desynced() && p->sim.game_mode() == sim::GameMode::Kills187);
     } TEST_END();
 
     TEST_CASE("S3.94 A Match That Had Ended When The Server Stopped (Its Last Turn Was In The Record, The Room Had Not Finished Yet) Is Finished At The Restart With The Same Final State As The Match That Was Never Interrupted: The Result Rows, The Referee's Hash And The Report Of Its End Are There, Its Record Is Deleted, Nobody Is Waited For")  {
@@ -11018,6 +11090,282 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(s.bot_controller);
     } TEST_END();
 
+    TEST_CASE("S3.186 The Plan's Game Mode Is The Match's (Protocol 17): The Leader's Plan Of A Lobby Room Sets The Mode (The Status, The Control Interface And Every Page's Room Message Say It), The START Puts It Into The Start Of The Match, The Leader's Game Makes Its Engine With It, And A Room Of A Page That Never Chose One Plays The Original's Game") {
+        World w(lobby_limits());
+        Client& pia = w.connect_page("Pia", "mode0001", lobby_block_of());
+        Client& bob = w.connect_page("Bob", "mode0001", lobby_block_of());
+        const net::SeatKey key = pia.lobby->key();
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader() && !bob.lobby->is_leader());
+        ASSERT_EQ(static_cast<int>(w.status("mode0001").mode), 0);
+        ASSERT_EQ(status_to_json(w.status("mode0001")).get("mode").str(), std::string("highest-score"));
+        net::PlanMsg plan = plan_msg({K::Open, K::Open, K::Nobody, K::Nobody});
+        plan.mode = static_cast<uint8_t>(sim::GameMode::Kills187);
+        ASSERT_TRUE(pia.lobby->request_plan(plan));
+        w.run(300);
+        ASSERT_EQ(static_cast<int>(w.status("mode0001").mode), 1);
+        ASSERT_EQ(status_to_json(w.status("mode0001")).get("mode").str(), std::string("187"));
+        ASSERT_TRUE(pia.lobby->room().mode == 1 && bob.lobby->room().mode == 1);
+        net::PlanMsg unknown = plan;                                                      // a plan that names a mode above the last never leaves a client (and is garbage on the wire)
+        unknown.mode = static_cast<uint8_t>(sim::kLastGameMode + 1);
+        ASSERT_FALSE(pia.lobby->request_plan(unknown));
+        ASSERT_EQ(static_cast<int>(w.status("mode0001").mode), 1);
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        ASSERT_TRUE(w.status("mode0001").starting);
+        Client& pia_game = w.connect_game("Pia", "mode0001", key);
+        Client& bob_game = w.connect_game("Bob", "mode0001", bob.lobby->key());
+        w.run(3500);
+        const RoomStatus s = w.status("mode0001");
+        ASSERT_TRUE(s.state == RoomState::Running && static_cast<int>(s.mode) == 1);
+        for (Client* game : {&pia_game, &bob_game}) {
+            ASSERT_EQ(game->lobby->start_info().mode, 1);
+            ASSERT_TRUE(game->sim.game_mode() == sim::GameMode::Kills187);
+        }
+        {   // a page that never chose a mode starts the original's game
+            World plain(lobby_limits());
+            Client& ann = plain.connect_page("Ann", "mode0003", lobby_block_of());
+            const net::SeatKey ann_key = ann.lobby->key();
+            ASSERT_TRUE(ann.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody})));
+            plain.run(300);
+            ASSERT_TRUE(ann.lobby->request_start());
+            plain.run(300);
+            Client& ann_game = plain.connect_game("Ann", "mode0003", ann_key);
+            plain.run(3500);
+            ASSERT_TRUE(plain.status("mode0003").state == RoomState::Running && static_cast<int>(plain.status("mode0003").mode) == 0);
+            ASSERT_TRUE(ann_game.lobby->start_info().mode == 0 && ann_game.sim.game_mode() == sim::GameMode::HighestScore);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.188 A Match Of Game Mode 187 That Starts With Teams Works From The Start To The End On Every Engine (Protocols 13 And 17): The Leader's Teams And The Room's Own Teams Stand On The Referee And On Every Machine Before The First Tick, The Mode Is On All Of Them, The Machines Fight, And Every State Hash Agrees With The Referee's To The Last Tick") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        const auto no_food = [](const sim::SimulationEngine& e) {
+            for (const auto& cell : e.get_world_state().cells) {
+                if (cell.is_food || cell.is_powerup) return false;
+            }
+            return true;
+        };
+        // a machine sends its three first ants at the first ant of `foe` that it sees (a fight: kills are the score in 187)
+        const auto attack = [](Client& from, uint8_t foe) {
+            const sim::WorldState& ws = from.sim.get_world_state();
+            const uint8_t seat = from.lobby->my_seat();
+            sim::Command c;
+            c.type = sim::CommandType::GroupAttack;
+            c.issuer = seat;
+            bool target = false;
+            for (const sim::AntSnapshot& a : ws.ants) {
+                if (a.player_id == seat && c.ants.size() < 3) c.ants.push_back(a.id);
+                if (a.player_id == foe && !target) {
+                    c.tile_x = static_cast<int16_t>(a.tile_x);
+                    c.tile_y = static_cast<int16_t>(a.tile_y);
+                    target = true;
+                }
+            }
+            if (c.ants.empty() || !target) return;
+            (void)from.session->submit(c);
+        };
+        {   // a room that was made with the mode, three people and a bot: the leader asks for Green + Black, so Red + Blue are the other team (seats 1 and 2 of two people); the alliances stand at tick 0 everywhere, the two teams fight, the match is played to its end
+            World w;
+            RoomSpec spec = spec_of("T187-1", 4);
+            spec.mode = 1;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "T187-1");
+            Client& bob = w.connect("Bob", "T187-1");
+            Client& cat = w.connect("Cat", "T187-1");
+            for (Client* c : {&ann, &bob, &cat}) c->record_hashes = true;
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Medium}, sim::StartTeams{true, 0, 3}));
+            w.run(1500);
+            RoomStatus s = w.status("T187-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.ticks == 0 && s.turns == 0 && s.joined == 4 && s.bots.size() == 1);
+            ASSERT_TRUE(static_cast<int>(s.mode) == 1 && s.teams == "0+3");
+            ASSERT_EQ(allies_text(s.allies), std::string("3210"));                          // the referee: Green and Black are a team, Red and Blue are the other
+            for (Client* c : {&ann, &bob, &cat}) {
+                ASSERT_EQ(c->lobby->start_info().mode, 1);
+                ASSERT_TRUE(c->lobby->start_info().teams() == sim::StartTeams({true, 0, 3}));
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
+                ASSERT_EQ(c->sim.current_tick(), uint64_t{0});
+                ASSERT_TRUE(said(c->room_chat).empty());                                   // nothing was refused: the teams are made in 187 as in the original's game
+            }
+            for (int guard = 0; guard < 4000 && w.status("T187-1").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) {
+                    attack(ann, 1);                                                        // Green (with the bot of Black) against Red and Blue
+                    attack(bob, 0);
+                    attack(cat, 0);
+                }
+            }
+            s = w.status("T187-1");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            for (Client* c : {&ann, &bob, &cat}) ASSERT_FALSE(c->session->desynced());
+            w.run(Room::kGraceMs + 500);
+            ASSERT_TRUE(s.referee_hash != 0 && s.ticks > 1000);
+            for (Client* c : {&ann, &bob, &cat}) ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            for (const auto& at : ann.hash_at) {                                           // every tick of the match, not only the last
+                ASSERT_TRUE(bob.hash_at.count(at.first) == 1 && bob.hash_at[at.first] == at.second && cat.hash_at[at.first] == at.second);
+            }
+            ASSERT_FALSE(s.rows.empty());
+            ASSERT_EQ(s.rows.size(), size_t{2});                                           // two teams, two rows (an alliance is one row)
+            uint32_t kills = 0;
+            for (uint8_t seat = 0; seat < 4; ++seat) kills += ann.sim.get_world_state().player_stats[seat].enemy_killed;
+            ASSERT_TRUE(kills > 0);                                                        // the machines really fought: the points of this match are kills
+        }
+        {   // a room whose own teams are 1 + 2 (the room's specification, not a leader's request; Green and Black are the other team): the same, with every seat a person
+            World w;
+            RoomSpec spec = spec_of("T187-2", 4);
+            spec.mode = 1;
+            spec.teams = sim::StartTeams{true, 1, 2};
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "T187-2");
+            Client& bob = w.connect("Bob", "T187-2");
+            Client& cat = w.connect("Cat", "T187-2");
+            Client& dee = w.connect("Dee", "T187-2");
+            for (Client* c : {&ann, &bob, &cat, &dee}) c->record_hashes = true;
+            w.run(2500);
+            RoomStatus s = w.status("T187-2");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && static_cast<int>(s.mode) == 1 && s.teams == "1+2" && s.room_teams == "1+2");
+            for (Client* c : {&ann, &bob, &cat, &dee}) {
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
+                ASSERT_TRUE(said(c->room_chat).empty());
+            }
+            ASSERT_EQ(allies_text(s.allies), std::string("3210"));
+            for (int guard = 0; guard < 4000 && w.status("T187-2").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) {
+                    attack(ann, 1);                                                        // Green and Black against Red and Blue
+                    attack(dee, 2);
+                }
+            }
+            s = w.status("T187-2");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            w.run(Room::kGraceMs + 500);
+            for (Client* c : {&ann, &bob, &cat, &dee}) {
+                ASSERT_FALSE(c->session->desynced());
+                ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            }
+        }
+        {   // the front page's lobby room: the leader's plan carries the mode and the teams together (Green + Blue, so Red + Black are the other team; two bots), the START puts both in the Start, both machines and the referee stand the same
+            World w(lobby_limits());
+            Client& pia = w.connect_page("Pia", "t187l001", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "t187l001", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            w.run(300);
+            net::PlanMsg plan = plan_msg({K::Open, K::Open, K::Medium, K::Easy}, 0, 2);
+            plan.mode = static_cast<uint8_t>(sim::GameMode::Kills187);
+            ASSERT_TRUE(pia.lobby->request_plan(plan));
+            w.run(300);
+            ASSERT_TRUE(static_cast<int>(w.status("t187l001").mode) == 1);
+            ASSERT_TRUE(pia.lobby->room().mode == 1 && bob.lobby->room().mode == 1 && pia.lobby->room().teams() == sim::StartTeams({true, 0, 2}));
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            Client& pia_game = w.connect_game("Pia", "t187l001", pia_key);
+            Client& bob_game = w.connect_game("Bob", "t187l001", bob_key);
+            pia_game.record_hashes = true;
+            bob_game.record_hashes = true;
+            w.run(3500);
+            RoomStatus s = w.status("t187l001");
+            ASSERT_TRUE(s.state == RoomState::Running && static_cast<int>(s.mode) == 1 && s.teams == "0+2" && s.joined == 4 && s.bots.size() == 2);
+            ASSERT_EQ(allies_text(s.allies), std::string("2301"));
+            for (Client* c : {&pia_game, &bob_game}) {
+                ASSERT_EQ(c->lobby->start_info().mode, 1);
+                ASSERT_TRUE(c->lobby->start_info().teams() == sim::StartTeams({true, 0, 2}));
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("2301"));
+            }
+            for (int guard = 0; guard < 4000 && w.status("t187l001").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) attack(bob_game, 0);                                   // Red's person sends ants at Green
+            }
+            s = w.status("t187l001");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            w.run(Room::kGraceMs + 500);
+            for (Client* c : {&pia_game, &bob_game}) {
+                ASSERT_FALSE(c->session->desynced());
+                ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.189 A Match Of Game Mode 187 With Teams Survives Two Restarts Of The Server (Protocols 13 And 17): The Record's Start Has The Mode And The Pair, The Restored Referee Makes The Mode And The Teams As Every Machine Did (Its State Is That Of An Independent Replay Of The Record), A Machine That Comes Back And A Page That Starts From Nothing Stand At The Referee's Final State With The Teams Kept") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        PWorld w("persist-189");
+        w.start_server(500);
+        RoomSpec spec = held_spec("T-187", 4);
+        spec.mode = 1;
+        ASSERT_TRUE(w.mgr->create_room(spec, w.server_now()).ok);
+        RClient& leader = w.connect("Lea", "T-187");
+        w.run(1500);
+        net::StartRequestMsg request;                                                          // Medium at seat 1, Hard at seat 2, Easy at seat 3; Red + Blue (1 + 2) are a team, so are Green + Black
+        request.fill = {FillLevel::None, FillLevel::Medium, FillLevel::Hard, FillLevel::Easy};
+        request.set_teams(sim::StartTeams{true, 1, 2});
+        ASSERT_TRUE(leader.end->send(net::encode(request)));
+        ASSERT_TRUE(w.until([&]() { return w.status("T-187").state == RoomState::Running; }, 20000));
+        w.run(9000 + kPre);
+        RoomStatus s = w.status("T-187");
+        ASSERT_TRUE(s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3 && s.record_kept && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        ASSERT_TRUE(leader.sim.game_mode() == sim::GameMode::Kills187);
+        const RestartLoaded before = w.read_record("T-187");
+        ASSERT_TRUE(before.ok() && before.head.start.mode == 1 && before.head.start.team_a == 1 && before.head.start.team_b == 2 && before.head.fill_mask == 0x0E);
+        ASSERT_TRUE(before.checks.size() >= 1);
+        const net::SeatKey key = leader.lobby->key();
+        const uint8_t seat = leader.lobby->my_seat();
+        w.stop_server(true);
+        w.start_server(500);
+        ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1);                      // (a referee that had not made the mode or the teams would have been refused at turn 19: "the replay does not agree")
+        const RestartLoaded rec = w.read_record("T-187");
+        s = w.status("T-187");
+        ASSERT_TRUE(s.restored && s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3 && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(s.restored_hash, replay_hash(rec, rec.turns.size()));                        // the state that the room stands at is that of an independent replay of the record
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-187").paused; }, 60000));
+        w.run(5000);
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && allies_text(s.allies) == "3210" && static_cast<int>(s.mode) == 1);
+        ASSERT_TRUE(leader.session->mode() == net::ClientSession::Mode::Normal && !leader.session->desynced() && !leader.lost);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        // a second restart; this time the leader's machine is a page that was reloaded: it starts from nothing, is sent the Start of the match with the mode and the teams and catches up to the referee
+        w.stop_server(true);
+        leader.reconnects = false;
+        w.start_server(500);
+        RClient& reloaded = w.connect("Lea", "T-187", seat, key);
+        ASSERT_TRUE(w.until([&]() { return reloaded.lobby != nullptr && reloaded.lobby->rejoined() && reloaded.session != nullptr; }, 30000));
+        ASSERT_TRUE(reloaded.lobby->start_info().team_a == 1 && reloaded.lobby->start_info().team_b == 2 && reloaded.lobby->start_info().mode == 1);
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-187").paused && reloaded.session->mode() == net::ClientSession::Mode::Normal; }, 60000));
+        w.run(3000);
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.teams == "1+2" && allies_text(s.allies) == "3210" && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));
+        ASSERT_TRUE(reloaded.sim.game_mode() == sim::GameMode::Kills187);
+        ASSERT_TRUE(!reloaded.session->desynced() && !reloaded.lost);
+        w.play_to_the_end("T-187");                                                            // the match is played to its end: the machine from nothing stands at the referee's final state
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Finished && s.referee_hash != 0);
+        ASSERT_TRUE(reloaded.sim.state_hash().total == s.referee_hash && !reloaded.session->desynced() && !reloaded.lost);
+    } TEST_END();
+
     TEST_CASE("S3.136 A START The Server Cannot Carry Out Ends With A Notice For The Leader And The Room Goes On Waiting, Fails Nothing: The Plan's Map Is Gone, The Colours Cannot Play The Map, There Is No Place For Another Match (And Is When An Abandoned Match Gives Its Place Up); The Same Leader Starts Again When The Plan Is Fixed") {
         const std::string dir = temp_dir_for("lobby_refusals");
         fs::copy_file(maps_dir() + "/TINY.LVL", dir + "/TINY.LVL");
@@ -11282,6 +11630,8 @@ void run_lobby_room_tests() {
         { RoomSpec s = lobby_spec("ctl-l009"); s.start_wait_ms = 0; ASSERT_TRUE(refused(s)); }
         { RoomSpec s = lobby_spec("ctl-l010"); s.silence_ms = 4000000; ASSERT_TRUE(refused(s)); }
         { RoomSpec s = lobby_spec("ctl-l011"); s.empty_close_ms = 999; ASSERT_TRUE(refused(s)); }
+        { RoomSpec s = lobby_spec("ctl-l0m1"); s.mode = 1; ASSERT_TRUE(refused(s)); }                                        // (protocol 17: the leader's plan decides the game mode)
+        { RoomSpec s = lobby_spec("ctl-l0m2"); s.mode = 2; ASSERT_TRUE(refused(s)); }
         { RoomSpec s = lobby_spec("ctl-l013"); s.silence_ms = 999; ASSERT_TRUE(refused(s)); }
         ASSERT_EQ(w.mgr.room_count(), size_t{0});
         ASSERT_TRUE(w.mgr.create_room(lobby_spec("ctl-l012"), w.now).ok);
