@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.2 - 2026-10-10 - Housekeeping: the page of old releases is gone
+
+**For players:**
+- **The page of old releases is gone.** The detailed history (every release before v0.0.90, and the long notes of v0.0.90 to v0.1.0) was a second changelog page of the site, `/changelog_archive.html`, with a "Detailed history" button on the changelog page. It is no longer on the site or among the repository's files; the git history keeps it. The changelog page is the only one.
+- Nothing else changes in the game or on the site. The rest is housekeeping: the changelog's links to the long notes go to their new place in the repository (`docs/history/`, and the differences made on purpose in `docs/ORIGINAL_PROGRAM.md`), and the notes in the code say what was reported or decided, not who.
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/288c7de...221b7b3)
+
 ## v0.12.1 - 2026-10-10 - The front page is the lobby, matches to watch, computer players that fight (network protocol 17)
 
 **For players:**
