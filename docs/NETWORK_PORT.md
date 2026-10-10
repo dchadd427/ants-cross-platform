@@ -42,7 +42,7 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
 
 In the original the machine that picked the map can drop out while the others play on. The remake keeps that: the host is a role (the sequencer), not the place where the state lives, because every machine
 already runs the whole simulation and holds the same state. What moves is sealing turns, the reference hash, the chat relay and the drop decisions. Code: `include/ants_net/session.hpp` /
-`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (the wire messages and the protocol version, 13 since v0.8.0; the rule that moves it is under "Protocol version 9"), `netgame.cpp` (the TCP mesh and the events).
+`src/ants_net/session.cpp` (`ClientSession` election state machine, `HostSession::resume`, `promote_to_host`), `protocol.hpp` (the wire messages and the protocol version, `kProtocolVersion`; the rule that moves it is under "Protocol version 9"), `netgame.cpp` (the TCP mesh and the events).
 
 1. **Peer links.** While the map loads every guest connects to the guests above its own seat (one link per pair; the ones below connect to it). A guest listens on an ephemeral port that it announces in
    `Hello.listen_port`; the host passes what it saw (the guest's address and that port) to everybody in `Start.endpoints`. An inbound link starts with `PeerHello{seat}` and is accepted only from a lower seat of the

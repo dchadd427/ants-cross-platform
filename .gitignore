@@ -65,7 +65,7 @@ Original-Ants/Franklin Gothic Medium.ttf
 
 # The original program and local tools: keep your own copy here, never commit it. From the original game the repository
 # holds only the data archive (Original-Ants/ants.chd), the maps (Original-Ants/Maps/*.LVL), the music (*.mp3, *.MID), the
-# sprites and sounds decoded from the archive (asset_catalog/, and the animation table docs/chd_table4_animations.json) and the front-page pictures cut out of the artwork (web/front/);
+# sprites and sounds decoded from the archive (asset_catalog/, and the animation table docs/chd_table4_animations.json), the front-page pictures cut out of the artwork (web/front/) and the movement tables the simulation needs (src/ants_sim/movement_tables_data.inc, generated);
 # see LICENSE and "License" in the README. Ants.exe and its decompilation are local references for the reverse
 # engineering (the tests and tools work without them), cnc-ddraw (ddraw.dll, ddraw.ini, the config program) and the
 # libretro shaders only run the original on Windows, chat.txt is a transcript the original wrote.
@@ -76,6 +76,9 @@ Original-Ants/cnc-ddraw config.exe
 Original-Ants/Shaders/
 Original-Ants/chat.txt
 docs/legacy/Ants.exe.c
+# Local outputs of tools/analyze_binary.py (a function map and string dump of the original program: never committed)
+docs/ORIGINAL_BINARY_MAP.md
+docs/binary_analysis.json
 
 # Local scratch folders and the files that editors and IDEs create inside the tree
 scratch/
