@@ -652,6 +652,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         return true;
     }
     if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "unjam") return flag(p.raid_unjam);
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
     if (key == "sabkeeper") return flag(p.sabotage_spare_keeper);

@@ -424,6 +424,7 @@ public:
     uint32_t failures() const noexcept { return failures_; }
     uint32_t ambushes() const noexcept { return ambushes_; }
     size_t waiting() const noexcept { return waiting_.size(); }
+    uint32_t unjams() const noexcept { return unjams_; }
     int last_target() const noexcept { return last_target_; }
     bool black(uint8_t team, uint64_t tick) const noexcept;
     const Params& params() const noexcept { return params_; }
@@ -437,6 +438,7 @@ private:
         sim::TileCoord origin{};
     };
     bool launch(TaskContext& context, const AntView& thief);
+    void unjam(TaskContext& context);
     bool ambush(TaskContext& context, const AntView& thief);
     struct Waiting {
         uint8_t team{0};
@@ -450,6 +452,8 @@ private:
     uint64_t ambush_pause_until_{0};
     uint32_t ambushes_{0};
     std::map<uint32_t, Raid> raids_;
+    std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
+    uint32_t unjams_{0};
     std::map<uint8_t, uint64_t> black_;
     uint32_t raids_ordered_{0};
     uint32_t failures_{0};

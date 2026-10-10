@@ -486,4 +486,86 @@ void run_b41_offence_tests() {
             ASSERT_EQ(n, 0u);
         }
     } TEST_END();
+    TEST_CASE("AI12.5 Two Thieves On One Hole: When The First Has The Loot And The Walls Of The Victim Have Shut All But The Tile On Which The Second One Waits, The Second One Steps Aside And The First Leaves, And The Second Raids After It (Before: Both Stood For As Long As The Walls Burned, About 3,600 Ticks, The First Showing \"Can't Go There.\"); An Enemy Ant On The Last Tile Is Not Moved, Nor An Ant When A Tile Is Free; With The Switch Off (unjam=0) The Jam Stays")
+    {
+        sim::SimulationEngine probe;
+        empty_field(probe, 62);
+        const MapInfo pmap(probe);
+        const HillInfo& victim = pmap.hill(1);                                                                // team 1's hill is at (50, 4)
+        const std::array<TileCoord, 3> east = east_tiles(victim);
+        const auto is_east = [&](int32_t x, int32_t y) { return std::any_of(east.begin(), east.end(), [&](const TileCoord& e) { return e.x == x && e.y == y; }); };
+        struct Outcome {
+            bool jammed{false};              // the first thief was in its raid clip, the second waited on a tile in front of the hole and the walls stood on the other two tiles
+            uint64_t out_after{0};           // ticks from the end of the first thief's raid clip to its leaving the raid tile (0: it never left)
+            uint32_t unjams{0};
+            bool second_raided{false};       // the second thief stood in a raid clip after the first was out
+            int32_t victim_score{0};
+        };
+        // Two thieves of team 0 are sent to the hole of team 1 (300 points): the one that gets there first raids, the other waits on a tile in front of the hole for the raid tile; once the first one is
+        // in its raid clip and the other waits, the walls of the victim (its Fire Ant lights the first 67 ticks after its order, the raid clip lasts 75) close the other two tiles
+        const auto play = [&](bool unjam) {
+            Outcome out;
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            const uint32_t first = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{east[1].x + 4, east[1].y});
+            const uint32_t second = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{east[1].x + 4, east[1].y + 6});
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.raid_unjam = unjam;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            uint64_t clip_over = 0;
+            for (int t = 0; t < 1200; ++t) {
+                rig.tick();
+                const sim::AntSnapshot* a = snapshot_of(sim, first);
+                const sim::AntSnapshot* b = snapshot_of(sim, second);
+                if (a == nullptr || b == nullptr) break;
+                if (!out.jammed && a->state == sim::UnitState::Infiltrating && b->state == sim::UnitState::Walking && is_east(b->tile_x, b->tile_y)) {
+                    for (const TileCoord& e : east) {
+                        if (!(e.x == b->tile_x && e.y == b->tile_y)) sim.set_fire_at(e, 3600);
+                    }
+                    out.jammed = true;
+                }
+                if (out.jammed && clip_over == 0 && a->state != sim::UnitState::Infiltrating) clip_over = sim.current_tick();
+                if (clip_over != 0 && out.out_after == 0 && !(a->tile_x == victim.raid.x && a->tile_y == victim.raid.y)) out.out_after = sim.current_tick() - clip_over;
+                if (out.out_after != 0 && b->state == sim::UnitState::Infiltrating) out.second_raided = true;
+            }
+            out.unjams = rig.as<StandardBot>().raids().unjams();
+            out.victim_score = sim.get_player_score(1);
+            return out;
+        };
+        ASSERT_TRUE(plan_for(Level::Medium).raid_unjam && plan_for(Level::Hard).raid_unjam);                  // (on in the shipped plans: unjam=0 is the ablation)
+        const Outcome fixed = play(true);
+        ASSERT_TRUE(fixed.jammed);                                                                            // (the premise: the walls closed the hole behind the first thief, the second waited on the last tile)
+        ASSERT_TRUE(fixed.unjams >= 1u);
+        ASSERT_TRUE(fixed.out_after != 0u && fixed.out_after <= 200u);                                        // the first one is out within ten seconds of the end of its raid clip
+        ASSERT_TRUE(fixed.second_raided);                                                                     // and the second takes its turn
+        ASSERT_TRUE(fixed.victim_score <= 200);                                                               // (300 points, 50 for each of the two)
+        const Outcome before = play(false);
+        ASSERT_TRUE(before.jammed);
+        ASSERT_EQ(before.unjams, 0u);
+        ASSERT_EQ(before.out_after, 0u);                                                                      // the jam: the first thief is still on the raid tile 1,200 ticks later
+        ASSERT_FALSE(before.second_raided);
+        // a thief of the bot stands on the raid tile, two walls, and an ant on the last tile
+        const auto scene = [&](uint8_t team, sim::AntType kind, bool second_wall, uint32_t& unjams) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            sim.spawn_unit(0, sim::AntType::Thief, victim.raid);
+            sim.set_fire_at(east[0], 3600);
+            if (second_wall) sim.set_fire_at(east[2], 3600);
+            const uint32_t stander = sim.spawn_unit(team, kind, east[1]);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            rig.run(200);
+            unjams = rig.as<StandardBot>().raids().unjams();
+            const sim::AntSnapshot* s = snapshot_of(sim, stander);
+            return s != nullptr && s->tile_x == east[1].x && s->tile_y == east[1].y;
+        };
+        uint32_t unjams = 0;
+        ASSERT_TRUE(scene(1, sim::AntType::Worker, true, unjams));                                            // (b) an enemy ant on the last tile is not the bot's to move
+        ASSERT_EQ(unjams, 0u);
+        scene(0, sim::AntType::Thief, false, unjams);                                                         // (c) a tile is free (one wall only): nothing is moved, the thief walks out by the free tile
+        ASSERT_EQ(unjams, 0u);
+        ASSERT_FALSE(scene(0, sim::AntType::Thief, true, unjams));                                            // (d) the bot's own thief on the last tile of a shut hole steps off
+        ASSERT_EQ(unjams, 1u);
+    } TEST_END();
 }

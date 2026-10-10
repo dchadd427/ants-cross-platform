@@ -221,6 +221,8 @@ struct LevelPlan {
     uint32_t raid_min_loot{30};          // a hill whose score box shows less is not raided (RaidTask)
     uint32_t raid_min_free{1};           // a hole is raided only when at least this many of the three tiles in front of it are free (1: any; 2: the quiet variant, docs/BOTS.md "The can't-go loop")
     uint32_t raid_black_ticks{600};      // a hill that could not be reached is left alone this long
+    bool raid_unjam{true};               // two thieves on one hole: when the one that has raided is shut in on the raid tile because an own ant stands on the last free tile in front of the hole, that ant
+                                         // steps aside, and no second thief is sent to a hole while an own thief is still on its raid tile (RaidTask::unjam; false, the ablation unjam=0: the bot as it was)
     // the stall detector (StandardBot, docs/BOTS.md; 0 switches a trigger off): stall_ticks without a point, or repeat_limit equal orders within repeat_window with nothing banked, send the seat to the
     // plain economy for fallback_ticks (doubled at every stall, at most 9,600)
     uint32_t stall_ticks{3600};
