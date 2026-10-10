@@ -1553,6 +1553,66 @@ int main(int argc, char* argv[]) {
     // The reference match of game mode 187, the same way as the one above: its rules number is kSimRulesMode187, and the hash it ends in changes only with a new number for the mode
     constexpr ReferenceHash kReferenceHashes187[] = {{2, 0x309916fdf73aa5daull}};
 
+    TEST_CASE("RP7.8 A Match Of Game Mode 187 That Began With Teams: The Head Holds The Mode And The Teams, The Alliances Stand When The Player Has Set The Engine Up (The Mode Before Init, The Teams After It, As The Referee And Every Machine Do), The File Plays To The Hash Of The Match, A File That Lost Its Teams Or Its Mode Does Not, And The Older Reader Still Refuses It") {
+        const sim::StartTeams teams{true, 1, 3};
+        const Played p = play_scripted(tiny, 33, 450, 0x0F, teams, false, nullptr, k187);
+        ASSERT_TRUE(!p.file.empty() && p.replay.complete);
+        ASSERT_TRUE(p.replay.head.mode == k187 && p.replay.head.sim_rules == kSimRulesMode187 && p.replay.head.teams == teams && plays_here(p.replay.head));
+        // the head: the teams are field 12 (two bytes), the mode field 17, the rules number field 16 (the last)
+        const std::vector<HeadField> fields = fields_of(chunks_of(p.file)[0].payload);
+        const HeadField* team_field = find_field(fields, 12);
+        ASSERT_TRUE(team_field != nullptr && team_field->bytes == std::vector<uint8_t>({1, 3}));
+        ASSERT_TRUE(fields.size() >= 3 && fields[fields.size() - 2].id == 17 && fields.back().id == 16);
+        // read back, written the same, and played on another engine to the hash of the match that was played
+        const Decoded d = decoded(p.file);
+        ASSERT_TRUE(d.ok && same(d.replay, p.replay) && d.replay.head.teams == teams && d.replay.head.mode == k187);
+        ASSERT_EQ(encoded(d.replay), p.file);
+        Outcome o = play(d.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == p.hash);
+        // the engine as the player sets it up before the first tick: the mode (no food, the map's own ants), and the teams made after init
+        sim::SimulationEngine engine;
+        begin_match(engine, d.replay, tiny.level, false);
+        ASSERT_TRUE(engine.game_mode() == sim::GameMode::Kills187);
+        ASSERT_TRUE(engine.alliance_of(1) == 3 && engine.alliance_of(3) == 1 && engine.alliance_of(0) == 2 && engine.alliance_of(2) == 0);                      // (a chosen pair, and the two seats left are the other team)
+        for (const auto& cell : engine.get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        // the same steps by hand give the state of the recorder's engine at turn 0 (set_game_mode, init, apply_start_teams): the order is the same in all of them
+        sim::SimulationEngine by_hand;
+        by_hand.set_game_mode(sim::GameMode::Kills187);
+        by_hand.init(tiny.level, 33, 0x0F);
+        sim::apply_start_teams(by_hand, teams);
+        ASSERT_TRUE(by_hand.state_hash() == engine.state_hash());
+        // the teams change the match (else the checks below prove nothing), and so does the mode. The script forms and breaks alliances from turn 60 on (and the engine drops a seat's old team when it forms a
+        // new one), so the end of the long match does not show the teams; the first 59 turns do: the file's final hash is the state with the teams made at the start, in the order of the match.
+        const Played early = play_scripted(tiny, 33, 59, 0x0F, teams, false, nullptr, k187);
+        const Played early_ffa = play_scripted(tiny, 33, 59, 0x0F, sim::StartTeams{}, false, nullptr, k187);
+        const Played early_original = play_scripted(tiny, 33, 59, 0x0F, teams);
+        ASSERT_TRUE(early.hash != early_ffa.hash && early.hash != early_original.hash);
+        ASSERT_TRUE(early.replay.head.teams == teams);
+        o = play(early.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.hash == early.hash);
+        Replay early_lost = early.replay;
+        early_lost.head.teams = sim::StartTeams{};
+        o = play(early_lost, tiny.level);
+        ASSERT_TRUE(!o.ok && contains(o.error, "does not reproduce") && o.hash == early_ffa.hash);       // (a file that lost its teams is the free-for-all match, and its final hash says that it is not the recorded one)
+        // a file that took the 187 match for the original's game is another match
+        Replay as_original = d.replay;
+        as_original.head.set_mode(0);
+        o = play(as_original, tiny.level);
+        ASSERT_TRUE(!o.ok && contains(o.error, "does not reproduce"));
+        // the older reader (RP7.6): it reads the rules number 2 and plays rules 1 only, with or without teams; this build still reads the file back after a field it does not know
+        uint16_t legacy_rules = 0;
+        for (const HeadField& f : fields) {
+            if (f.id == 16) legacy_rules = static_cast<uint16_t>(f.bytes[0] | (f.bytes[1] << 8));
+        }
+        ASSERT_TRUE(legacy_rules == 2 && legacy_rules != kSimRules);
+        ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
+        ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { set_field(f, 16, {1, 0}); })).ok);
+        const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {7}}); }));
+        ASSERT_TRUE(unknown.ok && same(unknown.replay, p.replay));
+        o = play(unknown.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.hash == p.hash);
+    } TEST_END();
+
     TEST_CASE("RP7.7 The Reference Match Of Game Mode 187 Ends In The Hash That Its Rules Number Says: The Rules Of 187 Cannot Change Without kSimRulesMode187; The Original's Reference Hash Is Untouched") {
         const Played p = play_scripted(tiny, 31, 1500, 0x0F, sim::StartTeams{}, false, nullptr, k187);
         ASSERT_TRUE(p.replay.commands.size() > 20);

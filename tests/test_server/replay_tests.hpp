@@ -1131,4 +1131,40 @@ void run_replay_tests() {
         refusal.clear();
         ASSERT_TRUE(replay::encode(half, refusal).empty() && !refusal.empty());
     } TEST_END();
+
+    TEST_CASE("S3.190 The Teams Of A Match Of Game Mode 187 Are In The Head Of Its File Next To The Mode (Protocols 13 And 17), And The File Plays Out On A Fresh Engine To Every Hash And To The Server's Final One (A File That Lacked The Teams Would Diverge At The First Check)") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-teams-187", &clock), false, why));
+        RoomSpec spec = spec_of("RT-187", 4);
+        spec.mode = 1;
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        Client& ann = w.connect("Ann", "RT-187");
+        w.run(500);
+        ASSERT_TRUE(ann.lobby->request_start(net::StartRequestMsg::all(net::FillLevel::Medium).fill, sim::StartTeams{true, 0, 2}));        // one person and three bots, Green + Red against Blue + Black
+        w.run(1500);
+        for (int guard = 0; guard < 4000 && w.status("RT-187").state == RoomState::Running && w.status("RT-187").turns < 700; ++guard) w.run(250);
+        if (w.status("RT-187").state == RoomState::Running) ASSERT_TRUE(w.mgr.close_room("RT-187", w.now));
+        const RoomStatus s = w.status("RT-187");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty() && s.turns >= 600);
+        ASSERT_TRUE(static_cast<int>(s.mode) == 1 && s.teams == "0+2");
+        const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x0F && !f.rep.head.fog);
+        ASSERT_TRUE(f.rep.head.mode == 1 && f.rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(f.rep.head));
+        ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));                            // (the teams of the Start are in the head in this mode as in the original's)
+        ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+        std::string again;
+        ASSERT_TRUE(replay::encode(f.rep, again) == f.bytes);                                      // (the reader gives back what the writer wrote: the mode and the teams with it)
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));
+        ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked > 5 && played.hash == f.rep.final_hash);
+        if (s.state == RoomState::Finished) ASSERT_EQ(played.hash, s.referee_hash);
+        // the same file without its teams is another match from the first hash on
+        replay::Replay no_teams = f.rep;
+        no_teams.head.teams = sim::StartTeams{};
+        replay::Outcome wrong;
+        ASSERT_FALSE(plays_out(no_teams, wrong));
+        ASSERT_TRUE(!wrong.ok && wrong.first_bad_turn > 0 && wrong.first_bad_turn <= 2 * replay::kHashPeriodTurns);
+    } TEST_END();
 }

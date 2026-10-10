@@ -11137,6 +11137,235 @@ void run_lobby_room_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("S3.188 A Match Of Game Mode 187 That Starts With Teams Works From The Start To The End On Every Engine (Protocols 13 And 17): The Leader's Teams And The Room's Own Teams Stand On The Referee And On Every Machine Before The First Tick, The Mode Is On All Of Them, The Machines Fight, And Every State Hash Agrees With The Referee's To The Last Tick") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        const auto no_food = [](const sim::SimulationEngine& e) {
+            for (const auto& cell : e.get_world_state().cells) {
+                if (cell.is_food || cell.is_powerup) return false;
+            }
+            return true;
+        };
+        // a machine sends its three first ants at the first ant of `foe` that it sees (a fight: kills are the score in 187)
+        const auto attack = [](Client& from, uint8_t foe) {
+            const sim::WorldState& ws = from.sim.get_world_state();
+            const uint8_t seat = from.lobby->my_seat();
+            sim::Command c;
+            c.type = sim::CommandType::GroupAttack;
+            c.issuer = seat;
+            bool target = false;
+            for (const sim::AntSnapshot& a : ws.ants) {
+                if (a.player_id == seat && c.ants.size() < 3) c.ants.push_back(a.id);
+                if (a.player_id == foe && !target) {
+                    c.tile_x = static_cast<int16_t>(a.tile_x);
+                    c.tile_y = static_cast<int16_t>(a.tile_y);
+                    target = true;
+                }
+            }
+            if (c.ants.empty() || !target) return;
+            (void)from.session->submit(c);
+        };
+        {   // a room that was made with the mode, three people and a bot: the leader asks for Green + Black, so Red + Blue are the other team (seats 1 and 2 of two people); the alliances stand at tick 0 everywhere, the two teams fight, the match is played to its end
+            World w;
+            RoomSpec spec = spec_of("T187-1", 4);
+            spec.mode = 1;
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "T187-1");
+            Client& bob = w.connect("Bob", "T187-1");
+            Client& cat = w.connect("Cat", "T187-1");
+            for (Client* c : {&ann, &bob, &cat}) c->record_hashes = true;
+            w.run(500);
+            ASSERT_TRUE(ann.lobby->request_start(std::array<FillLevel, 4>{FillLevel::None, FillLevel::None, FillLevel::None, FillLevel::Medium}, sim::StartTeams{true, 0, 3}));
+            w.run(1500);
+            RoomStatus s = w.status("T187-1");
+            ASSERT_TRUE(s.state == RoomState::Running && s.ticks == 0 && s.turns == 0 && s.joined == 4 && s.bots.size() == 1);
+            ASSERT_TRUE(static_cast<int>(s.mode) == 1 && s.teams == "0+3");
+            ASSERT_EQ(allies_text(s.allies), std::string("3210"));                          // the referee: Green and Black are a team, Red and Blue are the other
+            for (Client* c : {&ann, &bob, &cat}) {
+                ASSERT_EQ(c->lobby->start_info().mode, 1);
+                ASSERT_TRUE(c->lobby->start_info().teams() == sim::StartTeams({true, 0, 3}));
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
+                ASSERT_EQ(c->sim.current_tick(), uint64_t{0});
+                ASSERT_TRUE(said(c->room_chat).empty());                                   // nothing was refused: the teams are made in 187 as in the original's game
+            }
+            for (int guard = 0; guard < 4000 && w.status("T187-1").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) {
+                    attack(ann, 1);                                                        // Green (with the bot of Black) against Red and Blue
+                    attack(bob, 0);
+                    attack(cat, 0);
+                }
+            }
+            s = w.status("T187-1");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            for (Client* c : {&ann, &bob, &cat}) ASSERT_FALSE(c->session->desynced());
+            w.run(Room::kGraceMs + 500);
+            ASSERT_TRUE(s.referee_hash != 0 && s.ticks > 1000);
+            for (Client* c : {&ann, &bob, &cat}) ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            for (const auto& at : ann.hash_at) {                                           // every tick of the match, not only the last
+                ASSERT_TRUE(bob.hash_at.count(at.first) == 1 && bob.hash_at[at.first] == at.second && cat.hash_at[at.first] == at.second);
+            }
+            ASSERT_FALSE(s.rows.empty());
+            ASSERT_EQ(s.rows.size(), size_t{2});                                           // two teams, two rows (an alliance is one row)
+            uint32_t kills = 0;
+            for (uint8_t seat = 0; seat < 4; ++seat) kills += ann.sim.get_world_state().player_stats[seat].enemy_killed;
+            ASSERT_TRUE(kills > 0);                                                        // the machines really fought: the points of this match are kills
+        }
+        {   // a room whose own teams are 1 + 2 (the room's specification, not a leader's request; Green and Black are the other team): the same, with every seat a person
+            World w;
+            RoomSpec spec = spec_of("T187-2", 4);
+            spec.mode = 1;
+            spec.teams = sim::StartTeams{true, 1, 2};
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& ann = w.connect("Ann", "T187-2");
+            Client& bob = w.connect("Bob", "T187-2");
+            Client& cat = w.connect("Cat", "T187-2");
+            Client& dee = w.connect("Dee", "T187-2");
+            for (Client* c : {&ann, &bob, &cat, &dee}) c->record_hashes = true;
+            w.run(2500);
+            RoomStatus s = w.status("T187-2");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && static_cast<int>(s.mode) == 1 && s.teams == "1+2" && s.room_teams == "1+2");
+            for (Client* c : {&ann, &bob, &cat, &dee}) {
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("3210"));
+                ASSERT_TRUE(said(c->room_chat).empty());
+            }
+            ASSERT_EQ(allies_text(s.allies), std::string("3210"));
+            for (int guard = 0; guard < 4000 && w.status("T187-2").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) {
+                    attack(ann, 1);                                                        // Green and Black against Red and Blue
+                    attack(dee, 2);
+                }
+            }
+            s = w.status("T187-2");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            w.run(Room::kGraceMs + 500);
+            for (Client* c : {&ann, &bob, &cat, &dee}) {
+                ASSERT_FALSE(c->session->desynced());
+                ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            }
+        }
+        {   // the front page's lobby room: the leader's plan carries the mode and the teams together (Green + Blue, so Red + Black are the other team; two bots), the START puts both in the Start, both machines and the referee stand the same
+            World w(lobby_limits());
+            Client& pia = w.connect_page("Pia", "t187l001", lobby_block_of());
+            Client& bob = w.connect_page("Bob", "t187l001", lobby_block_of());
+            const net::SeatKey pia_key = pia.lobby->key();
+            const net::SeatKey bob_key = bob.lobby->key();
+            w.run(300);
+            net::PlanMsg plan = plan_msg({K::Open, K::Open, K::Medium, K::Easy}, 0, 2);
+            plan.mode = static_cast<uint8_t>(sim::GameMode::Kills187);
+            ASSERT_TRUE(pia.lobby->request_plan(plan));
+            w.run(300);
+            ASSERT_TRUE(static_cast<int>(w.status("t187l001").mode) == 1);
+            ASSERT_TRUE(pia.lobby->room().mode == 1 && bob.lobby->room().mode == 1 && pia.lobby->room().teams() == sim::StartTeams({true, 0, 2}));
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            Client& pia_game = w.connect_game("Pia", "t187l001", pia_key);
+            Client& bob_game = w.connect_game("Bob", "t187l001", bob_key);
+            pia_game.record_hashes = true;
+            bob_game.record_hashes = true;
+            w.run(3500);
+            RoomStatus s = w.status("t187l001");
+            ASSERT_TRUE(s.state == RoomState::Running && static_cast<int>(s.mode) == 1 && s.teams == "0+2" && s.joined == 4 && s.bots.size() == 2);
+            ASSERT_EQ(allies_text(s.allies), std::string("2301"));
+            for (Client* c : {&pia_game, &bob_game}) {
+                ASSERT_EQ(c->lobby->start_info().mode, 1);
+                ASSERT_TRUE(c->lobby->start_info().teams() == sim::StartTeams({true, 0, 2}));
+                ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && no_food(c->sim));
+                ASSERT_EQ(engine_allies(c->sim), std::string("2301"));
+            }
+            for (int guard = 0; guard < 4000 && w.status("t187l001").state == RoomState::Running; ++guard) {
+                w.run(250);
+                if (guard % 8 == 0) attack(bob_game, 0);                                   // Red's person sends ants at Green
+            }
+            s = w.status("t187l001");
+            ASSERT_TRUE(s.state == RoomState::Finished);
+            w.run(Room::kGraceMs + 500);
+            for (Client* c : {&pia_game, &bob_game}) {
+                ASSERT_FALSE(c->session->desynced());
+                ASSERT_TRUE(c->hash_at.count(s.ticks) == 1 && c->hash_at[s.ticks] == s.referee_hash);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.189 A Match Of Game Mode 187 With Teams Survives Two Restarts Of The Server (Protocols 13 And 17): The Record's Start Has The Mode And The Pair, The Restored Referee Makes The Mode And The Teams As Every Machine Did (Its State Is That Of An Independent Replay Of The Record), A Machine That Comes Back And A Page That Starts From Nothing Stand At The Referee's Final State With The Teams Kept") {
+        using net::FillLevel;
+        const auto allies_text = [](const std::array<uint8_t, 4>& a) {
+            std::string out;
+            for (const uint8_t v : a) out += std::to_string(static_cast<unsigned>(v));
+            return out;
+        };
+        const auto engine_allies = [](const sim::SimulationEngine& e) {
+            std::string out;
+            for (uint8_t seat = 0; seat < 4; ++seat) out += std::to_string(static_cast<unsigned>(e.alliance_of(seat)));
+            return out;
+        };
+        PWorld w("persist-189");
+        w.start_server(500);
+        RoomSpec spec = held_spec("T-187", 4);
+        spec.mode = 1;
+        ASSERT_TRUE(w.mgr->create_room(spec, w.server_now()).ok);
+        RClient& leader = w.connect("Lea", "T-187");
+        w.run(1500);
+        net::StartRequestMsg request;                                                          // Medium at seat 1, Hard at seat 2, Easy at seat 3; Red + Blue (1 + 2) are a team, so are Green + Black
+        request.fill = {FillLevel::None, FillLevel::Medium, FillLevel::Hard, FillLevel::Easy};
+        request.set_teams(sim::StartTeams{true, 1, 2});
+        ASSERT_TRUE(leader.end->send(net::encode(request)));
+        ASSERT_TRUE(w.until([&]() { return w.status("T-187").state == RoomState::Running; }, 20000));
+        w.run(9000 + kPre);
+        RoomStatus s = w.status("T-187");
+        ASSERT_TRUE(s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3 && s.record_kept && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        ASSERT_TRUE(leader.sim.game_mode() == sim::GameMode::Kills187);
+        const RestartLoaded before = w.read_record("T-187");
+        ASSERT_TRUE(before.ok() && before.head.start.mode == 1 && before.head.start.team_a == 1 && before.head.start.team_b == 2 && before.head.fill_mask == 0x0E);
+        ASSERT_TRUE(before.checks.size() >= 1);
+        const net::SeatKey key = leader.lobby->key();
+        const uint8_t seat = leader.lobby->my_seat();
+        w.stop_server(true);
+        w.start_server(500);
+        ASSERT_TRUE(w.report.count(RestoreItem::Outcome::Restored) == 1);                      // (a referee that had not made the mode or the teams would have been refused at turn 19: "the replay does not agree")
+        const RestartLoaded rec = w.read_record("T-187");
+        s = w.status("T-187");
+        ASSERT_TRUE(s.restored && s.teams == "1+2" && allies_text(s.allies) == "3210" && s.bots.size() == 3 && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(s.restored_hash, replay_hash(rec, rec.turns.size()));                        // the state that the room stands at is that of an independent replay of the record
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-187").paused; }, 60000));
+        w.run(5000);
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && allies_text(s.allies) == "3210" && static_cast<int>(s.mode) == 1);
+        ASSERT_TRUE(leader.session->mode() == net::ClientSession::Mode::Normal && !leader.session->desynced() && !leader.lost);
+        ASSERT_EQ(engine_allies(leader.sim), std::string("3210"));
+        // a second restart; this time the leader's machine is a page that was reloaded: it starts from nothing, is sent the Start of the match with the mode and the teams and catches up to the referee
+        w.stop_server(true);
+        leader.reconnects = false;
+        w.start_server(500);
+        RClient& reloaded = w.connect("Lea", "T-187", seat, key);
+        ASSERT_TRUE(w.until([&]() { return reloaded.lobby != nullptr && reloaded.lobby->rejoined() && reloaded.session != nullptr; }, 30000));
+        ASSERT_TRUE(reloaded.lobby->start_info().team_a == 1 && reloaded.lobby->start_info().team_b == 2 && reloaded.lobby->start_info().mode == 1);
+        ASSERT_TRUE(w.until([&]() { return !w.status("T-187").paused && reloaded.session->mode() == net::ClientSession::Mode::Normal; }, 60000));
+        w.run(3000);
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.teams == "1+2" && allies_text(s.allies) == "3210" && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(engine_allies(reloaded.sim), std::string("3210"));
+        ASSERT_TRUE(reloaded.sim.game_mode() == sim::GameMode::Kills187);
+        ASSERT_TRUE(!reloaded.session->desynced() && !reloaded.lost);
+        w.play_to_the_end("T-187");                                                            // the match is played to its end: the machine from nothing stands at the referee's final state
+        s = w.status("T-187");
+        ASSERT_TRUE(s.state == RoomState::Finished && s.referee_hash != 0);
+        ASSERT_TRUE(reloaded.sim.state_hash().total == s.referee_hash && !reloaded.session->desynced() && !reloaded.lost);
+    } TEST_END();
+
     TEST_CASE("S3.136 A START The Server Cannot Carry Out Ends With A Notice For The Leader And The Room Goes On Waiting, Fails Nothing: The Plan's Map Is Gone, The Colours Cannot Play The Map, There Is No Place For Another Match (And Is When An Abandoned Match Gives Its Place Up); The Same Leader Starts Again When The Plan Is Fixed") {
         const std::string dir = temp_dir_for("lobby_refusals");
         fs::copy_file(maps_dir() + "/TINY.LVL", dir + "/TINY.LVL");

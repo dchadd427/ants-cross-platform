@@ -992,6 +992,51 @@ void run_bot_tests() {
         ASSERT_EQ(plain.net()->room().mode, 0);
     } TEST_END();
 
+    TEST_CASE("AI6.11e --game-mode 187 With --teams When The Application Hosts: The Start Carries Both, Both Machines Have The Alliances At Tick 0 In The Game Without Food (The Teams Are Not Dropped In The Mode), The Same State To The End Of The Run, And The Recording Has Both In Its Head") {
+        using L = net::FillLevel;
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Host;
+        cfg.net_port = 0;
+        cfg.net_loopback_only = true;
+        cfg.player_name = "Alice";
+        cfg.game_mode = 1;
+        cfg.game_mode_given = true;
+        cfg.fill_bots = net::FillPlan(std::array<L, 4>{L::None, L::None, L::Easy, L::Hard});
+        cfg.teams = LocalTeams{true, 0, 2};
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.network_active() && app.net()->is_host());
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob"));
+        Duo duo{app, bob};
+        ASSERT_TRUE(duo.until([&]() { return app.net()->room().slots[1].state == net::SlotState::Client && app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
+        duo.step(200);
+        app.map_select().handle_key_down(SDLK_RETURN);
+        ASSERT_TRUE(duo.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 8000));
+        ASSERT_EQ(app.sim().roster_mask(), 0x0F);
+        ASSERT_EQ(app.net()->start_info().mode, 1);
+        ASSERT_EQ(bob.net.start_info().mode, 1);
+        ASSERT_TRUE(app.net()->start_info().team_a == 0 && bob.net.start_info().team_a == 0 && bob.net.start_info().team_b == 2);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187 && bob.sim.game_mode() == sim::GameMode::Kills187);
+        ASSERT_EQ(app.sim().current_tick(), uint64_t{0});
+        for (uint8_t seat = 0; seat < 4; ++seat) {                                                                         // (Green + Red against Blue + Black: the same on the host's engine and on the guest's)
+            const uint8_t want = static_cast<uint8_t>(seat == 0 ? 2 : seat == 1 ? 3 : seat == 2 ? 0 : 1);
+            ASSERT_TRUE(app.sim().alliance_of(seat) == want && bob.sim.alliance_of(seat) == want);
+        }
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        for (const auto& cell : bob.sim.get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1 && app.recorder()->replay().head.teams == sim::StartTeams({true, 0, 2}));
+        duo.step(4000 + kDialogMs);
+        app.net()->freeze();                                                                                               // the host stops sealing: what is in flight arrives, then both are at the same tick
+        duo.step(3000);
+        ASSERT_TRUE(app.sim().current_tick() > 60);
+        ASSERT_EQ(app.sim().current_tick(), bob.sim.current_tick());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
+        for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(app.sim().alliance_of(seat), bob.sim.alliance_of(seat));      // (whatever the bots did to the teams, both engines agree)
+        app.quit();
+    } TEST_END();
+
     TEST_CASE("AI6.6 Room With A Bot: The Host's Setup Screen Shows The Bot, Fog Is Refused, START Runs The Bot On The Host's Machine, The Guest Stays Bit-Identical Without Any Bot Code") {
         ApplicationConfig cfg = headless_config();
         cfg.net_role = ApplicationConfig::NetRole::Host;
