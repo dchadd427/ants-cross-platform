@@ -276,7 +276,7 @@ struct LevelPlan {
     uint32_t behind_tier1{15};           // the pressure, in percent, from which the war tier is 1, 2 and 3 (Hard 15, 35, 70; Medium 25, 55, 105; Easy 45, 100, 180: the weaker the level, the later)
     uint32_t behind_tier2{35};
     uint32_t behind_tier3{70};
-    uint32_t behind_min_leader{150};     // the leader's box shows at least this many points (before that nobody leads)
+    uint32_t behind_min_leader{150};     // the leader's box shows at least this many points (before that nobody leads); the war tier raises the tier of the catch-up from here, below catchup_min_leader (300) too
     uint8_t behind_free_tier{3};         // from this tier on the assault takes the Combat Ants off the piles and the mines are laid with a Bomber that the economy needs (they are not only the free ants); 4: never
     uint32_t behind_odds_ease{12};       // the assault asks for this many percent less of the odds at every tier (a bot that is behind takes the even and the worse trade)
     uint32_t behind_assault_after{300};  // the assault of a bot that is behind begins this early at the latest

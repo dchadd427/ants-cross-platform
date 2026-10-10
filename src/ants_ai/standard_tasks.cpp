@@ -345,8 +345,9 @@ void FightTask::start_fire_defence(TaskContext& c) {
 
 namespace {
 
-// An ant for the assault: one that stands idle with empty hands (nothing to harvest or no way to it), and, when the bot is far enough behind (pull), a Combat Ant wherever it is (it is a worker that
-// fights: it harvests between the blows). A worker on its way to a pile or carrying food is never taken: it kills nothing above two hit points and the food is what the assault is not for
+// An ant for the assault: one that stands idle with empty hands (nothing to harvest or no way to it; a worker of that kind too, at every tier, and from the pull tier without the surplus that the other
+// tiers ask for), and, when the bot is far enough behind (pull), a Combat Ant wherever it is (it is a worker that fights: it harvests between the blows). A worker on its way to a pile or carrying food
+// is never taken: it kills nothing above two hit points and the food is what the assault is not for
 bool assault_ant(const AntView& a, bool pull) noexcept {
     return (a.idle() && !a.holding && a.carried_points == 0) || (pull && a.type == sim::AntType::Combat);
 }
@@ -1547,7 +1548,7 @@ void MineTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t 
     jobs_.erase(it);
 }
 
-// The tiles round the piles that an enemy works, where the enemy is nearer than the bot (see the class). Every candidate is scored by how much nearer the enemy is (the walking costs of the two
+// The tiles round the piles that an enemy works, where the enemy is no further than the bot (see the class). Every candidate is scored by how much nearer the enemy is (the walking costs of the two
 // hills' fields) less 25 for every tile of distance from the pile; the best come first.
 void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) const {
     const BotView& v = c.view;
@@ -1617,7 +1618,7 @@ void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) co
                     for (const std::vector<int32_t>* f : foes) {
                         if ((*f)[idx] >= 0 && (foe_cost < 0 || (*f)[idx] < foe_cost)) foe_cost = (*f)[idx];
                     }
-                    if (mine_cost < 0 || foe_cost < 0 || foe_cost > mine_cost) continue;               // only where the enemy is nearer than the bot (a mine in front of the own workers blocks their way: R7)
+                    if (mine_cost < 0 || foe_cost < 0 || foe_cost > mine_cost) continue;               // only where the enemy is no further than the bot (a mine in front of the own workers blocks their way: R7)
                     here.push_back(Target{t, (mine_cost - foe_cost) - 25 * ring + (leader_works ? 40 : 0)});
                 }
             }

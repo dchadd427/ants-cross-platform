@@ -112,7 +112,7 @@ private:
         bool assault{false};                 // (with offence) an assault of the free ants after the food (plan.assault): its own numbers
         uint32_t force{0};                   // (with assault) the ants it was started with (plan.assault_force, one more for a bot that is far behind)
         bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles (plan.behind_free_tier)
-        uint32_t abort_percent{0};           // (with assault) the odds below which it is called off (the odds it was started with, eased for a bot that is behind, less a fifth)
+        uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;
     };
@@ -337,7 +337,7 @@ private:
 /// "The bomber doesn't place any bombs currently, but he should be bombing up the food so they can't eat it" (the owner, 2026-10-09). The Bomber Ants of the bot (an own ant of type Bomber,
 /// claimed for a job and given back to the economy after it) lay mines, one job per Bomber at a time:
 ///   at the food   on a pile that an enemy works (its walk there costs at most plan.mine_percent of the own, or one of its ants is near) and that holds plan.mine_min_units at least: the open
-///                 tiles two steps round the pile where the enemy is nearer than the bot (the enemy's walking cost to the tile below the own), the enemy-most first, plan.mine_per_pile standing
+///                 tiles two steps round the pile where the enemy is no further than the bot (the enemy's walking cost to the tile at most the own), the enemy-most first, plan.mine_per_pile standing
 ///                 at a time. The engine's path finder goes round an own bomb and straight through an enemy's (an ant that steps on one loses 2 hit points, is thrown 4 tiles and loses its walk),
 ///                 so the mines sit where the enemy walks and the bot does not
 ///   at the gate   with plan.mine_gate and no pile to mine: the open tiles of the ring round the gate of the best opponent (SabotageTask::ring_of), plan.mine_gate standing at a time. The fire-in
