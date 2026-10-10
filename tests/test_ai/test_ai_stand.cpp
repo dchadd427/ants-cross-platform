@@ -72,6 +72,8 @@ void run_stand_tests() {
         ASSERT_EQ(easy.mine_home, 0u);
         ASSERT_EQ(easy.behind_mine_gate, 0u);
         ASSERT_EQ(easy.behind_mine_tier, 4u);
+        ASSERT_TRUE(hard.mine_per_pile >= 6 && hard.mine_apart == 1);                                        // (David: "the bomber only places three bombs ... it could bomb up a whole area")
+        ASSERT_TRUE(hard.mine_home >= 8 && medium.mine_home >= 6);
         for (const LevelPlan* p : {&medium, &hard}) {
             ASSERT_TRUE(p->rush);
             ASSERT_TRUE(p->mine_home >= 2);
@@ -371,6 +373,7 @@ void run_stand_tests() {
         plan.assault = plan.raider_hunt = plan.sabotage = plan.rush = false;
         plan.mine_per_pile = plan.mine_gate = plan.behind_mine_gate = 0;
         plan.mine_home = 3;
+        plan.mine_home_apart = 3;
         plan.mine_home_after = 0;
         const auto build = [&](sim::SimulationEngine& sim) {
             empty_field(sim, 96);
@@ -390,6 +393,23 @@ void run_stand_tests() {
             for (size_t i = 0; i < mines.size(); ++i) {
                 ASSERT_TRUE(mines[i].chebyshev_dist(origin) >= 5 && mines[i].chebyshev_dist(origin) <= 9);
                 for (size_t k = i + 1; k < mines.size(); ++k) ASSERT_TRUE(mines[i].chebyshev_dist(mines[k]) >= 3);
+            }
+        }
+        {   // (a2) a field of them (the plans lay 8 and 12: "the bomber only places three bombs, it could bomb up a whole area"), two apart as the plans have it: more than three, none closer than
+            //      two tiles, none outside the ring, and the food is not touched (the Workers bank)
+            LevelPlan field = plan;
+            field.mine_home = 8;
+            field.mine_home_apart = 2;
+            sim::SimulationEngine sim;
+            build(sim);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(field), 4, 4);
+            rig.run(6000);
+            const TileCoord origin = rig.map().hill(0).origin;
+            const std::vector<TileCoord> mines = mines_at(sim, rig.map(), 0);
+            ASSERT_TRUE(mines.size() > 3u && mines.size() <= 8u);
+            for (size_t i = 0; i < mines.size(); ++i) {
+                ASSERT_TRUE(mines[i].chebyshev_dist(origin) >= 5 && mines[i].chebyshev_dist(origin) <= 9);
+                for (size_t k = i + 1; k < mines.size(); ++k) ASSERT_TRUE(mines[i].chebyshev_dist(mines[k]) >= 2);
             }
         }
         {   // (b) the plan without them: none

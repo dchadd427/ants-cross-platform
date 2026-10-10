@@ -176,7 +176,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.ramp_unjam = true;
             p.behind_mine_tier = 2;
             p.behind_mine_gate = 3;
-            p.mine_home = 2;
+            p.mine_home = 8;
+            p.mine_home_apart = 2;
             p.rush = true;
             p.rush_deficit = 300;
             break;
@@ -193,14 +194,16 @@ LevelPlan plan_for(Level level) noexcept {
             p.raider_radius = 6;
             p.war_free_only = true;
             p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
-            p.mine_per_pile = 3;
+            p.mine_per_pile = 10;                    // (David, 2026-10-10: "the bomber only places three bombs, it could bomb up a whole area": 10 at a pile, mines that touch, and 12 round the own hill cost no food and win kills; the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
+            p.mine_apart = 1;
             p.mine_gate = 3;
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
             p.fire_duel = true;                      // the stand batch (docs/BOTS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
             p.ramp_unjam = true;
             p.behind_mine_tier = 1;
             p.behind_mine_gate = 5;
-            p.mine_home = 3;
+            p.mine_home = 12;
+            p.mine_home_apart = 2;
             p.rush = true;
             p.rush_deficit = 200;
             break;
