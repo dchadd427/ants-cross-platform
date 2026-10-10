@@ -26,6 +26,7 @@ add_executable(test_ai
     test_ai_merge.cpp
     test_ai_cantgo.cpp
     test_ai_flowers.cpp
+    test_ai_war.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

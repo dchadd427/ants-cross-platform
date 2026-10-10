@@ -247,6 +247,40 @@ struct LevelPlan {
     bool flower_watch{false};            // (Hard) an ant waits beside the drop tile of the own side's flower, arrives about `flower_watch_early` ticks before the landing that the bot has learned to expect (Memory::flower) and takes a kind that the plan lacks
     uint32_t flower_watch_early{60};     // the ticks before the expected landing at which the watcher stands beside the drop tile (3 s)
     uint32_t flower_watch_chance{150};   // the least chance in permille that the next landing is a kind the plan lacks, for the watcher to wait (every kind alike until three landings were seen)
+    // the war batch (docs/BOTS.md, "The war batch"): the bots fight over the food and after it. Every field is off in a plan made by hand; `--tune war=0` switches all of them off again (the bot as it was)
+    uint32_t war_bombers{0};             // Bomber Ants wanted (at least this many; the wish is the larger of this and the opening's) for the mines (the drops of the flowers and the power-ups on the map; once an enemy plays)
+    bool war_free_only{false};           // the Bomber Ants for the mines are fetched and the mines laid only while an ant has nothing to harvest (the economy is not slowed by the war)
+    uint32_t war_fires{0};               // Fire Ants wanted besides the one of the walls, for the fire-in and the fire at the piles
+    uint32_t mine_per_pile{0};           // mines that stand at a pile an enemy works, at a time (MineTask; 0: no mines)
+    uint32_t mine_gate{0};               // ... and, when there is no pile to mine and an ant has nothing to harvest, on the ring round the gate of the best opponent (0: none). These are the tiles that the fire-in lights too:
+                                         // a mine leaves its tile to the mine (measured: no loss of score, kills or wins, docs/BOTS.md), the fire-in lights the others
+    uint32_t mine_min_units{8};          // a pile with fewer units left is not mined
+    uint32_t mine_percent{170};          // an enemy works a pile when its walk there costs at most this percentage of the own (an enemy far further away does not come)
+    uint32_t mine_replant_ticks{240};    // a mine that went off or was defused is laid again after this long, while the enemy still comes
+    bool raider_hunt{false};             // an enemy Fire or Bomber Ant within raider_radius tiles of the own hill or of a pile the own ants work is hunted by the fighters (the blows stop its work), whether or not walls stand
+    int32_t raider_radius{12};
+    bool raider_piles{false};            // also one at a pile the own ants work (it may be harvesting there: the hunts there cost the economy)
+    uint32_t raider_extra{0};            // fighters more than the level's defenders go after it
+    bool assault{false};                 // free ants (nothing to harvest) go for the enemy ants: the food is gone and the score is fixed, so the bot fights (FightTask)
+    uint32_t assault_force{2};           // ants at most in one assault, and never fewer than assault_min
+    uint32_t assault_min{2};
+    uint32_t assault_odds_percent{100};  // the assault force's strength against what answers near the target, in percent (an even trade is taken at 100)
+    int32_t assault_reach{40};           // free ants within this many tiles of the target are called
+    int32_t assault_chase{24};           // the target is not followed further than this from where it was first met
+    uint32_t assault_ticks{900};         // an assault lasts at most this long
+    uint32_t assault_after{600};         // no assault before this tick of the match
+    // the losers fight harder (docs/BOTS.md, "The war batch"; the owner, 2026-10-09: "especially the players that are losing, the bots should become more aggressive to try to gain a lead because at that
+    // point you're not going to out-eat them"). The war tier (Standing::war) is the same pressure as the catch-up tiers - the deficit in percent of what can still be earned - against lower marks, and
+    // it raises the tier of the catch-up (raids for a smaller loot, the strike force, the Combat Ants) as well. Off in a plan made by hand; `--tune behind=0` switches it off again
+    bool behind_war{false};
+    uint32_t behind_tier1{15};           // the pressure, in percent, from which the war tier is 1, 2 and 3 (Hard 15, 35, 70; Medium 25, 55, 105; Easy 45, 100, 180: the weaker the level, the later)
+    uint32_t behind_tier2{35};
+    uint32_t behind_tier3{70};
+    uint32_t behind_min_leader{150};     // the leader's box shows at least this many points (before that nobody leads); the war tier raises the tier of the catch-up from here, below catchup_min_leader (300) too
+    uint8_t behind_free_tier{3};         // from this tier on the assault takes the Combat Ants off the piles (and no longer asks for the surplus of free ants) and the mines are laid with a Bomber that the economy needs (they are not only the free ants); 4: never
+    uint32_t behind_odds_ease{12};       // the assault asks for this many percent less of the odds at every tier (a bot that is behind takes the even and the worse trade)
+    uint32_t behind_assault_after{300};  // the assault of a bot that is behind begins this early at the latest
+    uint32_t behind_sabotage_after{1800};  // ... and so does its fire-in (Medium; Hard lights from tick 600 anyway)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -259,6 +293,9 @@ LevelPlan plan_for(Level level) noexcept;
 LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept;
 /// One of the styles that the level allows, drawn from the generator
 Style draw_style(Level level, BotRng& rng) noexcept;
+/// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
+/// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
+void without_war_batch(LevelPlan& plan) noexcept;
 
 // ---- the thief hole -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -435,7 +472,8 @@ struct Standing {
     bool ahead{false};                   // the own box is not below the leader's
     int32_t deficit{0};                  // (contest batch) the leader's box above the own, 0 when not behind
     uint32_t pressure{0};                // the deficit in percent of what can still be earned (plan.catchup_earn_milli, the food on the field), 0 when not behind
-    uint8_t tier{0};                     // 0 not behind enough, 1 .. 3 the escalation (plan.catchup_tier1 / 2 / 3; the last minute puts a bot that is behind at 3: plan.endgame)
+    uint8_t tier{0};                     // 0 not behind enough, 1 .. 3 the escalation (plan.catchup_tier1 / 2 / 3, and the war tier below; the last minute puts a bot that is behind at 3: plan.endgame)
+    uint8_t war{0};                      // (plan.behind_war) 0 .. 3: the pressure against plan.behind_tier1 / 2 / 3; the rules of the war batch (assault, mines, fire-in) grow with it
     bool guard{false};                   // the last minute and the bot leads: it guards (plan.endgame)
 };
 

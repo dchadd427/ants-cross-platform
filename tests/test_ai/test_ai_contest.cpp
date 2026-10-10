@@ -544,7 +544,9 @@ void run_contest_tests() {
     TEST_CASE("AI20.6 The Fire-In Is Safe (The Owner: \"The Hard Bot Sent One Fire Ant To The Enemy Gate That Was Put Out At Once\"): A Lone Fire Ant Is Not Sent To A Hill Whose Team Has A Fire Ant In Sight Or A Fire Power-Up It Can Still Take; It Is Sent When Neither Is There; A Fire Ant With Two Combat Ants That Hold The Entrance Is Sent Though The Enemy Could Put The Fire Out; Walls Put Out Twice End The Attempt For A While; A Ring That Already Stands Calls Nobody, A Wall To Renew Calls The Escorts Again Before It Is Lit, Escorts That Do Not Arrive Or An Entrance That Cannot Be Held End The Attempt")
     {
         LevelPlan plan = plan_for(Level::Hard);
+        without_war_batch(plan);                                                                                                      // (the assault would send the Combat Ants away from the entrance that the escorts hold)
         plan.sabotage = true;
+        plan.sabotage_safe = true;                                                                                                    // (the subject; the shipped plans of Medium and Hard fire in whether or not the enemy can put it out: the war batch)
         plan.sabotage_after = 20;
         plan.sabotage_spare_keeper = false;                                                                                           // (the lone Fire Ant is free to go: the keeper of the own walls is not spared in this plan)
         sim::SimulationEngine probe;
@@ -1102,7 +1104,9 @@ void run_contest_tests() {
         const auto standing = [&](const sim::SimulationEngine& sim, Level level) {
             const MapInfo map(sim);
             const BotView view = BotView::build(sim, 0, &map);
-            return standing_of(plan_for(level), view, map);
+            LevelPlan plan = plan_for(level);
+            plan.behind_war = false;                                                                // (the tiers of the catch-up alone: AI24.6 has the war tier)
+            return standing_of(plan, view, map);
         };
         {   // (a) the tiers: at tick 7200 of 14400 there are 7200 ticks left, 1152 points to earn; the deficit in percent of that, from the tiers of the level
             struct Row { int32_t deficit; uint8_t easy; uint8_t medium; uint8_t hard; };
@@ -1154,6 +1158,7 @@ void run_contest_tests() {
                 sim.set_player_score(1, 100 + k.deficit);
                 LevelPlan plan = plan_for(k.level);
                 plan.catchup = k.catchup;
+                plan.behind_war = false;                                                                                               // (the tiers of the catch-up alone; the war tier of AI24.6 comes sooner)
                 plan.skirmish = false;                                                                                                 // (the skirmish of Hard would take the same ants for the same carriers: AI20.2)
                 Rig rig(sim, 0, k.level, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
@@ -1174,6 +1179,7 @@ void run_contest_tests() {
                 sim.set_player_score(0, 100);
                 sim.set_player_score(1, 100 + k.deficit);
                 LevelPlan plan = plan_for(Level::Hard);
+                plan.behind_war = false;                                                                                  // (the tiers of the catch-up alone; the war tier of AI24.6 comes sooner)
                 plan.skirmish = false;
                 if (k.workers_from_2) plan.catchup_workers_tier = 2;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
@@ -1225,6 +1231,7 @@ void run_contest_tests() {
             const MapInfo hills(sim);
             for (const TileCoord& t : east_tiles(hills.hill(1))) sim.set_fire_at(t, 3500);                                             // (every hole of the leader is shut)
             LevelPlan plan = plan_for(Level::Easy);
+            plan.behind_war = false;                                                                                  // (the tiers of the catch-up alone; the war tier of AI24.6 comes sooner)
             plan.ambush = true;
             Rig rig(sim, 0, Level::Easy, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(300);
@@ -1246,6 +1253,7 @@ void run_contest_tests() {
                 for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 8});
                 for (int i = 0; i < 2; ++i) carrier_at(sim, 1, TileCoord{46 + i, 8});
                 LevelPlan plan = plan_for(Level::Hard);
+                plan.behind_war = false;                                                                                  // (the tiers of the catch-up alone; the war tier of AI24.6 comes sooner)
                 plan.skirmish = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 const auto run_to = [&](uint64_t tick) {
@@ -1293,6 +1301,7 @@ void run_contest_tests() {
                 sim.set_player_score(0, 500);
                 sim.set_player_score(1, 300);
                 LevelPlan plan = plan_for(Level::Hard);
+                plan.behind_war = false;                                                                                  // (the tiers of the catch-up alone; the war tier of AI24.6 comes sooner)
                 plan.hunt = false;                                                                                                     // (the fight that a blow begins, nothing else)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(3);
