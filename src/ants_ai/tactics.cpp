@@ -147,8 +147,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_free_tier = 3;
             p.behind_odds_ease = 8;
             p.behind_assault_after = 900;
-            p.fire_duel = true;                      // (the stand batch: the Fire Ant strikes the Fire Ant that fires the gate in, the ramp is cleared; Easy drafts nobody, mines nowhere and never rushes)
-            p.ramp_unjam = true;
+            p.fire_duel = true;                      // (the stand batch: the Fire Ant strikes the Fire Ant that fires the gate in; Easy has no gate to clear, drafts nobody, mines nowhere and never rushes)
             break;
         case Level::Medium:
             p.assault = true;
@@ -172,8 +171,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_free_tier = 3;
             p.behind_odds_ease = 10;
             p.behind_assault_after = 600;
-            p.fire_duel = true;
-            p.ramp_unjam = true;
+            p.fire_duel = true;                      // (the ramp unjam is the gate's, which is Hard's)
             p.behind_mine_tier = 2;
             p.behind_mine_gate = 3;
             p.mine_home = 8;
@@ -194,7 +192,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.raider_radius = 6;
             p.war_free_only = true;
             p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
-            p.mine_per_pile = 10;                    // (David, 2026-10-10: "the bomber only places three bombs, it could bomb up a whole area": 10 at a pile, mines that touch, and 12 round the own hill cost no food and win kills; the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
+            p.mine_per_pile = 10;                    // (the owner, 2026-10-10: "the bomber only places three bombs, it could bomb up a whole area": 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
             p.mine_apart = 1;
             p.mine_gate = 3;
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)

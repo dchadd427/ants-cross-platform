@@ -32,8 +32,8 @@ bool attackable(const BotView& view, const AntView& enemy, bool from_fire = fals
 /// Whether an own ant may be sent to fight: it takes orders, holds nothing, is healthy and is a worker (of the level's default type) or a Combat Ant, and does not stand on a power-up
 bool can_fight(const BotView& view, const AntView& ant);
 
-/// Whether an own ant of ANY type may be sent to strike an enemy Fire Ant that fires the own gate in (plan.fire_draft): it takes orders, holds nothing, is healthy and does not stand on a power-up.
-/// A Fire Ant is the one whose blow reaches an enemy Fire Ant on a fire wall (plan.fire_duel); a Thief or Bomber Ant without a job of its own strikes like a worker
+/// Whether an own ant of ANY type may be sent to strike (the members of the rush): it takes orders, holds nothing, is healthy and does not stand on a power-up. (The draft of the fire hunt,
+/// plan.fire_draft, has its own test, which lets a carrier that cannot bank strike too.)
 bool can_strike(const BotView& view, const AntView& ant);
 
 /// What it takes to KILL an ant of `hp` hit points in the real engine (measured: docs/BOTS.md, "Hunting the kill"): the engine lets ONE blow land per hit clip (about 22 ticks, however many ants
@@ -350,9 +350,11 @@ private:
 ///   behind        (plan.behind_war) a bot far enough behind (war tier from plan.behind_free_tier) lays them although its economy needs the hands, and a pile that the leader works comes first;
 ///                 from plan.behind_mine_tier on (earlier) the mines of the gate ring are laid too, plan.behind_mine_gate of the eight at a time
 ///   at home       (plan.mine_home, from plan.mine_home_after) round the own hill, where the enemy's walks to it go: open tiles five to nine tiles out whose two walking costs (the enemy's from his hill
-///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, three tiles apart from every other mine. The engine's path finder goes
+///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, plan.mine_home_apart tiles apart from every other mine, and (plan.mine_home_off_route)
+///                 never on the estimated way of the bot's own carriers to a pile. The engine's path finder goes
 ///                 round an own bomb and straight through an enemy's, so the bot's carriers do not meet them and a rush (every ant of an enemy in one group, "select all and go") walks into them
-/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up, a tile with an ant on it, within six tiles of the own hill. Every job is
+/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up or a tile with an ant on it; the mines of a pile and of the gate never within
+/// six tiles of the own hill. Every job is
 /// checked with the engine's own prediction (a cursor that shows the target cursor), as the counters' are.
 class MineTask final : public Task {
 public:
@@ -535,13 +537,14 @@ private:
 
 /// "Rushing them with all their ants is always an option. If you're down by a few hundred points, you're very unlikely to win by just continuing to eat. So why not select all your ants and take them to their
 /// base?" (the owner, 2026-10-10). A bot that is far behind (plan.rush: the war tier plan.rush_tier and a deficit of plan.rush_deficit points, from tick plan.rush_after, not in the last plan.rush_min_left
-/// ticks) sends EVERY ant that holds no food (any type: the strike force is a few Combat Ants, the assault the free ants) at the ants of the leader, whatever the odds, for at most plan.rush_ticks.
+/// ticks) sends every TYPED ant that holds no food (Combat, Fire, Bomber and Thief Ants; the Workers only with plan.rush_workers, which no plan sets: a Worker kills nothing above two hit points) at the ants of the leader,
+/// whatever the odds, for at most plan.rush_ticks. The Fire Ant that keeps the walls of the thief hole stays while a thief threatens.
 ///   gather   the ants go to a rally tile on their way, where the leader's walk from his hill costs 400 (about twenty tiles of grass), and wait for each other (70 percent within six tiles, or 1,500
 ///            ticks), so that they come in as one group and not one by one into the leader's fighters
 ///   assault  every ant is ordered at the nearest ant of the leader (and its ally) within 18 tiles of his hill, a carrier first, and again after every blow (one order is one blow), as the strike does;
 ///            with no ant in sight they stand on the tiles of the ring round his gate, where they are in the way of his carriers (and of the ants that leave)
 ///   ends     after plan.rush_ticks, when the bot has caught up (the deficit has fallen below half of rush_deficit and the war tier below plan.rush_tier), with fewer than two ants left, in the last 100
-///            ticks, or when the leader has none; the next one is not begun before 1,800 ticks have passed
+///            ticks, or when the leader's hill is gone or another team leads; the next one is not begun before 1,800 ticks have passed
 /// Ants that carry food are not called (they bank first and join at the look after), and neither are those that a pick-up, a raid, the sabotage or the islands hold (the ledger: rank 3). A fight at
 /// home (the Fight task has the same rank) keeps its defenders.
 class RushTask final : public Task {

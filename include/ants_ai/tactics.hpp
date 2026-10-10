@@ -258,7 +258,7 @@ struct LevelPlan {
                                          // a mine leaves its tile to the mine (measured: no loss of score, kills or wins, docs/BOTS.md), the fire-in lights the others
     uint32_t mine_min_units{8};          // a pile with fewer units left is not mined
     uint32_t mine_percent{170};          // an enemy works a pile when its walk there costs at most this percentage of the own (an enemy far further away does not come)
-    uint32_t mine_apart{2};              // two mines of a pile or of the gate lie at least this many tiles apart (Chebyshev); 1: they may touch, a line of them across a lane
+    uint32_t mine_apart{2};              // two mines of a pile lie at least this many tiles apart (Chebyshev); 1: they may touch, a line of them across a lane
     uint32_t mine_replant_ticks{240};    // a mine that went off or was defused is laid again after this long, while the enemy still comes
     bool raider_hunt{false};             // an enemy Fire or Bomber Ant within raider_radius tiles of the own hill or of a pile the own ants work is hunted by the fighters (the blows stop its work), whether or not walls stand
     int32_t raider_radius{12};
@@ -293,11 +293,11 @@ struct LevelPlan {
                                          // typed ants has none at home), and a Combat Ant from anywhere within fire_draft_far tiles instead of 20
     int32_t fire_draft_far{60};
     bool fire_duel_walls{false};         // the duel may take the Fire Ant that keeps the walls of the thief hole while a thief threatens (the thieves raid the hill meanwhile: 100 points a match on TREASURE)
-    bool ramp_unjam{false};              // an own ant without food that stands still on the ramp, or on the entrance, for ramp_unjam_ticks while a carrier waits steps aside (StandardBot::unjam_ramp)
+    bool ramp_unjam{false};              // an own ant without food that stands idle on the ramp (Hard's gate: GateTask) for ramp_unjam_ticks while a carrier is on its way home steps aside
     uint32_t ramp_unjam_ticks{40};
     uint8_t behind_mine_tier{4};         // from this war tier on a Bomber lays mines with an ant that the economy needs, and wants no surplus (behind_free_tier keeps the Combat Ants of the assault); 4: never
     uint32_t behind_mine_gate{0};        // mines at the ring round the gate of the best opponent, at a time, while the bot is at behind_mine_tier (mine_gate otherwise)
-    uint32_t mine_home{0};               // mines round the own hill, at a time (MineTask): on the lanes that the enemy's walks take to it, five to nine tiles out, never on the doorstep, a tile apart from each other, so that the bot's own
+    uint32_t mine_home{0};               // mines round the own hill, at a time (MineTask): on the lanes that the enemy's walks take to it, five to nine tiles out, never on the doorstep, mine_home_apart tiles apart from each other, so that the bot's own
                                          // carriers (own bombs block their walks) and an enemy's rush meet them: an enemy ant that steps on one loses 2 hit points and is thrown four tiles. 0: none
     bool mine_home_off_route{true};      // ... never on the estimated way of the bot's own carriers to a pile (they walk round their own mines, and the enemy's lane to the gate is that way on a map with food between the hills)
     uint32_t mine_home_apart{3};         // ... the mines round the hill lie at least this many tiles apart

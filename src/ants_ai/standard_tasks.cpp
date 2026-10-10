@@ -180,11 +180,14 @@ size_t ring_walls_lit(const BotView& v, const HillInfo& hill) {
 // The ring is lit so far that the carriers cannot bank (or the ants inside cannot leave): an ant that stands still holding food earns nothing while it waits, so it may strike (it keeps its food)
 constexpr size_t kShutRingWalls = 5;
 
+// A fire hunt recruits the ants that stand within this many tiles of its target
+constexpr int32_t kFireHuntReach = 20;
+
 // An ant of the stand batch's hunt of a Fire Ant that fires the own gate in (plan.fire_draft): any type that takes orders and is healthy; with food only a carrier that stands still while the ring is
 // shut (it cannot bank anyway). `shut` is that state
 bool draft_ant(const BotView& v, const AntView& a, bool shut) {
     if (!a.takes_orders() || a.state == sim::UnitState::Stunned || a.hp < kMinFightHp || v.powerup_at(a.tile) != nullptr) return false;
-    if (a.holding || a.carried_points > 0) return shut && (a.idle() || a.state == sim::UnitState::CantGo);
+    if (a.holding || a.carried_points > 0) return shut && a.idle();
     return true;
 }
 
@@ -333,14 +336,20 @@ void FightTask::start_fire_defence(TaskContext& c) {
     for (const sim::TileCoord& t : SabotageTask::ring_of(hill)) walls += v.grid().in_bounds(t) && v.grid().has_fire_at(t) ? 1u : 0u;
     const bool ring = plan.fire_defence && walls != 0;                                              // walls stand on the ring: the Fire Ant that lights them is the target
     // (plan.fire_duel, the stand batch) an own Fire Ant that can strike: the enemy Fire Ant stands on a fire wall, where no other ant's order reaches it, and the Fire Ant's blow throws it off the wall
-    bool striker = false;
+    std::vector<sim::TileCoord> strikers;                                                            // (where they stand: the hunt recruits within kFireHuntReach tiles of its target only)
     if (plan.fire_duel && ring) {
         for (const AntView& a : v.mine()) {
             if (a.type != sim::AntType::Fire || a.id == duel_spare || !draft_ant(v, a, plan.fire_draft && walls >= kShutRingWalls)) continue;
             const TaskId owner = c.ledger.owner(a.id);
-            if (owner == kNoTask || owner == id() || c.ledger.rank(owner) < c.ledger.rank(id())) striker = true;
+            if (owner == kNoTask || owner == id() || c.ledger.rank(owner) < c.ledger.rank(id())) strikers.push_back(a.tile);
         }
     }
+    const auto striker_near = [&](const AntView& e) {
+        for (const sim::TileCoord& t : strikers) {
+            if (t.chebyshev_dist(e.tile) <= kFireHuntReach) return true;
+        }
+        return false;
+    };
     if (!ring && !plan.raider_hunt) return;
     for (const auto& f : fights_) {
         if (f.second.fire) return;                                                                   // one hunt at a time
@@ -363,7 +372,7 @@ void FightTask::start_fire_defence(TaskContext& c) {
     bool best_ring = false;
     for (const AntView& e : v.others()) {
         const bool fire_ant = e.type == sim::AntType::Fire;
-        if ((!fire_ant && !(plan.raider_hunt && e.type == sim::AntType::Bomber)) || fights_.count(e.id) != 0 || !attackable(v, e, striker && fire_ant) || shunned(e.id, now)) continue;
+        if ((!fire_ant && !(plan.raider_hunt && e.type == sim::AntType::Bomber)) || fights_.count(e.id) != 0 || !attackable(v, e, fire_ant && striker_near(e)) || shunned(e.id, now)) continue;
         if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
         const int32_t d = e.tile.chebyshev_dist(hill.origin);
         const bool ring_target = ring && fire_ant && d <= plan.fire_defence_radius;
@@ -729,7 +738,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             if (f.defenders.count(a.id) != 0 || !(can_fight(v, a) || fire_striker || (draft && draft_ant(v, a, shut)))) continue;
             if (f.ally && a.tile.chebyshev_dist(target->tile) > plan.ally_help_radius) continue;
             if (f.offence && a.tile.chebyshev_dist(target->tile) > (f.hunt ? plan.hunt_reach : f.assault ? plan.assault_reach : plan.skirmish_reach)) continue;
-            if (f.fire && a.tile.chebyshev_dist(target->tile) > (draft && a.type == sim::AntType::Combat ? plan.fire_draft_far : 20)) continue;
+            if (f.fire && a.tile.chebyshev_dist(target->tile) > (draft && a.type == sim::AntType::Combat ? plan.fire_draft_far : kFireHuntReach)) continue;
             if (f.assault && !assault_ant(a, f.pull)) continue;                  // (an assault is made of the free ants, and of the Combat Ants of a bot that is behind)
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) >= 3 && !(fire_striker && c.ledger.rank(owner) < c.ledger.rank(id()))) continue;         // the ants of a pick-up, a raid or a fight are not taken (the Fire Ant of the walls is, for the duel)
@@ -1750,7 +1759,7 @@ void MineTask::collect_gate_targets(TaskContext& c, std::vector<Target>& out) co
 }
 
 // Round the own hill: the open tiles five to nine tiles from it that lie on the enemy's way to it (the enemy's walking cost to the tile and the bot's own from its queue row add up to little more than the
-// enemy's walk to the hill), plan.mine_home standing at a time, three tiles apart from every other mine. An enemy walk does not go round a bomb of the bot (the engine's path finder skips only the
+// enemy's walk to the hill), plan.mine_home standing at a time, plan.mine_home_apart tiles apart from every other mine. An enemy walk does not go round a bomb of the bot (the engine's path finder skips only the
 // walker's own and the ally's), so a rush of many ants walks into them, and the bot's own carriers walk round them. Never within two tiles of a pile (a pile near home is worked), and only on open
 // ground (seven of the eight neighbours are walkable) so that no corridor of the own economy is closed by one.
 void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) const {
@@ -1767,7 +1776,7 @@ void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) co
     std::vector<int32_t> foe_home;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const TeamRow& row = v.rows()[t];
-        if (t == c.seat || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || !c.map.hill(t).present) continue;
+        if (t == c.seat || !row.present || row.dropped || (v.ally() < sim::MAX_PLAYERS && t == v.ally()) || !c.map.hill(t).present || !tactics_.memory.plays(t)) continue;      // (an enemy that has not moved yet comes nowhere)
         const std::vector<int32_t>& field = c.map.cost_field_of(t);
         if (field.empty()) continue;
         int32_t to_home = -1;                                                            // the enemy's walk to the ring round the gate (the queue row itself is the owner's) plus the own walk from the queue row to it
@@ -2570,7 +2579,7 @@ void RushTask::step(TaskContext& c) {
     // 1. the members that are still ours and fit (an ant that picked up food or got hurt leaves; it is called again when it is well and empty-handed)
     for (auto it = force_.begin(); it != force_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
-        const bool gone = a == nullptr || c.ledger.owner(it->first) != id() || a->hp < kMinFightHp || a->holding || a->carried_points > 0;
+        const bool gone = a == nullptr || c.ledger.owner(it->first) != id() || a->hp < kMinFightHp || a->holding || a->carried_points > 0 || (tactics_.wall_demand && it->first == tactics_.wall_keeper);
         if (gone) {
             if (a != nullptr && c.ledger.owner(it->first) == id()) c.ledger.release(it->first, id());
             it = force_.erase(it);
@@ -2584,6 +2593,7 @@ void RushTask::step(TaskContext& c) {
     for (const AntView& a : v.mine()) {
         if (force_.count(a.id) != 0) continue;
         if (!can_strike(v, a) || (a.type == sim::AntType::Worker && !tactics_.plan.rush_workers)) continue;
+        if (tactics_.wall_demand && a.id == tactics_.wall_keeper) continue;           // (the Fire Ant that keeps the walls of the thief hole stays while a thief threatens, as it does for the duel)
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && (c.ledger.rank(owner) == 3 || c.ledger.rank(owner) >= c.ledger.rank(id()))) continue;       // a pick-up, a raid, the sabotage, the islands; a fight (the ledger gives nothing to a task of the same rank)
         cands.push_back(&a);
@@ -2615,6 +2625,7 @@ void RushTask::step(TaskContext& c) {
 
     // 3. gathered?
     if (!assault_) {
+        if (rally_.x >= 0 && (v.powerup_at(rally_) != nullptr || v.grid().has_fire_at(rally_))) rally_ = rally_tile(c, static_cast<uint8_t>(target_));     // (a power-up landed on it, or it burns: no move onto it is accepted)
         size_t there = 0;
         for (const auto& m : force_) {
             const AntView* a = find_ant(v.mine(), m.first);
@@ -3504,12 +3515,13 @@ void GateTask::step(TaskContext& c) {
     if (!leaver_on_ramp) leaver_since_ = -1;
     else if (leaver_since_ < 0) leaver_since_ = static_cast<int64_t>(now);
     const bool leaver_hold = leaver_on_ramp && static_cast<int64_t>(now) < leaver_since_ + static_cast<int64_t>(params_.leaver_wait_ticks);        // (a click while it is there meets it head on in the one-wide way out; one that stays longer is not waited for)
-    // the ramp unjam (LevelPlan::ramp_unjam): an own ant without food that stands on the ramp, idle or in its can't-go clip, shuts the way to the entrance for the carriers (a Combat Ant that came home
-    // from a fight, a worker that was held up) and nothing moves it: a person would step it aside. Only an ant that nobody above the economy holds is sent, to a free tile at the side of the doorstep
+    // the ramp unjam (LevelPlan::ramp_unjam): the ramp has been held by ants that stand still on it for plan.ramp_unjam_ticks while a carrier is on its way home: an own ant without food that stands idle
+    // on it (a Combat Ant that came home from a fight, a worker that was held up) shuts the way to the entrance for the carriers and nothing moves it: a person would step it aside. Only an ant that nobody
+    // above the economy holds and that has no walk ordered is sent, to a free tile at the side of the doorstep (three to five tiles off the ramp)
     if (params_.unjam_ticks > 0 && ramp_standing && ramp_since_ >= 0 && static_cast<int64_t>(now) >= ramp_since_ + static_cast<int64_t>(params_.unjam_ticks) && now >= unjam_next_ && !carriers.empty()) {
         const AntView* mover = nullptr;
         for (const AntView& a : v.mine()) {
-            if (a.tile != ramp || a.holding || a.carried_points > 0 || !a.takes_orders() || !(a.idle() || a.state == sim::UnitState::CantGo)) continue;
+            if (a.tile != ramp || a.holding || a.carried_points > 0 || !a.idle() || v.has_pending_path(a.id)) continue;
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) > 1) continue;
             mover = &a;

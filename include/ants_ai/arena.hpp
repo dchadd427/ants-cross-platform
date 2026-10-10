@@ -192,7 +192,7 @@ struct ArenaSeatResult {
     uint32_t ramp_unjams{0};                   // ... the ants sent aside off the ramp (GateTask::ramp_unjams)
     uint32_t rushes{0};                        // ... the rushes begun (RushTask::rushes_started),
     uint32_t rush_ticks{0};                    //     the ticks they lasted
-    uint32_t rush_attacks{0};                  //     and the attack orders they gave
+    uint32_t rush_attacks{0};                  //     and the ants they ordered at an enemy ant (one count a member and order)
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile

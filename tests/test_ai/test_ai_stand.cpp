@@ -6,11 +6,11 @@
 //   AI25.1  the plans: what each level has of the batch, the switch that takes all of it out (`--tune stand=0`), a plan made by hand has none
 //   AI25.2  the fire duel: the own Fire Ant strikes the enemy Fire Ant that stands on a fire wall of the ring (nobody else's blow reaches it there), the others wait; without the rule nobody goes
 //   AI25.3  the draft: a Thief and a Bomber Ant of the bot (no worker, no Combat Ant at home) hunt the Fire Ant that fires the gate in; without the rule they stand by
-//   AI25.4  the ramp unjam: an own ant without food that stands on the ramp is sent to the side of the doorstep when a carrier waits; not without the rule, not an ant that a fight holds
-//   AI25.5  the mines of a loser: a bot 300 points behind lays its mines from war tier 1 (Hard), not before tier 3 without the rule
-//   AI25.6  the mines at home: a Bomber lays them five to nine tiles from the own hill, three tiles apart, at most plan.mine_home; none without the plan, none before plan.mine_home_after
-//   AI25.7  the rush: a bot far behind sends every ant without food at the leader's hill (gather, then assault), not before its time, not while it leads or with the plan off, and it ends
-//   AI25.8  whole matches: nobody rushes on ISLANDS (no walk joins the hills); the shipped plans rush, fire and mine on TREASURE and bank within a tenth of the bots without the batch
+//   AI25.4  the ramp unjam: an own ant without food that stands idle on the ramp is sent to the side of the doorstep when a carrier is on its way; not without the rule, not before its ticks
+//   AI25.5  the mines of a loser: a bot behind lays its mines from the plan's war tier (Medium and Hard 2), not before tier 3 without the rule
+//   AI25.6  the mines at home: a Bomber lays them five to nine tiles from the own hill, plan.mine_home_apart tiles apart, off the carriers' way, at most plan.mine_home; none without the plan, none before plan.mine_home_after, none while no enemy is seen to play
+//   AI25.7  the rush: a bot far behind sends its typed ants without food at the leader's hill (gather, then assault; Workers only with plan.rush_workers), not before its time, not while it leads or with the plan off, and it ends
+//   AI25.8  whole matches: nobody rushes on ISLANDS (no walk joins the hills); the shipped plans fire and mine on TREASURE and bank within a tenth of the bots without the batch
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -57,7 +57,7 @@ struct Home {
 }  // namespace
 
 void run_stand_tests() {
-    TEST_CASE("AI25.1 The Plans: Every Level Has The Fire Duel And The Ramp Unjam; The Draft Of Every Ant Is Off (It Cost Food And Won Nothing The Duel Did Not); Medium And Hard Lay Mines From An Earlier War Tier And Round Their Hill, And Rush When Far Behind; Easy Mines And Rushes Nowhere; The Switch Takes All Of It Out; A Plan Made By Hand Has None")
+    TEST_CASE("AI25.1 The Plans: Every Level Has The Fire Duel, Hard (The Level With A Gate) The Ramp Unjam; The Draft Of Every Ant Is Off (It Cost Food And Won Nothing The Duel Did Not); Medium And Hard Lay Mines From An Earlier War Tier And Round Their Hill, And Rush When Far Behind; Easy Mines And Rushes Nowhere; The Switch Takes All Of It Out; A Plan Made By Hand Has None")
     {
         const LevelPlan easy = plan_for(Level::Easy);
         const LevelPlan medium = plan_for(Level::Medium);
@@ -65,14 +65,15 @@ void run_stand_tests() {
         for (const LevelPlan* p : {&easy, &medium, &hard}) {
             ASSERT_TRUE(p->fire_duel);
             ASSERT_FALSE(p->fire_draft);                                                                     // (the rule is there, the plans leave it off: docs/BOTS.md, "The stand batch")
-            ASSERT_TRUE(p->ramp_unjam);
             ASSERT_EQ(p->ramp_unjam_ticks, 40u);
         }
+        ASSERT_TRUE(hard.ramp_unjam);                                                                        // (the gate is Hard's: GateTask never runs at the other levels)
+        ASSERT_FALSE(easy.ramp_unjam || medium.ramp_unjam);
         ASSERT_FALSE(easy.rush);
         ASSERT_EQ(easy.mine_home, 0u);
         ASSERT_EQ(easy.behind_mine_gate, 0u);
         ASSERT_EQ(easy.behind_mine_tier, 4u);
-        ASSERT_TRUE(hard.mine_per_pile >= 6 && hard.mine_apart == 1);                                        // (David: "the bomber only places three bombs ... it could bomb up a whole area")
+        ASSERT_TRUE(hard.mine_per_pile >= 6 && hard.mine_apart == 1);                                        // (the owner: "the bomber only places three bombs ... it could bomb up a whole area")
         ASSERT_TRUE(hard.mine_home >= 8 && medium.mine_home >= 6);
         for (const LevelPlan* p : {&medium, &hard}) {
             ASSERT_TRUE(p->rush);
@@ -392,7 +393,8 @@ void run_stand_tests() {
         plan.mine_home_after = 0;
         const auto build = [&](sim::SimulationEngine& sim) {
             empty_field(sim, 96);
-            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
+            const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
+            sim.apply_command(command_of(sim::CommandType::GroupMove, 1, {foe}, kFightHills[1].x - 3, kFightHills[1].y + 12));             // (it walks: the bot sees an enemy play)
             sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14, 10});
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
         };
@@ -474,7 +476,7 @@ void run_stand_tests() {
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(1200);
-            ASSERT_TRUE(rig.as<StandardBot>().mines().planted() <= 3u);                                     // (the field is empty of enemies' ants but their hills are on it: the rows are present)
+            ASSERT_EQ(rig.as<StandardBot>().mines().planted(), 0u);                                          // (the hills of the others are on the field but nothing of theirs has moved: nobody is seen to play)
         }
     } TEST_END();
 
@@ -571,7 +573,7 @@ void run_stand_tests() {
             ASSERT_TRUE(rig.as<StandardBot>().ledger().owner(carrier) != StandardBot::kRush);
         }
         {   // (f) the plans' rush (plan.rush_workers off: the Workers kill nothing and the rush cost 30 to 75 points a match with them): two typed ants and four Workers do not make a force; with
-            //     four typed ants the rush is those four and the Workers stay at their piles
+            //     five typed ants (the Thief is held by the raids) the rush is four of them and the Workers stay at their piles
             LevelPlan typed = plan;
             typed.rush_workers = false;
             {
@@ -596,7 +598,7 @@ void run_stand_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI25.8 Whole Matches: Nobody Rushes On ISLANDS Where No Walk Joins The Hills (Even With The Thresholds At Their Lowest); Two Hard Bots Of The Shipped Plan Rush, Fire And Mine On TREASURE, And Bank Within A Tenth Of Two Without The Batch")
+    TEST_CASE("AI25.8 Whole Matches: Nobody Rushes On ISLANDS Where No Walk Joins The Hills (Even With The Thresholds At Their Lowest); Two Hard Bots Of The Shipped Plan Fire And Mine On TREASURE, And Bank Within A Tenth Of Two Without The Batch")
     {
         const auto run = [&](const char* map, const std::vector<std::function<LevelPlan(const BotSpec&)>>& plans, uint32_t seed) {
             ArenaSpec spec;
@@ -639,19 +641,27 @@ void run_stand_tests() {
             };
             int64_t with = 0, without = 0;
             uint32_t mines = 0;
+            uint32_t hunts = 0;
             for (uint32_t seed = 1; seed <= 4; ++seed) {
                 const ArenaResult a = run("TREASURE", {shipped, before}, seed);
                 for (const ArenaSeatResult& s : a.seats) {
                     (s.spec.seat == 0 ? with : without) += s.banked;
-                    if (s.spec.seat == 0) mines += s.mines_planted;
+                    if (s.spec.seat == 0) {
+                        mines += s.mines_planted;
+                        hunts += s.fire_hunts;
+                    }
                 }
                 const ArenaResult b = run("TREASURE", {before, shipped}, seed);
                 for (const ArenaSeatResult& s : b.seats) {
                     (s.spec.seat == 2 ? with : without) += s.banked;
-                    if (s.spec.seat == 2) mines += s.mines_planted;
+                    if (s.spec.seat == 2) {
+                        mines += s.mines_planted;
+                        hunts += s.fire_hunts;
+                    }
                 }
             }
             ASSERT_TRUE(mines >= 4u);
+            ASSERT_TRUE(hunts >= 1u);
             ASSERT_TRUE(with * 10 >= without * 9);
         }
     } TEST_END();
