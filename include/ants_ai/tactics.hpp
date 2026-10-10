@@ -258,6 +258,7 @@ struct LevelPlan {
                                          // a mine leaves its tile to the mine (measured: no loss of score, kills or wins, docs/BOTS.md), the fire-in lights the others
     uint32_t mine_min_units{8};          // a pile with fewer units left is not mined
     uint32_t mine_percent{170};          // an enemy works a pile when its walk there costs at most this percentage of the own (an enemy far further away does not come)
+    uint32_t mine_apart{2};              // two mines of a pile or of the gate lie at least this many tiles apart (Chebyshev); 1: they may touch, a line of them across a lane
     uint32_t mine_replant_ticks{240};    // a mine that went off or was defused is laid again after this long, while the enemy still comes
     bool raider_hunt{false};             // an enemy Fire or Bomber Ant within raider_radius tiles of the own hill or of a pile the own ants work is hunted by the fighters (the blows stop its work), whether or not walls stand
     int32_t raider_radius{12};
@@ -283,6 +284,30 @@ struct LevelPlan {
     uint32_t behind_odds_ease{12};       // the assault asks for this many percent less of the odds at every tier (a bot that is behind takes the even and the worse trade)
     uint32_t behind_assault_after{300};  // the assault of a bot that is behind begins this early at the latest
     uint32_t behind_sabotage_after{1800};  // ... and so does its fire-in (Medium; Hard lights from tick 600 anyway)
+    // the stand batch (docs/BOTS.md, "The stand batch"; the owner, 2026-10-10: "the fire ants need to be aggressive when somebody's firing in their base ... try to kill the other fire ant, at least knock him off the fire
+    // and then get him with his other ants ... you got to stand your ground"; "if you're down by a few hundred points, you're very unlikely to win by just continuing to eat, so why not select all your ants and take them to
+    // their base ... that's why it's really important for you to put bombs around your base"). Off in a plan made by hand; `--tune stand=0` switches all of it off again (the bot as it was)
+    bool fire_duel{false};               // an own Fire Ant strikes the enemy Fire Ant that fires the own gate in even while it stands on a fire wall (nobody else's order reaches an ant on a wall; a Fire Ant walks onto one): the blow
+                                         // throws it off the wall and cancels what it is doing, and the other fighters take over (FightTask::start_fire_defence)
+    bool fire_draft{false};              // the hunt of that Fire Ant takes every ant that can strike: Thief and Bomber Ants without a job and the Fire Ant of the walls too (the fighters are workers and Combat Ants, and a bot of six
+                                         // typed ants has none at home), and a Combat Ant from anywhere within fire_draft_far tiles instead of 20
+    int32_t fire_draft_far{60};
+    bool fire_duel_walls{false};         // the duel may take the Fire Ant that keeps the walls of the thief hole while a thief threatens (the thieves raid the hill meanwhile: 100 points a match on TREASURE)
+    bool ramp_unjam{false};              // an own ant without food that stands still on the ramp, or on the entrance, for ramp_unjam_ticks while a carrier waits steps aside (StandardBot::unjam_ramp)
+    uint32_t ramp_unjam_ticks{40};
+    uint8_t behind_mine_tier{4};         // from this war tier on a Bomber lays mines with an ant that the economy needs, and wants no surplus (behind_free_tier keeps the Combat Ants of the assault); 4: never
+    uint32_t behind_mine_gate{0};        // mines at the ring round the gate of the best opponent, at a time, while the bot is at behind_mine_tier (mine_gate otherwise)
+    uint32_t mine_home{0};               // mines round the own hill, at a time (MineTask): on the lanes that the enemy's walks take to it, five to nine tiles out, never on the doorstep, a tile apart from each other, so that the bot's own
+                                         // carriers (own bombs block their walks) and an enemy's rush meet them: an enemy ant that steps on one loses 2 hit points and is thrown four tiles. 0: none
+    uint32_t mine_home_apart{3};         // ... the mines round the hill lie at least this many tiles apart
+    uint32_t mine_home_after{2400};      // ... not before this tick of the match
+    bool rush{false};                    // a bot that is far behind sends all its ants at the enemy ants (RushTask): "you are not going to out-eat them"
+    uint8_t rush_tier{3};                // ... from this war tier on, with a deficit of at least rush_deficit points ...
+    uint32_t rush_deficit{200};
+    uint32_t rush_after{3600};           // ... not before this tick, and not in the last rush_min_left ticks (nothing to gain)
+    uint32_t rush_min_left{400};
+    uint32_t rush_ticks{3600};           // a rush lasts at most this long
+    bool rush_workers{false};            // ... Workers go too (they kill nothing above two hit points and leave the piles: that cost 30 to 75 points a match for no win); false: the typed ants only
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -295,6 +320,9 @@ LevelPlan plan_for(Level level) noexcept;
 LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept;
 /// One of the styles that the level allows, drawn from the generator
 Style draw_style(Level level, BotRng& rng) noexcept;
+/// The plan without the stand batch (docs/BOTS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
+/// subject is an older rule (without_war_batch calls it).
+void without_stand_batch(LevelPlan& plan) noexcept;
 /// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;

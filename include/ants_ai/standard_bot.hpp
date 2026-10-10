@@ -68,6 +68,7 @@ private:
           raids_(kRaids, tactics_),
           guard_(kGuard, tactics_),
           strike_(kStrike, tactics_),
+          rush_(kRush, tactics_),
           hatch_(kHatch, tactics_),
           gate_(kGate, gate_params(plan)),
           harass_(kHarass, tactics_),
@@ -96,6 +97,7 @@ public:
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
     const StrikeTask& strike() const noexcept { return strike_; }
+    const RushTask& rush() const noexcept { return rush_; }
     const HatchTask& hatch() const noexcept { return hatch_; }
     const GateTask& gate() const noexcept { return gate_; }
     const HarassTask& harass() const noexcept { return harass_; }
@@ -144,6 +146,7 @@ public:
     static constexpr TaskId kExpedition = 15;
     static constexpr TaskId kFerry = 16;
     static constexpr TaskId kMines = 17;
+    static constexpr TaskId kRush = 18;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -158,6 +161,7 @@ private:
         p.predictive = plan.gate_predictive;
         p.user_fail_limit = plan.gate_user_fails;
         p.leaver_wait_ticks = plan.gate_leaver_ticks;
+        p.unjam_ticks = plan.ramp_unjam ? plan.ramp_unjam_ticks : 0;
         p.cantgo_aware = plan.cantgo_aware;
         return p;
     }
@@ -251,6 +255,7 @@ private:
     RaidTask raids_;
     GuardTask guard_;
     StrikeTask strike_;
+    RushTask rush_;
     HatchTask hatch_;
     GateTask gate_;
     HarassTask harass_;

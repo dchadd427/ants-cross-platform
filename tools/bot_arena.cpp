@@ -750,6 +750,29 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_stand_batch(p);
+        return true;
+    }
+    if (key == "duel") return flag(p.fire_duel);
+    if (key == "draft") return flag(p.fire_draft);
+    if (key == "duelwalls") return flag(p.fire_duel_walls);
+    if (key == "draftfar") { p.fire_draft_far = static_cast<int32_t>(v); return true; }
+    if (key == "rampunjam") return flag(p.ramp_unjam);
+    if (key == "rampticks") { p.ramp_unjam_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "bmine") { p.behind_mine_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "bmgate") { p.behind_mine_gate = static_cast<uint32_t>(v); return true; }
+    if (key == "minehome") { p.mine_home = static_cast<uint32_t>(v); return true; }
+    if (key == "minehomeapart") { p.mine_home_apart = static_cast<uint32_t>(v); return true; }
+    if (key == "mineapart") { p.mine_apart = static_cast<uint32_t>(v); return true; }
+    if (key == "minehomeafter") { p.mine_home_after = static_cast<uint32_t>(v); return true; }
+    if (key == "rush") return flag(p.rush);
+    if (key == "rushtier") { p.rush_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "rushworkers") return flag(p.rush_workers);
+    if (key == "rushdef") { p.rush_deficit = static_cast<uint32_t>(v); return true; }
+    if (key == "rushafter") { p.rush_after = static_cast<uint32_t>(v); return true; }
+    if (key == "rushleft") { p.rush_min_left = static_cast<uint32_t>(v); return true; }
+    if (key == "rushticks") { p.rush_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
         p.race = false;
@@ -1118,7 +1141,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
             return false;
         }
     }
@@ -1442,6 +1465,15 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.key("war_ticks");                                             // the ticks a standard bot spent at every war tier (0: not behind enough .. 3)
             j.begin_object();
             for (size_t k = 0; k < s.war_ticks.size(); ++k) j.field("t" + std::to_string(k), uint64_t{s.war_ticks[k]});
+            j.end_object();
+            j.key("stand");                                                 // the stand batch (docs/BOTS.md): hunts of the Fire Ant that fires the gate, mines laid, ants sent off the ramp, rushes begun, their ticks and attack orders
+            j.begin_object();
+            j.field("fire_hunts", uint64_t{s.fire_hunts});
+            j.field("mines_planted", uint64_t{s.mines_planted});
+            j.field("ramp_unjams", uint64_t{s.ramp_unjams});
+            j.field("rushes", uint64_t{s.rushes});
+            j.field("rush_ticks", uint64_t{s.rush_ticks});
+            j.field("rush_attacks", uint64_t{s.rush_attacks});
             j.end_object();
             j.field("refused_orders", uint64_t{s.refused_orders});
             j.field("cantgo", uint64_t{s.cantgo});

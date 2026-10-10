@@ -147,6 +147,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_free_tier = 3;
             p.behind_odds_ease = 8;
             p.behind_assault_after = 900;
+            p.fire_duel = true;                      // (the stand batch: the Fire Ant strikes the Fire Ant that fires the gate in, the ramp is cleared; Easy drafts nobody, mines nowhere and never rushes)
+            p.ramp_unjam = true;
             break;
         case Level::Medium:
             p.assault = true;
@@ -170,6 +172,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_free_tier = 3;
             p.behind_odds_ease = 10;
             p.behind_assault_after = 600;
+            p.fire_duel = true;
+            p.ramp_unjam = true;
+            p.behind_mine_tier = 2;
+            p.behind_mine_gate = 3;
+            p.mine_home = 2;
+            p.rush = true;
+            p.rush_deficit = 300;
             break;
         case Level::Hard:
             p.assault = true;
@@ -187,12 +196,26 @@ LevelPlan plan_for(Level level) noexcept {
             p.mine_per_pile = 3;
             p.mine_gate = 3;
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
+            p.fire_duel = true;                      // the stand batch (docs/BOTS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
+            p.ramp_unjam = true;
+            p.behind_mine_tier = 1;
+            p.behind_mine_gate = 5;
+            p.mine_home = 3;
+            p.rush = true;
+            p.rush_deficit = 200;
             break;
     }
     return p;
 }
 
+void without_stand_batch(LevelPlan& p) noexcept {
+    p.fire_duel = p.fire_draft = p.ramp_unjam = p.rush = false;
+    p.behind_mine_tier = 4;
+    p.behind_mine_gate = p.mine_home = 0;
+}
+
 void without_war_batch(LevelPlan& p) noexcept {
+    without_stand_batch(p);
     p.war_bombers = p.war_fires = p.mine_per_pile = p.mine_gate = p.raider_extra = p.assault_force = 0;
     p.raider_hunt = p.raider_piles = p.assault = p.war_free_only = false;
     p.sabotage = p.level == Level::Hard && p.style == Style::Aggressive;

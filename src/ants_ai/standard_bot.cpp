@@ -29,6 +29,7 @@ void StandardBot::start(const BotContext& context) {
     }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
+    ledger_.set_rank(kRush, kRankFight);                          // (the same rank as a fight: the defenders of a fight at home stay, and the rush takes the walls', the mines' and the economy's ants)
     ledger_.set_rank(kWalls, kRankWalls);
     ledger_.set_rank(kPowerUps, kRankPowerUps);
     ledger_.set_rank(kRaids, kRankPowerUps);
@@ -108,7 +109,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (enemy_plays && view.ticks_left() > 2400) {
         // the war batch: Bomber Ants for the mines, Fire Ants for the fire-in (the power-ups that the flowers let fall and those on the map; the pick-up trips are the ordinary ones)
         const bool war_now = !plan.war_free_only || tactics_.surplus > 0 || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_free_tier);
-        if (war_now && (plan.mine_per_pile > 0 || plan.mine_gate > 0)) tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)], plan.war_bombers));
+        const bool mine_now = war_now || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_mine_tier)        // (the stand batch: a loser wants its Bomber from an earlier tier ...
+                              || (plan.mine_home > 0 && now >= plan.mine_home_after);                              // ... and every bot for the mines round its hill)
+        if (mine_now && (plan.mine_per_pile > 0 || plan.mine_gate > 0)) tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)], plan.war_bombers));
         if (plan.war_fires > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], plan.war_fires + (tactics_.wall_demand ? 1u : 0u)));
         if (plan.sabotage && plan.fire_extra > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<size_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], 1u + plan.fire_extra));
         if (plan.takes_thief) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = static_cast<uint8_t>(plan.max_thief);
@@ -134,10 +137,11 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if (plan.islands && plan.island_ferry && island_.active()) ferry_.step(context);        // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     fight_.step(context);
+    if (plan.rush || rush_.active()) rush_.step(context);                                    // (when the plan has no rush the task only gives back what it held)
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
-    if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
+    if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
     const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
     raids_.set_launching(raiding);
     if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
@@ -254,6 +258,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     raids_.on_command(command, fate, tick);
     guard_.on_command(command, fate, tick);
     strike_.on_command(command, fate, tick);
+    rush_.on_command(command, fate, tick);
     harass_.on_command(command, fate, tick);
     sabotage_.on_command(command, fate, tick);
     island_.on_command(command, fate, tick);
