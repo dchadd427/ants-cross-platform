@@ -5,10 +5,10 @@ usage: web_routes_check.py --web http://127.0.0.1:19980/
 
 The front page and the game page share the address "/": the owner made the Play online page the front page (the lobby now), and every address that the game
 page ever had keeps opening it. The rules (docker/nginx.conf):
-  /                                     the lobby (lobby.html), unless the query has join=<something> (a match on the game server: the games of the lobby's links and of every link shared before)
-                                        or embed=1 (a frame of the lobby): those open the game page (index.html), as "/" always did
-  /four.html[?query]                    a permanent redirect to /[?query] (the Play online page's own address, and its links with ?room=, ?map=, ?players=, ?fill=, ?play=here, ?aspect=)
-  /play.html[?map=...&bots=...]         the game page, at an explicit path of its own (the games on this computer: the lobby's Play button)
+  /                                     the lobby (lobby.html), unless the query has join=<something> (a match on the game server: the games of the lobby's links and of every link shared before):
+                                        those open the game page (index.html), as "/" always did. Every other query is the front page, an old ?map=... or ?embed=1 too
+  /four.html[?query]                    a permanent redirect to /[?query] (the Play online page's own address, and its links with ?room=, ?aspect=)
+  /play.html[?map=...&bots=...]         the game page, at an explicit path of its own (the games on this computer: START for one on the front page)
   /index.html, /lobby.html              the two files themselves
 Every html answer has the headers that every page of the site has always had: Cache-Control "no-cache, must-revalidate" (exactly one line), the two cross-origin headers, an ETag (a conditional
 request is answered 304), and the redirect has the server's cross-origin headers too. The pages are recognised by one marker each: the lobby has the room (id="lobby"; the build writes it with or without quotes),
@@ -72,10 +72,10 @@ def main():
     print("[web routes] the front page, the game page's addresses, the redirect of four.html")
     lobby_paths = ["/", "/lobby.html", "/?room=k7m2xq", "/?room=k7m2xq&roommap=small&roomseats=2", "/?room=k7m2xq&roommap=treasure&roomseats=4&roomteams=0%2B1&roomleaderstart=1&fill=medium&aspect=4:3",
                    "/?map=treasure&players=1&fill=medium", "/?map=tiny&players=4&fill=easy&play=here&aspect=4:3",
-                   "/?aspect=4:3", "/?clear_cache=1790000000", "/?x=join&y=embed", "/?join=", "/?embed=0", "/?embed=", "/?joined=/ws", "/?map=small"]
+                   "/?aspect=4:3", "/?clear_cache=1790000000", "/?x=join&y=embed", "/?join=", "/?embed=0", "/?embed=", "/?embed=1", "/?embed=1&aspect=4:3", "/?joined=/ws", "/?map=small"]
     game_paths = ["/index.html", "/play.html", "/play.html?map=treasure&bots=medium&name=Bob&aspect=16:9", "/play.html?map=islands", "/?join=/ws&room=k7m2xq&roommap=small&roomseats=2",
                   "/?join=/ws&room=k7m2xq&roommap=small&roomseats=2&roomteams=0%2B1&roomleaderstart=1&platform=browser-linux&seat=1&name=Bob&aspect=16:9",
-                  "/?join=/ws&room=abc&seat=1&name=Bob&aspect=16:9&embed=1", "/?join=/ws&room=abc&fill=hard", "/?embed=1", "/?embed=1&aspect=4:3", "/?aspect=4:3&join=/ws&room=r", "/?join=%2Fws&room=r",
+                  "/?join=/ws&room=abc&seat=1&name=Bob&aspect=16:9", "/?join=/ws&room=abc&fill=hard", "/?aspect=4:3&join=/ws&room=r", "/?join=%2Fws&room=r",
                   "/?room=r&join=/ws", "/?join=/ws"]
     for path in lobby_paths:
         status, headers, names, body = get(path)
@@ -96,7 +96,7 @@ def main():
     check(status == 301 and headers.get("location") == "/", "HEAD /four.html is the same redirect")
 
     print("[web routes] revalidation: a page that has not changed is answered 304 at every one of its addresses")
-    for path in ("/", "/?join=/ws&room=x", "/?embed=1", "/play.html?map=tiny", "/lobby.html", "/index.html"):
+    for path in ("/", "/?join=/ws&room=x", "/play.html?map=tiny", "/lobby.html", "/index.html"):
         status, headers, names, body = get(path)
         tag = headers.get("etag")
         status2, headers2, names2, body2 = get(path, {"If-None-Match": tag}) if tag else (0, {}, [], "")

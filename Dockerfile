@@ -93,8 +93,8 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy compiled WebAssembly artifacts atomically in a single layer
 COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 
-# The game page also answers at a path of its own, play.html (the games on this computer: the front page's Play button opens it with ?map=...&bots=...): a copy of index.html. nginx serves "/" with
-# the lobby unless the address is a game's (?join=, ?embed=1: docker/nginx.conf), so index.html is still what every old game address opens.
+# The game page also answers at a path of its own, play.html (the games on this computer: START for one on the front page opens it with ?map=...): a copy of index.html. nginx serves "/" with
+# the lobby unless the address is a game's (?join=: docker/nginx.conf), so index.html is still what every old game address opens.
 RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html
 
 # Copy favicon assets
@@ -103,7 +103,7 @@ COPY web/favicon.* /usr/share/nginx/html/
 # The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
 COPY web/front/ /usr/share/nginx/html/front/
 
-# The front page, the lobby (lobby.html): play on this computer alone or against bots, host a match on the game server or join one by its code (it embeds the game page for the seats that play on it),
+# The front page, the lobby (lobby.html): a room on the game server that is ready when the page opens (a link to send, a code to type, START), or a game for one on this computer,
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 

@@ -33,6 +33,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kPowerUps, kRankPowerUps);
     ledger_.set_rank(kRaids, kRankPowerUps);
     ledger_.set_rank(kBombs, kRankWalls);
+    ledger_.set_rank(kMines, kRankWalls);
     ledger_.set_rank(kGuard, kRankGuard);
     ledger_.set_rank(kStrike, kRankWalls);
     ledger_.set_rank(kHarass, kRankWalls);
@@ -78,6 +79,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.standing = standing_of(plan, view, *map);
     tactics_.guard_stance = tactics_.standing.guard;
     const Standing& st = tactics_.standing;
+    if (last_look_ != 0 && now > last_look_) war_ticks_[st.war] += static_cast<uint32_t>(std::min<uint64_t>(now - last_look_, 1000u));    // (the ticks the bot spent at every war tier, for the arena's report)
+    last_look_ = now;
     const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
     tactics_.wall_demand = wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
@@ -103,6 +106,10 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (t != seat_ && row.present && !row.dropped && !(view.ally() < sim::MAX_PLAYERS && t == view.ally()) && tactics_.memory.plays(t)) enemy_plays = true;
     }
     if (enemy_plays && view.ticks_left() > 2400) {
+        // the war batch: Bomber Ants for the mines, Fire Ants for the fire-in (the power-ups that the flowers let fall and those on the map; the pick-up trips are the ordinary ones)
+        const bool war_now = !plan.war_free_only || tactics_.surplus > 0 || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_free_tier);
+        if (war_now && (plan.mine_per_pile > 0 || plan.mine_gate > 0)) tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Bomber)], plan.war_bombers));
+        if (plan.war_fires > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<uint32_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], plan.war_fires + (tactics_.wall_demand ? 1u : 0u)));
         if (plan.sabotage && plan.fire_extra > 0) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = static_cast<uint8_t>(std::max<size_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Fire)], 1u + plan.fire_extra));
         if (plan.takes_thief) tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = static_cast<uint8_t>(plan.max_thief);
         // Combat Ants pay when the enemy fights (an own ant was hit lately, an enemy Combat Ant or Thief has been seen): against a passive economy they are an ant that does not harvest
@@ -130,6 +137,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     walls_.step(context);
     powerups_.step(context);
     bombs_.step(context);
+    if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
     const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
     raids_.set_launching(raiding);
     if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
@@ -242,6 +250,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     walls_.on_command(command, fate, tick);
     powerups_.on_command(command, fate, tick);
     bombs_.on_command(command, fate, tick);
+    mines_.on_command(command, fate, tick);
     raids_.on_command(command, fate, tick);
     guard_.on_command(command, fate, tick);
     strike_.on_command(command, fate, tick);

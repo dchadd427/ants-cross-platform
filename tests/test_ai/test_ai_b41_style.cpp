@@ -310,7 +310,8 @@ void run_b41_style_tests() {
                     ASSERT_TRUE(p.max_thief <= neutral.max_thief);
                     ASSERT_TRUE(p.max_combat <= (level == Level::Hard ? 2u : level == Level::Medium ? 1u : 0u));
                     ASSERT_TRUE(p.defenders <= neutral.defenders + 1u);
-                    if (level != Level::Hard) ASSERT_TRUE(!p.sabotage && !p.strikes && p.fire_extra == 0u);               // (theft and the strike are Hard's)
+                    if (level != Level::Hard) ASSERT_TRUE(!p.strikes && p.fire_extra == 0u);                              // (theft and the strike are Hard's)
+                    ASSERT_EQ(p.sabotage, level != Level::Easy);                                                        // (the fire-in of the war batch: Medium's and Hard's, whatever the style)
                     if (level == Level::Easy) ASSERT_TRUE(!p.harass);
                     ASSERT_TRUE(p.contest_opening_ants <= neutral.contest_opening_ants + 1u);
                     if (level == Level::Easy) ASSERT_EQ(p.opening_order[0], sim::AntType::Fire);
@@ -571,7 +572,9 @@ void run_b41_style_tests() {
                 }
                 const uint32_t walker = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{58, 58});
                 sim.apply_command(command_of(CommandType::GroupMove, 1, {walker}, 50, 58));                         // an enemy plays, far from every power-up
-                Rig rig(sim, 0, Level::Hard, Pinned::bot(Level::Hard, style), 4, 4);
+                LevelPlan pinned = Pinned::plan(Level::Hard, style);
+                without_war_batch(pinned);                                                                          // (the war batch wants two Fire Ants of every Hard style: AI24.1)
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(pinned), 4, 4);
                 rig.run(1500);
                 ASSERT_EQ(count_type(sim, 0, sim::AntType::Fire), style == Style::Aggressive ? 2u : 1u);
             }
@@ -711,20 +714,22 @@ void run_b41_style_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI11.6 The Shipped Plans: The Tactics That The Tournaments Measured As Losses Are Off In The Plan Of Every Level (The Parked Combat Ant, The Harassment Squad, The Sabotage Of Another Gate, The Ambush At A Thief Hole, The Strict Contest Order, Strikes, Hatching For Fights, The Wipe-Out Focus) And Only The Aggressive Style Of Medium (The Squad, Short) And Of Hard (The Squad, The Sabotage, The Strike) Turns Some Of Them On; What Pays Is On At Medium And Hard: The Combat Ant That Harvests And Is Taken In The Opening, The Raids, The Gate And The Theft (Hard)")
+    TEST_CASE("AI11.6 The Shipped Plans: The Tactics That The Tournaments Measured As Losses Are Off In The Plan Of Every Level (The Parked Combat Ant, The Harassment Squad, The Ambush At A Thief Hole, The Strict Contest Order, Strikes, Hatching For Fights, The Wipe-Out Focus) And Only The Aggressive Style Of Medium (The Squad, Short) And Of Hard (The Squad, The Sabotage, The Strike) Turns Some Of Them On; The Fire-In Of The War Batch (AI24.1) Is On At Medium And Hard Whatever The Style; What Pays Is On At Medium And Hard: The Combat Ant That Harvests And Is Taken In The Opening, The Raids, The Gate And The Theft (Hard)")
     {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             const LevelPlan n = plan_for(level);                                                           // the level's neutral plan
-            ASSERT_FALSE(n.guards || n.harass || n.sabotage || n.ambush || n.contest_aware || n.strikes || n.hatches || n.hatch_for_squad || n.wipe_focus);
+            ASSERT_EQ(n.sabotage, level != Level::Easy);                                                   // (the fire-in of the war batch, docs/BOTS.md: lit whether or not the enemy can put it out)
+            ASSERT_FALSE(n.guards || n.harass || n.ambush || n.contest_aware || n.strikes || n.hatches || n.hatch_for_squad || n.wipe_focus);
             ASSERT_EQ(n.harass_workers, 0u);
             for (uint32_t seed = 1; seed <= 12; ++seed) {
                 const LevelPlan p = plan_in_match(level, Style::Random, seed, static_cast<uint8_t>(seed % 4));
                 ASSERT_FALSE(p.guards || p.ambush || p.contest_aware || p.hatches || p.hatch_for_squad || p.wipe_focus);
                 ASSERT_EQ(p.harass_workers, 0u);
-                if (p.style != Style::Aggressive || level == Level::Easy) ASSERT_FALSE(p.harass || p.sabotage || p.strikes);
+                if (p.style != Style::Aggressive || level == Level::Easy) ASSERT_FALSE(p.harass || p.strikes);
+                ASSERT_EQ(p.sabotage, level != Level::Easy);
                 if (p.style == Style::Aggressive && level != Level::Easy) ASSERT_TRUE(p.harass);
                 if (p.style == Style::Aggressive && level == Level::Hard) ASSERT_TRUE(p.sabotage && p.strikes && p.fire_extra == 1u);
-                if (p.style == Style::Aggressive && level == Level::Medium) ASSERT_FALSE(p.sabotage || p.strikes);
+                if (p.style == Style::Aggressive && level == Level::Medium) ASSERT_FALSE(p.strikes);
                 if (level == Level::Easy) continue;
                 ASSERT_TRUE(p.combat_harvests);
                 ASSERT_TRUE(p.max_combat >= 1);

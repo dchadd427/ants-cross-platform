@@ -4,7 +4,7 @@ seats you in its first colour; the page shows the room's code and a link to send
 player onto another colour, sets a colour to Open, a bot of a level or Nobody, and presses Team 1 / Team 2, the map and START!; a link to somebody's room asks for a name first, "Have a code?" takes a typed code,
 and START sends every page to the game page (web/shell.html) in the same tab with the key of its seat (a match for one is the game page's own single player). The game page has a Menu button back.
 
-  - what needs no browser and no markup is RUN (node, when it is installed): the old addresses' rules that are still in the page (the test room: the create block, the plan, the teams, a game on this computer),
+  - what needs no browser and no markup is RUN (node, when it is installed): the rules of the addresses that the page still makes (a game on this computer),
     the game page's whitelist (the six maps by key, the levels, the teams, the room's block, a cleaned name: never the text of the address), the two pages agreeing, and that everything the page reads from
     its two scripts is there (tests/scripts/web_lobby_check.js). The rules of the lobby itself (front/lobby_rules.js) are run by tests/scripts/web_lobby_rules_check.js, its client of the game server
     (front/lobby_net.js) by tests/scripts/web_lobby_net_check.js and web_lobby_client_check.js;
@@ -103,9 +103,8 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.style, r"\.slots \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);")             # two columns on a wide page ...
         phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
         self.found(phone, r"\.slots \{ grid-template-columns: minmax\(0, 1fr\);")                                         # ... one column on a phone, in the same order
-        # the seats of the test room are the server's: Green 0, Red 1, Blue 2, Black 3; its games lie by colour like the cards (a CSS order there: a frame that is moved loads its game again)
-        self.assertEqual(re.findall(r"\{ name: '(\w+)', css: '(\w+)' \}", script), [("Green", "green"), ("Red", "red"), ("Blue", "blue"), ("Black", "black")])
-        self.assertEqual(re.findall(r'\.cell\[data-seat="(\d)"\] \{ order: (\d); \}', self.style), [("3", "0"), ("0", "1"), ("1", "2"), ("2", "3")])
+        # the page keeps no table of the seats' names of its own (the colours' names, seats and cards come from front/lobby_rules.js: Green 0, Red 1, Blue 2, Black 3)
+        self.assertNotIn("var SEATS", script)
         # what a card is made of: text and attributes, never markup (a name is whatever a person typed), each control named for a screen reader and found again by the listeners through the same attributes
         for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
             self.assertNotIn(banned, self.page)
@@ -229,7 +228,7 @@ class TheFrontPageMarkup(PageCase):
         self.found(phone, r"\.invite #copy \{ width: 100%; \}")
 
     def test_have_a_code_opens_a_line_and_a_typed_code_asks_for_a_name_then_looks_at_the_room_before_it_leaves_this_one(self):
-        self.assertIn('<span class="rt"><button type="button" id="havecode">Have a code?</button><button type="button" id="more">More ways to play</button></span>', self.markup)
+        self.assertIn('<span class="rt"><button type="button" id="havecode">Have a code?</button></span>', self.markup)
         self.assertIn('<div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" '
                       'autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>', self.markup)
         self.assertIn('<p class="hint" id="joinhint" role="status"></p>', self.markup)
@@ -262,11 +261,10 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("else if (e.reason === R.MatchRunning) failed(Rules.HINT.running);", probe)
         self.assertIn("else if (e.reason === R.VersionMismatch) showBanner('version');", probe)
         self.assertIn("else failed(Rules.TEXT.noroom());", probe)
-        self.assertEqual(len(re.findall(r"joinUrl\(", script)), 2)                  # the definition and the test room's "Play in this tab": a typed code never makes an address of the game page
-        # More ways to play: the two buttons of the test mode, shown and hidden by one line
-        self.assertIn("$('more').addEventListener('click', function () { $('morebox').hidden = !$('morebox').hidden; });", script)
-        self.assertIn('<div class="morebox" id="morebox" hidden><span>For testing:</span><button class="btn sm" type="button" id="more-here">Play every colour myself, in this page</button>'
-                      '<button class="btn sm" type="button" id="more-windows">Play every colour in separate windows</button></div>', self.markup)
+        self.assertNotIn("joinUrl(", script)                                          # a typed code never makes an address of the game page
+        # there is no "More ways to play": the map selection screen is the only way to play
+        for gone in ("More ways to play", "morebox", "more-here", "more-windows", "testRoom", "Play every colour"):
+            self.assertNotIn(gone, self.page, gone)
 
     def test_how_it_works_is_a_dialog_behind_a_footer_button_with_its_steps_and_the_two_sheets(self):
         self.assertIn('<button class="lnk" type="button" id="how-open">How it works</button>', self.markup)
@@ -294,7 +292,7 @@ class TheFrontPageMarkup(PageCase):
         script = self.script
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", script)
         self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()", script)      # (the Hello of a new room asks for the default map)
-        run = script[script.index("function runLobby() {"):script.index("var room = '';")]
+        run = script[script.index("function runLobby() {"):script.index("// SELECTOR_BEGIN")]
         self.assertIn("connect({ code: newCode(), name: myName(), own: true });", run)                            # a plain visit: a room of a new code
         self.assertIn("} else if (stored) {", run)
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run)       # a reload: the same room and the key of the seat
@@ -309,9 +307,10 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("if (!v || typeof v !== 'object' || !Net.publicRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;", script)
         self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", script)       # (Back from a match: the room is the match's now, this page makes another)
         self.assertIn("forgetSession();                           // (Back from the match makes a room again: this one is the match's now)", script)
-        # which page this is: an address that asks for the test room (a map, or a room with a create block or play=here) is the test room, everything else the lobby
-        self.assertIn("if (asksMap || (asksRoom && (wantedBlock !== null || params.get('play') === 'here'))) {", script)
+        # which page this is: the lobby, whatever the address (there is no test room to ask for)
         self.assertIn("runLobby();", script)
+        for gone in ("runTestRoom", "asksMap", "asksRoom", "wantedBlock", "in-room", "room-panel"):
+            self.assertNotIn(gone, script, gone)
 
     def test_the_keys_in_this_browser_are_the_name_the_shape_and_the_seat_entry_and_none_of_the_old_cards(self):
         for key in ("ants-match", "ants-solo-seats", "ants-solo-bots", "ants-solo-teams", "ants-four-map", "ants-four-players", "ants-four-fill", "ants-four-teams"):
@@ -349,27 +348,25 @@ class TheFrontPageMarkup(PageCase):
         self.found(self.markup, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')
         self.assertIn("runNameStep(ui, { recall: recall, remember: remember }, function (name) { o.done(name || suggestion); });", self.script)       # (an empty name is the suggestion that the field's placeholder shows)
         self.assertIn("ui.input.placeholder = suggestion;", self.script)
-        self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 3, "the name card is asked for by a typed code, a link to a room and the test room's old addresses")
+        self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
         self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
         self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
         # the picture's shape: a pair of buttons of the footer, 16:9 first and checked until the page reads another
         self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture \(960 x 540\)">16:9</label>')
         for shape, name in (("4-3", "Classic 4:3"), ("16-10", "16:10"), ("21-9", "21:9")):
             self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-%s" value="[0-9:]+"><label for="aspect-%s" title="[^"]+">%s</label>' % (shape, shape, name))
-        # the test room (the old addresses and "Play every colour myself"): its panel, hidden until an address or those buttons open it
-        self.assertIn('<section id="room-panel" class="room" hidden>', self.markup)
-        for ident in ("play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint"):
-            self.assertEqual(self.markup.count('id="%s"' % ident), 1, ident)
+        # the test room (a second page inside this file, with the games in frames) is gone
+        for ident in ("room-panel", "play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint", "sync", "grid", "frames-note"):
+            self.assertEqual(self.markup.count('id="%s"' % ident), 0, ident)
 
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))
         self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues"])
-        self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 1, "the one window.open is the explicit 'Open a window' of a seat")
-        self.assertIn("function openWindow(seat)", self.page)
+        self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 0, "the front page opens no window of its own")
 
-    def test_start_goes_to_this_tab_and_so_do_the_old_addresses_and_the_room_panel(self):
+    def test_start_goes_to_this_tab(self):
         script = self.script
         # START of the lobby: when the room heard that it starts, this page puts the entry of its seat where the game page looks, then goes to the game page in THIS tab (the game page asks no name, the seat's key is there)
         start = script[script.index("function onStarting() {"):script.index("function shownTeam(seat) {")]
@@ -387,25 +384,21 @@ class TheFrontPageMarkup(PageCase):
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
         self.assertIn("var LOCAL_PAGE = 'play.html';", script)
         self.assertIn("client.start();", script)
-        # an old address that asks for a game on this computer, "Play every colour myself", and Play in this tab of the test room: all in this tab
-        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(mapKey, levels, youName(), aspect), window.location.href).href);", script)
-        self.assertIn("window.location.assign(new URL('./?map=' + key + query, window.location.href).href);", script)
-        self.assertIn("$('more-here').addEventListener('click', function () { testRoom('&play=here'); });", script)
-        self.assertIn("$('more-windows').addEventListener('click', function () { testRoom(''); });", script)
-        self.assertIn("window.location.assign(joinUrl(room, roomBlock, checked.name, fill, teamsInBlock ? '' : roomTeams));", script)       # (Play in this tab: the room's block goes with it, and the teams that the block names travel in the block)
-        self.assertIn("window.location.assign(window.location.origin + window.location.pathname.replace(/^\\/+/, '/'));", script)             # (New match and Back to the front page: the lobby again, from this page's own origin)
-        # the selector of the picture's shape changes the lobby's next game at once, and asks only where games run on the page
-        self.assertIn("if (!room) {                         // the lobby has no game open: the next game is the new shape", script)
+        # the selector of the picture's shape changes the lobby's next game at once and asks nothing (the lobby has no game open)
+        block = script[script.index("// SELECTOR_BEGIN"):script.index("// SELECTOR_END")]
+        self.assertIn("aspect = value;", block)
+        self.assertNotIn("confirm", block)
+        self.assertNotIn("location.assign", block)
 
-    def test_the_old_address_and_its_state_addresses_still_work_at_the_front_page(self):
-        for needle in ("params.get('room')", "params.get('map')", "params.get('players')", "validFillPlan(params.get('fill'))", "validRoomTeams(params.get('teams'))", "params.get('play') === 'here'", "new URLSearchParams(window.location.search).get('aspect')"):
+    def test_only_a_room_code_and_the_shape_are_read_from_the_address(self):
+        for needle in ("new URLSearchParams(window.location.search).get('room')", "new URLSearchParams(window.location.search).get('aspect')"):
             self.assertIn(needle, self.page, needle)
-        self.assertIn("var wantedPlayers = playersChoice(wantedPlayersText, 4);", self.page)         # (an address that names no players hosts 4, as before; players=1 plays on this computer)
+        for gone in ("get('map')", "get('players')", "get('fill')", "get('teams')", "get('play')", "roomBlockOf", "validFillPlan", "validRoomTeams"):      # (the old addresses of the test room mean nothing now: they open the lobby)
+            self.assertNotIn(gone, self.page, gone)
         self.assertNotIn("four.html", self.page)
 
-    def test_a_code_is_only_a_name_and_the_test_rooms_choices_are_its_create_block_that_every_link_of_it_carries(self):
-        # protocol 15: the code is six random characters of an alphabet without look-alikes (front/lobby_rules.js makeCode; tests/scripts/web_lobby_rules_check.js holds the alphabet); what a TEST room is (its map, its
-        # seats, its teams) is its create block, &roommap= &roomseats= [&roomteams=] [&roomleaderstart=1] right after &room=<code>, which ONE function makes and every link of the test room uses. The lobby's
+    def test_a_code_is_only_a_name_and_no_link_of_the_page_carries_a_create_block(self):
+        # protocol 15: the code is six random characters of an alphabet without look-alikes (front/lobby_rules.js makeCode; tests/scripts/web_lobby_rules_check.js holds the alphabet). The lobby's
         # own rooms are made by the game server from the Hello, so their link is the code alone.
         script = self.script
         newcode = script[script.index("function newCode() {"):]
@@ -414,15 +407,8 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("(window.crypto || window.msCrypto).getRandomValues(buf);", newcode)
         self.assertIn("return Rules.makeCode(buf);", newcode)                                              # ... made into the code by the rules
         self.assertNotIn("Math.random", newcode)
-        self.assertIn("function roomBlockQuery(block) {", script)
-        self.assertIn("return (map ? '&roommap=' + map : '') + '&roomseats=' + seats + (teams ? '&roomteams=' + encodeURIComponent(teams) : '') + (block.leaderStart === true ? '&roomleaderstart=1' : '');", script)
-        self.assertEqual(len(re.findall(r"roomBlockQuery\(", script)), 4)                       # the definition and the three makers of an address of the test room: its links, its own address, Play in this tab
-        for maker in ("var q = '?join=/ws&room=' + encodeURIComponent(room) + roomBlockQuery(roomBlock);",                                      # gameUrl
-                      "'?room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fill ? '&fill=' + fill : '')",                            # startRoom: the address of the page
-                      "var q = '?join=/ws&room=' + encodeURIComponent(code) + roomBlockQuery(block) + (fillPlan ? '&fill=' + fillPlan : '')"):  # joinUrl
-            self.assertIn(maker, script, maker)
-        self.assertIn("startRoom(newCode(), { map: m.key, seats: players, teams: roomTeam === 'ffa' ? '' : roomTeam, leaderStart: false }, play, hostFillText(seats, players), '');", script)   # (an address that hosts a match)
-        self.assertIn("var wantedBlock = roomBlockOf(window.location.search);", script)                       # (?room=<code> with block parameters is a room that this page made, with none a room that was made some other way)
+        for gone in ("roomBlockQuery", "roomBlockOf", "roommap", "roomseats", "roomteams", "roomleaderstart"):                    # (the create block of the test room's links: the lobby's links are the code alone)
+            self.assertNotIn(gone, script, gone)
         for gone in ("roomTeamWord", "codeTeams", "describeCode", "cardCode", "teamsInCode", "'demo-'", "demo-small", "demo-treasure", "randomCode", "cardBlock", "cardRoom"):                 # (a code names nothing, and no code is converted)
             self.assertNotIn(gone, self.page, gone)
 
@@ -433,11 +419,9 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',", script)           # (the name card of a link)
         self.assertIn("title: 'Join the room ' + Rules.codeText(typed.code), button: 'Join',", script)           # (the name card of a typed code)
         self.assertIn("var code = codeText(offer.room);", script)                                                 # (the Rejoin button's words)
-        self.assertIn("$('room-code').textContent = codeText(room);", script)                                    # (the test room's panel)
-        self.assertIn("'Join the match ' + codeText(wanted)", script)                                            # (the test room's name card)
         # typed: Rules.typedCode takes blanks and capitals; a link's code must be 1 - 32 letters, digits, - and _ (the older eight-character codes work), in the three places that read one
         self.assertIn("var typed = Rules.typedCode($('joincode').value), hint = $('joinhint');", script)
-        self.assertEqual(script.count("/^[A-Za-z0-9_-]{1,32}$/.test(wanted)"), 3)
+        self.assertEqual(script.count("/^[A-Za-z0-9_-]{1,32}$/.test(wanted)"), 1)
         self.assertIn('placeholder="6 letters and numbers, like k7m 2xq"', self.markup)
         self.assertIn('autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">', self.markup)
 
@@ -457,10 +441,6 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        if (!Rules || !Net) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
-
-    def test_the_frames_note_is_shown_only_where_games_run(self):
-        self.found(self.page, r'<p id="frames-note" class="frames-note" hidden>')
-        self.assertEqual(len(re.findall(r"\$\('frames-note'\)\.hidden = false;", self.page)), 3)       # the first report, a seat on the page, a seat in a window
 
 
 class TheGamePage(PageCase):
@@ -539,7 +519,7 @@ class TheGamePage(PageCase):
         join = self.page[self.page.index("function joinArguments(search, secure, host) {"):]
         join = join[:join.index("return out;", join.index("if (join && "))]                                     # (the first "return out;" is the one of an address that cannot be read)
         self.assertEqual(re.findall(r"out\.args\.push\('(--[a-z-]+)'", join),
-                         ["--audio-focus", "--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
+                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
         self.assertIn("var roomTeams = antsTeamsArg(q.get('roomteams'));", join)
         self.assertIn("var platform = antsPlatformArg(q.get('platform'));", join)
         self.assertNotIn("navigator", join)                                                                    # (the page does not look for the platform: it is the address's word or none)
@@ -586,14 +566,16 @@ class TheImageAndTheCi(PageCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_notes_say_where_the_lobby_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "## The front page: a room that is ready when the page opens", "### Your room", "### START!", "### The notices", "### The old test room", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
-                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "**More ways to play**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
+        for needle in ("`/play.html?map=", "## The front page: a room that is ready when the page opens", "### Your room", "### START!", "### The notices", "### The old addresses", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
+                       "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Have a code?**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
         for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
             self.assertIn(needle, notes, needle)
         readme = read("README.md")
+        self.assertNotIn("**More ways to play**", page)                                     # (the button and the test room are gone: the map selection screen is the only way to play)
+        self.assertNotIn("### The old test room", page)
         self.assertNotIn("web/four.html", readme + page)
         for stale in ("**Players 1 to 4**", "Players 1 to 4.", "**Play vs the computer**", "**Host a match**", "**Join a match**", "**Opponents**", "two cards", "Host card",                       # (the pages that the earlier card replaced)
                       "one card for every game", "**Sit here**", "**Friend**", "**The card", "New match**", "Invitations**", "`ants-match`"):                                                              # (the earlier front page's card: the lobby replaced it)

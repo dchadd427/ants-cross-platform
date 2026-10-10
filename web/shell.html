@@ -1000,36 +1000,6 @@
             }
         }
 
-        /* Embedded in another page (web/lobby.html: ?embed=1): only the game, filling the frame */
-        body.embed {
-            padding: 0;
-            min-height: 0;
-            background: #000;
-            overflow: hidden;
-        }
-        body.embed::after {
-            display: none;
-        }
-        body.embed header,
-        body.embed footer,
-        body.embed .mobile-tip-banner,
-        body.embed .view-bar,
-        body.embed .info-panel-wrapper {
-            display: none !important;
-        }
-        body.embed #game-stage {
-            max-width: none;
-            min-width: 0;
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            aspect-ratio: auto;
-        }
-        body.embed #game-container {
-            border-radius: 0;
-            box-shadow: none;
-        }
-
         /* Wide windows: the six guide panels in two rows of three */
         @media (min-width: 1100px) {
             #info-panel {
@@ -1042,7 +1012,7 @@
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1058,18 +1028,15 @@
         .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
         .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
 
-        /* on the picture: what the page says over the game (small, so that the game's own bars stay clear) */
+        /* on the picture: what the page says over the game (small, so that the game's own bars stay clear). The REPLAY tag is not here: it rides with the bar (below), so nothing of it lies over the game */
         body.replay #game-container { container-type: inline-size; }
-        .rtag { position: absolute; top: 1.4cqw; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 1cqw; padding: .12cqw 1cqw; font-size: max(10px, 1.2cqw); line-height: 1.5; white-space: nowrap; color: var(--cream); background: rgba(5, 10, 8, .86); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
-        .rtag b { font-weight: 500; letter-spacing: .16em; color: var(--gold); }
-        .rtag span { font-variant-numeric: tabular-nums; }
         .endnote { position: absolute; left: 3%; right: 3%; width: fit-content; margin: 0 auto; top: 4cqw; z-index: 4; padding: .7cqw 1.6cqw; font-size: max(11px, 1.5cqw); line-height: 1.35; text-align: center; color: var(--cream); background: var(--inset); border: 3px solid var(--gold); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); pointer-events: none; }
         .veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 10, 8, .55); z-index: 4; }
         .veil .card { display: grid; gap: 10px; justify-items: center; padding: 14px 24px 16px; min-width: min(78%, 330px); font-size: max(12px, 1.8cqw); color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
 
         /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
-        .rbar { width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 22px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
+        .rbar { position: relative; width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
         body:not(.replay) .rbar { display: none; }
         .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; }
         .rbar .rplay svg { width: 24px; height: 24px; fill: currentColor; display: block; }
@@ -1089,6 +1056,18 @@
         .rbar .fsx { grid-area: fsx; display: none; min-width: 44px; padding: 6px 10px; }
         .rbar .fsx svg { width: 22px; height: 22px; fill: currentColor; display: block; }
 
+        /* the REPLAY / LIVE tag: just above the bar, in the room that the bar's top margin makes (never over the picture); in fullscreen it lies over the picture's bottom edge with the bar and goes with it. Its sizes are
+           pixels: it is outside the picture's box, whose width the picture's own sizes follow */
+        .rtag { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 8px; padding: 1px 10px; font-size: 13px; line-height: 1.5; white-space: nowrap; color: var(--cream); background: rgba(5, 10, 8, .86); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+        .rtag b { font-weight: 500; letter-spacing: .16em; color: var(--gold); }
+        .rtag span { font-variant-numeric: tabular-nums; }
+        /* the tab on the bar's top edge (fullscreen only): a tap hides the bar, like a swipe down on it */
+        .rtab { display: none; }
+        .rtab svg { width: 20px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; }
+        /* the strip along the bottom edge of a fullscreen page where a finger calls the bar back (a tap, or a swipe up); nothing is drawn on it, and it is there only while the bar is away and the last touch was a finger */
+        .redge { position: absolute; left: 0; right: 0; bottom: 0; height: calc(56px + env(safe-area-inset-bottom, 0px)); z-index: 59; touch-action: none; }
+        .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; width: max-content; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
+
         /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
         .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
         .rm-card p b { font-weight: 500; color: #fff; }
@@ -1102,6 +1081,10 @@
         /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
         .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease; }
         .rbar.over.idle { opacity: 0; pointer-events: none; }
+        .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
+        .rbar.over .rtag { left: 14px; transform: none; font-size: 14px; }
+        .rbar.over .rtab { display: flex; position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); width: 60px; height: 20px; align-items: center; justify-content: center; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-bottom: 0; border-radius: 9px 9px 0 0; cursor: pointer; touch-action: manipulation; }
+        .rbar.over .rtab:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         .rbar.over .fsx { display: inline-flex; }
         .rbar.over .tl .tick { background: #486a5f; } .rbar.over .tl .tick.m5 { background: var(--muted); }
 
@@ -1110,14 +1093,18 @@
             body.replay header { flex-wrap: wrap; }
             .rhead { order: 3; flex: 1 1 100%; }
             .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
-            .rbar { margin: 18px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
+            .rtag { font-size: 12px; bottom: calc(100% + 5px); }
+            .rbar.over .rtab { left: auto; right: 14px; transform: none; }          /* (the tag at the left can be long, and a phone upright has no room for the tab in the middle) */
+            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
             .rbar .clock { text-align: left; font-size: 19px; }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
         }
         /* a phone on its side, or any short window: the title keeps one row, and in fullscreen the bar is one thin row */
         @media (max-height: 520px) {
             #r-meta { display: none; }
-            .rbar { width: 100%; max-width: 1280px; }
+            .rbar { width: 100%; max-width: 1280px; margin-top: 43px; }
+            .rtag { font-size: 11px; bottom: calc(100% + 5px); }
+            .rbar.over .rtag { font-size: 13px; }
             .rhead h2 { font-size: 20px; } .rhead h2 small { font-size: 13px; }
             .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
             .rbar.over .clock { text-align: right; font-size: 16px; min-width: 0; }
@@ -1134,7 +1121,7 @@
         .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
         body.live [data-dl], body.nodl [data-dl] { display: none !important; }
         .rtag.lv b { color: #ff8c84; }
-        .rtag.lv b::before { content: ""; display: inline-block; width: .8cqw; height: .8cqw; min-width: 7px; min-height: 7px; margin-right: .7cqw; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
+        .rtag.lv b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
         .rbar.islive .tl .edge { display: block; }
         .rbar .livebox { grid-area: live; display: none; }
@@ -1203,7 +1190,6 @@
         <div id="game-container">
             <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-            <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
             <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
             <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
 
@@ -1218,6 +1204,8 @@
             </div>
         </div>
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
+        <div class="redge rep-only" id="redge" hidden></div>
+        <div class="rnote rep-only" id="rnote" role="status" hidden>Swipe up from the bottom edge to bring the bar back</div>
     </div>
 
     <div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>
@@ -1258,12 +1246,14 @@
     </div>
 
     <div class="rbar rep-only" id="rbar">
+        <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
         <button class="btn rplay" type="button" id="b-play" title="Play or pause (Space)" aria-label="Play"></button>
         <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Position in the match" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="rail" id="rail"><div class="track"><div class="fill" id="tl-fill"></div><div class="edge"></div></div><div class="ticks" id="tl-ticks"></div><div class="thumb" id="tl-thumb"></div></div></div>
         <div class="clock" id="clock"><b id="t-now">0:00</b> <small id="t-all">/ 0:00</small></div>
         <div class="livebox" id="livebox"><span class="livenow" id="livenow" hidden>Live</span><button class="btn sm jtl" type="button" id="b-live" hidden>Jump to live</button></div>
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
+        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
@@ -1405,7 +1395,7 @@
         //   edgePixel / clientFor the game's pointer over a bar of a fullscreen page (the nearest pixel of the picture); lockStart / moveLocked the game's cursor while the pointer is
         //   locked (it moves by the browser's relative motion, held to the picture); lockSetting the player's choice of the lock
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
-        //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start= &embed=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
+        //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
         //   badDownload whether a download is not the game data
         //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
         var ANTS_PAGE = (function () {
@@ -1660,7 +1650,7 @@
             // teams, leader starts), the platform word, a seat, a fill level, the teams, the number of people to wait for (start) and a name that do not fit their rule are left out (the game checks them too).
             // Without a valid join nothing about a room goes to the game, and without a valid room nothing of the create block. The arguments come in this order: the door, the room, the create block, the platform, the seat, the fill, the teams, the start, the name.
             function joinArguments(search, secure, host) {
-                var out = { embed: false, args: [] };
+                var out = { args: [] };
                 var q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var join = q.get('join');
@@ -1675,8 +1665,6 @@
                 var fill = antsFillPlanArg(q.get('fill'));
                 var teams = antsTeamsArg(q.get('teams'));
                 var start = antsStartArg(q.get('start'));
-                out.embed = q.get('embed') === '1';
-                if (out.embed) out.args.push('--audio-focus');
                 if (join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1) {
                     out.args.push('--join-url', (secure ? 'wss://' : 'ws://') + host + join);
                     if (room && /^[A-Za-z0-9_-]{1,32}$/.test(room)) {
@@ -1749,8 +1737,8 @@
                 return out;
             }
 
-            // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts), not a
-            // frame of another page (embed), and with no `name` parameter at all. The page that makes an address of its own (web/lobby.html: its frames, its windows and its Join button) always puts
+            // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts) with no
+            // `name` parameter at all. The page that makes an address of its own (web/lobby.html: START, Rejoin and its Join button) always puts
             // the name in, empty or not, because its player chose it there ("name=" with nothing behind it is a name that was chosen: none), so such an address asks nobody.
             function asksForName(search) {
                 var q;
@@ -1759,7 +1747,7 @@
                 var room = q.get('room');
                 if (!(join && /^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) && join.indexOf('//') === -1 && join.indexOf('..') === -1)) return false;
                 if (!(room && /^[A-Za-z0-9_-]{1,32}$/.test(room))) return false;
-                return q.get('embed') !== '1' && !q.has('name');
+                return !q.has('name');
             }
             // A room code as a screen shows it: six characters in two groups of three, "k7m2xq" as "k7m 2xq" (easier to read out and to copy by eye), any other length as it is. The front page's codeText
             // (web/lobby.html: the room panel, the Rejoin button, the name step of a room link) says the same. Only a screen shows a code so: addresses, fields and the game's arguments keep the plain code.
@@ -1841,7 +1829,7 @@
         })();
 
         // Joining a game server from the page address (docs/NETWORK_PORT.md): ?join=/ws&room=<code>[&roommap=<key>][&roomseats=<2-4>][&roomteams=A+B][&roomleaderstart=1][&platform=<word>]&seat=<0-3>&name=<name>[&fill=<plan>]
-        //                                                                         [&teams=A+B][&start=<1-4>][&embed=1] (ANTS_PAGE.joinArguments reads it)
+        //                                                                         [&teams=A+B][&start=<1-4>] (ANTS_PAGE.joinArguments reads it)
         //   join   the server's WebSocket door on THIS site: /ws or a path below it (the nginx of the site passes /ws to the server)
         //   room   the room code, a name and nothing more (letters, digits, _ and -, up to 32; the front page makes six characters of its own: k7m2xq); seat 0 green, 1 red, 2 blue, 3 black;
         //          name: printable ASCII, up to 32 characters
@@ -1857,9 +1845,7 @@
         //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
-        //   embed  the page is a frame of another page (lobby.html): no header and no guide; sound only while this frame has the focus
         var ANTS_ARGS = [];
-        var ANTS_EMBED = false;
         // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the 16:9 picture and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
@@ -1870,8 +1856,6 @@
         (function () {
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
-            ANTS_EMBED = joined.embed;
-            if (ANTS_EMBED) document.body.classList.add('embed');
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
                 var remembered = '';
@@ -1893,7 +1877,7 @@
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
             if (ANTS_REPLAY_MODE) { fromAddress = '16:9'; remembered = null; }      // (a recording is shown in the wide picture only)
-            var chosen = ANTS_PAGE.resolveAspect(fromAddress, ANTS_EMBED ? null : remembered);
+            var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
@@ -1903,9 +1887,9 @@
             });
         })();
         // The game tells the page the seat that the room gave this window (after the Welcome, and again if it changes: Application's on_seat_known): the address of a game of a server's room then carries it
-        // (withSeat), so that a reload of THIS window takes this seat and its key. Never for a frame of another page (the page that holds it makes its addresses) or a game on this computer.
+        // (withSeat), so that a reload of THIS window takes this seat and its key. Never for a game on this computer.
         window.antsSeatKnown = function (seat) {
-            if (ANTS_EMBED || ANTS_ARGS.indexOf('--join-url') === -1) return;
+            if (ANTS_ARGS.indexOf('--join-url') === -1) return;
             var changed = ANTS_PAGE.withSeat(window.location.search, seat);
             if (changed === window.location.search) return;
             try { window.history.replaceState(null, '', window.location.pathname + changed + window.location.hash); } catch (e) { /* the address stays as it is */ }
@@ -2037,15 +2021,13 @@
         // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
         // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
-            var asks = !ANTS_EMBED && ANTS_PAGE.asksForName(window.location.search);
+            var asks = ANTS_PAGE.asksForName(window.location.search);
             if (asks) {                                           // (a browser that holds the key of this very seat is on its way back: no step, see holdsThisSeat)
                 try { asks = !holdsThisSeat(window.location.search, ANTS_ARGS, window.localStorage, Date.now()); } catch (e) { /* no storage: the step asks, as for any shared link */ }
             }
-            if (!ANTS_EMBED) {
-                var stripped = ANTS_PAGE.withoutName(window.location.search);
-                if (stripped !== window.location.search) {
-                    try { window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash); } catch (e) { /* the address stays as it is */ }
-                }
+            var stripped = ANTS_PAGE.withoutName(window.location.search);
+            if (stripped !== window.location.search) {
+                try { window.history.replaceState(null, '', window.location.pathname + stripped + window.location.hash); } catch (e) { /* the address stays as it is */ }
             }
             var card = document.getElementById('name-step');
             var ui = {
@@ -2257,8 +2239,7 @@
         Module.setStatus('Downloading game data package...');
 
         // The game starts by itself: when it is ready the loading screen goes away and the canvas takes the keyboard. The first press inside the game takes it again
-        // (a click focuses the canvas anyway; this makes it sure in every browser). A frame of another page (ANTS_EMBED) gets the focus when the player clicks it,
-        // and must not scroll that page.
+        // (a click focuses the canvas anyway; this makes it sure in every browser).
         function focusGame() {
             try { canvas.focus({preventScroll: true}); } catch (e) { /* nothing to focus */ }
         }
@@ -2266,13 +2247,11 @@
             splashOverlay.classList.remove('failed');                       // (a failure card that was up before the game started after all goes away with the rest)
             splashOverlay.style.opacity = '0';
             setTimeout(function() { splashOverlay.style.display = 'none'; }, 300);
-            if (!ANTS_EMBED) focusGame();
+            focusGame();
         }
-        if (!ANTS_EMBED) {
-            ['pointerdown', 'mousedown'].forEach(function(name) {
-                document.getElementById('game-container').addEventListener(name, focusGame, { capture: true, once: true });
-            });
-        }
+        ['pointerdown', 'mousedown'].forEach(function(name) {
+            document.getElementById('game-container').addEventListener(name, focusGame, { capture: true, once: true });
+        });
 
         // Sound and the browsers' autoplay rules. A page may make sound only after the person has done something on it, so the game's Web Audio context (SDL's, which the game
         // opens when it starts: Module.SDL2.audioContext) begins suspended and the game's sound and music begin the moment it is resumed; the game itself does not wait for it.
@@ -2369,7 +2348,7 @@
 
         // The height of everything on the page that is not the game's box: the slot's CSS size is what is left of the window (--chrome, see the style above)
         function measureChrome() {
-            if (ANTS_EMBED || isFullscreen()) return;
+            if (isFullscreen()) return;
             var bar = document.getElementById(ANTS_REPLAY_MODE ? 'rbar' : 'view-bar');
             var bodyStyle = window.getComputedStyle(document.body);
             var barStyle = bar ? window.getComputedStyle(bar) : null;
@@ -2493,7 +2472,7 @@
 
         // ---- The pointer in fullscreen: the bars, and the pointer lock ----
         // The bars and the lock are for a FULLSCREEN page (the browser's, or the page's own). A WINDOWED page has the margin ("The margin of a windowed page" below): a pointer that goes a little
-        // beyond the game's box still counts as at its edge. Touch is left alone in both, and so is a frame of another page (ANTS_EMBED: the frame's edge is the frame's).
+        // beyond the game's box still counts as at its edge. Touch is left alone in both.
         //
         // THE BARS. A screen of another shape than the picture has bars (the stage's black: the top and bottom on a 16:10 screen, the sides on a 21:9 or 4:3 one). They are part of the
         // screen, so a pointer over a bar is at the nearest edge of the picture, as in the desktop game, whose window maps the bars to positions outside the picture that it holds to
@@ -2594,8 +2573,7 @@
         // picture's nearest edge pixel, so the map goes on scrolling; (2) the canvas's leave towards the margin is not passed on; (3) the pointer is gone, as it always was, when it goes beyond the
         // margin, out of the browser window (the page's leave), or over one of the page's own controls (a button, a link, a field or a selector near the game: ANTS_PAGE.overControl: hovering those
         // must never scroll the map). A click, the wheel and the context menu in the margin are the page's (SDL listens on the canvas: the game never hears of them; a button release that SDL
-        // sees without a press changes nothing there); the browser's own arrow shows in the margin (it is the page). Not for a frame of another page (ANTS_EMBED: the box fills the frame, there is no
-        // margin), not for touch, not for a locked pointer, not in fullscreen (the bars' rules above).
+        // sees without a press changes nothing there); the browser's own arrow shows in the margin (it is the page). Not for touch, not for a locked pointer, not in fullscreen (the bars' rules above).
         var ANTS_EDGE_MARGIN = 96;           // CSS pixels: one inch as CSS counts it (96 px): about the width of a hand's overshoot, small enough never to be mistaken for another place of the page
         var marginLast = null;               // the last place of a mouse over the page ({ x, y, buttons }): a scroll or a resize moves the box under a pointer that did not move
         // SDL (2.28.4) drops the FIRST leave of a page's life (see handToGame), so that the leave of a pointer that goes from the game onto a button of the page would not stop the scrolling when it is
@@ -2623,22 +2601,22 @@
             }
         }
         window.addEventListener('pointermove', function (e) {
-            if (handingOver || ANTS_EMBED || e.pointerType === 'touch' || isLocked() || isFullscreen()) return;
+            if (handingOver || e.pointerType === 'touch' || isLocked() || isFullscreen()) return;
             marginLast = { x: e.clientX, y: e.clientY, buttons: e.buttons };
             if (e.target === canvas) { primeFocusOverTheGame(e); return; }       // over the game itself the browser's own events are the game's pointer (the canvas's mousemove clears edgeForwarded)
             windowedPointer(e.clientX, e.clientY, e.target, e.buttons);
         }, true);
         window.addEventListener('mouseleave', function (e) {                    // the canvas's leave towards the margin (window capture: before SDL's own listener)
-            if (handingOver || ANTS_EMBED || e.target !== canvas || !e.relatedTarget || isLocked() || isFullscreen()) return;      // (no relatedTarget: the pointer left the browser window: gone)
+            if (handingOver || e.target !== canvas || !e.relatedTarget || isLocked() || isFullscreen()) return;      // (no relatedTarget: the pointer left the browser window: gone)
             var rect = canvas.getBoundingClientRect();
             if (!ANTS_PAGE.overControl(e.relatedTarget) && ANTS_PAGE.marginPixel(rect.left, rect.top, rect.width, rect.height, e.clientX, e.clientY, ANTS_EDGE_MARGIN)) e.stopPropagation();
         }, true);
         document.documentElement.addEventListener('mouseleave', function () {   // the pointer left the browser window: it is gone, wherever it was
             marginLast = null;
-            if (!ANTS_EMBED && !isFullscreen() && edgeForwarded) handLeaveToGame();
+            if (!isFullscreen() && edgeForwarded) handLeaveToGame();
         });
         function windowedAgain() {                                              // the page scrolled or was resized under a pointer that did not move: where is it now?
-            if (ANTS_EMBED || isFullscreen() || isLocked() || !edgeForwarded || !marginLast) return;
+            if (isFullscreen() || isLocked() || !edgeForwarded || !marginLast) return;
             windowedPointer(marginLast.x, marginLast.y, document.elementFromPoint(marginLast.x, marginLast.y), marginLast.buttons);
         }
         window.addEventListener('scroll', windowedAgain, { passive: true });
@@ -3355,17 +3333,44 @@
             }
 
             // ---- fullscreen: the bar lies over the picture, so it moves into the picture's box while the page is fullscreen ----
+            // The bar goes away by itself 3 seconds after the last touch of it while the match plays (it stays while the match is paused), and a swipe down on it or a tap on its tab hides it at once. A FINGER on the
+            // picture never calls it (a tap or a drag of the map would put it over the picture's bottom edge every time); a finger calls it from the strip along the bottom edge (#redge: a tap, or a swipe up), which
+            // is there only while the bar is away and the last touch was a finger (the strip would keep a mouse from the game's edge). A mouse, a pen and the keys call it as ever.
+            var EDGE_SWIPE = 24, BAR_SWIPE = 36;                                    // CSS pixels
+            var touchSeen = false, noteShown = false, noteTimer = 0, swiped = -1;      // swiped: the pointer that has just swiped the bar away (-1: none)
             window.antsReplayPlaceBar = function () {
                 var bar = $('rbar');
                 var over = isFullscreen();
                 if (over && bar.parentNode !== stageElement) { stageElement.appendChild(bar); bar.classList.add('over'); wake(); }
                 else if (!over && bar.parentNode === stageElement) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
             };
+            function syncEdge() {
+                var bar = $('rbar');
+                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));
+            }
             function wake() {
                 var bar = $('rbar');
                 bar.classList.remove('idle');
                 clearTimeout(idleTimer);
-                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(function () { bar.classList.add('idle'); }, 3000);
+                clearTimeout(noteTimer);
+                $('rnote').hidden = true;
+                swiped = -1;
+                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
+                syncEdge();
+            }
+            function hideBar() {                                                  // (only in fullscreen: the bar of the page is always there)
+                var bar = $('rbar');
+                if (!bar.classList.contains('over')) return;
+                clearTimeout(idleTimer);
+                if (dragging) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline is a touch of the bar: it looks again)
+                bar.classList.add('idle');
+                syncEdge();
+                if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
+                    noteShown = true;
+                    $('rnote').hidden = false;
+                    clearTimeout(noteTimer);
+                    noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000);
+                }
             }
 
             // ---- what the game tells the page ----
@@ -3412,6 +3417,7 @@
                 if (!dragging) return;
                 dragging = false;
                 seek(turnAt(ev) / TPS);
+                wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
             });
             tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; });
             tl.addEventListener('keydown', function (ev) {
@@ -3429,7 +3435,41 @@
                     toggle();
                 }
             }, true);
-            ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) { document.addEventListener(name, wake, { passive: true }); });
+            ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
+                document.addEventListener(name, function (ev) {
+                    var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';
+                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
+                    if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
+                    if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)
+                    wake();
+                }, { passive: true });
+            });
+            ['pointerup', 'pointercancel'].forEach(function (name) { document.addEventListener(name, function (ev) { if (ev.pointerId === swiped) swiped = -1; }, { passive: true }); });
+            // a finger on the strip: a tap, or a swipe up, calls the bar. A TAP calls it in its click, the last event of the tap: the bar is under the finger from then on, and a tap that called it earlier would be
+            // followed by a click on whatever the bar has under the finger (a speed button, Play, the way out of fullscreen). A swipe makes no click.
+            var edgeFrom = null;
+            $('redge').addEventListener('pointerdown', function (ev) {
+                edgeFrom = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
+                try { $('redge').setPointerCapture(ev.pointerId); } catch (e) { /* the moves come while the finger is over the strip */ }
+            });
+            $('redge').addEventListener('pointermove', function (ev) {
+                if (edgeFrom && ev.pointerId === edgeFrom.id && edgeFrom.y - ev.clientY >= EDGE_SWIPE) { edgeFrom = null; wake(); }
+            });
+            $('redge').addEventListener('pointerup', function () { edgeFrom = null; });
+            $('redge').addEventListener('pointercancel', function () { edgeFrom = null; });
+            $('redge').addEventListener('click', wake);
+            // a swipe down on the bar (anywhere but the timeline, which has its own drag), or a tap on its tab, hides it
+            var barFrom = null;
+            $('rbar').addEventListener('pointerdown', function (ev) {
+                barFrom = ev.pointerType === 'touch' && $('rbar').classList.contains('over') && !$('tl').contains(ev.target) ? { id: ev.pointerId, x: ev.clientX, y: ev.clientY } : null;
+            });
+            $('rbar').addEventListener('pointermove', function (ev) {
+                if (!barFrom || ev.pointerId !== barFrom.id) return;
+                var down = ev.clientY - barFrom.y;
+                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; hideBar(); swiped = ev.pointerId; }
+            });
+            ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
+            $('b-tab').addEventListener('click', hideBar);
 
             // ---- a match that is being played: the feed ----
             var feedTimer = 0, notLiveLooks = 0;
@@ -3581,7 +3621,7 @@
     <!-- END replay glue -->
     <script>
         // ---- The game's data (index.data, about 15 MB) ----
-        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; two or four frames of web/lobby.html asked for the same file at the same
+        // The file packager in index.js downloads it with an XMLHttpRequest and throws when that fails; several games on one page (the front page used to frame two or four) asked for the same file at the same
         // moment and one of them was refused by the browser's cache (net::ERR_CACHE_WRITE_FAILURE in Chromium), after which its card said "Downloading data (0%)" for ever. So the
         // page downloads the data itself, with fetch: the first try with the browser's cache (a repeat visit costs a 304), the retries (up to 3, after 0.4, 1.2 and 3 seconds)
         // without it, so that a cache entry that cannot be written cannot fail them again; progress is shown as before; the bytes are handed to the packager through
