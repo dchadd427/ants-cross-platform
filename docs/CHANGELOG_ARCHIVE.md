@@ -2,10 +2,10 @@
 
 This is the detailed history of every release up to and including v0.1.0, frozen: nothing is added here after v0.1.0. It was moved here unchanged from the old `CHANGELOG.md` (only the title and the relative links changed: the links are now relative to this folder). It names every change with its measured numbers, the test counts of its day and the reverse-engineering sources; the numbers, file names and counts in it are those of each release at the time, and are not kept current. What changed in each release, in a few lines, is in the short changelog: [`CHANGELOG.md`](../CHANGELOG.md).
 
-The running list of what changed in every version of the Ants remake, newest first. The version number lives in
-`include/ants_app/version.hpp` and is shown on screen next to the FPS meter (bottom right of every screen).
-This file is updated with every release, together with the [README](../README.md); it is also published on the beta site at
-[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html).
+The list of what changed in every version of the Ants remake up to v0.1.0, newest first. The version number lives in
+the file `VERSION` and is shown on screen next to the FPS meter (bottom right of every screen).
+This file is no longer updated: the releases after v0.1.0 are in the short changelog, [`CHANGELOG.md`](../CHANGELOG.md). It is also published on the beta site at
+[beta.playants.org/changelog_archive.html](https://beta.playants.org/changelog_archive.html).
 
 How to read it: versions before v0.0.24 approximated the original 1998 game; from v0.0.24 on every system was re-derived from
 the disassembly of `Ants.exe` and replaced (the "Original ..." series). "Rewritten tests" are old tests that encoded behaviour

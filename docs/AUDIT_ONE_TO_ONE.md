@@ -3,7 +3,7 @@
 Status: commit 4aa985f (v0.0.50 plus the cleanup pass), audit of 2026-09-30. When it was written nothing in this list had been changed yet; section 0 logs the fixes that followed. It is the list of what differs, in the
 order in which it is proposed to be fixed. The owner decides.
 
-## 0. Progress (updated with every release)
+## 0. Progress (a record up to v0.0.77)
 * v0.0.51: shortcuts that the original did not have removed (owner request), hit-point numbers on by default (owner tweak).
 * v0.0.52: batch 1 item 1 (hill queue: LH NEW-1, NEW-2, NEW-3), reported by the owner in play ("six ants sent to the base, three cancelled their queue").
 * v0.0.53: batch 1 items 2 and 3 (ability orders re-issued when the approach tile is taken: LM NEW-M1; group re-click rules: LM NEW-M2; the invented left-column rule next to the hill removed: LB NEW-3).
