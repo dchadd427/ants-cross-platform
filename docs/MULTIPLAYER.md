@@ -163,7 +163,7 @@ A bot reads the world through `BotView` and `MapInfo`, a copy of what a player o
 - **`worker`** only harvests, and never hatches, fights, raids or uses a power-up. It is the fixed yardstick that other bots are measured against.
 - **`standard`** is the bot that people meet: the worker's economy plus the tactics of its level and one of four styles (`aggressive`, `economic`, `raider`, `defensive`; a Hard bot plays only `aggressive` or `raider`, and on Easy a style only moves the numbers). Its tactics include the contest play (a race for contested food, fights for the kill, fire walls lit only where they cannot simply be put out, a harder game when it is behind) and, on ISLANDS and SMALL, the island play (a crew flown over the water by bomb flights, Swimmers that carry the food home). A standard bot draws a style for each match from its seat's own random numbers, or you pin it (`--bot 2:hard:raider`). It sends fewer orders that cannot work (the gate, the rescue of a carrier and the carrier aid look at the map as it is now, and a thief raids no hole that an ant holds), so the bot's own refused orders ("Can't go there.") are few, and `bot_arena` counts them ([`BOTS.md`](BOTS.md) "The can't-go loop"). Its name stays "Bot (Level)".
 
-What each level and style does, how every tactic was judged (the win rate and the margin against opponents that fight) and the tables of numbers: [`BOTS.md`](BOTS.md) "Difficulty levels", "The standard bot" and "Measurements".
+What each level and style does, how every tactic was judged (the win rate and the margin against opponents that fight) and the tables of numbers: [`BOTS.md`](BOTS.md) "Difficulty levels" and "The standard bot", and "Measurements" in [`BOTS_history.md`](history/BOTS_history.md).
 
 ### The arena
 

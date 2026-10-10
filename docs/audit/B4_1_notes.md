@@ -360,7 +360,7 @@ The survivors, one by one:
 - **`bot_arena`'s usage text lost the end of its `--tune` line** to a bad edit (found by the fast tier after the texts changed): fixed.
 - **Documents were wrong** (`docs/GAME_REVERSE_ENGINEERING.md`): the mud "humping" bullet (3 << 16 is in neither the program nor the remake), the forced hatch is "free" (it costs `min(200, score)`), the emergence invulnerability of section 17 (the hatch task never creates it). Corrected there.
 
-## B4a: the island play (the deep tier; numbers in `docs/BOTS.md`, "Measurements")
+## B4a: the island play (the deep tier; numbers in `docs/history/BOTS_history.md`, "Measurements")
 
 **What the measurements decided.** (1) No builder in the level plans: two bots of the plan against two of today's on SMALL (32 matches a level) differ by -94, +21 and +82 points at Easy, Medium and Hard with a builder and by +163, +220 and +195 without; a Swimmer that carries food earns 700 to 850 points a match, a bridge carries one ant at a time. The code stays (tests, `--tune ibuild=1`) and guards the bridges that others dig. (2) The wants (Easy 2, Medium 3, Hard 3) hold on SMALL as well: 1, 2 and 3 Swimmers gave +132, +176, +176 at Easy, +209, +237, +238 at Medium and +172, +210, +214 at Hard. (3) Walking the crew over bridges to the rows was not built: no bridge reaches a corner before the flights have brought the Swimmers (a power-up beyond a bridge is collected by the power-up task: `AI15.13`). (4) The tests first played the plan alone (`StandardBot(plan)`: no style), the arena plays the registry's bot (`StandardBot(level, style)`): the tests of whole matches now do what the arena does, seed for seed.
 

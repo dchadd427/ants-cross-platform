@@ -19,7 +19,7 @@ The simulation, the lock-step rules, the network protocol and every golden hash 
 
 ## The comparison
 
-One bot with the rules of the contest batch against three of the strategy of v0.5.0 (`prev=1`), at every level on every map, as in B4-1: win rate, margin, kills and losses. `prev=1` is not byte for byte the binary of v0.5.0 (the controller's refusal, the view's hit points and `attackable()`'s refusal of an enemy that stands on a fire wall stay): a mirror of four Hard bots on TREASURE holds the two to the same within noise: the binary of v0.5.0 (48 matches) 2,200 points, 2,343 banked, 143 raided, 0.67 kills a match, `prev=1` (24 matches) 2,201, 2,344, 142 and 0.66 (`docs/BOTS.md`, "The contest batch"). Against the real v0.5.0 binary the commands first differ at tick 216 (a thief's raid names another tile of the enemy mound when an ant stands on the usual one) and the state hashes from about tick 4,100.
+One bot with the rules of the contest batch against three of the strategy of v0.5.0 (`prev=1`), at every level on every map, as in B4-1: win rate, margin, kills and losses. `prev=1` is not byte for byte the binary of v0.5.0 (the controller's refusal, the view's hit points and `attackable()`'s refusal of an enemy that stands on a fire wall stay): a mirror of four Hard bots on TREASURE holds the two to the same within noise: the binary of v0.5.0 (48 matches) 2,200 points, 2,343 banked, 143 raided, 0.67 kills a match, `prev=1` (24 matches) 2,201, 2,344, 142 and 0.66 (`docs/history/BOTS_history.md`, "The contest batch"). Against the real v0.5.0 binary the commands first differ at tick 216 (a thief's raid names another tile of the enemy mound when an ant stands on the usual one) and the state hashes from about tick 4,100.
 
 ## Mutants
 

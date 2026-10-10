@@ -112,7 +112,7 @@ The changelog pages (`/changelog.html` and `/changelog_archive.html`) and Sprite
 
 - The game can run a second engine next to the match's own (the confirmed one, which the host's turns, the server's referee and every hash keep exactly as they were). An order is run on it in the same call and the screen shows it, a few ticks ahead, so the ants answer a click as they do in a game of one machine instead of one round trip, one seal and one jitter buffer later. The corner's `delay` shows what the click feels.
 - **It is off by default**: other players' ants still hop about a dozen pixels, a tile at most, when their orders arrive. `?prediction=on` on the address of a network game (a `?join=...` link; the front page does not pass it on) turns it on, as the game's `--prediction on`; a game on one computer never predicts. Once on, it switches itself off for a while (ten seconds, twice as long each time) when its work takes too long on a slow device, and it is off in a hidden tab, in a pause and while the "Get ready" dialog is up.
-- More: [`MULTIPLAYER.md`](MULTIPLAYER.md), "Prediction of your own orders"; the design and the measurements: [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
+- More: [`MULTIPLAYER.md`](MULTIPLAYER.md), "Prediction of your own orders"; the design: [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim); the measurements: [`NETWORK_PORT_history.md`](history/NETWORK_PORT_history.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 
 ## Authentic 1998 Asset Pipeline
 

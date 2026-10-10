@@ -36,6 +36,11 @@ def read(*parts):
         return f.read()
 
 
+def network_document_and_its_history():
+    """docs/NETWORK_PORT.md (the rules) and docs/history/NETWORK_PORT_history.md (the tests, measurements and review notes of each chapter): the texts that these checks pin are in either."""
+    return read("docs", "NETWORK_PORT.md") + "\n" + read("docs", "history", "NETWORK_PORT_history.md")
+
+
 class TheMarkupAndTheStyle(unittest.TestCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
@@ -333,7 +338,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
 
     def test_the_documents_say_what_the_re_check_of_the_fixes_changed(self):
         """The re-check's N3 and N4 (docs/audit/persist_notes.md): the words of the documents are what the code does."""
-        doc = read("docs", "NETWORK_PORT.md")
+        doc = network_document_and_its_history()
         server_page = read("docs", "SERVER.md")
         for needle in ("a new player's key at the Start, a rejoin's at its Welcome", "a waiting room that another player's Hello made", "up to ten seconds (200) on a slow disk",
                        "about **0.77 s of every second**", "the first IPv4 address, else the first IPv6 one with its scope", "N1 - N5"):
@@ -346,7 +351,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         self.assertIn("**The re-check of these fixes.**", read("docs", "audit", "persist_notes.md"))
 
     def test_the_network_document_names_the_parts_of_the_check_and_what_it_stands_on(self):
-        doc = read("docs", "NETWORK_PORT.md")
+        doc = network_document_and_its_history()
         section = doc[doc.index("### The switch, the front page's Rejoin button and the check in a real browser (work package 4)"):]
         for part in ("reload", "restart", "rejoin", "leave", "none"):
             self.assertIn("| `%s` |" % part, section, part)
