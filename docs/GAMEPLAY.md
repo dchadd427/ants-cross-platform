@@ -15,7 +15,7 @@ The game reads the original's own data files directly: no conversion tool and no
   - block 3 is the level's default ant type: on `POPcOrN` every ant is a combat ant, on `Bombz Away` a bomber (see Ants and their types).
 - The archive stores each directional animation in five of the eight directions. The other three are mirrored copies of the sprites, made once when `ants.chd` loads, so a direction is an O(1) table lookup (section 5.8).
 
-Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 3, 4 and 5.8. The sprites, sounds and animations of `ants.chd` can be browsed in the asset catalog ([`ASSET_CATALOG.md`](ASSET_CATALOG.md)). What comes from the original game is explained in [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md); which of its files the repository holds, and on what terms, is under [License](../README.md#license) in the README.
+Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 3, 4 and 5.8. The sprites, sounds and animations of `ants.chd` can be browsed in the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#interactive-asset-catalog)). What comes from the original game is explained in [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md); which of its files the repository holds, and on what terms, is under [License](../README.md#license) in the README.
 
 ## Deterministic 20Hz Simulation Engine
 

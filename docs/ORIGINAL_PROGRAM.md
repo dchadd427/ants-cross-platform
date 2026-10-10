@@ -10,7 +10,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 
 ## What comes from the original and what does not
 
-- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([`ASSET_CATALOG.md`](ASSET_CATALOG.md) shows what is inside the archive).
+- **Read from the original's data files:** the artwork, animations and sounds of `Original-Ants/ants.chd` and the maps `Original-Ants/Maps/*.LVL` ([the asset catalog](PLAY_IN_BROWSER.md#interactive-asset-catalog) shows what is inside the archive).
 - **Re-derived from the original:** the simulation's mechanics, timings and constants, to match the original exactly where that can be checked. This was done one system at a time over many releases, not in one step; [`../CHANGELOG.md`](../CHANGELOG.md) and [`CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md) say which release did which.
 - **This project's own additions:** network play (lock-step turns, state hashes, the dedicated server), computer players, widescreen, zoom and touch control.
 - **Network play:** the original's game is not lock-step. The remake keeps its lobby flow, texts and rules, but not its transport, trust model or sync model ([`NETWORK_PORT.md`](NETWORK_PORT.md#what-the-original-does); the evidence is section 5.46 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md)).
@@ -55,4 +55,4 @@ The test suites do not need the program. The two that compare the remake with st
 - [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md): the specification, with the disassembly addresses, opcode traces and formulas, system by system. Older text there counts as unverified until it is checked against the program again; a section whose heading says "Capstone-Verified" records such a check.
 - [`reverse_engineering/movement/README.md`](reverse_engineering/movement/README.md): the reports behind the movement ground truth (section 5.32 of the specification).
 - [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md): the audit of the remake against the original, made from static evidence (it did not run the original): what differed, what was fixed and, in section 6, what only the real game can settle.
-- [`TABLE4_ANIMATION_REFERENCE.md`](TABLE4_ANIMATION_REFERENCE.md): the 1,344 animation sequences of `Original-Ants/ants.chd`, with timings, sounds and motion. `tools/dump_table4.py` writes it from the archive, so it needs no copy of the program.
+- [`chd_table4_animations.json`](chd_table4_animations.json): the 1,344 animation sequences of `Original-Ants/ants.chd` (Table 4), with timings, sounds and motion. `tools/dump_table4.py` writes it from the archive, so it needs no copy of the program.

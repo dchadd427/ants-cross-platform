@@ -3,9 +3,7 @@
 tools/dump_table4.py
 Extracts and analyzes all 1,344 Table 4 animation & physics bytecode sequences
 from Original-Ants/ants.chd, correlating sound triggers with Table 2 audio.
-Generates:
-  - docs/chd_table4_animations.json
-  - docs/TABLE4_ANIMATION_REFERENCE.md
+Generates docs/chd_table4_animations.json.
 """
 
 import os
@@ -15,7 +13,6 @@ import json
 
 CHD_PATH = "Original-Ants/ants.chd"
 JSON_OUT = "docs/chd_table4_animations.json"
-MD_OUT = "docs/TABLE4_ANIMATION_REFERENCE.md"
 
 def load_sounds(data, t2_off):
     count = struct.unpack_from("<I", data, t2_off)[0]
@@ -118,79 +115,6 @@ def parse_table4(data, t4_off, sound_map):
 
     return entries
 
-def generate_markdown_reference(entries, sound_map):
-    md = []
-    md.append("# Table 4 Animation & Physics Reference (`ants.chd`)")
-    md.append("")
-    md.append("This document is generated directly from ground-truth inspection of `ants.chd` Table 4.")
-    md.append(f"Total animation sequences: **{len(entries)}**.")
-    md.append("")
-    md.append("## Action Prefixes & Meanings")
-    md.append("- **Prefix Class**: `ag` (Worker), `ab` (Bomber), `af` (Fire), `ac` (Combat), `as` (Swimmer), `at` (Thief)")
-    md.append("- **Action Code**:")
-    md.append("  - `wg` / `ws`: Walking on Ground / Shoreline")
-    md.append("  - `st`: Standing / Idle ready")
-    md.append("  - `at`: Melee Attack strike")
-    md.append("  - `gh`: Get Hit (combat flinch reaction slide)")
-    md.append("  - `gb`: Ground Bounce (tumbling collision bounce flight)")
-    md.append("  - `gf`: Grab Food (harvesting food bite)")
-    md.append("  - `fa`: Food Action / Eat")
-    md.append("  - `sb`: Set Bomb (plant bomb sequence)")
-    md.append("  - `db`: Defuse Bomb / Demolish Bridge")
-    md.append("  - `sf`: Set Fire (plant firewall)")
-    md.append("  - `xf`: Extinguish Fire")
-    md.append("  - `bb`: Build Bridge")
-    md.append("  - `sw`: Swimming in water")
-    md.append("  - `di`: Diving into water")
-    md.append("  - `go`: Emerging / exiting water onto land")
-    md.append("  - `dr`: Drowning sequence")
-    md.append("  - `bu`: Bomb dud / smoke burn stagger")
-    md.append("  - `cg`: Can't Go / blocked path reaction")
-    md.append("")
-    md.append("---")
-    md.append("")
-    md.append("## Core Action Timings, Subitems & Audio Triggers")
-    md.append("")
-    md.append("| Entry | Action Name | Subitems | Total Duration | Audio Triggers (Subitem: Sound) | Motion (dx, dy) |")
-    md.append("|:-----:|:------------|:--------:|:--------------:|:--------------------------------|:----------------|")
-
-    tracked_prefixes = ["ag", "ab", "af", "ac", "as", "at"]
-    tracked_actions = ["at", "gh", "gb", "gf", "sb", "db", "sf", "xf", "bb", "cg", "dr", "bu", "st", "wg"]
-
-    seen = set()
-    for e in entries:
-        name = e["name"]
-        key = None
-        for p in tracked_prefixes:
-            for a in tracked_actions:
-                if name.startswith(p + a) and (name.endswith("301") or name.endswith("201")):
-                    key = p + a
-                    break
-            if key: break
-        if not key:
-            if name in ["battle", "ears", "bombex", "hgen301", "pudrop"]:
-                key = name
-
-        if key and key not in seen:
-            seen.add(key)
-            snd_str = ", ".join([f"Sub {st['subitem']}: `{st['sound_name']}` ({st['sound_id']})" for st in e["sound_triggers"]])
-            if not snd_str: snd_str = "None"
-
-            dx_dy_list = []
-            for s in e["subitems"][:4]:
-                if s["dx_per_tick"] != 0 or s["dy_per_tick"] != 0:
-                    dx_dy_list.append(f"s{s['subitem_index']}:({s['dx_per_tick']},{s['dy_per_tick']})")
-            motion_str = ", ".join(dx_dy_list) if dx_dy_list else "Stationary"
-
-            md.append(f"| {e['entry_index']:4d} | `{name}` | {e['subitem_count']} | {e['total_duration_ms']} ms | {snd_str} | {motion_str} |")
-
-    md.append("")
-    md.append("---")
-    md.append("")
-    md.append("## Full Table 4 Data Access")
-    md.append("The complete dataset with all frames, sprite indices, bounding boxes, and per-subitem durations is serialized in `docs/chd_table4_animations.json`.")
-    return "\n".join(md)
-
 def main():
     if not os.path.exists(CHD_PATH):
         print(f"Error: {CHD_PATH} not found", file=sys.stderr)
@@ -212,11 +136,6 @@ def main():
     with open(JSON_OUT, "w") as f:
         json.dump(entries, f, indent=2)
     print(f"Exported JSON to {JSON_OUT} ({os.path.getsize(JSON_OUT):,} bytes).")
-
-    md_content = generate_markdown_reference(entries, sound_map)
-    with open(MD_OUT, "w") as f:
-        f.write(md_content)
-    print(f"Exported Markdown reference to {MD_OUT} ({os.path.getsize(MD_OUT):,} bytes).")
 
     return 0
 

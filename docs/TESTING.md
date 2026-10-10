@@ -6,23 +6,7 @@ Prerequisites and how to build: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md).
 
 ## The three tiers
 
-The tests come in three tiers. [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers") says when each one runs.
-
-- **Quick**, for every change: `./run_tests.sh --fast` (below).
-- **Full**, for every pull request: the full matrix of GitHub Actions, the one full gate ([Continuous Integration](#continuous-integration)). `main` takes a change only through a pull request whose checks pass.
-- **Deep**, for changes to the network, the rules or fairness: mutation batteries (`tools/mutate.py`), AddressSanitizer, soak runs and browser checks.
-
-## Quick tier (every change)
-
-```bash
-./run_tests.sh --fast
-```
-
-It builds what it needs and runs the asset, simulation, network-core, bot and application suites that finish in seconds, plus the repository checks (the version and changelog consistency check and the python tests of `tests/scripts`).
-
-On a 10-core Mac the test time is about 25 seconds in the default parallel run (about 100 seconds one suite after the other); the build comes on top.
-
-It leaves out the E2E runner, the script suites that start the game, the sanitizer and the slow suites (the lock-step core, the control interface, the map sweep, the dedicated server and its way back, the worker bot, the whole-match engine copies, the network application, the start menu application and the way back in the application). The table below marks every suite that only the full run has, and `./run_tests.sh --fast --list` names what the quick tier runs.
+Quick (`./run_tests.sh --fast`, after every change), full (CI, for every pull request) and deep (mutation checks, AddressSanitizer, soak and browser runs, for changes to the network, the rules or fairness): what each one is, when it runs and what it costs is in [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers"). `./run_tests.sh --fast --list` names the suites of the quick tier, and the table below marks every suite that only the full run has. The quick tier's test time on a 10-core Mac is about 25 seconds in the default parallel run (about 100 seconds one suite after the other); the build comes on top.
 
 ## Master Test Suite
 
@@ -125,7 +109,7 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 | 3.25 Touch model | Every rule of the touch model with an injected clock, no SDL: tap, hold, drag, the minimap, the second and the third finger, pan and pinch (judged once per frame), cancels, the clock, the slop's size, a soak of random sessions, and the feedback's geometry (the ring and the pulse). |
 | 3.26 Touch in the application | Synthetic finger events through the real event loop of a headless application: a tap, a drag and a hold against the mouse's click, band and right click (point by point), the hold's timing, the pan and the pinch at three zooms, every place where two fingers do nothing, cancels, a press that waited on a dialog that opened, the other screens, SDL's letterbox, an inset picture, the slop's size, and the ring and the pulse in the picture (nothing else of it changes). |
 | 3.27 Replays in the application | `test_replay_app`: a real headless application records a game on this computer (the HUD's order, the computer players' orders and the quit; a clock that runs out; teams made at the start; the direct start) and a match of the network (both machines' orders, the names and seats of the Start), and each file plays out to the state in which the match ended; the names are the ones that were typed; the desktop game keeps the file in the folder `replays` beside its settings and never replaces one; a match that is left before its end keeps its file when an order was given or a minute went by, and leaves nothing otherwise. The replay viewer's controls (RA7.1 - RA7.6): state, jump, speed, restart, the end, a cut-short file and the refusals (older, newer, no map, diverged) that the page shows as cards. |
-| 4 E2E (full tier) | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see `tests/TEST_INFRA.md`). |
+| 4 E2E (full tier) | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see [Standalone E2E Test Runner](#standalone-e2e-test-runner)). |
 | 5.1 Version consistency | `tools/check_version_consistency.py`: the file `VERSION`, the top release heading of `CHANGELOG.md`, and the version line of `README.md` name the same release. |
 | 5.2 Tool and script tests | The python tests of `tests/scripts` (every `test_*.py`): the pages of the site, the version, release, mutation and deploy tools, the web build without Docker, `run_tests.sh` itself and the CI workflow; the list is below the table. |
 
@@ -150,7 +134,14 @@ Suite 5.2 runs every `tests/scripts/test_*.py`:
 
 ## Standalone E2E Test Runner
 
-The E2E suite exercises the game's features in four tiers. It is a CMake project of its own and runs against its own model of the rules: it links none of the game's code, and its model still has the early combat rules. A pass says that the model agrees with the documents, not that the engine does; the engine's rules are checked by the golden, integration and differential suites above. The status note and the feature list are in [`tests/TEST_INFRA.md`](../tests/TEST_INFRA.md).
+The E2E suite is a CMake project of its own (`tests/e2e/`) and links none of the game's code (no `ants_sim`, `ants_assets` or `ants_app`). It runs against its own model of the rules (`tests/e2e/e2e_model.hpp`), which was written from the early, paraphrased rules of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) and was never brought in line with the audit of the original program: its melee, knock-back, stun and "guard AI" rules, and its bomb knock-back and fire ricochet, are the model's, not the engine's (the engine's combat rules are section 5.36 of the specification, checked by the golden, integration and differential suites above). A pass here says that the model agrees with the documents, not that the engine matches the 1998 game.
+
+The tests are written opaque-box: they assert only on observable inputs, outputs, states and events (decoded structures, simulation tick outputs, state transitions, audio events, scorecard numbers), never on internals; the expected values come from the specification and never from fitting to what passes; each test sets up its own state, runs deterministically and depends on no other test or on the order. Four tiers:
+
+1. **Feature coverage** (category-partition): the happy paths and the modes of every feature.
+2. **Boundaries and corner cases**: coordinates at the edges of the grid, exact tick boundaries (a bridge at 179,950, 180,000 and 180,050 ms; the match clock at 0:01 and 0:00), numeric limits (food theft with a score of 0, 25, 50 and 75; hit points 0 to 10), invalid input refused.
+3. **Cross-feature pairs**: knock-back with fire walls and ricochets, bridges with the collapse and drowning, the thief's dive with the alarm and the dropped lunchbox, alliances with scores.
+4. **Whole matches** on the shipped maps at 20 Hz to 0:00: the freeze, the winner's and the losers' sound, the four statistics of the scorecard.
 
 ```bash
 # Build standalone E2E runner
@@ -167,7 +158,7 @@ cmake --build build_e2e
 ./build_e2e/e2e_runner --tier 4   # Tier 4: Real-World Workloads (full matches)
 ```
 
-`--list` names the registered tests, and `-v` also prints a `[PASS]` line with its time for every test that passes (a test that fails is always printed).
+`--list` names the registered tests, and `-v` also prints a `[PASS]` line with its time for every test that passes (a test that fails is always printed). The exit code is 0 when every executed test passed and otherwise the number of failures; the output has the test names, their times, the subtotals of the tiers, and the file and line of every failure.
 
 ## Continuous Integration
 
@@ -195,11 +186,7 @@ The rule covers the game, the server and every test program, with three exceptio
 
 ### The deploy job
 
-The sixth job, **Deploy (Portainer webhook)**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed (five on `main`, four on `staging`, which has no MSVC 2022 build). It deploys only when the push changed something that an image contains, or the stack file (`tools/deploy_filter.py`). `CHANGELOG.md`, `VERSION` and the changelog archive count, because an image copies them. The other documents, `.github/`, `tests/` and the tools that no image runs do not.
-
-A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server. It polls the site's public `/busy` (the repository variable `DEPLOY_BUSY_URL`; the beta site's `/busy` when it is not set) every minute and goes on when no match runs, after `DEPLOY_MAX_WAIT_MINUTES` (a repository variable, 180 by default, 300 at the most) whatever runs, or when the address has not answered for five minutes (`tools/deploy_wait.py`). On `staging` it waits only when the variable `STAGING_BUSY_URL` is set. A newer push cancels a job that waits, and a push that is no longer the tip of its branch after the wait is not deployed.
-
-The job then calls the Portainer webhook that the repository secret `PORTAINER_WEBHOOK_URL` (staging: `PORTAINER_STAGING_WEBHOOK_URL`) holds, never printing it. Without the secret it says "deploy secret not set: skipped" and does nothing, so a merge deploys only once the secret is set. [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site") has how to switch it on, the wait and the staging stack.
+The sixth job, **Deploy (Portainer webhook)**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed, and deploys only when the push changed something that an image contains (`tools/deploy_filter.py`). Before it calls the webhook (the repository secret `PORTAINER_WEBHOOK_URL`) it waits until the site's `/busy` shows no match running (`DEPLOY_MAX_WAIT_MINUTES` at the most). How it works, how to switch it on and the staging site: [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site").
 
 ### What CI does not cover
 

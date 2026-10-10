@@ -8,7 +8,7 @@
 # application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
-# --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
+# --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
 #
 # The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
 # or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
