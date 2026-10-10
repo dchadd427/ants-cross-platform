@@ -1808,7 +1808,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
                                    if (free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return true;
                                    // an own thief on the raid tile (it is raiding, or has raided and is on its way out) has the hole: a second one sent now waits on a tile in front of it, and the first one cannot leave
                                    // when the walls have shut the other tiles (unjam)
-                                   if (plan.raid_unjam) {
+                                   if (plan.raid_unjam && plan.cantgo_aware) {
                                        for (const AntView& m : v.mine()) {
                                            if (m.id != thief.id && m.type == sim::AntType::Thief && m.tile == h.raid) return true;
                                        }
@@ -1927,6 +1927,8 @@ bool RaidTask::ambush(TaskContext& c, const AntView& thief) {
     return true;
 }
 
+namespace {
+
 // A tile for an ant that waits in front of a hole to step to: east of the three tiles in front of it and off their rows, which a thief that leaves walks; {-1, -1} when there is none
 sim::TileCoord aside_of_hole(TaskContext& c, const HillInfo& hill, sim::TileCoord from) {
     const BotView& v = c.view;
@@ -1934,7 +1936,7 @@ sim::TileCoord aside_of_hole(TaskContext& c, const HillInfo& hill, sim::TileCoor
     int32_t best_d = 0;
     for (int32_t dx = 6; dx <= 8; ++dx) {
         for (int32_t dy = -2; dy <= 6; ++dy) {
-            if (dx < 8 && dy >= 1 && dy <= 3) continue;
+            if (dy >= 1 && dy <= 3) continue;
             const sim::TileCoord t{hill.origin.x + dx, hill.origin.y + dy};
             if (!v.grid().in_bounds(t) || v.grid().has_fire_at(t) || v.powerup_at(t) != nullptr || occupied(v, t)) continue;
             if (!MapInfo::walkable(v.grid(), c.seat, t, v.walk_context()) || !reachable_by(c.map, c.seat, t)) continue;
@@ -1948,6 +1950,8 @@ sim::TileCoord aside_of_hole(TaskContext& c, const HillInfo& hill, sim::TileCoor
     return best;
 }
 
+}  // namespace
+
 // Two thieves on one hole (the real game lets the second wait on a tile in front of it until the first is out). The victim's Fire Ant walls the hole in while the first raids, and when the first
 // has the loot and no tile in front of the hole is free but the one on which the second waits, it shows "Can't go there." for as long as the walls burn (3,600 ticks) while the second waits for
 // the raid tile: neither can move. A person moves the second aside. So does the bot: an own ant that stands on a tile in front of a hole whose raid tile an own thief holds (not in its raid clip)
@@ -1957,7 +1961,7 @@ void RaidTask::unjam(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     for (auto it = aside_.begin(); it != aside_.end();) it = it->second + kAsideTicks <= now ? aside_.erase(it) : std::next(it);
-    if (!tactics_.plan.raid_unjam || !v.has_grid()) return;
+    if (!tactics_.plan.raid_unjam || !tactics_.plan.cantgo_aware || !v.has_grid()) return;
     const sim::Grid& grid = v.grid();
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const HillInfo& hill = c.map.hill(t);
@@ -1976,7 +1980,7 @@ void RaidTask::unjam(TaskContext& c) {
             for (const AntView& a : v.mine()) {
                 if (a.tile != e) continue;
                 held = true;
-                if (mover == nullptr && aside_.count(a.id) == 0 && a.takes_orders() && (a.type == sim::AntType::Thief || a.idle())) mover = &a;
+                if (mover == nullptr && aside_.count(a.id) == 0 && a.takes_orders() && !a.holding && a.carried_points == 0 && (a.type == sim::AntType::Thief || a.idle())) mover = &a;
             }
             if (!held) {                                                                // a tile is free: the thief leaves by it
                 mover = nullptr;

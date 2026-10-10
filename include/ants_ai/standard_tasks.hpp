@@ -406,7 +406,7 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 /// a power-up lies on the entrance) for Params::filtered_ticks. The thief is ordered again as soon as it is idle and empty-handed.
 /// Two thieves on one hole (unjam, LevelPlan::raid_unjam): the second waits on a tile in front of the hole while the first raids. When the first has raided and sits shut in on the raid tile
 /// (idle, or in the can't-go loop) because an own ant stands on the last free tile in front of the hole and the walls or an enemy hold the others, that ant steps aside (a free tile a few steps
-/// off the hole, `kAsideTicks` out of the raid task's hands) and is sent to steal again afterwards; and no second thief is sent to a hole while an own thief is on its raid tile.
+/// off the hole, out of the raid task's hands for 80 ticks) and is sent to steal again afterwards; and no second thief is sent to a hole while an own thief is on its raid tile.
 class RaidTask final : public Task {
 public:
     struct Params {

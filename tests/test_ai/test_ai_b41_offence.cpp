@@ -536,7 +536,7 @@ void run_b41_offence_tests() {
         ASSERT_TRUE(plan_for(Level::Medium).raid_unjam && plan_for(Level::Hard).raid_unjam);                  // (on in the shipped plans: unjam=0 is the ablation)
         const Outcome fixed = play(true);
         ASSERT_TRUE(fixed.jammed);                                                                            // (the premise: the walls closed the hole behind the first thief, the second waited on the last tile)
-        ASSERT_TRUE(fixed.unjams >= 1u);
+        ASSERT_TRUE(fixed.unjams >= 1u && fixed.unjams <= 2u);                                                // (once for the jam, not again and again)
         ASSERT_TRUE(fixed.out_after != 0u && fixed.out_after <= 200u);                                        // the first one is out within ten seconds of the end of its raid clip
         ASSERT_TRUE(fixed.second_raided);                                                                     // and the second takes its turn
         ASSERT_TRUE(fixed.victim_score <= 200);                                                               // (300 points, 50 for each of the two)
@@ -567,5 +567,54 @@ void run_b41_offence_tests() {
         ASSERT_EQ(unjams, 0u);
         ASSERT_FALSE(scene(0, sim::AntType::Thief, true, unjams));                                            // (d) the bot's own thief on the last tile of a shut hole steps off
         ASSERT_EQ(unjams, 1u);
+        // (e) the launch rule: an own thief that walks off the raid tile (it has raided and carries the loot home: the view draws it as Walking, not standing) still has the hole, so no second thief
+        // is sent to it; with the switch off the second one is sent at the first look
+        const auto sent_to_raid = [&](bool unjam) -> int {                                                    // (-1: the premise failed)
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            const uint32_t leaving = sim.spawn_unit(0, sim::AntType::Thief, victim.raid);
+            const uint32_t second = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{east[1].x + 4, east[1].y + 6});
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {leaving}, east[1].x + 4, east[1].y + 6));
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.raid_unjam = unjam;
+            tick_all(sim, 3);                                                                                // (the order is taken at the next tick: the thief walks, still on the raid tile)
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.tick();
+            const sim::AntSnapshot* l = snapshot_of(sim, leaving);
+            if (l == nullptr || l->tile_x != victim.raid.x || l->tile_y != victim.raid.y || l->state != sim::UnitState::Walking) return -1;      // (the premise: the first look finds it walking on the raid tile)
+            int n = 0;
+            for (const auto& e : rig.proposed) n += e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == second ? 1 : 0;
+            return n;
+        };
+        ASSERT_EQ(sent_to_raid(true), 0);
+        ASSERT_TRUE(sent_to_raid(false) >= 1);
+        // (f) the ant that stepped aside is not sent to raid for 80 ticks (it stands where it was sent), and is again after them: the first thief walks off at once, so that the hole is free to raid
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 62);
+            sim.set_player_score(1, 300);
+            const uint32_t first = sim.spawn_unit(0, sim::AntType::Thief, victim.raid);
+            sim.set_fire_at(east[0], 3600);
+            sim.set_fire_at(east[2], 3600);
+            const uint32_t stander = sim.spawn_unit(0, sim::AntType::Thief, east[1]);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            uint64_t at = 0;
+            for (int t = 0; t < 400 && at == 0; ++t) {
+                rig.tick();
+                if (rig.as<StandardBot>().raids().unjams() >= 1u) at = sim.current_tick();
+            }
+            ASSERT_TRUE(at != 0u);
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {first}, east[1].x + 4, east[1].y + 6));
+            const auto raid_orders = [&](uint64_t from, uint64_t to) {
+                size_t n = 0;
+                for (const auto& e : rig.proposed) n += e.first > from && e.first <= to && e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == stander ? 1u : 0u;
+                return n;
+            };
+            rig.run(70);
+            ASSERT_EQ(raid_orders(at, at + 70), 0u);
+            rig.run(200);
+            ASSERT_TRUE(raid_orders(at + 70, at + 270) >= 1u);                                                // (the hole was there to raid: the pause is what held the ant)
+        }
     } TEST_END();
 }

@@ -2463,6 +2463,8 @@ int selftest() {
         t.check(cg.gate_leaver_ticks == 60u && apply_tune(cg, "gatehold", 0, tune_err) && cg.gate_leaver_ticks == 0u && apply_tune(cg, "gatehold", 7, tune_err) && cg.gate_leaver_ticks == 7u &&
                     !apply_tune(cg, "gatehold", -1, tune_err) && !apply_tune(cg, "gatehold", 1001, tune_err) && cg.gate_leaver_ticks == 7u,
                 "the key gatehold sets the ticks that the gate's click waits for an ant that leaves over the ramp (60 at Hard, 0: no wait, 0 to 1000 allowed)");
+        t.check(cg.raid_unjam && apply_tune(cg, "unjam", 0, tune_err) && !cg.raid_unjam && apply_tune(cg, "unjam", 1, tune_err) && cg.raid_unjam,
+                "the key unjam switches the step aside of a thief's own waiting thief of the plan (two thieves on one hole; on by default)");
         t.check(cg.island_fly_on && ai::plan_for(ai::Level::Medium).island_fly_on && !ai::plan_for(ai::Level::Easy).island_fly_on && apply_tune(cg, "ifly", 0, tune_err) && !cg.island_fly_on &&
                     apply_tune(cg, "ifly", 1, tune_err) && cg.island_fly_on,
                 "the key ifly switches the flying on of the expedition's Bomber (on at Medium and Hard, off at Easy)");
