@@ -356,7 +356,7 @@ Optional environment variables, set in the stack's "Environment variables" (they
 | `ANTS_PORT` | 19980 | The host port of the web page. |
 | `ANTS_SERVER_PORT` | 4001 | The host port of the game port: TCP only, and only native clients use it; the browser pages reach the server through `/ws` of the site. |
 | `ANTS_SERVER_WS_PORT`, `ANTS_SERVER_CTL_PORT` | 4002, 4010 | The host ports of the WebSocket port and the control interface, both on the host's loopback address only. |
-| `ANTS_BUILD_ID` | the commit of the clone's git files, else the UTC build time | The build id that the page's footer, the changelog pages and `ants_server --version` show. |
+| `ANTS_BUILD_ID` | the commit of the clone's git files, else the UTC build time | The build id that the page's footer, the changelog page and `ants_server --version` show. |
 
 The server's container is given **15 s to stop** (`stop_grace_period`, in the staging stack and the example service too; docker's default is 10 s). On `SIGTERM` it makes the restart records of its running rooms durable and exits within a moment. A redeploy recreates the container, and the server that starts again brings the matches back. **Keep the volume `ants-server-results`**, which holds the restart records, the replays and the control secret: a stack that is removed with its volumes loses them.
 

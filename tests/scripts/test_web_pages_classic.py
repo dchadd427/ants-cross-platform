@@ -2,8 +2,8 @@
 """Every page of the site is in the Classic look of the front page (run by ./run_tests.sh --fast and by the CI).
 
 The site's pages are found, not listed: the html files of web/ (the front page and the game page: the Dockerfile copies the folder, the image serves them at "/", /lobby.html, /index.html and
-/play.html), every html file of asset_catalog/ (Sprites and sounds, copied whole), and the pages that the Dockerfile generates from the changelogs with tools/changelog_to_html.py (built
-here the way the image builds them). A page is in the Classic look when it links the shared stylesheet, /front/classic.css, or, for the two pages that keep an inline copy of it
+/play.html), every html file of asset_catalog/ (Sprites and sounds, copied whole), and the page that the Dockerfile generates from the changelog with tools/changelog_to_html.py (built
+here the way the image builds it). A page is in the Classic look when it links the shared stylesheet, /front/classic.css, or, for the two pages that keep an inline copy of it
 (lobby.html and shell.html), defines the same colours as that stylesheet. A page that is not fails the test by name, so that a new page, or an old one that is redone, cannot be
 forgotten when the look moves on.
 
@@ -55,19 +55,15 @@ def is_classic(page):
 
 
 def generated_pages():
-    """{page name: text}: the pages that the Dockerfile builds from the changelogs, made here with the same tool and the same arguments."""
+    """{page name: text}: the page that the Dockerfile builds from the changelog, made here with the same tool and the same arguments."""
     dockerfile = read("Dockerfile")
-    calls = re.findall(r"python3 changelog_to_html\.py (\S+) (\S+\.html)([^&\n]*)", dockerfile)
+    calls = re.findall(r"python3 changelog_to_html\.py (\S+) (\S+\.html)", dockerfile)
     pages = {}
     with tempfile.TemporaryDirectory() as tmp:
-        for source, target, rest in calls:
-            md = {"CHANGELOG.md": ("CHANGELOG.md",), "CHANGELOG_ARCHIVE.md": ("docs", "CHANGELOG_ARCHIVE.md")}.get(source)
-            if md is None:
+        for source, target in calls:
+            if source != "CHANGELOG.md":
                 raise AssertionError("the Dockerfile builds a page from %s: this test does not know where that file is" % source)
-            args = [sys.executable, os.path.join(REPO, "tools", "changelog_to_html.py"), os.path.join(REPO, *md), os.path.join(tmp, target), "--version", "v0.0.0", "--build-id", "0000000"]
-            other = re.search(r"--other-page (\S+) --other-label \"([^\"]+)\"", rest)
-            if other:
-                args += ["--other-page", other.group(1), "--other-label", other.group(2)]
+            args = [sys.executable, os.path.join(REPO, "tools", "changelog_to_html.py"), os.path.join(REPO, source), os.path.join(tmp, target), "--version", "v0.0.0", "--build-id", "0000000"]
             done = subprocess.run(args, capture_output=True, text=True)
             if done.returncode != 0:
                 raise AssertionError("tools/changelog_to_html.py failed for %s: %s" % (source, done.stderr))
@@ -102,7 +98,7 @@ def pages():
 class TheSitesPages(unittest.TestCase):
     def test_the_pages_are_the_ones_that_the_image_serves(self):
         found = sorted(pages())
-        self.assertEqual(found, ["asset_catalog/index.html", "changelog.html (generated from CHANGELOG.md)", "changelog_archive.html (generated from CHANGELOG_ARCHIVE.md)", "web/lobby.html", "web/shell.html", "web/watch.html"],
+        self.assertEqual(found, ["asset_catalog/index.html", "changelog.html (generated from CHANGELOG.md)", "web/lobby.html", "web/shell.html", "web/watch.html"],
                          "the site has a page that this list does not name (or lost one): a new page needs the Classic look too (link /front/classic.css), then name it here")
 
     def test_every_page_is_in_the_classic_look_but_the_pending_ones(self):
@@ -136,7 +132,7 @@ class TheReleasePlates(unittest.TestCase):
             self.assertIn("border-radius: " + radius + ";", plate.group(1), name)
             self.assertIn("background: " + face.replace("var(--sheen)", "var(--sheen, none)") + ";", plate.group(1), name)       # (the plate takes the token from the style sheet: flat teal, not transparent, with an older one)
             found += 1
-        self.assertEqual(found, 2)
+        self.assertEqual(found, 1)
 
 
 class TheInlineCopies(unittest.TestCase):

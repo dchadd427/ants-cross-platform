@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page. The long notes of every release up to v0.1.0, with their measured numbers and sources, are the detailed history, [`docs/CHANGELOG_ARCHIVE.md`](docs/CHANGELOG_ARCHIVE.md) (on the site: `/changelog_archive.html`).
+What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
 An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
 
@@ -17,7 +17,7 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Fixes:**
 - one line each (optional)
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
 
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
@@ -244,7 +244,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Computer players no longer move during the "Get ready to play!" dialog at the start of a match. Their first orders come after it closes, when you can give yours, and they come one by one at the speed of their level: about 5.4 s into the match at Hard, 6.2 s at Medium and 8 s at Easy. This holds in a game against `--bot` or the start menu's bots, in a room on the local network and on the online server.
 - The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.1 - build abc1234". The version in the corner plate is unchanged.
-- This changelog is short: one entry per release in a fixed template. The detailed history of every release up to v0.1.0 (the old 556 KB file, unchanged) is in `docs/CHANGELOG_ARCHIVE.md` and on the site at `/changelog_archive.html`, linked from the changelog page.
+- This changelog is short: one entry per release in a fixed template.
 - Internal: one version source (the file `VERSION`), a build id at every build, `./run_tests.sh --fast` (about a minute) with the time of every suite, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
 
 **Rules / network:** The rules did not change. Network protocol 11: v0.1.0 and v0.1.1 games play together (the bots run on one machine and their commands travel as data).
@@ -270,7 +270,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On Windows, the server retries reading its secret file for up to half a second when another program holds it.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5)
 
 ## v0.0.99 - 2026-10-02 - The game is 16:9 by default: more map, a frame grown from the original's art, the web page in 16:9, a new setup screen with a map preview
 
@@ -284,7 +284,7 @@ Work that is not released yet is written in the same template under a heading th
 - The web page downloads the game's data again when a download fails (with several games on one page it could stay at "Downloading data (0%)" for ever), and shows a card with a Reload button when the game's files cannot be loaded.
 - The web guide and footer lost some spaces ("Goal:get the most points"); fixed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb)
 
 ## v0.0.98 - 2026-10-02 - Reconnect, part A: the server can hold a lost player's seat (off by default)
 
@@ -295,7 +295,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** Network protocol 10 (the Hello and the Welcome carry a key, and five messages are new): a v0.0.97 game cannot join a v0.0.98 server's room or LAN game, and the other way round. The simulation rules did not change.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
 
 ## v0.0.97 - 2026-10-02 - The desktop start menu: Single player with bots, Join with a code, Host an online match
 
@@ -306,7 +306,7 @@ Work that is not released yet is written in the same template under a heading th
 - Host an online match: pick the map, 2 to 4 players and your name. The menu makes the room, shows its code in large letters with a Copy button, and puts you in as the leader. After an online game the program goes back to the menu.
 - The original's own screens are unchanged. `--map`, `--host`, `--join` and similar options skip the menu, `--start-menu` forces it, and `--server HOST[:PORT]` names the game server.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
 
 ## v0.0.96 - 2026-10-02 - The web game starts at once and keeps playing in a hidden tab
 
@@ -315,7 +315,7 @@ Work that is not released yet is written in the same template under a heading th
 - A network match keeps playing when its tab is hidden or its window is minimised. Before, a hidden seat was called lagging after 3 seconds and dropped after 30. Now it keeps up and the other players are not told it lags.
 - A hidden page plays no sound or music, and a local game stands still while its page is hidden. A sleeping computer or a phone with a locked screen still stops the page.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
 
 ## v0.0.95 - 2026-10-02 - Community maps play as in the original: their default ant types and power-ups by tile
 
@@ -327,7 +327,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** The end of every attack now resumes the saved auto-engage of any ant that still has it, as in the original. An ant that took another power-up during a Combat Ant's auto-engage walks back to where the engage began. This changes some plays of the shipped maps. Network protocol 9: a v0.0.94 game cannot join.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38)
 
 ## v0.0.94 - 2026-10-02 - Less lag: ping and delay next to the FPS counter, 50 ms turns, an adaptive buffer, and a lagging player no longer freezes the others
 
@@ -343,7 +343,7 @@ Work that is not released yet is written in the same template under a heading th
 - A burst of orders after a stuck connection is queued, not counted as violations that could throw the player out.
 - The frame-rate counter shows the real rate below 10 frames a second (it read "10 FPS").
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47)
 
 ## v0.0.93 - 2026-10-01 - The room leader can start early
 
@@ -358,7 +358,7 @@ Work that is not released yet is written in the same template under a heading th
 - One connection could flood the server with valid messages (pings, acknowledgements, chat and so on) and use a whole core and over a gigabyte of memory without being dropped. Inboxes are bounded, every connection has a message budget, and a flooder is dropped within a second.
 - Reloading the web game no longer downloads about 9 MB again: the files are revalidated and an unchanged build answers 304.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa)
 
 ## v0.0.92 - 2026-10-01 - The black bars of a wide window scroll the map, fullscreen keeps the mouse, four games in the corners of their hills, bot fixes
 
@@ -371,14 +371,14 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - A mouse button released outside the window, or a finger lifted from a touch screen, no longer leaves the map scrolling on its own.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2185be0...4344c0e), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2185be0...4344c0e)
 
 ## v0.0.91 - 2026-10-01 - The original program leaves the repository
 
 **For players:**
 - Internal: the original 1998 program (Ants.exe), its decompilation and the local tools of an installation of the original are no longer in the repository, which keeps only the data archive, the maps and the music. Nothing in the game, the server or the network protocol changed but the version number. Pulling this change into an existing checkout deletes those files from the working tree, so copy them aside first.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0)
 
 ## v0.0.90 - 2026-10-01 - Play online: host a match, join it with a code, any map, 2 to 4 players
 
@@ -389,8 +389,8 @@ Work that is not released yet is written in the same template under a heading th
 - Every game on the page reports its tick and state hash every 100 ticks, and the page says whether they agree ("In step").
 - Server operators: the room code chooses the map and the players (`demo-[<map>-][<n>p-]<anything>`), `--demo-maps A.LVL,B.LVL,...` lists the maps a code may choose, and a demo room now waits ten minutes (it waited one minute). The stack starts with the six original maps and 12 demo rooms.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea3bc89...64654b3), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea3bc89...64654b3)
 
 ## Older versions (v0.0.89 and before)
 
-Every release before v0.0.90, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are in the detailed history: [`docs/CHANGELOG_ARCHIVE.md`](docs/CHANGELOG_ARCHIVE.md).
+Every release before v0.0.90, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

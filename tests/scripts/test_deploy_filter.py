@@ -27,7 +27,7 @@ DEPLOYS = [
     "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp",
     "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
     "Dockerfile", "Dockerfile.server", ".dockerignore", "docker-compose.stack.yml",
-    "CHANGELOG.md", "docs/CHANGELOG_ARCHIVE.md", "tools/changelog_to_html.py",
+    "CHANGELOG.md", "tools/changelog_to_html.py",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
 SKIPS = [
@@ -82,7 +82,7 @@ class TheList(unittest.TestCase):
             elif top in ("tests", ".github"):
                 self.assertFalse(counts, "%s: tests and CI files are in no image (%s)" % (path, why))
             elif top == "docs":
-                self.assertEqual(counts, path == "docs/CHANGELOG_ARCHIVE.md", "%s (%s)" % (path, why))
+                self.assertFalse(counts, "%s: no image copies anything of docs/ (%s)" % (path, why))
             elif path.endswith(".md") and "/" not in path:
                 self.assertEqual(counts, path == "CHANGELOG.md", "%s (%s)" % (path, why))
             elif top == "tools":
@@ -90,9 +90,10 @@ class TheList(unittest.TestCase):
 
     def test_the_sources_of_the_dockerfiles_are_derived_from_the_real_files(self):
         sources = [s for s, _ in self.classifier.sources]
-        for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md", "docs/CHANGELOG_ARCHIVE.md",
+        for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md",
                          "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION"):
             self.assertIn(expected, sources)
+        self.assertEqual([s for s in sources if s.startswith("docs")], [])                  # no image copies a document of docs/
         self.assertNotIn("/src/build_web/src/ants_app/index.*", sources)                  # COPY --from=builder reads another stage, not the context
 
     def test_a_new_copy_line_is_noticed(self):
@@ -131,9 +132,9 @@ class Pushes(unittest.TestCase):
         out = run_tool("--files", stdin="\n\n").stdout.strip()
         self.assertEqual(out, "skip: no file changed")
 
-    def test_the_changelog_and_its_archive_are_the_documents_that_deploy(self):
+    def test_the_changelog_is_the_one_document_that_deploys(self):
         self.assertTrue(self.verdict(["CHANGELOG.md"]).startswith("deploy:"))
-        self.assertTrue(self.verdict(["docs/CHANGELOG_ARCHIVE.md"]).startswith("deploy:"))
+        self.assertTrue(self.verdict(["docs/WORKFLOW.md"]).startswith("skip:"))                    # nothing of docs/ is in an image
         self.assertTrue(self.verdict(["docs/AUDIT_ONE_TO_ONE.md"]).startswith("skip:"))
 
     def test_each_site_has_its_own_stack_file(self):
