@@ -5,7 +5,7 @@
 #                                   (add --map-select to start on the setup screen at once)
 #   ./start_game.sh --players N     the test rig: N games on this machine (2 - 4), one player each, playing one networked match together: window 0 hosts
 #                                   (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by colour, the way
-#                                   the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games on web/lobby.html): black top
+#                                   the four hills lie on the Small and Treasure maps (the same as the games on web/lobby.html): black top
 #                                   left, green top right, red bottom left, blue bottom right; two sit side by side (green left, red right), three are green,
 #                                   red, blue in the first three cells of the grid. The windows of the rig never show the menu: each has --host or --join.
 #                                   --players 1 is the plain game
@@ -151,7 +151,7 @@ GRID="2x2"
 [ "$PLAYERS" -eq 2 ] && GRID="2x1"
 
 # The cell of window n (= seat n) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
-# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the owner's layout, the same as the games of web/lobby.html):
+# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the same as the games of web/lobby.html):
 #   black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
 # (Other maps put the hills elsewhere; the layout is the same for every map.)
 # Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),

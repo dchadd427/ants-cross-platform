@@ -629,7 +629,7 @@ int main() {
     } TEST_END();
 
     TEST_CASE("4.9 A plain player move may end on an own bomb (FUN_010202e7 gets flag 0x20 for every player order): the ant walks onto it and sets it off (case 0xa, 0x101d44f)") {
-        // ISLANDS: the owner's way off the island is a bomber that hits a bomb of its own team. A single selected bomber gets the defuse
+        // ISLANDS: a player's way off the island is a bomber that hits a bomb of its own team. A single selected bomber gets the defuse
         // (panel 3, target cursor); a group, even of bombers, gets this plain move (panel 4), and the goal tile keeps the bomb on it.
         SimulationEngine sim;
         make_world(sim);

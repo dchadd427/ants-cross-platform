@@ -1,11 +1,11 @@
-// Runs the pages' OWN code for the player's name (the owner: "the ability for somebody to type in their name ... so their name goes into the game instead of random", and "when joining a
-// link from somebody else, it should ask you first what you want your name to be"):
+// Runs the pages' OWN code for the player's name (somebody can type in their name, so that their name goes into the game instead of a random one, and a
+// link from somebody else asks first what the name should be):
 //   1. the rules of a name (the block NAME_BEGIN .. NAME_END, the same text in web/lobby.html and web/shell.html) on a table of names: the rules of the desktop start menu
 //      (printable ASCII, trimmed, at most 32, nothing that starts with "Bot (" with blanks and case ignored; an empty name means "none chosen");
 //   2. the name step (runNameStep): filled in from what the browser remembered, a bad name explained and not accepted, the button or Enter accepts once, the name is remembered;
 //   3. web/shell.html: which addresses ask for a name (a shared link: ANTS_PAGE.asksForName), the address without its name (withoutName), and the gate that holds the game back until the name
 //      is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
-//   4. web/lobby.html (the front page, the owner's lobby: a room on the game server, protocol 16) read from the file: its scripts, its ids, the name card's wiring, a name only ever as text
+//   4. web/lobby.html (the front page, the lobby: a room on the game server, protocol 16) read from the file: its scripts, its ids, the name card's wiring, a name only ever as text
 //      (textContent, a value, an attribute, encodeURIComponent in an address), and the links that are made for somebody else (no name in them);
 //   5. web/lobby.html as a whole, run with a small fake of the browser's DOM, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server:
 //      a plain visit makes a room at once under the remembered or picked name (Hello's name, room, key and the session storage that keeps them), the pencil renames the host, a link of somebody
@@ -351,8 +351,8 @@ for (const [label, e, want] of [
     const stepMarkup = shellText.slice(shellText.indexOf('id="name-step"'), shellText.indexOf('<div class="view-bar"'));
     check('the card has a way out: "Back to the front page", a plain link to the front page (no query: nothing of the match goes with it), after the hint and inside the card',
           /<a class="btn sm name-step-back" id="name-step-back" href="\/">&larr; Back to the front page<\/a>\s*<\/div>\s*<\/div>/.test(stepMarkup) && stepMarkup.indexOf('name-step-hint') < stepMarkup.indexOf('name-step-back'));
-    // The notice (the owner chose "Add the line" on 2026-10-08): where a page asks for a name it also says what the server does with an online match, in the hint's own type under the name field. The
-    // words are the ones of the picture that he approved, in both pages; 30 days is the stack's default (tests/scripts/test_nginx_replays.py pins it to docker-compose.stack.yml)
+    // The notice (decided on 2026-10-08): where a page asks for a name it also says what the server does with an online match, in the hint's own type under the name field. The
+    // words are the ones of the approved picture, in both pages; 30 days is the stack's default (tests/scripts/test_nginx_replays.py pins it to docker-compose.stack.yml)
     const noticeAt = stepMarkup.indexOf('<div class="name-step-hint name-step-notice">' + NOTICE_HTML + '</div>');
     const hintAt = stepMarkup.indexOf('<div class="name-step-hint">The name the other players see.');
     check('the card tells a player who joins by a link what the server does with an online match: one more paragraph of the hint\'s own type, after the hint and before the way out, once',
@@ -809,7 +809,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     env.$('name-step-input').key('Enter');
     check('Enter with a good name joins: the card goes away, the page connects (one socket) and the browser remembers the name', env.$('name-step').hidden && env.sockets.length === 1 && env.storage.data['ants.name'] === 'Zed');
     const hello = env.last().open().sent[0];
-    check('... the Hello is the name that was typed, in the room of the link, with the lobby block (a room that is gone is made again, as the owner\'s picture 9 shows) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq')) && env.replaced.length === 0, hex(hello));
+    check('... the Hello is the name that was typed, in the room of the link, with the lobby block (a room that is gone is made again, as picture 9 shows) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq')) && env.replaced.length === 0, hex(hello));
 }
 {
     const env = runLobby('?room=k7m2xq', {});
@@ -1171,7 +1171,7 @@ const statsView = (env) => ({ hidden: env.$('stats').hidden, dot: env.$('stats-d
     const env = runLobby('', {}, { fetch: answers({ '/stats': GOOD_STATS }) });
     check('before the answer the line is hidden (the markup says so)', /<p class="stats" id="stats" hidden>/.test(lobbyText) && env.$('stats').hidden === true);
     await settle();
-    same('/stats answers: the line is shown, the dot is green, the numbers are the owner\'s example', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
+    same('/stats answers: the line is shown, the dot is green, the numbers are the example\'s', statsView(env), { hidden: false, dot: 'live on', live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
     same('... one request, to the site\'s own /stats, with no cache and no cookies', env.fetches.map((f) => [f.url, f.init.cache, f.init.credentials]), [['/stats', 'no-store', 'omit']]);
     check('... and the page made no markup from the numbers', env.innerHTMLWrites.length === 0);
 }

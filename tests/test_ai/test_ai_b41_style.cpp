@@ -1,4 +1,4 @@
-// The styles of the standard bot and the plans of the levels (B4-1, AI11.x): "some aggressiveness / randomness between the bots" (the owner). Hand-made worlds and plain logic, quick enough for
+// The styles of the standard bot and the plans of the levels (B4-1, AI11.x): some aggressiveness / randomness between the bots was wanted. Hand-made worlds and plain logic, quick enough for
 // suite 2.20. What a style is: docs/BOTS.md, "Styles".
 //
 //   AI11.1  the words of the styles, which style a level may play (Hard: aggressive or raider only)

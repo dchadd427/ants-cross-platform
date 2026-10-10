@@ -2639,7 +2639,7 @@ void run_suite_7_input_controls() {
     } TEST_END();
 
     TEST_CASE("7.8f A FULLSCREEN Window Whose Shape Is Not The Picture's Has Bars Inside The Window (SDL Maps A Position Over A Bar To One Outside The Picture): The Pointer Over A Bar Is On The Picture's Nearest Edge Pixel, Corners Included, And Is Not Gone; A Window Of Another Shape (4:3 Picture In A Wide Window) Does The Same At The Sides (A Real Fullscreen Window Of SDL's Dummy Video Driver, The 16:9 Canvas, The Setup Screen)") {
-        // The same clamp as 7.8 .. 7.8d, but in a window that is FULLSCREEN (SDL_WINDOW_FULLSCREEN_DESKTOP, which is how the owner's 16:10 screen shows the 16:9 picture: bars of 45 rows above and
+        // The same clamp as 7.8 .. 7.8d, but in a window that is FULLSCREEN (SDL_WINDOW_FULLSCREEN_DESKTOP, which is how a 16:10 screen shows the 16:9 picture: bars of 45 rows above and
         // below at 1440 x 900, of 66 at 1512 x 982): the clamp does not look at fullscreen, so the bars of a window and the bars of a fullscreen screen are the same rule. The dummy driver's
         // display is 4:3 (1024 x 768 with SDL 2.32), so a 16:9 canvas has bars above and below (96 rows) and the 4:3 canvas none; what the window really is decides the geometry (CanvasLayout::fit is
         // SDL's own arithmetic, pinned in test_canvas_layout), and a driver whose display happens to have the canvas's shape has no bars to test.
@@ -2767,7 +2767,7 @@ void run_suite_8_unit_health_and_map_select() {
             }
         }
 
-        // Initial selection: TREASURE.LVL, the last entry of this list (the one deliberate deviation of the screen, at the owner's request: the original highlights the first entry; 8.9 has it)
+        // Initial selection: TREASURE.LVL, the last entry of this list (the one deliberate deviation of the screen, as requested: the original highlights the first entry; 8.9 has it)
         ASSERT_EQ(screen.get_selected_index(), 5);
         ASSERT_EQ(maps[5].filename, "TREASURE.LVL");
         ASSERT_FALSE(screen.get_selected_map_path().empty());

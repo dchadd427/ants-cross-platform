@@ -1132,7 +1132,7 @@ void run_b41_tests() {
         sim::SimulationEngine sim;
         start_match(sim, "TREASURE", 5, 0x0F);
         const MapInfo map(sim);
-        // the pinned layout of the shipped map (tile -> side with four teams): the owner's words, "each base has one of each type of power-up on its side", checked against the analysis
+        // the pinned layout of the shipped map (tile -> side with four teams): the rule that each base has one of each type of power-up on its side, checked against the analysis
         struct Pin {
             int32_t x;
             int32_t y;

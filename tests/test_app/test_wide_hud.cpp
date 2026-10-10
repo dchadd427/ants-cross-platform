@@ -3,8 +3,8 @@
 //     is, which of them are stretched, and that the spans of a piece tile it without a gap or an overlap;
 //   * the cuts: for every stretched piece the repeated line lies inside a run of identical lines of the piece's own plain part (measured on the art of ants.chd: the top bar's columns
 //     138 - 143, the bottom strip's three cuts in 13 - 17, 186 - 190 and 345 - 348, each identical to its neighbours on all 19 rows, one in each gap between the recesses of the score boxes, and never the panel's own fill 458 - 482, the left strip's rows 294 - 314) and, for the right panel, the three pieces that span the
-//     owner's row (canvas y = 357) are plain there between their ant decorations; a cut where the art is not plain fails the same tests;
-//   * the picture: the frame composed from the spans is, pixel for pixel, the owner's mock-up semantics (one line repeated) written out independently, at several sizes, and with the
+//     mock-up's row (canvas y = 357) are plain there between their ant decorations; a cut where the art is not plain fails the same tests;
+//   * the picture: the frame composed from the spans is, pixel for pixel, the mock-up's semantics (one line repeated) written out independently, at several sizes, and with the
 //     original's picture the plain 14 pieces; the real renderer draws the spans exactly (draw_sprite_region, set_origin);
 //   * the HUD: it draws the frame first, offsets the panel's animations by the layout, puts the options window and the quick help of a match over the middle of the map view (the frame
 //     stays around them) like its dialogs, and takes the pointer back to the numbers of those windows in the events AND in the 50 ms poll of HUD::update (every control is clicked
@@ -140,7 +140,7 @@ Pic compose_from_spans(const assets::AssetArchive& arc, const ScreenLayout& layo
     return pic;
 }
 
-/// The owner-approved mock-up of 2026-10-02 (a small tool that composes the frame from the original's pieces), written out here independently of the production header: the 14 pieces in the order the original draws them, each moved by the
+/// The approved mock-up of 2026-10-02 (a small tool that composes the frame from the original's pieces), written out here independently of the production header: the 14 pieces in the order the original draws them, each moved by the
 /// right / bottom anchors and drawn with ONE of its columns or rows repeated dW or dH times (the line `col` / `row`)
 struct RefPiece {
     const char* name;
@@ -166,7 +166,7 @@ constexpr RefPiece kReference[14] = {
     {"x17y461.bmp", 17, 461, false, true, {15, 188, 346}, -1},    // the bottom strip: wider at three plain cuts (the score boxes are spread), down by dH
 };
 
-/// The mock-up's rule (the owner's reference tool, draw_multi): the extra width dW is shared between the cuts in thirds (a third each for three cuts; the leftmost takes the remainder), and
+/// The mock-up's rule (the reference tool, draw_multi): the extra width dW is shared between the cuts in thirds (a third each for three cuts; the leftmost takes the remainder), and
 /// every cut column is repeated by its share
 std::vector<int32_t> reference_shares(int32_t dw, size_t cuts) {
     std::vector<int32_t> shares(cuts, cuts > 0 ? dw / static_cast<int32_t>(cuts) : 0);
@@ -455,10 +455,10 @@ void test_cuts(const assets::AssetArchive& arc) {
             all_cut = all_cut && kShellRules[k].cut_row >= 0 && c.y + kShellRules[k].cut_row == 357;
         }
         check(spanning == 3 && all_cut, "the pieces of the right panel that span canvas row 357 are exactly the three, and each is cut at it (" + std::to_string(spanning) + ")");
-        // the row the owner rejected: the right edge strip's row 50 (canvas y 304) stretches an ant decoration into a long bar
+        // the rejected row: the right edge strip's row 50 (canvas y 304) stretches an ant decoration into a long bar
         const assets::Sprite& edge = sprite("x521y254.bmp");
         const bool plain_neighbours = line_diff(edge, true, 49, 50) <= 5 && line_diff(edge, true, 50, 51) <= 5;
-        check(!(plain_neighbours && distance_to_decoration(edge, true, 50, 10) >= 8), "the control: x521y254 row 50, which the owner rejected, fails the same tests (it is beside a decoration)");
+        check(!(plain_neighbours && distance_to_decoration(edge, true, 50, 10) >= 8), "the control: x521y254 row 50, which was rejected, fails the same tests (it is beside a decoration)");
     }
     // the cuts together: the model's anchors and cut lines are the ones the independent mock-up uses
     for (const RefPiece& p : kReference) {

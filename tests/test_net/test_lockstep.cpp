@@ -8834,7 +8834,7 @@ void run_reconnect_session_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.84 Hold: The Resume Countdown (Owner's Request): After A Pause Of 3 s Or More The Match Stays Held For 10 s More Before The Next Turn Is Sealed (After A Return Or After A Vote Or The Cap Dropped The Seat): Presence Says The Seconds Left, Once A Second (10, 9, ... 1, 0); Chat Goes On, Commands Are Discarded Without A Violation; A Loss Cancels It And A Countdown Follows That Pause; A Blip Under 3 s And The Setting 0 Resume At Once; The Countdown Is Not The Cap's Time Nor A Catch-Up's; The Drops And The Resume Are The Same Tick On Every Machine") {
+    TEST_CASE("N2.84 Hold: The Resume Countdown (As Requested): After A Pause Of 3 s Or More The Match Stays Held For 10 s More Before The Next Turn Is Sealed (After A Return Or After A Vote Or The Cap Dropped The Seat): Presence Says The Seconds Left, Once A Second (10, 9, ... 1, 0); Chat Goes On, Commands Are Discarded Without A Violation; A Loss Cancels It And A Countdown Follows That Pause; A Blip Under 3 s And The Setting 0 Resume At Once; The Countdown Is Not The Cap's Time Nor A Catch-Up's; The Drops And The Resume Are The Same Tick On Every Machine") {
         HoldOptions o;
         o.host.attendance.resume_countdown_ms = 10000;
         {   // after a return: a pause of 6 s

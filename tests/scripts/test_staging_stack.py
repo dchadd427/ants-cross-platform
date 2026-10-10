@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The staging stack (docker-compose.staging.yml) and the site label of the pages (run by ./run_tests.sh --fast and by the CI).
 
-The staging stack is a second copy of the site for the owner to try finished work (docs/WORKFLOW.md). Both stacks must run on one machine at the same time, so nothing may be
+The staging stack is a second copy of the site to try finished work (docs/WORKFLOW.md). Both stacks must run on one machine at the same time, so nothing may be
 shared: container names, host ports, volumes and the network are the stack's own. The compose files are read as text (no docker needed), and with `docker compose config`
 where docker is installed. The page says "staging" in its title and footer when the build argument ANTS_SITE_LABEL says so; the RUN step of the Dockerfile that does it is
 cut out of the real Dockerfile and run on copies of the real pages, with a label and without one (empty: the pages must be byte for byte the pages of the repository).

@@ -1,6 +1,6 @@
 // The wide pages (the loading screen, the quick help at the start, the results and the desktop start menu of the original recomposed for the 16:9 picture of 960 x 540;
 // include/ants_app/wide_page.hpp, page_layout.hpp, results_layout.hpp, start_menu.hpp):
-//   1. the layout: every rectangle of every screen (the six panels of the start menu included) is the owner-approved mock-up's (the rectangle files that the mock-up tool wrote beside its
+//   1. the layout: every rectangle of every screen (the six panels of the start menu included) is the approved mock-up's (the rectangle files that the mock-up tool wrote beside its
 //      pictures: every element's rectangle at 960 x 540), and the classic rectangles are the original's;
 //   2. the seams: the two bottom-edge chains of the results boxes are checked against the art of ants.chd (every junction between runs that do not follow each other is between identical
 //      columns, every repeated line lies in a run of identical lines, the lengths, where each chain starts and ends), and the pieces of the wide frame do not overlap (so the order in
@@ -396,7 +396,7 @@ constexpr MockRect kMockMenuMain[] = {
     {"title plate", 280, 28, 400, 44},        {"button \"Single player\"", 320, 148, 320, 50}, {"button \"Join with a code\"", 320, 214, 320, 50},
     {"button \"Host an online match\"", 320, 280, 320, 50}, {"button \"Quit\"", 320, 346, 320, 50}, {"hint line", 200, 506, 560, 14},
 };
-// Single player has the player's name since the owner asked for it (with the choice of the teams): the mock-up's panel had no name field (the mock-up's digest was 0x7f200eb25b5cfc11), so this
+// Single player has the player's name since it was asked for (with the choice of the teams): the mock-up's panel had no name field (the mock-up's digest was 0x7f200eb25b5cfc11), so this
 // table and the panel's digest are the panel as it is now: the model's numbers (StartMenu::elements) with the 16:9 shift, the art of the other panels.
 constexpr MockRect kMockMenuSingle[] = {
     {"title plate", 280, 28, 400, 44},        {"intro line", 220, 110, 520, 22},        {"label \"Your name\"", 296, 141, 130, 24},      {"name field", 440, 136, 280, 34},
@@ -410,7 +410,7 @@ constexpr MockRect kMockMenuJoin[] = {
     {"room code field", 270, 214, 420, 34},   {"button \"Join\"", 320, 266, 320, 46},    {"button \"Back\"", 320, 320, 320, 40}, {"server line", 220, 484, 520, 14},
     {"hint line", 200, 506, 560, 14},
 };
-// The Host panel has a row for each seat after the leader's (the bot that START puts there) and the room's teams since bot games part B (network protocol 13, the owner's requests for a level for
+// The Host panel has a row for each seat after the leader's (the bot that START puts there) and the room's teams since bot games part B (network protocol 13, the requests for a level for
 // each bot and for teams chosen before the start): the mock-up's panel had the one "Empty seats at START" choice, so this table and the panel's digest are the panel as it is now (the model's numbers,
 // StartMenu::elements, with the 16:9 shift), for the settings that the mock-up tool assumed: the name "Player", Treasure, four players, the empty seats stay empty, free for all.
 constexpr MockRect kMockMenuHost[] = {

@@ -1871,7 +1871,7 @@ void test_clock() {
 
 void test_slop_size() {
     group("slop", "the slop is a size on the glass: 8 CSS pixels of the game box, at least 6 device pixels, between 1 and 64 picture pixels");
-    // (the constants are named in one place, touch_control.hpp, to be tuned on the owner's phone: a tuned value is changed here at the same time)
+    // (the constants are named in one place, touch_control.hpp, to be tuned on a phone: a tuned value is changed here at the same time)
     check(touch::kSlopCssPx == 8.0 && touch::kSlopFloorDevicePx == 6.0, "the constants: 8 CSS px (Android's own 8 dp), 6 device px");
     check(touch::kTapMs == 400 && touch::kHoldMs == 450 && touch::kRingStartMs == 150 && touch::kPulseMs == 240, "the times: tap 400 ms, hold 450 ms, the ring from 150 ms, the pulse 240 ms");
     check(touch::kHysteresis == 0.15 && touch::kMinSpanSlops == 3.0, "the pinch: hysteresis 0.15 of a step, a least span of 3 slops");

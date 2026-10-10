@@ -231,9 +231,9 @@ class TheLocations(unittest.TestCase):
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
-        # the owner chose "Add the line" (2026-10-08): the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
+        # decided on 2026-10-08: the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
         # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so). The two pages word the second sentence differently:
-        # the front page as the owner's lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
+        # the front page as the lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         lobby = read("web", "lobby.html")
         shell = read("web", "shell.html")

@@ -1,5 +1,5 @@
 // Runs the rules and the words of the lobby page (web/front/lobby_rules.js) without a browser, on tables: what a Room message of network protocol 16 shows on each of the four colour cards and on the
-// map's side (the owner's pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16 and 17, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
+// map's side (the pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16 and 17, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
 // a press is refused, what the leader asks of the room (the plan, a colour moved or exchanged), the player's name (the same rules as the game page's own NAME block, which is read from web/shell.html and
 // web/lobby.html and must be the same text in both), the room codes (the alphabet, the two groups of three, what a typed or pasted code may be), the maps (against the level files of Original-Ants/Maps),
 // the sentences that the server says (noticeKind) and every message strip of picture 15 (text, tone and button).
@@ -64,7 +64,7 @@ same('the cards lie Black, Green, Red, Blue (top left to bottom right, as the fo
 same('GRID is a way through the four seats, each once', R.GRID.slice().sort(), [0, 1, 2, 3]);
 same('the plan words are the protocol\'s plan values 0 to 4', R.KINDS.map((k) => N.PLAN[k.charAt(0).toUpperCase() + k.slice(1)]), [0, 1, 2, 3, 4]);
 check('the slot states of the protocol are the ones that the rules read (a person is a Host or a Client, a computer player a Bot)', N.SLOT.Empty === 0 && N.SLOT.Host === 1 && N.SLOT.Client === 2 && N.SLOT.Bot === 3);
-check('Treasure is the default map (the owner\'s request)', R.DEFAULT_MAP_KEY === 'treasure' && R.mapByKey(R.DEFAULT_MAP_KEY) !== null);
+check('Treasure is the default map (as requested)', R.DEFAULT_MAP_KEY === 'treasure' && R.mapByKey(R.DEFAULT_MAP_KEY) !== null);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. Names: the rules are the game page's own (the NAME block of web/shell.html and web/lobby.html), on one table
@@ -517,7 +517,7 @@ const exchanged = (kinds, teamA, teamB) => ({ op: 'plan', plan: { map: '', kinds
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 7. What each card and the map's side show: the owner's pictures, word for word
+// 7. What each card and the map's side show: the pictures, word for word
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const ctx = (o) => Object.assign({ sides: [0, 0, 0, 0], picked: -1, removing: -1, offline: false, refusal: '' }, o || {});
 const view = (room, o) => R.viewOf(model(room), ctx(o));
@@ -964,7 +964,7 @@ check('the random runs held ' + Object.keys(props).length + ' rules at 700 rooms
 check('the random rooms were many and of every kind (the generator is not stuck)', strings.size > 150, String(strings.size));
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 10. The words of the screen: "player", never "friend" (the owner's rule), no stray blanks in the fixed lines
+// 10. The words of the screen: "player", never "friend" (a project rule), no stray blanks in the fixed lines
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const fixed = new Set();
@@ -974,7 +974,7 @@ check('the random rooms were many and of every kind (the generator is not stuck)
     keep([R.TEXT.noroom(), R.HINT, R.ACTS, R.MAPS.map((x) => x.info), R.NAMES, R.nameCheck('é').why, R.nameCheck('a'.repeat(40)).why, R.nameCheck('Bot (x)').why, R.typedCode('').why, R.typedCode('!').why, R.teamsText([0, 0, 0, 0], [0, 1], false), R.teamsText([0, 0, 0, 0], ALL, false)]);
     Object.keys(R.TEXT).forEach((k) => keep(R.TEXT[k]({ server: 'S.', host: 'H', leaver: 'L', guest: true, map: 'M' })));
     const all = Array.from(fixed).concat(Array.from(strings));
-    check('no line of the screen says "friend" (the owner\'s rule: player)', all.every((s) => !/friend/i.test(s)), all.filter((s) => /friend/i.test(s)).join(' | '));
+    check('no line of the screen says "friend" (a project rule: player)', all.every((s) => !/friend/i.test(s)), all.filter((s) => /friend/i.test(s)).join(' | '));
     check('the fixed lines (the pictures\' words) have no stray blank: none at the ends or doubled', Array.from(fixed).filter((s) => s !== '' && (/^\s|\s$|\s\s/.test(s))).length === 0, Array.from(fixed).filter((s) => /^\s|\s$|\s\s/.test(s)).join('|'));
     check('the fixed lines are plain text: no markup in them', Array.from(fixed).every((s) => !/[<>]/.test(s)));
     check('the words use the characters of the pictures only: ASCII and the ellipsis, the apostrophe of a possessive and the middle dot', Array.from(fixed).every((s) => /^[\x20-\x7e…’·]*$/.test(s)), Array.from(fixed).filter((s) => !/^[\x20-\x7e…’·]*$/.test(s)).join('|'));

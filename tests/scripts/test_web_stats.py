@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The line of numbers in the front page's footer (run by ./run_tests.sh --fast and by the CI). The owner: "Game stats would be cool on the page. How many games played / in progress etc."
+"""The line of numbers in the front page's footer (run by ./run_tests.sh --fast and by the CI). The requirement: game stats on the page (how many games played, in progress, etc.).
 
 "3 matches being played - 7 players online - 1,284 games played (21 today)": the numbers come from the game server through this site's own address /stats ({"now":{"matches","players"},
 "online":{"day","total"},"local":{"day","total"},"since"}); a site that has no /stats is asked for /busy ({"matches","players"}) and the line then shows the live part only; when neither

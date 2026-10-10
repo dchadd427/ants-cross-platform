@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""16:9 is the default picture of the web pages (run by ./run_tests.sh --fast and by the CI). The owner: 16:9 is to be the default everywhere. The pages already show 16:9 unless the
+"""16:9 is the default picture of the web pages (run by ./run_tests.sh --fast and by the CI). The requirement: 16:9 is to be the default everywhere. The pages already show 16:9 unless the
 address says ?aspect=4:3 or the selector remembered a Classic 4:3, and a browser that once tried Classic 4:3 stayed on it for good (the choice was remembered under `ants.aspect`). The
 pages now remember the choice under `ants.aspect.v2` and do not read the old key, so a Classic 4:3 that an earlier page remembered is forgotten once: every browser starts 16:9 until its
 player picks Classic 4:3 again.

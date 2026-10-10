@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The player's name on the web pages (run by ./run_tests.sh --fast and by the CI). The owner: "the ability for somebody to type in their name to beta.playants.org ... so their name goes into
-the game instead of random", and "when joining a link from somebody else, it should ask you first what you want your name to be".
+"""The player's name on the web pages (run by ./run_tests.sh --fast and by the CI). The requirement: somebody can type in their name on beta.playants.org, so that their name goes into
+the game instead of a random one, and a link from somebody else asks first what the name should be.
 
   - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
     is chosen, and the whole of web/lobby.html (the lobby: a room on the game server) with a small fake of the browser's DOM, its real scripts and a scripted server: a plain visit makes a room
@@ -60,7 +60,7 @@ class TheMarkup(unittest.TestCase):
         self.assertEqual(len(re.findall(r"\bstartGame\(\)", page)), 1)                      # only the definition: function startGame()
 
     def test_both_name_screens_say_that_online_matches_are_recorded(self):
-        # The game page's card has the older words (live watching changed its second sentence); the front page, as the owner's lobby picture draws it, says "The recordings are public and ..." in two places:
+        # The game page's card has the older words (live watching changed its second sentence); the front page, as the lobby picture draws it, says "The recordings are public and ..." in two places:
         # in the footer, for a visitor who is not asked for a name, and in the name card (under the hint; only the step of a game on this computer hides it, by script).
         first = "Online matches are recorded and kept for 30 days."
         game = first + " Anybody can watch them, live or later, and they show the players&rsquo; names."

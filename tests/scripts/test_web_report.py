@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The web game counts a single-player game for the front page (run by ./run_tests.sh --fast and by the CI). The owner chose to count online matches AND single-player games; a single-player
+"""The web game counts a single-player game for the front page (run by ./run_tests.sh --fast and by the CI). Online matches AND single-player games are both counted; a single-player
 game runs in the browser tab, so the page tells the server when one begins (docs/NETWORK_PORT.md "Site statistics").
 
   - the page's own function is RUN (node, when it is installed): antsReportLocalGame makes one POST of /stats/local with nothing in it for each call, and no failure of any kind reaches the
