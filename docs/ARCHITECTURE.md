@@ -43,9 +43,9 @@ ants-cross-platform/
 │   ├── ARCHITECTURE.md                 # This page: the source tree and the layers
 │   ├── NETWORK_PORT.md                 # The network design in full: the original's network, the lock-step core,
 │   │                                   # transports, the protocol by version, host migration, reconnect,
-│   │                                   # measurements, milestones
+│   │                                   # restart records
 │   ├── BOTS.md                         # Bots (computer players): the rule, fairness, architecture, difficulty
-│   │                                   # levels, the standard bot, measurements, known limits
+│   │                                   # levels, the standard bot, running bots, known limits
 │   ├── WORKFLOW.md                     # How work flows: the three test tiers, branches and releases, the deploy, the
 │   │                                   # version policy, the changelog template
 │   ├── GAME_REVERSE_ENGINEERING.md     # The mechanics reference (ground truth per system)

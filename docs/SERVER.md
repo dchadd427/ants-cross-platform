@@ -276,7 +276,7 @@ Details, flows and limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#reconnect-protoco
 - **One server to a records folder**: the store locks it for its life. A second server cannot take the folder: with an explicit `--restart-dir` it stops with status 1, and with the default folder it runs without records and says so.
 - **Keep the volume** (`ants-server-results` in the stack): a stack that is removed with its volumes loses the records.
 
-The format, the limits, the measurements and the tests: [`NETWORK_PORT.md`](NETWORK_PORT.md#restart-records-a-running-match-survives-a-restart-of-the-server), "Restart records".
+The format and the limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#restart-records-a-running-match-survives-a-restart-of-the-server), "Restart records"; the measurements and the tests: [`NETWORK_PORT_history.md`](history/NETWORK_PORT_history.md#restart-records-a-running-match-survives-a-restart-of-the-server).
 
 ## Replays
 

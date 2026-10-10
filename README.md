@@ -47,10 +47,10 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [Architecture](docs/ARCHITECTURE.md): the source tree and the libraries
 - [The original program](docs/ORIGINAL_PROGRAM.md): reverse engineering, what the remake takes from the original and what it adds
 - [`GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md): the specification of the original game, system by system
-- [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design, the protocol and the measurements
-- [`BOTS.md`](docs/BOTS.md): the computer players, their levels and how they are tested
+- [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
+- [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits
 - [`AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md): what differs from the original, on purpose or not
-- [`history/`](docs/history/README.md): how things were built and measured (the audit ledgers, the notes of the bot batches); nothing in it is needed to work on the code
+- [`history/`](docs/history/README.md): how things were built and measured (the audit ledgers, the notes of the bot batches, the tests and measurements of the long pages); nothing in it is needed to work on the code
 
 ## Reverse Engineering & Historical Preservation
 
