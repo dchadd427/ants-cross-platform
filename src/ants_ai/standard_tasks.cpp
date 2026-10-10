@@ -1971,7 +1971,8 @@ void RaidTask::unjam(TaskContext& c) {
             if (a.type == sim::AntType::Thief && a.tile == hill.raid && (a.idle() || a.state == sim::UnitState::CantGo)) shut_in = true;
         }
         if (!shut_in) continue;
-        const AntView* mover = nullptr;
+        std::vector<const AntView*> movers;                                              // the own ants that stand on the tiles in front of the hole and may be sent off, in the order of the tiles
+        bool free_tile = false;
         for (const sim::TileCoord& e : east_tiles(hill)) {
             const EastTile k = classify_tile(grid, e);
             if (k != EastTile::Open && k != EastTile::Bare) continue;                    // a wall, a bomb, rock or water: nobody stands there
@@ -1980,22 +1981,22 @@ void RaidTask::unjam(TaskContext& c) {
             for (const AntView& a : v.mine()) {
                 if (a.tile != e) continue;
                 held = true;
-                if (mover == nullptr && aside_.count(a.id) == 0 && a.takes_orders() && !a.holding && a.carried_points == 0 && (a.type == sim::AntType::Thief || a.idle())) mover = &a;
+                if (aside_.count(a.id) == 0 && a.takes_orders() && !a.holding && a.carried_points == 0 && (a.type == sim::AntType::Thief || a.idle())) movers.push_back(&a);
             }
-            if (!held) {                                                                // a tile is free: the thief leaves by it
-                mover = nullptr;
-                break;
-            }
+            free_tile = free_tile || !held;                                             // a tile is free: the thief leaves by it
         }
-        if (mover == nullptr) continue;
-        const sim::TileCoord spot = aside_of_hole(c, hill, mover->tile);
-        if (spot.x < 0 || !c.ledger.take(mover->id, id())) continue;
-        c.orders.move({mover->id}, spot, Priority::Normal);
-        raids_.erase(mover->id);                                                        // (a waiting thief's raid is over: it must not count as one that never got going)
-        waiting_.erase(mover->id);
-        aside_[mover->id] = now;
-        c.ledger.release(mover->id, id());
-        ++unjams_;
+        if (free_tile) continue;
+        for (const AntView* mover : movers) {                                           // (the first that is nobody else's: a fight may have taken one)
+            const sim::TileCoord spot = aside_of_hole(c, hill, mover->tile);
+            if (spot.x < 0 || !c.ledger.take(mover->id, id())) continue;
+            c.orders.move({mover->id}, spot, Priority::Normal);
+            raids_.erase(mover->id);                                                    // (a waiting thief's raid is over: it must not count as one that never got going)
+            waiting_.erase(mover->id);
+            aside_[mover->id] = now;
+            c.ledger.release(mover->id, id());
+            ++unjams_;
+            break;
+        }
     }
 }
 
