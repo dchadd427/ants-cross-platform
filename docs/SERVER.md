@@ -23,7 +23,7 @@ The log goes to the standard error, and the number after `ants_server` is the se
 
 ```text
 [ants_server 0] control secret made now and stored in results/control-secret (owner-only); it is shown here this once: <64 hex digits>
-[ants_server 0] ants_server v0.8.0 build abc1234 (network protocol 13), maps in Original-Ants/Maps
+[ants_server 0] ants_server vX.Y.Z build abc1234 (network protocol N), maps in Original-Ants/Maps
 [ants_server 0] ...
 [ants_server 0] TCP game port 4001 (this machine only)
 [ants_server 0] WebSocket port 4002 (this machine only: put a TLS proxy in front)
@@ -62,7 +62,7 @@ A later start does not print the secret again. With demo rooms, a line "public r
 | `--bot-match-every-min N` | 0 (none) | The server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none), so that the site always has a match to watch (["Matches of computer players"](#matches-of-computer-players)). It needs the replays. The stack file asks for 60 (`ANTS_BOT_MATCH_EVERY_MIN`). |
 | `--demo-rooms N`, `--demo-map NAME`, `--demo-maps A.LVL,B.LVL,...` | off | Demo rooms for a public page that has no secret (`web/lobby.html`): see "Demo rooms" below. |
 | `--demo-lobbies N` | 200 with `--demo-rooms` and reconnect, else 0 | The most lobby rooms (network protocol 16) that wait at a time, for a page that waits in a room from its first second: see "Lobby rooms" below. 0 switches them off. |
-| `--help`, `-h`, `--version` | | `--help` prints the usage and exits. `--version` prints the version, the build id and the network protocol, for example `ants_server v0.8.0 build abc1234 (network protocol 13)`, and exits. The server's log says the same near its start. |
+| `--help`, `-h`, `--version` | | `--help` prints the usage and exits. `--version` prints the version, the build id and the network protocol, for example `ants_server vX.Y.Z build abc1234 (network protocol N)`, and exits. The server's log says the same near its start. |
 
 A value outside its range, or one that is no number, stops the server with status 2.
 

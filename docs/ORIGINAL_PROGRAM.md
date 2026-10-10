@@ -33,7 +33,7 @@ The reverse-engineering tools read the program. When it is missing they stop wit
 
 | Tool | Needs | Does |
 |---|---|---|
-| `tools/analyze_binary.py` | `Original-Ants/Ants.exe` (pefile, capstone) | writes the function map `docs/ORIGINAL_BINARY_MAP.md` and `docs/binary_analysis.json` |
+| `tools/analyze_binary.py` | `Original-Ants/Ants.exe` (pefile, capstone) | writes a function map to `docs/ORIGINAL_BINARY_MAP.md` and `docs/binary_analysis.json` for your own use (git ignores both; never commit them; the classification column of the map is a keyword guess) |
 | `tools/extract_movement_tables.py` | `Original-Ants/Ants.exe`, `Original-Ants/ants.chd` (pefile) | writes `src/ants_sim/movement_tables_data.inc`, or checks it (`--check`; `--stdout` prints it instead) |
 | `tools/movement_reference_model.py` | the same two files (pefile) | prints the golden timings of `tests/test_sim/test_movement_golden.cpp` (`--trace` also prints every pixel move) |
 
@@ -53,7 +53,6 @@ The test suites do not need the program. The two that compare the remake with st
 ## Where the findings are
 
 - [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md): the specification, with the disassembly addresses, opcode traces and formulas, system by system. Older text there counts as unverified until it is checked against the program again; a section whose heading says "Capstone-Verified" records such a check.
-- [`ORIGINAL_BINARY_MAP.md`](ORIGINAL_BINARY_MAP.md): the function map that `tools/analyze_binary.py` writes, with the calls, strings and sound ids of each function. Its classification column is a guess, as the page says.
 - [`reverse_engineering/movement/README.md`](reverse_engineering/movement/README.md): the reports behind the movement ground truth (section 5.32 of the specification).
 - [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md): the audit of the remake against the original, made from static evidence (it did not run the original): what differed, what was fixed and, in section 6, what only the real game can settle.
 - [`TABLE4_ANIMATION_REFERENCE.md`](TABLE4_ANIMATION_REFERENCE.md): the 1,344 animation sequences of `Original-Ants/ants.chd`, with timings, sounds and motion. `tools/dump_table4.py` writes it from the archive, so it needs no copy of the program.

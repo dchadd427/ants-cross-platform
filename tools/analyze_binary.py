@@ -7,7 +7,8 @@ pefile and capstone. Maps:
   - String cross-references (audio files, level formats, UI tokens, network)
   - Audio playback functions & sound dispatch locations
   - Memory offset dereference clusters (AntUnit, GridCell, GameWorld)
-Outputs:
+Outputs (local files for your own use; .gitignore keeps them out of every commit,
+because AGENTS.md rule 4 allows no function maps or string dumps in the repository):
   - docs/ORIGINAL_BINARY_MAP.md
   - docs/binary_analysis.json
 

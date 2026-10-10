@@ -157,14 +157,14 @@ These two print their answer and exit. They need no window and no assets (native
 
 | Option | Argument | Default | Meaning |
 |---|---|---|---|
-| `--version` | none | none | Print the version, the build id and the network protocol, for example `ants v0.8.0 build abc1234 (network protocol 13)`, and exit. Run the executable itself: `./build/src/ants_app/ants --version`. The build id is the short git commit of the build, or `unknown` outside a git checkout; `-DANTS_BUILD_ID=TEXT` sets it by hand when CMake configures the build. The full rule, with the Docker images' own: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md), "Versioning and the Build Id". `ants_server --version` prints the same line for the server, starting with `ants_server`. |
+| `--version` | none | none | Print the version, the build id and the network protocol, for example `ants vX.Y.Z build abc1234 (network protocol N)`, and exit. Run the executable itself: `./build/src/ants_app/ants --version`. The build id is the short git commit of the build, or `unknown` outside a git checkout; `-DANTS_BUILD_ID=TEXT` sets it by hand when CMake configures the build. The full rule, with the Docker images' own: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md), "Versioning and the Build Id". `ants_server --version` prints the same line for the server, starting with `ants_server`. |
 | `--lan-list` | `[SECONDS]` | `3 s` | Do not start the game: listen for the rooms that the local network announces, print them and exit. The time is in whole seconds. `--lan-port N` picks the UDP port (4001 unless given); no other option is read. A room that has started its match is no longer announced ([`NETWORK_PORT.md`](NETWORK_PORT.md#lan-discovery-lanhpp-native-builds-v0078)). Exit status 0 when a room was heard, 1 when none was (a script can wait for a room), 2 when the port cannot be used. |
 
 `--lan-list` prints a header, one line per room (`address:port  "host"  map  players/seats players  version`, the version being the host's own game) and a count:
 
 ```
 Games on the local network (UDP port 4001, listening for 3.0 s):
-  192.168.1.20:4001  "Alice"  TREASURE.LVL  1/4 players  v0.8.0
+  192.168.1.20:4001  "Alice"  TREASURE.LVL  1/4 players  vX.Y.Z
 1 game found.
 ```
 

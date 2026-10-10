@@ -51,7 +51,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design, the protocol and the measurements
 - [`BOTS.md`](docs/BOTS.md): the computer players, their levels and how they are tested
 - [`AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md): what differs from the original, on purpose or not
-- [`TABLE4_ANIMATION_REFERENCE.md`](docs/TABLE4_ANIMATION_REFERENCE.md) and [`ORIGINAL_BINARY_MAP.md`](docs/ORIGINAL_BINARY_MAP.md): the animation table of the archive and the function map of the original program
+- [`TABLE4_ANIMATION_REFERENCE.md`](docs/TABLE4_ANIMATION_REFERENCE.md): the animation table of the archive
 
 ## Reverse Engineering & Historical Preservation
 
