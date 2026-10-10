@@ -1,10 +1,10 @@
 # Bots: the can't-go batch (the evidence)
 
-What the batch does, the owner's decisions, the numbers and what is left are in `docs/BOTS.md`, "The can't-go loop". This note keeps the evidence behind them: the study, the checks and the mutants.
+What the batch does, the decisions, the numbers and what is left are in `docs/BOTS.md`, "The can't-go loop". This note keeps the evidence behind them: the study, the checks and the mutants.
 
 ## The study
 
-The owner heard "Can't go there." a lot ("it keeps trying to do illegal moves"; "I was hearing it a lot on the small map"). A measurement of 84 matches of the v0.5.0 bots (a scratch tool on the built libraries, no change to the code) found:
+A report after play: "Can't go there." was heard a lot (the bots kept trying to do illegal moves), and a lot on the small map. A measurement of 84 matches of the v0.5.0 bots (a scratch tool on the built libraries, no change to the code) found:
 
 - the bots' own orders are rarely refused: 546 of 28,016 group orders (19.5 in 1,000); in 530 of the 531 refused walks the map analysis of the start had said "reachable", and what refused them came later (a fire ring 312 times, standing ants 206);
 - 88.5 percent of the 5,660 reactions are the engine's own order, 79 percent the original's can't-go loop (the mechanism is in `docs/BOTS.md`); no order of a bot ends it (a Stop or a move out at every tick for 300 ticks changed nothing);
@@ -36,7 +36,7 @@ Two of the 84 did not count at the first run and were run again with a corrected
 
 ## The gate and the ant that leaves
 
-The owner (2026-10-05): "Sometimes it tries to send the ant into the hole but the other ant hasn't fully exited and it causes a can't go." What the bot does about it is in `docs/BOTS.md`, "The can't-go loop"; this section keeps the study, the second set of seeds, the rules tried and the checks.
+A report after play (2026-10-05): the bot sometimes sends an ant into the hole before the other ant has fully exited, which causes a can't go. What the bot does about it is in `docs/BOTS.md`, "The can't-go loop"; this section keeps the study, the second set of seeds, the rules tried and the checks.
 
 **The study.** The study tool of the first section, with the tiles of the hill added to its trace, replayed 120 matches of four Hard bots (TINY, SMALL, MEDIUM, GAUNTLET and TREASURE, seeds 1 to 24) and counted the gate's clicks onto the entrance that the walk refused because of an ant on the ramp:
 

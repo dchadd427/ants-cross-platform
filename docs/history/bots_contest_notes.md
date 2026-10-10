@@ -1,6 +1,6 @@
 # Bots: the contest batch (what was built, how it was checked, what was left out)
 
-The owner's reports of 2026-10-05 (the hard bots do not fight unless they defend; the losing player should be a little more aggressive; the food order; health and the kill; three bugs of the fire play) and the plan that answered them (stage 1: the food order, the bot's own attacks, the escalation of a bot that is behind, the endgame, health-aware fights, the kill, the fire play). This is a deep-tier change (what a bot sees and does, `AGENTS.md`, "How much checking"). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) (the sections "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame" and, in "Measurements", "The contest batch"); this file holds what is specific to the check.
+The reports of 2026-10-05 (the hard bots do not fight unless they defend; the losing player should be a little more aggressive; the food order; health and the kill; three bugs of the fire play) and the plan that answered them (stage 1: the food order, the bot's own attacks, the escalation of a bot that is behind, the endgame, health-aware fights, the kill, the fire play). This is a deep-tier change (what a bot sees and does, `AGENTS.md`, "How much checking"). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) (the sections "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame" and, in "Measurements", "The contest batch"); this file holds what is specific to the check.
 
 The simulation, the lock-step rules, the network protocol and every golden hash are unchanged. Code and docs call this batch "the contest batch": it has no release number of its own.
 
@@ -8,7 +8,7 @@ The simulation, the lock-step rules, the network protocol and every golden hash 
 
 | Item | Where |
 |---|---|
-| The view lists the hit points (1 to 10) of every ant, the other teams' too: the owner's decision on what players know | `bot_view.cpp`, `docs/BOTS.md` ("Fairness in detail") |
+| The view lists the hit points (1 to 10) of every ant, the other teams' too: the decision on what players know | `bot_view.cpp`, `docs/BOTS.md` ("Fairness in detail") |
 | The race: the ants that the gate cannot use go to the contested piles first | `HarvestTask` (`tasks.cpp`), `LevelPlan::race*` |
 | Fights: health-aware, the engine's kill plan, hunts of wounded enemies (two blows), the skirmish (a flag, off) | `FightTask` (`standard_tasks.cpp`), `kill_plan` |
 | Fire: the safe fire-in (a Fire Ant to light, escorts only then, give-up), the defence against being fired in | `SabotageTask`, `WallTask`, `FightTask` |
@@ -77,7 +77,7 @@ Spec files kept outside the repository, `tools/mutate.py`, one change at a time,
 
 Equivalent: the occupant checks that `SabotageTask` and `WallTask` make before an ignite order (the engine's predicted acknowledgement refuses it already; the controller refuses it too) and the guard stance of `StrikeTask` (a leader has tier 0 and never strikes, unless `wipe_focus`, which is off in every plan).
 
-The review of the joined branch (2026-10-05) changed the fire-in (the escorts, the entrance, the wait), the hold of the fire defence, the release of a Thief that is kept for a raid, the dying ants and the end of a hunt; the faults for those rules, and the ones that are equivalent, are in `docs/audit/bots_integration_notes.md` ("The two reviews of the joined branch and their fixes").
+The review of the joined branch (2026-10-05) changed the fire-in (the escorts, the entrance, the wait), the hold of the fire defence, the release of a Thief that is kept for a raid, the dying ants and the end of a hunt; the faults for those rules, and the ones that are equivalent, are in `docs/history/bots_integration_notes.md` ("The two reviews of the joined branch and their fixes").
 
 ## Sanitizers
 
@@ -87,14 +87,14 @@ GCC 13, `-fsanitize=address,undefined`, a Release build with `-DANTS_WERROR=OFF`
 
 | Test | Change | Why |
 |---|---|---|
-| AI1.1, AI1.25, AI2.5, AI2.16, AI2.21 | the hit points of another team's ant are the engine's (they were 0) | the owner's decision |
+| AI1.1, AI1.25, AI2.5, AI2.16, AI2.21 | the hit points of another team's ant are the engine's (they were 0) | a project decision |
 | AI8.2, AI8.4, AI8.5, AI11.8, AI11.9 | the plan sets `race = false` | they hold the opening of v0.5.0 (one or two ants to the middle), which stays selectable; the race has AI20.1 |
 | AI7.15 | `plan.catchup = false` in two parts | the world has no food, so any deficit is the highest pressure at once (AI20.9 holds the tiers) |
 | the fight plans of AI9.x (`fight_plan()`) | `catchup = false` | they hold the old trigger, a margin in points |
 
 ## "Can't go there." reactions
 
-Counted by replaying recorded matches with the locomotion trace (every ant that shows "Can't go there." or "Can't do that..."), four Hard bots, per 1,000 ticks played: SMALL (seeds 1 to 8) 20.9 with the bots of v0.5.0 and 1.0 with the bots of the contest batch (1,609 reactions and 75); TREASURE (seeds 1 to 4) 35.8 and 28.1 (2,065 and 1,619). The SMALL cut is the rule on special orders and the safe fire-in (the orders at an occupied tile and the lone Fire Ant's walls); the thieves' raid tile on TREASURE, where most of the rest comes from, is untouched. Nothing here opens a ring over an enemy ant: that is the owner's decision.
+Counted by replaying recorded matches with the locomotion trace (every ant that shows "Can't go there." or "Can't do that..."), four Hard bots, per 1,000 ticks played: SMALL (seeds 1 to 8) 20.9 with the bots of v0.5.0 and 1.0 with the bots of the contest batch (1,609 reactions and 75); TREASURE (seeds 1 to 4) 35.8 and 28.1 (2,065 and 1,619). The SMALL cut is the rule on special orders and the safe fire-in (the orders at an occupied tile and the lone Fire Ant's walls); the thieves' raid tile on TREASURE, where most of the rest comes from, is untouched. Nothing here opens a ring over an enemy ant: that is a project decision.
 
 ## Left out, and why
 
@@ -103,12 +103,12 @@ Counted by replaying recorded matches with the locomotion trace (every ant that 
 - **A race floor** (`race_floor`: at least this many ants race whatever the gate can use): 2 ants lost 12 points of win rate (22.6 against 34.9 percent) and 0 ships.
 - **The strict contest order** (v0.3.0): still off (6.2 percent).
 - **Who gets to a dropped Fire power-up first** (a refinement of the safe fire-in on maps with droppers, see "Known limits").
-- **A forward guard**: before the escorts waited for a Fire Ant, two Combat Ants parked at the best opponent's entrance and punched what came in and out. It was worth about 8 points of win rate to the Hard aggressive style on TREASURE (26.7 against 18.1 percent, 144 matches) and to Hard on GAUNTLET (32.8 against 25.0, 64 matches), and it was an accident of the rule, not a design; a bot that waits at an enemy's gate with no purpose is the owner's to decide, and it is left to stage 2.
+- **A forward guard**: before the escorts waited for a Fire Ant, two Combat Ants parked at the best opponent's entrance and punched what came in and out. It was worth about 8 points of win rate to the Hard aggressive style on TREASURE (26.7 against 18.1 percent, 144 matches) and to Hard on GAUNTLET (32.8 against 25.0, 64 matches), and it was an accident of the rule, not a design; a bot that waits at an enemy's gate with no purpose is open to decision, and it is left to stage 2.
 - **Stage 2** (bombers, power-ups, the specials, the rush of the enemy's Fire power-up before the fire-in): not built (the flower droppers are: "The flowers" in `docs/BOTS.md`); nothing here makes it harder (`can_put_out` of the fire-in is the rule that the rush would satisfy).
 
-## What the owner decided about the calls of this batch (2026-10-05, Pacific morning)
+## What was decided about the calls of this batch (2026-10-05, Pacific morning)
 
-The hand-back of the batch marked four things as the owner's to decide, each with what the batch had built; he approved all four as built.
+The report of the batch marked four things for decision, each with what the batch had built; all four were approved as built.
 
 - **Hunts** stay (two blows; `hunt=0` is the plan without them): half a kill a match more, and 6 points of win rate on Hard GAUNTLET.
 - **The safe fire-in** stays as built, with its cost of about 4 points of win rate on SMALL at Hard (the flowers there drop Fire power-ups); `sabsafe=0` is the old fire-in. A fire-in that also works where this one refuses (take or deny the Fire power-ups first) is stage 2.

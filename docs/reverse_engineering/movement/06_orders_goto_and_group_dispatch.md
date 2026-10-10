@@ -501,7 +501,7 @@ every order.
 
 Timing from path delivery to first pixel of motion (grass worker):
 idle restart at T -> idle first frame -> at T+first the walk anim is started from inside the
-step callback, so (lead claim C5) its first frame is booked twice: first 4-px move at
+step callback, so (claim C5) its first frame is booked twice: first 4-px move at
 T + 150 + 2*50 ms for a grass worker. Path delivery itself happens on a PATHMGR tick (<= 50 ms
 + the latency of the scheduler passes that process the list head after the request; *(corrected: the default scheduler is the sorted list, not the 8 ms wheel of the
 non-default `newtask` mode, see C2 in the verification notes)*) and only one ant's path completes per tick.
@@ -636,7 +636,7 @@ Common: `tgt = +0xac; +0xac = SENTINEL; wasHome = (+0x68==1); +0x68 = 0; handled
   BTNPUSH (0, 125).
 
 -----------------------------------------------------------------------------------------------
-## 19. Corrections / notes for the lead
+## 19. Corrections / notes
 * Ant vtbl+0x28 is 0x101a93a (set position x,y: +0x38/+0x3a, occupancy, fog), not 0x102b7bb;
   vtbl+0x18 is 0x101a928 (same, from a Point object) — dump at 0x1004be0.
 * FUN_0100e8f5(world, id, flag) displays string resource `id` (FUN_010292dc + FUN_0100e944); it

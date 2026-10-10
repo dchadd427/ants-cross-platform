@@ -1,6 +1,6 @@
 # Audit ledger: The original's scheduler tasks and timed behaviour
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
 
 ## LX: census of the scheduler tasks of Ants.exe
 
@@ -30,7 +30,7 @@ The full table (43 classes, 16 non-task timing behaviours, ranked deviations) is
    - REFRESH has interval 0 and its body waits for the DirectDraw flip (FUN_0102ccdc, FUN_0102cd36).
    - On a vsynced flip chain every task is therefore serviced on a grid of display refreshes (a 50 ms task runs every 50 to 66.7 ms at 60 Hz).
    - timeGetTime ticks at the OS timer tick.
-   - UNVERIFIED on the owner's cnc-ddraw setup. A runtime measurement is needed.
+   - UNVERIFIED on a real cnc-ddraw setup. A runtime measurement is needed.
 
 Four task classes outside the brief's 31 names exist: REMOTE, CUSS, KWFO and Invuln. There are 43 classes in total.
 
@@ -161,7 +161,7 @@ Not deviations: VIEWPORT, CUSS, SOUNDS/5000, Invuln and STOPTASK. The net tasks 
 - **Net task bodies and schedules** are taken from audit N, with the Add arguments re-checked.
 - **Remake side** was read and grepped only. I built and ran nothing.
 - **Not verified:**
-  - real task periods under the owner's DirectDraw or cnc-ddraw setup;
+  - real task periods under a DirectDraw or cnc-ddraw setup;
   - the exact range value behind the positional-sound formula;
   - the allypro cue slot (game+0x4900), which comes from audit N.
 - **Helper agents:** two background agents died on the rate limit without writing anything, so none of their output is used.
