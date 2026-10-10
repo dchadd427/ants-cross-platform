@@ -2551,6 +2551,17 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (checked with Capsto
 * **Names.** The peer table copies a name with `FUN_010293bf(dest, name, 0x32)` (`FUN_01033101`, 0x1033101): at most 50 characters, "Unknown" (the string at 0x104775c) for an empty one; the score label of the HUD keeps 15 of them (`push 0xF; call strncpy`, 0x100e231); the remake's wire protocol carries 32 (`net::kMaxNameChars`), the setup screen's rows cut a name to 16 and clip it to 120 px, and the menu's name field takes the 32 that a Hello can carry (printable ASCII 0x20 - 0x7e, as the original's edit field).
 * **No label-free button picture.** Every button picture of `ants.chd` carries its words ("Leave Game", "START!", "Return to Game", "Accept", "Decline", "Withdraw", "Leave Help", "Ok!", "On", "Off", the two arrows, "Play Single Player Mode", "Play Multi Player Mode"; all 45 sprites between 60 - 140 x 16 - 34 pixels were looked at). The menu therefore builds its buttons and boxes from the palette of those pictures: face (43, 99, 87), light edges (115, 191, 155) and (59, 151, 111), shades (23, 83, 63) and (19, 51, 35), outline (7, 11, 15), the drop shadow (183, 11, 27) one pixel to the right and below, the black inside (7, 11, 15) of the setup screen's text boxes with their green frame; the labels are the game's TrueType face, the seats' ants are the `agst301` portrait in the seat's colour, the background is `sm_screen`.
 
+### 5.64 The Original's Recorder and Observer Playback (`-O` and `-I`; Capstone-Verified)
+
+Checked with Capstone on the local copy of `Ants.exe` (read only, nothing of the program is copied) and read in the local decompilation (never committed):
+
+* `-I<file>` (the case at **0x100ca69**) sets `[W+0x4ae4] = 1` (OBSERVER) and stores the argument (at most 0x104 characters) at `[W+0x4ff7]`; `-O<file>` stores the name without the flag.
+* The file is opened when `[W+0x4ff7]` is not empty (**0x100abcc - 0x100ac0b**), with the mode word `((observer == 0) + 1) | 0x100` (0x101 for an observer, 0x102 otherwise) through the file object's vtable +0xc; the handle goes to `[W+0x5330]`; a failure shows an error text.
+* For an observer a `PLAYBACK` task (constructor **0x1024eba**, called at **0x100acbc** with the handle) is scheduled with the delay **0x3e8 = 1000 ms** (**0x100acc7 - 0x100acd9**).
+* From the decompilation only: the message dispatcher `FUN_0100d791` writes one record for every handled message while a file is open and the machine is not an observer (8517 - 8560): a header of start values once, then the milliseconds since the last message and the message; many order paths are guarded by `[W+0x4ae4] != 0`. The scheduler ledger says Space toggles the playback (not verified here).
+
+So the original records the MESSAGES a machine handles in a game that is not lock-step: such a file cannot be rebuilt from commands and the remake does not read it. The remake's file is its own ([`REPLAYS.md`](REPLAYS.md)). The original's switch names can be kept as aliases (`-O` = `--save-replay`, `-I` = `--replay`); a file with another magic is refused.
+
 ## 6. Target Multi-Platform Architecture
 
 > The tree and the list below are the target as first sketched, not the project's layout (`docs/ARCHITECTURE.md` has that): the libraries are `ants_assets`, `ants_sim`, `ants_app` and others under `src/`, the audio mixer is part of `ants_app`, and the game has no shaders of its own.
