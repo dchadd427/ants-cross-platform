@@ -160,19 +160,35 @@ void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& arc
     draw_results_box(renderer, archive, kOthersBox, l.dx, l.dy, find_strip(kStrips.data(), kStrips.size(), "results.others.bottom"));
 }
 
+void draw_art_text(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, FontSize size) {
+    renderer.draw_text(text, x + 1, y + 1, kArtShadow, size);
+    renderer.draw_text(text, x - 1, y - 1, kArtLit, size);
+    renderer.draw_text(text, x, y, kArtFill, size);
+}
+
+void draw_art_rects(IRenderer& renderer, const std::vector<LayoutRect>& parts) {
+    for (const LayoutRect& r : parts) renderer.fill_rect(r.x + 1, r.y + 1, r.w, r.h, kArtShadow);
+    for (const LayoutRect& r : parts) renderer.fill_rect(r.x - 1, r.y - 1, r.w, r.h, kArtLit);
+    for (const LayoutRect& r : parts) renderer.fill_rect(r.x, r.y, r.w, r.h, kArtFill);
+}
+
+void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h) { draw_art_rects(renderer, std::vector<LayoutRect>{LayoutRect{x, y, w, h}}); }
+
 // The head of an arrow, one row after the other from its top: how far right of the shaft's column (the column's left edge) each row starts and how wide it is. The shaft is 2 px wide at +6, so the head is
 // a triangle of 11 px at its base and 1 px at its tip, symmetric about the shaft
 constexpr int32_t kArrowHead[10][2] = {{1, 11}, {2, 9}, {2, 9}, {3, 7}, {3, 7}, {4, 5}, {4, 5}, {5, 3}, {5, 3}, {6, 1}};
 
+// The picture's order (tools/compose.py): the text, then the line (the stroke and the shaft down to the head's top row, as one shape), then the head (its own shape, so its edges lie over the line's)
 void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout) {
     for (const Results187Heading& h : layout.headings187) {
         const int32_t cx = layout.column_x[static_cast<size_t>(h.column)];
-        renderer.draw_text(h.text, h.text_right - renderer.get_text_width(h.text, h.size), h.text_y, kResultsArtGreen, h.size);
-        renderer.fill_rect(cx - 12, h.stroke_y, 20, 2, kResultsArtGreen);                                      // from the text to the shaft
-        renderer.fill_rect(cx + 6, h.stroke_y, 2, layout.arrow_tip_y187 - h.stroke_y, kResultsArtGreen);       // the shaft, down to the tip's row
-        for (int32_t row = 0; row < 10; ++row) {
-            renderer.fill_rect(cx + kArrowHead[row][0], layout.arrow_tip_y187 - 9 + row, kArrowHead[row][1], 1, kResultsArtGreen);
-        }
+        const int32_t head_top = layout.arrow_tip_y187 - 9;
+        draw_art_text(renderer, h.text, h.text_right - renderer.get_text_width(h.text, h.size), h.text_y, h.size);
+        draw_art_rects(renderer, {LayoutRect{cx - 12, h.stroke_y, 20, 2},                                  // from the text to the shaft
+                                  LayoutRect{cx + 6, h.stroke_y, 2, head_top - h.stroke_y + 1}});          // the shaft, down to the head's top row
+        std::vector<LayoutRect> head;
+        for (int32_t row = 0; row < 10; ++row) head.push_back(LayoutRect{cx + kArrowHead[row][0], head_top + row, kArrowHead[row][1], 1});
+        draw_art_rects(renderer, head);
     }
 }
 
@@ -203,7 +219,7 @@ void draw_results_headline_187(IRenderer& renderer, const ResultsLayout& layout,
     const int32_t pitch = font_cell_height(headline.size);
     int32_t y = headline.y;
     for (const std::string& line : headline.lines) {
-        renderer.draw_text(line, layout.headline187.x + (layout.headline187.w - renderer.get_text_width(line, headline.size)) / 2, y, kResultsArtGreen, headline.size);
+        draw_art_text(renderer, line, layout.headline187.x + (layout.headline187.w - renderer.get_text_width(line, headline.size)) / 2, y, headline.size);
         y += pitch;
     }
 }

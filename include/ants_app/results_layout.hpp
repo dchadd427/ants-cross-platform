@@ -19,7 +19,8 @@
 //
 // The 187 page (docs/GAMEPLAY.md "187", the owner approved the pictures): the four baked headings (newstats.bmp: Score, Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) are not drawn. Three
 // headings of the game's own letters stand in their place, "Kills", "Ants lost" and "Ants left", each with a stroke and an arrow over the number column it names (the columns of the score, the
-// friendly ants lost and the new ants hatched, whose last place the ants that are left take), and a headline of the same green stands at the top, right of "YOUR SCORE". The numbers are the
+// friendly ants lost and the new ants hatched, whose last place the ants that are left take), and a headline stands at the top, right of "YOUR SCORE". All of this lettering has the look of the art's
+// own ("YOUR SCORE", "Winner!"): the fill of its green and a lit and a shadow edge, one pixel each (draw_art_text, draw_art_rects). The numbers are the
 // original's counters (above). In the wide page every position is the approved picture's own (the pixel positions of its 960 x 540 frame); the classic page has the same construction moved the way
 // the page moves its parts (what is anchored to the right by -320, what is in the middle by -30), with the headline in the free space right of "YOUR SCORE" (the pictures do not show it).
 //
@@ -131,8 +132,19 @@ inline constexpr int32_t kResultsDigitWidth = 8;
 /// button are the screen's (they change). The classic page is the animation re_screen, drawn by the screen. `headers` false leaves out the baked column headers (newstats.bmp): the 187 page.
 void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool headers = true);
 
-/// The green of the art's own letters (the page's headings and arrows), which the 187 page's headings, arrows and headline are drawn in
-inline constexpr ants::assets::ColorRGBA kResultsArtGreen{19, 71, 47, 255};
+/// The look of the art's own lettering ("YOUR SCORE", "Winner!"), which the 187 page's headings, strokes, arrows and headline have: the fill, a lit edge one pixel up and to the left, and a shadow edge
+/// one pixel down and to the right (the colours are sampled from the original's art)
+inline constexpr ants::assets::ColorRGBA kArtFill{43, 95, 67, 255};
+inline constexpr ants::assets::ColorRGBA kArtLit{115, 191, 155, 255};
+inline constexpr ants::assets::ColorRGBA kArtShadow{19, 55, 47, 255};
+
+/// A text in that look: a copy in the shadow colour at (x + 1, y + 1), a copy in the lit colour at (x - 1, y - 1), then the fill at (x, y)
+void draw_art_text(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, FontSize size);
+/// A filled rectangle in that look: its shadow copy 1 px right and down, its lit copy 1 px left and up, then the fill
+void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h);
+/// One shape that is made of several rectangles (a stroke and its shaft, the rows of an arrow's head) in that look: every part's shadow copy, then every part's lit copy, then every part's fill, so that the
+/// edges of one part never paint over the fill of another
+void draw_art_rects(IRenderer& renderer, const std::vector<LayoutRect>& parts);
 
 /// The three headings of the 187 page with their strokes and arrows (instead of the baked headers), in the page's own coordinates: the layout's headings187
 void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout);

@@ -5,6 +5,8 @@
 //   3. the baked headings (newstats.bmp) are not drawn in 187, in the wide page and in the classic page, and everything else of the page is (the original's modes draw them, as before);
 //   4. the three headings, their strokes and arrows, the numbers and the headline stand where the approved picture has them (the positions of tools/compose.py at 960 x 540, written out here
 //      as numbers of their own: the arrows pixel for pixel, the texts by the calls that draw them), and nothing else of the page changed (pixel for pixel, outside the places that are 187's);
+//      the lettering has the look of the original's own (YOUR SCORE, Winner!): the fill, a lit edge one pixel up and left, a shadow edge one pixel down and right, in the colours sampled from the art;
+//      the page of the original's rules is as it was (its draw calls and its pixels, pinned from before the lettering had that look);
 //   5. the headline fits: at the real fonts every wording of the page lies inside its box, wrapped or made smaller when a name is long, and never touches the art around it;
 //   6. the start line of the chat log ("Game started! Most kills wins.") and the line "<Name> (<Colour>) is out of ants!" reach the chat log; the original's modes say the old start line and
 //      nothing of ants running out;
@@ -16,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -43,6 +46,7 @@ namespace {
 int g_checks = 0;
 int g_failures = 0;
 const char* g_group = "";
+bool g_print = false;                    // --print writes the pinned numbers of test_original_page (for regeneration; never to silence a failure)
 
 void check(bool ok, const std::string& what) {
     ++g_checks;
@@ -58,6 +62,32 @@ void group(const char* name, const char* what) {
 }
 
 std::string str(int64_t v) { return std::to_string(v); }
+
+/// FNV-1a 64 over bytes
+class Fnv {
+public:
+    void byte(uint8_t b) {
+        h_ ^= b;
+        h_ *= 0x100000001b3ull;
+    }
+    void i32(int32_t v) {
+        for (int i = 0; i < 4; ++i) byte(static_cast<uint8_t>((static_cast<uint32_t>(v) >> (8 * i)) & 0xffu));
+    }
+    void text(const std::string& s) {
+        i32(static_cast<int32_t>(s.size()));
+        for (char c : s) byte(static_cast<uint8_t>(c));
+    }
+    uint64_t value() const { return h_; }
+
+private:
+    uint64_t h_{0xcbf29ce484222325ull};
+};
+
+std::string hex64(uint64_t v) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "0x%016llxull", static_cast<unsigned long long>(v));
+    return buf;
+}
 
 void ensure_sdl() {
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);                      // nothing is shown or heard
@@ -146,6 +176,17 @@ public:
         for (const Ev& e : events) n += e.kind == k ? 1u : 0u;
         return n;
     }
+    uint64_t fingerprint() const {
+        Fnv f;
+        for (const Ev& e : events) {
+            f.byte(static_cast<uint8_t>(e.kind));
+            f.text(e.name);
+            for (int32_t v : {e.x, e.y, e.w, e.h}) f.i32(v);
+            f.byte(e.colour.r); f.byte(e.colour.g); f.byte(e.colour.b); f.byte(e.colour.a);
+            f.byte(static_cast<uint8_t>(e.size));
+        }
+        return f.value();
+    }
 
 private:
     Ev base(Kind k) const {
@@ -214,7 +255,37 @@ Rgb pixel(const std::vector<uint8_t>& px, int32_t width, int32_t x, int32_t y) {
     return Rgb{px[i], px[i + 1], px[i + 2]};
 }
 
-constexpr Rgb kGreen{19, 71, 47};                   // the green of the art's own letters (tools/compose.py: ARTGREEN)
+// The look of the original's own lettering ("YOUR SCORE", "Winner!"), sampled from its art (tools/compose.py: ARTGREEN, ARTHI, ARTLO): the fill, the lit edge one pixel up and to the left, the shadow
+// edge one pixel down and to the right
+constexpr Rgb kFill{43, 95, 67};
+constexpr Rgb kLit{115, 191, 155};
+constexpr Rgb kShadow{19, 55, 47};
+
+bool has_colour(const Spy::Ev& e, const Rgb& c) { return e.colour.r == c.r && e.colour.g == c.g && e.colour.b == c.b && e.colour.a == 255; }
+
+/// The three copies that a text of this look is drawn in, in the order they are drawn: the shadow copy (at +1, +1), the lit copy (at -1, -1), then the fill (at the true place): three text calls in a
+/// row for the same text, in these colours
+struct ArtText {
+    const Spy::Ev* shadow{nullptr};
+    const Spy::Ev* lit{nullptr};
+    const Spy::Ev* fill{nullptr};
+};
+
+ArtText find_art_text(const Spy& spy, const std::string& text) {
+    for (size_t i = 0; i + 2 < spy.events.size(); ++i) {
+        const Spy::Ev& a = spy.events[i];
+        const Spy::Ev& b = spy.events[i + 1];
+        const Spy::Ev& c = spy.events[i + 2];
+        if (a.kind != Spy::Kind::Text || b.kind != Spy::Kind::Text || c.kind != Spy::Kind::Text || a.name != text || b.name != text || c.name != text) continue;
+        if (has_colour(a, kShadow) && has_colour(b, kLit) && has_colour(c, kFill)) return ArtText{&a, &b, &c};
+    }
+    return ArtText{};
+}
+
+/// The copies lie as the look wants: the shadow 1 px right and down, the lit 1 px left and up of the fill, all of one size
+bool art_text_in_place(const ArtText& t) {
+    return t.fill != nullptr && t.shadow->x == t.fill->x + 1 && t.shadow->y == t.fill->y + 1 && t.lit->x == t.fill->x - 1 && t.lit->y == t.fill->y - 1 && t.shadow->size == t.fill->size && t.lit->size == t.fill->size;
+}
 
 // =====================================================================================================================================================
 // The results that the tests hand to the page
@@ -485,12 +556,14 @@ void test_positions(const assets::AssetArchive& arc) {
         card.render(spy, arc);
         const char* const texts[3] = {"Kills", "Ants lost", "Ants left"};
         for (size_t i = 0; i < 3; ++i) {
-            const Spy::Ev* e = spy.find_text(texts[i]);
-            check(e != nullptr && e->kind == Spy::Kind::Text, at + "\"" + texts[i] + "\" is drawn");
-            if (e == nullptr) continue;
+            const ArtText t = find_art_text(spy, texts[i]);
+            check(t.fill != nullptr, at + "\"" + texts[i] + "\" is drawn in three copies: the shadow, the lit edge, the fill");
+            if (t.fill == nullptr) continue;
+            const Spy::Ev* e = t.fill;
             const int32_t width = static_cast<int32_t>(std::string(texts[i]).size()) * 6;
             check(e->x + width == l.headings187[i].text_right && e->y == l.headings187[i].text_y, at + "\"" + texts[i] + "\" is right aligned at " + str(l.headings187[i].text_right) + ", its cell's top at " + str(l.headings187[i].text_y) + " (" + str(e->x) + " + " + str(width) + ", " + str(e->y) + ")");
-            check(e->size == l.headings187[i].size && e->colour.r == 19 && e->colour.g == 71 && e->colour.b == 47, at + "\"" + texts[i] + "\" is in the art's green at its size");
+            check(e->size == l.headings187[i].size, at + "\"" + texts[i] + "\" is at its size");
+            check(art_text_in_place(t), at + "\"" + texts[i] + "\": the shadow copy is 1 px right and down, the lit copy 1 px left and up of the fill");
         }
         // the three numbers of every row: a clipped, squeezed label at the column, the row's y, nothing in a fourth place
         const char* const numbers[4][3] = {{"9", "5", "1"}, {"8", "6", "0"}, {"5", "8", "0"}, {"4", "8", "0"}};
@@ -512,12 +585,13 @@ void test_positions(const assets::AssetArchive& arc) {
         check(spy.count(Spy::Kind::Squeezed) == 12, at + "and there are no others");
         // the headline
         const std::string headline = "Juniper is the last colony standing!";
-        const Spy::Ev* h = spy.find_text(headline);
-        check(h != nullptr && h->kind == Spy::Kind::Text, at + "the headline is drawn");
-        if (h != nullptr) {
+        const ArtText t = find_art_text(spy, headline);
+        check(t.fill != nullptr, at + "the headline is drawn in three copies: the shadow, the lit edge, the fill");
+        if (t.fill != nullptr) {
+            const Spy::Ev* h = t.fill;
             const int32_t width = static_cast<int32_t>(headline.size()) * 6;
             check(h->size == FontSize::Px35 && h->x == l.headline187.x + (l.headline187.w - width) / 2 && h->y == l.headline187.y + (l.headline187.h - 35) / 2, at + "centred in its box, one 35 px line (" + str(h->x) + ", " + str(h->y) + ")");
-            check(h->colour.r == 19 && h->colour.g == 71 && h->colour.b == 47, at + "in the art's green");
+            check(art_text_in_place(t), at + "the shadow copy is 1 px right and down, the lit copy 1 px left and up of the fill");
         }
     }
 }
@@ -551,30 +625,55 @@ void test_pixels(const assets::AssetArchive& arc) {
     rig.renderer.begin_frame();
     quiet187.render(rig.renderer, arc);
     const std::vector<uint8_t> bare = rig.read();
+    rig.renderer.begin_frame();
+    draw_results_art(rig.renderer, arc, false);                      // the ground of the 187 page: the art without the baked headings and without any lettering of 187's
+    const std::vector<uint8_t> ground = rig.read();
 
-    // the arrows: a 2 px stroke from 12 px left of the column to the shaft, the shaft (2 px wide at the column + 6) down to row 246, the head: rows 238 to 247, 11 px at the base, 1 px at the tip
-    // (the polygon (cx + 1, 238), (cx + 11, 238), (cx + 6, 247): the rows' half widths 5, 4, 4, 3, 3, 2, 2, 1, 1, 0 around the shaft's left column)
-    const int32_t half[10] = {5, 4, 4, 3, 3, 2, 2, 1, 1, 0};
+    // the arrows, as the picture draws them (tools/compose.py: emboss_line, then emboss_poly, per heading): a 2 px stroke from 12 px left of the column to the shaft and the shaft (2 px wide at the
+    // column + 6) down to row 238, as one shape; the head, the polygon (cx + 1, 238), (cx + 11, 238), (cx + 6, 247), as the next; a shape is its shadow copy (1 px right and down), its lit copy (1 px left
+    // and up) and then its fill. The pixels around every arrow, from the stroke's start to the head's end and a pixel beyond (the shadow's last row, 248, lies in the first row of the winner's
+    // box), are these three colours where the picture has them and the page's ground (the art without the baked headings) where it has not
+    const int32_t half[10] = {5, 4, 4, 3, 3, 2, 2, 1, 1, 0};                  // the head's rows (238 .. 247): half widths around the shaft's left column
     for (size_t i = 0; i < 3; ++i) {
         const int32_t cx = kPictureColumn[i];
         const int32_t y0 = kPictureStrokeY[i];
         const std::string n = "arrow " + str(static_cast<int64_t>(i)) + ": ";
-        bool stroke = true, shaft = true, head = true, outside = true;
-        for (int32_t x = cx - 12; x <= cx + 7; ++x) stroke = stroke && pixel(now, 960, x, y0) == kGreen && pixel(now, 960, x, y0 + 1) == kGreen;
-        outside = outside && pixel(now, 960, cx - 13, y0) != kGreen && pixel(now, 960, cx - 13, y0 + 1) != kGreen && pixel(now, 960, cx + 8, y0 - 1) != kGreen && pixel(now, 960, cx + 8, y0 + 2) != kGreen;
-        for (int32_t y = y0; y <= kPictureShaftEnd; ++y) shaft = shaft && pixel(now, 960, cx + 6, y) == kGreen && pixel(now, 960, cx + 7, y) == kGreen;
-        for (int32_t y = y0 + 2; y < kPictureHeadTop; ++y) outside = outside && pixel(now, 960, cx + 5, y) != kGreen && pixel(now, 960, cx + 8, y) != kGreen;
-        for (int32_t k = 0; k < 10; ++k) {
-            const int32_t y = kPictureHeadTop + k;
-            for (int32_t x = cx + 6 - half[k]; x <= cx + 6 + half[k]; ++x) head = head && pixel(now, 960, x, y) == kGreen;
-            outside = outside && pixel(now, 960, cx + 6 - half[k] - 1, y) != kGreen && pixel(now, 960, cx + 6 + half[k] + 1, y) != kGreen;
+        std::vector<int8_t> paint(960u * 540u, 0);                          // 0 nothing, 1 shadow, 2 lit, 3 fill
+        auto put = [&](int32_t x, int32_t y, int8_t what) { paint[static_cast<size_t>(y) * 960u + static_cast<size_t>(x)] = what; };
+        auto shape = [&](const std::vector<LayoutRect>& parts) {
+            const struct { int32_t d; int8_t what; } passes[3] = {{1, 1}, {-1, 2}, {0, 3}};
+            for (const auto& pass : passes) {
+                for (const LayoutRect& r : parts) {
+                    for (int32_t y = r.y; y < r.bottom(); ++y) {
+                        for (int32_t x = r.x; x < r.right(); ++x) put(x + pass.d, y + pass.d, pass.what);
+                    }
+                }
+            }
+        };
+        shape({LayoutRect{cx - 12, y0, 20, 2}, LayoutRect{cx + 6, y0, 2, kPictureHeadTop - y0 + 1}});
+        std::vector<LayoutRect> head;
+        for (int32_t k = 0; k < 10; ++k) head.push_back(LayoutRect{cx + 6 - half[k], kPictureHeadTop + k, 2 * half[k] + 1, 1});
+        shape(head);
+        int64_t wrong = 0, painted = 0;
+        int32_t first_x = -1, first_y = -1;
+        for (int32_t y = y0 - 1; y <= kPictureTip + 1; ++y) {
+            for (int32_t x = cx - 11; x <= cx + 9; ++x) {                    // (the heading's own text ends left of this: its shadow lies at most at the stroke's lit edge, x - 13)
+                const int8_t what = paint[static_cast<size_t>(y) * 960u + static_cast<size_t>(x)];
+                const Rgb want = what == 1 ? kShadow : what == 2 ? kLit : what == 3 ? kFill : pixel(ground, 960, x, y);
+                painted += what != 0 ? 1 : 0;
+                if (pixel(now, 960, x, y) != want) {
+                    if (wrong == 0) { first_x = x; first_y = y; }
+                    ++wrong;
+                }
+            }
         }
-        check(stroke, n + "the stroke is green from " + str(cx - 12) + " to " + str(cx + 7) + " on rows " + str(y0) + " and " + str(y0 + 1));
-        check(shaft, n + "the shaft is green at x " + str(cx + 6) + " and " + str(cx + 7) + " from row " + str(y0) + " to " + str(kPictureShaftEnd));
-        check(head, n + "the head is the polygon (" + str(cx + 1) + ", 238), (" + str(cx + 11) + ", 238), (" + str(cx + 6) + ", 247)");
-        check(outside, n + "and nothing next to them is green");
+        check(painted > 150, n + "the picture's arrow has " + str(painted) + " pixels around it");
+        check(wrong == 0, n + "stroke, shaft and head are the picture's, with the lit and the shadow edge, pixel for pixel (" + str(wrong) + " differ, the first at (" + str(first_x) + ", " + str(first_y) + "))");
     }
-    check(pixel(was, 960, kPictureColumn[0] + 6, 235) != kGreen && pixel(was, 960, kPictureColumn[1] + 6, 235) != kGreen && pixel(was, 960, kPictureColumn[2] + 6, 235) != kGreen, "the original's page has no arrow there");
+    // the three colours are in the right places by their own: the stroke's fill, the lit edge over it, the shadow edge under it (the first arrow's stroke at row 220, columns 800)
+    check(pixel(now, 960, 800, 220) == kFill && pixel(now, 960, 800, 221) == kFill && pixel(now, 960, 800, 219) == kLit && pixel(now, 960, 800, 222) == kShadow, "the stroke: fill on rows 220 and 221, the lit edge above (219), the shadow edge below (222)");
+    check(pixel(now, 960, 811, 230) == kFill && pixel(now, 960, 812, 230) == kFill && pixel(now, 960, 810, 230) == kLit && pixel(now, 960, 813, 230) == kShadow, "the shaft: fill at x 811 and 812, the lit edge left of it (810), the shadow edge right of it (813)");
+    check(pixel(ground, 960, 800, 219) != kLit && pixel(ground, 960, 800, 220) != kFill && pixel(ground, 960, 811, 230) != kFill, "the ground has none of it there");
 
     // nothing else changed: the places that are 187's own are the baked headings' rectangle, the area of the headings and arrows, the headline's line, and the numbers of the rows
     std::vector<LayoutRect> own;
@@ -623,12 +722,104 @@ void test_pixels(const assets::AssetArchive& arc) {
         }
         check(letters > 5000 && touched == 0, "the headline does not touch the letters of YOUR SCORE (" + str(touched) + " of " + str(letters) + " green pixels differ)");
     }
-    // ... and it has ink: the box of the line holds green pixels
+    // ... and it has ink: the box of the line holds pixels of the fill
     int64_t ink = 0;
     for (int32_t y = l.headline187.y; y < l.headline187.bottom(); ++y) {
-        for (int32_t x = l.headline187.x; x < l.headline187.right(); ++x) ink += pixel(now, 960, x, y) == kGreen ? 1 : 0;
+        for (int32_t x = l.headline187.x; x < l.headline187.right(); ++x) ink += pixel(now, 960, x, y) == kFill ? 1 : 0;
     }
-    check(ink > 800, "the headline has ink in its box (" + str(ink) + " green pixels)");
+    check(ink > 800, "the headline has ink in its box (" + str(ink) + " pixels of the fill)");
+
+    // the look of the lettering: a pixel of the lit edge has the fill one pixel down and to the right of it (the edge is the text's own copy, moved up and left), a pixel of the shadow edge has it one pixel
+    // up and to the left. The lettering of 187: the headline and the three headings (the boxes that the texts lie in; their pixels depend on the machine's font, so the check is by relation, not by place)
+    struct Part {
+        const char* what;
+        LayoutRect box;
+        int64_t fill_at_least;
+        int64_t edge_at_least;                  // (an edge shows only where the text's pixel is fully covered: thin strokes are blended with the clay)
+    };
+    std::vector<Part> parts;
+    parts.push_back({"the headline", LayoutRect{l.headline187.x, l.headline187.y - 4, l.headline187.w, l.headline187.h + 8}, 800, 30});
+    for (const Results187Heading& h : l.headings187) {
+        const int32_t w = rig.renderer.get_text_width(h.text, h.size);
+        parts.push_back({h.text, LayoutRect{h.text_right - w - 2, h.text_y - 2, w + 4, font_cell_height(h.size) + 4}, 120, 5});
+    }
+    for (const Part& part : parts) {
+        int64_t lit = 0, lit_ok = 0, shadow = 0, shadow_ok = 0, fill = 0;
+        for (int32_t y = part.box.y + 1; y < part.box.bottom() - 1; ++y) {
+            for (int32_t x = part.box.x + 1; x < part.box.right() - 1; ++x) {
+                const Rgb c = pixel(now, 960, x, y);
+                if (c == kFill) ++fill;
+                if (c == kLit) {
+                    ++lit;
+                    lit_ok += pixel(now, 960, x + 1, y + 1) == kFill ? 1 : 0;
+                }
+                if (c == kShadow) {
+                    ++shadow;
+                    shadow_ok += pixel(now, 960, x - 1, y - 1) == kFill ? 1 : 0;
+                }
+            }
+        }
+        const std::string at = std::string(part.what) + ": ";
+        check(fill >= part.fill_at_least && lit >= part.edge_at_least && shadow >= part.edge_at_least, at + "the fill, the lit edge and the shadow edge are all there (" + str(fill) + ", " + str(lit) + ", " + str(shadow) + " pixels)");
+        check(lit > 0 && lit_ok * 100 >= lit * 90, at + "the lit edge lies up and to the left of the fill (" + str(lit_ok) + " of " + str(lit) + " pixels have the fill one down and right)");
+        check(shadow > 0 && shadow_ok * 100 >= shadow * 90, at + "the shadow edge lies down and to the right of the fill (" + str(shadow_ok) + " of " + str(shadow) + " pixels have the fill one up and left)");
+    }
+}
+
+// =====================================================================================================================================================
+// 4c. The original's page, as before
+// =====================================================================================================================================================
+
+// The page of the original's rules (the same result as the 187 pages above), pinned as it was drawn before the 187 lettering got the look of the original's own: the draw calls of both pages (the
+// recording renderer: every sprite, rectangle and text, in order) and the pixels of the wide page (FNV-1a 64 over the RGB bytes, the rows' text areas blanked: their pixels depend on the
+// machine's font library). A mode that draws a thing of 187's on the original's page, or moves a piece of it, moves these.
+constexpr uint64_t kOriginalWideCalls = 0x4ea7cebdf5492e20ull;
+constexpr uint64_t kOriginalClassicCalls = 0x95776ac41275aa82ull;
+constexpr uint64_t kOriginalWidePixels = 0xcd9f2dab73105aacull;
+
+void test_original_page(const assets::AssetArchive& arc) {
+    group("original", "the page of the original's rules is as it was: the same draw calls (both pages) and the same pixels (the wide one)");
+    Scene s;
+    uint64_t calls[2] = {0, 0};
+    for (const bool wide : {true, false}) {
+        ScorecardModal card;
+        open_page(card, s, sim::GameMode::HighestScore, wide);
+        Spy spy(arc);
+        card.render(spy, arc);
+        calls[wide ? 0 : 1] = spy.fingerprint();
+        check(spy.find_text("Kills") == nullptr && spy.find_text("Ants lost") == nullptr && spy.find_text("Ants left") == nullptr, std::string(wide ? "wide" : "classic") + ": no heading of 187 is drawn");
+    }
+    RendererRig rig(arc, 960, 540);
+    check(rig.ok, "the renderer is up on a 960 x 540 canvas");
+    uint64_t pixels = 0;
+    if (rig.ok) {
+        const ResultsLayout& l = ResultsLayout::wide();
+        ScorecardModal card;
+        open_page(card, s, sim::GameMode::HighestScore, true);
+        rig.renderer.begin_frame();
+        card.render(rig.renderer, arc);
+        const std::vector<uint8_t> px = rig.read();
+        std::vector<LayoutRect> masks;
+        for (size_t row = 0; row < 4; ++row) masks.push_back(LayoutRect{l.name_x - 2, l.row_y(row) - 2, 925 - (l.name_x - 2), 22});
+        Fnv f;
+        for (int32_t y = 0; y < 540; ++y) {
+            for (int32_t x = 0; x < 960; ++x) {
+                bool masked = false;
+                for (const LayoutRect& m : masks) masked = masked || m.contains(x, y);
+                const Rgb c = pixel(px, 960, x, y);
+                f.byte(masked ? uint8_t{0} : c.r);
+                f.byte(masked ? uint8_t{0} : c.g);
+                f.byte(masked ? uint8_t{0} : c.b);
+            }
+        }
+        pixels = f.value();
+    }
+    if (g_print) {
+        std::printf("constexpr uint64_t kOriginalWideCalls = %s;\nconstexpr uint64_t kOriginalClassicCalls = %s;\nconstexpr uint64_t kOriginalWidePixels = %s;\n", hex64(calls[0]).c_str(), hex64(calls[1]).c_str(), hex64(pixels).c_str());
+    }
+    check(calls[0] == kOriginalWideCalls, "wide: the draw calls are the original's (" + hex64(calls[0]) + ", pinned " + hex64(kOriginalWideCalls) + ")");
+    check(calls[1] == kOriginalClassicCalls, "classic: the draw calls are the original's (" + hex64(calls[1]) + ", pinned " + hex64(kOriginalClassicCalls) + ")");
+    check(pixels == kOriginalWidePixels, "wide: the pixels are the original's, the rows' text areas blanked (" + hex64(pixels) + ", pinned " + hex64(kOriginalWidePixels) + ")");
 }
 
 // =====================================================================================================================================================
@@ -862,8 +1053,9 @@ void test_application() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--print") == 0) g_print = true;
+    }
     ensure_sdl();
     assets::AssetArchive archive;
     if (!archive.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
@@ -875,6 +1067,7 @@ int main(int argc, char* argv[]) {
     test_baked_headings(archive);
     test_positions(archive);
     test_pixels(archive);
+    test_original_page(archive);
     test_fit(archive);
     test_chat();
     test_application();
