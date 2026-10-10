@@ -404,6 +404,9 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 ///   are not guarded       (Hard) no enemy Combat Ant stands near the raid tile of the hill: its reflex would hit the thief before it gets there
 /// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks, and one whose raid click the controller refused (Fate::Filtered:
 /// a power-up lies on the entrance) for Params::filtered_ticks. The thief is ordered again as soon as it is idle and empty-handed.
+/// Two thieves on one hole (unjam, LevelPlan::raid_unjam): the second waits on a tile in front of the hole while the first raids. When the first has raided and sits shut in on the raid tile
+/// (idle, or in the can't-go loop) because an own ant stands on the last free tile in front of the hole and the walls or an enemy hold the others, that ant steps aside (a free tile a few steps
+/// off the hole, out of the raid task's hands for 80 ticks) and is sent to steal again afterwards; and no second thief is sent to a hole while an own thief is on its raid tile.
 class RaidTask final : public Task {
 public:
     struct Params {
@@ -424,6 +427,7 @@ public:
     uint32_t failures() const noexcept { return failures_; }
     uint32_t ambushes() const noexcept { return ambushes_; }
     size_t waiting() const noexcept { return waiting_.size(); }
+    uint32_t unjams() const noexcept { return unjams_; }
     int last_target() const noexcept { return last_target_; }
     bool black(uint8_t team, uint64_t tick) const noexcept;
     const Params& params() const noexcept { return params_; }
@@ -437,6 +441,7 @@ private:
         sim::TileCoord origin{};
     };
     bool launch(TaskContext& context, const AntView& thief);
+    void unjam(TaskContext& context);
     bool ambush(TaskContext& context, const AntView& thief);
     struct Waiting {
         uint8_t team{0};
@@ -450,6 +455,8 @@ private:
     uint64_t ambush_pause_until_{0};
     uint32_t ambushes_{0};
     std::map<uint32_t, Raid> raids_;
+    std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
+    uint32_t unjams_{0};
     std::map<uint8_t, uint64_t> black_;
     uint32_t raids_ordered_{0};
     uint32_t failures_{0};

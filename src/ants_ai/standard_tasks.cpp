@@ -15,6 +15,7 @@ constexpr int32_t kThiefRadius = 16;          // an enemy Thief this close to th
 constexpr uint64_t kShunTicks = 900;          // an enemy ant that no order reached is left alone this long (45 s)
 constexpr uint64_t kBlowTicks = 6;            // an attack order is one blow: an ant that is idle this long after the order LEFT has done it (or cannot)
 constexpr uint64_t kCantGoWindow = 24;        // an attack that shows "can't go" within this many ticks of leaving was refused by the path finder
+constexpr uint64_t kAsideTicks = 80;          // an ant that was sent off the tiles in front of a hole is not sent to a raid, nor off again, for this long (4 s)
 
 const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept {
     const auto it = std::lower_bound(ants.begin(), ants.end(), id, [](const AntView& a, uint32_t want) { return a.id < want; });
@@ -1804,7 +1805,15 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
                                        const EastTile k = classify_tile(grid, e);
                                        free_tiles += (k == EastTile::Open || k == EastTile::Bare) && !(plan.cantgo_aware && held_by_standing_ant(v, e)) ? 1u : 0u;
                                    }
-                                   return free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid));
+                                   if (free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return true;
+                                   // an own thief on the raid tile (it is raiding, or has raided and is on its way out) has the hole: a second one sent now waits on a tile in front of it, and the first one cannot leave
+                                   // when the walls have shut the other tiles (unjam)
+                                   if (plan.raid_unjam && plan.cantgo_aware) {
+                                       for (const AntView& m : v.mine()) {
+                                           if (m.id != thief.id && m.type == sim::AntType::Thief && m.tile == h.raid) return true;
+                                       }
+                                   }
+                                   return false;
                                }),
                 teams.end());
     if (teams.empty()) return false;
@@ -1918,10 +1927,84 @@ bool RaidTask::ambush(TaskContext& c, const AntView& thief) {
     return true;
 }
 
+namespace {
+
+// A tile for an ant that waits in front of a hole to step to: east of the three tiles in front of it and off their rows, which a thief that leaves walks; {-1, -1} when there is none
+sim::TileCoord aside_of_hole(TaskContext& c, const HillInfo& hill, sim::TileCoord from) {
+    const BotView& v = c.view;
+    sim::TileCoord best{-1, -1};
+    int32_t best_d = 0;
+    for (int32_t dx = 6; dx <= 8; ++dx) {
+        for (int32_t dy = -2; dy <= 6; ++dy) {
+            if (dy >= 1 && dy <= 3) continue;
+            const sim::TileCoord t{hill.origin.x + dx, hill.origin.y + dy};
+            if (!v.grid().in_bounds(t) || v.grid().has_fire_at(t) || v.powerup_at(t) != nullptr || occupied(v, t)) continue;
+            if (!MapInfo::walkable(v.grid(), c.seat, t, v.walk_context()) || !reachable_by(c.map, c.seat, t)) continue;
+            const int32_t d = t.chebyshev_dist(from);
+            if (best.x < 0 || d < best_d) {
+                best = t;
+                best_d = d;
+            }
+        }
+    }
+    return best;
+}
+
+}  // namespace
+
+// Two thieves on one hole (the real game lets the second wait on a tile in front of it until the first is out). The victim's Fire Ant walls the hole in while the first raids, and when the first
+// has the loot and no tile in front of the hole is free but the one on which the second waits, it shows "Can't go there." for as long as the walls burn (3,600 ticks) while the second waits for
+// the raid tile: neither can move. A person moves the second aside. So does the bot: an own ant that stands on a tile in front of a hole whose raid tile an own thief holds (not in its raid clip)
+// while no tile in front of the hole is free steps off, to a tile east of the hole and off the lane; the raid is ordered again when the thief is out (launch: no hole with an own thief on its raid
+// tile). Only an own thief or an ant that stands still is moved; an enemy ant on the tile is not the bot's to move
+void RaidTask::unjam(TaskContext& c) {
+    const BotView& v = c.view;
+    const uint64_t now = v.tick();
+    for (auto it = aside_.begin(); it != aside_.end();) it = it->second + kAsideTicks <= now ? aside_.erase(it) : std::next(it);
+    if (!tactics_.plan.raid_unjam || !tactics_.plan.cantgo_aware || !v.has_grid()) return;
+    const sim::Grid& grid = v.grid();
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const HillInfo& hill = c.map.hill(t);
+        if (t == c.seat || !hill.present) continue;
+        bool shut_in = false;                                                           // an own thief on the raid tile that is no longer raiding: it stands (idle, or in its can't-go clip) and has to leave
+        for (const AntView& a : v.mine()) {
+            if (a.type == sim::AntType::Thief && a.tile == hill.raid && (a.idle() || a.state == sim::UnitState::CantGo)) shut_in = true;
+        }
+        if (!shut_in) continue;
+        std::vector<const AntView*> movers;                                              // the own ants that stand on the tiles in front of the hole and may be sent off, in the order of the tiles
+        bool free_tile = false;
+        for (const sim::TileCoord& e : east_tiles(hill)) {
+            const EastTile k = classify_tile(grid, e);
+            if (k != EastTile::Open && k != EastTile::Bare) continue;                    // a wall, a bomb, rock or water: nobody stands there
+            bool held = false;
+            for (const AntView& a : v.others()) held = held || a.tile == e;
+            for (const AntView& a : v.mine()) {
+                if (a.tile != e) continue;
+                held = true;
+                if (aside_.count(a.id) == 0 && a.takes_orders() && !a.holding && a.carried_points == 0 && (a.type == sim::AntType::Thief || a.idle())) movers.push_back(&a);
+            }
+            free_tile = free_tile || !held;                                             // a tile is free: the thief leaves by it
+        }
+        if (free_tile) continue;
+        for (const AntView* mover : movers) {                                           // (the first that is nobody else's: a fight may have taken one)
+            const sim::TileCoord spot = aside_of_hole(c, hill, mover->tile);
+            if (spot.x < 0 || !c.ledger.take(mover->id, id())) continue;
+            c.orders.move({mover->id}, spot, Priority::Normal);
+            raids_.erase(mover->id);                                                    // (a waiting thief's raid is over: it must not count as one that never got going)
+            waiting_.erase(mover->id);
+            aside_[mover->id] = now;
+            c.ledger.release(mover->id, id());
+            ++unjams_;
+            break;
+        }
+    }
+}
+
 void RaidTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     if (!v.has_grid()) return;
+    unjam(c);
     for (auto it = waiting_.begin(); it != waiting_.end();) {                           // a waiting thief that is gone, hurt or busy with something else is not waiting
         const AntView* a = find_ant(v.mine(), it->first);
         if (a == nullptr || a->type != sim::AntType::Thief || c.ledger.owner(it->first) != id() || a->hp < 4 || a->holding || a->carried_points > 0) it = waiting_.erase(it);
@@ -1955,6 +2038,10 @@ void RaidTask::step(TaskContext& c) {
             } else if (r.sent == kPending && now > r.decided + 200u) {
                 raids_.erase(it);
             }
+            continue;
+        }
+        if (aside_.count(a.id) != 0) {                                                  // it was sent off the tiles in front of a hole a moment ago: the economy's for now
+            if (held) c.ledger.release(a.id, id());
             continue;
         }
         if (!launching_) {                                                              // no raid is wanted now (the pressure fell): the thief is the economy's again

@@ -434,9 +434,9 @@ public:
     ~DiagBot() override {
         const StandardBot& b = *inner_;
         std::fprintf(stderr,
-                     "DIAG label=%s seat=%u style=%s attack_cmds=%u attack_ants=%u harass=%u fight=%u raids=%u walls=%u sabwalls=%u strikes=%u hatches=%u pickups=%u gate=%u squad_end=%zu recruited=%u\n",
+                     "DIAG label=%s seat=%u style=%s attack_cmds=%u attack_ants=%u harass=%u fight=%u raids=%u walls=%u sabwalls=%u strikes=%u hatches=%u pickups=%u gate=%u squad_end=%zu recruited=%u unjams=%u\n",
                      label_.c_str(), static_cast<unsigned>(seat_), style_name(b.style()), attack_cmds_, attack_ants_, b.harass().attacks_ordered(), b.fight().attacks_ordered(), b.raids().raids_ordered(), b.walls().walls_ordered(),
-                     b.sabotage().walls_ordered(), b.strike().strikes_started(), b.hatch().hatches_ordered(), b.powerups().taken(), b.gate().entrance_clicks(), b.harass().squad(), b.harass().recruited());
+                     b.sabotage().walls_ordered(), b.strike().strikes_started(), b.hatch().hatches_ordered(), b.powerups().taken(), b.gate().entrance_clicks(), b.harass().squad(), b.harass().recruited(), b.raids().unjams());
         // The contest batch: the fights of its own, the hunts (kills available / hunted / made), the fire-in and the tiers of the pressure (looks at each tier; guard: looks of the last minute with the lead)
         std::fprintf(stderr,
                      "DIAG2 label=%s seat=%u fights=%u offence=%u aborted=%u hunt_available=%u hunts=%u hunts_killed=%u fire_hunts=%u sab_walls=%u sab_refused=%u sab_put_out=%u tier_looks=%u/%u/%u/%u guard_looks=%u\n",
