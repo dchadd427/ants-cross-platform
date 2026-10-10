@@ -189,14 +189,14 @@ The suites, the tiers and CI are in [`TESTING.md`](TESTING.md) and [`WORKFLOW.md
 - `./run_tests.sh --fast` fails when the top release heading of `CHANGELOG.md` or the version line of the `README.md` names another release than `VERSION`.
 - The changelog is [`../CHANGELOG.md`](../CHANGELOG.md) (the detailed history up to v0.1.0: [`CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md)). How work goes from a commit to a release: [`WORKFLOW.md`](WORKFLOW.md).
 
-Every build also has a **build id**, which says which build it is. Where the version and the build id show (the numbers in the examples are those of v0.8.0):
+Every build also has a **build id**, which says which build it is. Where the version and the build id show (in the examples, vX.Y.Z is the version and N the network protocol number):
 
 | Where | What it shows |
 |---|---|
-| `ants --version`, `ants_server --version` | one line: the program's name, the version, the build id and the network protocol, for example `ants v0.8.0 build abc1234 (network protocol 13)`. No window and no assets; native builds only |
+| `ants --version`, `ants_server --version` | one line: the program's name, the version, the build id and the network protocol, for example `ants vX.Y.Z build abc1234 (network protocol N)`. No window and no assets; native builds only |
 | the server's start-up log line | the same words, followed by the maps folder |
 | the corner of the game window, next to the FPS meter | the version only |
-| the footer of the web pages | "Version v0.8.0 - build abc1234" on the game page and the front page; "v0.8.0 - build abc1234" on the changelog pages |
+| the footer of the web pages | "Version vX.Y.Z - build abc1234" on the game page and the front page; "vX.Y.Z - build abc1234" on the changelog pages |
 
 Where the id comes from:
 
