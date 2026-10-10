@@ -404,6 +404,9 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 ///   are not guarded       (Hard) no enemy Combat Ant stands near the raid tile of the hill: its reflex would hit the thief before it gets there
 /// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks, and one whose raid click the controller refused (Fate::Filtered:
 /// a power-up lies on the entrance) for Params::filtered_ticks. The thief is ordered again as soon as it is idle and empty-handed.
+/// Two thieves on one hole (unjam, LevelPlan::raid_unjam): the second waits on a tile in front of the hole while the first raids. When the first has raided and sits shut in on the raid tile
+/// (idle, or in the can't-go loop) because an own ant stands on the last free tile in front of the hole and the walls or an enemy hold the others, that ant steps aside (a free tile a few steps
+/// off the hole, `kAsideTicks` out of the raid task's hands) and is sent to steal again afterwards; and no second thief is sent to a hole while an own thief is on its raid tile.
 class RaidTask final : public Task {
 public:
     struct Params {
