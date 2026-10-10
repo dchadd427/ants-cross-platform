@@ -8421,7 +8421,7 @@ void run_persist_server_tests_6() {
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// The review of the restart records (docs/audit/persist_notes.md, "State at handoff"): S3.103 and on
+// The review of the restart records (docs/audit/persist_notes.md, "State of the work"): S3.103 and on
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 namespace {

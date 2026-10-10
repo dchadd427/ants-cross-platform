@@ -193,7 +193,7 @@ Every match opens with the original's dialog: its picture, `Get ready to play!  
 - A game that starts straight into a match (`--map`) has no dialog.
 - In a network match every machine closes the dialog when its first turn runs ([`MULTIPLAYER.md`](MULTIPLAYER.md), "How a match runs").
 
-Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 6.2, item 21 ("Match Start 'Get Ready!' Modal ..."). The deviation is listed in [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md#3b-deliberate-differences-requested-by-the-owner-tweaks).
+Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 6.2, item 21 ("Match Start 'Get Ready!' Modal ..."). The deviation is listed in [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md#3b-deliberate-differences-tweaks).
 
 ## Death & Burning
 

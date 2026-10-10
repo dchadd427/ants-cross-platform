@@ -50,6 +50,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design, the protocol and the measurements
 - [`BOTS.md`](docs/BOTS.md): the computer players, their levels and how they are tested
 - [`AUDIT_ONE_TO_ONE.md`](docs/AUDIT_ONE_TO_ONE.md): what differs from the original, on purpose or not
+- [`history/`](docs/history/README.md): how things were built and measured (the audit ledgers, the notes of the bot batches); nothing in it is needed to work on the code
 
 ## Reverse Engineering & Historical Preservation
 

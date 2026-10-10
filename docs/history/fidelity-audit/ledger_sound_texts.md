@@ -1,6 +1,6 @@
 # Audit ledger: Status texts, voices, sound cues, music
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
 
 ## Ledger
 
@@ -32,7 +32,7 @@ Legend: CR = code reading, T = test binary run, P = probe. The probes (`probe/p_
 | S-7, D9, D10 | voice map, auto-hatch | FIXED | original re-derived (even/odd `rand()` residues match `sim_engine.hpp:99-143`); `combat_system.cpp:556-563` | - |
 | S-11.O6 | bomb path into "Ouch!" | NOT A DEVIATION | FUN_01010a03 has one caller (FUN_01020c70, reached only from the melee paths); bombs never reach it | - |
 | S-11.O5 | clock master | FIXED by design | lock-step; P: game over one poll after 0:00 | - |
-| S-11.O1-O4, O7 | clip, indent, `[map+0x70]`, FUN_0101c4f2, key codes | UNVERIFIED | no oracle | owner screenshots |
+| S-11.O1-O4, O7 | clip, indent, `[map+0x70]`, FUN_0101c4f2, key codes | UNVERIFIED | no oracle | screenshots of the original |
 | S-cue-00..56 | 57 cues | 51 FIXED, 2 PARTIAL (cue 9 slider voice; cue 40 invite queue, recorded in v0.0.50), 4 OPEN | cue 31/44 (NEW-1), cue 37 (NEW-3), cue 46 (NEW-2) | see `verdicts_cues.tsv` |
 | C01-C21 (`FUN_0102bd7e` sites) | cue call sites | 16 FIXED, C04 PARTIAL, OPEN: C07, C08, C09, C14 | `sound_audit_cue_sites.tsv` | see NEW list |
 | P01-P07 (other primitives) | the only DirectSound Play is FUN_0102e955, reached only via the clip stepper (FUN_0102b997) or the cue play; also clip start/AddChild, effect creators, re-attenuation, StopTracked, SetSoundVolume, MCI music | PARTIAL | `sound_audit_cue_sites.tsv` P01-P07 | tracked-stop and law missing (NEW-4, NEW-6) |
@@ -68,7 +68,7 @@ All of these match in target. I found no second case like allynot. The remaining
 | NEW-4 | Tracked sounds are never stopped. FUN_0102c0db stops the old clip's still-playing buffers (flag bit5) on replace, and FUN_0102c245 / FUN_01008871 do so on removal (`[map+0x68]=1` at 0x100def3). The remake lets every sound play out. 109 instances outlast their clip. | bomb explosion cut at 680 of 1144 ms, fire-ant attack 120 of 366, set-fire 460 of 879, dive 420 of 993, grabs 80-300 of 429, UI clicks cut at button release |
 | NEW-5 | Options Sound slider. The original applies the volume at release and plays the gantrdy test voice (0x101508a). The remake applies it while dragging, no voice (`hud.cpp:1276,1543`). | every change of the option |
 | NEW-6 | Sound laws differ. Original: listener at the view centre, radius 2500, Chebyshev, attenuation `25*((SV*pct/100)-100)` hundredths of dB, pan applied to the far channel only. Remake: Euclidean, `1-d/800`, hard equal-power pan (`audio_mixer.cpp:292-309`). | at 800 px the original is -8 dB and the remake silent; at dx=221 the remake is hard-panned versus -2 dB far channel; SV 50 is -12.5 dB versus -6 dB |
-| NEW-7 | Startup jingle: template 161 is added with AddChild, so the first step plays snd 6 (stereo, 2956 ms). Audit R inferred no jingle; the control flow says yes. The remake has no splash, and the mixer treats 2-channel PCM as mono. | once per start; vendor artwork, owner decision |
+| NEW-7 | Startup jingle: template 161 is added with AddChild, so the first step plays snd 6 (stereo, 2956 ms). Audit R inferred no jingle; the control flow says yes. The remake has no splash, and the mixer treats 2-channel PCM as mono. | once per start; vendor artwork, open decision |
 | NEW-8 | Music. The original plays the intro once, then random in-game pieces. It closes the music on focus loss and starts a new random piece on regain. A volume change restarts the track, and the match end cuts it instantly. The remake loops the intro, ignores focus, applies volume live, and fades the match end over 1 s. | setup screen and alt-tab |
 | NEW-9 | Invented sound: a bridge collapse with a swimmer plays splash.wav (`combat_system.cpp:433`). `dsplash` is silent in Table 4. | one 1.9 s sound per such collapse |
 | NEW-10 | Chat body wraps at 21 characters (`hud.cpp:1816`); the original wraps greedily by pixels at 126 px. | every multi-line chat message |
@@ -103,4 +103,4 @@ Three helper agents for these rows died on the usage limit having produced nothi
 7. **Music (NEW-8).** Intro plays once then the next random piece; close on focus loss, new piece on gain; stop at match end; apply volume at release. No tests exist for music.
 8. **Slider (NEW-5).** Apply at release and play GeneralReady. Options checks in `test_hud_layout` apply.
 9. **Chat wrap (NEW-10).** Reuse `wrap_label_text` from v0.0.48; `test_chat_log_format` and `test_chat_rendering` change.
-10. **Invented splash (NEW-9), then the NEW-7 decision.** Delete `combat_system.cpp:433`; any bridge-collapse test that counts audio events changes. NEW-7 (splash jingle) needs an owner decision on the vendor splash first.
+10. **Invented splash (NEW-9), then the NEW-7 decision.** Delete `combat_system.cpp:433`; any bridge-collapse test that counts audio events changes. NEW-7 (splash jingle) needs a decision on the vendor splash first.

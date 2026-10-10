@@ -1,6 +1,6 @@
 # Audit ledger: Input: pointer, cursors, scrolling, pedestals, keys, view origin
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
 
 ## Ledger
 
@@ -13,7 +13,7 @@ Full per-row evidence is in `SCRATCH/audit/LI/ledger_LI.csv` (46 rows; SCRATCH =
 | I-04 | 12 px bands, disjoint strips, CanScroll | FIXED | `probe_input`: all 17 old probe pixels now give the original's cursor, e.g. (12,240) Normal, (5,12) W | clamp still 441/439 (I-06) |
 | I-05 | Minimap pixel formula, (221,220) square, right-click order | FIXED | `edge_scroll.hpp:92-116`; 0x1026640-0x10266d0; `hud_input.cpp:404-414` = 0x1027b98 | - |
 | I-06 | View frame (16,21) 442x440 vs remake (17,22) 441x439 | **OPEN** | see below | see Top 10 |
-| I-07 | Wheel / PgUp chat scroll; panning in dialogs | PARTIAL | panning in dialogs fixed (`input_tick` gate). Chat scroll kept under plan section 11 "kept", not an owner decision | owner to confirm |
+| I-07 | Wheel / PgUp chat scroll; panning in dialogs | PARTIAL | panning in dialogs fixed (`input_tick` gate). Chat scroll kept under plan section 11 "kept", not a project decision | to confirm |
 | I-08, I-09, I-10, I-11, I-12 | Click at release point, band <=4 px; (255,0,0) 1 px band with 2x2 dot; positive-area pick, Shift rules; enemy hill selects base; latch is visual | FIXED | `hud.cpp:1193-1240,1425-1526`; `hud_input.cpp:187,327-359,384-397,482-501`; 0x1027530, 0x10277f4, 0x1028ee0 re-read | status text on Shift paths (NEW-2) |
 | I-13, I-14 | Cursor table incl. 0x1026f91 special targets; the cursor while a dialog is open (the normal arrow, mode 1 set by the dialog's attach thunk 0x101279a; the INPUT decision does not run: v0.0.80) | FIXED | `hud_input.cpp:114-189` follows 0x1026aa3 step by step. 0x1026f91 re-read per type; matches `sim_engine.cpp:1096-1120`. 0x1026584 early return for dialogs. Cursor sprite follows GetCursorPos every loop (0x1030b7a), so per-frame draw is right | NEW-7 |
 | I-15 to I-18 | Right button = left rules at release at the press point; pedestal rects and no re-press cancel; Stop rules; hatch / ally | FIXED | `hud_input.cpp:400-434,17,458-511`; `stop_ant` = 0x1028a60; rects = 0x1028d30 constants; `butcand` frame 0 carries sound 61 (CHD read) | NEW-10 |
@@ -23,7 +23,7 @@ Full per-row evidence is in `SCRATCH/audit/LI/ledger_LI.csv` (46 rows; SCRATCH =
 | I-22 | Invented hotkeys | PARTIAL | armed-order keys and Space are gone; Ctrl+N/P use ScrollToShow. Still present: NEW-5 | NEW-5 |
 | I-24, I-25 | Modal keys; button class | PARTIAL | quit dialog FIXED (0x1014511); top-bar / All / Team fire on release and cancel on leave (`hud.cpp:1375-1444,1532-1539`). Options, quick help and setup: see the LR ledger | NEW-8 |
 | I-26, I-27, I-28 | Gates for buttons; marker on every release; Ctrl+L digits | FIXED | 0x102737e gate order; marker flag set after refusals too (0x10278d5); 0x102d193 has no SetTextAlign, so top-left TextOutA (closes open item 4) | - |
-| I-29 | 50 ms input tick | PARTIAL / owner decision | remake acts at event time with event coordinates (`application.cpp:863-883`). Original reads world+0x110 (polled each loop) when the 50 ms task pops the event; band end point is the last tick's | owner (open item 7) |
+| I-29 | 50 ms input tick | PARTIAL / open decision | remake acts at event time with event coordinates (`application.cpp:863-883`). Original reads world+0x110 (polled each loop) when the 50 ms task pops the event; band end point is the last tick's | decision (open item 7) |
 | C-0 / C-1 | Pipeline claims | CONFIRMED | 0x1031b63: 0x203 (double click) and everything above 0x205 ignored; style 3 at 0x10319b3; key ids at 0x1031bbd; only the top dialog receives input (0x1012b5b-0x1012c97) | - |
 
 **I-06 evidence.**
@@ -44,7 +44,7 @@ Full per-row evidence is in `SCRATCH/audit/LI/ledger_LI.csv` (46 rows; SCRATCH =
 | NEW-2 | Shift+click add, toggle off and Shift+drag add post the panel text (SetPanelMode d=0, e.g. 0x1027947, 0x1027aae). The remake marks them quiet and keeps the old text (`hud_input.cpp:332-340`, `hud.cpp:1211-1219`) | OPEN | `probe_shift_status`: worker + bomber, toggle off the worker gives "Ready!" (original "BomberAnt selected."); toggle off the last ant keeps "Ready!" (original clears) | Low |
 | NEW-3 | BTNPUSH presses the pedestal through the normal chain. Frame 0 of `butXXX2d` carries sound 89 (CHD read; `butcand` 61). The original clicks after every accepted order with an unlatched pedestal; the remake is silent (`flash_pedestal`, `hud_input.cpp:195-199`; 89 only at real presses) | OPEN | 0x10285a4 into 0x1028360 mode 2 | Audible on every order |
 | NEW-4 | Several ants on one tile: the original takes one representative (0x100f4ab, then 0x100f2cd: first found over teams 0-3, replaced by later unfrozen, stationary, preferably local ants). The remake tests all and the last in vector order wins | OPEN | `hud_input.cpp:76-88` | Low: stacked ants only |
-| NEW-5 | Developer keys that do nothing in the original: Ctrl+M, Ctrl+T/F3, Ctrl+C, Ctrl+1..4, Ctrl+Tab, Shift/Ctrl+F12, Alt+Enter, Cmd+F. They run before the dialog gate; Ctrl+1..4/C/Tab call `HUD::init` (wipes chat log, closes dialogs, clears selection) | OPEN (kept by plan section 11, not an owner decision) | `application.cpp:793-847`, `hud.cpp:103-172` | Medium if pressed by accident (Ctrl+C) |
+| NEW-5 | Developer keys that do nothing in the original: Ctrl+M, Ctrl+T/F3, Ctrl+C, Ctrl+1..4, Ctrl+Tab, Shift/Ctrl+F12, Alt+Enter, Cmd+F. They run before the dialog gate; Ctrl+1..4/C/Tab call `HUD::init` (wipes chat log, closes dialogs, clears selection) | OPEN (kept by plan section 11, not a project decision) | `application.cpp:793-847`, `hud.cpp:103-172` | Medium if pressed by accident (Ctrl+C) |
 | NEW-6 | The original's dialogs stack (0x1012b5b pushes unless an exclusive one is open; the top takes all input). The remake allows one at a time and holds alliance offers until the other dialog closes | OPEN | `hud.cpp` `update_alliance_dialog` guard | Low |
 | NEW-7 | Thief target cursor over a hill of any other colour, also colours without a player (0x102701e uses only FUN_0100ecac); the remake removes absent teams' hills | OPEN | `sim_engine.cpp:1096-1120` | Low: networked games with fewer than 4 players |
 | NEW-8 | Quit and alliance dialog buttons keep the pressed state after leaving and re-entering; the original's OnMove cancels for good | OPEN | `hud.cpp:1461-1488,1554-1564` | Low |
@@ -73,7 +73,7 @@ Full per-row evidence is in `SCRATCH/audit/LI/ledger_LI.csv` (46 rows; SCRATCH =
 5. **NEW-9 pointer.** Grab the pointer while playing and read `SDL_GetMouseState` each input tick; drop the (320,240) reset and the `mouse_has_moved_` gate.
 6. **NEW-2 Shift status.** Drop `selection_status_quiet_` on Shift add, toggle and drag add; extend `test_status_messages`.
 7. **NEW-4 tile occupant.** Port 0x100f2cd's choice into `pick_ant_at`; add a two-ants-on-one-tile test.
-8. **I-29 input tick.** With owner approval, queue events to the 20 Hz input tick and read the pointer at processing time; keep the band's end point at the last tick. The pointer-model tests call `handle_mouse_*` directly and would need a drain step.
+8. **I-29 input tick.** With approval, queue events to the 20 Hz input tick and read the pointer at processing time; keep the band's end point at the last tick. The pointer-model tests call `handle_mouse_*` directly and would need a drain step.
 9. **NEW-6 / NEW-8.** Dialog stack for alliance offers; cancel pressed state on leave for dialog buttons.
 10. **NEW-11 / NEW-13 / NEW-12.** Marker colour and size, glow phase, and the feedback/voice conditions (check refusal cases first).
 

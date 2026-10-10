@@ -31,7 +31,7 @@ let go of (spent) does not hold the clock back: the finger that lands next is at
 **The slop** (how far a finger may wobble and still be a tap or a hold) is a size on the glass: 8 CSS pixels of the game box (Android's own touch slop is 8 dp), never under 6 device pixels, in picture
 pixels (`touch::slop_pixels`): in the browser the box's CSS size and the device ratio, on a desktop the window's size in points and the output's size in pixels. It is 18 - 20 picture pixels in a phone held
 upright, 8 in a 960 pixel window. The ring (`touch_feedback.hpp`) is as big as the slop says: it closes from 8 to 5 slops of radius, just outside of a fingertip. The two times are named constants to
-be tuned from the owner's phone (`touch::kTapMs`, `touch::kHoldMs`, and `touch::kSlopCssPx` for the wobble): a thumb that rests on the map for 0.45 s is a right click, which a phone may show as holds that were not meant.
+be tuned on a phone (`touch::kTapMs`, `touch::kHoldMs`, and `touch::kSlopCssPx` for the wobble): a thumb that rests on the map for 0.45 s is a right click, which a phone may show as holds that were not meant.
 
 ## The page (`web/shell.html`, the block ANTS_TOUCH_BEGIN ... END)
 

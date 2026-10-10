@@ -15,7 +15,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 - **This project's own additions:** network play (lock-step turns, state hashes, the dedicated server), computer players, widescreen, zoom and touch control.
 - **Network play:** the original's game is not lock-step. The remake keeps its lobby flow, texts and rules, but not its transport, trust model or sync model ([`NETWORK_PORT.md`](NETWORK_PORT.md#what-the-original-does); the evidence is section 5.46 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md)).
 - **Music:** the original plays four MIDI pieces. The remake plays MP3 renders of them, because the timbre of the 1998 General MIDI synthesiser cannot be reproduced ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.24e).
-- **Other differences made on purpose** are listed in [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md#3b-deliberate-differences-requested-by-the-owner-tweaks), so that they are not mistaken for deviations.
+- **Other differences made on purpose** are listed in [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md#3b-deliberate-differences-tweaks), so that they are not mistaken for deviations.
 
 ## The original program is a local reference, not part of the repository
 

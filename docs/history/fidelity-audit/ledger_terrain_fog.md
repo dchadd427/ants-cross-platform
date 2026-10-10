@@ -1,12 +1,12 @@
 # Audit ledger: Terrain, fog of war, passability
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
 
 Terrain is now identical to the original, and fog rendering is identical with one rare exception. The remaining differences are in how fog gets revealed and in the minimap. The full tables, logs and probes are in `SCRATCH/audit/LT/` (main file `ledger_LT.md`; data in `template_durations.csv`, `radar_model_vs_remake.csv`, `run_nofog_all.log`, `run_fog_a.log`; probes are the `lt_*.cpp` / `lt_*.py` files there).
 
 Method: I wrote an independent Python reference of the original's rules and compared it pixel-exact with the real `Renderer::render_world`. The rules are: positional tile ids, one template per id with t0 at map load, layer 1 / layer 2 / y-sorted list sprites / fog overlay, and the original's table values.
 
-**Your question (terrain animation, tick vs real time): 0 % differs.**
+**The question (terrain animation, tick vs real time): 0 % differs.**
 - Terrain and all layer-2 and list templates are sampled at real time once per rendered frame. `begin_frame` (`src/ants_app/renderer.cpp:639-646`) uses `SDL_GetTicks() - map_epoch_ms_`.
 - A probe with irregular frame pacing gave clock steps of 8 to 30 ms, not 0 or 50.
 - All 372 terrain frame durations are multiples of 50 ms (40 x 50, 42 x 100, 68 x 150, idle 1000 to 4300), so even a tick-aligned clock would show the same frames.

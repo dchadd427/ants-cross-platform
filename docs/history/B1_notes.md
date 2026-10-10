@@ -1,6 +1,6 @@
 # Bot plumbing (B1): what was built
 
-Update for section 50 of `implementation_plan.md` (that file is not part of the repository; the owner copies this text into it). Milestone B1 of the computer players, as designed in [`docs/BOTS.md`](../BOTS.md). Status: built, all suites pass, released as v0.0.85 (version.hpp, the version test, the README and the CHANGELOG entry carry it), after a review of its own that found 22 points, all fixed (see the CHANGELOG).
+Milestone B1 of the computer players, as designed in [`docs/BOTS.md`](../BOTS.md). Status: built, all suites pass, released as v0.0.85 (version.hpp, the version test, the README and the CHANGELOG entry carry it), after a review of its own that found 22 points, all fixed (see the CHANGELOG).
 
 ## Built
 

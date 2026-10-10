@@ -1,6 +1,6 @@
 # Audit ledger: Results screen, options, setup screen, startup flow (stage R)
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
 
 Every finding of audit R has a verdict below. The stage R screens are still not built: no R finding is REGRESSED, 3 are FIXED, 3 are BY DECISION or UNVERIFIED, and the rest are OPEN or PARTIAL. I re-read the binary for each item I rely on, rendered the remake's screens offscreen, and ran two probes against the frozen libraries; nothing in the repo was touched.
 
@@ -28,7 +28,7 @@ Remake refs are in `frozen_4aa985f/src/ants_app/`. "Orig" means I re-read it in 
 | R1.3d | Net names, never colour words | PARTIAL | v0.0.46 names; "Green Team" fallbacks remain (`:11-16`) | Vanish with R1.3a |
 | R1.3e | Sting rule: local==rows[0] or ally==rows[0] | PARTIAL | Ids 56/42 right; equivalent except the quitter | Quitter rule |
 | R1.4a | Keys Enter C c Q q X x leave; Esc does nothing | OPEN | Orig 0x1015b17. Remake: Esc goes to setup (`application.cpp:793-798`), no shortcuts | Key map |
-| R1.4b | Leave exits the process | PARTIAL | Native OK (`:224,500`); web and Esc go to setup | Owner decision (web) |
+| R1.4b | Leave exits the process | PARTIAL | Native OK (`:224,500`); web and Esc go to setup | Decision needed (web) |
 | R1.4c | Game-over triggers | PARTIAL | Clock FIXED (CHECKGO). Elimination and quit-Yes with one other side (orig 0x100c5b1, 0x101453f) not ported | Port both |
 | R2.1a | Slider geometry and thumb position | FIXED | Orig 0x1011397/0x1011543. `hud.cpp:91-95` gives the same left for v=0..100 | - |
 | R2.1b | value=((clamp(x,211,395)-211)*100)/185; moves on move only; callback once on release | OPEN | Probe: press at 300 gives 60% (orig unchanged), x=301 gives 61% vs orig 48% (`hud.cpp:1273-1292,1541`) | SliderModel |
@@ -48,7 +48,7 @@ Remake refs are in `frozen_4aa985f/src/ants_app/`. "Orig" means I re-read it in 
 | R3.4 | Invented click targets | OPEN | Probe: name and info boxes advance the map | Remove |
 | R4.2a | 3 s splash: anim 161 logo on (7,11,15), unskippable | OPEN | Orig 0x100abc1/0x1017977; `img/x1_splash...` | Add |
 | R4.2b | Loading at least 3 s unskippable, INTRO started once, first screen at or after 6 s | OPEN | Orig 0x10179ea/0x100af86. Remake: any key skips (`application.cpp:686`), 1.5 s (`:886`), INTRO loops from init (`:360`) | Timeline |
-| R4.2c | Single/Multi screen (string 76) | OPEN, needs owner decision | Orig 0x1016dfc/0x1017055/0x1017082 | Decide |
+| R4.2c | Single/Multi screen (string 76) | OPEN, needs a decision | Orig 0x1016dfc/0x1017055/0x1017082 | Decide |
 | R4.2d | Quick help: START + More Help; keys Enter Esc C c X x; M opens dialog | OPEN | Remake Enter/Space/Esc (`:713`), no More Help; option not persisted | Keys, decision |
 | R4.3 | INTRO once, then chained random tracks | OPEN | Orig 0x100e8cc chain | Chain |
 | R4.4/4.5 | Exit and stage sounds | PARTIAL | See R1.4b and NEW-1 | - |
@@ -92,7 +92,7 @@ Not verified, because no oracle exists here:
 - Exact pixels of the edge-scroll step.
 - Whether message 3 reaches other machines (inferred from the broadcast flags).
 
-The owner's Windows copy (with cnc-ddraw in the owner's local copy of `Original-Ants/`; not in the repository) could settle those: screenshots of the splash, setup, results and options screens, and a note whether a jingle plays at start.
+A Windows copy (with cnc-ddraw in a local copy of `Original-Ants/`; not in the repository) could settle those: screenshots of the splash, setup, results and options screens, and a note whether a jingle plays at start.
 
 ## Top 10 to fix next
 This is the ordered stage R outline; the detailed version with VAs is in `stage_R_outline.txt`.
@@ -119,4 +119,4 @@ This is the ordered stage R outline; the detailed version with VAs is in `stage_
 7. **Startup flow.** Splash 3 s, loading of at least 3 s without input, full composite, no pointer, INTRO once then chained random tracks, quick help keys Enter Esc C c X x and M. Tests: 8.4 (INTRO loop) and the intro-flow block near line 7332. New: a simulated-clock test that no input is accepted before 6 s.
 8. **Text and colour pass (NEW-4).** Table-driven test of `text_elements_status.csv`: chat input at (481,424) in (7,11,15), caret 150 ms, and the in-game quick help closing only by button or keys.
 9. **Quit and game-over flow.** Port CountOtherSides 0x100c5b1 and the message 3 quitter parameter; CHECKGO elimination comes with the network item.
-10. **Owner decisions before step 7:** Single/Multi screen (Multi has no lobby), More Help URL (dead), web Leave (reload vs setup), antialiased vs exact-pixel text, minimise-pause (NEW-7).
+10. **Decisions before step 7:** Single/Multi screen (Multi has no lobby), More Help URL (dead), web Leave (reload vs setup), antialiased vs exact-pixel text, minimise-pause (NEW-7).

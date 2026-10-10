@@ -1,6 +1,6 @@
 # Bots: the contest batch and the island batch in one bot (what was joined, how it was checked, what is left)
 
-Two finished branches of the bots were joined on v0.6.0: the contest batch (`docs/audit/bots_contest_notes.md`: the race for contested food, the hit points of every ant on the view, fights for the kill, a safe fire-in, the endgame; 7 commits) and the island batch (`docs/audit/B4_1_notes.md`, "B4a": the water analysis, bridges, the expedition by bomb flights, the Swimmer ferry; 5 commits). The simulation, the lock-step rules, the network protocol and every golden hash are unchanged (rule 5: only `ants_ai`, its tests, `bot_arena` and the documents change). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) ("Task ranks" and, in "Measurements", "The two batches together"); this file holds what is specific to the join.
+Two finished branches of the bots were joined on v0.6.0: the contest batch (`docs/history/bots_contest_notes.md`: the race for contested food, the hit points of every ant on the view, fights for the kill, a safe fire-in, the endgame; 7 commits) and the island batch (`docs/audit/B4_1_notes.md`, "B4a": the water analysis, bridges, the expedition by bomb flights, the Swimmer ferry; 5 commits). The simulation, the lock-step rules, the network protocol and every golden hash are unchanged (rule 5: only `ants_ai`, its tests, `bot_arena` and the documents change). The rules as they are, and the numbers, are in [`docs/BOTS.md`](../BOTS.md) ("Task ranks" and, in "Measurements", "The two batches together"); this file holds what is specific to the join.
 
 ## What conflicted
 
@@ -44,7 +44,7 @@ Two independent read-only reviews of this branch, one of the contest batch and i
 
 | Finding | What was done | Pinned by |
 |---|---|---|
-| Contest 1: the escorts of the safe fire-in were called to an enemy gate whose ring had no open tile (the forward guard that the owner decided to leave out), the first wall waited for escorts that no walk gets to the entrance for ever, and the entrance was not tested | escorts are called only to light (an open tile and a Fire Ant to light it) and are held while a ring stands, whoever lit it (`ring_done_` is decided before the escorts are); an entrance that no ant can stand on or walk to is no fire-in; a wait for escorts ends after `sabotage_escort_wait` (2,400 ticks) and the team is left alone for `sabotage_giveup_ticks` | AI20.6 (f), (g), (g2), (h), (h2), (i), (i2), (i3) |
+| Contest 1: the escorts of the safe fire-in were called to an enemy gate whose ring had no open tile (the forward guard that was left out), the first wall waited for escorts that no walk gets to the entrance for ever, and the entrance was not tested | escorts are called only to light (an open tile and a Fire Ant to light it) and are held while a ring stands, whoever lit it (`ring_done_` is decided before the escorts are); an entrance that no ant can stand on or walk to is no fire-in; a wait for escorts ends after `sabotage_escort_wait` (2,400 ticks) and the team is left alone for `sabotage_giveup_ticks` | AI20.6 (f), (g), (g2), (h), (h2), (i), (i2), (i3) |
 | Contest 2: `docs/BOTS.md` said that a pile with one competitor races, but the plans ship `race_one` off, and no test had it on | the document says that only a pile with two competitors races (`raceone=1` is the experiment); a test with `race_one` on tells a pile of one competitor from one that an enemy far nearer reaches first | AI20.1 (e) |
 | Contest 3: a Thief that the raid task held stayed held on Easy when the catch-up pressure fell (nothing stepped the task any more) | `RaidTask::set_launching`: when the plan does not raid and the pressure is below the lift tier no raid is launched, the one under way is seen out and the Thief is the economy's again | AI20.9 (e2), (e3) |
 | Contest N1: a dying ant (its clip of about 42 ticks) is in no list of the view, but the controller refuses a click on it; a raid at the entrance held the best target off for 900 ticks | `BotView::dying_at`; the tasks' `occupied()` looks there | AI1.1, AI13.5 |
@@ -105,12 +105,12 @@ The 16 that survive, and why no test can tell them from the code:
 | only the x of the click is compared (`ferry-click-x-only`) | needs the click and the rescue order on one column |
 | the count of give-ups in a row never reset (`giveups-never-reset`) | needs a finished expedition and then a give-up in one match |
 
-## The owner's calls of the contest batch
+## The calls of the contest batch
 
-Hunts, the safe fire-in, the forward guard and MEDIUM at Hard were approved as built on 2026-10-05 (`docs/audit/bots_contest_notes.md`, last section); the joined bot changes nothing for them.
+Hunts, the safe fire-in, the forward guard and MEDIUM at Hard were approved as built on 2026-10-05 (`docs/history/bots_contest_notes.md`, last section); the joined bot changes nothing for them.
 
 ## Left
 
 - The builder is still off in the level plans (the ferry earns more, `docs/BOTS.md` "Islands"); with the contest's controller its bridges are tested only in the labs.
-- Two owner decisions for later batches, not built here: Swimmers are wanted on TREASURE too (the ferry should harvest where a water route beats the land route), and the fire-in is the ring of eight round the queue row with more walls allowed when the enemy has no Fire Ant (the safe fire-in of the contest refuses where a Fire power-up lies; on SMALL it costs a Hard bot about 5 points of win rate).
+- Two decisions for later batches, not built here: Swimmers are wanted on TREASURE too (the ferry should harvest where a water route beats the land route), and the fire-in is the ring of eight round the queue row with more walls allowed when the enemy has no Fire Ant (the safe fire-in of the contest refuses where a Fire power-up lies; on SMALL it costs a Hard bot about 5 points of win rate).
 - At Hard on SMALL some ants drown by blows (6 ants in 16 matches, none with the island batch alone): the fights of the contest reach the lake's shore and a punch flings an ant four tiles; the plan does not avoid it (the same for a person).
