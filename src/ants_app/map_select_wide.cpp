@@ -1,4 +1,4 @@
-// The setup screen at 960 x 540 (setup_layout.hpp): the same screen as map_select.cpp draws on the original's 640 x 480 page, in the owner's layout, with a map preview.
+// The setup screen at 960 x 540 (setup_layout.hpp): the same screen as map_select.cpp draws on the original's 640 x 480 page, in the approved layout, with a map preview.
 // Everything that decides WHAT the screen shows is the same as on the page (the selected map or the room's, the prompt, the seats and their thumbs, the buttons' pictures); only where it
 // stands changes, and the preview, the chat column and the bot-fill footer are new.
 #include <algorithm>

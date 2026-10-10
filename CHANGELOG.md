@@ -151,7 +151,7 @@ Work that is not released yet is written in the same template under a heading th
 - A reload of the game page no longer asks for a name: it takes your seat back (the address carries your seat).
 - An online match that nobody comes back to gives its place up (it held a slot for as long as it was paused).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [the notes](docs/audit/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [the notes](docs/history/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
 
 ## v0.5.1 - 2026-10-05 - Every page in the front page's look
 
@@ -164,7 +164,7 @@ Work that is not released yet is written in the same template under a heading th
 - The two changelog pages link to each other (the short page's links to the detailed history opened GitHub's file view).
 - A bullet after a blank line in a changelog was written outside its list.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283), [the pages](docs/audit/web_home_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283), [the pages](docs/history/web_home_notes.md)
 
 ## v0.5.0 - 2026-10-04 - A new front page in the game's own look, with game statistics
 
@@ -172,7 +172,7 @@ Work that is not released yet is written in the same template under a heading th
 - **A new front page in the game's own look:** the 1998 game's menu style (the clay, the green frame, the teal buttons, the original "ants!" logo and START! button, a picture of the chosen map). Two cards: **Play vs the computer** (each opponent's level is a row of one-click buttons; Teams as before) and **Play online** (host a match or join one by its code); the help is behind "How it works". It fits phones and wide screens with no sideways scrolling, and every address, link and remembered choice works as before.
 - **Game statistics on the front page:** a line under the welcome banner shows the matches being played and the players online now, and the games played today and in all: online matches of 30 seconds or more, and single-player games (a game in the browser tells the server once that it began: a count, nothing else).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516), [the front page](docs/audit/web_home_notes.md), [the statistics](docs/audit/site_stats_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516), [the front page](docs/history/web_home_notes.md), [the statistics](docs/history/site_stats_notes.md)
 
 ## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
 
@@ -183,7 +183,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Your own orders can show at once in a network match** (off by default: add `?prediction=on` to the game's address, or start the desktop game with `--prediction on`): your ants answer a click as in a game on one computer instead of a round trip later; the corner's `delay` shows what a click feels. It switches itself off for a while on a device that is too slow for it, and is off in a hidden tab, in a pause and behind the "Get ready" dialog.
 - **Desktop:** `start_game.sh` / `start_game.bat` open one game with the start menu (Single player, Join, Host); the four-window test match is `--players 4`.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the zoom levels](docs/audit/view_fixes_notes.md), [the prediction](docs/audit/rollback_notes.md), [the bots](docs/BOTS.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the zoom levels](docs/history/view_fixes_notes.md), [the prediction](docs/history/rollback_notes.md), [the bots](docs/BOTS.md)
 
 ## v0.3.0 - 2026-10-04 - Computer players that fight; the front page is the lobby
 
@@ -197,7 +197,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - Behind the "Get ready to play!" dialog the ants are drawn again, standing, as in the original (since v0.2.0 only their hit-point numbers were).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/audit/B4_1_notes.md), [the front page](docs/audit/web_home_notes.md), [restart records](docs/audit/persist_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/history/B4_1_notes.md), [the front page](docs/history/web_home_notes.md), [restart records](docs/history/persist_notes.md)
 
 ## v0.2.0 - 2026-10-03 - The clock waits for the start dialog; every screen in 16:9; fullscreen mouse
 
@@ -214,7 +214,7 @@ Work that is not released yet is written in the same template under a heading th
 - A command that reaches the host before the first turn is sealed is discarded: a modified client could script an opening of up to 64 orders per seat that ran at the first tick, ahead of every person. Honest clients are not affected.
 - The loading screen drew the frame's pieces in the wrong order (145 pixels), and the results' numbers ran together ("20", "4", "10" as "204 10").
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md), [notes](docs/history/B3_notes.md)
 
 ## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
 
@@ -237,7 +237,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** None: the rules and network protocol 11 are unchanged (v0.1.0 to v0.1.2 games play together).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/AUDIT_ONE_TO_ONE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/ORIGINAL_PROGRAM.md#differences-made-on-purpose)
 
 ## v0.1.1 - 2026-10-03 - Bots wait for the start dialog
 
@@ -254,7 +254,7 @@ Work that is not released yet is written in the same template under a heading th
 - Test 12.108 no longer pins the value of the version. It checks the format; the value lives in the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
 - The reverse-engineering notes said that the dialog lasts 6.0 seconds; the program keeps it up at least 5.0 s, which is what the game does, and the notes now say so.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md), [notes](docs/history/B3_notes.md)
 
 ## v0.1.0 - 2026-10-02 - Online rooms: bots fill the empty seats at START, chat in the waiting room, team chat only to allies, and mouse-wheel zoom
 

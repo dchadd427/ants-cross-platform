@@ -1496,7 +1496,7 @@
                 return { clientX: Math.trunc(left) + pixel.x, clientY: Math.trunc(top) + pixel.y };
             }
 
-            // THE MARGIN OF A WINDOWED PAGE (the owner: "go off the screen with the mouse and it not screw up the scrolling"). A pointer that left the game's box while the map scrolled used to stop the
+            // THE MARGIN OF A WINDOWED PAGE (requested: the mouse can go off the screen without breaking the scrolling). A pointer that left the game's box while the map scrolled used to stop the
             // scrolling at once (the browser says that it left the canvas), so a player who overshot the edge by a few pixels lost the scroll. Now a pointer that is OUTSIDE the box but within `margin` CSS
             // pixels of it, on each axis (a band around the box: its corners are squares), counts as at the picture's nearest edge pixel, as a pointer over the black bars of a fullscreen page does.
             // marginPixel(left, top, width, height, clientX, clientY, margin) is that pixel (edgePixel's: the one that the game reads), or null for a pointer on the box itself (the browser's own events
@@ -1911,7 +1911,7 @@
             if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE NAME STEP of a link that somebody else shared (the owner: "when joining a link from somebody else, it should ask you first what you want your name to be"): the field is filled in with
+        // THE NAME STEP of a link that somebody else shared (requested: when joining a link from somebody else, the page asks you first what you want your name to be): the field is filled in with
         // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
         // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
         // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
@@ -2566,7 +2566,7 @@
         stageElement.addEventListener('wheel', function (e) { if (isFullscreen() && !boxElement.contains(e.target)) e.preventDefault(); }, { passive: false });
         stageElement.addEventListener('contextmenu', function (e) { if (isFullscreen()) e.preventDefault(); });
 
-        // THE MARGIN OF A WINDOWED PAGE (the owner: "go off the screen with the mouse and it not screw up the scrolling"; agreed: keep scrolling while the mouse is just past the game's edge, about an
+        // THE MARGIN OF A WINDOWED PAGE (requested: the mouse can go off the screen without breaking the scrolling; agreed: keep scrolling while the mouse is just past the game's edge, about an
         // inch, and stop when it goes farther). The browser says that the pointer LEFT the canvas the moment it crosses the edge, which the game takes for a pointer that went away (no more
         // scrolling), so a player who overshoots the edge of the game by a few pixels loses the scroll. As over the bars of a fullscreen page, the page hands the game what the browser does not:
         // (1) a pointer that is outside the box but within ANTS_EDGE_MARGIN CSS pixels of it (ANTS_PAGE.marginPixel: a band around the box, corners included) is handed to the game as a motion at the
@@ -2795,7 +2795,7 @@
         })();
         // ANTS_SELECTOR_END
 
-        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's logo and Menu button and the footer's link go there in THIS tab (the owner: nothing opens a new tab by default). The game that is running
+        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's logo and Menu button and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
         // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (ants_match_running, and
         // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it).
         (function () {

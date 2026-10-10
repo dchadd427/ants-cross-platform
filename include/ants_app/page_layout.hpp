@@ -1,7 +1,7 @@
 #pragma once
 
 // The loading screen and the quick help at the start, in the original's own picture (640 x 480) and recomposed for the 16:9 picture of 960 x 540 (widescreen work, after the setup screen;
-// the owner approved the mock-ups: "Approved").
+// the mock-ups were approved).
 //
 // LOADING SCREEN (the animation `antslogo`: frame pieces, 33 clay tiles, logo.bmp, credits.bmp and strip.bmp; the program shows it from FUN_010175ad, 0x10175ad). The remake fills the page with
 // flat orange (the clay tiles are left out: "authentic solid orange"), draws the frame pieces, the logo, the credits, the strip that masks the credits' subtitle line, and the progress bar.

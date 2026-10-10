@@ -17,7 +17,7 @@ constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsig
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
-    // The contest batch (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the owner's report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
+    // The contest batch (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
     // switches these flags off again (the strategy of v0.5.0, for the tournaments' comparison; the controller's refusal of special orders onto an ant is no plan field and stays)
     p.race = true;
     p.health_aware = true;
@@ -47,7 +47,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
-            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves (docs/BOTS.md, "The expedition batch")
+            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves (docs/history/BOTS_history.md, "The expedition batch")
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -110,7 +110,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.strike_force = 4;
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
-            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches; docs/BOTS.md, "The can't-go loop")
+            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches; docs/history/BOTS_history.md, "The can't-go loop")
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
             p.hunt_force = 3;
@@ -126,8 +126,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_builders = 0;
             break;
     }
-    // The war batch (docs/BOTS.md, "The war batch"; the owner, 2026-10-09: "they just don't fight, they just eat ... they need to start more fights with each other, fire at their opponent, and try to kill their
-    // fire ant if they try to come for them ... the bomber ... should be bombing up the food"). Every level fights over the food that is left and, with the food gone and an ant of nothing to do, goes for the
+    // The war batch (docs/BOTS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their
+    // fire ant if they try to come for them, and the bomber bombs up the food). Every level fights over the food that is left and, with the food gone and an ant of nothing to do, goes for the
     // enemy ants; the weaker the level the later it starts and the better the odds it asks for. Medium and Hard also light the ring round the gate of the best opponent whether or not he can put the fire out (a
     // Fire Ant is cheap, and the walls that stand cost the owner his way out), hunt the Fire and Bomber Ants that come near the own hill, and lay mines at the piles an enemy works and round his gate while
     // an ant has nothing to harvest. `--tune war=0` switches all of it off again (tools/bot_arena.cpp)
@@ -192,7 +192,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.raider_radius = 6;
             p.war_free_only = true;
             p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
-            p.mine_per_pile = 10;                    // (the owner, 2026-10-10: "the bomber only places three bombs, it could bomb up a whole area": 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
+            p.mine_per_pile = 10;                    // (requested 2026-10-10: the bomber places more than three bombs and bombs up a whole area: 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
             p.mine_apart = 1;
             p.mine_gate = 3;
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
@@ -241,7 +241,7 @@ uint32_t jitter(uint32_t v, uint32_t pct, BotRng& rng) noexcept {
 
 Style draw_style(Level level, BotRng& rng) noexcept {
     static const Style all[4] = {Style::Aggressive, Style::Economic, Style::Raider, Style::Defensive};
-    if (level == Level::Hard) return rng.below(2) == 0 ? Style::Aggressive : Style::Raider;       // "Hard bots should be really aggressive"
+    if (level == Level::Hard) return rng.below(2) == 0 ? Style::Aggressive : Style::Raider;       // Hard bots should be really aggressive
     return all[rng.below(4)];
 }
 
@@ -267,7 +267,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 if (hard) {
                     p.max_combat = 2;                                                        // (the second Combat Ant is a theft: Hard's)
                     p.combat_extra = 0;
-                    p.sabotage = true;                                                       // "they could fire your whole basin and then you cannot eat": a stolen Fire Ant walls in the gate of the best opponent
+                    p.sabotage = true;                                                       // a stolen Fire Ant walls in the gate of the best opponent, so that its whole basin is fired and it cannot eat
                     p.fire_extra = 1;
                     p.strikes = true;                                                        // behind the leader, a force goes for its carriers
                 } else {                                                                     // Medium: a milder one, careful odds

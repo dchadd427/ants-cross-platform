@@ -21,7 +21,7 @@ constexpr uint32_t TICK_MS      = 50u;
 /// The start of a match. The original opens every match with the "Get ready to play!" dialog (string 105): its constructor (Ants.exe 0x1017127) adds the task KWFO, delay 5000 ms and
 /// interval 200 ms (0x10174a9, body 0x10254b0), which closes the dialog at the first run that finds it released, so it stays up at least 5 s. While it is up it is the top window and
 /// takes every click and key (0x1012b5b - 0x1012c97): a person can neither select an ant nor give an order. In the ORIGINAL the match clock and the ants already run behind it (the GO handler
-/// 0x1022432 that releases the dialog also starts the clock): the dialog costs a player five seconds of the match. THE REMAKE DEVIATES ON PURPOSE, at the owner's request (v0.2.0, section 21
+/// 0x1022432 that releases the dialog also starts the clock): the dialog costs a player five seconds of the match. THE REMAKE DEVIATES ON PURPOSE, as a project decision (v0.2.0, section 21
 /// of docs/GAME_REVERSE_ENGINEERING.md): the dialog is the original's picture and stays up this long, but the simulation does not run while it is up: tick 0 runs when it closes, and the clock
 /// shows the match's full time. A local game counts the dialog in real time (Application::update_simulation, steps of 50 ms); in a network match the host seals the first turn this long after
 /// the match begins (net::kMatchStartDelayMs, protocol 12) and every machine closes its dialog when its first turn executes.
@@ -405,7 +405,7 @@ public:
     /// names) and NOTHING is shared: the two engines go on independently, and given the same commands they stay identical (state_hash() equal at every tick, the same
     /// cues, news and world state). The lock-step client uses it to show a player's own orders at once (client-side prediction): the predicted engine is a copy of the
     /// confirmed one plus the orders that the server has not sealed yet. The only thing that is not copied is the cached world state (get_world_state() rebuilds it).
-    /// The copy constructor is explicit: a copy moves the whole map and every ant (see the measurements in docs/audit/rollback_notes.md), so it must be asked for and
+    /// The copy constructor is explicit: a copy moves the whole map and every ant (see the measurements in docs/history/rollback_notes.md), so it must be asked for and
     /// cannot happen by accident (an engine passed by value, say).
     explicit SimulationEngine(const SimulationEngine& other);
     /// The same, into an engine that exists. The target keeps the memory it has (the cells, the ants, the lists) wherever the shapes fit, so rebuilding a second engine

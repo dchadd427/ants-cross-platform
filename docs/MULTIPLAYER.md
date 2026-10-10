@@ -65,7 +65,7 @@ Every change a player makes is a `Command` (a group move, special or attack, Sto
 - Every machine runs a turn after an **adaptive jitter buffer** that it sizes itself from how late the turns come: one turn (50 ms) on a steady link, up to four (200 ms) on a rough one. It grows at once when turns come later than it covers, or after a short stall (a late turn that came within 100 ms), and it shrinks by a turn after ten seconds without a stall.
 - A machine that waits at a missing turn does not owe the wait. A queue that is longer than the buffer runs down at up to four times normal speed, in a long frame as in a short one.
 - The feedback of your click (the ant's voice, the marker, the pedestal flash) comes at once, from a prediction of the order's acknowledgement. The order itself runs a few turns later.
-- Every network match opens with the "Get ready to play!" dialog for 5 s. The original runs the clock and the ants behind it ([`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md) section 3b, [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 21), so the remake waits instead: the simulation starts when the dialog closes, and all the match's time is playable ([`GAMEPLAY.md`](GAMEPLAY.md) "The start of a match"). In a network match the host seals the first turn 5 s after the match began (a LAN host and a server's room alike), and every machine closes its dialog when its first turn runs. Nothing is sealed before that, so there is no waiting message, no lag notice and no pause, and no bot moves ([`NETWORK_PORT.md`](NETWORK_PORT.md) "Protocol 12").
+- Every network match opens with the "Get ready to play!" dialog for 5 s. The original runs the clock and the ants behind it ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose), [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 21), so the remake waits instead: the simulation starts when the dialog closes, and all the match's time is playable ([`GAMEPLAY.md`](GAMEPLAY.md) "The start of a match"). In a network match the host seals the first turn 5 s after the match began (a LAN host and a server's room alike), and every machine closes its dialog when its first turn runs. Nothing is sealed before that, so there is no waiting message, no lag notice and no pause, and no bot moves ([`NETWORK_PORT.md`](NETWORK_PORT.md) "Protocol 12").
 
 ### Ping and delay
 
@@ -108,7 +108,7 @@ The prediction is **off by default**. Switch it on with `--prediction on`, the s
 - The screen, the HUD's picks and your own action sounds read it. The news, the combat sounds, the hashes, the bots and the end of the match stay the confirmed engine's. Group moves, specials, attacks and Stop are predicted. Hatching and the alliance commands wait for their turn.
 - It is off by default because the ants of other players hop about a dozen pixels when their orders arrive. It is off in a pause, a catch-up, a host change, a hidden tab and before the first tick (the "Get ready to play!" dialog).
 - When its work costs more than 12 ms of the thread's CPU time four times within ten seconds, it switches itself off for 10 s, and each further time for twice as long, up to 160 s.
-- [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" and [`audit/rollback_notes.md`](audit/rollback_notes.md) have the design and the measurements.
+- [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" and [`history/rollback_notes.md`](history/rollback_notes.md) have the design and the measurements.
 
 ## Limits
 

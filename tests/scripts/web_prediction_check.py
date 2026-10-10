@@ -16,7 +16,7 @@ correct for:
     cheap (a mean under 8 ms, a frame is 16.7 ms).
 
 What it cannot say: the felt delay at a round trip that the stack does not have (this is the stack's own latency, a few milliseconds on one machine; the measurements at 60 and 200 ms
-are in docs/audit/rollback_notes.md), what a real display adds, or anything about Safari and Firefox.
+are in docs/history/rollback_notes.md), what a real display adds, or anything about Safari and Firefox.
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser, the page did not come up, the stack does not answer); 2 is a bad command line.
 """

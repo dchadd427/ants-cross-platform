@@ -13,7 +13,7 @@
 //                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
 //                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
-//                     the keys of apply_tune (the tournaments' ablations; listed in docs/audit/B4_1_notes.md).
+//                     the keys of apply_tune (the tournaments' ablations; listed in docs/history/B4_1_notes.md).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
 //                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
@@ -484,7 +484,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/audit/B4_1_notes.md)\n"
+        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/history/B4_1_notes.md)\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -553,7 +553,7 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     return true;
 }
 
-// --tune KEY=VALUE,...: the ablations of the standard bot's plan (docs/audit/B4_1_notes.md): every standard bot of the run gets the plan of its level with these values put over it.
+// --tune KEY=VALUE,...: the ablations of the standard bot's plan (docs/history/B4_1_notes.md): every standard bot of the run gets the plan of its level with these values put over it.
 // Set while the options are parsed, before any match (and thread) starts, and only read afterwards.
 std::vector<std::pair<std::string, int64_t>> g_tune;
 
@@ -817,7 +817,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
-    err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp, listed in docs/audit/B4_1_notes.md)";
+    err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp, listed in docs/history/B4_1_notes.md)";
     return false;
 }
 

@@ -106,7 +106,7 @@ public:
     static constexpr int32_t kTicksPerCostNum = 2;
     static constexpr int32_t kTicksPerCostDen = 5;
     /// What a round trip costs besides the walking: the bite (grab clip), the queue at the hill, the enter clip (22 ticks) and the walk from the queue tile; a design value that
-    /// the nearest pile of every hill of the five maps with food on foot fits to within 25 percent (docs/audit/B2_notes.md has the measured numbers)
+    /// the nearest pile of every hill of the five maps with food on foot fits to within 25 percent (docs/history/B2_notes.md has the measured numbers)
     static constexpr int32_t kTripOverheadTicks = 70;
 
     /// Analyses the map as it is now: the grid of `sim` (at the start of a match). A grid that is empty gives an empty analysis.

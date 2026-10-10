@@ -42,7 +42,7 @@ bool parse_level(std::string_view text, Level& out) noexcept;
 ///   Economic    no contest of the middle, the fire walls of the thief hole before a thief shows, raids only for three times the loot
 ///   Raider      Fire and Thief first in the opening (no Bomber), raids for half the loot, a shorter wait after a hill that could not be reached
 ///   Defensive   the fire walls before a thief shows, one defender more, the ally's blows answered, no contest of the middle
-/// Hard bots are Aggressive or Raider only ("Hard bots should be really aggressive"); Easy keeps its plan (a style changes little there: only the numbers move).
+/// Hard bots are Aggressive or Raider only (Hard bots should be really aggressive); Easy keeps its plan (a style changes little there: only the numbers move).
 enum class Style : uint8_t { Random = 0, Aggressive = 1, Economic = 2, Raider = 3, Defensive = 4 };
 
 /// "random", "aggressive", "economic", "raider", "defensive"

@@ -83,7 +83,7 @@ public:
         uint32_t lag_samples{5};
         uint32_t lag_fresh_ticks{400};                     // 20 s
         // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
-        // order in six shows a whole-tile hop when its turn corrects it (docs/audit/rollback_notes.md, R6).
+        // order in six shows a whole-tile hop when its turn corrects it (docs/history/rollback_notes.md, R6).
         uint32_t lead_bias_ticks{0};
     };
 

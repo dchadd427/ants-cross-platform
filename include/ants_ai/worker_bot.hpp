@@ -5,7 +5,7 @@
 //
 //   it harvests      every idle, empty-handed worker is sent to a pile (HarvestTask: one group move per pile starts the engine's self-running harvest loop)
 //   it never hatches It is a fixed yardstick, and hatching does not pay on the shipped maps: a worker costs 200 points and takes 171 ticks (160 of incubation and the emerge clip)
-//                    before it can take an order; one hatch helps a little on TINY seat 0 (+190 to +220) and loses on the other maps (docs/BOTS.md, "Measurements")
+//                    before it can take an order; one hatch helps a little on TINY seat 0 (+190 to +220) and loses on the other maps (docs/history/BOTS_history.md, "Measurements")
 //   it never fights, never uses a power-up, never raids, never builds: those are the standard bot's (B4)
 //   it declines     an invitation to team up is answered with a Deny: nobody else answers it (the simulation lets an invitation wait for ever) and an alliance of all live teams
 //                   ends the match within a fifth of a second, so a bot that cannot judge it says no. A bot's Deny is what a person's click on "No" sends, and the controller

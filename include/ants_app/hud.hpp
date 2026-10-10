@@ -361,7 +361,7 @@ public:
         return (index < 4) ? options_.state().quick_chat[index] : empty;
     }
 
-    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. Owner's tweak of the original: ON by default
+    /// Ctrl+L (0x1026440): the ant draw prints the hit points of every ant as text at its sprite position. A tweak of the original: ON by default
     /// (the original starts with it off); Ctrl+L toggles it as in the original.
     bool is_show_hp() const noexcept { return show_hp_; }
 
@@ -494,7 +494,7 @@ private:
     int32_t mouse_y_{-1};
 
     // Marquee drag selection
-    bool show_hp_{true};                 // owner tweak: the original starts with the digits off
+    bool show_hp_{true};                 // tweak: the original starts with the digits off
     bool is_dragging_{false};
     bool shift_held_{false};
     int32_t drag_start_x_{0};

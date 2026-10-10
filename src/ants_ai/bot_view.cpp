@@ -181,7 +181,7 @@ BotView BotView::build(const sim::SimulationEngine& sim, uint8_t seat, const Map
         av.type = a.type;
         av.tile = sim::TileCoord{a.tile_x, a.tile_y};
         av.holding = a.is_holding;
-        av.hp = static_cast<uint8_t>(a.hp > 255u ? 255u : a.hp);                // the owner's decision on what players know: every ant's health, as a number (1 .. 10; a dead ant is not listed)
+        av.hp = static_cast<uint8_t>(a.hp > 255u ? 255u : a.hp);                // the decision on what players know: every ant's health, as a number (1 .. 10; a dead ant is not listed)
         if (a.player_id == v.seat_) {
             av.state = a.state;                                                // an own ant: the engine's label
             av.carried_points = a.carried_points;

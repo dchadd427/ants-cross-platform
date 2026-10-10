@@ -1,6 +1,6 @@
 // The rules and the words of the front page's lobby (web/lobby.html): everything that decides what the page shows and sends, with no browser in it, so that node can run it
 // (tests/scripts/web_lobby_rules_check.js). The page reads a Room message of network protocol 17 (web/front/lobby_net.js) through modelOf(), asks viewOf() what each colour card
-// and the map side show, and asks planWith(), moveOf() and the team functions what to send. The pictures that these words and rules belong to are the lobby's (the owner's cards).
+// and the map side show, and asks planWith(), moveOf() and the team functions what to send. The pictures that these words and rules belong to are the lobby's (the approved cards).
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyRules, node gets module.exports.
 //   * Seats are the server's: Green 0, Red 1, Blue 2, Black 3. The cards lie Black, Green, Red, Blue (GRID: the four hills of the maps, top left to bottom right) and are built in that
 //     reading order, so that Tab and a screen reader follow what is on screen.
@@ -28,7 +28,7 @@
         { key: 'treasure', name: 'Treasure', file: 'TREASURE.LVL', info: "One person's trash... (12 min)" },
         { key: 'islands', name: 'Islands', file: 'ISLANDS.LVL', info: 'Island hopping, expert map (12 min)' }
     ];
-    // Treasure is the map that is played most: it is the default of everything (the owner's request)
+    // Treasure is the map that is played most: it is the default of everything (requested)
     var DEFAULT_MAP_KEY = 'treasure';
     var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
 

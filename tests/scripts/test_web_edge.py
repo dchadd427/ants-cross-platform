@@ -168,7 +168,7 @@ class TheWindowedMargin(PageCase):
 
     def test_a_click_the_wheel_and_the_menu_in_the_margin_are_left_to_the_page(self):
         """Nothing in the margin's code cancels an event (the page keeps its clicks, its wheel and its menu): no preventDefault in the margin's section."""
-        start = self.page.index("THE MARGIN OF A WINDOWED PAGE (the owner: \"go off the screen with the mouse and it not screw up the scrolling\"; agreed")
+        start = self.page.index("THE MARGIN OF A WINDOWED PAGE (requested: the mouse can go off the screen without breaking the scrolling; agreed")
         end = self.page.index("// THE POINTER LOCK. On the Mac")
         section = self.page[start:end]
         self.not_found(section, r"preventDefault\(\)")
