@@ -396,6 +396,77 @@ void run_suite_4_dynamic_alliances() {
         ASSERT_EQ(sim.get_unit(ally_worker).hp, 10u);
         ASSERT_EQ(sim.get_unit(guard).state, UnitState::GuardIdle);
     } TEST_END();
+
+    TEST_CASE("4.8 Re-alliance: P0 allies with P1, then with P2; P1 is dissociated and every score stays exact") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 707);
+
+        sim.set_player_score(0, 100);
+        sim.set_player_score(1, 200);
+        sim.set_player_score(2, 300);
+        sim.set_player_score(3, 400);
+
+        // P0 allies with P1
+        sim.form_alliance(0, 1);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 1));
+        ASSERT_TRUE(sim.stats_manager().are_allies(1, 0));
+        ASSERT_EQ(sim.get_ally_id(0), uint8_t{1});
+        ASSERT_EQ(sim.get_ally_id(1), uint8_t{0});
+        ASSERT_EQ(sim.get_display_score(0), 300);
+        ASSERT_EQ(sim.get_display_score(1), 300);
+
+        // P0 now allies with P2
+        sim.form_alliance(0, 2);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 2));
+        ASSERT_TRUE(sim.stats_manager().are_allies(2, 0));
+        ASSERT_EQ(sim.get_ally_id(0), uint8_t{2});
+        ASSERT_EQ(sim.get_ally_id(2), uint8_t{0});
+
+        // P1's former alliance is broken cleanly
+        ASSERT_EQ(sim.get_ally_id(1), ALLIANCE_NONE);
+        ASSERT_FALSE(sim.stats_manager().are_allies(0, 1));
+        ASSERT_FALSE(sim.stats_manager().are_allies(1, 0));
+        ASSERT_FALSE(sim.stats_manager().are_allies(1, 2));
+
+        // The displayed scores are not inflated: P1 is back to its own score
+        ASSERT_EQ(sim.get_display_score(1), 200);
+        ASSERT_EQ(sim.get_display_score(0), 400);   // 100 + 300
+        ASSERT_EQ(sim.get_display_score(2), 400);   // 100 + 300
+        ASSERT_EQ(sim.get_display_score(3), 400);   // nobody's ally
+
+        // The personal scores are untouched
+        ASSERT_EQ(sim.get_player_score(0), 100);
+        ASSERT_EQ(sim.get_player_score(1), 200);
+        ASSERT_EQ(sim.get_player_score(2), 300);
+        ASSERT_EQ(sim.get_player_score(3), 400);
+    } TEST_END();
+
+    TEST_CASE("4.9 Chained shift: P3 allies with P2 and takes it from P0") {
+        SimulationEngine sim;
+        sim.init_test_world(60, 60, 708);
+
+        sim.set_player_score(0, 100);
+        sim.set_player_score(1, 200);
+        sim.set_player_score(2, 300);
+        sim.set_player_score(3, 400);
+
+        sim.form_alliance(0, 2);
+        ASSERT_TRUE(sim.stats_manager().are_allies(0, 2));
+
+        // P3 allies with P2
+        sim.form_alliance(3, 2);
+        ASSERT_TRUE(sim.stats_manager().are_allies(3, 2));
+        ASSERT_TRUE(sim.stats_manager().are_allies(2, 3));
+        ASSERT_EQ(sim.get_ally_id(2), uint8_t{3});
+        ASSERT_EQ(sim.get_ally_id(3), uint8_t{2});
+
+        // P0's former alliance with P2 is broken
+        ASSERT_EQ(sim.get_ally_id(0), ALLIANCE_NONE);
+        ASSERT_FALSE(sim.stats_manager().are_allies(0, 2));
+        ASSERT_EQ(sim.get_display_score(0), 100);
+        ASSERT_EQ(sim.get_display_score(2), 700);   // 300 + 400
+        ASSERT_EQ(sim.get_display_score(3), 700);   // 300 + 400
+    } TEST_END();
 }
 
 // ============================================================================

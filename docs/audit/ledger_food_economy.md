@@ -69,4 +69,4 @@ Files are in `SCRATCH/audit/LF/` (SCRATCH = <scratch>):
 7. **Known MISSING: ally break-alliance dialog.** Needs an `OrderType`/HUD dialog hook. The repo has no test for it.
 8. **Low:** start-egg default, inert `food_*` counters, `carried_food*25` fallback, bubble step offset.
 
-`tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` is stale: it calls `step_thief_animation` and `execute_thief_loot`, which no longer exist, and it is not built.
+`tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` was stale (it called `step_thief_animation` and `execute_thief_loot`, which no longer exist, and it was not built) and has been removed.
