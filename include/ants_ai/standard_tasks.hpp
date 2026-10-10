@@ -111,7 +111,7 @@ private:
         bool raider{false};                  // (with fire) an enemy Fire or Bomber Ant near the own hill or a pile the own ants work (plan.raider_hunt): hunted whether or not walls stand
         bool assault{false};                 // (with offence) an assault of the free ants after the food (plan.assault): its own numbers
         uint32_t force{0};                   // (with assault) the ants it was started with (plan.assault_force, one more for a bot that is far behind)
-        bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles (plan.behind_free_tier)
+        bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles, and the surplus of free ants is no longer asked for (plan.behind_free_tier)
         uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;

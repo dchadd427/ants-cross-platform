@@ -109,6 +109,17 @@ void run_war_tests() {
         ASSERT_TRUE(easy.behind_free_tier >= medium.behind_free_tier && medium.behind_free_tier >= hard.behind_free_tier);
         ASSERT_TRUE(easy.behind_odds_ease <= medium.behind_odds_ease && medium.behind_odds_ease <= hard.behind_odds_ease);
         ASSERT_TRUE(easy.behind_assault_after >= medium.behind_assault_after && medium.behind_assault_after >= hard.behind_assault_after);
+        // ... and the numbers themselves (docs/BOTS.md, "The war batch")
+        ASSERT_TRUE(easy.behind_tier1 == 45 && easy.behind_tier2 == 100 && easy.behind_tier3 == 180);
+        ASSERT_TRUE(medium.behind_tier1 == 25 && medium.behind_tier2 == 55 && medium.behind_tier3 == 105);
+        ASSERT_TRUE(hard.behind_tier1 == 15 && hard.behind_tier2 == 35 && hard.behind_tier3 == 70);
+        ASSERT_TRUE(easy.behind_odds_ease == 8 && medium.behind_odds_ease == 10 && hard.behind_odds_ease == 12);
+        ASSERT_TRUE(easy.behind_assault_after == 900 && medium.behind_assault_after == 600 && hard.behind_assault_after == 300);
+        for (const LevelPlan* p : {&easy, &medium, &hard}) {
+            ASSERT_EQ(p->behind_free_tier, 3u);
+            ASSERT_EQ(p->behind_min_leader, 150u);
+            ASSERT_EQ(p->behind_sabotage_after, 1800u);
+        }
         // a plan made by hand has none of it
         const LevelPlan hand;
         ASSERT_FALSE(hand.behind_war);
@@ -647,16 +658,20 @@ void run_war_tests() {
             for (uint64_t t = 0; t < limit && rig.as<StandardBot>().fight().offence_running() == 0; t += 4) rig.run(4);
             return rig.as<StandardBot>().fight().offence_running() > 0;
         };
-        {   // (a) a bot that is behind goes for the ants of the leader first: two enemy workers, equally near (the same rows, the same hit points), one of team 1 and one of team 2; whoever leads is struck
-            for (const int leader : {1, 2}) {
-                sim::SimulationEngine sim;
-                field(sim, 100, leader == 1 ? 400 : 0, leader == 2 ? 400 : 0);
-                const uint32_t one = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{26, 14});
-                const uint32_t two = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{26, 10});
-                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
-                ASSERT_TRUE(until_offence(rig, 900));
-                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.leader, leader);
-                ASSERT_EQ(rig.as<StandardBot>().fight().offence_target(), leader == 1 ? one : two);
+        {   // (a) a bot that is behind goes for the ants of the leader first, from the war tier 1 on: two enemy workers, equally near (the same rows, the same hit points), one of team 1 and one of team 2;
+            //     whoever leads is struck (the tie of the scores goes to the lower id, so it is the run with team 2 in the lead that shows the rule)
+            for (const int32_t deficit : {20, 50, 90}) {                                                   // (war tier 1, 2 and 3 of Hard)
+                for (const int leader : {1, 2}) {
+                    sim::SimulationEngine sim;
+                    field(sim, 200, leader == 1 ? 200 + deficit : 0, leader == 2 ? 200 + deficit : 0);
+                    const uint32_t one = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{26, 14});
+                    const uint32_t two = sim.spawn_unit(2, sim::AntType::Worker, TileCoord{26, 10});
+                    Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                    ASSERT_TRUE(until_offence(rig, 900));
+                    ASSERT_EQ(rig.as<StandardBot>().tactics().standing.leader, leader);
+                    ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, deficit == 20 ? 1u : deficit == 50 ? 2u : 3u);
+                    ASSERT_EQ(rig.as<StandardBot>().fight().offence_target(), leader == 1 ? one : two);
+                }
             }
         }
         {   // (b) the force: plan.assault_force ants for a bot that is level, one more from the war tier 2 (50 points behind of nothing left to earn: a pressure of 50 percent)
@@ -672,8 +687,8 @@ void run_war_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().fight().defenders_of(target).size(), static_cast<size_t>(plan.assault_force + (behind ? 1u : 0u)));
             }
         }
-        {   // (c) the odds: four enemy Combat Ants stand together, so that three of them (a strength of 180) answer a blow on any one; two workers (40) never go, three (90) do not go at the 60 percent that
-            //     Hard asks of a bot that is level, and go at the 38 percent that it asks of a bot that is at war tier 3
+        {   // (c) the odds: four enemy Combat Ants stand together, so that three of them (a strength of 180) answer a blow on any one. With an assault force of two (three at war tier 3: 90) a bot that is
+            //     level does not go, and a bot at war tier 3 does, at the 38 percent that Hard asks of it: the case pins the ease of the odds and the one ant more together
             LevelPlan p = plan;
             p.assault_force = 2;
             for (const bool behind : {false, true}) {
@@ -684,6 +699,21 @@ void run_war_tests() {
                 rig.run(900);
                 ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, behind ? 3u : 0u);
                 ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started() >= 1u, behind);
+            }
+            // ... and at war tier 1, with three ants (90) and the odds of 52 percent (12 percent less of 60): against a strength of 180 the ants stay at home, against 162 (the same Combat Ants with
+            //     nine hit points) they go; a bot that is level (60 percent) stays at home against both
+            struct Row { int32_t deficit; uint16_t hp; bool goes; };
+            for (const Row& row : {Row{20, uint16_t{10}, false}, Row{20, uint16_t{9}, true}, Row{0, uint16_t{9}, false}}) {
+                sim::SimulationEngine sim;
+                field(sim, 200, 200 + row.deficit, 0);
+                for (int i = 0; i < 4; ++i) {
+                    const uint32_t ant = sim.spawn_unit(1, sim::AntType::Combat, TileCoord{26 + i % 2, 14 + i / 2});
+                    sim.get_unit(ant).hp = row.hp;
+                }
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(900);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, row.deficit == 20 ? 1u : 0u);
+                ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started() >= 1u, row.goes);
             }
         }
         {   // (d) the level of the abort goes with the odds: four enemy workers together (any one is answered by three: 90), two of the bot (one, and one more at war tier 3: 40) are 44 percent of it - they start
@@ -702,20 +732,22 @@ void run_war_tests() {
             ASSERT_EQ(fight.offence_aborted(), 0u);
             ASSERT_EQ(fight.offence_running(), 1u);
         }
-        {   // (e) sooner: the plan's Hard assault begins at tick 600; a bot that is behind (tier 3 from the start) goes at tick 300, one that is not at tick 600
-            for (const bool rule : {true, false}) {
-                LevelPlan p = plan_for(Level::Hard);
-                p.raider_hunt = p.sabotage = false;
-                p.war_bombers = p.war_fires = p.mine_per_pile = p.mine_gate = 0;
-                p.behind_war = rule;
-                sim::SimulationEngine sim;
-                field(sim, 100, 250, 0);
-                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{26, 14});
-                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
-                rig.run(296);
-                ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started(), 0u);
-                rig.run(264);                                                                               // (tick 560)
-                ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started() >= 1u, rule);
+        {   // (e) sooner: the plan's Hard assault begins at tick 600; a bot that is behind (war tier 1, 2 or 3 from the start) goes at tick 300, one that is not at tick 600
+            for (const int32_t deficit : {20, 50, 90}) {
+                for (const bool rule : {true, false}) {
+                    LevelPlan p = plan_for(Level::Hard);
+                    p.raider_hunt = p.sabotage = false;
+                    p.war_bombers = p.war_fires = p.mine_per_pile = p.mine_gate = 0;
+                    p.behind_war = rule;
+                    sim::SimulationEngine sim;
+                    field(sim, 200, 200 + deficit, 0);
+                    sim.spawn_unit(1, sim::AntType::Worker, TileCoord{26, 14});
+                    Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+                    rig.run(296);
+                    ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started(), 0u);
+                    rig.run(264);                                                                           // (tick 560)
+                    ASSERT_EQ(rig.as<StandardBot>().fight().assaults_started() >= 1u, rule);
+                }
             }
         }
         {   // (f) the Bomber for the mines: a plan with the free rule (the mines wait for an ant with nothing to harvest) asks for it from war tier 3 on - the economy has no hand to spare, the war says it has - and
@@ -743,22 +775,25 @@ void run_war_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Bomber)], row.bombers);
             }
         }
-        {   // (g) the fire-in of Medium begins at tick 1,800 for a bot that is behind (tick 5,400 for one that is not): two Fire Ants (the first one keeps the own walls), the leader has 400 points
+        {   // (g) the fire-in of Medium begins at tick 1,800 for a bot that is behind, from the war tier 1 on (tick 5,400 for one that is not): two Fire Ants (the first one keeps the own walls), the leader
+            //     has 230 to 310 points
             const LevelPlan mp = plan_for(Level::Medium);
-            for (const bool behind : {false, true}) {
+            for (const int32_t deficit : {0, 30, 60, 110}) {                                              // (a bot that is level, and the war tiers 1, 2 and 3 of Medium)
                 sim::SimulationEngine sim;
                 empty_field(sim, 252);
-                sim.set_player_score(0, behind ? 0 : 400);
-                sim.set_player_score(1, 400);
+                sim.set_player_score(0, 200);
+                sim.set_player_score(1, 200 + deficit);
                 sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
                 sim.spawn_unit(0, sim::AntType::Fire, TileCoord{32, 30});
                 Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(mp), 4, 4);
                 rig.run(3600);
-                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, behind ? 3u : 0u);
-                ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered() >= 1u, behind);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, deficit == 0 ? 0u : deficit == 30 ? 1u : deficit == 60 ? 2u : 3u);
+                ASSERT_EQ(rig.as<StandardBot>().sabotage().walls_ordered() >= 1u, deficit != 0);
             }
         }
-        {   // (h) the mines go to the piles of the leader first: two piles in front of the hills of teams 1 and 2, an enemy worker at each, the Bomber of the bot lays one mine at a time; whoever leads is mined first
+        {   // (h) the mines go to the piles of the leader first: two piles in front of the hills of teams 1 and 2, an enemy worker at each, the Bomber of the bot lays one mine at a time; whoever leads is mined
+            //     first. The second pile stands where the walk is a little dearer for the enemy than for the bot at one place (y = 37: the first pile is the better by 12 points, the 40 of the leader's
+            //     bonus turn it) and a little cheaper at the other (y = 38: the second is the better by 28), so that each run with the other team in the lead shows the rule
             LevelPlan mp = plan_for(Level::Hard);
             mp.raider_hunt = mp.sabotage = mp.assault = false;
             mp.war_free_only = false;
@@ -766,27 +801,50 @@ void run_war_tests() {
             mp.mine_per_pile = 1;
             mp.mine_gate = 0;
             mp.mine_percent = 100;
-            for (const int leader : {1, 2}) {
+            for (const int32_t row : {37, 38}) {
+                for (const int leader : {1, 2}) {
+                    sim::SimulationEngine sim;
+                    empty_field(sim, 253);
+                    add_pile(sim, 40, 10, 60, 25);
+                    add_pile(sim, 10, row, 60, 25);
+                    sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
+                    sim.spawn_unit(2, sim::AntType::Worker, TileCoord{kFightHills[2].x + 6, kFightHills[2].y - 3});
+                    sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{12, 12});
+                    sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 10});
+                    sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10, 8});
+                    sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
+                    sim.set_player_score(0, 100);
+                    sim.set_player_score(1, leader == 1 ? 1200 : 0);
+                    sim.set_player_score(2, leader == 2 ? 1200 : 0);
+                    Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(mp), 4, 4);
+                    for (uint32_t t = 0; t < 2400 && rig.as<StandardBot>().mines().planted() == 0; t += 8) rig.run(8);
+                    const auto mines = mines_of(sim, rig.map(), 0, 0);
+                    ASSERT_TRUE(!mines.empty());
+                    const int32_t to_one = mines.front().chebyshev_dist(TileCoord{40, 10});
+                    const int32_t to_two = mines.front().chebyshev_dist(TileCoord{10, row});
+                    ASSERT_TRUE(leader == 1 ? to_one < to_two : to_two < to_one);
+                }
+            }
+        }
+        {   // (i) the gate mines of a bot at the pull tier whose workers all have work: Medium has gate mines only, and the free rule (they wait for an ant with nothing to harvest); from war tier 3 they are
+            //     laid although nobody is free, at tier 2 they are not. Four workers on a pile far away (nobody is free), the Bomber of the bot walks about
+            LevelPlan mp = plan_for(Level::Medium);
+            mp.assault = mp.raider_hunt = mp.sabotage = false;
+            ASSERT_TRUE(mp.war_free_only && mp.mine_gate >= 1 && mp.mine_per_pile == 0);
+            for (const int32_t deficit : {1700, 2800}) {                                                  // (the war tiers 2 and 3 of Medium at tick 3,200: the bot has banked 400 points of it by then, 1,792 points can still be earned)
                 sim::SimulationEngine sim;
-                empty_field(sim, 253);
-                add_pile(sim, 40, 10, 60, 25);
-                add_pile(sim, 10, 37, 60, 25);
-                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
-                sim.spawn_unit(2, sim::AntType::Worker, TileCoord{kFightHills[2].x + 6, kFightHills[2].y - 3});
-                sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{12, 12});
-                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 10});
-                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10, 8});
-                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
+                empty_field(sim, 254);
+                add_pile(sim, 30, 30, 400, 25);
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
+                sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14, 10});
+                sim.spawn_unit(1, sim::AntType::Worker, TileCoord{47, 10});
+                Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(mp), 4, 4);
+                rig.run(800);
                 sim.set_player_score(0, 100);
-                sim.set_player_score(1, leader == 1 ? 1200 : 0);
-                sim.set_player_score(2, leader == 2 ? 1200 : 0);
-                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(mp), 4, 4);
-                for (uint32_t t = 0; t < 2400 && rig.as<StandardBot>().mines().planted() == 0; t += 8) rig.run(8);
-                const auto mines = mines_of(sim, rig.map(), 0, 0);
-                ASSERT_TRUE(!mines.empty());
-                const int32_t to_one = mines.front().chebyshev_dist(TileCoord{40, 10});
-                const int32_t to_two = mines.front().chebyshev_dist(TileCoord{10, 40});
-                ASSERT_TRUE(leader == 1 ? to_one < to_two : to_two < to_one);
+                sim.set_player_score(1, 100 + deficit);
+                rig.run(2400);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, deficit == 1700 ? 2u : 3u);
+                ASSERT_EQ(rig.as<StandardBot>().mines().planted() >= 1u, deficit == 2800);
             }
         }
     } TEST_END();
