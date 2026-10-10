@@ -147,6 +147,7 @@ void CantGoTally::command(const sim::Command& c, uint64_t tick) {
     if (!sim::is_group_order(c.type) || c.ants.empty()) return;                    // a Stop, a hatch and the rest ask for no walk
     const uint8_t seat = c.issuer < sim::MAX_PLAYERS ? c.issuer : 0;
     ++seats_[seat].orders;
+    if (c.type == sim::CommandType::GroupAttack) ++seats_[seat].attacks;
     refused_.push_back(0);
     order_seat_.push_back(seat);
     const uint32_t number = static_cast<uint32_t>(refused_.size());                  // 1, 2, ...
@@ -240,6 +241,8 @@ void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatR
     const sim::PlayerMatchStats st = sim.get_player_stats(seat);
     out.kills = st.enemy_killed;
     out.losses = st.friendly_lost;
+    out.bombs_planted = st.bombs_planted;
+    out.fires_lit = st.fires_lit;
     out.ants = 0;
     for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
         if (a.player_id == seat && a.hp > 0 && a.state != sim::UnitState::Dead && a.state != sim::UnitState::Drowning) ++out.ants;
@@ -331,6 +334,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         if (const StandardBot* sb = dynamic_cast<const StandardBot*>(bot)) {
             r.style = style_name(sb->style());
             r.stalls = sb->stalls();
+            r.war_ticks = sb->war_ticks();
             r.expedition = read_expedition(sb->expedition());
         }
         read_seat_result(sim, b.seat, r);
@@ -339,6 +343,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         r.cantgo = tally.seat(b.seat).reactions;
         r.cantgo_began = tally.seat(b.seat).began;
         r.orders = tally.seat(b.seat).orders;
+        r.attack_orders = tally.seat(b.seat).attacks;
         r.refused_orders = tally.seat(b.seat).refused;
         r.took = flowers.seat(b.seat).took;
         r.took_at_flowers = flowers.seat(b.seat).at_flowers;

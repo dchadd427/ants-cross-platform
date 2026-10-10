@@ -716,6 +716,39 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
+    if (key == "war") {                                                               // the war batch of docs/BOTS.md, "The war batch" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_war_batch(p);
+        return true;
+    }
+    if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
+    if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
+    if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
+    if (key == "bt3") { p.behind_tier3 = static_cast<uint32_t>(v); return true; }
+    if (key == "bmin") { p.behind_min_leader = static_cast<uint32_t>(v); return true; }
+    if (key == "bfree") { p.behind_free_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "bease") { p.behind_odds_ease = static_cast<uint32_t>(v); return true; }
+    if (key == "bafter") { p.behind_assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "bsab") { p.behind_sabotage_after = static_cast<uint32_t>(v); return true; }
+    if (key == "wbomb") { p.war_bombers = static_cast<uint32_t>(v); return true; }
+    if (key == "wfire") { p.war_fires = static_cast<uint32_t>(v); return true; }
+    if (key == "mines") { p.mine_per_pile = static_cast<uint32_t>(v); return true; }
+    if (key == "minegate") { p.mine_gate = static_cast<uint32_t>(v); return true; }
+    if (key == "minemin") { p.mine_min_units = static_cast<uint32_t>(v); return true; }
+    if (key == "minepct") { p.mine_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "minere") { p.mine_replant_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "raider") return flag(p.raider_hunt);
+    if (key == "raiderr") { p.raider_radius = static_cast<int32_t>(v); return true; }
+    if (key == "warfree") return flag(p.war_free_only);
+    if (key == "raiderp") return flag(p.raider_piles);
+    if (key == "raiderx") { p.raider_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "assault") return flag(p.assault);
+    if (key == "asforce") { p.assault_force = static_cast<uint32_t>(v); return true; }
+    if (key == "asmin") { p.assault_min = static_cast<uint32_t>(v); return true; }
+    if (key == "asodds") { p.assault_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "asreach") { p.assault_reach = static_cast<int32_t>(v); return true; }
+    if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
+    if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
     if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
         p.race = false;
@@ -1084,7 +1117,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
             return false;
         }
     }
@@ -1402,6 +1435,13 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("losses", uint64_t{s.losses});
             j.field("stalls", uint64_t{s.stalls});
             j.field("orders", uint64_t{s.orders});
+            j.field("attack_orders", uint64_t{s.attack_orders});
+            j.field("bombs_planted", uint64_t{s.bombs_planted});
+            j.field("fires_lit", uint64_t{s.fires_lit});
+            j.key("war_ticks");                                             // the ticks a standard bot spent at every war tier (0: not behind enough .. 3)
+            j.begin_object();
+            for (size_t k = 0; k < s.war_ticks.size(); ++k) j.field("t" + std::to_string(k), uint64_t{s.war_ticks[k]});
+            j.end_object();
             j.field("refused_orders", uint64_t{s.refused_orders});
             j.field("cantgo", uint64_t{s.cantgo});
             j.field("cantgo_began", uint64_t{s.cantgo_began});
@@ -2157,7 +2197,7 @@ void selftest_tool(SelfTest& t) {
             const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
                         num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
-                        num("orders") == r.orders && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
+                        num("orders") == r.orders && num("attack_orders") == r.attack_orders && num("bombs_planted") == r.bombs_planted && num("fires_lit") == r.fires_lit && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
                         num("took_at_flowers") == r.took_at_flowers && s.get("took") != nullptr && s.get("took")->get("fire") != nullptr && s.get("took")->get("fire")->u64() == r.took[2] &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;

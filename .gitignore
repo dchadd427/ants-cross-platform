@@ -52,6 +52,9 @@ tests/artifacts/
 .claude/
 implementation_plan.md
 
+# Process-id files of a local server or tool run
+*.pid
+
 # Python cache
 __pycache__/
 *.pyc
