@@ -9,6 +9,7 @@
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/sim_engine.hpp"
+#include "ants_sim/start_teams.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -425,6 +426,62 @@ int main() {
         run_ticks(e, 40);
         ASSERT_TRUE(e.is_match_over());
         ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+    } TEST_END();
+
+    TEST_CASE("3.9 teams from the start (the room's Teams choice): 2 against 2 is two sides; an ally that is gone does not end the match, the last side with an ant does, and its two players share the first row") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2, 3});
+        apply_start_teams(e, StartTeams{true, 0, 2});                      // green + blue against red + black
+        ASSERT_EQ(e.alliance_of(0), 2);
+        ASSERT_EQ(e.alliance_of(1), 3);
+        kill_pair(e, 0, 1);                                                // a kill of the other side: one point for green, one for blue (the pair's score is the two added)
+        kill_pair(e, 2, 3);
+        ASSERT_EQ(e.get_world_state().player_scores[0], 2);                // an alliance shows its two players' kills added, on both boxes, as today
+        ASSERT_EQ(e.get_world_state().player_scores[2], 2);
+        ASSERT_EQ(e.get_world_state().player_scores[1], 0);
+        for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);       // red is gone: red + black is still a side (black)
+        run_ticks(e, 40);
+        ASSERT_FALSE(e.is_match_over());
+        for (const AntSnapshot& a : ants_of(e, 0)) e.kill_unit(a.id);       // green is gone: green + blue is still a side (blue)
+        run_ticks(e, 40);
+        ASSERT_FALSE(e.is_match_over());
+        for (const AntSnapshot& a : ants_of(e, 3)) e.kill_unit(a.id);       // black is gone: one side is left, blue's
+        run_ticks(e, 40);
+        ASSERT_TRUE(e.is_match_over());
+        const MatchResult r = e.get_world_state().match_result;
+        ASSERT_EQ(r.standing, 2);
+        for (int screen = 0; screen < 4; ++screen) {
+            const std::vector<ResultRow> rows = r.rows(static_cast<uint8_t>(screen));
+            ASSERT_EQ(rows.size(), 2u);                                    // two sides, two rows
+            ASSERT_TRUE(rows[0].first == 0 || rows[0].first == 2);
+            ASSERT_TRUE(rows[0].second == 0 || rows[0].second == 2);
+            ASSERT_EQ(rows[0].enemy_killed, 2);                            // the two players' kills added
+            ASSERT_EQ(rows[0].ants_left, 4);                               // blue's three and the ant that killed
+        }
+        ASSERT_TRUE(r.is_winner(0) && r.is_winner(2) && !r.is_winner(1) && !r.is_winner(3));
+    } TEST_END();
+
+    TEST_CASE("3.10 teams from the start with three players (2 against 1), and the clock with teams: the most kills of a side ranks first") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2});
+        apply_start_teams(e, StartTeams{true, 0, 2});                      // green + blue against red
+        ASSERT_EQ(e.alliance_of(0), 2);
+        ASSERT_TRUE(e.alliance_of(1) != 0 && e.alliance_of(1) != 2);        // red has no ally
+        for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);       // red has nothing left: the allies stand
+        run_ticks(e, 40);
+        ASSERT_TRUE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+        SimulationEngine f = small_world(GameMode::Kills187, {0, 1, 2});
+        apply_start_teams(f, StartTeams{true, 0, 2});
+        kill_pair(f, 1, 0);
+        kill_pair(f, 1, 2);
+        kill_pair(f, 0, 1);                                                // red has 2 kills, green + blue have 1
+        f.set_match_time_remaining_ms(100);
+        run_ticks(f, 40);
+        ASSERT_TRUE(f.is_match_over());
+        const MatchResult r = f.get_world_state().match_result;
+        ASSERT_EQ(r.standing, PLAYER_NEUTRAL);
+        ASSERT_EQ(r.rows(0)[0].first, 1);                                  // red (2 kills) before the pair (1)
+        ASSERT_EQ(r.rows(0)[1].enemy_killed, 1);
+        ASSERT_TRUE(r.is_winner(1) && !r.is_winner(0) && !r.is_winner(2));
     } TEST_END();
 
     TEST_CASE("4.1 the eggs are lives: a team with an egg is not out when its last ant dies, the free hatch costs it none of its kills, and the match goes on until the egg is hatched and the ant killed") {
