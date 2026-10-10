@@ -252,7 +252,7 @@ void test_centred_picture() {
 void test_window_sizes() {
     group("window", "the window of a canvas: the largest scale in steps of 0.5 that fits the display's usable area (at least 1x), centred; the grid's cells of the canvas's shape");
     // (rewritten with the review fixes of M3: the first window was the largest WHOLE multiple of the canvas, which left a typical laptop at 1x, 960 x 540 points on a 1800 x 1130 area;
-    // the owner decided: steps of 0.5, which on a Retina display (two pixels to a point) is 3x in pixels at 1.5x in points, crisp)
+    // the decision was steps of 0.5, which on a Retina display (two pixels to a point) is 3x in pixels at 1.5x in points, crisp)
     auto open = [](int32_t area_w, int32_t area_h, int32_t top = 0, int32_t canvas_w = 960, int32_t canvas_h = 540) {
         return default_canvas_window(WindowRect{0, 0, area_w, area_h}, canvas_w, canvas_h, top, 0, 0, 0);
     };
@@ -384,7 +384,7 @@ ApplicationConfig parse(std::initializer_list<const char*> args) {
 void test_aspect_option() {
     group("option", "--aspect on the command line");
     ApplicationConfig c = parse({"ants"});
-    // (M3 rewrote this: the default of a game started from the command line is the platform's, 16:9 on a desktop, not the original's 4:3 any more: the owner's priority, 2026-10-02)
+    // (M3 rewrote this: the default of a game started from the command line is the platform's, 16:9 on a desktop, not the original's 4:3 any more: a project priority, 2026-10-02)
     check(c.aspect == kPlatformDefaultAspect && !c.aspect_given && c.startup_error.empty(), "without the option the aspect is the platform's default (16:9 on a desktop) and not given");
     c = parse({"ants", "--aspect", "16:9"});
     check(c.aspect == Aspect::Wide16x9 && c.aspect_given && c.startup_error.empty(), "--aspect 16:9");
@@ -918,7 +918,7 @@ void test_pointer_over_bars() {
         f.scroll(12);
         check(f.app.renderer().camera().world_x > x1, "... and the map scrolls east");
     }
-    {   // THE OWNER'S SCREENS (edge-pan: "if I go off the edge of the game, it no longer pans", on a 16:10 screen in fullscreen): a window of the shape of a 16:10 screen, 1440 x 900 (the picture
+    {   // THE REPORTED SCREENS (edge-pan: when the pointer goes off the edge of the game, the map no longer pans, on a 16:10 screen in fullscreen): a window of the shape of a 16:10 screen, 1440 x 900 (the picture
         // 1440 x 810, bars of 45 rows) and 1512 x 982 (a MacBook's, bars of 66 rows at a scale of 1.575): the pointer anywhere over a bar is on the picture's nearest edge pixel and is NOT gone, the
         // map scrolls up or down, a corner of the bars scrolls diagonally, and the picture's own first row and the bar's last row are the same pointer. A fullscreen window is such a window (the clamp does not
         // look at fullscreen): tests/test_app/test_app_integration.cpp 7.8f makes one. The windowed case is unchanged: a pointer that really left (SDL's LEAVE) is gone and scrolls nothing.

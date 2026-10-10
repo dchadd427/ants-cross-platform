@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The front page's Rejoin strip (run by ./run_tests.sh --fast and by the CI). The owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back".
+"""The front page's Rejoin strip (run by ./run_tests.sh --fast and by the CI). The requirement: if a player's browser crashed or the power went out, the game is held paused until the player gets back.
 
 The server holds the seat of a player whose connection is lost and the game page comes back to its seat by itself (a reload, a restart of the server). The front page is the last door: a player who
 closed the tab, or whose browser crashed, opens the site's front page and finds a strip at the top of the page, "Your match in room CODE is still running: go back to your seat." with ONE button,

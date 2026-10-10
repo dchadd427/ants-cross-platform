@@ -22,7 +22,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONT = os.path.join(REPO, "web", "front")
 
-# Pages that are not in the Classic look yet. The coordinator removes a line when the branch that restyles that page is merged (this test then says so).
+# Pages that are not in the Classic look yet. A line is removed when the branch that restyles that page is merged (this test then says so).
 PENDING = {
 }
 
@@ -121,7 +121,7 @@ class TheSitesPages(unittest.TestCase):
 
 class TheReleasePlates(unittest.TestCase):
     def test_a_release_plate_has_the_corners_and_the_sheen_of_the_buttons(self):
-        # "v0.8.1" on a changelog page is a teal plate with the buttons' bevel: it is cut and lit like them (the owner, 2026-10-05: "round a little more", "less flat")
+        # "v0.8.1" on a changelog page is a teal plate with the buttons' bevel: it is cut and lit like them (requested on 2026-10-05: a little more round, less flat)
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         button = re.search(r"\.btn, \.banner \{([^}]*)\}", classic).group(1)
         radius = re.search(r"border-radius: (\d+px);", button).group(1)

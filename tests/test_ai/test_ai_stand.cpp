@@ -1,7 +1,7 @@
-// The stand batch (docs/BOTS.md, "The stand batch"): the owner's report of a match on TREASURE, 2026-10-10: "that combat ant is blocking where the regular ant could walk, and it doesn't know that it can move
-// it ... the fire ants need to fight each other: this fire ant is firing in his team, and he has a fire ant, and he could just go and try to kill the other fire ant ... at least try to knock him off the fire
-// and then get him with his other ants ... you got to stand your ground"; "if you're down by a few hundred points, you're very unlikely to win by just continuing to eat, so why not select all your ants and
-// take them to their base? That's why it's really important to put bombs around your base: they'd have to go one or two ants at a time and path around the bombs".
+// The stand batch (docs/BOTS.md, "The stand batch"): a report of a match on TREASURE, 2026-10-10: a combat ant was blocking where the regular ant could walk, and it did not know that it can move
+// it; the fire ants need to fight each other: a fire ant is firing in a team, and that team has a fire ant that could just go and try to kill the other fire ant, or at least try to knock it off the fire
+// and then get it with its other ants (stand your ground); a bot that is down by a few hundred points is very unlikely to win by just continuing to eat, so it could select all its ants and
+// take them to the enemy base; that is why it is really important to put bombs around the own base: the enemy would have to go one or two ants at a time and path around the bombs.
 //
 //   AI25.1  the plans: what each level has of the batch, the switch that takes all of it out (`--tune stand=0`), a plan made by hand has none
 //   AI25.2  the fire duel: the own Fire Ant strikes the enemy Fire Ant that stands on a fire wall of the ring (nobody else's blow reaches it there), the others wait; without the rule nobody goes
@@ -73,7 +73,7 @@ void run_stand_tests() {
         ASSERT_EQ(easy.mine_home, 0u);
         ASSERT_EQ(easy.behind_mine_gate, 0u);
         ASSERT_EQ(easy.behind_mine_tier, 4u);
-        ASSERT_TRUE(hard.mine_per_pile >= 6 && hard.mine_apart == 1);                                        // (the owner: "the bomber only places three bombs ... it could bomb up a whole area")
+        ASSERT_TRUE(hard.mine_per_pile >= 6 && hard.mine_apart == 1);                                        // (reported after play: the bomber only placed three bombs where it could bomb up a whole area)
         ASSERT_TRUE(hard.mine_home >= 8 && medium.mine_home >= 6);
         for (const LevelPlan* p : {&medium, &hard}) {
             ASSERT_TRUE(p->rush);
@@ -110,7 +110,7 @@ void run_stand_tests() {
         ASSERT_EQ(by_hand.behind_mine_tier, 4u);
     } TEST_END();
 
-    TEST_CASE("AI25.2 The Fire Duel (The Owner: \"The Fire Ants Need To Fight Each Other ... At Least Try To Knock Him Off The Fire And Then Get Him With His Other Ants\"): The Own Fire Ant Is Sent At The Enemy Fire Ant That Stands On A Wall Of The Ring, Unless It Keeps The Walls Of The Thief Hole Against A Thief, Nobody Else Is (No Blow Of Theirs Reaches It There), The Enemy Is Struck And Thrown Off; Without The Rule Nobody Goes")
+    TEST_CASE("AI25.2 The Fire Duel (Reported After Play: The Fire Ants Need To Fight Each Other, At Least To Knock The Enemy Off The Fire And Then Get It With The Other Ants): The Own Fire Ant Is Sent At The Enemy Fire Ant That Stands On A Wall Of The Ring, Unless It Keeps The Walls Of The Thief Hole Against A Thief, Nobody Else Is (No Blow Of Theirs Reaches It There), The Enemy Is Struck And Thrown Off; Without The Rule Nobody Goes")
     {
         const Home home(91);
         const auto build = [&](sim::SimulationEngine& sim, uint32_t& keeper, uint32_t& enemy) {
@@ -234,7 +234,7 @@ void run_stand_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI25.4 The Ramp Unjam (The Owner: \"That Combat Ant Is Blocking Where The Regular Ant Could Walk, And It Doesn't Know That It Can Move It\"): An Own Ant Without Food That Stands On The Ramp While A Carrier Waits Is Sent To The Side Of The Doorstep; Not Without The Rule, Not Before The Plan's Ticks, Not While Nobody Waits")
+    TEST_CASE("AI25.4 The Ramp Unjam (Reported After Play: A Combat Ant Was Blocking Where The Regular Ant Could Walk, And It Did Not Know That It Can Move): An Own Ant Without Food That Stands On The Ramp While A Carrier Waits Is Sent To The Side Of The Doorstep; Not Without The Rule, Not Before The Plan's Ticks, Not While Nobody Waits")
     {
         const Home home(93);
         const TileCoord ramp{home.origin.x + 1, home.origin.y};
@@ -291,7 +291,7 @@ void run_stand_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI25.5 The Mines Of A Loser (The Owner: \"It Waited Until The Last Two Minutes ... Especially Since They Were Losing, Green Should Have Started Putting A Bunch Of Bombs Down\"): A Bot 300 Points Behind Is At War Tier 1 And Lays Its Mines Then, Where Before The Free Rule Held Them Back Until Tier 3; A Bot That Is Level Lays None; The Gate Ring Gets More")
+    TEST_CASE("AI25.5 The Mines Of A Loser (Reported After Play: A Bot Waited Until The Last Two Minutes Though It Was Losing, And Should Have Started Putting A Bunch Of Bombs Down): A Bot 300 Points Behind Is At War Tier 1 And Lays Its Mines Then, Where Before The Free Rule Held Them Back Until Tier 3; A Bot That Is Level Lays None; The Gate Ring Gets More")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.assault = plan.raider_hunt = plan.sabotage = false;
@@ -383,7 +383,7 @@ void run_stand_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI25.6 The Mines At Home (The Owner: \"It's Really Important To Put Bombs Around Your Base ... They'd Have To Go One Or Two Ants At A Time And Path Around The Bombs\"): A Bomber Lays plan.mine_home Mines Five To Nine Tiles From The Own Hill, Three Tiles Apart, Never On The Doorstep Or At A Pile; None Without The Plan, None Before Its Tick")
+    TEST_CASE("AI25.6 The Mines At Home (Reported After Play: It Is Really Important To Put Bombs Around The Own Base, So That The Enemy Has To Go One Or Two Ants At A Time And Path Around The Bombs): A Bomber Lays plan.mine_home Mines Five To Nine Tiles From The Own Hill, Three Tiles Apart, Never On The Doorstep Or At A Pile; None Without The Plan, None Before Its Tick")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.assault = plan.raider_hunt = plan.sabotage = plan.rush = false;
@@ -412,7 +412,7 @@ void run_stand_tests() {
                 for (size_t k = i + 1; k < mines.size(); ++k) ASSERT_TRUE(mines[i].chebyshev_dist(mines[k]) >= 3);
             }
         }
-        {   // (a2) a field of them (the plans lay 8 and 12: "the bomber only places three bombs, it could bomb up a whole area"), two apart as the plans have it: more than three, none closer than
+        {   // (a2) a field of them (the plans lay 8 and 12: the bomber only placed three bombs where it could bomb up a whole area), two apart as the plans have it: more than three, none closer than
             //      two tiles, none outside the ring, and the food is not touched (the Workers bank)
             LevelPlan field = plan;
             field.mine_home = 8;
@@ -480,7 +480,7 @@ void run_stand_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI25.7 The Rush (The Owner: \"Why Not Select All Your Ants And Take Them To Their Base?\"): A Bot Far Behind Sends Every Ant Without Food At The Leader, Gathers Them On The Way And Then Orders Them At The Leader's Ants; Not Before Its Time, Not While It Leads, Not With The Plan Off, Not In The Last Ticks; It Ends")
+    TEST_CASE("AI25.7 The Rush (Reported After Play: A Bot Far Behind Could Select All Its Ants And Take Them To The Enemy Base): A Bot Far Behind Sends Every Ant Without Food At The Leader, Gathers Them On The Way And Then Orders Them At The Leader's Ants; Not Before Its Time, Not While It Leads, Not With The Plan Off, Not In The Last Ticks; It Ends")
     {
         LevelPlan plan = plan_for(Level::Hard);
         plan.assault = plan.raider_hunt = plan.sabotage = false;

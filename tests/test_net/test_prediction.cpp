@@ -1679,7 +1679,7 @@ void run_cue_tests() {
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 5u);
         ASSERT_EQ(c.lag_fresh_ticks, 400u);
-        ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (the owner's decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
+        ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);
         ASSERT_EQ(c.lead_fall_after_ticks, 40u);

@@ -558,7 +558,7 @@ int main() {
         ASSERT_TRUE(sim.is_ant_in_base_queue(b));
     } TEST_END();
 
-    // The owner's report (v0.0.50): "I command six ants to go to the base, the first three queued up and went in, the other three cancelled their queue".
+    // Reported after play (v0.0.50): when six ants were commanded to go to the base, the first three queued up and went in, the other three cancelled their queue.
     for (int carriers : {6, 8}) {
         TEST_CASE(std::string("4.3 A click on the own hill sends ") + std::to_string(carriers) + " food carriers in: every one of them deposits") {
             SimulationEngine sim;

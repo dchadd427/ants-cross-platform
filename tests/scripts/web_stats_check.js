@@ -1,4 +1,4 @@
-// Runs the front page's OWN code for the line of numbers in its footer (the owner: "Game stats would be cool on the page. How many games played / in progress etc."): the block STATS_BEGIN ..
+// Runs the front page's OWN code for the line of numbers in its footer (game stats on the page: how many games played, in progress, etc.): the block STATS_BEGIN ..
 // STATS_END of web/lobby.html, on tables and with a fake clock, a fake page visibility and fake answers of the site:
 //   * statsOf: the answer of /stats ({"now":{"matches","players"},"online":{"day","total"},"local":{"day","total"},"since"}): the live numbers and the sums (games played = online.total + local.total, today =
 //     online.day + local.day), and every other shape (not an object, a missing part, a negative or fractional or non-numeric number, a text that is no date as the only thing wrong) as null or as it is allowed;
@@ -63,7 +63,7 @@ const S = new Function(block + '\nreturn { STATS_EVERY: STATS_EVERY, statsOf: st
     // ---- the words
     same('digits: thousands separators', [0, 7, 21, 999, 1000, 1284, 12345, 123456, 1234567, 999999999999].map(S.groupDigits), ['0', '7', '21', '999', '1,000', '1,284', '12,345', '123,456', '1,234,567', '999,999,999,999']);
     const words = (m, p, t, d) => S.statsWords({ matches: m, players: p, played: t, today: d, since: '2026-10-04' });
-    same('words: the line of the owner\'s example', words(3, 7, 1284, 21), { on: true, live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
+    same('words: the line of the example', words(3, 7, 1284, 21), { on: true, live: '3 matches being played · 7 players online', played: '1,284 games played (21 today)', title: 'Counted since 2026-10-04. Today means the last 24 hours.' });
     same('words: singular where the number is 1: match, player, game', [words(1, 1, 1, 1).live, words(1, 1, 1, 1).played], ['1 match being played · 1 player online', '1 game played (1 today)']);
     same('words: plural at 0 and at 2', [words(0, 0, 0, 0).live, words(0, 0, 0, 0).played, words(2, 2, 2, 2).live, words(2, 2, 2, 2).played], ['0 matches being played · 0 players online', '0 games played (0 today)', '2 matches being played · 2 players online', '2 games played (2 today)']);
     same('words: separators in every number', words(1000, 12345, 1234567, 1000).live + ' | ' + words(1000, 12345, 1234567, 1000).played, '1,000 matches being played · 12,345 players online | 1,234,567 games played (1,000 today)');

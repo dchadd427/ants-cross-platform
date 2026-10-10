@@ -64,7 +64,7 @@ Command move_of(uint8_t issuer, std::vector<uint32_t> ants, int16_t x, int16_t y
 }  // namespace
 
 void run_view_tests() {
-    TEST_CASE("AI1.1 Ants In The View: Own And Others Apart And By Id, Gone Ants Not Listed, The Hit Points Of Every Ant (The Owner's Decision: 1 To 10, Equal To The Engine's), Carried Points Only Of Own Ants, The Crumb Is Visible, No Order Or Target Anywhere") {
+    TEST_CASE("AI1.1 Ants In The View: Own And Others Apart And By Id, Gone Ants Not Listed, The Hit Points Of Every Ant (A Project Decision: 1 To 10, Equal To The Engine's), Carried Points Only Of Own Ants, The Crumb Is Visible, No Order Or Target Anywhere") {
         sim::SimulationEngine sim;
         build_world(sim, 21);
         const std::vector<uint32_t> mine = ants_of(sim, 0);
@@ -117,7 +117,7 @@ void run_view_tests() {
         const AntView* them = find_ant(v.others(), foes[0]);
         ASSERT_TRUE(them != nullptr);
         ASSERT_TRUE(them->holding);                                                    // the sprite shows the crumb
-        ASSERT_EQ(them->hp, 3);                                                        // and the health: every ant's hit points are on the view, an enemy's too (the owner's decision)
+        ASSERT_EQ(them->hp, 3);                                                        // and the health: every ant's hit points are on the view, an enemy's too (a project decision)
         ASSERT_EQ(them->carried_points, 0);                                            // but not what the crumb is worth
         for (const AntView& a : v.mine()) ASSERT_TRUE(a.team == 0 && a.hp > 0);
         for (const AntView& a : v.others()) ASSERT_TRUE(a.team != 0 && a.hp > 0 && a.hp <= sim::AntUnit::MAX_HP && a.carried_points == 0);
@@ -148,7 +148,7 @@ void run_view_tests() {
         ASSERT_FALSE(AntHasHarvestOrigin<AntView>::value);
     } TEST_END();
 
-    TEST_CASE("AI1.1b The Hit Points Of Every Ant (The Owner's Decision On What Players Know: 10 Is Full, 1 Is One Hit Point Left, 0 Is Dead): For Every Seat Every Ant That The View Lists, Its Own And The Other Teams', Has The Hit Points Of The Engine's Ant (Several Different Values At Once); An Ant That Is Dead Or Drowning, Or Whose Team Dropped Out, Gives Nothing; The Number Follows A Hit From One Look To The Next; The Carried Points Of Another Team's Ant Are Still Hidden") {
+    TEST_CASE("AI1.1b The Hit Points Of Every Ant (A Project Decision On What Players Know: 10 Is Full, 1 Is One Hit Point Left, 0 Is Dead): For Every Seat Every Ant That The View Lists, Its Own And The Other Teams', Has The Hit Points Of The Engine's Ant (Several Different Values At Once); An Ant That Is Dead Or Drowning, Or Whose Team Dropped Out, Gives Nothing; The Number Follows A Hit From One Look To The Next; The Carried Points Of Another Team's Ant Are Still Hidden") {
         sim::SimulationEngine sim;
         build_world(sim, 22, 8);
         std::vector<uint32_t> all;

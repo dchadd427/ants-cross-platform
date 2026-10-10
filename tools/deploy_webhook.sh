@@ -7,7 +7,7 @@
 # The address is secret: it is read from the environment (never from an argument), handed to curl through its standard input (never on a command line, where `ps` shows
 # it), and never printed: curl's own messages are switched off because they name the host, and the messages here say the status and nothing else. A POST with a timeout
 # and a few retries (a few seconds apart; DEPLOY_RETRY_DELAY changes that). Without an address: "deploy secret not set: skipped", and success, so that nothing changes
-# until the owner sets the secret. Exit status: 0 called (or skipped), 1 the call failed.
+# until the secret is set. Exit status: 0 called (or skipped), 1 the call failed.
 label="${1:-the site}"
 if [ -z "${WEBHOOK_URL:-}" ]; then
     echo "deploy secret not set: skipped"

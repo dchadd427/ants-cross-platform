@@ -1,5 +1,5 @@
-// The war batch (docs/BOTS.md, "The war batch"): the owner's report of a match of four bots on SMALL, "they just don't fight, they just eat ... they need to start more fights with each other, fire at
-// their opponent, and try to kill their fire ant if they try to come for them ... the bomber doesn't place any bombs currently, but he should be bombing up the food so they can't eat it". Hand-made
+// The war batch (docs/BOTS.md, "The war batch"): a report of a match of four bots on SMALL: they just don't fight, they just eat; they need to start more fights with each other, fire at
+// their opponent, and try to kill their fire ant if they try to come for them; the bomber doesn't place any bombs currently, but should be bombing up the food so they can't eat it. Hand-made
 // worlds (b41_helpers.hpp) hold the four rules; whole matches show what they add up to.
 //
 //   AI24.1  the plans: every level fights once it has nothing to harvest, Medium and Hard also fire the gate of the best opponent in and mine, the weaker the level the later and the more careful; a
@@ -10,7 +10,7 @@
 //   AI24.4  the raider hunt: an enemy Fire or Bomber Ant near the own hill is hunted without walls on the ring, a worker is not, one farther than the plan's radius is not
 //   AI24.5  whole matches on SMALL: the shipped plans fight (attack orders, fire) where the plans without the war batch do nothing of it, and the banked food of a Hard bot against bots without it
 //           stays within a tenth
-//   AI24.6  the losers fight harder ("especially the players that are losing, the bots should become more aggressive to try to gain a lead because at that point you're not going to out-eat them"):
+//   AI24.6  the losers fight harder (especially the players that are losing, the bots should become more aggressive to try to gain a lead because at that point you're not going to out-eat them):
 //           the war tier from the pressure, the later the weaker the level; a bot far enough behind takes its Combat Ants off the piles for the assault and lays mines with its Bomber when the economy
 //           needs it; not a worker on its way to the food, not a bot that leads, not a plan without the rule
 //   AI24.7  the losers' rule one rule at a time: the leader's ants and piles first, one ant more from tier 2, the odds eased at every tier and the abort level with them, the assault and the fire-in
@@ -490,7 +490,7 @@ void run_war_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI24.6 The Losers Fight Harder (The Owner: \"Especially The Players That Are Losing, The Bots Should Become More Aggressive To Try To Gain A Lead, At That Point You're Not Going To Out-Eat Them\"): The War Tier Is The Pressure Against Marks That Come Later The Weaker The Level; A Bot Far Enough Behind Takes Its Combat Ants Off The Piles For The Assault (Not Its Workers On The Way To The Food) And Lays Mines When The Economy Needs Its Hands; Not A Bot That Leads, Not A Plan Without The Rule, Easy Later Than Hard")
+    TEST_CASE("AI24.6 The Losers Fight Harder (Reported After Play: The Bots That Are Losing Should Become More Aggressive To Try To Gain A Lead, Because Then They Are Not Going To Out-Eat The Others): The War Tier Is The Pressure Against Marks That Come Later The Weaker The Level; A Bot Far Enough Behind Takes Its Combat Ants Off The Piles For The Assault (Not Its Workers On The Way To The Food) And Lays Mines When The Economy Needs Its Hands; Not A Bot That Leads, Not A Plan Without The Rule, Easy Later Than Hard")
     {
         // (a) the war tier: tick 7200 of 14400, 10,000 points of food on the field, so 1,152 points can still be earned (the time limits it): the deficit in percent of that against the marks of the level
         const auto build_standing = [&](sim::SimulationEngine& sim, int32_t mine, int32_t leader, uint64_t at, uint32_t ticks = 14400) {

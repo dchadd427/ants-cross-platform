@@ -1967,7 +1967,7 @@ void test_keyboard() {
         check(f.hud.is_move_latched(), "a pedestal is latched");
         check(key(SDLK_ESCAPE), "Esc is handled");
         check(f.hud.get_selected_ant_ids().empty() && !f.hud.is_move_latched() && !f.hud.is_quit_dialog_open(), "Esc deselects everything and lets the pedestals up, no dialog");
-        check(f.hud.is_show_hp(), "hit point digits are on (the owner's tweak: the original starts with them off)");
+        check(f.hud.is_show_hp(), "hit point digits are on (a tweak: the original starts with them off)");
         key('l', KMOD_CTRL);
         check(!f.hud.is_show_hp(), "Ctrl+L switches them off");
         key('L', KMOD_CTRL);
@@ -2282,7 +2282,7 @@ void test_pillarbox() {
     check(!wants_mouse_grab(false, false, false), "a window (also a maximized one: that is not fullscreen) does not grab");
     check(!wants_mouse_grab(true, true, true), "a headless run never grabs");
 
-    // The Dock and the menu bar of macOS (the owner: they came up whenever the pointer touched the bottom or top edge of a fullscreen screen). SDL's own fullscreen already has them hidden for good
+    // The Dock and the menu bar of macOS (reported after play: they came up whenever the pointer touched the bottom or top edge of a fullscreen screen). SDL's own fullscreen already has them hidden for good
     // (its window delegate asks for FullScreen | HideDock | HideMenuBar when the window has SDL's flag), so the game asks only for the fullscreen Space that SDL's flags do not describe (the
     // green button, Cmd+Ctrl+F): the whole table of the three inputs
     int hiding = 0;

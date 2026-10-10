@@ -239,7 +239,7 @@ void run_controller_tests() {
                     mine_seen[seat].push_back(static_cast<uint32_t>(v.mine().size()));
                     others_seen[seat].push_back(static_cast<uint32_t>(v.others().size()));
                     for (const AntView& a : v.mine()) ASSERT_EQ(a.team, seat);
-                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp > 0 && a.hp <= 10);     // another team's hit points are on the view (the owner's decision)
+                    for (const AntView& a : v.others()) ASSERT_TRUE(a.team != seat && a.hp > 0 && a.hp <= 10);     // another team's hit points are on the view (a project decision)
                 });
                 ASSERT_TRUE(b[seat] != nullptr && b[seat]->started && b[seat]->seat == seat);
             }

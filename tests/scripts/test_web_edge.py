@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock, and the margin of a WINDOWED one (run by ./run_tests.sh --fast and by the CI). The owner: on a 16:10 screen the
+"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock, and the margin of a WINDOWED one (run by ./run_tests.sh --fast and by the CI). On a 16:10 screen the
 16:9 picture has bars above and below, and a pointer that went over a bar no longer scrolled the map (the browser sends the game nothing there and says that the pointer LEFT the canvas); and on
-a Mac a pointer at the screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer. In a window the same loss: "go off the screen with the
-mouse and it not screw up the scrolling": a pointer within 96 CSS pixels (about an inch) beyond the game's box still scrolls the map at the box's edge.
+a Mac a pointer at the screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer. In a window the same loss: going off the screen with the
+mouse must not spoil the scrolling; a pointer within 96 CSS pixels (about an inch) beyond the game's box still scrolls the map at the box's edge.
 
   - the page's own code is RUN (node, when it is installed): the pixel that the game reads for a pointer over a bar and the position that makes the game read it, the cursor of a locked
     pointer (its start, the motion by the mouse's distance, the edges, the corners, the slow mouse), the choice "Fullscreen mouse: Locked / Free" and its storage key (`ants.pointerlock`,

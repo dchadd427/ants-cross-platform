@@ -143,7 +143,7 @@ void test_sized_layouts() {
     check_rect(w.chat_view(), LayoutRect{802, 299, 138, 161}, "the chat log is right anchored and takes the extra height");
     check_rect(w.panel_fill(), LayoutRect{800, 22, 160, 518}, "the panel's fill is right anchored and as tall as the screen below the top bar");
     check(w.panel_fill().right() == 960 && w.panel_fill().bottom() == 540, "... it ends at the screen's right and bottom edge");
-    // (the review fixes of M3 spread the three bottom boxes over the strip, the owner's request: the strip is widened at three cuts, 108, 106 and 106 px at 960 wide, so the boxes are at
+    // (the review fixes of M3 spread the three bottom boxes over the strip, as requested: the strip is widened at three cuts, 108, 106 and 106 px at 960 wide, so the boxes are at
     // x 213, 468 and 722 and not together at the right end (425, 574 and 722); the top bar's slot stays right anchored; test_wide_hud pins the cuts and the art under the boxes)
     const ScoreSlot expected[4] = {{632, 719, 4, 722}, {113, 209, 524, 213}, {377, 465, 524, 468}, {632, 719, 524, 722}};
     for (size_t k = 0; k < 4; ++k) check(w.score_slot(k) == expected[k], "score slot " + std::to_string(k) + " of 960 x 540: the top bar's right anchored, the bottom strip's boxes bottom anchored and spread over the strip");

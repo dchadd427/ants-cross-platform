@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The default map (run by ./run_tests.sh --fast and by the CI): Treasure is the map that is played most, so it is the default of everything that chooses a map when the person
-did not (the owner's request). The C++ suites test the setup screen's highlight (test_app_integration 8.9), the start menu's Host panel (test_start_menu M4.4,
+did not (a project decision). The C++ suites test the setup screen's highlight (test_app_integration 8.9), the start menu's Host panel (test_start_menu M4.4,
 test_start_menu_app A4.6) and a LAN host's room (test_network_app N5.3b). What no C++ test reaches is read here, from the files themselves:
 
   - docker-compose.stack.yml: the map of a public room whose create block names none (`--demo-map ${ANTS_DEMO_MAP:-TREASURE.LVL}`), the six maps that a create block may choose, and the comments that

@@ -2384,7 +2384,7 @@ SDL_WindowEvent window_event(uint8_t what) {
 
 /// An Application with the animation clock of its renderer and the clock of its HUD pinned. A headless one starts on the setup screen; one with a window
 /// (SDL's dummy video and audio drivers: nothing is shown or heard) starts on the loading screen, which a headless application skips. The settings go
-/// to a place that does not exist: neither the owner's stored options are read nor any file is written.
+/// to a place that does not exist: neither the user's stored options are read nor any file is written.
 struct AppRig {
     explicit AppRig(bool window = false) {
         const QuietStdout quiet;
@@ -4011,7 +4011,7 @@ const Golden kGoldens[] = {
     {"screen.menu.join.name_refused", 0xa4d022926ae89c6f, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0xdffb5d28277afaa0, 158},
-    // The host-panel rows below moved deliberately in bot games part B (network protocol 13: the owner asked for a level for each bot and for teams chosen before the start): the panel has a row for
+    // The host-panel rows below moved deliberately in bot games part B (network protocol 13: a level for each bot and teams chosen before the start were asked for): the panel has a row for
     // each seat after the leader's (the bot that START puts there) and, with three or four players, the Teams row, in rows of 18 px text, with the caption under them (the line says what the standard bot
     // does: "Bots gather food, raid and fight back."). screen.menu.room.fill_medium did NOT move: the room's panel for the same level in every seat is what it was; the rows with seats_and_teams and
     // three_players are new. The two room panels with teams moved once more in the review fixes of part B, deliberately: the teams are the room's own now (a word of its code in protocol 13, its create
