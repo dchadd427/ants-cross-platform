@@ -764,6 +764,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "bmgate") { p.behind_mine_gate = static_cast<uint32_t>(v); return true; }
     if (key == "minehome") { p.mine_home = static_cast<uint32_t>(v); return true; }
     if (key == "minehomeapart") { p.mine_home_apart = static_cast<uint32_t>(v); return true; }
+    if (key == "homeroute") return flag(p.mine_home_off_route);
     if (key == "mineapart") { p.mine_apart = static_cast<uint32_t>(v); return true; }
     if (key == "minehomeafter") { p.mine_home_after = static_cast<uint32_t>(v); return true; }
     if (key == "rush") return flag(p.rush);

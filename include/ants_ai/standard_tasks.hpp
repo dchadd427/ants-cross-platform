@@ -375,6 +375,7 @@ private:
     static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
     static constexpr int32_t kHomeNear = 5;              // the home mines lie this far from the hill at least (never on the doorstep) ...
     static constexpr int32_t kHomeFar = 9;               // ... and at most
+    static constexpr int32_t kRouteSlack = 80;           // cost units that a tile may lie off the estimated way of the own carriers to a pile and still count as on it
     static constexpr int32_t kHomeLaneSlack = 60;        // cost units (three steps over grass) that a tile may lie off the enemy's shortest way to the hill
     /// The bot is far enough behind (plan.behind_mine_tier) to lay the mines of the gate ring with ants that the economy needs
     bool behind_mining() const noexcept { return tactics_.plan.behind_war && tactics_.standing.war >= 1 && tactics_.standing.war >= tactics_.plan.behind_mine_tier; }

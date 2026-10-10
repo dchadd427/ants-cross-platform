@@ -94,6 +94,9 @@ void run_stand_tests() {
             ASSERT_EQ(p.mine_home, 0u);
             ASSERT_EQ(p.behind_mine_gate, 0u);
             ASSERT_EQ(p.behind_mine_tier, 4u);
+            ASSERT_TRUE(p.mine_per_pile <= 3u);                                                              // (the field of mines at the piles goes with the batch: three were all there was)
+            ASSERT_EQ(p.mine_apart, 2u);
+            ASSERT_EQ(p.mine_home_apart, 3u);
             LevelPlan q = plan_for(level);
             without_war_batch(q);
             ASSERT_FALSE(q.fire_duel || q.fire_draft || q.ramp_unjam || q.rush);
@@ -296,6 +299,8 @@ void run_stand_tests() {
         plan.mine_gate = 0;
         plan.mine_home = 0;
         plan.rush = false;
+        const LevelPlan shipped = plan;                                                                      // (the tier of the shipped plan: (a2))
+        plan.behind_mine_tier = 1;
         // (the bot banks food as it plays; the scores are set again every 100 ticks, so that it stays 300 points behind)
         const auto play = [&](Rig& rig, sim::SimulationEngine& sim, int32_t own, int32_t leader, uint32_t ticks) {
             for (uint32_t t = 0; t < ticks; t += 100) {
@@ -320,6 +325,16 @@ void run_stand_tests() {
             play(rig, sim, 100, 400, 2400);
             ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, 1u);
             ASSERT_TRUE(rig.as<StandardBot>().mines().planted() >= 1u);
+        }
+        {   // (a2) the tier of the shipped Hard plan (2: tier 1 cost four bots 10 percent of their food on TREASURE): 300 points behind is tier 1, no mines; 600 behind is tier 2, mines
+            for (const int32_t leader : {400, 700}) {
+                sim::SimulationEngine sim;
+                build(sim, leader);
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(shipped), 4, 4);
+                play(rig, sim, 100, leader, 2400);
+                ASSERT_EQ(rig.as<StandardBot>().tactics().standing.war, leader == 400 ? 1u : 2u);
+                ASSERT_EQ(rig.as<StandardBot>().mines().planted() >= 1u, leader == 700);
+            }
         }
         {   // (b) the plan of before (the mines wait for war tier 3 or for an ant with nothing to harvest): none
             LevelPlan off = plan;
@@ -410,6 +425,28 @@ void run_stand_tests() {
             for (size_t i = 0; i < mines.size(); ++i) {
                 ASSERT_TRUE(mines[i].chebyshev_dist(origin) >= 5 && mines[i].chebyshev_dist(origin) <= 9);
                 for (size_t k = i + 1; k < mines.size(); ++k) ASSERT_TRUE(mines[i].chebyshev_dist(mines[k]) >= 2);
+            }
+        }
+        {   // (a3) a pile on the lane (fourteen tiles east of the hill): the carriers' way to it is no place for a mine (own bombs block their walks; on a map with food between the hills it is the
+            //      enemy's lane too, and four bots that mined it lost 17 percent of their food); with plan.mine_home_off_route off the lane gets mines
+            for (const bool off_route : {true, false}) {
+                LevelPlan p = plan;
+                p.mine_home = 6;
+                p.mine_home_apart = 2;
+                p.mine_home_off_route = off_route;
+                sim::SimulationEngine sim;
+                build(sim);
+                add_pile(sim, 26, 10, 60, 25);
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
+                rig.run(4000);
+                const TileCoord origin = rig.map().hill(0).origin;
+                size_t on_way = 0;
+                for (const TileCoord& m : mines_at(sim, rig.map(), 0)) on_way += std::abs(m.y - origin.y) <= 2 && m.x > origin.x && m.x < 26 ? 1u : 0u;
+                if (off_route) {
+                    ASSERT_EQ(on_way, 0u);
+                } else {
+                    ASSERT_TRUE(on_way >= 1u);
+                }
             }
         }
         {   // (b) the plan without them: none

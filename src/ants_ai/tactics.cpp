@@ -200,7 +200,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
             p.fire_duel = true;                      // the stand batch (docs/BOTS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
             p.ramp_unjam = true;
-            p.behind_mine_tier = 1;
+            p.behind_mine_tier = 2;                  // (tier 1 cost four Hard bots against four 10 percent of their food on TREASURE, tier 2 four percent, tier 3 nothing)
             p.behind_mine_gate = 5;
             p.mine_home = 12;
             p.mine_home_apart = 2;
@@ -215,6 +215,9 @@ void without_stand_batch(LevelPlan& p) noexcept {
     p.fire_duel = p.fire_draft = p.ramp_unjam = p.rush = false;
     p.behind_mine_tier = 4;
     p.behind_mine_gate = p.mine_home = 0;
+    p.mine_per_pile = std::min<uint32_t>(p.mine_per_pile, 3);                  // (the field of mines at the piles is the batch's: three were all there was)
+    p.mine_apart = 2;
+    p.mine_home_apart = 3;
 }
 
 void without_war_batch(LevelPlan& p) noexcept {

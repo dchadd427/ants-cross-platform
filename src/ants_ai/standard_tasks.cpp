@@ -1818,6 +1818,14 @@ void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) co
                 const PileInfo* info = c.map.pile(p.index);
                 if (info == nullptr) continue;
                 for (const sim::TileCoord& q : info->cells) by_pile = by_pile || q.chebyshev_dist(t) <= 2;
+                // (plan.mine_home_off_route) nor on the way of the bot's own carriers to a pile: own bombs block their walks, and on a map whose food lies between the hills that way is also the
+                // enemy's lane to the gate, where every bot of a room laid its field and all of them lost 17 percent of their food on TREASURE. The way is estimated: the walk to the tile plus
+                // twenty cost units a tile of the straight rest of it costs no more than the walk to the pile and a little
+                if (plan.mine_home_off_route && !by_pile && p.remaining >= plan.mine_min_units && info->approach[c.seat].reachable() && !info->cells.empty()) {
+                    int32_t near = 1 << 20;
+                    for (const sim::TileCoord& q : info->cells) near = std::min(near, q.chebyshev_dist(t));
+                    by_pile = own_field[idx] + 20 * near <= info->approach[c.seat].cost + kRouteSlack;
+                }
             }
             if (by_pile) continue;
             bool crowded = false;

@@ -299,6 +299,7 @@ struct LevelPlan {
     uint32_t behind_mine_gate{0};        // mines at the ring round the gate of the best opponent, at a time, while the bot is at behind_mine_tier (mine_gate otherwise)
     uint32_t mine_home{0};               // mines round the own hill, at a time (MineTask): on the lanes that the enemy's walks take to it, five to nine tiles out, never on the doorstep, a tile apart from each other, so that the bot's own
                                          // carriers (own bombs block their walks) and an enemy's rush meet them: an enemy ant that steps on one loses 2 hit points and is thrown four tiles. 0: none
+    bool mine_home_off_route{true};      // ... never on the estimated way of the bot's own carriers to a pile (they walk round their own mines, and the enemy's lane to the gate is that way on a map with food between the hills)
     uint32_t mine_home_apart{3};         // ... the mines round the hill lie at least this many tiles apart
     uint32_t mine_home_after{2400};      // ... not before this tick of the match
     bool rush{false};                    // a bot that is far behind sends all its ants at the enemy ants (RushTask): "you are not going to out-eat them"
