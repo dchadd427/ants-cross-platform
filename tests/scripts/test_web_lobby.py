@@ -69,7 +69,7 @@ class TheFrontPageMarkup(PageCase):
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
-        self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (AGENTS.md rule 7)")
+        self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (docs/VIEW_AND_HUD.md, Wording)")
         # the room: its heading and code, the invitation, the colours; the match: the map, the line about it and START
         self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><h2 id="room-h">Your room</h2><span class="code">Room code <b id="code"></b></span></div>', self.markup)
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colours"></ul>', self.markup)
