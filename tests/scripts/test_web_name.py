@@ -4,7 +4,7 @@ the game instead of random", and "when joining a link from somebody else, it sho
 
   - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
     is chosen, and the whole of web/lobby.html (the lobby: a room on the game server) with a small fake of the browser's DOM, its real scripts and a scripted server: a plain visit makes a room
-    under the remembered or picked name, the pencil renames the host, a shared link, a typed code and an address of the test room ask for a name first and start nothing before it, bad names
+    under the remembered or picked name, the pencil renames the host, a shared link and a typed code ask for a name first and start nothing before it, bad names
     start nothing, a name with < > & is only ever text, a link made for somebody else carries no name, START hands the seat over with the key in the storage (tests/scripts/web_name_check.js);
   - what needs no browser is read from the files: the name card is the front page's only name field, the page makes no markup from text, the recording notice is in the footer and in the
     card, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
@@ -39,7 +39,7 @@ class TheMarkup(unittest.TestCase):
         self.assertIn('placeholder="Player"', field)
         self.assertIn('autocomplete="off"', field)
         self.assertRegex(page, r'<label for="name-step-input">Your name</label>')                # (the field has a visible label)
-        self.assertRegex(page, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')      # (a card over the page, hidden until a link, a code or a test-room address asks)
+        self.assertRegex(page, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')      # (a card over the page, hidden until a link or a code asks)
         for part in ("name-step-title", "name-step-go", "name-step-msg", "name-step-hint", "who-notice", "name-step-own"):
             self.assertEqual(page.count('id="%s"' % part), 1, part)
         self.assertRegex(page, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')      # (a bad name is explained there, and said aloud)

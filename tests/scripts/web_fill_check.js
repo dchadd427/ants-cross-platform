@@ -1,6 +1,6 @@
 // Runs the page's own code that validates ?fill=, ?teams=, ?start=, ?roommap=, ?roomseats=, ?roomleaderstart= and ?platform= on tables of addresses' values (tests/scripts/test_ants_server.sh): web/shell.html's
 // antsFillArg / antsFillPlanArg / antsTeamsArg / antsStartArg / antsRoomMapArg / antsRoomSeatsArg / antsRoomLeaderStartArg / antsPlatformArg (what may reach the game's arguments as --fill-bots, --teams, --start-when,
-// --room-map, --room-seats, --room-leader-start and --platform; ?roomteams= is read by antsTeamsArg, like ?teams=) and web/lobby.html's validFill / validFillPlan (what may go into a link of the room). The functions are cut
+// --room-map, --room-seats, --room-leader-start and --platform; ?roomteams= is read by antsTeamsArg, like ?teams=) and web/lobby.html's validFill (what may go into the address of a game on this computer). The functions are cut
 // out of the pages between their marker comments and run as they are.
 // usage: node web_fill_check.js web/shell.html web/lobby.html     (exit 0: every row of the table holds; the first differing row is printed)
 'use strict';
@@ -101,14 +101,14 @@ const run = (label, fn, rows) => {
     }
 };
 let functionCount = 0;
-for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg', 'antsRoomMapArg', 'antsRoomSeatsArg', 'antsRoomLeaderStartArg', 'antsPlatformArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill', 'validFillPlan']]]) {
+for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'ANTS_FILL_END', ['antsFillArg', 'antsFillPlanArg', 'antsTeamsArg', 'antsStartArg', 'antsRoomMapArg', 'antsRoomSeatsArg', 'antsRoomLeaderStartArg', 'antsPlatformArg']], [process.argv[3], 'FILL_BEGIN', 'FILL_END', ['validFill']]]) {
     if (!path) { console.log('usage: web_fill_check.js shell.html lobby.html'); process.exit(2); }
     let fns;
     try { fns = extract(path, begin, end, names); } catch (e) { console.log('FAIL ' + e.message); failed++; continue; }
     functionCount += names.length;
     // (the first of the names is the one level; its table has a few more rows with lists, which are no level)
     run(names[0], fns[names[0]], table.concat([['none,none,easy,hard', ''], ['easy,hard', ''], ['easy,easy,easy,easy', '']]));
-    run(names[1], fns[names[1]], planTable);
+    if (names[1] === 'antsFillPlanArg') run(names[1], fns[names[1]], planTable);
     if (names[2]) run(names[2], fns[names[2]], teamsTable);
     if (names[3]) run(names[3], fns[names[3]], startTable);
     if (names[4]) run(names[4], fns[names[4]], roomMapTable);
@@ -118,8 +118,8 @@ for (const [path, begin, end, names] of [[process.argv[2], 'ANTS_FILL_BEGIN', 'A
     // (the room's teams are read by the one function of ?teams=: the same table, whatever the parameter is called)
 }
 // The meeting of ?fill= and the mouse-wheel zoom in one page (web/shell.html carries both): the page cancels the wheel and Safari's pinch over the game's CANVAS only (nothing on window,
-// document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/four.html (the games' frames) has no wheel
-// handler of its own, the outer page scrolls as usual. The setup screen's chat input is drawn on the canvas by the game: nothing of the page's is added for it.
+// document or body, so the title, the selector and the guide scroll as usual) and the game's own wheel handler has the page to itself; web/lobby.html (the front page) has no wheel
+// handler of its own, the page scrolls as usual. The setup screen's chat input is drawn on the canvas by the game: nothing of the page's is added for it.
 for (const [path, isShell] of [[process.argv[2], true], [process.argv[3], false]]) {
     const text = fs.readFileSync(path, 'utf8');
     const receivers = [...text.matchAll(/([A-Za-z_$][\w$.]*)\.addEventListener\(\s*['"](wheel|mousewheel|DOMMouseScroll|gesturestart|gesturechange|gestureend)['"]/g)].map((m) => m[1] + ':' + m[2]);

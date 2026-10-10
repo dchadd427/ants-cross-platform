@@ -97,7 +97,6 @@ class PlayOnlinePage(unittest.TestCase):
         self.assertIsNotNone(match, "the rules script names no default map")
         self.assertEqual(match.group(1), "treasure")
         # the page takes the list and the default from the rules script and has none of its own (two defaults could disagree); its drop-down is filled from the list, in its order
-        self.assertIn("var MAPS = Rules.MAPS;", self.page)
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", self.page)
         self.assertIn("var mapByKey = Rules.mapByKey;", self.page)
         self.assertNotRegex(self.page, r"var MAPS = \[")
@@ -114,17 +113,10 @@ class PlayOnlinePage(unittest.TestCase):
         self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem)\(\s*'ants[-.](four-map|map)")
         self.assertIn("if (!sendPlan({ map: key })) render();", self.page)                              # (a choice of the leader goes to the room, which tells everybody)
 
-    def test_an_address_still_chooses_the_map(self):
-        self.assertIn("var wantedMap = params.get('map');", self.page)
-        self.assertIn("else if (wantedMap && mapByKey(wantedMap.toLowerCase())) {", self.page)
-        self.assertIn("create(wantedMap.toLowerCase(),", self.page)
-
     def test_every_fallback_to_a_map_is_the_default(self):
         self.assertNotIn("MAPS[0]", self.page)                                # (the first of the list is Tiny)
-        self.assertIn("var m = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)                                  # (an old address that hosts a match)
         self.assertIn("var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)                                # (the address of a game on this computer)
         self.assertIn("var key = model.map || Rules.DEFAULT_MAP_KEY, name = myName();", self.page)                           # (START with nobody else)
-        self.assertIn("var key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)                       # (Play every colour myself)
         self.assertIn("var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)    # (the arrows before the room has said its map)
 
 

@@ -992,7 +992,7 @@ void run_island_expedition_tests() {
 
     TEST_CASE("AI17.37 A Bomber Does Not Hold A Crew That Needs Two Tokens: In A Match Of Four Hard Bots (Seed 75, Seat 0, Commands At Once) The Only Ant Of The Crew That Can Take A Token, A Bomber On The Island Of The Row, Takes The Last Token And No Other, The Two Plain Ants Left On The Middle Island Have 2 Hit Points And Two Tokens Are Left: The Attempt Is Given Up At Tick 1,701, 204 Ticks After It Last Moved (If That Bomber Counts As An Ant That Takes Any Token, At Tick 3,901)")
     {
-        const Natural r = four_bots(Level::Hard, 75, 0, 0, 2400, kOldRow);
+        const Natural r = four_bots(Level::Hard, 75, 0, 0, 2400, [](LevelPlan& p) { kOldRow(p); without_war_batch(p); });
         ASSERT_TRUE(r.gave_up > 0 && r.gave_up <= 1800);
         ASSERT_EQ(r.swimmers, 1u);
         ASSERT_TRUE(r.gave_up - r.last_take >= 200 && r.gave_up - r.last_take <= 260);               // (the 200 ticks of a hopeless crew after the last token, not the 2,400 of one that is only slow)

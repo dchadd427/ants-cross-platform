@@ -64,6 +64,7 @@ private:
           walls_(kWalls, tactics_),
           powerups_(kPowerUps, tactics_),
           bombs_(kBombs, tactics_),
+          mines_(kMines, tactics_),
           raids_(kRaids, tactics_),
           guard_(kGuard, tactics_),
           strike_(kStrike, tactics_),
@@ -91,6 +92,7 @@ public:
     const WallTask& walls() const noexcept { return walls_; }
     const PowerUpTask& powerups() const noexcept { return powerups_; }
     const BombTask& bombs() const noexcept { return bombs_; }
+    const MineTask& mines() const noexcept { return mines_; }
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
     const StrikeTask& strike() const noexcept { return strike_; }
@@ -111,6 +113,8 @@ public:
     const AntLedger& ledger() const noexcept { return ledger_; }
     /// Times the stall detector sent the bot to the plain economy, and whether it is there at `tick`
     uint32_t stalls() const noexcept { return stalls_; }
+    /// The ticks that the bot spent at every war tier of Standing (0: not behind enough .. 3), counted at its looks
+    const std::array<uint32_t, 4>& war_ticks() const noexcept { return war_ticks_; }
     bool in_fallback() const noexcept { return fallback_until_ != 0; }
     uint64_t fallback_until() const noexcept { return fallback_until_; }
     /// The longest a fallback lasts (ticks): 8 minutes
@@ -139,6 +143,7 @@ public:
     static constexpr TaskId kIslands = 14;
     static constexpr TaskId kExpedition = 15;
     static constexpr TaskId kFerry = 16;
+    static constexpr TaskId kMines = 17;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -242,6 +247,7 @@ private:
     WallTask walls_;
     PowerUpTask powerups_;
     BombTask bombs_;
+    MineTask mines_;
     RaidTask raids_;
     GuardTask guard_;
     StrikeTask strike_;
@@ -265,6 +271,8 @@ private:
     // the stall detector
     uint64_t fallback_until_{0};                     // the plain economy runs until this tick (0: normal play)
     uint32_t stalls_{0};
+    std::array<uint32_t, 4> war_ticks_{};     // the ticks spent at every war tier (war_ticks)
+    uint64_t last_look_{0};                   // the tick of the last look that counted
     uint64_t progress_tick_{0};                      // the look at which the score last rose (the first look to begin with)
     int32_t last_score_{0};
     bool progress_known_{false};
