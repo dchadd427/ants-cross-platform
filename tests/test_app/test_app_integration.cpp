@@ -9001,8 +9001,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     TEST_CASE("12.108: Version Format, Build Id & Fog of War Cursor Concealment Parity") {
-        // 1. Verify the FORMAT of the version, not its value. The value lives in one place, the file VERSION (CMake generates ants_app/version.hpp from it) and moves for a
-        // batch or a milestone only (docs/WORKFLOW.md), so a test that pinned "v0.1.0" failed at every release for no reason. What stays pinned: the text is
+        // 1. Verify the FORMAT of the version, not its value. The value lives in one place, the file VERSION (CMake generates ants_app/version.hpp from it) and moves with
+        // each change that goes live (docs/WORKFLOW.md), so a test that pinned "v0.1.0" failed at every release for no reason. What stays pinned: the text is
         // "vMAJOR.MINOR.PATCH" (digits only, no leading zeros of a longer number, nothing after the third number), the three numbers agree with it, and the build id names the build.
         {
             const std::string text(ants::VERSION_STRING);
