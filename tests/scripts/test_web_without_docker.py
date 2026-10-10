@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 import urllib.request
 from unittest import mock
@@ -679,6 +680,17 @@ class TheNginxProcess(Scratch):
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"] + list(extra))
         self.addCleanup(child.wait)
         self.addCleanup(child.kill)
+        # (Popen returns before the new program's command line shows in /proc: the first read is empty, often. Wait for it, as nginx's master has had it for long.)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            try:
+                with open("/proc/%d/cmdline" % child.pid, "rb") as f:
+                    shown = f.read()
+            except OSError:
+                shown = b""
+            if shown and all(os.fsencode(arg) in shown for arg in extra):
+                break
+            time.sleep(0.01)
         return child
 
     def test_a_pid_file_that_names_another_process_is_not_this_nginx_and_nothing_is_sent_to_it(self):
