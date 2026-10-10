@@ -970,7 +970,7 @@ std::filesystem::path temp_ini(const char* stem) {
 }
 
 struct AppRig {
-    AppRig() : settings(temp_ini("ants_results_187")) {
+    explicit AppRig(sim::GameMode mode = sim::GameMode::HighestScore) : settings(temp_ini("ants_results_187")) {
         std::error_code ignore;
         std::filesystem::remove(settings, ignore);
         ApplicationConfig cfg;
@@ -986,6 +986,8 @@ struct AppRig {
         cfg.has_window_size = true;
         cfg.window_w = 960;
         cfg.window_h = 540;
+        cfg.game_mode = static_cast<uint8_t>(mode);                                   // (a game of this machine plays by the application's own game mode, as with --game-mode)
+        cfg.game_mode_given = mode != sim::GameMode::HighestScore;
         const QuietStdout quiet;
         ok = app.init(cfg);
     }
@@ -1013,10 +1015,9 @@ bool chat_has(const HUD& hud, const std::string& text) { return hud.chat_transcr
 void test_application() {
     group("app", "a match of the rules 187 starts with its chat line and ends in its results page; a match of the original's rules does neither");
     {
-        AppRig rig;
+        AppRig rig(sim::GameMode::Kills187);
         check(rig.ok, "the application is up");
         if (!rig.ok) return;
-        rig.app.sim().set_game_mode(sim::GameMode::Kills187);
         check(rig.app.start_game("Original-Ants/Maps/SMALL.LVL"), "a match of the rules 187 starts");
         check(rig.app.sim().game_mode() == sim::GameMode::Kills187 && rig.app.hud().game_mode() == sim::GameMode::Kills187, "the engine and the HUD have the rules");
         check(chat_has(rig.app.hud(), "News Flash: Game started! Most kills wins.\n") && !chat_has(rig.app.hud(), "Go get that food"), "the chat log begins with \"Game started! Most kills wins.\"");
