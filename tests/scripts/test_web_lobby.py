@@ -571,8 +571,10 @@ class TheDocuments(unittest.TestCase):
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+        for needle in ("The front page", "`antsStartArg`"):
             self.assertIn(needle, notes, needle)
+        for needle in ("localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+            self.assertIn(needle, page, needle)
         readme = read("README.md")
         self.assertNotIn("**More ways to play**", page)                                     # (the button and the test room are gone: the map selection screen is the only way to play)
         self.assertNotIn("### The old test room", page)

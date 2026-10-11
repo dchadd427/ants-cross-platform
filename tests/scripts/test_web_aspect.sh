@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OPT-IN, not part of ./run_tests.sh: the web page's picture (16:9 by default, Classic 4:3, the selector, the resize / fullscreen bridge, the pointer) in a real browser, against a
-# web page that is already running (docs/NETWORK_PORT.md, "The page's picture"). No automated test reaches the logic of web/shell.html: a native test cannot lay out a page.
+# web page that is already running (docs/PLAY_IN_BROWSER.md, "The page's picture"). No automated test reaches the logic of web/shell.html: a native test cannot lay out a page.
 # This starts a throwaway headless browser (its own profile and port), opens the page at desktop and phone sizes at device ratios 1, 2 and 3 and checks that the canvas the game
 # makes has exactly the shape of its picture and fills the page's box, that the box fits the window, the address and the selector, resizing, fullscreen and the pointer.
 #

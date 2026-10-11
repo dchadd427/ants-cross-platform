@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: the pointer of a FULLSCREEN game page in a real browser (docs/NETWORK_PORT.md, "The pointer in fullscreen") and the margin of a WINDOWED one ("The margin of a
+# OPT-IN, not part of ./run_tests.sh: the pointer of a FULLSCREEN game page in a real browser (docs/PLAY_IN_BROWSER.md, "The pointer in fullscreen") and the margin of a WINDOWED one ("The margin of a
 # windowed page": about an inch beyond the game's box still scrolls the map): the black bars of a screen that is not
 # the picture's shape (the pointer over a bar is at the picture's nearest edge: the map scrolls, corners included), and the pointer lock that fullscreen takes (the game's own cursor
 # moves by the mouse's motion and stays on the picture; the Dock and the menu bar of a Mac have no edge to come up at), its release, the setting "Fullscreen mouse: Locked / Free".
