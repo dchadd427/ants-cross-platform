@@ -174,7 +174,7 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
         self.assertIn("<title>Watch matches — Ants (1998) (staging)</title>", pages["watch"])
         # the footer of the pages is the emerald bar: the label stands in front of the version (and the build), in the same box. The game page's and the replays' footer is that one box; the front page's
-        # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links, and at the right the Screen buttons)
+        # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links)
         for name in ("index", "watch"):
             self.assertRegex(pages[name], r'<footer class="bar">\s*<div class="bar-in">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
         footer = pages["lobby"][pages["lobby"].index('<footer class="bar" id="footer-bar">'):pages["lobby"].index("</footer>")]

@@ -21,6 +21,7 @@ COPY CMakeLists.txt VERSION ./
 COPY cmake/ ./cmake/
 COPY include/ ./include/
 COPY src/ ./src/
+COPY third_party/ ./third_party/
 COPY tools/ ./tools/
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS=OFF && \

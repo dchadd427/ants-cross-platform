@@ -23,6 +23,12 @@
 
 #include "ants_test_paths.hpp"
 
+// The counters and the runner of this harness live in namespace ai_test: the shared macros reach them by these names.
+#define ANTS_TEST_ASSERT_COUNT ai_test::g_assert_count
+#define ANTS_TEST_FAILURES ai_test::g_test_failures
+#define ANTS_TEST_RUNNER ai_test::run_test_case
+#include "../common/test_assert.hpp"
+
 namespace ai_test {
 
 inline int g_test_count = 0;
@@ -48,20 +54,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 }
 
 }  // namespace ai_test
-
-#define TEST_CASE(name) ai_test::run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++ai_test::g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++ai_test::g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 
 namespace ai_test {
 

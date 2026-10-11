@@ -1,6 +1,6 @@
 # Bombs that a map file holds: the layer-2 ids 129 .. 132
 
-What the original does with a bomb tile that the map file itself places, and what the remake does since v0.12.5. Read from the decompilation, the movement reports in `movement/` and Table 4 of `ants.chd` ([`../chd_table4_animations.json`](../chd_table4_animations.json)); the original was read, never run. The rest of the combat and ability rules are in [`../GAME_REVERSE_ENGINEERING.md`](../GAME_REVERSE_ENGINEERING.md) 5.36 and 5.37.
+What the original does with a bomb tile that the map file itself places, and what the remake does since v0.12.7. Read from the decompilation, the movement reports in `movement/` and Table 4 of `ants.chd` ([`../chd_table4_animations.json`](../chd_table4_animations.json)); the original was read, never run. The rest of the combat and ability rules are in [`../GAME_REVERSE_ENGINEERING.md`](../GAME_REVERSE_ENGINEERING.md) 5.36 and 5.37.
 
 ## What a bomb is, and its colour
 

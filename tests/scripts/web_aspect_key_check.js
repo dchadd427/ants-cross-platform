@@ -2,7 +2,7 @@
 // (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the table of the four shapes, the block of the picture's
 // shape, the selector's listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // 16:9 is the default everywhere: only the choice of the selector (the key `ants.aspect.v2`) or ?aspect= in the address gives another picture (both pages have the same four shapes, 4:3, 16:10, 16:9 and
-// 21:9: the front page's footer has them as its "Screen" buttons "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
+// 21:9: the front page's match column has them as its "Picture" row "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
 // starts 16:9 once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
 // The front page's selector (the lobby is the page's only mode) keeps the match and the room, changes the shape of the page at once, remembers it, and the address of the hand-off to the game
@@ -165,7 +165,7 @@ function runLobby(path, search, stored, options) {
     if (options && options.noScreen) win.screen = undefined;                          // a window that has no screen to ask
     const radios = radioGroup(['4:3', '16:10', '16:9', '21:9']);
     const body = element();
-    // the footer: its tags (hidden until the page shows one) and the bar that gets the room for them
+    // the Picture row: its tags (hidden until the page shows one) and the row, which gets the room for them
     const tags = {};
     for (const value of SHELL_SHAPES) { tags[value] = element(); tags[value].hidden = true; }
     const bar = element();
@@ -177,7 +177,7 @@ function runLobby(path, search, stored, options) {
             const at = SHELL_SHAPES.map((value) => value.replace(':', '-'));
             if (id.indexOf('aspect-') === 0 && at.indexOf(id.slice(7)) !== -1) return radios[SHELL_SHAPES[at.indexOf(id.slice(7))]];
             if (id.indexOf('fit-') === 0 && at.indexOf(id.slice(4)) !== -1) return tags[SHELL_SHAPES[at.indexOf(id.slice(4))]];
-            if (id === 'footer-bar') return bar;
+            if (id === 'shape-row') return bar;
             throw new Error('the page asked for #' + id);
         },
     };
@@ -441,7 +441,7 @@ try {
     ]) {
         const r = runLobby(lobbyPath, '', {}, { screen });
         expect('lobby.html, ' + label + ': the tag', r.tags, shape);
-        expect('lobby.html, ' + label + ': the footer has room for it only when there is one', r.bar.classes.join(' '), shape ? 'has-fit-tag' : '');
+        expect('lobby.html, ' + label + ': the Picture row has room for it only when there is one', r.bar.classes.join(' '), shape ? 'has-fit-tag' : '');
         expect('lobby.html, ' + label + ': the tag does not change what is checked (16:9 until the player picks)', shown(r) + ' ' + r.now(), '16:9 16:9');
         const shell = runShell(shellPath, '', {}, { screen });
         expect('lobby.html, ' + label + ': the same shape as the game page tags', r.tags, shell.tags);

@@ -99,10 +99,18 @@ class Forbidden(Tree):
         self.put("AGENTS.md", "DECISIONS.md\n")
         self.put("Community-Maps/m.lvl", "implementation_plan\n")
         self.put("previews/p.txt", "ants-plans\n")
+        self.put("third_party/sqlite/sqlite3.c", "/* the other thread */\n")
+        self.put("third_party/sqlite/sqlite3.h", "/* the other thread */\n")
         with open(os.path.join(self.root, "b.bin"), "wb") as f:
             f.write(b"\0\0claude.ai/code")
         self.put("docs/ok.md", "plain words\n")
         self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}), [])
+
+    def test_our_own_files_in_third_party_are_checked(self):
+        self.put("third_party/sqlite/README.md", "see implementation_plan\n")
+        self.put("third_party/sqlite/CMakeLists.txt", "# DECISIONS.md\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed=set())
+        self.assertEqual(len(out), 2)
 
 
 class Lines(Tree):

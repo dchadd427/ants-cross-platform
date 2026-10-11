@@ -249,6 +249,51 @@ check "... and --replay-port 0 (no public door: the default) starts it" "$([ "$(
 check "... and so does a public door on a free port of this machine" "$([ "$(exit_of --replay-port "$(free_port)")" = "142" ]; echo $?)"
 check "--replays-dir makes its folder (the server's own, it is written to when a match ends)" "$([ -d "$WORK/rp_a" ]; echo $?)"
 check "--help names the replay options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--replays-dir DIR | --no-replays' && "$SERVER" --help 2>&1 | grep -q -- '--replays-days 1-3650' && "$SERVER" --help 2>&1 | grep -q -- '--replays-max-mb 1-4096' && "$SERVER" --help 2>&1 | grep -q -- '--replay-port N' && "$SERVER" --help 2>&1 | grep -q -- '--replay-demo'; echo $?)"
+# the database (docs/SERVER.md "The database"): --db and --no-db, the default file in --results-dir, the log line, a clean stop, and a file that is no database
+check "--db together with --no-db is refused" "$([ "$(exit_of --db "$WORK/x.db" --no-db)" = "2" ]; echo $?)"
+check "--db with an empty file name is refused" "$([ "$(exit_of --db '')" = "2" ]; echo $?)"
+check "--db without a value is refused" "$([ "$(exit_of --db)" = "2" ]; echo $?)"
+check "--help names --db FILE | --no-db" "$("$SERVER" --help 2>&1 | grep -q -- '--db FILE | --no-db'; echo $?)"
+db_start() {      # db_start LOGFILE ARGS...: starts the server in the background, waits for its "TCP game port" line, stops it with SIGTERM; prints the exit status
+    local log="$1"; shift
+    ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" "$@" > "$log" 2>&1 &
+    local pid=$! up=1
+    for _ in $(seq 1 50); do
+        if grep -q 'TCP game port' "$log" 2> /dev/null; then up=0; break; fi
+        kill -0 "$pid" 2> /dev/null || break
+        sleep 0.1
+    done
+    if [ "$up" = "0" ]; then kill -TERM "$pid" 2> /dev/null; fi
+    wait "$pid" 2> /dev/null
+    echo $?
+}
+db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
+mkdir -p "$WORK/db_default"
+check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 1" "$WORK/db_default.log"; echo $?)"
+check "... and the database file is in the results folder by default (ants.db)" "$([ -s "$WORK/db_default/ants.db" ]; echo $?)"
+if python3 -c 'import sqlite3' 2> /dev/null; then
+    check "... it is a database at schema version 1 with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "1 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
+else
+    echo "  SKIP: python3 has no sqlite3 module: the content of the database file was NOT read"
+fi
+check "a second start over the same file finds schema version 1 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 1' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
+check "--db FILE puts the database there (its folder is made) and not in the results folder" "$([ "$(db_start "$WORK/db_named.log" --results-dir "$WORK/db_default2" --db "$WORK/db_dir/sub/named.db")" = "0" ] && [ -s "$WORK/db_dir/sub/named.db" ] && [ ! -e "$WORK/db_default2/ants.db" ]; echo $?)"
+check "--no-db keeps no database file, whatever --results-dir says, and the log says so" "$([ "$(db_start "$WORK/db_off.log" --results-dir "$WORK/db_off" --no-db)" = "0" ] && [ ! -e "$WORK/db_off/ants.db" ] && grep -q 'database is off (--no-db)' "$WORK/db_off.log"; echo $?)"
+check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
+printf 'this is not a database, it must be left exactly as it is, byte for byte, by a server that refuses to start on it\n' > "$WORK/db_junk.db"
+cp "$WORK/db_junk.db" "$WORK/db_junk.copy"
+check "a file that is no database stops the server (status 1) with a message that names the file, and the file is not changed" "$([ "$(exit_of --db "$WORK/db_junk.db")" = "1" ] && cmp -s "$WORK/db_junk.db" "$WORK/db_junk.copy" && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_junk.db" 2>&1 | grep -q 'db_junk.db.*not a database'; echo $?)"
+if python3 -c 'import sqlite3' 2> /dev/null; then
+    python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table schema_version (version integer primary key, name text not null, applied_at text not null)"); c.execute("insert into schema_version values (99, ?, ?)", ("future", "then")); c.commit(); c.close()' "$WORK/db_newer.db"
+    python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table somebody_elses (x text)"); c.commit(); c.close()' "$WORK/db_foreign.db"
+    cp "$WORK/db_newer.db" "$WORK/db_newer.copy"; cp "$WORK/db_foreign.db" "$WORK/db_foreign.copy"
+    check "a database of a NEWER program in the rollback journal (schema version 99) stops the server (status 1) and is byte for byte as it was, with no -wal, -shm or -journal file beside it" "$([ "$(exit_of --db "$WORK/db_newer.db")" = "1" ] && cmp -s "$WORK/db_newer.db" "$WORK/db_newer.copy" && [ ! -e "$WORK/db_newer.db-wal" ] && [ ! -e "$WORK/db_newer.db-shm" ] && [ ! -e "$WORK/db_newer.db-journal" ] && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_newer.db" 2>&1 | grep -q 'newer'; echo $?)"
+    check "a foreign SQLite file (tables, no schema_version) stops the server (status 1) and is left byte for byte as it was, with no side files" "$([ "$(exit_of --db "$WORK/db_foreign.db")" = "1" ] && cmp -s "$WORK/db_foreign.db" "$WORK/db_foreign.copy" && [ ! -e "$WORK/db_foreign.db-wal" ] && [ ! -e "$WORK/db_foreign.db-shm" ] && [ ! -e "$WORK/db_foreign.db-journal" ]; echo $?)"
+else
+    echo "  SKIP: python3 has no sqlite3 module: the refusal of a newer and of a foreign database file was NOT checked"
+fi
+check "... and --no-db starts the server in spite of it" "$([ "$(exit_of --results-dir "$WORK/db_off2" --no-db)" = "142" ]; echo $?)"
+check "--db that names a folder stops the server (status 1)" "$([ "$(exit_of --db "$WORK")" = "1" ]; echo $?)"
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"

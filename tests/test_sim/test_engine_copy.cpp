@@ -36,6 +36,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
@@ -78,20 +79,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS (" << std::fixed << std::setprecision(1) << s << " s)\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
-#define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
 // A comparison function answers "" when the two engines agree and otherwise says what differs; the message is printed with the failure.
 #define ASSERT_NO_DIFF(diff_expr) \
     do { \

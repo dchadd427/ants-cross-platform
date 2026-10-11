@@ -9,6 +9,7 @@ add_library(ants_server_core STATIC
     site_stats.cpp
     replay_store.cpp
     live_board.cpp
+    db_schema.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
@@ -19,6 +20,7 @@ target_link_libraries(ants_server_core PUBLIC
     ants_sim
     ants_assets
     ants_ctl
+    ants_db          # the server's database (docs/SERVER.md "The database"): SQLite behind a thin wrapper, the schema migrations
     ants_replay      # the recorder of a room's match and the files that the server keeps (docs/REPLAYS.md "On the game server")
 )
 if(WIN32)
