@@ -204,6 +204,39 @@ int main() {
         ASSERT_FALSE(list_of(evil).get("maps").at(0).has("thumb"));
     } TEST_END();
 
+    TEST_CASE("ML2.3 A community folder that cannot be looked into (here: a plain file where the folder should be, the error a folder without search rights gives) is a note or nothing, never an exception; the maps folder is still listed") {
+        TempDir t;
+        const fs::path fake = t.path / "community";
+        std::ofstream(fake) << "not a folder";
+        MapStore store(maps_dir(), fake.string());
+        std::vector<std::string> notes;
+        size_t n = 0;
+        bool threw = false;
+        try { n = store.scan(&notes); } catch (...) { threw = true; }
+        ASSERT_FALSE(threw);
+        ASSERT_EQ(n, size_t{6});
+        ASSERT_TRUE(notes.size() <= 2);                                                            // (a path that cannot be looked at is a note, or simply not there: never an exception)
+    } TEST_END();
+
+    TEST_CASE("ML4.3 The lobby's choice is answered from the scanned list, without touching the disk: a listed map is accepted after its file is gone, a file that came after the scan is refused") {
+        TempDir t;
+        const fs::path dir = t.path / "maps";
+        fs::create_directories(dir);
+        copy_map(maps_dir() + "/TINY.LVL", dir, "TINY.LVL");
+        copy_map(maps_dir() + "/SMALL.LVL", dir, "Mine One.lvl");
+        RoomManager mgr{MapStore(dir.string())};                                                    // (a manager made by hand lists its folder itself)
+        const LobbyServices s = mgr.lobby_services();
+        fs::remove(dir / "Mine One.lvl");                                                          // gone from the disk: the answer comes from memory
+        ASSERT_EQ(s.choose_map("Mine One.lvl"), std::string("Mine One.lvl"));
+        ASSERT_EQ(s.choose_map("mine one.LVL"), std::string("Mine One.lvl"));
+        copy_map(maps_dir() + "/MEDIUM.LVL", dir, "Later.lvl");                                    // there on the disk, not in the list
+        ASSERT_EQ(s.choose_map("Later.lvl"), std::string());
+        ASSERT_EQ(s.choose_map("NOT-HERE.LVL"), std::string());
+        MapEntry entry;
+        assets::LevelData level;
+        ASSERT_FALSE(s.load_map("Mine One.lvl", entry, level));                                    // (loading is where the disk is read)
+    } TEST_END();
+
     TEST_CASE("ML3.1 plays: 0 without a database; with one, the rows of map_plays by file name AND hash (another hash or name is 0)") {
         MapStore store(maps_dir());
         store.scan();

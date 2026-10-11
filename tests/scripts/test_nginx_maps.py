@@ -125,7 +125,8 @@ class TheLocations(unittest.TestCase):
         for what, block in STATIC:
             for header in ("Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy", "X-Content-Type-Options"):
                 self.assertEqual(len(re.findall(r"add_header %s\b" % header, block)), 1, what + header)
-            self.assertRegex(block, r'add_header Cache-Control "public, max-age=\d+" always;')
+            self.assertRegex(block, r'add_header Cache-Control "public, max-age=\d+";')       # (no "always": an error is never publicly cacheable)
+            self.assertNotRegex(block, r'Cache-Control[^\n]*always')
         self.assertIn("default_type image/webp;", PREVIEWS)
         self.assertIn("default_type application/octet-stream;", FILES)
         self.assertEqual(len(re.findall(r"add_header X-Content-Type-Options", OFF)), 1)
@@ -379,6 +380,19 @@ class TheBlocksRun(Asking, unittest.TestCase):
         status, headers, body = self.ask("HEAD", "/maps/files/" + quote(name))
         self.assertEqual((status, body), (200, b""))
         self.assertTrue(self.names(headers, "content-length"))
+
+    def test_an_error_answer_is_never_publicly_cacheable(self):
+        missing = ["/maps/files/Nothing%20Here.lvl", "/maps/previews/Nothing%20Here.webp", "/maps/files/x.txt", "/maps/previews/x.png", "/maps/files/subdir.lvl/", "/maps/files/a?x=1"]
+        for target in missing:
+            status, headers, _ = self.ask("GET", target)
+            self.assertIn(status, (404, 403), target)
+            self.assertEqual(self.names(headers, "cache-control"), [], target)
+        for target in ("/maps/files/" + quote(NAMES[0]), "/maps/previews/" + quote(PICTURES[NAMES[0]]["picture"])):
+            status, headers, _ = self.ask("POST", target, {"Content-Length": "0"})
+            self.assertEqual(status, 405)
+            self.assertEqual(self.names(headers, "cache-control"), [], target)
+            status, headers, _ = self.ask("GET", target)
+            self.assertTrue(self.names(headers, "cache-control")[0].startswith("public, max-age="), target)       # (a good answer still is)
 
     def test_nothing_that_could_name_another_path_is_served(self):
         for target in ("/maps/files/..%2f..%2fsecret.txt", "/maps/files/..%2fsecret.lvl", "/maps/files/%2e%2e%2fsecret.lvl", "/maps/files/%2e%2e/secret.lvl", "/maps/files/../secret.lvl",

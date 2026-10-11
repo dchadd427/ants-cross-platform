@@ -14,7 +14,9 @@ namespace fs = std::filesystem;
 
 namespace ants::server {
 
-RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes) {}
+RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes) {
+    if (!store_.scanned()) store_.scan();           // (the server's main has scanned it and logged the notes; a manager made by hand lists its folders here)
+}
 
 RoomManager::~RoomManager() = default;
 
@@ -300,10 +302,9 @@ LobbyServices RoomManager::lobby_services() {
             if (iequals(name, file)) return file;
         }
         if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return limits_.demo_map;       // (the server's one map when it offers no list)
-        // Any other map the store has (the maps folder and the community folder: GET /maps lists them): the lobby offers every map of the list, not only the --demo-maps. A name that cannot travel is refused by find().
-        const std::string listed = store_.listed_name(name);
-        MapEntry entry;
-        return store_.find(listed.empty() ? name : listed, entry) ? entry.name : std::string();
+        // Any other map of the scanned list (the maps folder and the community folder: GET /maps lists them): the lobby offers every map of the list, not only the --demo-maps. Answered from the list in memory:
+        // a Plan message costs no disk read and no hashing; a name that is not in the list is refused. The file is read when the room loads its map (load_map).
+        return store_.listed_name(name);
     };
     s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path); };
     s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };

@@ -119,6 +119,7 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
 
 size_t MapStore::scan(std::vector<std::string>* notes) {
     listing_.clear();
+    scanned_ = true;
     auto note = [&](const std::string& line) {
         if (notes != nullptr) notes->push_back(line);
     };
@@ -129,22 +130,28 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
         ctl::JsonValue json;
         std::string why;
         const fs::path list = fs::path(community_dir_) / "maps.json";
-        if (fs::exists(list)) {
+        std::error_code ec;
+        if (fs::exists(list, ec) && !ec) {
             if (!read_json_file(list, json, why)) {
                 note("maps.json of the community folder " + why + ": the maps are listed from their own files");
             } else {
                 const ctl::JsonValue& maps = json.get("maps");
                 for (size_t i = 0; i < maps.size(); ++i) described[maps.at(i).get("file").str()] = maps.at(i);
             }
+        } else if (ec) {
+            note("maps.json of the community folder cannot be looked at (" + ec.message() + "): the maps are listed from their own files");
         }
         json = ctl::JsonValue();
         const fs::path pictures = fs::path(community_dir_) / "previews.json";
-        if (fs::exists(pictures)) {
+        ec.clear();
+        if (fs::exists(pictures, ec) && !ec) {
             if (!read_json_file(pictures, json, why)) {
                 note("previews.json of the community folder " + why + ": the maps have no pictures");
             } else {
                 for (size_t i = 0; i < json.size(); ++i) pictured[json.key_at(i)] = {json.at(i).get("hash").str(), json.at(i).get("picture").str()};
             }
+        } else if (ec) {
+            note("previews.json of the community folder cannot be looked at (" + ec.message() + "): the maps have no pictures");
         }
     }
     std::set<std::string> seen;

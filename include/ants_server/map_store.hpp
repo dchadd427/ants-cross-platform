@@ -58,6 +58,7 @@ public:
     /// for each thing that is wrong but not fatal (a bad json file, a map that maps.json describes with another hash). The list: the six originals first, in the order of originals(), then the others by file name.
     size_t scan(std::vector<std::string>* notes = nullptr);
     const std::vector<MapListing>& listing() const noexcept { return listing_; }
+    bool scanned() const noexcept { return scanned_; }
     /// The name under which the scanned list knows `name` (the same name, or the one that differs in letter case only); "" when it does not
     std::string listed_name(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
@@ -68,6 +69,7 @@ private:
     std::string dir_;
     std::string community_dir_;
     std::vector<MapListing> listing_;
+    bool scanned_{false};
 };
 
 }  // namespace ants::server
