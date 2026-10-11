@@ -2061,8 +2061,7 @@
         })();
 
         // ANTS_REPORT_BEGIN (tests/scripts/web_report_check.js runs this function with a fake fetch and a table of failures)
-        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/NETWORK_PORT.md
-        // "Site statistics"). One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
+        // The game calls this when a game on THIS computer begins (its first tick; a match of the network never does): the server counts it for the numbers of the front page (docs/SERVER.md, the section on the site statistics). One POST with nothing in it; no retry, nothing on the page, and no failure (no fetch, a throw, a refused or lost request, a 503) is ever the game's business.
         function antsReportLocalGame() {
             try {
                 var sent = fetch('/stats/local', { method: 'POST', keepalive: true });
@@ -2259,7 +2258,7 @@
         // enough in every browser, so this keeps trying until the context really runs: on pointerdown and click, on touchend (iOS Safari and Chrome on Android grant their
         // permission at the END of a touch, not at its start), and on a key. A press before the context exists (a click while the game's data downloads) is not lost, a key that
         // grants nothing (Esc, a shortcut of the browser) does not use the attempt up, and a context that stops later (Safari: a call, the lock screen) is resumed by the next press. The listeners
-        // are taken off as soon as the context runs. (docs/NETWORK_PORT.md lists what the browsers' policies need.)
+        // are taken off as soon as the context runs. (docs/PLAY_IN_BROWSER.md, "Starts at once, and the sound follows your first click or key", says what the browsers' policies need.)
         (function() {
             var events = ['pointerdown', 'mousedown', 'touchend', 'click', 'keydown'];
             var armed = false;

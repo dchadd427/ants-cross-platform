@@ -405,7 +405,7 @@ public:
     /// names) and NOTHING is shared: the two engines go on independently, and given the same commands they stay identical (state_hash() equal at every tick, the same
     /// cues, news and world state). The lock-step client uses it to show a player's own orders at once (client-side prediction): the predicted engine is a copy of the
     /// confirmed one plus the orders that the server has not sealed yet. The only thing that is not copied is the cached world state (get_world_state() rebuilds it).
-    /// The copy constructor is explicit: a copy moves the whole map and every ant (see the measurements in docs/history/rollback_notes.md), so it must be asked for and
+    /// The copy constructor is explicit: a copy moves the whole map and every ant, so it must be asked for and
     /// cannot happen by accident (an engine passed by value, say).
     explicit SimulationEngine(const SimulationEngine& other);
     /// The same, into an engine that exists. The target keeps the memory it has (the cells, the ants, the lists) wherever the shapes fit, so rebuilding a second engine

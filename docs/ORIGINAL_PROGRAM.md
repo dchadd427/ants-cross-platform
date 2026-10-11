@@ -31,7 +31,7 @@ The goal is a one-to-one copy; tweaks on top of it are each recorded here and in
 
 ### What only the real game can settle
 
-The audit of the remake against the original was made from static evidence (it did not run the original; its ledgers are in [`history/`](history/README.md)). Screenshots of the original (cnc-ddraw in a local copy of the original game's folder, `Original-Ants/`, saves the game's own 640 x 480 picture with the Print Screen key) would settle: the minimap hit flash, the start view, the setup and results layouts and the start-up timeline, the splash jingle, the score-box edge and minimap frame, the real refresh cadence (hence bubble and task periods), the 180 s life of fire walls and bridges (0.3-2.2 s spread), contact latency of fights, and whether pressed-button clicks play sounds at the press. A stopwatch recording of a fire wall's life would settle the timers.
+The audit of the remake against the original was made from static evidence (it did not run the original). Screenshots of the original (cnc-ddraw in a local copy of the original game's folder, `Original-Ants/`, saves the game's own 640 x 480 picture with the Print Screen key) would settle: the minimap hit flash, the start view, the setup and results layouts and the start-up timeline, the splash jingle, the score-box edge and minimap frame, the real refresh cadence (hence bubble and task periods), the 180 s life of fire walls and bridges (0.3-2.2 s spread), contact latency of fights, and whether pressed-button clicks play sounds at the press. A stopwatch recording of a fire wall's life would settle the timers.
 
 ## The original program is a local reference, not part of the repository
 
@@ -70,5 +70,4 @@ The test suites do not need the program. The two that compare the remake with st
 
 - [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md): the specification, with the disassembly addresses, opcode traces and formulas, system by system. Older text there counts as unverified until it is checked against the program again; a section whose heading says "Capstone-Verified" records such a check.
 - [`reverse_engineering/movement/README.md`](reverse_engineering/movement/README.md): the reports behind the movement ground truth (section 5.32 of the specification).
-- [`history/AUDIT_ONE_TO_ONE.md`](history/AUDIT_ONE_TO_ONE.md): the audit of the remake against the original, made from static evidence (it did not run the original): what differed and what was fixed, release by release.
 - [`chd_table4_animations.json`](chd_table4_animations.json): the 1,344 animation sequences of `Original-Ants/ants.chd` (Table 4), with timings, sounds and motion. `tools/dump_table4.py` writes it from the archive, so it needs no copy of the program.

@@ -47,7 +47,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
-            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves (docs/history/BOTS_history.md, "The expedition batch")
+            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -110,7 +110,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.strike_force = 4;
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
-            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches; docs/history/BOTS_history.md, "The can't-go loop")
+            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches)
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
             p.hunt_force = 3;

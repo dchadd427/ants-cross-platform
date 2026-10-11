@@ -482,7 +482,7 @@ public:
     /// SDL_GetPerformanceFrequency per second) so that every rule of the time is checked exactly and without waiting. Nothing: the real clock.
     void set_clock(std::function<uint64_t()> counter) { clock_ = std::move(counter); }
     /// Called once for each game on this computer, when its first tick runs (never for a match of the network, whichever machine it is): the web build tells its page, which has the server count
-    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/NETWORK_PORT.md "Site statistics"). A native game sets nothing and so reports nothing.
+    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The network's clock in ms: what the frames and the wake-ups have given the session so far
     double net_clock_ms() const noexcept { return net_time_ms_; }
