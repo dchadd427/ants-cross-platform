@@ -106,6 +106,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 ### Flower droppers
 
 - Daisy flowers (`flower1`, animation 421) on maps such as `SMALL.LVL` and `GAUNTLET.LVL` drop power-ups. A drop is a 9-frame falling droplet animation (`FD_*`: `FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE` or `FD_BOMB`) with sound 62 (`powerdrip.wav`). After 820 ms the power-up lies on the ground tile in front of the flower.
+- The power-up lands on the drop tile, the tile one row below a daisy (a plant at (x, y) drops onto (x, y + 1)). The droplet falls for 820 ms, which is 16 or 17 ticks of 50 ms, and the kind of each drop is drawn from the match's random numbers.
 - The interval and the odds come from block 4 of the map: waypoints with five probabilities (bomber, combat, thief, swimmer, fire). On the shipped maps a class with probability 0 is never drawn; if the five probabilities of a map add up to less than 1, a draw above their total picks any of the five classes at random.
 - A dropper is a plant by the tile flag of its id (the clovers and flowers, whatever the dictionary calls them) with the first block 4 record at its cell when that record's flag is not 0.
 - The dropper task polls about every 3 s, so an interval is rounded up to a whole poll: the 8 s of `MEDIUM` is 9 s in play.
