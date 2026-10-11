@@ -1011,6 +1011,86 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("RP2.11 The Outcome Holds What The Match's Results Screen Is Built From: The Engine's Own Result (Each Seat's Counted Numbers, The Rows, The Quitter, The Seats That Were There At The End) And The Seats That Dropped Out On The Way") {
+        // four seats to the end: all four have a row, nobody quit or dropped, and the score of a row's seat is the score box that the match showed
+        const Played four = play_scripted(tiny, 31, 450);
+        Outcome o = play(four.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok && o.dropped_mask == 0 && o.result.is_over && o.result.present_mask == 0x0F && o.result.quitter == sim::NO_QUITTER);
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) ASSERT_EQ(o.result.final_scores[seat], o.scores[seat]);
+        ASSERT_EQ(o.result.rows(sim::PLAYER_NEUTRAL).size(), size_t{4});
+        // two seats of four: only they have a row, the two that were never there count nothing
+        const Played pair = play_scripted(tiny, 31, 450, 0x05);
+        o = play(pair.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.dropped_mask == 0 && o.result.present_mask == 0x05 && o.result.rows(sim::PLAYER_NEUTRAL).size() == 2);
+        ASSERT_TRUE(o.result.stats[1].score == 0 && o.result.stats[3].score == 0 && o.scores[1] == 0 && o.scores[3] == 0);
+        // a Quit that ends a match of two: the quitter is named and his row is last, however he stood
+        sim::SimulationEngine engine;
+        engine.init(tiny.level, 31, 0x03);
+        Recorder rec(head_for(tiny, "TINY", 31, 0x03));
+        for (uint32_t turn = 0; turn < 200; ++turn) {
+            engine.tick();
+            engine.clear_news_events();
+            engine.clear_audio_events();
+            rec.on_tick(engine);
+        }
+        const Command quit = make_command(CommandType::Quit, 0, 0, 0, {});
+        engine.apply_command(quit);
+        rec.on_command(quit);
+        std::string error;
+        const std::vector<uint8_t> bytes = rec.finish(engine, error);
+        Replay ended;
+        std::string why;
+        ASSERT_TRUE(!bytes.empty() && decode(bytes.data(), bytes.size(), ended, why));
+        o = play(ended, tiny.level);
+        ASSERT_TRUE(o.ok && o.match_over && o.result.quitter == 0);
+        const std::vector<sim::ResultRow> rows = o.result.rows(sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(rows.size() == 2 && rows.back().first == 0 && rows.front().first == 1);
+        // a seat that is dropped out of a match of three (the system's command: the room sends it for a machine that left) has no row, and the other two go on
+        sim::SimulationEngine three;
+        three.init(tiny.level, 31, 0x07);
+        Recorder rec3(head_for(tiny, "TINY", 31, 0x07));
+        for (uint32_t turn = 0; turn < 150; ++turn) {
+            if (turn == 100) {
+                const Command drop = make_command(CommandType::Drop, 2, 0, 0, {});
+                three.apply_command(drop);
+                rec3.on_command(drop);
+            }
+            three.tick();
+            three.clear_news_events();
+            three.clear_audio_events();
+            rec3.on_tick(three);
+        }
+        const std::vector<uint8_t> dropped_bytes = rec3.finish(three, error);
+        Replay dropped;
+        ASSERT_TRUE(!dropped_bytes.empty() && decode(dropped_bytes.data(), dropped_bytes.size(), dropped, why));
+        o = play(dropped, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok);
+        ASSERT_TRUE(o.dropped_mask == 0x04 && o.result.present_mask == 0x03 && o.result.rows(sim::PLAYER_NEUTRAL).size() == 2);
+    } TEST_END();
+
+    TEST_CASE("RP2.12 A Match Of Game Mode 187 Plays Out With The Engine's Own Result Of That Mode: The Score Is The Kills, The Ants Each Seat Has Left Are Counted, And The Side That Is Left Stands (Its Row Is First)") {
+        // three seats, two of them allied by the script: two sides are alive after 450 turns, so the match goes on and no side stands; every seat's living ants are counted
+        const Played three = play_scripted(tiny, 31, 450, 0x07, sim::StartTeams{}, false, nullptr, 1);
+        ASSERT_EQ(three.replay.head.mode, uint8_t{1});
+        Outcome o = play(three.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok && !o.match_over);
+        for (uint8_t seat = 0; seat < 3; ++seat) {
+            ASSERT_EQ(o.result.stats[seat].score, static_cast<int32_t>(o.result.stats[seat].enemy_killed));        // (the mode has no food: the engine's score is the kills)
+            ASSERT_TRUE(o.result.ants_left[seat] > 0);                                                            // (counted by the engine's own result, which a bare evaluate_victory does not do)
+        }
+        ASSERT_EQ(o.result.standing, sim::PLAYER_NEUTRAL);
+        // two seats that the script allies are ONE side: the engine ends the match at once by the 187 rule, names the lower seat as the one left, and their row (both seats) is the first
+        const Played two = play_scripted(tiny, 31, 450, 0x03, sim::StartTeams{}, false, nullptr, 1);
+        o = play(two.replay, tiny.level);
+        ASSERT_TRUE(o.ran && o.ok && o.match_over && o.result.standing == 0 && o.dropped_mask == 0);
+        const std::vector<sim::ResultRow> rows = o.result.rows(sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(rows.size() == 1 && rows.front().first == 0 && rows.front().second == 1);
+        // the same 450 turns by the original's rules end with no side named and no ant counted
+        const Played q = play_scripted(tiny, 31, 450, 0x07);
+        o = play(q.replay, tiny.level);
+        ASSERT_TRUE(o.ok && o.result.standing == sim::PLAYER_NEUTRAL && o.result.ants_left[0] == 0 && o.result.ants_left[2] == 0);
+    } TEST_END();
+
     TEST_CASE("RP3.1 Four Computer Players Make A Real Match (Hundreds Of Commands Of Every Kind): Their Log, Recorded, Plays Out To The Arena's Own State Hash") {
         const ArenaRecording recording = record_arena_match(tiny, 5, 3000);
         const ai::ArenaResult& match = recording.match;

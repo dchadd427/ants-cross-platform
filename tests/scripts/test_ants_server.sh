@@ -269,14 +269,14 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
 }
 db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
 mkdir -p "$WORK/db_default"
-check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 1" "$WORK/db_default.log"; echo $?)"
+check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 2" "$WORK/db_default.log"; echo $?)"
 check "... and the database file is in the results folder by default (ants.db)" "$([ -s "$WORK/db_default/ants.db" ]; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
-    check "... it is a database at schema version 1 with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "1 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
+    check "... it is a database at schema version 2 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "2 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
 else
     echo "  SKIP: python3 has no sqlite3 module: the content of the database file was NOT read"
 fi
-check "a second start over the same file finds schema version 1 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 1' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
+check "a second start over the same file finds schema version 2 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 2' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
 check "--db FILE puts the database there (its folder is made) and not in the results folder" "$([ "$(db_start "$WORK/db_named.log" --results-dir "$WORK/db_default2" --db "$WORK/db_dir/sub/named.db")" = "0" ] && [ -s "$WORK/db_dir/sub/named.db" ] && [ ! -e "$WORK/db_default2/ants.db" ]; echo $?)"
 check "--no-db keeps no database file, whatever --results-dir says, and the log says so" "$([ "$(db_start "$WORK/db_off.log" --results-dir "$WORK/db_off" --no-db)" = "0" ] && [ ! -e "$WORK/db_off/ants.db" ] && grep -q 'database is off (--no-db)' "$WORK/db_off.log"; echo $?)"
 check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
@@ -294,6 +294,14 @@ else
 fi
 check "... and --no-db starts the server in spite of it" "$([ "$(exit_of --results-dir "$WORK/db_off2" --no-db)" = "142" ]; echo $?)"
 check "--db that names a folder stops the server (status 1)" "$([ "$(exit_of --db "$WORK")" = "1" ]; echo $?)"
+# the match history lives in the database (docs/REPLAYS.md "The match history"): no folder of its own, --no-history turns it off, --no-db leaves it nothing to live in
+check "--help names --no-history, and there is no --history-dir (the history is in the database: a leftover option is refused, status 2)" "$("$SERVER" --help 2>&1 | grep -q -- '--no-history'; [ "$(exit_of --history-dir "$WORK/hi_none")" = "2" ]; echo $?)"
+check "with a database the server keeps the match history, and the log says where it counts from" "$([ "$(db_start "$WORK/hist_on.log" --results-dir "$WORK/hist_on")" = "0" ] && grep -q 'match history kept for good in the database; the matches of the replay store are counted while no match runs' "$WORK/hist_on.log"; echo $?)"
+check "--no-history keeps no history, and the log says so (the database is still made)" "$([ "$(db_start "$WORK/hist_off.log" --results-dir "$WORK/hist_off" --no-history)" = "0" ] && grep -q 'the match history is off (--no-history)' "$WORK/hist_off.log" && ! grep -q 'match history kept for good' "$WORK/hist_off.log" && [ -s "$WORK/hist_off/ants.db" ]; echo $?)"
+check "--no-db leaves the history nothing to live in, and the log says so" "$([ "$(db_start "$WORK/hist_nodb.log" --results-dir "$WORK/hist_nodb" --no-db)" = "0" ] && grep -q 'the match history is off: the server has no database' "$WORK/hist_nodb.log"; echo $?)"
+if python3 -c 'import sqlite3' 2> /dev/null; then
+    check "... and the database of the history has its three tables" "$([ "$(python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(",".join(r[0] for r in c.execute("select name from sqlite_master where type = ? and name like ? order by name", ("table", "history_%"))))' "$WORK/hist_on/ants.db")" = "history_markers,history_matches,history_seats" ]; echo $?)"
+fi
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"

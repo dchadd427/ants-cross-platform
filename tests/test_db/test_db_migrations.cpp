@@ -226,9 +226,9 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at, and nothing else of its own") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables and nothing else of its own") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(!list.empty() && list.front().version == 1);
+        DB_CHECK(list.size() == 2 && list.front().version == 1 && list.back().version == 2);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -240,9 +240,44 @@ void run_migration_tests() {
         DB_CHECK(st.step() == Statement::Step::Row);
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
-        DB_CHECK(db.prepare(st, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version')").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_int64(0) == 0);       // (no data tables yet)
+        DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats");       // (no other data table yet)
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
+    } DB_END;
+
+    DB_CASE("SV1.2 Version 2 (the match history): an index for every filter and sort of the list, the checks that keep a bad row out, a seat goes with its match, and a database of version 1 is brought to it with its data") {
+        const auto& list = ants::server::db_migrations();
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list.data(), 1, &v).ok() && v == 1);                              // (a server of the step before)
+        DB_CHECK(rows_in(db, "meta") == 1 && !has_table(db, "history_matches"));
+        DB_CHECK(migrate(db, list, &v).ok() && v == 2 && has_table(db, "history_matches") && has_table(db, "history_seats") && has_table(db, "history_markers"));
+        DB_CHECK(rows_in(db, "meta") == 1);                                                   // (what was there is still there)
+        Statement st;
+        DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='history_matches' AND name LIKE 'history_matches_%' ORDER BY name)").ok());
+        DB_CHECK(st.step() == Statement::Step::Row);
+        DB_CHECK(st.column_text(0) == "history_matches_computers,history_matches_ended,history_matches_format,history_matches_hatched,history_matches_kills,history_matches_mode,"
+                                      "history_matches_result,history_matches_score,history_matches_turns,history_matches_turns_short");
+        // the reserved column of step 3 is there and nullable
+        DB_CHECK(db.prepare(st, "SELECT \"notnull\" FROM pragma_table_info('history_matches') WHERE name = 'details'").ok());
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_int64(0) == 0);
+        const std::string match =
+            "INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
+            "('m1', 1, 'TINY.LVL', 'v1', 10, 1, NULL, '%MODE%', '1v1', '%RESULT%', 0, 1, 1, 1, 'tiny', '[]', 1)";
+        const auto with = [&](const char* mode, const char* result) {
+            std::string sql = match;
+            sql.replace(sql.find("%MODE%"), 6, mode);
+            sql.replace(sql.find("%RESULT%"), 8, result);
+            return sql;
+        };
+        DB_CHECK(!db.exec(with("chess", "decided")).ok() && !db.exec(with("187", "won")).ok());            // (a mode and a result that are not the two and the three)
+        DB_CHECK(db.exec(with("187", "draw")).ok());
+        DB_CHECK(!db.exec("INSERT INTO history_seats VALUES ('m1', 4, '', '', 0, 0, 0, 0, 0, 0, 0, 0, 0)").ok());       // (seat 0 - 3)
+        DB_CHECK(!db.exec("INSERT INTO history_seats VALUES ('nobody', 0, '', '', 0, 0, 0, 0, 0, 0, 0, 0, 0)").ok());   // (a seat of a match that is not there)
+        DB_CHECK(db.exec("INSERT INTO history_seats VALUES ('m1', 0, 'Ann', '', 5, 5, 0, 0, 0, 0, 0, 0, 1)").ok());
+        DB_CHECK(rows_in(db, "history_seats") == 1);
+        DB_CHECK(db.exec("DELETE FROM history_matches WHERE id = 'm1'").ok() && rows_in(db, "history_seats") == 0);     // (the seats go with their match: foreign keys are on)
     } DB_END;
 }
