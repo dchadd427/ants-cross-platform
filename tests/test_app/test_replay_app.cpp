@@ -1600,6 +1600,40 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(cam.moments(), 7u);
         } TEST_END();
 
+        TEST_CASE("RA8.5b The ranks: a theft, a fire, a bomb and a death each take the camera from the low ones (a power-up, a bridge, a base alarm, an ant in the water), and each is enough alone") {
+            const std::vector<std::pair<uint32_t, uint8_t>> high = {{S::ThiefDive, 255}, {S::FireBeam, 255}, {S::FireErupt, 255}, {S::BombDetonate, 255}, {S::BombDefuseGrab, 255}, {S::BaseScoreDn, 255}};
+            const std::vector<std::pair<uint32_t, uint8_t>> low = {{S::PowerUpDrop, 255}, {S::ShovelGravel, 255}, {S::ShovelWater, 255}, {S::AntDrown, 255}, {S::BaseAlarmSiren, 0}, {S::Anthill, 0}};
+            for (const auto& [sound, who] : high) {
+                for (const auto& [lesser, whose] : low) {
+                    AutoCamera cam;
+                    cam.set_hills({Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}});
+                    cam.observe_cue(cue_at(lesser, whose == 255 ? 4000 : 0, whose == 255 ? 4000 : 0, whose));       // (the same moment, elsewhere: a cue for a seat is at its hill)
+                    cam.observe_cue(cue_at(sound, 2000, 2000, who));
+                    Pt hot;
+                    ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 2000.0, 2000.0, 1.0));
+                }
+                AutoCamera alone;
+                alone.observe_cue(cue_at(sound, 2000, 2000, who));
+                Pt hot;
+                ASSERT_TRUE(alone.hot_spot(hot));
+            }
+            sim::WorldState before;
+            sim::AntSnapshot a;
+            a.id = 1;
+            a.px = 500;
+            a.py = 600;
+            before.ants = {a};
+            for (const auto& [lesser, whose] : low) {                                // a death, too, is high
+                AutoCamera cam;
+                cam.set_hills({Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}});
+                cam.observe_world(before);
+                cam.observe_cue(cue_at(lesser, whose == 255 ? 4000 : 0, whose == 255 ? 4000 : 0, whose));
+                cam.observe_world(sim::WorldState{});
+                Pt hot;
+                ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 500.0, 600.0, 1.0));
+            }
+        } TEST_END();
+
         TEST_CASE("RA8.6 What the camera reads: a cue with a place is where it happens, a cue for a player is that player's hill (a base alarm, a raid), a stop, a cue of no meaning and a seat that has no hill are ignored") {
             AutoCamera cam;
             cam.set_hills({Pt{300.0, 300.0}, Pt{1700.0, 300.0}, Pt{300.0, 1700.0}, Pt{1700.0, 1700.0}});
