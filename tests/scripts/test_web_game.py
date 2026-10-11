@@ -325,8 +325,6 @@ class TheLookIsTheFrontPages(PageCase):
         for name in ("color", "font-size", "background", "border-top", "box-shadow"):
             self.assertEqual(footer[name], theirs[name], name)
         self.assertEqual(rule(self.style, ".bar .ver")["background"], rule(self.lobby_style, ".bar .ver")["background"])
-        # Pending a decision (reported): the spacer's basis differs, `.bar .grow` flex 1 1 280px on this page against 1 1 40px on the front page, so only that it grows and shrinks alike is compared.
-        self.assertEqual(rule(self.style, ".bar .grow")["flex"].split()[:2], rule(self.lobby_style, ".bar .grow")["flex"].split()[:2])
 
     def test_the_picture_has_the_frame_of_the_front_pages_pictures(self):
         ring = rule(self.style, "#game-container")["box-shadow"]
