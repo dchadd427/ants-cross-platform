@@ -31,7 +31,9 @@
 //   but without "readable", and "count" is the number of those files; GET /replays/<file> -> the file of one of them; and the matches that run now (live_board.hpp): GET /live -> 200 {"live": [{"id", "map",
 //   "started" (seconds since 1970 UTC), "turns", "seconds", "players": ["Green (Ann)", "Red (Bot (Medium))"]}, ...], "count", "sim_rules"}, the newest 50 that have run 30 seconds, and GET /live/<id> -> the
 //   match so far as an incomplete .antsrep file with a `live` chunk (application/octet-stream, made at most once a second), or 404 {"error": "no such live match", "ended": bool, "replay": "<file>"}
-//   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); GET /history and GET /history/<id> as above; 404 for everything else: handle_public_replays)
+//   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); GET /history and GET /history/<id> as above; GET /maps -> 200 {"format": 1, "maps":
+//   [{"file", "width", "height", "minutes", "players", "description", "plays", "thumb" (an address on the site, left out when the map has no picture), "original": true (only the six maps of the original game)}]}
+//   (map_store.hpp: the originals first, then the others by file name; plays are 0 without a database); 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",

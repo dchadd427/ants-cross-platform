@@ -104,6 +104,11 @@ COPY web/front/ /usr/share/nginx/html/front/
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
 COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 
+# The players' maps for the browser (docs/SERVER.md "The list of maps"): the preview pictures (558 small WebP files) and the .lvl files themselves, served by docker/nginx.conf at /maps/previews/ and /maps/files/ from
+# a folder outside the web root, so that only those two locations can reach them. The six originals' pictures are the front page's own (web/front/): no second copy.
+COPY Community-Maps/previews/ /srv/community-maps/previews/
+COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
+
 # The replays (docs/REPLAYS.md "Watching"): the list of the matches that the game server keeps (watch.html, linked from the footer of the front page and of the game page, with the site label, the version and the
 # build put in), and the helpers that it shares with the game page (replay_page.js). The game page plays one as play.html?replay=<file>.
 COPY --from=builder /src/watch.html /usr/share/nginx/html/watch.html

@@ -149,6 +149,24 @@ target_include_directories(test_site_stats_db PRIVATE
 add_test(NAME test_site_stats_db COMMAND test_site_stats_db)
 set_tests_properties(test_site_stats_db PROPERTIES COST 1)
 
+# The list of maps (MapStore::scan and list_json, GET /maps on the public door) and the lobby's choice of any map of the store: the six originals first, the community folder with its lists, odd file names, the
+# play counts keyed by file name and hash. No network, no room that runs a match
+add_executable(test_map_list
+    test_map_list.cpp
+)
+
+target_link_libraries(test_map_list PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_map_list PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_map_list COMMAND test_map_list)
+set_tests_properties(test_map_list PROPERTIES COST 3)
+
 # The match history in front of real rooms (ants_server/history_store.hpp): rooms of computer players play whole matches in both game modes on a room manager with a replay store and a database; the history
 # counts them from the recordings when no room runs a match, and both doors list them. No network
 add_executable(test_history_rooms
