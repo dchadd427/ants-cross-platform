@@ -231,6 +231,13 @@ bool entry_plays_here(const ReplayEntry& entry) noexcept {
     return entry.readable && wanted != 0 && entry.sim_rules == wanted;
 }
 
+std::string map_hash_text(uint64_t hash) {
+    static const char digits[] = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i, hash >>= 4) out[static_cast<size_t>(i)] = digits[hash & 0xF];
+    return out;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // The store
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -263,6 +270,7 @@ db::Error HistoryStore::refresh_counts() const {
     db::Error e = scalar(db_, "SELECT count(*) FROM history_matches", {}, matches);
     if (e.ok()) e = scalar(db_, "SELECT count(*) FROM history_markers", {}, markers);
     if (e.ok()) e = run(db_, "SELECT 1 FROM history_seats LIMIT 1", {});               // (the third table: a look at the whole schema that the list needs)
+    if (e.ok()) e = run(db_, "SELECT 1 FROM map_plays LIMIT 1", {});
     if (!e.ok()) return e;
     count_ = static_cast<size_t>(matches);
     markers_ = static_cast<size_t>(markers);
@@ -331,7 +339,10 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
         else fail(what, e);
         return false;
     };
-    db::Error e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(record.id)});
+    // A match is one play of its map the first time it is kept: a record of an id that the history or the owner's marker already knows was counted then (or was taken out on purpose)
+    int64_t known = 0;
+    db::Error e = scalar(db_, "SELECT (SELECT count(*) FROM history_matches WHERE id = ?1) + (SELECT count(*) FROM history_markers WHERE id = ?1)", {text_arg(record.id)}, known);
+    if (e.ok()) e = run(db_, "DELETE FROM history_seats WHERE match_id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_matches WHERE id = ?1", {text_arg(record.id)});
     if (e.ok()) e = run(db_, "DELETE FROM history_markers WHERE id = ?1", {text_arg(record.id)});
     if (!e.ok()) return refused("a record could not be replaced", e);
@@ -350,6 +361,13 @@ bool HistoryStore::put(const HistoryRecord& record, std::string& why) {
                 {text_arg(record.id), int_arg(s.seat), text_arg(s.name), text_arg(s.bot), int_arg(s.score), int_arg(s.killed), int_arg(s.lost), int_arg(s.hatched), int_arg(s.bombs_planted),
                  int_arg(s.bombs_defused), int_arg(s.fires_lit), int_arg(s.left ? 1 : 0), int_arg(s.winner ? 1 : 0)});
         if (!e.ok()) return refused("a seat could not be kept", e);
+    }
+    if (known == 0 && record.counts_as_map_play()) {
+        e = run(db_,
+                "INSERT INTO map_plays (map, hash, plays, last_played) VALUES (?1, ?2, 1, ?3)"
+                " ON CONFLICT (map, hash) DO UPDATE SET plays = plays + 1, last_played = max(last_played, excluded.last_played)",
+                {text_arg(record.map), text_arg(map_hash_text(record.map_hash)), int_arg(record.ended_s)});
+        if (!e.ok()) return refused("a map's play could not be counted", e);
     }
     e = tx.commit();
     if (!e.ok()) return refused("a record could not be committed", e);
@@ -417,6 +435,33 @@ size_t HistoryStore::prune_markers(const std::function<bool(const std::string& i
     e = refresh_counts();
     if (!e.ok()) fail("the records could not be counted", e);
     return gone.size();
+}
+
+bool HistoryStore::map_plays(std::vector<MapPlays>& out) const {
+    out.clear();
+    if (!up_) return false;
+    db::Statement st;
+    db::Error e = db_.prepare(st, "SELECT map, hash, plays, last_played FROM map_plays ORDER BY map, hash");
+    if (!e.ok()) {
+        fail("the play counts could not be read", e);
+        return false;
+    }
+    for (;;) {
+        const db::Statement::Step step = st.step();
+        if (step == db::Statement::Step::Failed) {
+            fail("the play counts could not be read", st.error());
+            out.clear();
+            return false;
+        }
+        if (step == db::Statement::Step::Done) break;
+        MapPlays row;
+        row.map = st.column_text(0);
+        row.hash = st.column_text(1);
+        row.plays = st.column_int64(2);
+        row.last_played = st.column_int64(3);
+        out.push_back(std::move(row));
+    }
+    return true;
 }
 
 bool HistoryStore::find(const std::string& id, HistoryRecord& out) const {

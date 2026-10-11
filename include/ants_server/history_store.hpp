@@ -7,8 +7,9 @@
 // The numbers are not counted while the match is played. A match is played once more with no screen when it is over (HistoryFeeder, below): replay::play() runs the recorded file on the engine and the engine's
 // own MatchResult says what each seat came to.
 //
-// The tables (migration 2, src/ants_server/db_schema.cpp): `history_matches` (one row per match, a column for every field the list filters or sorts by, an index for each), `history_seats` (one row per
-// seat) and `history_markers` (the matches that the owner deleted while their recording is still kept, so that they are not counted again). A request's words never reach the SQL text: the text of a statement
+// The tables (migrations 2 and 3, src/ants_server/db_schema.cpp): `history_matches` (one row per match, a column for every field the list filters or sorts by, an index for each), `history_seats` (one row per
+// seat) and `history_markers` (the matches that the owner deleted while their recording is still kept, so that they are not counted again) and `map_plays` (how many times each map was played: put() adds one in the transaction that keeps a
+// new match that HistoryRecord::counts_as_map_play, so a match is counted once, however often the server restarts, and a match that is kept again, or that the owner took out, is not counted twice). A request's words never reach the SQL text: the text of a statement
 // is made of fixed pieces, and every value is a bound parameter.
 //
 // One thread: the server's main loop (SQLite is built without mutexes). The store never throws and never stops the server: the first database error is logged once and the store is UNAVAILABLE (the routes answer
@@ -67,6 +68,17 @@ struct HistoryPage {
     std::vector<HistoryRecord> items;                // the page asked for
 };
 
+/// How many times a map was played (one row of map_plays). The key is the map's file name and its hash, as Community-Maps/maps.json names a map ("file" and "hash").
+struct MapPlays {
+    std::string map;                                 // the file name, "TREASURE.LVL"
+    std::string hash;                                // FNV-1a 64 of the file, 16 lower-case hex digits
+    int64_t plays{0};
+    int64_t last_played{0};                          // the end of the newest match that counted (seconds since 1970 UTC)
+};
+
+/// The hash as map_plays and maps.json write it: 16 lower-case hex digits
+std::string map_hash_text(uint64_t hash);
+
 class HistoryStore {
 public:
     static constexpr uint32_t kRetryMs = 60u * 1000u;       // an unavailable store looks again after this long
@@ -92,7 +104,7 @@ public:
         std::function<uint64_t()> clock_us;                 // a steady clock in microseconds (empty: std::chrono::steady_clock); the time box and the budget (the tests make it deterministic)
     };
 
-    /// `database` must stay open and outlive the store (the server's main keeps it for its whole run); it must have the schema of migration 2.
+    /// `database` must stay open and outlive the store (the server's main keeps it for its whole run); it must have the schema of migration 3.
     explicit HistoryStore(db::Database& database, Config config = Config());
 
     /// Looks at the tables once (they are made by the migrations) and counts the records. False, with the reason, when the database cannot be read: the caller keeps no history then.
@@ -114,6 +126,9 @@ public:
     Removal remove(const std::string& id, bool keep_marker, std::string& why);
     /// Deletes the markers of matches that `still_needed` does not know any more (their recording has gone). Returns how many it deleted.
     size_t prune_markers(const std::function<bool(const std::string& id)>& still_needed);
+
+    /// The play count of every map that was played, ordered by file name and hash (for the list of maps). False, with `out` empty, when the database does not answer (the store is unavailable then).
+    bool map_plays(std::vector<MapPlays>& out) const;
 
     size_t count() const noexcept { return count_; }
     size_t marker_count() const noexcept { return markers_; }

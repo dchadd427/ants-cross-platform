@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history").
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -63,6 +63,18 @@ const char* const kHistorySql =
     " deleted_at INTEGER NOT NULL"
     ") WITHOUT ROWID;";
 
+// Version 3. map_plays: how many times each map was played, one row per map (the file name and the FNV-1a 64 of the file as 16 lower-case hex digits, the key of Community-Maps/maps.json: another file under
+// the same name is another map). Written in the transaction that keeps a match in the history (HistoryStore::put), once for each match that had a person in it and ran at least 30 seconds; `last_played` is
+// the end time of the newest such match (seconds since 1970 UTC).
+const char* const kMapPlaysSql =
+    "CREATE TABLE map_plays ("
+    " map TEXT NOT NULL,"
+    " hash TEXT NOT NULL CHECK (length(hash) = 16),"
+    " plays INTEGER NOT NULL CHECK (plays >= 1),"
+    " last_played INTEGER NOT NULL,"
+    " PRIMARY KEY (map, hash)"
+    ") WITHOUT ROWID;";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -71,6 +83,7 @@ const std::vector<db::Migration>& db_migrations() {
          "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;"
          "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));"},
         {2, "history", kHistorySql},
+        {3, "map_plays", kMapPlaysSql},
     };
     return list;
 }
