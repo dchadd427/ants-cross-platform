@@ -276,6 +276,27 @@
             --ar-h: 3;
         }
 
+        /* The field that a phone's keyboard types into (ANTS_CHAT in the script): over the chat box, there but not seen (opacity 0, not display: none: a hidden field cannot be focused), taking
+           no tap itself, and 16px so that iOS does not zoom the page when it is focused. The script places it over the box when the keyboard opens. */
+        #chat-keys {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1px;
+            height: 1px;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: transparent;
+            caret-color: transparent;
+            font: 16px/1 sans-serif;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 3;
+        }
+
         #game-container {
             position: relative;
             flex: 0 0 auto;
@@ -1203,6 +1224,7 @@
     <div id="game-stage" data-aspect="16:9">
         <div id="game-container">
             <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+            <input type="text" id="chat-keys" maxlength="100" tabindex="-1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" aria-label="Chat message">
 
             <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
             <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
@@ -3026,6 +3048,126 @@
             canvas.addEventListener('gestureend', function (e) { e.preventDefault(); }, { passive: false });
         })();
         // ANTS_TOUCH_END
+
+        // ANTS_CHAT_BEGIN (tests/scripts/web_chat_check.js runs everything from here to ANTS_CHAT_END with fakes for the page)
+        // A PHONE'S KEYBOARD for the match's chat box. A phone has no keyboard that the game hears, and a browser opens its keyboard only for a text field that a tap focuses, so the page
+        // keeps one (#chat-keys: over the chat box, invisible, 16px) and focuses it from the touchend of a TAP on the box (a finger that stays within 10 px and is up within 400 ms; the game asks
+        // where the box is, Module._ants_chat_probe, and whether it takes text now). What is typed is MIRRORED into the game's own chat line (Module._ants_chat_do: clear, then the printable
+        // ASCII characters, at most 100: the game's rules stay the game's, and a character it refuses is taken out of the field), Enter sends it as a keyboard's Enter does and closes the
+        // keyboard, Esc, a tap anywhere else on the game, and a chat that stops taking text (a dialog, the end of the match) close it too. The field's keys never reach the game's own key
+        // handler (stopPropagation: the text would be typed twice). Desktop: nothing changes, the field is focused by a finger only.
+        (function () {
+            var input = document.getElementById('chat-keys');
+            if (!input) return;
+            var MAX = 100, TAP_MS = 400, TAP_SLOP = 10, POLL_MS = 400;
+            var start = null;                                               // the finger that may be a tap: { id, x, y, time }
+            var poll = null;
+            function ask(what) { try { return Module._ants_chat_probe ? Module._ants_chat_probe(what) : -1; } catch (err) { return -1; } }
+            function tell(what, value) { try { return Module._ants_chat_do ? Module._ants_chat_do(what, value || 0) : -1; } catch (err) { return -1; } }
+            function takesText() { return isReadyToPlay && ask(0) === 1; }
+            function printable(text) { return String(text).replace(/[^\x20-\x7e]/g, '').slice(0, MAX); }
+            function gameLine() {                                           // what the game's chat line holds now
+                var n = ask(5), text = '';
+                for (var i = 0; i < n; ++i) text += String.fromCharCode(ask(100 + i));
+                return text;
+            }
+            function mirror(text) {                                         // the game's line becomes the field's
+                tell(0);
+                for (var i = 0; i < text.length; ++i) tell(1, text.charCodeAt(i));
+            }
+            function inBox(clientX, clientY) {                              // is the point (client pixels) in the chat box? the game's numbers are the canvas's own pixels
+                var rect = canvas.getBoundingClientRect();
+                var logicalW = probeGame(40), logicalH = probeGame(41);
+                if (!(rect.width > 0 && rect.height > 0 && logicalW > 0 && logicalH > 0)) return false;
+                var x = (clientX - rect.left) * logicalW / rect.width, y = (clientY - rect.top) * logicalH / rect.height;
+                var bx = ask(1), by = ask(2), bw = ask(3), bh = ask(4);
+                return bw > 0 && bh > 0 && x >= bx && x < bx + bw && y >= by && y < by + bh;
+            }
+            function probeGame(what) { try { return Module._ants_probe ? Module._ants_probe(what) : -1; } catch (err) { return -1; } }
+            function place() {                                              // the field covers the box (a keyboard that scrolls to the field finds it where the player tapped)
+                var rect = canvas.getBoundingClientRect(), outer = boxElement.getBoundingClientRect();
+                var logicalW = probeGame(40), logicalH = probeGame(41);
+                if (!(rect.width > 0 && logicalW > 0 && logicalH > 0)) return;
+                var fx = rect.width / logicalW, fy = rect.height / logicalH;
+                input.style.left = (rect.left - outer.left + ask(1) * fx) + 'px';
+                input.style.top = (rect.top - outer.top + ask(2) * fy) + 'px';
+                input.style.width = (ask(3) * fx) + 'px';
+                input.style.height = (ask(4) * fy) + 'px';
+            }
+            function isOpen() { return document.activeElement === input; }
+            function open() {
+                input.value = gameLine();
+                place();
+                try { input.focus({ preventScroll: true }); } catch (err) { input.focus(); }
+                if (poll === null) poll = setInterval(watch, POLL_MS);
+            }
+            function close() {
+                if (poll !== null) { clearInterval(poll); poll = null; }
+                if (isOpen()) input.blur();
+                else afterBlur();
+            }
+            function afterBlur() {
+                if (poll !== null) { clearInterval(poll); poll = null; }
+                input.value = '';
+                if (typeof focusGame === 'function') focusGame();           // (a keyboard of a tablet goes on typing into the game after a tap on the map)
+            }
+            function watch() {                                              // while the keyboard is up: the game may stop taking text (a dialog, the end of the match), or change the line (a quick chat text)
+                if (!isOpen()) { afterBlur(); return; }
+                if (!takesText()) { close(); return; }
+                var line = gameLine();
+                if (line !== input.value && !composing) input.value = line;
+            }
+            var composing = false;
+            function send() {
+                mirror(printable(input.value));
+                tell(3);
+                input.value = '';
+                close();
+            }
+            input.addEventListener('input', function (e) {
+                if (e && e.inputType === 'insertLineBreak') return;
+                var text = printable(input.value);
+                if (text !== input.value && !(e && e.isComposing) && !composing) input.value = text;
+                mirror(text);
+            });
+            input.addEventListener('beforeinput', function (e) {
+                if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); send(); }
+            });
+            input.addEventListener('compositionstart', function () { composing = true; });
+            input.addEventListener('compositionend', function () {
+                composing = false;
+                var text = printable(input.value);
+                if (text !== input.value) input.value = text;
+                mirror(text);
+            });
+            ['keydown', 'keypress', 'keyup'].forEach(function (name) {
+                input.addEventListener(name, function (e) {
+                    e.stopPropagation();                                    // (the game's own handler on the window would type the character a second time)
+                    if (name !== 'keydown') return;
+                    if (e.key === 'Enter') { e.preventDefault(); send(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+                });
+            });
+            input.addEventListener('blur', afterBlur);
+            canvas.addEventListener('touchstart', function (e) {
+                var list = e.touches || [];
+                var t = e.changedTouches && e.changedTouches[0];
+                if (isOpen() && t && !inBox(t.clientX, t.clientY)) close();     // a finger on the game outside the box: the keyboard goes
+                start = list.length === 1 && t ? { id: t.identifier, x: t.clientX, y: t.clientY, time: e.timeStamp } : null;
+            }, { passive: true });
+            canvas.addEventListener('touchend', function (e) {
+                var t = e.changedTouches && e.changedTouches[0];
+                var tap = start;
+                start = null;
+                if (!tap || !t || t.identifier !== tap.id || (e.touches && e.touches.length > 0)) return;
+                if (e.timeStamp - tap.time > TAP_MS || Math.abs(t.clientX - tap.x) > TAP_SLOP || Math.abs(t.clientY - tap.y) > TAP_SLOP) return;
+                if (takesText() && inBox(tap.x, tap.y)) open();             // (inside this handler: a browser opens its keyboard only for a focus that a tap makes)
+            }, { passive: true });
+            canvas.addEventListener('touchcancel', function () {
+                start = null;
+            }, { passive: true });
+        })();
+        // ANTS_CHAT_END
 
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual

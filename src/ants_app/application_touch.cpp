@@ -257,4 +257,76 @@ void Application::render_touch_feedback() {
     draw_touch_feedback(*renderer_, ring, pulse, touch_.slop());
 }
 
+// ---- A phone's keyboard for the match's chat box (docs/TOUCH.md "The chat box and the on-screen keyboard"). A phone has no keyboard that SDL hears, so the page (web/shell.html, ANTS_CHAT) keeps a
+// real text field that it focuses when a finger taps the chat box (the browser opens its keyboard only for a field that a tap focuses) and mirrors what is typed into the game's own chat line through
+// ants_chat_do. The game stays the authority: the line is the HUD's (printable ASCII, at most 100 characters, nothing while a dialog is open or the option is off), Enter is the key press of a
+// keyboard's, and the simulation, the network and the hashes never see any of it. (The exports are in this file because the file that nothing else refers to is left out of the static library's link.)
+
+bool Application::web_chat_available() const noexcept {
+    return state_ == AppState::Playing && !scorecard_.is_open() && !replay_mode_ && !catch_up_screen_active() && hud_.chat_takes_text();
+}
+
+LayoutRect Application::web_chat_box() const noexcept {
+    const LayoutRect box = hud_.chat_box_rect();
+    return box.moved(picture_.x, picture_.y);
+}
+
+bool Application::web_chat_do(int what, int value) {
+    if (!web_chat_available()) return false;
+    switch (what) {
+        case 0:
+            hud_.set_chat_input(std::string());
+            return true;
+        case 1:
+            if (value < 32 || value > 126) return false;                     // (the box takes printable ASCII only)
+            hud_.handle_text_input(std::string(1, static_cast<char>(value)));
+            return true;
+        case 2: {
+            std::string line = hud_.get_chat_input();
+            if (!line.empty()) line.pop_back();
+            hud_.set_chat_input(line);
+            return true;
+        }
+        case 3:                                                              // Enter: a key press through the queue, as a keyboard makes it (it is dealt with in the next frame)
+            for (const Uint32 type : {static_cast<Uint32>(SDL_KEYDOWN), static_cast<Uint32>(SDL_KEYUP)}) {
+                SDL_Event event;
+                SDL_zero(event);
+                event.type = type;
+                event.key.type = type;
+                event.key.state = type == SDL_KEYDOWN ? SDL_PRESSED : SDL_RELEASED;
+                event.key.keysym.sym = SDLK_RETURN;
+                event.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                SDL_PushEvent(&event);
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace ants::app
+
+#if defined(__EMSCRIPTEN__)
+extern ants::app::Application* g_web_app;
+
+// For the page (web/shell.html, ANTS_CHAT): what the chat box is now. 0: 1 while it takes text (ants::app::Application::web_chat_available), else 0; 1 - 4: the box's x, y, width and
+// height in the canvas's pixels (where a tap opens the keyboard); 5: the length of the game's chat line; 100 + i: the code of its character i (-1 past the end). Anything else, or no game: -1.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_chat_probe(int what) {
+    if (g_web_app == nullptr) return -1;
+    if (what == 0) return g_web_app->web_chat_available() ? 1 : 0;
+    if (what >= 1 && what <= 4) {
+        const ants::app::LayoutRect box = g_web_app->web_chat_box();
+        return what == 1 ? box.x : what == 2 ? box.y : what == 3 ? box.w : box.h;
+    }
+    const std::string& line = g_web_app->hud().get_chat_input();
+    if (what == 5) return static_cast<int>(line.size());
+    if (what >= 100 && static_cast<size_t>(what - 100) < line.size()) return static_cast<unsigned char>(line[static_cast<size_t>(what - 100)]);
+    return -1;
+}
+
+// ... and what the page types: Application::web_chat_do (0 clear, 1 add a character, 2 Backspace, 3 Enter). 1 when the game took it, 0 when it did not, -1 for no game.
+extern "C" EMSCRIPTEN_KEEPALIVE int ants_chat_do(int what, int value) {
+    if (g_web_app == nullptr) return -1;
+    return g_web_app->web_chat_do(what, value) ? 1 : 0;
+}
+#endif

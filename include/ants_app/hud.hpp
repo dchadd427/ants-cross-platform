@@ -147,6 +147,13 @@ public:
     const std::string& get_chat_input() const noexcept { return chat_input_; }
     void set_chat_input(const std::string& input) { chat_input_ = input; }
     void handle_text_input(const std::string& text);
+    /// The chat box as a finger sees it (the log and the input box, 143 px wide) in the picture's pixels: what a tap on a phone opens the keyboard for (Application::web_chat_box)
+    LayoutRect chat_box_rect() const noexcept {
+        const LayoutRect view = layout_.chat_view();
+        return LayoutRect{layout_.right(479), view.y, 143, layout_.bottom(437) - view.y};
+    }
+    /// The input box takes text now: the option "Participate In Chat" is on and no dialog is open (the same conditions as handle_text_input)
+    bool chat_takes_text() const noexcept { return options_.state().chat && !is_modal_open(); }
     /// Enter (FUN_010103eb with hasAlly): sends the text to the team when the local player has an ally, else to everybody, and clears the box.
     void send_chat_message() { send_chat(is_on_team_); }
     /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.

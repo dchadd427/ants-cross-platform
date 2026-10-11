@@ -59,6 +59,29 @@ Never relied on: an edge swipe (the system's back gesture on Android and iOS).
 A native build has no page, so a lift that is never delivered can still make the game ignore the fingers after a finger that is not spent, until the focus is lost. `SDL_GetNumTouchFingers` does not
 help: SDL's list is built from the same events as the model's, so it keeps the finger too (and SDL already turns a repeated finger id into its own lift first).
 
+## The chat box and the on-screen keyboard
+
+A phone has no keyboard that the game hears, and a browser opens its own only for a text field that a tap focuses. So `web/shell.html` keeps one (`#chat-keys`, the block ANTS_CHAT_BEGIN ... END): a real
+`<input>` inside the game's box, invisible (opacity 0; `display: none` cannot be focused), 16px (iOS Safari zooms the page into a smaller field), out of the tab order, taking no tap itself, and with the
+attributes that keep a keyboard from correcting a chat line. A **tap** on the match's chat box (the log and the input box; a finger that stays within 10 px and is up within 400 ms) focuses it inside the
+`touchend` handler (a browser opens its keyboard only for a focus that a tap makes). The page never cancels the touch: the game sees the same tap as ever.
+
+- **The game stays the authority.** The page asks where the box is and whether it takes text (`ants_chat_probe`: the chat option is on, a match is on the screen, no dialog, no recording, no catch-up
+  screen; the box is `HUD::chat_box_rect`, 143 px wide, right and bottom anchored like the HUD) and mirrors what is typed into the game's own chat line (`ants_chat_do`: clear, then the printable ASCII
+  characters, at most 100; Backspace is the field with a letter fewer). A character the game does not take (an accent, an emoji) is taken out of the field too. The line is the HUD's `chat_input_`, drawn,
+  limited and sent by the HUD as ever. Nothing of the simulation, the network or the hashes is touched.
+- **Enter** (the key, or a line break from the keyboard) mirrors the line and gives the game an Enter key press through SDL's queue (`Application::web_chat_do`): the same path as a keyboard's, so
+  [All] / [Team] and the empty-line rule are the game's. The field is emptied and the keyboard closes. **Esc**, a **finger on the game outside the box**, and a chat that stops taking text (a dialog opens, the match
+  ends: a poll every 400 ms) close it too, and the keyboard focus goes back to the game's canvas. A line that the game changes meanwhile (a quick chat text) shows in the field.
+- **No stray game input.** The field's `keydown`, `keypress` and `keyup` stop at the field (`stopPropagation`): SDL's handler on the window would type the letter a second time. A composition (an IME's, a
+  predictive keyboard's) is not rewritten while it goes on.
+- **The desktop is as it was**: the field is focused by a finger only. A mouse click on the chat box, and a keyboard, are the game's own.
+- **Not changed**: nothing is drawn. The chat box looks as it did; the field is not seen.
+
+**Limits (by design, until a picture of it is approved: AGENTS.md rule 7).** The chat box is at the bottom right of the picture and a phone's keyboard covers the bottom of the screen, so on a phone held
+upright or sideways the typed line may be hidden behind the keyboard: the text is typed and sent, but not seen while it is typed. A visible echo (a line above the keyboard) is a screen and needs an approved
+picture first. The field is not moved above the keyboard and the page does not scroll (`preventScroll`), so opening it moves nothing.
+
 ## What is verified, and what is not
 
 Verified by tests: the model (`test_touch_model`, suite 3.25: every rule, a soak of random sessions, the feedback's geometry), the application (`test_touch_app`, suite 3.26: synthetic finger events through
@@ -71,3 +94,9 @@ a thumb that rests on the glass and holds by accident; the system's own gestures
 list and SDL's `SIZE_CHANGED` behave as the stale-finger rule and the size-change cancel assume; how often a stall of 150 - 450 ms happens on a phone (the stall rule's 100 ms); and, for iOS Safari,
 every guard that exists for it: the non-passive gesture listeners (the browser's pinch), `touch-action` (honoured from iOS 13), the callout and selection rules, the unlock on `touchend`, the page's own
 fullscreen on an iPhone and the missing vibration. They run in Chromium and break nothing there; whether they do what is meant on WebKit is only known on an iPhone or an iPad.
+
+**The chat box's keyboard** is verified by the application's test (`test_web_chat`, suite 3.28: where the box is in every layout, what the page types, Enter, when the box takes nothing), the page's block run
+with fakes (`tests/scripts/web_chat_check.js`) and its field, script and exports (`tests/scripts/test_web_chat.py`), all in the quick tier; and, opt-in, in a real browser
+(`tests/scripts/test_web_chat.sh`: a Pixel-like and an iPhone-like phone and a desktop; a tap on the box focuses the field, the typed text is the game's line once, Enter sends, Esc and a tap on the map close
+it, a dialog closes it, nothing moves). **Not verified, and to be checked on a phone**: that the operating system's keyboard really comes up for this focus (iOS Safari for a focus made inside `touchend`, Android
+Chrome), what the keyboard covers (the chat box itself, see above), a keyboard's suggestions, autocorrect and dictation, the zoom rule of Safari, and what the visual viewport does when the keyboard opens.
