@@ -3103,6 +3103,8 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEn
 
 * **The layer-2 pass** (`FUN_01008089`, mode 2 for the objects): the anchor cells scanned are the rows `top / 32 - 3` up to `bottom / 32 + 3 + 1` (exclusive) of the view rectangle and the columns likewise (the margin is `push 3` at 0x10080e9, 0 for the other passes), clipped to the map. An object anchored further out than that is not drawn even when its art reaches into the view (`grassbig2` showed slivers up to 32 px wide, `glasses` and `stick2a` 15 px, with the remake's margin of 5 cells and a rounded-up end row).
 
+- **Permanent Exploration (`0x1006af4`, `0x1006be9`, `0x101a9e4`)**: Friendly units reveal tiles within an authentic **radius of 6 tiles** (`push 6; call 0x1006af4`). Bits in the bitgrid (`[world + 0xcc]`) are set to 1 and never cleared; explored terrain stays revealed permanently.
+
 ### 5.55 The Minimap (Capstone-Verified; Supersedes Earlier Radar Notes; Ported in v0.0.71)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::render_radar` (`src/ants_app/hud.cpp`), `minimap_object_id`, `minimap_object_entry` and the class / fog / ant colours (`include/ants_app/minimap_tables.hpp`, `src/ants_app/minimap_tables.cpp`; shared with the setup screen's map preview, `map_preview.hpp`), `minimap_tables.inc` (the 215 records of 0x1001c50), `Grid::plants` / `WorldState::plants`. Checked by `test_hud_layout` (`test_minimap`, `test_minimap_dots`) and, for the preview's colours, `test_wide_setup`.
@@ -3315,7 +3317,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 - **Map Selection Toggle (`0x100bcc9`, `0x100bfed`)**: Setup screen Fog of War setting writes `1` or `0` into `[0x104b350] + 0x4b08`, which initializes `[world + 0xc8]`.
 
-- **Permanent Exploration (`0x1006af4`, `0x1006be9`, `0x101a9e4`)**: Friendly units reveal tiles within an authentic **radius of 6 tiles** (`push 6; call 0x1006af4`). Bits in the bitgrid (`[world + 0xcc]`) are set to 1 and never cleared; explored terrain stays revealed permanently.
+- The reveal radius, the bitgrid that records it and the code that sets it are described in [section 5.54](#554-the-fog-of-wars-reveal-and-the-layer-2-scan-margin-capstone-verified-ported-in-v0070).
 
 - **Authentic 4-Neighbor Dither Autotiling (`0x1008750`..`0x10087da`, Table `0x1001a78`)**:
 
@@ -3432,7 +3434,7 @@ To deliver authentic 1:1 gameplay inside standard web browsers with zero install
 
 - **Bomb 8-Way Knockback Redirection (`FUN_0101df5d`)**:
 
-  - Recoil starts at 4 tiles opposite approach vector: `(facing + 4) % 8`.
+  - The start direction and the range of a bomb victim's flight are described in [section 5.36](#536-combat-ground-truth-contact-strike-flights-landings-blast-bomb-victim-stun-death-auto-engage-capstone-verified-supersedes-earlier-combat-knockback-and-bounce-notes), 'Bomb victim'.
 
   - Landing eligibility in `FUN_0101df5d`: power-up items, solid obstacle rocks, and anthill base tiles cannot be landed on; when blocked by any of these, the landing trajectory rotates clockwise `(dir + 1) % 8` through all 8 compass directions.
 

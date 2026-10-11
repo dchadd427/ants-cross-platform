@@ -14,7 +14,7 @@ Its method is reverse engineering of the original 1998 program (`Ants.exe`): Cap
 - **Re-derived from the original:** the simulation's mechanics, timings and constants, to match the original exactly where that can be checked. This was done one system at a time over many releases, not in one step; [`../CHANGELOG.md`](../CHANGELOG.md) says which release did which (from v0.0.90; the earlier ones are only in git history).
 - **This project's own additions:** network play (lock-step turns, state hashes, the dedicated server), computer players, widescreen, zoom and touch control.
 - **Network play:** the original's game is not lock-step. The remake keeps its lobby flow, texts and rules, but not its transport, trust model or sync model ([`NETWORK_PORT.md`](NETWORK_PORT.md#what-the-original-does); the evidence is section 5.46 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md)).
-- **Music:** the original plays four MIDI pieces. The remake plays MP3 renders of them, because the timbre of the 1998 General MIDI synthesiser cannot be reproduced ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.24e).
+- **Music:** how the original plays its music, and why the remake plays MP3 renders of it, is described in [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md#524-authentic-gamesound-dispatch-table-0x1002c28) section 5.24e and in [View and HUD](VIEW_AND_HUD.md#sound-and-music).
 - **Other differences made on purpose** are listed under [Differences made on purpose](#differences-made-on-purpose) below, so that they are not mistaken for deviations.
 
 ## Differences made on purpose

@@ -16,7 +16,7 @@ To run all test suites:
 ./run_tests.sh
 ```
 
-Independent suites run side by side, up to as many as the machine has cores. Each suite's output is printed in the order of the table, and the result of every suite is the same as in a serial run. [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers") describes the parallel runner.
+The parallel runner is described in [`WORKFLOW.md`](WORKFLOW.md#the-three-test-tiers) ("The three test tiers").
 
 It runs the same suites as the Linux and macOS jobs of CI. CI also builds on Windows and builds the web and server images ([Continuous Integration](#continuous-integration)).
 
@@ -164,7 +164,7 @@ cmake --build build_e2e
 
 Every pull request, every push to `main` and to `staging`, and every manual run is built and tested by GitHub Actions (`.github/workflows/ci.yml`). A newer push to a branch or pull request cancels the run of the older one.
 
-`main` is protected: it takes a change only through a pull request whose five checks (the five jobs of the table below) pass on a branch that is up to date with `main`, merged with a merge commit ([`WORKFLOW.md`](WORKFLOW.md), "Branches, pull requests and releases"). The merge deploys the beta site through the sixth job once the deploy secret is set ([the deploy job](#the-deploy-job), below).
+The five jobs of the table below are the checks that `main` requires, as [`WORKFLOW.md`](WORKFLOW.md#branches-pull-requests-and-releases) describes; the deploy that follows a merge is described under [the deploy job](#the-deploy-job), below.
 
 The five jobs run side by side. A run takes about 10 to 15 minutes: the web job about 4 minutes, the others 8 to 13.
 

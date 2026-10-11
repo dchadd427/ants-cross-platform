@@ -187,7 +187,7 @@ Every match opens with the original's dialog: its picture, `Get ready to play!  
 
 ### The "Get ready to play!" dialog does not cost match time (a deliberate deviation)
 
-- The original already runs the match clock and the ants behind the dialog, so in a game of one person you lose five seconds of the match (in a network game its clock starts at GO, so you lose less, or nothing).
+- How the original handles the match clock and the ants while the dialog is up is described in [GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md#21-match-start-get-ready-modal-mutual-friendly-bouncing--snapped-redirection-ground-truth-antsexe-0x1017127-0x1021cb0-0x101b938-rsrc-strings-100105), section 6.2, item 21.
 - Here the simulation waits: tick 0 runs when the dialog closes, and the clock shows the match's full time while the dialog is up.
 - The ants stand in the picture behind the dialog, locked until it closes. The original creates them when its GO message is handled, so it shows none while it waits for the others.
 - A game that starts straight into a match (`--map`) has no dialog.

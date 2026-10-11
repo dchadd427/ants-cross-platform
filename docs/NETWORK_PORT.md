@@ -672,7 +672,7 @@ A request after play: the match clock should wait until the "Get ready to play!"
 | **A room on the local network** (the host and every guest) | `Application::net_begin_match` when the match begins on that machine (the HUD's dialog, until dismissed) | `Application::post_tick`: the machine's own first executed turn | the host seals turn 0 at begin + 5000 ms and turn 1 50 ms later; the host's runner starts with two turns in hand (begin + 5050 ms), a guest's one link delay and its buffer later |
 | **A room of the dedicated server** | the same, on every client | the same | the referee's own engine and every client as for a LAN host: the room seals turn 0 5000 ms after `Room::begin_match` |
 
-A game that starts straight into its match (`--map`, for tests and screenshots) has no dialog and starts at once, as before. A match is never shorter for the dialog: the clock, the 12 minutes or the map's own time, runs from tick 0.
+A game that starts straight into its match, and the match time that the dialog never takes, are described in [GAMEPLAY.md](GAMEPLAY.md#the-get-ready-to-play-dialog-does-not-cost-match-time-a-deliberate-deviation) and in [GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md#21-match-start-get-ready-modal-mutual-friendly-bouncing--snapped-redirection-ground-truth-antsexe-0x1017127-0x1021cb0-0x101b938-rsrc-strings-100105), section 6.2, item 21.
 
 ### The seconds before the first turn are not a stall
 
