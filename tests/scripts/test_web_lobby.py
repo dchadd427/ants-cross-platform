@@ -329,7 +329,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
-    def test_the_footer_links_the_name_card_the_aspect_choice_and_the_test_room_buttons_are_there(self):
+    def test_the_footer_links_the_name_card_the_picture_row_and_the_test_room_buttons_are_there(self):
         self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Watch matches: the other links are in the footer")
         self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
         self.assertIn('<a class="btn sm" href="/watch.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
@@ -356,7 +356,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
         self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
         self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
-        # the picture's shape: a pair of buttons of the footer, 16:9 first and checked until the page reads another
+        # the picture's shape: the four buttons of the Picture row in the match column, 16:9 first and checked until the page reads another
         self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture \(960 x 540\)">16:9</label>')
         for shape, name in (("4-3", "Classic 4:3"), ("16-10", "16:10"), ("21-9", "21:9")):
             self.found(self.markup, r'<input type="radio" name="aspect" id="aspect-%s" value="[0-9:]+"><label for="aspect-%s" title="[^"]+">%s</label>' % (shape, shape, name))

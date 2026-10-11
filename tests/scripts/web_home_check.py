@@ -3,7 +3,7 @@
 
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen: Classic 4:3, 16:10, 16:9, which is the default, or 21:9). A visitor who
+Nobody; players are dragged between colours), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9, which is the default, or 21:9) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
@@ -12,7 +12,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
 
   * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link and Have a code? (there is no other way to play on the page);
              the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
-             and notice; Screen with 16:9 the default and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
+             and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with 16:9 the default and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
              a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
              strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
@@ -578,6 +578,7 @@ def main():
                 aspect: ['4-3', '16-10', '16-9', '21-9'].map(function (id) { return document.getElementById('aspect-' + id).checked; }).concat([document.body.getAttribute('data-aspect')]),
                 tags: Array.prototype.map.call(document.querySelectorAll('.fit-tag'), function (t) { return [t.id, t.hidden, getComputedStyle(t).display]; }), screenSize: [screen.width, screen.height],
                 shapeLabels: Array.prototype.map.call(document.querySelectorAll('.shape .seg label'), function (l) { return l.textContent; }),
+                shapePlace: (function () { var r = document.getElementById('shape-row').getBoundingClientRect(), i = document.getElementById('info').getBoundingClientRect(), s = document.getElementById('start').getBoundingClientRect(); return [r.top >= i.bottom - 1, r.bottom <= s.top + 1, !!document.querySelector('footer .shape, footer input[name=aspect]')]; })(),
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
@@ -724,7 +725,8 @@ def main():
 
             # the picture's shape: 16:9 is the default, 4:3 is chosen under Screen and remembered
             check(info["aspect"] == [False, False, True, False, "16:9"], "Screen: 16:9 is chosen on a first visit, and the other three are not (%s)" % info["aspect"])
-            check(info["shapeLabels"] == ["Classic 4:3", "16:10", "16:9", "21:9"], "Screen offers Classic 4:3, 16:10, 16:9 and 21:9, left to right (%s)" % info["shapeLabels"])
+            check(info["shapePlace"] == [True, True, False], "the Picture row is in the match column under the map's line and above START!, and the footer has no selector (%s)" % info["shapePlace"])
+            check(info["shapeLabels"] == ["Classic 4:3", "16:10", "16:9", "21:9"], "Picture offers Classic 4:3, 16:10, 16:9 and 21:9, left to right (%s)" % info["shapeLabels"])
             # "fills your screen": under the shape nearest to this computer's screen (None when no shape is within 8 per cent), shown only where there is a mouse
             sw, sh = info["screenSize"]
             ratios = {"4-3": 4 / 3, "16-10": 8 / 5, "16-9": 16 / 9, "21-9": 7 / 3}
