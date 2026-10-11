@@ -1052,6 +1052,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(v.ok);
         ASSERT_TRUE(v.app.replay_mode() && v.app.replay_failure() == ReplayFailure::None);
         ASSERT_TRUE(v.state() == ReplayState::Playing && v.turn() == 0);
+        ASSERT_TRUE(v.app.state() == AppState::Playing && v.app.hud().chat_takes_text() && !v.app.web_chat_available() && !v.app.web_chat_do(1, 'a'));      // (a phone's keyboard: a recording has no chat line to type in)
         ASSERT_EQ(v.app.replay_value(ReplayValue::Total), 700);
         ASSERT_EQ(v.app.replay_value(ReplayValue::Speed), 100);
         ASSERT_FALSE(v.app.sim().is_fog_of_war_enabled());                              // (the file has the fog on: a viewer sees everything, and the fog is no part of any hash)

@@ -352,6 +352,14 @@ public:
     /// The page's touchcancel (a call that comes from outside the event loop): the same, behind the events that SDL already holds. A finger that went down in the same frame begins and is
     /// cancelled in order, and the lift that SDL makes of a cancel finds it unknown (done at once, as cancel_touch(), when SDL has no event to give). Public for the web build's export and the tests.
     void cancel_touch_queued();
+    /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the
+    /// game what is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat on, no dialog)
+    bool web_chat_available() const noexcept;
+    /// ... the box where a finger taps, in the CANVAS's pixels (the picture sits in the canvas: picture().x / y)
+    LayoutRect web_chat_box() const noexcept;
+    /// ... and the page edits the HUD's chat line (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character `value`, 2 Backspace, 3 Enter (a
+    /// key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's). Returns false when the box takes nothing (web_chat_available)
+    bool web_chat_do(int what, int value);
     /// Is a touch device's finger one of the model's? Not a platform's own touch made from the mouse, and not a trackpad's (a touch screen counts, and so does a device that SDL does not know: a test's)
     static bool counts_as_finger(SDL_TouchID device, SDL_TouchDeviceType kind) noexcept;
     /// How many holds have fired their feedback (the buzz of the web build): for the tests

@@ -991,6 +991,40 @@ target_link_libraries(test_touch_app PRIVATE ants_test_paths)
 add_test(NAME test_touch_app COMMAND test_touch_app)
 set_tests_properties(test_touch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# A phone's keyboard for the match's chat box: where the box is, what the page types into the game's chat line, Enter, and when the box takes nothing
+add_executable(test_web_chat
+    test_web_chat.cpp
+)
+
+target_include_directories(test_web_chat PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_web_chat PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_web_chat PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_web_chat PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_web_chat PRIVATE ants_test_paths)
+
+add_test(NAME test_web_chat COMMAND test_web_chat)
+set_tests_properties(test_web_chat PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Replays in the application: a headless application plays a game on this computer and a match of the network (the other machine is a bare NetGame over loopback sockets); the file that it keeps
 # of each is played again by the replay player on the engine alone and must reach the state in which the match ended
 add_executable(test_replay_app
