@@ -72,7 +72,12 @@ bool cue_weight(uint32_t sound, CueWeight& out) {
     }
 }
 
-double distance(double ax, double ay, double bx, double by) { return std::hypot(ax - bx, ay - by); }
+/// Is (ax, ay) within `radius` of (bx, by)? (squared: the camera asks it for every pair of moments, every frame)
+bool within(double ax, double ay, double bx, double by, double radius) {
+    const double dx = ax - bx;
+    const double dy = ay - by;
+    return dx * dx + dy * dy <= radius * radius;
+}
 
 }  // namespace
 
@@ -97,6 +102,7 @@ void AutoCamera::reset() {
     have_seen_ = false;
     has_target_ = false;
     has_last_ = false;
+    deaths_ = 0;
     hold_until_ms_ = 0.0;
     glide_ms_ = kGlideMs;
     return_pending_ = false;
@@ -133,7 +139,10 @@ void AutoCamera::observe_world(const sim::WorldState& world) {
         for (const auto& [id, before] : seen_) {
             const auto now = next_.find(id);
             if (now == next_.end()) {
-                if (!before.drowning) add(before.x, before.y, kDeath, true);           // an ant that is gone and did not drown died (a drowning one has its cue)
+                if (!before.drowning) {
+                    add(before.x, before.y, kDeath, true);
+                    ++deaths_;
+                }           // an ant that is gone and did not drown died (a drowning one has its cue)
             }
         }
     }
@@ -150,7 +159,7 @@ double AutoCamera::influence(const Moment& m) const noexcept {
 double AutoCamera::score_at(const Point& p) const noexcept {
     double sum = 0.0;
     for (const Moment& m : moments_) {
-        if (distance(m.x, m.y, p.x, p.y) <= kRadius) sum += influence(m);
+        if (within(m.x, m.y, p.x, p.y, kRadius)) sum += influence(m);
     }
     return sum;
 }
@@ -170,7 +179,7 @@ bool AutoCamera::best_spot(Spot& out) const {
     double sy = 0.0;
     double sw = 0.0;
     for (const Moment& m : moments_) {
-        if (distance(m.x, m.y, at->x, at->y) > kRadius) continue;
+        if (!within(m.x, m.y, at->x, at->y, kRadius)) continue;
         const double w = influence(m);
         sx += m.x * w;
         sy += m.y * w;

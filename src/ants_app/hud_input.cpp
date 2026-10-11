@@ -350,7 +350,6 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 
 // FUN_010277f4: the click at the release point, by the cursor mode found there
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
-    if (view_only_) return;
     const auto& world = sim.get_world_state();
     if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
     sim_query_ = &sim;                                      // (the special-target question is asked of the engine whose world the click picks from: the one the screen shows)
@@ -445,7 +444,6 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
 // FUN_01027b51: the right button executes at its release with the tile of the press point
 void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera, int capture, int32_t press_x, int32_t press_y,
                               int32_t x, int32_t y) {
-    if (view_only_) return;
     const auto& world = sim.get_world_state();
     const PanelMode panel = panel_mode(world);
     if (capture == 2) {                                        // pressed on the minimap: own ants only; the press point is a point of the map

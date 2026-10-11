@@ -69,6 +69,8 @@ public:
     bool gliding() const noexcept { return has_target_ && glide_ms_ < kGlideMs; }
     bool holding() const noexcept { return has_target_ && now_ms_ < hold_until_ms_; }
     size_t moments() const noexcept { return moments_.size(); }
+    /// How many deaths the camera has seen in this match (an ant that is gone from the world and did not drown)
+    uint32_t deaths() const noexcept { return deaths_; }
 
 private:
     struct Moment {
@@ -110,6 +112,7 @@ private:
     bool has_last_{false};
     Point last_action_;
     bool return_pending_{false};
+    uint32_t deaths_{0};
 };
 
 }  // namespace ants::app

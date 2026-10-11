@@ -1498,17 +1498,21 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(r.cam.target(target) && near(target, 5000.0, 5000.0));
             r.run(900.0);
             ASSERT_TRUE(near(r.at, 5000.0, 5000.0));
-            // a place that stays busy keeps the view: a fight at A that goes on, one bomb at B that is no clearly busier
+            // a place that stays busy keeps the view: a fight at A that goes on, and B that is busier but not clearly (two bombs against the fight), then clearly (three)
             Run busy;
             busy.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
-            for (int i = 0; i < 20; ++i) {                                          // (a hit every 250 ms for 5 s)
+            for (int i = 0; i < 16; ++i) {                                          // (a hit every 250 ms for 4 s: the hold is over)
                 busy.cam.observe_cue(cue_at(S::MeleeAttack, 1000, 2000));
                 busy.run(250.0);
-                if (i == 12) busy.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));
             }
             ASSERT_TRUE(busy.cam.target(target) && near(target, 1000.0, 2000.0));
-            Pt hot;
-            ASSERT_TRUE(busy.cam.hot_spot(hot) && near(hot, 1000.0, 2000.0, 60.0));
+            for (int i = 0; i < 2; ++i) busy.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));
+            busy.run(100.0);
+            ASSERT_FALSE(busy.moved);                                               // (busier, but not by half as much again: the view stays)
+            ASSERT_TRUE(busy.cam.target(target) && near(target, 1000.0, 2000.0));
+            busy.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));
+            busy.run(100.0);
+            ASSERT_TRUE(busy.moved && busy.cam.target(target) && near(target, 5000.0, 5000.0));        // (three bombs: clearly busier)
         } TEST_END();
 
         TEST_CASE("RA8.3 Taking the camera makes it Manual (the view stays where it is put, whatever happens), and the button's Auto glides to the last action and holds there") {
@@ -1537,6 +1541,14 @@ int main(int argc, char* argv[]) {
             r.run(900.0);
             ASSERT_TRUE(near(r.at, 3000.0, 500.0));
             ASSERT_TRUE(r.cam.holding());
+            // the last action wins over the busiest place when both are still fresh: a bomb, then a hit elsewhere, then the button
+            Run both;
+            both.cam.take();
+            both.cam.observe_cue(cue_at(S::BombDetonate, 2500, 3000));
+            both.cam.observe_cue(cue_at(S::MeleeAttack, 3000, 500));
+            both.cam.set_mode(CameraMode::Auto);
+            both.run(100.0);
+            ASSERT_TRUE(both.cam.target(target) && near(target, 3000.0, 500.0));
             // with nothing ever to go to, Auto stays where it is
             Run none;
             none.cam.take();
@@ -1717,6 +1729,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(v.value(ReplayValue::CameraTaken), 0);
         v.frames(3000);
         ASSERT_TRUE(v.state() == ReplayState::CutShort);
+        ASSERT_GT(v.app.auto_camera().deaths(), 0u);                                 // (the camera reads the ants that are gone: a match of four Hard bots has deaths)
         ASSERT_EQ(v.app.sim().state_hash().total, bot_match().file.final_hash);
         v.app.shutdown();
     } TEST_END();

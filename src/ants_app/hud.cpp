@@ -1194,7 +1194,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         // The press saves its point and captures the view under it (FUN_01028751); the order is given at the release (FUN_01027b51)
         right_press_x_ = x;
         right_press_y_ = y;
-        right_capture_ = view_only_ ? 0 : (over_minimap(x, y) ? 2 : (over_map(x, y) ? 1 : 0));        // (a replay has no orders to give)
+        right_capture_ = over_minimap(x, y) ? 2 : (over_map(x, y) ? 1 : 0);
         return right_capture_ != 0;
     }
 
