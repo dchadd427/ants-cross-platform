@@ -5990,7 +5990,7 @@ void run_bot_tests() {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
             ASSERT_EQ(net::kProtocolVersion, uint16_t{18});                  // (16 was the protocol of v0.12.0: a Start, a Room and a Plan without the mode byte; 15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, uint16_t{18}, uint16_t{1}, uint16_t{0}}) {      // (16: v0.12.0, whose Hello is the Hello of 17 byte for byte: the number alone refuses it; 18: a client from the future)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, uint16_t{17}, uint16_t{1}, uint16_t{0}}) {      // (16: v0.12.0, whose Hello is the Hello of 17 byte for byte: the number alone refuses it; 18: a client from the future)
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;

@@ -10194,7 +10194,7 @@ void run_protocol15_tests() {
         return key;
     };
     const auto hello_prefix = [&](const std::string& room) {
-        std::vector<uint8_t> bytes = {1, 17, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
+        std::vector<uint8_t> bytes = {1, 18, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
         bytes.insert(bytes.end(), room.begin(), room.end());
         const std::vector<uint8_t> token = {3, 't', 'o', 'k'};
         bytes.insert(bytes.end(), token.begin(), token.end());
@@ -10228,7 +10228,7 @@ void run_protocol15_tests() {
             want.push_back(0);
             ASSERT_TRUE(encode(h) == want);
             HelloMsg back;
-            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == 17 && back.client_kind == kClientGame);
+            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == 18 && back.client_kind == kClientGame);
             ASSERT_TRUE(encode(back) == want);
         }
         // with a block: the map's name, the seats, team_a, team_b, the flags
@@ -10619,7 +10619,7 @@ void run_protocol16_tests() {
         block.map_name = "TREASURE.LVL";
         block.flags = static_cast<uint8_t>(kCreateLeaderStarts | kCreateLobby);
         h.create = block;
-        std::vector<uint8_t> want = {1, 17, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
+        std::vector<uint8_t> want = {1, 18, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
         want.insert(want.end(), size_t{16 + 4}, uint8_t{0});                                           // the key and the turns: a new player has neither
         want.push_back(static_cast<uint8_t>(kOsMacos | kPlatformBrowser));
         want.push_back(1);                                                                              // the client kind: a lobby page

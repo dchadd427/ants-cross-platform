@@ -337,6 +337,44 @@ int main() {
         CHECK(left[0] <= 895);
     });
 
+    run_case("FB3.2 POPcOrN (Community-Maps): Its 250 Bomb Cells (249 After A Food Anchor Or A Plant Took One) Are Bombs In The Grid And No Obstacle, Its 62 Fire Walls Are Fire, Its 32 Power-Ups Are Power-Ups; The Block-3 Default Type Is Combat For Every Ant; Two Plays End In One State Hash", [] {
+        LevelData level;
+        CHECK(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/POPcOrN.lvl"));
+        size_t bomb_cells = 0, fire_cells = 0;
+        for (const auto& c : level.layer2_interactive) {
+            bomb_cells += (c.tile_index >= 129 && c.tile_index <= 132) ? 1u : 0u;
+            fire_cells += (c.tile_index == TILE_FIREWALL) ? 1u : 0u;
+        }
+        CHECK(bomb_cells == 250 && fire_cells == 62);
+        Grid g;
+        CHECK(g.init_from_level(level));
+        size_t bombs = 0, fires = 0, powerups = 0;
+        for (uint32_t y = 0; y < g.height(); ++y) {
+            for (uint32_t x = 0; x < g.width(); ++x) {
+                const TileCell& c = g.get_cell(x, y);
+                if (c.has_bomb()) CHECK(!c.is_obstacle_overlay);       // (a fire wall named "." is still an overlay in the loader: a separate matter, not part of this change)
+                bombs += c.has_bomb() ? 1u : 0u;
+                fires += c.has_fire() ? 1u : 0u;
+                powerups += c.has_powerup() ? 1u : 0u;
+            }
+        }
+        CHECK(bombs == 249 && fires == 62 && powerups == 32);
+        CHECK(g.default_ant_tile() == PU_COMBAT);
+        uint64_t hash[2] = {0, 0};
+        for (int run = 0; run < 2; ++run) {
+            SimulationEngine sim;
+            sim.init(level, 77, 0x0F);
+            if (run == 0) {
+                size_t combat = 0, ants = 0;
+                for (const auto& a : sim.get_world_state().ants) { ++ants; combat += (a.type == AntType::Combat) ? 1u : 0u; }
+                CHECK(ants > 0 && combat == ants);
+            }
+            for (int t = 0; t < 1200; ++t) sim.tick();
+            hash[run] = sim.state_hash().total;
+        }
+        CHECK(hash[0] == hash[1]);
+    });
+
     std::cout << "\nfile bombs: " << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
