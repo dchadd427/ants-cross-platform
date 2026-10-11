@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** the way a level is read changed, so network protocol 18: a v0.12.4 game cannot join a v0.12.5 room. Replays: the rules numbers are 3 (the original's game) and 4 (game mode 187); recordings made before this update stay in the list under "Earlier versions".
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d4...v0125)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d4...5cdbef5e)
 
 ## v0.12.4 - 2026-10-11 - A link to a missing room says so
 
