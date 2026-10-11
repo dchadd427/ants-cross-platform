@@ -250,7 +250,9 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         set_food_tile(TileCoord{static_cast<int32_t>(o.col), static_cast<int32_t>(o.row)}, o.stage_tile());
     }
 
-    // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag:
+    // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag. The file's bit is the ONLY source of an object's solidity, power-ups, food, fire walls and
+    // lunchboxes included (FUN_0100cf0f reads the bit; FUN_010069d8 stored it verbatim): a power-up that the file leaves on a cell without the bit is walkable ground, and the run-time
+    // placement and removal of an object set and clear the bit as SetTile does (Grid::place_powerup, clear_powerup, place_firewall, set_food_tile, set_layer2 ...).
     //  * every Block-4 entry marks its tile solid (Ants.exe FUN_01006f0e -> FUN_0100660c(row, col, 1));
     //    this is what makes daisy-flower stems block ants, including entries without a plant;
     //  * row 0 is always solid (level loader loop at 0x1006592; FUN_0100660c never clears row 0).
@@ -261,16 +263,6 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     }
     for (uint32_t x = 0; x < width_; ++x) {
         get_cell_mut(x, 0).static_solid = true;
-    }
-    // Removable objects (food, power-ups, lunchboxes, fire walls) are tracked dynamically by
-    // is_solid_object(), mirroring object placement/removal (FUN_01007a22 / FUN_0100744f).
-    for (uint32_t y = 1; y < height_; ++y) {
-        for (uint32_t x = 0; x < width_; ++x) {
-            auto& cell = get_cell_mut(x, y);
-            if (cell.is_food || cell.is_powerup || cell.has_lunchbox() || cell.has_fire()) {
-                cell.static_solid = false;
-            }
-        }
     }
     // The anthill set-up clears the entrance and the tile above it (FUN_0100ecdf -> FUN_0100660c(.., 0)).
     for (const auto& ah : anthills_) {
@@ -401,6 +393,7 @@ void Grid::place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept
     cell.interactive_id = TILE_FIREWALL;
     cell.interactive_owner = owner_player;
     cell.timer_ticks = LIFETIME_180S_TICKS;
+    cell.static_solid = true;                               // SetTile copies the tile flag 0x01 of the fire wall (id 134) to the layer-1 solid bit (FUN_01007a22)
 }
 
 void Grid::clear_firewall(uint32_t x, uint32_t y) noexcept {
@@ -409,6 +402,7 @@ void Grid::clear_firewall(uint32_t x, uint32_t y) noexcept {
     if (cell.interactive_id == TILE_FIREWALL) {
         cell.interactive_id = TILE_EMPTY;
         cell.timer_ticks = 0;
+        if (y > 0) cell.static_solid = false;               // SetTile(empty) clears the footprint's solid bit (FUN_0100744f -> FUN_0100660c(.., 0); row 0 never)
     }
 }
 
@@ -424,6 +418,7 @@ void Grid::place_bomb(uint32_t x, uint32_t y, uint8_t team_id) noexcept {
     cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + (team_id % 4u));
     cell.interactive_owner = team_id;
     cell.timer_ticks = 0;
+    if (y > 0) cell.static_solid = false;                   // SetTile clears what the cell held before (the placeholder 160 of a plant in progress is solid); a bomb has no solid flag itself
 }
 
 void Grid::clear_bomb(uint32_t x, uint32_t y) noexcept {
@@ -479,6 +474,11 @@ void Grid::collapse_bridge(uint32_t x, uint32_t y) noexcept {
 void Grid::set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
     auto& cell = get_cell_mut(x, y);
+    if (cell.interactive_id != id) {
+        // FUN_01007352: the old object's footprint is cleared first (solid bit off, row 0 never), then the new tile's flag 0x01 sets it
+        if (!cell.is_empty_overlay() && y > 0) cell.static_solid = false;
+        if (id != TILE_EMPTY && (movement::tile_flags_of(id) & movement::kTileFlagSolid) != 0) cell.static_solid = true;
+    }
     cell.interactive_id = id;
     cell.interactive_owner = (id == TILE_EMPTY) ? uint8_t{255} : owner;
     cell.timer_ticks = 0;
@@ -546,8 +546,11 @@ void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
         c.interactive_owner = 255;
         c.timer_ticks = 0;
         c.is_food = (tile != 0x7FFEu);
+        c.is_powerup = false;                                          // the cell now holds this tile: a power-up that the file had under the pile's footprint is gone with its tile
+        c.powerup_type = 0;
         c.anchor_x = static_cast<int16_t>(anchor.x);
         c.anchor_y = static_cast<int16_t>(anchor.y);
+        if ((movement::tile_flags_of(tile) & movement::kTileFlagSolid) != 0) c.static_solid = true;     // the tile flag 0x01 is copied to the layer-1 solid bit
     };
     if (a.interactive_id != TILE_EMPTY && a.interactive_id != 0xFFFFu && a.interactive_id != 0x7FFEu) {
         const movement::FootprintSpan old = movement::food_footprint(a.interactive_id);
@@ -583,6 +586,7 @@ void Grid::clear_powerup(int32_t x, int32_t y) noexcept {
     cell.is_powerup = false;
     cell.powerup_type = 0;
     cell.interactive_id = TILE_EMPTY;
+    if (y > 0) cell.static_solid = false;                   // SetTile(2, tile, 0x7ffe) clears the footprint's solid bit (row 0 never)
 }
 
 void Grid::strip_pickups() noexcept {
@@ -612,6 +616,7 @@ void Grid::place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept {
     cell.is_powerup = true;
     cell.powerup_type = powerup_type;
     cell.interactive_id = 0x8000u | static_cast<uint16_t>(powerup_type);
+    cell.static_solid = true;                               // SetTile copies the power-up tile's flag 0x01 (ids 62 .. 66) to the layer-1 solid bit
 }
 
 } // namespace ants::sim

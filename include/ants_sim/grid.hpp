@@ -310,14 +310,18 @@ public:
 
     /**
      * @brief Original layer-1 "solid object" bit (FUN_0100cf0f): object footprints (LVL cell flag bit0),
-     * Block-4 entries, row 0 and the removable objects (food, power-ups, lunchboxes, fire walls).
+     * Block-4 entries, row 0 and the removable objects (food, power-ups, lunchboxes, fire walls), which set the bit
+     * when they are placed and clear it when they go (a level from a file; a world made by hand counts them solid by themselves).
      * Walls added at run time as TERRAIN_OBSTACLE count too; in worlds without LVL solid bits (test worlds)
      * the remake's obstacle overlays stand in for them. Out-of-bounds tiles count as solid.
      */
     bool is_solid_object(TileCoord t) const noexcept {
         if (!in_bounds(t)) return true;
         const auto& c = get_cell(t);
-        if (c.static_solid || c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food() || c.has_reserved()) return true;
+        if (c.static_solid) return true;
+        // A level read from a file has the original's rule: the layer-1 solid bit decides, for a power-up, food, a fire wall, a lunchbox and the placeholder as for a rock (they set and clear
+        // the bit when they are placed and removed). A world made by hand (init_empty: tests and tools) has no file bits, and its objects count as solid themselves.
+        if (!exact_solid_bits_ && (c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food() || c.has_reserved())) return true;
         if (c.is_base_hole) return false;
         return c.terrain_type == TERRAIN_OBSTACLE || (!exact_solid_bits_ && c.is_obstacle_overlay);
     }
@@ -440,6 +444,7 @@ public:
         auto& cell = get_cell_mut(pos);
         cell.interactive_id = TILE_FIREWALL;
         cell.timer_ticks = timer_ticks;
+        cell.static_solid = true;                   // as SetTile does: the fire wall's tile flag 0x01 sets the layer-1 solid bit
     }
 
     void set_bridge_at(TileCoord pos, int stage, uint32_t timer_ticks) noexcept {

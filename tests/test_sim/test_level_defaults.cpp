@@ -505,18 +505,18 @@ int main() {
         // where the rule of the attack clip's last frame (resume of the auto-engage for any ant that has the flag) shows on the shipped maps.
         struct Pin { const char* map; int roster; uint64_t at0, at800, at1600; };
         static const Pin kPins[] = {
-            {"TINY",     0x0F, 0xd40271bb630258ccull, 0x7e4a4676c5e71d91ull, 0x8c5ca460219bf849ull},
-            {"TINY",     0x09, 0xf8947198d3889560ull, 0x2d54a0ac69060bbbull, 0x50a5a4419b5105c2ull},
-            {"SMALL",    0x0F, 0xd51776888a337558ull, 0xfcae24b118fc762bull, 0xbd908705aa899ffdull},
-            {"SMALL",    0x09, 0xcff380924879366bull, 0xa82af692c4a4cca7ull, 0x8be9a8e2f1a91241ull},
-            {"MEDIUM",   0x0F, 0x5e0882337549f483ull, 0xee9a7f9c84af43ffull, 0xfcccc8c6886828f2ull},
-            {"MEDIUM",   0x09, 0xfe5bce1353aadaaaull, 0xf3d46815b4e77ab4ull, 0x62e057f33d670857ull},
-            {"GAUNTLET", 0x0F, 0xfe3fa643d5817df4ull, 0x56c46f02f9060444ull, 0xbbb9bd494d59204aull},
-            {"GAUNTLET", 0x09, 0x400ea4bdc90c2553ull, 0x67fdeeb73fee5c6dull, 0x50afef7c3f571917ull},
-            {"ISLANDS",  0x0F, 0x3129b0aed5d9320cull, 0x952829b0fc70a4ebull, 0x6be9282103858627ull},
-            {"ISLANDS",  0x09, 0xa9db20074340642aull, 0x477da6cc47b90c4eull, 0xf7bdede5e943465eull},
-            {"TREASURE", 0x0F, 0xb818284f63070407ull, 0xf8dbaf300a041c31ull, 0xc3d6dddd459d6501ull},
-            {"TREASURE", 0x09, 0x5322865be308148dull, 0x65e0178749ebb6d5ull, 0x21c87085b30dcb6aull},
+            {"TINY",     0x0F, 0x845a77684c5a5bc6ull, 0x3aa927da6efc407full, 0x5cd3670b55bda48bull},
+            {"TINY",     0x09, 0xd685fecbbe92290dull, 0x7e3d43b7d3da18a6ull, 0xf346a83e4b9e0c83ull},
+            {"SMALL",    0x0F, 0x4360e0b0f00ca921ull, 0xab09d3cb6a9a5489ull, 0xa26c2ff8d65166f3ull},
+            {"SMALL",    0x09, 0x050e47ac387e5327ull, 0x18da6c594f8c64adull, 0x63f79b2d57aefa6dull},
+            {"MEDIUM",   0x0F, 0x38506406ecec8e93ull, 0xd60a0c939c44227cull, 0x21cd5c48f1aa8d87ull},
+            {"MEDIUM",   0x09, 0xde7d827925ddc74dull, 0x4ba359e39ab8a084ull, 0xf7a44a7cd651a775ull},
+            {"GAUNTLET", 0x0F, 0xf550fff595a6ba4dull, 0x1a97bb27b1404ef1ull, 0x3ee489d6c2643b7bull},
+            {"GAUNTLET", 0x09, 0x7e0a9f256454d907ull, 0x617ab5338b34adcbull, 0xbd845255eb5c86f9ull},
+            {"ISLANDS",  0x0F, 0x6d07d2d3142aa472ull, 0x6687fb744358707eull, 0xd90dd4cc06379a03ull},
+            {"ISLANDS",  0x09, 0x098825189683825eull, 0x07bd3ea8139aa972ull, 0x641b2f29607cf60bull},
+            {"TREASURE", 0x0F, 0x22cbedc1f567b356ull, 0x0fe766af6317e3b4ull, 0x56188a6078f3add0ull},
+            {"TREASURE", 0x09, 0xce6c2ef2643f003cull, 0x5e208191967a3754ull, 0x402db13d2f909427ull},
         };
         std::string bad;
         for (const Pin& pin : kPins) {
@@ -567,7 +567,7 @@ int main() {
         // resume of the auto-engage (FUN_0101dd6f) at the end of EVERY attack clip without a type test (0x101ef4a), the engage flag (+0xbc) is cleared only by that resume and by
         // StartEngaged (0x1020cae) and is not touched by a new order (GoTo) or a pick-up, so a combat ant that was ordered away in the middle of an auto-engage and then took another power-up
         // (a bomber, fire ant, swimmer ...) still has the flag, and when it attacks later the original sends it back to the saved place where v0.0.92 left it standing (tests 4.6, 4.7).
-        // The columns: the state hash after tick 2000, 4000, 6000 and 8000 as v0.0.92 gave it, and as the engine gives it now. The first ant that differs, in each of the five plays, is an ant of
+        // The columns: the state hash after tick 2000, 4000, 6000 and 8000 as v0.0.92 gave it, as v0.12.9 gave it (rules 3), and as the engine gives it now (rules 5: only the solid bit that the hash holds moved, see LF1.7 in test_loader_fidelity). The first ant that differs, in each of the five plays, is an ant of
         // own type Bomber, Fire or Swimmer with the engage flag set whose saved order is resumed (GAUNTLET 0x0F from tick 2721 on, MEDIUM 0x09 from 5688, GAUNTLET 0x09 from 6749, TREASURE
         // 0x0F from 6958, TREASURE 0x09 from 7298); with the old condition restored the same plays give v0.0.92's numbers again, tick by tick. TINY, SMALL, ISLANDS and MEDIUM with the
         // full roster never get there in 8,000 ticks and are the same as in v0.0.92. This is a change of the lock-step rules: a v0.0.92 peer and a newer one can disagree on a shipped
@@ -576,33 +576,46 @@ int main() {
             const char* map;
             int roster;
             uint64_t v092[4];
-            uint64_t now[4];
+            uint64_t before[4];          // the engine at rules 3 (v0.12.9)
+            uint64_t now[4];             // the engine now (rules 5): same plays on these maps, but the hash holds the file's solid bit of every power-up, pile and fire wall cell, which the loader used to clear
         };
         static const Play kPlays[] = {
             {"TINY", 0x0F, {0x5e2a4e436c160678ull, 0x20e6b93285b9be70ull, 0x95a6036e66cde3f2ull, 0x22c46cd28e3082abull},
-             {0x5e2a4e436c160678ull, 0x20e6b93285b9be70ull, 0x95a6036e66cde3f2ull, 0x22c46cd28e3082abull}},
+             {0x5e2a4e436c160678ull, 0x20e6b93285b9be70ull, 0x95a6036e66cde3f2ull, 0x22c46cd28e3082abull},
+             {0x81f5b20fc70e68ceull, 0xeac37be8ea25782eull, 0xc4716c60bbb29be4ull, 0xaa6190b682d93529ull}},
             {"TINY", 0x09, {0xe04b03e59568ba62ull, 0xc66825bcd1625f87ull, 0xc2b1578ff71ed35eull, 0x58ea06c4c1ff516aull},
-             {0xe04b03e59568ba62ull, 0xc66825bcd1625f87ull, 0xc2b1578ff71ed35eull, 0x58ea06c4c1ff516aull}},
+             {0xe04b03e59568ba62ull, 0xc66825bcd1625f87ull, 0xc2b1578ff71ed35eull, 0x58ea06c4c1ff516aull},
+             {0x450053e462bd7e8bull, 0xcdbb7a4963a8aa66ull, 0x699cdcd46e3d1177ull, 0x63fb224a310a58e7ull}},
             {"SMALL", 0x0F, {0x0aa6ec2619cd2b4eull, 0x2bfc87394de142d5ull, 0x193cea108e2ebcd0ull, 0x0e57c435b272c237ull},
-             {0x0aa6ec2619cd2b4eull, 0x2bfc87394de142d5ull, 0x193cea108e2ebcd0ull, 0x0e57c435b272c237ull}},
+             {0x0aa6ec2619cd2b4eull, 0x2bfc87394de142d5ull, 0x193cea108e2ebcd0ull, 0x0e57c435b272c237ull},
+             {0x7f497eb7c0880717ull, 0xff43293ef01fa716ull, 0x086ed3bd72c86743ull, 0x4ac57df6830e433bull}},
             {"SMALL", 0x09, {0xcb4a086f596ade6dull, 0x43bffdc49ef9eb3full, 0x654a73becdcc58d8ull, 0xd5d5fdafaf00c932ull},
-             {0xcb4a086f596ade6dull, 0x43bffdc49ef9eb3full, 0x654a73becdcc58d8ull, 0xd5d5fdafaf00c932ull}},
+             {0xcb4a086f596ade6dull, 0x43bffdc49ef9eb3full, 0x654a73becdcc58d8ull, 0xd5d5fdafaf00c932ull},
+             {0x86026132780ecc17ull, 0x9053b6c6b196a716ull, 0x0e27567f4a4b3d30ull, 0x2e92d237c70f4258ull}},
             {"MEDIUM", 0x0F, {0x06b6a8de391480efull, 0x2948d82f68b5a61bull, 0x2c603682b63c9edeull, 0xada3f4d2c9c7213cull},
-             {0x06b6a8de391480efull, 0x2948d82f68b5a61bull, 0x2c603682b63c9edeull, 0xada3f4d2c9c7213cull}},
+             {0x06b6a8de391480efull, 0x2948d82f68b5a61bull, 0x2c603682b63c9edeull, 0xada3f4d2c9c7213cull},
+             {0x94ab9c0b41470aeeull, 0x576bc15cb5a60586ull, 0x2b9453713b5753d2ull, 0xa165fa2c69dffb19ull}},
             {"MEDIUM", 0x09, {0x9d25db3215b8e1d7ull, 0x9e4864555f7e5c39ull, 0x5768fe23f75d6c9eull, 0x351866dd887383e9ull},
-             {0x9d25db3215b8e1d7ull, 0x9e4864555f7e5c39ull, 0xb9b733533541ec1full, 0x9601b830cc9f1f01ull}},
+             {0x9d25db3215b8e1d7ull, 0x9e4864555f7e5c39ull, 0xb9b733533541ec1full, 0x9601b830cc9f1f01ull},
+             {0x4c4517d3eab49de0ull, 0xb81b3fb9b8127789ull, 0xa339ed40390aff34ull, 0x2f5d95cf1f575c00ull}},
             {"GAUNTLET", 0x0F, {0x99882d295c80e214ull, 0xa017f03fa8eb2cbdull, 0xcff64a78f647122aull, 0xec558812e7f1ff01ull},
-             {0x99882d295c80e214ull, 0xe9a87c07f7f45bd3ull, 0x7779260cd0c99b17ull, 0x8ae8aad81c47e034ull}},
+             {0x99882d295c80e214ull, 0xe9a87c07f7f45bd3ull, 0x7779260cd0c99b17ull, 0x8ae8aad81c47e034ull},
+             {0x7d77b10403621d68ull, 0x590ab824cecf5055ull, 0xb23e03d321fede41ull, 0x132f54fa7dba0cc2ull}},
             {"GAUNTLET", 0x09, {0x27ecf591e7d88dc9ull, 0x3e8f4b907b0a27ebull, 0xb7951c1d0e9d2956ull, 0xd1d33f68d199510bull},
-             {0x27ecf591e7d88dc9ull, 0x3e8f4b907b0a27ebull, 0xb7951c1d0e9d2956ull, 0xec31809794b99713ull}},
+             {0x27ecf591e7d88dc9ull, 0x3e8f4b907b0a27ebull, 0xb7951c1d0e9d2956ull, 0xec31809794b99713ull},
+             {0x1164cde24ced128bull, 0xce9f1ed8ad55ec23ull, 0xfc53302dc330c5c9ull, 0x9cb870dd15be4ebdull}},
             {"ISLANDS", 0x0F, {0x5041399949f6d9a8ull, 0xba788499b96239bdull, 0x2478700e0734d088ull, 0xc9fe4d7fda6ff99cull},
-             {0x5041399949f6d9a8ull, 0xba788499b96239bdull, 0x2478700e0734d088ull, 0xc9fe4d7fda6ff99cull}},
+             {0x5041399949f6d9a8ull, 0xba788499b96239bdull, 0x2478700e0734d088ull, 0xc9fe4d7fda6ff99cull},
+             {0x04ea33924447b5c8ull, 0x62dfc1e7cdf20964ull, 0x49e9a9d88442e85aull, 0x3844a139bbe6bc30ull}},
             {"ISLANDS", 0x09, {0x7eaa828e7f5849deull, 0x8eed646b41f324c6ull, 0x133b3688de7c9a65ull, 0x3590055c5320c086ull},
-             {0x7eaa828e7f5849deull, 0x8eed646b41f324c6ull, 0x133b3688de7c9a65ull, 0x3590055c5320c086ull}},
+             {0x7eaa828e7f5849deull, 0x8eed646b41f324c6ull, 0x133b3688de7c9a65ull, 0x3590055c5320c086ull},
+             {0xe90dca6729427654ull, 0x4bf6c490a3e692fbull, 0x327b233eafcc45e9ull, 0x997145592f9f9c32ull}},
             {"TREASURE", 0x0F, {0xf4b61683eaf845e0ull, 0x423afcd23afce999ull, 0x822482356efd2f0aull, 0xea8b1d4f2749ab35ull},
-             {0xf4b61683eaf845e0ull, 0x423afcd23afce999ull, 0x822482356efd2f0aull, 0x33cb481bfb17e9e1ull}},
+             {0xf4b61683eaf845e0ull, 0x423afcd23afce999ull, 0x822482356efd2f0aull, 0x33cb481bfb17e9e1ull},
+             {0x6e741fc54ae0a412ull, 0x6c1af01500bf0e77ull, 0xa9446b478e21862cull, 0x3493edf05b441171ull}},
             {"TREASURE", 0x09, {0xcd56a9d87ac079bfull, 0x97e8643d9a434995ull, 0x15943bccfe19474bull, 0x0a42012d7ba7a43full},
-             {0xcd56a9d87ac079bfull, 0x97e8643d9a434995ull, 0x15943bccfe19474bull, 0x649a3d8a3f771a01ull}},
+             {0xcd56a9d87ac079bfull, 0x97e8643d9a434995ull, 0x15943bccfe19474bull, 0x649a3d8a3f771a01ull},
+             {0x7636e14e744465b1ull, 0xcb6b855eb553f428ull, 0xd30e3024b8a69d3cull, 0x39078b0bd5386b65ull}},
         };
         const std::vector<uint32_t> checkpoints = {2000, 4000, 6000, 8000};
         std::string bad;
@@ -614,7 +627,7 @@ int main() {
             ASSERT_EQ(got.size(), checkpoints.size());
             bool differs = false;
             for (size_t i = 0; i < checkpoints.size(); ++i) {
-                differs = differs || play.v092[i] != play.now[i];
+                differs = differs || play.v092[i] != play.before[i];
                 if (got[i] == play.now[i]) continue;
                 std::ostringstream o;
                 o << "\n      " << play.map << " roster 0x" << std::hex << play.roster << std::dec << " tick " << checkpoints[i] << ": got " << std::hex << got[i] << ", pinned " << play.now[i] << std::dec;
@@ -1346,7 +1359,7 @@ int main() {
             ASSERT_TRUE(c.has_powerup());
             ASSERT_EQ(c.powerup_type, kPowerUpTypeOfTile[k]);
             ASSERT_FALSE(c.is_obstacle_overlay);                              // not a rock
-            ASSERT_FALSE(c.static_solid);                                     // the removable object's own solidity, as in the named level
+            ASSERT_TRUE(c.static_solid);                                      // the file's solid bit, kept (this level sets it with the object): the bit alone makes a power-up solid
             ASSERT_TRUE(dotted.is_solid_object(TileCoord{12 + 2 * k, 10}));   // but solid to every order that is not the power-up order
         }
     } TEST_END();

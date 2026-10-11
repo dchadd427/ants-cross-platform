@@ -484,6 +484,7 @@ void SimulationEngineImpl::flower_dropper_land(FlowerDropper& d) {
     cell.interactive_id = tile_id;
     cell.is_powerup = true;
     cell.powerup_type = p_type;
+    cell.static_solid = true;                                               // SetTile copies the power-up tile's flag 0x01 to the layer-1 solid bit
 }
 
 } // namespace ants::sim

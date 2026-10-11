@@ -99,7 +99,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 - The type changes at once, and the `getpow` clip (action 4, 840 ms) plays with sounds 1 and 2. Hit points stay.
 - An ant that already had a type drops its old power-up on a free neighbour tile (the West neighbour is twice as likely as each of the others; with no free tile the old power-up is lost).
 - An order given while the ant is crossing into the tile cancels the pick-up: the ant stands on the power-up and cannot be attacked.
-- Power-ups are solid obstacles for paths, attacks and knock-backs.
+- Power-ups are solid obstacles for paths, attacks and knock-backs when the map file gives their tile the solid bit (the editor does; `POPcOrN` does not, and there they are ordinary ground), and so are food piles, fire walls and lunchboxes ([the report](reverse_engineering/map_loader_fidelity.md)).
 
 Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.38 and 5.62.
 

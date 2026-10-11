@@ -1346,7 +1346,7 @@ int main(int argc, char* argv[]) {
         uint16_t sim_rules;
         uint64_t hash;
     };
-    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0x7a96df7831c965e0ull}};      // (3: the bombs of a map file; 5: the loader as the original's; TINY has neither, so the match ended where it did)
+    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0xaa55a2a4a1ec6beeull}};      // (3: the bombs of a map file; TINY has none, so the match ended where it did. 5: the loader as the original's: the hash holds the file's solid bit of every power-up, pile and fire wall cell, which moves it on every map)
 
     TEST_CASE("RP7.3 The Reference Match Ends In The Hash That Its Rules Number Says: The Simulation Cannot Change Without kSimRules") {
         const Played p = play_scripted(tiny, 31, 1500);
@@ -1694,9 +1694,9 @@ int main(int argc, char* argv[]) {
         const Outcome o = play(p.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.hash == line->hash);
         // the original's line stays what it was, and its match ends there still (the 187 engine is not in its way)
-        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[2].sim_rules == kSimRules && kReferenceHashes[2].hash == 0x7a96df7831c965e0ull);
+        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[1].hash == 0x7a96df7831c965e0ull && kReferenceHashes[2].sim_rules == kSimRules && kReferenceHashes[2].hash == 0xaa55a2a4a1ec6beeull);
         const Played original = play_scripted(tiny, 31, 1500);
-        ASSERT_EQ(original.hash, 0x7a96df7831c965e0ull);
+        ASSERT_EQ(original.hash, 0xaa55a2a4a1ec6beeull);
     } TEST_END();
 
     // ---- the snapshot of a match that still runs: the optional chunk `live` ----------------------------------------------------------
