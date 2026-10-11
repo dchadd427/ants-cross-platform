@@ -106,10 +106,10 @@ function load(text, p) {
 
 function touch(id, x, y) { return { identifier: id, clientX: x, clientY: y }; }
 
-// A tap at client (x, y): down, up `ms` later, `dx` away
+// A tap at client (x, y): down, up `ms` later, `dx` and `dy` away
 function tap(p, x, y, opts) {
     opts = opts || {};
-    const down = touch(1, x, y), up = touch(1, x + (opts.dx || 0), y);
+    const down = touch(1, x, y), up = touch(1, x + (opts.dx || 0), y + (opts.dy || 0));
     fire(p.canvas, 'touchstart', event('touchstart', { changedTouches: [down], touches: opts.two ? [down, touch(2, 5, 5)] : [down], timeStamp: 1000 }));
     return fire(p.canvas, 'touchend', event('touchend', { changedTouches: [up], touches: [], timeStamp: 1000 + (opts.ms === undefined ? 80 : opts.ms) }));
 }
@@ -148,11 +148,22 @@ try {
         expect('the poll starts', p.calls.intervals.length, 1);
     }
 
+    // ---- the slop's edge: 10 px is still a tap, in both directions
+    for (const o of [{ dx: 10 }, { dy: 10 }, { dx: -10 }, { dy: -10 }]) {
+        const p = page();
+        load(text, p);
+        tap(p, ...INSIDE, o);
+        expect('a finger that moves ' + JSON.stringify(o) + ' px is still a tap', p.calls.focus, 1);
+    }
+
     // ---- what is not a tap on the box
     {
         const cases = [
             ['a tap beside the box', () => { const p = page(); load(text, p); tap(p, ...BESIDE); return p; }],
             ['a drag (the finger travels 30 px)', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { dx: 30 }); return p; }],
+            ['a vertical drag (the finger travels 30 px down)', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { dy: 30 }); return p; }],
+            ['a finger 11 px off sideways', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { dx: 11 }); return p; }],
+            ['a finger 11 px off vertically', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { dy: 11 }); return p; }],
             ['a long press (500 ms)', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { ms: 500 }); return p; }],
             ['two fingers', () => { const p = page(); load(text, p); tap(p, ...INSIDE, { two: true }); return p; }],
             ['a game that takes no text (a dialog is open, chat is off, no match)', () => { const p = page(); p.game.takes = false; load(text, p); tap(p, ...INSIDE); return p; }],
@@ -223,6 +234,13 @@ try {
         typeText(r, 'line break');
         const before = fire(r.input, 'beforeinput', event('beforeinput', { inputType: 'insertLineBreak' }));
         expect('a line break from the keyboard sends too, and is not typed', [before.prevented, r.game.enters, r.doc.activeElement], [true, 1, null]);
+        const u = page();
+        load(text, u);
+        tap(u, ...INSIDE);
+        typeText(u, 'up only');
+        fire(u.input, 'keyup', event('keyup', { key: 'Enter' }));
+        fire(u.input, 'keypress', event('keypress', { key: 'Enter' }));
+        expect('Enter on keyup or keypress alone sends nothing (only the keydown does)', [u.game.enters, u.doc.activeElement === u.input], [0, true]);
         const s = page();
         load(text, s);
         tap(s, ...INSIDE);

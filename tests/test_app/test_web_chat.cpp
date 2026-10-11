@@ -3,6 +3,7 @@
 //   * what the page types lands in the game's own chat line (printable ASCII, at most 100 characters), Backspace and clear edit it, and what is not text is refused;
 //   * Enter is a key press through the event queue: the line is sent and the box empties, exactly as for a keyboard (the HUD's rules: nothing when the box is empty);
 //   * a dialog or the option "Participate In Chat" off closes the box to all of it, and a typed line stays what it was.
+//   * the catch-up screen and the results refuse text too (the recording's clause is pinned in test_replay_app, RA7.1).
 // Usage: test_web_chat. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -84,9 +85,10 @@ void test_enter() {
     check(rig.ok, "the match is up");
     if (!rig.ok) return;
     Application& app = rig.app;
+    const size_t before = app.hud().get_chat_log().size();
     app.web_chat_do(3, 0);
     app.run_frame_with_delta(0.016f);
-    check(app.hud().get_chat_log().empty() || !log_has(app, "Rush"), "Enter on an empty line sends nothing");
+    check(app.hud().get_chat_log().size() == before, "Enter on an empty line sends nothing (the chat log has the same lines)");
     type(app, "Rush the base!");
     check(app.web_chat_do(3, 0), "Enter is taken");
     check(app.hud().get_chat_input() == "Rush the base!", "the line is sent by the frame that reads the key, not at once");
@@ -116,6 +118,21 @@ void test_closed() {
     app.hud().close_options();
 }
 
+void test_other_refusals() {
+    std::printf("[refused] the catch-up screen and the results close the box\n");
+    AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+    check(rig.ok, "the match is up");
+    if (!rig.ok) return;
+    Application& app = rig.app;
+    check(app.web_chat_available(), "(it takes text first)");
+    app.force_catch_up_screen_for_test(true);
+    check(!app.web_chat_available() && !app.web_chat_do(1, 'a') && app.hud().get_chat_input().empty(), "not on the catch-up screen of a network match");
+    app.force_catch_up_screen_for_test(false);
+    check(app.web_chat_available(), "it is back when the catch-up screen goes");
+    app.scorecard().show(app.sim().get_world_state().match_result, 0);
+    check(app.scorecard().is_open() && !app.web_chat_available() && !app.web_chat_do(1, 'a') && app.hud().get_chat_input().empty(), "not while the results are open");
+}
+
 void test_not_a_match() {
     std::printf("[screens] the setup screen has no chat box of the match\n");
     AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), false, true);
@@ -135,6 +152,7 @@ int main(int argc, char* argv[]) {
     test_typing();
     test_enter();
     test_closed();
+    test_other_refusals();
     test_not_a_match();
     std::printf("\nweb chat: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

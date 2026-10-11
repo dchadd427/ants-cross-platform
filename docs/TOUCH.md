@@ -72,7 +72,7 @@ attributes that keep a keyboard from correcting a chat line. A **tap** on the ma
   limited and sent by the HUD as ever. Nothing of the simulation, the network or the hashes is touched.
 - **Enter** (the key, or a line break from the keyboard) mirrors the line and gives the game an Enter key press through SDL's queue (`Application::web_chat_do`): the same path as a keyboard's, so
   [All] / [Team] and the empty-line rule are the game's. The field is emptied and the keyboard closes. **Esc**, a **finger on the game outside the box**, and a chat that stops taking text (a dialog opens, the match
-  ends: a poll every 400 ms) close it too, and the keyboard focus goes back to the game's canvas. A line that the game changes meanwhile (a quick chat text) shows in the field.
+  ends: a poll every 400 ms) close it too (Esc leaves the typed draft in the game's chat line, as on a desktop), and the keyboard focus goes back to the game's canvas. A line that the game changes meanwhile (a quick chat text) shows in the field.
 - **No stray game input.** The field's `keydown`, `keypress` and `keyup` stop at the field (`stopPropagation`): SDL's handler on the window would type the letter a second time. A composition (an IME's, a
   predictive keyboard's) is not rewritten while it goes on.
 - **The desktop is as it was**: the field is focused by a finger only. A mouse click on the chat box, and a keyboard, are the game's own.
