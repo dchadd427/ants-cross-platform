@@ -809,16 +809,21 @@ def main():
             time.sleep(0.4)
             check("Bot (" in json.loads(value(NAME_CARD_JS))["msg"], "a name that begins like a computer player's is refused too (%r)" % json.loads(value(NAME_CARD_JS))["msg"][:60])
             fill_name_card(tab, "Iris")
+            # A: a link to a code that no room has takes nobody into a room: the card comes back with the line, the name filled in, and the button for a room of one's own
+            again = wait_for(lambda: open_name_card(tab) and json.loads(value(NAME_CARD_JS))["msg"] != "", 10)
+            card = json.loads(value(NAME_CARD_JS))
+            st = lobby()
+            check(bool(again) and card["input"] == "Iris" and card["msg"] == "There is no room with that code. Check it, or ask the host to send the link again." and card["own"] == "Start a room of my own instead" and card["title"] == "Join the room qqq qqq"
+                  and value("document.getElementById('name-step-input').getAttribute('aria-invalid')") == "true" and server.room("qqqqqq") is None and "room=qqqqqq" in value("window.location.search"),
+                  "Join with a name: the link only joins and no room has the code, so the name card comes back with the same name and the line \"There is no room with that code\" (%r), the address is still the link, and the server made nothing" % card["msg"])
+            shot("home_front_no_room_card")
+            contrast("1440 px with the name card that says there is no room", least=40)
+            click_on(tab, "#name-step-own")
             ok = front_ready()
             st = lobby()
-            check(ok and not open_name_card(tab) and st["heading"] == "Your room" and st["banner"]["shown"] and st["banner"]["text"] == "That room is gone, because everybody left, so this one is yours now. Send the link on if you like." and st["banner"]["button"] == "OK" and "warn" not in st["banner"]["cls"],
-                  "Join with a name: the room is not there, so this one is the visitor's own, under that name, and a green strip says so (%r)" % st["banner"]["text"])
-            check(card_of(st, "green")["name"] == "Iris" and code_of(st) == "qqqqqq" and (server.room("qqqqqq") or {}).get("lobby") is True and (server.room("qqqqqq") or {}).get("leader") == 0,
-                  "... the link's code is made again, for the visitor: a lobby on the server with Iris its leader (%s)" % {k: (server.room("qqqqqq") or {}).get(k) for k in ("lobby", "state", "leader")})
-            shot("home_front_gone_strip")
-            contrast("1440 px with the strip at the top", least=40)
-            real_click("#banner-x")
-            check(lobby()["banner"]["shown"] is False, "OK closes the strip")
+            own_code = code_of(st)
+            check(ok and not open_name_card(tab) and st["heading"] == "Your room" and own_code != "qqqqqq" and card_of(st, "green")["name"] == "Iris" and server.room("qqqqqq") is None and (server.room(own_code) or {}).get("lobby") is True and (server.room(own_code) or {}).get("leader") == 0,
+                  "\"Start a room of my own instead\" makes the visitor's room under that name with a new code: a lobby with Iris its leader, and still no room qqqqqq (%s)" % {k: (server.room(own_code) or {}).get(k) for k in ("lobby", "state", "leader")})
             check(value("localStorage.getItem('ants.name')") == "Iris", "the name that was typed is remembered by the browser (for the next room)")
 
             # widths: the layout of the whole page, 320 to 1600 px

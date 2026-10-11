@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.4 - 2026-10-11 - A link to a missing room says so
+
+**For players:**
+- A link to a room that does not exist now says so and offers to start a room of your own, instead of putting you alone in a made-up room.
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/893ef3c...v0124)
+
 ## v0.12.3 - 2026-10-11 - Housekeeping: documentation of finished work removed
 
 **For players:**

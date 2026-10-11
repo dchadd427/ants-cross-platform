@@ -908,7 +908,8 @@
         }
         function onRefused(e) {
             var R = Net.REJECT;
-            if (e.reason === R.Full) startOwn('full');
+            if (e.reason === R.NoSuchRoom && lastParams && lastParams.joinFirst && client && client.joinOnly) askLink(lastParams.code, Rules.TEXT.noroom());      // (a link only joins: a code that no room has takes nobody into a room; the name card says so and offers a room of the visitor's own. A server whose lobbies are all in use answers a Hello that makes a room, never this one)
+            else if (e.reason === R.Full) startOwn('full');
             else if (e.reason === R.MatchRunning) startOwn('running');
             else if (e.reason === R.RejoinFailed || e.reason === R.Dropped) startOwn('running');
             else if (e.reason === R.VersionMismatch) { offline = 'none'; showBanner('version'); render(); }
@@ -944,10 +945,10 @@
         }
         function makeClient(p) {
             return new Net.LobbyClient({
-                url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()
+                url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()
             });
         }
-        // Connect this page to the room of p: { code, name, own, key (a seat to take back), join (a room that must exist) }
+        // Connect this page to the room of p: { code, name, own, key (a seat to take back), join (a room that must exist), joinFirst (a room that must exist for the first Hello: a link) }
         function connect(p) {
             if (client) { var before = client; client = null; before.leave(); }
             lastParams = p;
@@ -972,7 +973,7 @@
         }
 
         // ---- the name card (a link that somebody sent, a code that was typed) ----
-        // title / button / hint: the words of this use; notice: show the recording notice; back: what "a room of my own" does
+        // title / button / hint: the words of this use; message: a line under the field at once (aria-invalid); notice: show the recording notice; back: what "a room of my own" does
         function askName(o) {
             var ui = {
                 input: freshNode('name-step-input'), button: freshNode('name-step-go'),
@@ -984,6 +985,7 @@
                     $('name-step-hint').textContent = o.hint || 'The name the other players see. Leave it empty to be called ' + suggestion + '.';
                     $('who-notice').hidden = o.notice === false;
                     $('name-step-own').textContent = o.backText || 'Start a room of my own instead';
+                    ui.message.textContent = o.message || '';
                     $('name-step').hidden = false;
                     try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
                 },
@@ -1291,18 +1293,22 @@
 
         // ---- the way in ----
         var wanted = new URLSearchParams(window.location.search).get('room');      // (a room code in the address: a link to somebody's room)
+        // The name card of a link (message: the line under the field, if any): Join connects to the room of the code, which is joined and never made; "a room of my own" is the page's own room
+        function askLink(wantedCode, message) {
+            offline = 'join';
+            render();
+            askName({
+                title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join', message: message,
+                done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false, joinFirst: true }); },
+                back: function () { stripRoom(); var own = loadSession(); if (own && own.own) connect({ code: own.code, key: own.key, name: own.name || myName(), own: true }); else { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); } }
+            });
+        }
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
             var stored = loadSession();
             if (wantedCode && !(stored && stored.code === wantedCode)) {
-                offline = 'join';
-                render();
-                askName({
-                    title: 'Join the room ' + Rules.codeText(wantedCode), button: 'Join',
-                    done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false }); },
-                    back: function () { stripRoom(); var own = loadSession(); if (own && own.own) connect({ code: own.code, key: own.key, name: own.name || myName(), own: true }); else { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); } }
-                });
+                askLink(wantedCode, '');
             } else if (stored) {
                 connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });
             } else {
