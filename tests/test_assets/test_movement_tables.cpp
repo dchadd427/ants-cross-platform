@@ -31,6 +31,9 @@
 #include <string>
 #include <vector>
 #include "ants_test_paths.hpp"
+// Failures go through report_failure() below (it adds the test context); the shared macros count the assertion and call it.
+#define ANTS_TEST_REPORT(text) report_failure((text), __FILE__, __LINE__)
+#include "../common/test_assert.hpp"
 
 namespace fs = std::filesystem;
 namespace mv = ants::sim::movement;
@@ -74,8 +77,6 @@ static void skip_test_case(const std::string& name, const std::string& why) {
     std::cout << "  SKIPPED: " << name << " (" << why << ")\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
 
 static void report_failure(const std::string& what, const char* file, int line) {
     std::cout << "FAILED!\n    Assertion failed: " << what << " at " << file << ":" << line;
@@ -84,16 +85,8 @@ static void report_failure(const std::string& what, const char* file, int line) 
     ++g_test_failures;
 }
 
-#define ASSERT_TRUE(cond)                                   \
-    do {                                                    \
-        ++g_assert_count;                                   \
-        if (!(cond)) {                                      \
-            report_failure(#cond, __FILE__, __LINE__);      \
-            return;                                         \
-        }                                                   \
-    } while (0)
-
 // Integer equality; values are printed with integral promotion (so int8_t shows as a number).
+#undef ASSERT_EQ
 #define ASSERT_EQ(a, b)                                                                     \
     do {                                                                                    \
         ++g_assert_count;                                                                   \

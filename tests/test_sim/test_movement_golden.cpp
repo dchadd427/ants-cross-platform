@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <vector>
 #include "ants_test_paths.hpp"
+#include "../common/test_assert.hpp"
 
 using namespace ants::sim;
 namespace mv = ants::sim::movement;
@@ -51,22 +52,8 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     }
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
 
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
 
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
 
 template <typename T>
 long long printable(const T& v) {
@@ -77,6 +64,7 @@ long long printable(const T& v) {
     }
 }
 
+#undef ASSERT_EQ
 #define ASSERT_EQ(a, b) \
     do { \
         ++g_assert_count; \

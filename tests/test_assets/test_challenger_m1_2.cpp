@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <functional>
 #include "ants_test_paths.hpp"
+#include "../common/test_assert.hpp"
 
 namespace fs = std::filesystem;
 using namespace ants::assets;
@@ -58,19 +59,9 @@ inline void run_challenge_case(const std::string& name, const std::function<void
 
 #define CHALLENGE_END() );
 
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
 
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 
+#undef ASSERT_EQ
 #define ASSERT_EQ(a, b) \
     do { \
         ++g_assert_count; \
@@ -82,6 +73,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_NE
 #define ASSERT_NE(a, b) \
     do { \
         ++g_assert_count; \
@@ -93,6 +85,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_NEAR
 #define ASSERT_NEAR(a, b, eps) \
     do { \
         ++g_assert_count; \
@@ -105,6 +98,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_LT
 #define ASSERT_LT(a, b) \
     do { \
         ++g_assert_count; \
@@ -117,6 +111,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_LE
 #define ASSERT_LE(a, b) \
     do { \
         ++g_assert_count; \
@@ -129,6 +124,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_GT
 #define ASSERT_GT(a, b) \
     do { \
         ++g_assert_count; \
@@ -141,6 +137,7 @@ inline void run_challenge_case(const std::string& name, const std::function<void
         } \
     } while (0)
 
+#undef ASSERT_GE
 #define ASSERT_GE(a, b) \
     do { \
         ++g_assert_count; \

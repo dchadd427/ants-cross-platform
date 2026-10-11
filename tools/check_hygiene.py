@@ -58,7 +58,7 @@ LINE_CEILINGS = {
     "src/ants_sim/sim_engine.cpp": 1533,
 }
 
-ASSERT_TRUE_DEFINITIONS = 45  # shrinks to 1 when the tests are consolidated: then lower this constant
+ASSERT_TRUE_DEFINITIONS = 2  # tests/common/test_assert.hpp and the throwing ASSERT_TRUE of tests/e2e/e2e_framework.hpp: a third one is a new copy to remove
 
 FORBIDDEN = re.compile(r"implementation_plan|ants-plans|DECISIONS\.md|claude\.ai/code|Co-Authored-By|Claude-Session|project thread|the other thread", re.I)
 FORBIDDEN_ALLOWED = {"AGENTS.md", "docs/WORKFLOW.md", ".gitignore", "tools/check_hygiene.py", "tests/scripts/test_hygiene.py"}
@@ -234,7 +234,7 @@ def assert_true_count(root, files):
 def check_assert_true(root, files, allowed=ASSERT_TRUE_DEFINITIONS):
     n = assert_true_count(root, files)
     if n > allowed:
-        return ["ASSERT_TRUE: %d definitions, at most %d (use the shared header, define no new copy)" % (n, allowed)]
+        return ["ASSERT_TRUE: %d definitions, at most %d (include tests/common/test_assert.hpp, define no new copy)" % (n, allowed)]
     if n < allowed:
         return ["ASSERT_TRUE: %d definitions, fewer than the constant %d: lower the constant" % (n, allowed)]
     return []
