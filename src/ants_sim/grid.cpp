@@ -111,7 +111,17 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.powerup_type = 0;
             cell.is_obstacle_overlay = false;
 
-            if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE && movement::is_powerup_tile(c2.tile_index)) {
+            if (is_original_bomb_tile(c2.tile_index)) {
+                // A bomb is a tile id (FUN_01008bc6, 0x81 .. 0x84), never a dictionary name: community editors leave these entries "." and the original arms them all the same. Its COLOUR is the
+                // tile's (the planted bomb's id, 100 + the colour's team index); its OWNER is the cell's second word (the file's third, `properties`: the team index that credits the hits and whose
+                // ants and allies route around it), kept verbatim: 0 .. 4 as they are (4 is also "no ally", as in the original), anything above is an editor leftover that matches nobody
+                // (255). The word is not an anchor here: the cell has none, as a planted bomb has none. It is walkable (a bomb is not solid) and set off by the first ant that ends a step on
+                // it (docs/reverse_engineering/map_file_bombs.md).
+                cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + original_bomb_team(c2.tile_index));
+                cell.interactive_owner = c2.properties <= 4u ? static_cast<uint8_t>(c2.properties) : uint8_t{255};
+                cell.anchor_x = -1;
+                cell.anchor_y = -1;
+            } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE && movement::is_powerup_tile(c2.tile_index)) {
                 // A power-up is a tile id (FUN_01007202, 0x1007202: the ids 62 .. 66 carry the flag, the five kinds of FUN_01021087), never a dictionary name: community
                 // dictionaries often name these entries "." (the editor did not list them) and the original plays and draws them all the same. The cell is a removable
                 // object (no obstacle overlay): it is solid to every order but the power-up order, and the arrival of that order takes it.
@@ -422,6 +432,9 @@ void Grid::clear_bomb(uint32_t x, uint32_t y) noexcept {
     if (cell.has_bomb()) {
         cell.interactive_id = TILE_EMPTY;
         cell.interactive_owner = 255;
+        // SetTile(empty) clears the cell's layer-1 solid bit too (FUN_0100744f -> FUN_0100660c(row, col, 0); row 0 never): a bomb of a map file on a solid cell leaves it open. A planted bomb
+        // lies on a cell that was not solid, so nothing changes for it.
+        if (y > 0) cell.static_solid = false;
     }
 }
 

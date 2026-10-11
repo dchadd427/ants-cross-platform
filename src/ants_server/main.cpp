@@ -5,7 +5,7 @@
 //               [--resume-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
-//               [--bot-match-every-min N]
+//               [--bot-match-every-min N] [--db FILE | --no-db] [--no-history]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -65,12 +65,18 @@
 //                      the server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none, the default): two to four standard bots, Medium or Hard, on random seats of one of the original's six
 //                      maps, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER.md "Matches of computer players"). Needs the replays (without them nothing is
 //                      played): the first match begins a minute after the start, the next ones N minutes after the one before began, and none while the last is still going.
+//   --db FILE          the database file (SQLite, docs/SERVER.md "The database"). Default: ants.db in --results-dir; without a results folder the server keeps none. A file that cannot be opened (not a database,
+//                      damaged, not writable) or that a newer program made stops the server; the file is never changed or deleted by that
+//   --no-db            keep no database, whatever --results-dir says
+//   --no-history       keep no match history (docs/REPLAYS.md "The match history": what every match came to, in the database, for good). Without this option the history is kept whenever there is a database; there is
+//                      no folder of its own (it lives in the database), and --no-db keeps none either. It counts the matches from the replays, while no match runs, so it needs those to add to it
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
 //                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
-//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays and for the matches that run now (GET /replays, GET /replays/<file>, GET /live, GET /live/<id>; no secret, nothing
-//                      else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the four paths to it (docker/nginx.conf). The control interface lists and gives the files too (all of them), and deletes them, behind its secret whatever this says
+//   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays, the match history and the matches that run now (GET /replays, GET /replays/<file>, GET /history, GET /history/<id>,
+//                      GET /live, GET /live/<id>; no secret, nothing else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the paths to it (docker/nginx.conf). The control interface
+//                      lists and gives the files and the history too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
 //   --version, --help
@@ -102,6 +108,9 @@
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_server/control.hpp"
+#include "ants_db/database.hpp"
+#include "ants_db/migrations.hpp"
+#include "ants_server/db_schema.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
@@ -149,6 +158,9 @@ struct Options {
     uint16_t replay_port{0};                   // --replay-port: the public read-only door of the replays (0: none)
     bool replay_any_interface{false};
     long bot_match_every_min{0};             // --bot-match-every-min (0: none)
+    std::string db_file;                       // --db (empty: ants.db in the results folder, when there is one)
+    bool no_db{false};
+    bool no_history{false};                    // --no-history
 };
 
 void usage(FILE* to) {
@@ -160,7 +172,7 @@ void usage(FILE* to) {
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
-                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440]\n"
+                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -232,6 +244,16 @@ int main(int argc, char** argv) {
             o.replay_demo = true;
         } else if (a == "--no-replays") {
             o.no_replays = true;
+        } else if (a == "--no-db") {
+            o.no_db = true;
+        } else if (a == "--no-history") {
+            o.no_history = true;
+        } else if (a == "--db") {
+            o.db_file = value("--db");
+            if (o.db_file.empty()) {
+                std::fprintf(stderr, "--db takes a file name\n");
+                return 2;
+            }
         } else if (a == "--replays-dir") {
             o.replays_dir = value("--replays-dir");
             if (o.replays_dir.empty()) {
@@ -347,6 +369,10 @@ int main(int argc, char** argv) {
     }
     if (o.no_replays && !o.replays_dir.empty()) {
         std::fprintf(stderr, "--replays-dir and --no-replays exclude each other\n");
+        return 2;
+    }
+    if (o.no_db && !o.db_file.empty()) {
+        std::fprintf(stderr, "--db and --no-db exclude each other\n");
         return 2;
     }
     std::error_code ec;
@@ -497,6 +523,29 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     log(std::string("ants_server ") + std::string(ants::VERSION_STRING) + " build " + std::string(ants::BUILD_ID) + " (network protocol " + std::to_string(ants::net::kProtocolVersion) + "), maps in " + o.maps_dir);
+    // The database (docs/SERVER.md "The database"): the file --db, else ants.db in the results folder, unless switched off. It is opened, brought to the schema of this program and kept open until the server
+    // stops. Whatever cannot be done (a file that is no database, a newer one, a read-only folder) stops the server: the file is left as it is, and --no-db starts the server without one.
+    ants::db::Database database;
+    {
+        std::string path = o.db_file;
+        if (o.no_db) {
+            log("database is off (--no-db)");
+        } else if (path.empty() && o.results_dir.empty()) {
+            log("database is off: no --results-dir or --db to keep it in");
+        } else {
+            if (path.empty()) path = (std::filesystem::path(o.results_dir) / "ants.db").u8string();
+            std::filesystem::create_directories(std::filesystem::u8path(path).parent_path(), ec);          // (an empty parent, a file in the current folder, is fine)
+            int version = 0;
+            std::string journal;
+            const ants::db::Error err = ants::db::open_and_migrate(database, path, ants::server::db_migrations(), ants::db::OpenOptions(), &version, &journal);
+            if (!err.ok()) {
+                std::fprintf(stderr, "database %s: %s\n(the file was not changed; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str());
+                return 1;
+            }
+            log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
+                (journal == "wal" ? std::string() : std::string("; the file system gave no WAL, the rollback journal is used")));
+        }
+    }
     // Restart records (restart_record.hpp): in --restart-dir, else in the folder "restart" of the results folder, unless switched off. An explicit folder that cannot be used stops the server
     // (the operator asked for it); the default one is given up with a line in the log.
     {
@@ -565,6 +614,19 @@ int main(int argc, char** argv) {
             }
         }
     }
+    // The match history (history_store.hpp): in the database, unless switched off. It counts the matches that the replay store keeps. Whatever is wrong with it only switches the history off, with a line in the log.
+    if (o.no_history) {
+        log("the match history is off (--no-history)");
+    } else if (!database.is_open()) {
+        log("the match history is off: the server has no database (see --db and --no-db)");
+    } else {
+        std::string history_why;
+        if (!rooms.enable_history(database, history_why)) log("the match history is off: " + history_why);
+        for (const std::string& line : rooms.take_notices()) log(line);
+        if (rooms.history_store() != nullptr) {
+            log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; the matches of the replay store are counted while no match runs" : "; the server keeps no replays, so nothing is added"));
+        }
+    }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
@@ -577,7 +639,7 @@ int main(int argc, char** argv) {
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
-            ": GET /replays, GET /replays/<file>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
     }
     if (http) {
         using ants::server::SecretSource;
@@ -644,6 +706,11 @@ int main(int argc, char** argv) {
     if (rooms.restart_store() != nullptr) {
         const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - stopping).count();
         log("stopped: " + std::to_string(kept) + " restart record(s) made durable and kept (" + std::to_string(took) + " ms)");
+    }
+    rooms.disable_history();                                     // (it lets go of the database)
+    if (database.is_open()) {
+        const ants::db::Error err = database.close();
+        if (!err.ok()) log("database: closing failed: " + err.message);
     }
     return 0;
 }

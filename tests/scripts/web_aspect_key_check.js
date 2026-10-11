@@ -2,7 +2,7 @@
 // (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the table of the four shapes, the block of the picture's
 // shape, the selector's listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // 16:9 is the default everywhere: only the choice of the selector (the key `ants.aspect.v2`) or ?aspect= in the address gives another picture (both pages have the same four shapes, 4:3, 16:10, 16:9 and
-// 21:9: the front page's footer has them as its "Screen" buttons "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
+// 21:9: the front page's match column has them as its "Picture" row "Classic 4:3", "16:10", "16:9" and "21:9", with the "fills your screen" tag under the one nearest to the computer's screen). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
 // starts 16:9 once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
 // The front page's selector (the lobby is the page's only mode) keeps the match and the room, changes the shape of the page at once, remembers it, and the address of the hand-off to the game
@@ -102,6 +102,7 @@ function runShell(path, search, stored, options) {
     if (!hook) throw new Error(path + ': the postRun hook of the Module was not found');
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen);
+    win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
     const buttons = SHELL_SHAPES.map((shape) => {
         const button = element({ 'data-aspect': shape, 'aria-checked': shape === '16:9' ? 'true' : 'false' });
@@ -165,7 +166,7 @@ function runLobby(path, search, stored, options) {
     if (options && options.noScreen) win.screen = undefined;                          // a window that has no screen to ask
     const radios = radioGroup(['4:3', '16:10', '16:9', '21:9']);
     const body = element();
-    // the footer: its tags (hidden until the page shows one) and the bar that gets the room for them
+    // the Picture row: its tags (hidden until the page shows one) and the row, which gets the room for them
     const tags = {};
     for (const value of SHELL_SHAPES) { tags[value] = element(); tags[value].hidden = true; }
     const bar = element();
@@ -177,7 +178,7 @@ function runLobby(path, search, stored, options) {
             const at = SHELL_SHAPES.map((value) => value.replace(':', '-'));
             if (id.indexOf('aspect-') === 0 && at.indexOf(id.slice(7)) !== -1) return radios[SHELL_SHAPES[at.indexOf(id.slice(7))]];
             if (id.indexOf('fit-') === 0 && at.indexOf(id.slice(4)) !== -1) return tags[SHELL_SHAPES[at.indexOf(id.slice(4))]];
-            if (id === 'footer-bar') return bar;
+            if (id === 'shape-row') return bar;
             throw new Error('the page asked for #' + id);
         },
     };
@@ -258,6 +259,30 @@ try {
         expect('shell.html, ' + label + ' (the selector shows it)', r.checked, checkedString(aspect));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
+    }
+    // a spectator (a replay or a live match) is a visitor like any other: ?aspect=, then what the selector remembered, then 16:9 (it used to be 16:9 whatever the address and the browser said)
+    for (const [label, search, stored, aspect, source] of [
+        ['a replay, nothing remembered', '?replay=a', {}, '16:9', 'default'],
+        ['a replay, 4:3 remembered', '?replay=a', { [NEW_KEY]: '4:3' }, '4:3', 'remembered'],
+        ['a replay, 21:9 remembered', '?replay=a', { [NEW_KEY]: '21:9' }, '21:9', 'remembered'],
+        ['a replay, the address asks for 16:10 over a remembered 4:3', '?replay=a&aspect=16:10', { [NEW_KEY]: '4:3' }, '16:10', 'address'],
+        ['a replay, the address asks for 4:3', '?aspect=4:3&replay=a', {}, '4:3', 'address'],
+        ['a replay, storage refused, the address asks for 21:9', '?replay=a&aspect=21:9', THROWS, '21:9', 'address'],
+        ['a live match, nothing remembered', '?live=a', {}, '16:9', 'default'],
+        ['a live match, 16:10 remembered', '?live=a', { [NEW_KEY]: '16:10' }, '16:10', 'remembered'],
+        ['a live match, the address asks for 21:9 over a remembered 4:3', '?live=a&aspect=21:9', { [NEW_KEY]: '4:3' }, '21:9', 'address'],
+    ]) {
+        const r = runShell(shellPath, search, stored);
+        expect('shell.html, ' + label + ' (the shape)', r.aspect, aspect);
+        expect('shell.html, ' + label + ' (where it came from)', r.source, source);
+        expect('shell.html, ' + label + ' (--aspect for the game)', r.args.slice(-2).join(' '), '--aspect ' + aspect);
+        expect('shell.html, ' + label + ' (the stage)', r.stage.attributes['data-aspect'], aspect);
+        expect('shell.html, ' + label + ' (the buttons show it)', r.checked, checkedString(aspect));
+    }
+    {   // the spectator's pick is the player's: remembered under the same key and put in the address
+        const r = runShell(shellPath, '?replay=a', {});
+        r.buttons[0].listeners.click();
+        expect('shell.html, a replay: a pick of 4:3 is remembered, shown and given to the stage', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + r.stage.attributes['data-aspect'], JSON.stringify([[NEW_KEY, '4:3']]) + ' 4:3 4:3');
     }
     // ?embed=1 is no frame of another page any more (the front page has no frames): the game page reads the remembered shape for it as for any address
     for (const [label, search, stored, aspect, source] of [
@@ -441,7 +466,7 @@ try {
     ]) {
         const r = runLobby(lobbyPath, '', {}, { screen });
         expect('lobby.html, ' + label + ': the tag', r.tags, shape);
-        expect('lobby.html, ' + label + ': the footer has room for it only when there is one', r.bar.classes.join(' '), shape ? 'has-fit-tag' : '');
+        expect('lobby.html, ' + label + ': the Picture row has room for it only when there is one', r.bar.classes.join(' '), shape ? 'has-fit-tag' : '');
         expect('lobby.html, ' + label + ': the tag does not change what is checked (16:9 until the player picks)', shown(r) + ' ' + r.now(), '16:9 16:9');
         const shell = runShell(shellPath, '', {}, { screen });
         expect('lobby.html, ' + label + ': the same shape as the game page tags', r.tags, shell.tags);

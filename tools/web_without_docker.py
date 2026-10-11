@@ -563,7 +563,7 @@ def prepare_ports(context, emsdk, env):
 def site_config(conf, fs, cache, port):
     """docker/nginx.conf for a machine without the image's folders: its paths under fs, the cache folder, and `listen` on 127.0.0.1:PORT."""
     html, stats = os.path.join(fs, "usr", "share", "nginx", "html"), os.path.join(cache, "ants_stats")
-    text = conf.replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats)
+    text = conf.replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
     text, moved = re.subn(r"^([ \t]*)listen[ \t]+80;[ \t]*$", r"\1listen 127.0.0.1:%d;" % port, text, flags=re.M)
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:
@@ -628,7 +628,7 @@ class Nginx:
 
     def configure(self):
         fs = os.path.join(self.work, "fs")
-        for sub in ("cache/ants_stats", "tmp/client_body", "tmp/proxy", "tmp/fastcgi", "tmp/uwsgi", "tmp/scgi"):
+        for sub in ("cache/ants_stats", "cache/ants_history", "tmp/client_body", "tmp/proxy", "tmp/fastcgi", "tmp/uwsgi", "tmp/scgi"):
             os.makedirs(os.path.join(self.prefix, sub), exist_ok=True)
         with open(self.site, "w", encoding="utf-8") as f:
             f.write(site_config(read_text(os.path.join(fs, "etc", "nginx", "conf.d", "default.conf")), fs, os.path.join(self.prefix, "cache"), self.port))

@@ -43,7 +43,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
         -Wconversion
         -Wsign-conversion
         -Wshadow
-        -Wnon-virtual-dtor
+        $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>      # (C++ only: the vendored SQLite is a C file, third_party/sqlite)
     )
     # (GCC 13 and later: -Wdangling-reference has one known false positive in this project, in tests/test_ai/test_ai_worker.cpp: it is switched off for that one source file in
     # tests/test_ai/CMakeLists.txt, so that the product code and every other file keep the warning. -Wsign-conversion is off in GCC's sanitizer build only: see ENABLE_ASAN below.)
@@ -169,6 +169,8 @@ add_subdirectory(src/ants_net)
 add_subdirectory(src/ants_ai)         # the computer players (virtual clients, docs/BOTS.md): no SDL, no sockets, no threads, so it builds for the web too
 add_subdirectory(src/ants_replay)     # the replay file, its recorder and player (docs/REPLAYS.md): no SDL, no sockets, no threads, so it builds for the web too
 if(NOT EMSCRIPTEN)
+    add_subdirectory(third_party/sqlite)  # SQLite (the amalgamation, public domain): the static library ants_sqlite
+    add_subdirectory(src/ants_db)         # the database layer of the game server (SQLite behind a thin wrapper, schema migrations): no SDL, no sockets, no threads
     add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
     add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
 endif()
@@ -267,6 +269,7 @@ if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests/test_ai)
     add_subdirectory(tests/test_replay)
     if(NOT EMSCRIPTEN)
+        add_subdirectory(tests/test_db)
         add_subdirectory(tests/test_ctl)
         add_subdirectory(tests/test_server)
     endif()

@@ -38,3 +38,8 @@ include/ants_app/dr_mp3.h           linguist-vendored
 asset_catalog/catalog_data.js       linguist-generated
 docs/*.json                         linguist-generated
 src/ants_sim/*_data.inc             linguist-generated
+
+# the vendored SQLite: byte for byte as the official amalgamation (its hash is in third_party/sqlite/README.md)
+third_party/sqlite/sqlite3.c  -text
+third_party/sqlite/sqlite3.h  -text
+third_party/**  linguist-vendored

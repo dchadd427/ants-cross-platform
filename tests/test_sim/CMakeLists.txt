@@ -198,6 +198,24 @@ target_link_libraries(test_level_defaults PRIVATE ants_test_paths)
 
 add_test(NAME test_level_defaults COMMAND test_level_defaults)
 
+# Bombs that a map file holds (layer-2 ids 129 .. 132, docs/reverse_engineering/map_file_bombs.md): they are the planted bomb of their colour, walkable, set off by a step; the community map Bombz Away plays
+add_executable(test_file_bombs
+    test_file_bombs.cpp
+)
+
+target_link_libraries(test_file_bombs PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_file_bombs PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_file_bombs PRIVATE ants_test_paths)
+
+add_test(NAME test_file_bombs COMMAND test_file_bombs)
+
 add_executable(test_commands
     test_commands.cpp
 )

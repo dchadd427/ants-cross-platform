@@ -147,10 +147,10 @@ class TheListPage(unittest.TestCase):
         self.assertRegex(self.page, r"\.sim_rules\s*(?:===|!==|==|!=)")
 
     def test_a_match_of_game_mode_187_is_playable_as_well_with_its_own_rules_number_and_its_mode(self):
-        # replay.hpp: kSimRulesMode187 = 2 and the list entry says "mode": "187"; an entry of rules 2 that does not say the mode is not one of that game
-        self.assertIn("var RULES_187 = 2;", self.page)
+        # replay.hpp: kSimRulesMode187 = 4 and the list entry says "mode": "187"; an entry of rules 4 that does not say the mode is not one of that game
+        self.assertIn("var RULES_187 = 4;", self.page)
         header = read("include", "ants_replay", "replay.hpp")                                                # (the page's number is the header's, or the game of a mode would move to "Earlier versions")
-        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 2;")
+        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 4;")
         self.assertRegex(self.page, r"e\.sim_rules\s*===\s*RULES_187\s*&&\s*e\.mode\s*===\s*'187'")
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's rule for a playable match was NOT run")
@@ -160,22 +160,24 @@ class TheListPage(unittest.TestCase):
         function = re.search(r"^\s*function playable\(e, rules\) \{.*\}$", self.page, re.M)
         self.assertTrue(number and function)
         table = [  # (the list's sim_rules, an entry's sim_rules, the entry's mode, playable)
-            (1, 1, None, True),           # the original's game on a build of rules 1 (entries of servers before 187 say no mode)
-            (1, 1, "highest-score", True),
-            (1, 2, "187", True),          # a match of 187 on that build
-            (1, 2, "highest-score", False),  # rules 2 are the rules of 187 only: the entry does not say it
-            (1, 2, None, False),
-            (1, 2, "", False),
-            (1, 1, "187", True),          # (rules 1 are this build's: the mode word is not looked at)
-            (1, 3, "187", False),         # rules that no build plays yet
-            (1, 3, "highest-score", False),
-            (1, 0, "187", False),
-            (1, 0, None, False),          # an entry of unknown rules is an earlier version
-            (1, None, "187", False),         # an entry that names no rules at all
+            (3, 3, None, True),           # the original's game on a build of rules 3 (entries of servers before 187 say no mode)
+            (3, 3, "highest-score", True),
+            (3, 4, "187", True),          # a match of 187 on that build
+            (3, 4, "highest-score", False),  # rules 4 are the rules of 187 only: the entry does not say it
+            (3, 4, None, False),
+            (3, 4, "", False),
+            (3, 3, "187", True),          # (rules 3 are this build's: the mode word is not looked at)
+            (3, 5, "187", False),         # rules that no build plays yet
+            (3, 5, "highest-score", False),
+            (3, 2, "187", False),         # the rules of 187 before the bombs of a map file: an earlier version
+            (3, 1, None, False),          # the original's game before them
+            (3, 0, "187", False),
+            (3, 0, None, False),          # an entry of unknown rules is an earlier version
+            (3, None, "187", False),         # an entry that names no rules at all
             (0, 0, None, False),          # a list that does not say the server's rules: nothing is playable
             (0, 0, "187", False),
-            (0, 2, "187", False),
-            (0, 1, "highest-score", False),
+            (0, 4, "187", False),
+            (0, 3, "highest-score", False),
         ]
         script = number.group(0) + "\n" + function.group(0) + "\n" + "const table = " + json.dumps(table) + ";\n" + (
             "let bad = [];\n"
@@ -324,6 +326,102 @@ class TheLiveGlue(unittest.TestCase):
         self.assertIn("R.chipsOf(document, ", self.glue)
         self.assertIn("document.createTextNode(R.mapTitle(map) || 'A match to watch')", self.glue)
         self.assertNotRegex(self.glue, r"innerHTML\s*=[^;]*(?:LIVE_ID|latest|info\.|overEntry|why)")
+
+
+class TheSpectatorsPicture(unittest.TestCase):
+    """A spectator (a replay, a live match) chooses the picture's shape as a player does: the same remembered choice and ?aspect= (16:9 without them), a Picture button in the replay bar that opens a small
+    window with the four shapes, and the bar as wide as the picture in every shape. The node checks run the page's own code (web_aspect_key_check.js: the shape that a spectator gets;
+    web_picture_popover_check.js: the button); tests/scripts/web_aspect_check.py and web_live_check.py look at the real layout."""
+    page = read("web", "shell.html")
+    glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
+
+    def test_a_spectator_is_not_forced_to_16_9(self):
+        self.assertNotIn("fromAddress = '16:9'", self.page)
+        self.assertNotRegex(self.page, r"if \(ANTS_REPLAY_MODE\)[^\n]*remembered = null")
+        block = self.page[self.page.index("var ANTS_ASPECT_KEY"):self.page.index("// The game tells the page the seat")]
+        self.assertNotIn("ANTS_REPLAY_MODE", block)                                                          # (the choice is the page's for every address)
+        self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered);", block)
+
+    def test_the_picture_button_and_its_window_are_in_the_bar_with_the_four_shapes(self):
+        bar = self.page[self.page.index('<div class="rbar rep-only" id="rbar">'):self.page.index('id="b-tab"')]
+        self.assertRegex(bar, r'<div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop"[^>]*>Picture &#9652;</button>')
+        self.assertLess(bar.index('id="picwrap"'), bar.index('id="b-fsx"'))
+        self.assertGreater(bar.index('id="picwrap"'), bar.index('id="speed"'))
+        pop = bar[bar.index('id="picpop"'):bar.index('id="b-fsx"')]
+        self.assertRegex(pop, r'^id="picpop" role="group" aria-labelledby="picpop-h" hidden>')
+        self.assertIn('role="radiogroup"', pop)
+        shapes = re.findall(r'<button type="button" role="radio" data-aspect="([^"]+)" aria-checked="(true|false)" title="([^"]+)">([^<]+)</button><span class="fit-tag" hidden>fills your screen</span>', pop)
+        self.assertEqual(shapes, [("4:3", "false", "Classic 4:3: the original's picture (640 x 480)", "Classic 4:3"), ("16:10", "false", "16:10: laptops and 16:10 monitors (960 x 600)", "16:10"),
+                                  ("16:9", "true", "16:9: the wide picture (960 x 540)", "16:9"), ("21:9", "false", "21:9: ultrawide monitors (1260 x 540)", "21:9")])
+        self.assertNotRegex(pop, r'\bid="aspect-')                                                          # (the player's buttons keep their ids: one of each on the page)
+        self.assertEqual(len(re.findall(r'\bid="aspect-(?:4-3|16-10|16-9|21-9)"', self.page)), 4)
+
+    def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
+        self.assertIn("document.querySelectorAll('.seg button[data-aspect]').forEach(function (button) {\n                button.addEventListener('click'", self.page)   # (every shape button of the page, the bar's too)
+        self.assertIn("remember(value);", self.page)
+        self.assertIn("body.replay .view-bar", self.page)
+        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's row stays hidden here)
+        self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
+        self.assertNotRegex(self.page, r"(?m)^\s*\.seg \{[^}]*picpop")                                       # (no new style for the buttons: the page's .seg)
+
+    def test_the_bar_is_as_wide_as_the_picture_in_every_shape(self):
+        rule = re.search(r"\n\s*\.rbar \{([^}]*)\}", self.page).group(1)
+        self.assertIn("--ar-w: 16; --ar-h: 9; --bar-max: 1280px;", rule)
+        self.assertIn("width: min(100%, var(--bar-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
+        self.assertIn("width: min(100%, var(--bar-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
+        self.assertNotRegex(rule, r"\* 16 / 9")                                                              # (not the 16:9 formula for every shape any more)
+        stage = {m[0]: m[1] for m in re.findall(r'#game-stage\[data-aspect="([^"]+)"\] \{([^}]*)\}', self.page)}
+        for shape, numbers in (("4:3", ("4", "3", "960px")), ("16:10", ("8", "5", None)), ("21:9", ("7", "3", None))):
+            bar = re.search(r'#game-stage\[data-aspect="%s"\] ~ \.rbar \{([^}]*)\}' % shape, self.page).group(1)
+            self.assertIn("--ar-w: %s; --ar-h: %s;" % numbers[:2], bar, shape)
+            self.assertIn("--ar-w: %s;" % numbers[0], stage[shape])                                           # (the same numbers as the stage's)
+            self.assertIn("--ar-h: %s;" % numbers[1], stage[shape])
+            if numbers[2]:
+                self.assertIn("--bar-max: %s;" % numbers[2], bar, shape)
+                self.assertIn("--stage-max: %s;" % numbers[2], stage[shape])
+            else:
+                self.assertNotIn("--bar-max", bar, shape)
+
+    def test_every_layout_of_the_bar_has_a_place_for_the_button(self):
+        for areas in ('"play tl clock speed pic fsx"', '"tl tl tl tl" "play clock pic fsx" "speed speed speed speed"', '"play tl clock live speed pic fsx"',
+                      '"tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed"'):
+            self.assertIn("grid-template-areas: " + areas, self.page, areas)
+        self.assertEqual(self.page.count('"play tl clock speed pic fsx"'), 2)                                 # (the bar, and the fullscreen bar of a short window)
+        self.assertEqual(self.page.count('"play tl clock live speed pic fsx"'), 2)
+        self.assertIn(".rbar .picwrap { grid-area: pic; position: relative; }", self.page)
+
+    def test_the_window_stays_on_a_narrow_screen(self):
+        rule = re.search(r"\n\s*\.picpop \{([^}]*)\}", self.page).group(1)
+        self.assertIn("box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px);", rule)                    # (one line when it fits, never wider than the screen less a gutter at each side)
+        self.assertIn(".picpop .seg { flex-wrap: wrap; }", self.page)                                        # (the four shapes take two lines under about 380 px)
+        self.assertIn("right: 0;", rule)
+
+    def test_the_arrows_choose_a_shape_and_the_keys_are_not_overstated(self):
+        self.assertIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)
+        entry = read("CHANGELOG.md")
+        entry = entry[entry.index("## v0.12.8"):entry.index("## v0.12.7")]
+        self.assertNotIn("Tab", entry)
+        self.assertNotIn("keyboard", entry.lower())                                                          # (Tab does not move the focus on the game page: the entry promises no keyboard reach)
+
+    def test_the_bar_stays_while_the_window_is_open_and_esc_is_the_windows(self):
+        self.assertIn("if (dragging || !$('picpop').hidden) {", self.glue)
+        self.assertIn("ev.key !== 'Escape' || !picOpen()", self.glue)
+        self.assertIn("picBtn.focus()", self.glue)
+
+    def test_nothing_else_of_a_spectator_assumes_the_wide_picture(self):
+        self.assertNotIn("960", self.glue)
+        self.assertNotIn("1260", self.glue)
+        self.assertNotIn("stage-max", self.glue)
+        self.assertNotIn("'16:9'", self.glue)
+        self.assertNotIn("--aspect", self.glue)                                                              # (the shape is the page's, passed on once with the game's other arguments)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the Picture button's code was NOT run (tests/scripts/web_picture_popover_check.js)")
+class ThePictureButtonsOwnCode(unittest.TestCase):
+    def test_open_close_click_elsewhere_esc_and_the_focus(self):
+        done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_picture_popover_check.js"), os.path.join(REPO, "web", "shell.html")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("every row holds", done.stdout)
 
 
 class TheFiles(unittest.TestCase):

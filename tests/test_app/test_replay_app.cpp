@@ -27,6 +27,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -63,19 +64,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 
 namespace {
 
@@ -1243,16 +1231,8 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_hash ^= 1u; }), ReplayFailure::NoMap));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_name = "NOWHERE.LVL"; }), ReplayFailure::NoMap));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.seed += 1; }), ReplayFailure::Diverged));
-        // an older file that the table of protocol numbers knows plays (the field is absent, protocol 15)
-        {
-            replay::Replay r = made.file;
-            r.head.sim_rules = 0;
-            r.head.engine_rules = 15;
-            std::string error;
-            Viewer v(replay::encode(r, error));
-            ASSERT_TRUE(v.ok && v.state() == ReplayState::Playing && v.app.replay_failure() == ReplayFailure::None);
-            v.app.shutdown();
-        }
+        // an older file that the table of protocol numbers knows (the field is absent, protocol 15: rules 1) is an earlier version's since the bombs of a map file (rules 3)
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 15; }), ReplayFailure::Older));
         // the page's own questions on an application that shows no replay
         Application plain;
         ApplicationConfig cfg;

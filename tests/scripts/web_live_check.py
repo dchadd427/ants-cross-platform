@@ -7,7 +7,7 @@ page's own part: the glue that fetches the growing file again and again and tell
 C++ tests do). The DevTools protocol is spoken with the client of web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
 Parts (--only): list (the "Live now" box: the matches, hostile names as text, a match that comes later, no box when the door is not there), watch (a match at its present: the tag, Pause and
 "Jump to live", the file that grows, the feed that stops and comes back), ends (a match that ends and was kept, one that ends and was not kept, a kept replay that is slow to appear), cards
-(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), bar (the REPLAY tag lies outside the picture
+(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
 in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
 note says how to bring it back; a mouse works as ever).
 
@@ -187,10 +187,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay or bar (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay, picture or bar (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "watch", "ends", "cards", "replay", "bar")
+    parts = ("list", "watch", "ends", "cards", "replay", "picture", "bar")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -398,6 +398,92 @@ def main():
             tab = new_tab()
             open_page(tab, "/play.html?replay=ants-NOPE-20260101-000000Z.antsrep")
             check(until(tab, "document.getElementById('rm-title').textContent === 'That replay is gone'") is True, "a file that is gone: 'That replay is gone'")
+            tab.close()
+
+        if args.only in ("", "picture"):
+            print("[web live] part picture: the replay bar's Picture button, and the bar as wide as the picture")
+            fresh(kept_at=1.0)
+            width_of = "(function () { var s = document.getElementById('game-stage').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect(); return [Math.round(s.width), Math.round(b.width), Math.round(s.left), Math.round(b.left)]; })()"
+            state = "(function () { return [document.getElementById('picpop').hidden, document.getElementById('picbtn').getAttribute('aria-expanded'), document.activeElement && document.activeElement.id]; })()"
+            key = lambda tab, name, code, vk: [tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk}) for kind in ("keyDown", "keyUp")]
+            for query, shape in (("", "16:9"), ("&aspect=4:3", "4:3"), ("&aspect=16:10", "16:10"), ("&aspect=21:9", "21:9")):
+                tab = new_tab()
+                tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {}")
+                open_page(tab, "/play.html?replay=" + KEPT + query)
+                check(until(tab, READY) is True, "a replay starts (%s)" % shape)
+                time.sleep(0.5)
+                got = tab.ev(width_of)
+                check(got[0] > 300 and abs(got[0] - got[1]) <= 1 and abs(got[2] - got[3]) <= 1, "%s: the bar is as wide as the picture and stands under it (stage %s, bar %s, left %s / %s)" % (shape, got[0], got[1], got[2], got[3]))
+                check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == shape, "%s: the picture has the shape that the address asks for" % shape)
+                check(tab.ev("getComputedStyle(document.getElementById('view-bar')).display") == "none", "%s: the player's Picture row stays hidden" % shape)
+                bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                tab.click(bx[0], bx[1])
+                check(tab.ev(state)[:2] == [False, "true"], "%s: the button opens the window and says so" % shape)
+                pos = tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(), b = document.getElementById('picbtn').getBoundingClientRect(), r = document.getElementById('rbar').getBoundingClientRect();"
+                             " return [p.bottom <= b.top, Math.abs(p.right - b.right) <= 2, p.left >= 0 && p.right <= window.innerWidth, p.top >= 0, [].map.call(document.querySelectorAll('#picpop button'), function (x) { return x.getAttribute('data-aspect'); }).join(' ')]; })()")
+                check(pos == [True, True, True, True, "4:3 16:10 16:9 21:9"], "%s: the window opens above the bar at its right end, inside the screen, with the four shapes (%s)" % (shape, pos))
+                if shape == "16:9":
+                    shot(tab, "picture-open")
+                    check(tab.ev("(function () { var want = ANTS_PAGE.shapeForScreen(window.screen.width, window.screen.height), seen = [].filter.call(document.querySelectorAll('#picpop .fit-tag'), function (t) { return !t.hidden; }).map(function (t) { return t.parentNode.querySelector('button').getAttribute('data-aspect'); }); return JSON.stringify(seen) === JSON.stringify(want ? [want] : []); })()") is True,
+                          "the 'fills your screen' tag stands under the shape nearest to the screen, as in a match, and under no other")
+                    ox, oy = 200, 200
+                    tab.click(ox, oy)
+                    check(tab.ev(state)[:2] == [True, "false"], "a click elsewhere closes the window")
+                    tab.click(bx[0], bx[1])
+                    key(tab, "Escape", "Escape", 27)
+                    check(tab.ev(state) == [True, "false", "picbtn"], "Esc closes the window and gives the focus back to the button")
+                    tab.click(bx[0], bx[1])
+                    tx, ty = tab.ev("(function () { var r = document.querySelector('#picpop button[data-aspect=\"21:9\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                    tab.click(tx, ty)
+                    time.sleep(0.5)
+                    got = tab.ev(width_of)
+                    check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9" and abs(got[0] - got[1]) <= 1 and got[0] > 1200, "a shape picked in the window changes the picture at once and the bar follows it (stage %s, bar %s)" % (got[0], got[1]))
+                    check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "21:9" and "aspect=21:9" in tab.ev("location.search") and tab.ev(state)[0] is False, "the choice is remembered and put in the address; the window stays open")
+                    check(tab.ev("[].map.call(document.querySelectorAll('#picpop button'), function (x) { return x.getAttribute('aria-checked'); }).join(' ')") == "false false false true", "the chosen shape is the pressed one")
+                    tab.call("Page.reload")
+                    check(until(tab, READY) is True and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9", "the page, opened again with the address as it was, keeps the shape")
+                    tab.call("Page.navigate", {"url": door.url("/play.html?replay=" + KEPT)})
+                    check(until(tab, READY) is True and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9", "the address without ?aspect= follows the remembered choice")
+                tab.close()
+            tab = new_tab(390, 844, 2, True)
+            open_page(tab, "/play.html?replay=" + KEPT)
+            check(until(tab, READY) is True, "a replay starts on a phone")
+            time.sleep(0.5)
+            row = tab.ev("(function () { var c = document.getElementById('clock').getBoundingClientRect(), b = document.getElementById('picbtn').getBoundingClientRect(), p = document.getElementById('b-play').getBoundingClientRect();"
+                         " return [Math.abs((b.top + b.bottom) / 2 - (c.top + c.bottom) / 2) <= 12, b.left >= c.right - 1, b.right <= window.innerWidth, Math.abs((p.top + p.bottom) / 2 - (c.top + c.bottom) / 2) <= 12]; })()")
+            check(row == [True, True, True, True], "a phone: the button takes the place beside the clock, on the play button's row (%s)" % row)
+            check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "a phone: no sideways scroll")
+            bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+            tab.tap(bx[0], bx[1])
+            check(tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(); return !document.getElementById('picpop').hidden && p.left >= 0 && p.right <= window.innerWidth && p.bottom <= document.getElementById('picbtn').getBoundingClientRect().top; })()") is True, "a phone: the window opens above the button, inside the screen")
+            shot(tab, "picture-phone")
+            tab.close()
+            for width, height in ((320, 640), (360, 740), (390, 844)):
+                tab = new_tab(width, height, 2, True)
+                open_page(tab, "/play.html?replay=" + KEPT + "&aspect=21:9")
+                check(until(tab, READY) is True, "a %d px phone, 21:9: the replay starts" % width)
+                time.sleep(0.5)
+                bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                tab.tap(bx[0], bx[1])
+                box = tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(); return [Math.round(p.left), Math.round(p.right), Math.round(p.top), window.innerWidth, document.documentElement.scrollWidth]; })()")
+                check(not tab.ev("document.getElementById('picpop').hidden") is True and box[0] >= 0 and box[1] <= box[3] and box[2] >= 0 and box[4] <= box[3], "a %d px phone: the window lies inside the screen, with no sideways scroll (x %d to %d of %d)" % (width, box[0], box[1], box[3]))
+                if width == 320:
+                    shot(tab, "picture-320")
+                tab.close()
+            tab = new_tab()
+            open_page(tab, "/play.html?replay=" + KEPT + "&aspect=4:3")
+            check(until(tab, READY) is True, "a replay in fullscreen: it starts")
+            fx, fy = centre(tab, "fullscreen-btn-r")
+            tab.click(fx, fy)
+            if until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True:
+                bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                tab.click(bx[0], bx[1])
+                check(tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(), b = document.getElementById('picbtn').getBoundingClientRect(); return !document.getElementById('picpop').hidden && p.bottom <= b.top && p.top >= 0 && p.right <= window.innerWidth; })()") is True, "fullscreen: the window opens above the floating bar, on the picture")
+                shot(tab, "picture-fullscreen")
+                time.sleep(4)
+                check(tab.ev("document.getElementById('rbar').classList.contains('idle')") is False, "fullscreen: the bar stays while the window is open (it would go after 3 seconds)")
+            else:
+                check(False, "fullscreen: the bar lies over the picture")
             tab.close()
 
         if args.only in ("", "bar"):

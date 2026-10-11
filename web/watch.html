@@ -414,8 +414,8 @@
 
     // What the server's public list gives (docs/SERVER.md "Replays"): { replays: [{ file, ended, map, players, seconds, finished, game, mode, sim_rules }], count, keep_days, sim_rules }. A match is playable when
     // it needs the rules that this server's build plays; the others are the "Earlier versions" (an entry with no number is one that nobody can tell: it is shown there too). The build plays the rules of game
-    // mode 187 as well (replay.hpp kSimRulesMode187: 2, and the entry says "mode": "187"): a match of that mode is as playable as the original's game, and the page shows no difference.
-    var RULES_187 = 2;
+    // mode 187 as well (replay.hpp kSimRulesMode187: 4, and the entry says "mode": "187"): a match of that mode is as playable as the original's game, and the page shows no difference.
+    var RULES_187 = 4;
     function playable(e, rules) { return rules !== 0 && (e.sim_rules === rules || (e.sim_rules === RULES_187 && e.mode === '187')); }
     function show(data) {
         var rules = typeof data.sim_rules === 'number' ? data.sim_rules : 0;

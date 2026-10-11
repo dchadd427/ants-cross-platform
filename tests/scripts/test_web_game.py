@@ -306,7 +306,7 @@ class TheLookIsTheFrontPages(PageCase):
                        'id="lock-off" data-lock="off" aria-checked="false"'):
             self.assertIn(markup, self.page)
         self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:aspect-16-9|aspect-4-3|lock-on|lock-off)"', self.page)), 4)
-        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 3)           # (the picture and the mouse, and the replay bar's speed: TheReplayPage)
+        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 4)           # (the picture and the mouse, the replay bar's speed and the replay bar's Picture window: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
         # (the front page's black box with its frame is `.panel`; its name card, the same card as this page's own, has the same field)
@@ -325,8 +325,6 @@ class TheLookIsTheFrontPages(PageCase):
         for name in ("color", "font-size", "background", "border-top", "box-shadow"):
             self.assertEqual(footer[name], theirs[name], name)
         self.assertEqual(rule(self.style, ".bar .ver")["background"], rule(self.lobby_style, ".bar .ver")["background"])
-        # Pending a decision (reported): the spacer's basis differs, `.bar .grow` flex 1 1 280px on this page against 1 1 40px on the front page, so only that it grows and shrinks alike is compared.
-        self.assertEqual(rule(self.style, ".bar .grow")["flex"].split()[:2], rule(self.lobby_style, ".bar .grow")["flex"].split()[:2])
 
     def test_the_picture_has_the_frame_of_the_front_pages_pictures(self):
         ring = rule(self.style, "#game-container")["box-shadow"]

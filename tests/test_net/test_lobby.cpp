@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 using namespace ants;
 using namespace ants::net;
@@ -45,19 +46,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 #define ASSERT_MSG(cond, msg) \
     do { \
         ++g_assert_count; \
@@ -762,7 +750,7 @@ int main() {
         // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's. Protocol 16 (the first
         // lobby pages) is refused by a host of 17 by the number as well: its Hello is byte for byte a Hello of 17, but its Start, Room and Plan messages lack the game mode, and a match played by
         // a machine that cannot be told its game mode would be played by the original's rules whatever the room chose.
-        ASSERT_EQ(kProtocolVersion, 17);
+        ASSERT_EQ(kProtocolVersion, 18);
         for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});

@@ -27,6 +27,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -67,19 +68,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 // The same with a text that says which input failed (the documents of a table, the iteration of a fuzz loop)
 #define ASSERT_MSG(cond, msg) \
     do { \

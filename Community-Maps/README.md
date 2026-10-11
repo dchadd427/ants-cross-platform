@@ -13,6 +13,10 @@ Maps that players of the 1998 game made and shared (`.lvl` files, the same forma
 
 503 of the 558 files are different maps; the other 55 are the same map shared under a second name (`AlleyAnts` and `Alley Ants`), kept because the collection lists both.
 
+## Bombs in the files
+
+208 of the maps hold bombs of their own: layer-2 cells with the original's bomb ids 129 (red), 130 (green), 131 (black) and 132 (blue), 61,766 cells in all (`Bombz Away` fills its floor with 896 of them, `Bombzzzzz away!!!` with 3,536). The maps' own dictionaries mostly call these entries `.` (the editor left them unnamed), which is why an earlier remake took them for rocks and never drew them. The remake now plays them as the original does: each is a bomb of its colour with the owner team that the file names, shown on the field (not on the minimap, as in the original), and the first ant that steps on one sets it off. How and why: [the report](../docs/reverse_engineering/map_file_bombs.md). The map files are untouched.
+
 ## The 46 repaired maps
 
 A repaired file is new bytes under the same name; the bytes of the maps that were not repaired are untouched. A repair (`tools/repair_maps.py`, tested in `tests/scripts/test_repair_maps.py`) is a function of the file's bytes alone and changes only what is damaged; each repaired file is swept like the others and is in the folder only because it passes. Three kinds of damage were found:
