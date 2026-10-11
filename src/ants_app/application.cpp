@@ -79,9 +79,7 @@ EM_JS(void, ants_go_to_front_page, (), {
 }
 
 // The one application of the page (main() keeps it alive for as long as the page lives): the entry for ants_background_pump below
-namespace {
-ants::app::Application* g_web_app = nullptr;
-}  // namespace
+ants::app::Application* g_web_app = nullptr;       // (also read by the exports in application_touch.cpp)
 #endif
 
 namespace ants::app {

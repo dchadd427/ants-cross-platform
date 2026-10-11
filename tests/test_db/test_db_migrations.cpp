@@ -226,9 +226,9 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 3 && list.front().version == 1 && list.back().version == 3);
+        DB_CHECK(list.size() == 4 && list.front().version == 1 && list.back().version == 4);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats,map_plays");       // (no other data table yet)
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats,map_plays,site_stats,site_stats_hours");       // (no other data table yet)
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -288,12 +288,27 @@ void run_migration_tests() {
         DB_CHECK(migrate(db, list.data(), 2, &v).ok() && v == 2 && !has_table(db, "map_plays"));
         DB_CHECK(db.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
                          "('m1', 1, 'TINY.LVL', 'v1', 10, 1, NULL, '187', '1v1', 'draw', 0, 1, 1, 1, 'tiny', '[]', 1)").ok());
-        DB_CHECK(migrate(db, list, &v).ok() && v == 3 && has_table(db, "map_plays") && rows_in(db, "map_plays") == 0);
+        DB_CHECK(migrate(db, list.data(), 3, &v).ok() && v == 3 && has_table(db, "map_plays") && rows_in(db, "map_plays") == 0);
         DB_CHECK(rows_in(db, "history_matches") == 1 && rows_in(db, "schema_version") == 3);                  // (the history is as it was)
         DB_CHECK(db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', '0123456789abcdef', 1, 5)").ok());
         DB_CHECK(!db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', '0123456789abcdef', 1, 6)").ok());      // (one row for each map and hash)
         DB_CHECK(db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', 'fedcba9876543210', 2, 5)").ok());       // (another file of the same name is another map)
         DB_CHECK(!db.exec("INSERT INTO map_plays VALUES ('X.LVL', 'abc', 1, 5)").ok() && !db.exec("INSERT INTO map_plays VALUES ('X.LVL', '0123456789abcdef', 0, 5)").ok());
         DB_CHECK(rows_in(db, "map_plays") == 2);
+    } DB_END;
+    DB_CASE("SV1.4 Version 4 (the site statistics): a database of version 3 is brought to it with its play counts, one row for each of the two counters, a bucket needs its counter and is at least one game") {
+        const auto& list = ants::server::db_migrations();
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list.data(), 3, &v).ok() && v == 3 && !has_table(db, "site_stats") && !has_table(db, "site_stats_hours"));
+        DB_CHECK(db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', '0123456789abcdef', 2, 5)").ok());
+        DB_CHECK(migrate(db, list, &v).ok() && v == 4 && has_table(db, "site_stats") && has_table(db, "site_stats_hours") && rows_in(db, "site_stats") == 0);
+        DB_CHECK(rows_in(db, "map_plays") == 1 && rows_in(db, "schema_version") == 4);                          // (the older data is as it was)
+        DB_CHECK(db.exec("INSERT INTO site_stats VALUES ('online', 5)").ok() && db.exec("INSERT INTO site_stats VALUES ('local', 0)").ok());
+        DB_CHECK(!db.exec("INSERT INTO site_stats VALUES ('online', 6)").ok() && !db.exec("INSERT INTO site_stats VALUES ('other', 1)").ok() && !db.exec("INSERT INTO site_stats VALUES ('x', -1)").ok());
+        DB_CHECK(db.exec("INSERT INTO site_stats_hours VALUES ('online', 497532, 3)").ok() && !db.exec("INSERT INTO site_stats_hours VALUES ('online', 497532, 1)").ok());
+        DB_CHECK(!db.exec("INSERT INTO site_stats_hours VALUES ('online', 1, 0)").ok() && !db.exec("INSERT INTO site_stats_hours VALUES ('nobody', 1, 1)").ok());
+        DB_CHECK(db.exec("DELETE FROM site_stats WHERE kind = 'online'").ok() && rows_in(db, "site_stats_hours") == 0);   // (the buckets go with their counter)
     } DB_END;
 }

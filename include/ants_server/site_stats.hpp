@@ -1,7 +1,7 @@
 #pragma once
 
 // The numbers of the front page (docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"): online games (a match that ran at least 30 seconds and ended) and single-player games that browsers report, each for the last 24
-// hours (24 buckets of an hour on the server's clock) and for all time, kept in one small file. Numbers only, never a code, name, address or key. Single threaded like the server's loop.
+// hours (24 buckets of an hour on the server's clock) and for all time, kept in the server's database (docs/SERVER.md "The database"; without one, in one small file). Numbers only, never a code, name, address or key. Single threaded like the server's loop.
 
 #include <array>
 #include <cstddef>
@@ -9,6 +9,10 @@
 #include <functional>
 #include <string>
 #include <vector>
+
+namespace ants::db {
+class Database;
+}
 
 namespace ants::server {
 
@@ -51,9 +55,13 @@ public:
     /// Keeps the counters in the file `path` from now on: reads it when it exists (a file that is not a usable one is put aside as <path>.broken-<seconds> and the counters start at
     /// 0), else the counters are new and the file is written at the first save. Call it once, before anything is counted. Without it the counters live in memory only.
     void open(const std::string& path);
-    /// Writes the file when something changed and kSaveEveryS seconds have passed since the last try (a failed try counts too: the disk is not asked every pass). True when it wrote.
+    /// Keeps the counters in the database from now on (tables site_stats and site_stats_hours, schema version 4): reads them when they are there. Else, when `legacy_path` (the file site-stats.json of an older
+    /// server, or "") holds a usable file, its counters are imported at once, in one transaction, and the file is left as it was (a start over the same file again reads the database, never the file); a file that
+    /// is no usable one is put aside as <path>.broken-<seconds> as open() does, and without a file the counters are new. Call it once, before anything is counted. The database must outlive this object's use.
+    void open_db(db::Database& database, const std::string& legacy_path);
+    /// Writes the file (or the database) when something changed and kSaveEveryS seconds have passed since the last try (a failed try counts too: the disk is not asked every pass). True when it wrote.
     bool save_if_due();
-    /// Writes the file now (the server stops). True when nothing is left unsaved: it wrote, or there is no file or nothing changed.
+    /// Writes the file or the database now (the server stops). True when nothing is left unsaved: it wrote, or there is no file or nothing changed.
     bool save();
     /// Something counted has not reached the file yet
     bool dirty() const noexcept { return dirty_; }
@@ -70,8 +78,13 @@ private:
     static int64_t hour_of(int64_t seconds) noexcept;
     static uint64_t window(const Series& series, int64_t now_hour) noexcept;
     static void add(Series& series, int64_t now_hour) noexcept;
+    enum class FileState { Missing, Read, Refused };
+    FileState load_file(std::string& why, std::string& fate);
+    bool persistent() const noexcept { return db_ != nullptr || !path_.empty(); }
     bool write_file(std::string& why);
     bool read_file(std::string& why);
+    bool write_db(std::string& why);
+    bool read_db(bool& found, std::string& why);
 
     Clock clock_;
     std::string since_;
@@ -81,6 +94,7 @@ private:
     size_t local_next_{0};
     size_t local_filled_{0};
     std::string path_;
+    db::Database* db_{nullptr};
     bool dirty_{false};
     bool have_tried_{false};
     int64_t tried_at_{0};

@@ -16,7 +16,7 @@
 //                      the WebSocket / control port listens on every interface instead of the loopback address. For a container only: a port that is published
 //                      from a container does not reach a program that listens on the container's loopback address. The host decides who can connect
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
-//   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in site-stats.json (without it they live in memory)
+//   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in the database, or with --no-db in site-stats.json (without a results folder they live in memory)
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --community-maps DIR  a second folder of maps, the players' maps (Community-Maps/ of the repository: the .lvl files with maps.json and previews.json; the image has it in /community-maps). The lobby
 //                      may choose every map of --maps and of this folder, and GET /maps on the replay port lists them. Left out: only the --maps folder (the default)
@@ -525,9 +525,9 @@ int main(int argc, char** argv) {
             return "{\"matches\":" + std::to_string(b.matches) + ",\"players\":" + std::to_string(b.players) + "}";
         });
     }
-    // The numbers of the front page (site_stats.hpp): the games that ended on this server and the single-player games that browsers report, kept in the results folder when there is one
+    // The numbers of the front page (site_stats.hpp): the games that ended on this server and the single-player games that browsers report. They are kept in the database (opened below), else in
+    // the results folder when there is one, else in memory.
     ants::server::SiteStats stats;
-    if (!o.results_dir.empty()) stats.open((std::filesystem::path(o.results_dir) / ants::server::SiteStats::kFileName).string());
     if (ws) {                                                    // GET /stats (numbers only) and POST /stats/local (a browser tells that a single-player game began: counted, answered 204)
         ws->add_status("/stats", [&rooms, &stats]() { return stats.json(rooms.busy(now_ms())); });
         ws->set_post("/stats/local", [&stats]() { stats.count_local(); });
@@ -560,6 +560,11 @@ int main(int argc, char** argv) {
             log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
                 (journal == "wal" ? std::string() : std::string("; the file system gave no WAL, the rollback journal is used")));
         }
+    }
+    {
+        const std::string legacy = o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / ants::server::SiteStats::kFileName).string();
+        if (database.is_open()) stats.open_db(database, legacy);               // (a site-stats.json of an older server is read into the database once)
+        else if (!legacy.empty()) stats.open(legacy);                          // --no-db: the file, as it always was
     }
     // Restart records (restart_record.hpp): in --restart-dir, else in the folder "restart" of the results folder, unless switched off. An explicit folder that cannot be used stops the server
     // (the operator asked for it); the default one is given up with a line in the log.

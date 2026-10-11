@@ -132,6 +132,23 @@ target_include_directories(test_map_plays PRIVATE
 add_test(NAME test_map_plays COMMAND test_map_plays)
 set_tests_properties(test_map_plays PROPERTIES COST 3)
 
+# The site statistics in the server's database (SiteStats::open_db, tables site_stats and site_stats_hours): the migration from version 3, the numbers kept and read back, the import of the file of an older
+# server (once, the file left as it was), a write that fails and is rolled back, a stop without a save, and the file as before without a database. No network
+add_executable(test_site_stats_db
+    test_site_stats_db.cpp
+)
+
+target_link_libraries(test_site_stats_db PRIVATE
+    ants_server_core
+)
+
+target_include_directories(test_site_stats_db PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_site_stats_db COMMAND test_site_stats_db)
+set_tests_properties(test_site_stats_db PROPERTIES COST 1)
+
 # The list of maps (MapStore::scan and list_json, GET /maps on the public door) and the lobby's choice of any map of the store: the six originals first, the community folder with its lists, odd file names, the
 # play counts keyed by file name and hash. No network, no room that runs a match
 add_executable(test_map_list
