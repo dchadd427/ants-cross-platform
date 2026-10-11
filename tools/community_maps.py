@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""The players' maps of the repository (Community-Maps/): which maps of a collection are taken in, and the list that says what is there.
+"""The players' maps of the repository (Community-Maps/): which maps of a collection are taken in, the repairs of those that are not, and the list that says what is there.
 
-usage: community_maps.py build SRC_DIR SWEEP_REPORT DEST_DIR   copy the maps that pass into DEST_DIR and write DEST_DIR/maps.json
-       community_maps.py discards SRC_DIR SWEEP_REPORT         the maps that are not taken in, one line each with the reason (an original map says so), then the counts
+usage: community_maps.py repair SRC_DIR SWEEP_REPORT REPAIRED_DIR   write into REPAIRED_DIR the repaired file of every map that is not taken in as it is and that tools/repair_maps.py can repair, and REPAIRED_DIR/repairs.json
+       community_maps.py build SRC_DIR SWEEP_REPORT DEST_DIR [REPAIRED_DIR REPAIRED_SWEEP_REPORT]   copy the maps that pass (and the repaired ones that pass) into DEST_DIR and write DEST_DIR/maps.json
+       community_maps.py discards SRC_DIR SWEEP_REPORT [REPAIRED_DIR REPAIRED_SWEEP_REPORT]   the maps that are not taken in, one line each with the reason (an original map says so), then the counts
        community_maps.py verify DIR SWEEP_REPORT               DIR holds only maps that pass in a sweep of DIR itself, and maps.json lists exactly them
 exit status: 0 all is well; 1 verify found problems (one line each) or a file could not be read; 2 usage.
 
@@ -12,24 +13,30 @@ two teams alone: green and black) and whether the plays were deterministic, and 
   - the engine loads it, the rosters above were played on it (a report without a play, as `--skip-run` makes it, passes nothing) and every one of them ended without a crash, a hang
     or an error, with one state hash in three plays;
   - every tile on it is a name of its own dictionary (a tile outside it is what the original draws as heap garbage, so there is nothing to copy);
-  - the file holds no email address (the repository is public) and no program (a map that carries one is not a map);
+  - the file holds no program (a map that carries one is not a map);
   - its name is one that the network protocol accepts (a room could not use it otherwise).
 The maps of the original game are not taken: the six in Original-Ants/Maps are known by their names, and a file that has the bytes of one of them under another name is the same
 map (the tool reads Original-Ants/Maps beside it; without that folder only the names tell).
+
+A map that does not pass may be repaired (tools/repair_maps.py): the repaired file is new bytes under the same name, it is swept on its own (REPAIRED_SWEEP_REPORT is the report of a
+sweep of REPAIRED_DIR) and passes by the same rule or stays out. `build` writes the sentence that says what was changed into maps.json as "repaired".
 """
 import json
 import os
 import re
-import shutil
 import sys
+
+import repair_maps
 
 ORIGINAL_NAMES = ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS")
 ORIGINALS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "Original-Ants", "Maps"))
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
 PROGRAM = re.compile(r"this program (cannot|requires)|\.(exe|dll|sys|bat)\b|kernel32", re.I)
 PRINTABLE_RUN = re.compile(rb"[\x20-\x7e]{4,}")
-REASONS = ("does not load", "not playable", "play fails", "tile outside the dictionary", "email address inside", "program code inside", "name the protocol refuses")
+REASONS = ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses")
 ORIGINAL = "original map"       # (not one of REASONS: an original map belongs in Original-Ants/Maps)
+REPAIRED = "repaired"           # (nor this: a map that was repaired and then passes)
+REPAIRS_FILE = "repairs.json"   # in the folder of repaired files: {"format": 1, "repairs": {file name: the sentence}}
+REPAIRED_FIELD_MAX = 300
 ALL_FOUR_TEAMS = 15             # the rosters of tools/map_sweep.cpp: bit t is team t
 GREEN_AND_BLACK = 9
 
@@ -63,13 +70,10 @@ def reason(entry, data):
         return REASONS[2]
     if any(p["kind"] == "tile_outside_dictionary" for p in entry["problems"]):
         return REASONS[3]
-    texts = [m.group().decode("ascii") for m in PRINTABLE_RUN.finditer(data)]
-    if any(EMAIL.search(t) for t in texts):
+    if any(PROGRAM.search(m.group().decode("ascii")) for m in PRINTABLE_RUN.finditer(data)):
         return REASONS[4]
-    if any(PROGRAM.search(t) for t in texts):
-        return REASONS[5]
     if not entry["name_ok"]:
-        return REASONS[6]
+        return REASONS[5]
     return None
 
 
@@ -126,34 +130,110 @@ def read(folder, name):
         return f.read()
 
 
-def build(src, report, dest, originals=None):
+def sentence(notes):
+    """The sentence of maps.json's "repaired": what tools/repair_maps.py did, one capital letter and a full stop."""
+    text = "; ".join(notes)
+    return text[:1].upper() + text[1:] + "."
+
+
+def repair(src, report, dest, originals=None):
+    """Writes into `dest` the repaired file of every map of the report that is not an original, does not pass as it is and has a repair; writes dest/repairs.json; returns the count."""
     originals = load_originals() if originals is None else originals
-    kept = []
+    os.makedirs(dest, exist_ok=True)
+    done = {}
     for entry in report:
         data = read(src, entry["name"])
-        if original_of(entry["name"], data, originals) is None and reason(entry, data) is None:
-            kept.append((entry, data))
+        if original_of(entry["name"], data, originals) is not None or reason(entry, data) is None:
+            continue
+        fixed, notes = repair_maps.repair(data)
+        if fixed is None:
+            continue
+        with open(os.path.join(dest, entry["name"]), "wb") as f:
+            f.write(fixed)
+        done[entry["name"]] = sentence(notes)
+    with open(os.path.join(dest, REPAIRS_FILE), "w", encoding="utf-8", newline="\n") as f:
+        json.dump({"format": 1, "repairs": dict(sorted(done.items(), key=lambda kv: kv[0].encode("latin-1")))}, f, indent=1, ensure_ascii=True)
+        f.write("\n")
+    return len(done)
+
+
+def read_repairs(folder):
+    """{file name: sentence} of a folder of repaired files."""
+    with open(os.path.join(folder, REPAIRS_FILE), encoding="utf-8") as f:
+        repairs = json.load(f)["repairs"]
+    if not isinstance(repairs, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in repairs.items()):
+        raise ValueError("%s is not a list of repairs" % REPAIRS_FILE)
+    return repairs
+
+
+def repaired_passes(name, repaired):
+    """(the bytes of the repaired file, its sentence) when the map `name` has a repaired file that passes in the sweep of its folder, else None. `repaired` is (folder, report) or None."""
+    if repaired is None:
+        return None
+    folder, report = repaired
+    repairs = read_repairs(folder)
+    entry = next((e for e in report if e["name"] == name), None)
+    if name not in repairs or entry is None:
+        return None
+    data = read(folder, name)
+    if entry.get("hash") != fnv1a64(data):
+        raise ValueError("%s: the sweep report of the repaired files is not of this file (the hash differs)" % name)
+    return (data, repairs[name]) if reason(entry, data) is None else None
+
+
+def taken(src, report, originals, repaired=None):
+    """[(sweep object, bytes, sentence or None)] of the maps that are taken in: the ones that pass as they are, else their repaired file when that passes. Never an original."""
+    out = []
+    for entry in report:
+        data = read(src, entry["name"])
+        if original_of(entry["name"], data, originals) is not None:
+            continue
+        if reason(entry, data) is None:
+            out.append((entry, data, None))
+            continue
+        got = repaired_passes(entry["name"], repaired)
+        if got:
+            out.append(([e for e in repaired[1] if e["name"] == entry["name"]][0], got[0], got[1]))
+    return out
+
+
+def build(src, report, dest, originals=None, repaired=None):
+    """Copies the maps that are taken in into `dest` and writes dest/maps.json; returns their number. `repaired` is (folder of repaired files, report of their sweep) or None."""
+    originals = load_originals() if originals is None else originals
+    kept = taken(src, report, originals, repaired)
     os.makedirs(dest, exist_ok=True)
-    for entry, _ in kept:
-        shutil.copyfile(os.path.join(src, entry["name"]), os.path.join(dest, entry["name"]))
-    rows = sorted((manifest_entry(e, d) for e, d in kept), key=lambda r: r["file"].encode("latin-1"))
+    rows = []
+    for entry, data, note in kept:
+        with open(os.path.join(dest, entry["name"]), "wb") as f:
+            f.write(data)
+        row = manifest_entry(entry, data)
+        if note:
+            row["repaired"] = note
+        rows.append(row)
+    rows.sort(key=lambda r: r["file"].encode("latin-1"))
     with open(os.path.join(dest, "maps.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump({"format": 1, "maps": rows}, f, indent=1, ensure_ascii=True)
         f.write("\n")
     return len(rows)
 
 
-def discards(src, report, originals=None):
-    """Prints one line for every map that is not taken in; returns the counts: one for each of REASONS and one for the originals."""
+def discards(src, report, originals=None, repaired=None):
+    """Prints one line for every map that is not taken in; returns the counts: one for each of REASONS, one for the originals and, when `repaired` is given, one for the repaired maps."""
     originals = load_originals() if originals is None else originals
     counts = {r: 0 for r in REASONS + (ORIGINAL,)}
+    if repaired is not None:
+        counts[REPAIRED] = 0
     for entry in report:
         data = read(src, entry["name"])
         which = original_of(entry["name"], data, originals)
         why = ORIGINAL if which else reason(entry, data)
-        if why:
-            counts[why] += 1
-            print("%s\t%s" % ("%s (%s)" % (why, which) if which else why, entry["name"]))
+        if why is None:
+            continue
+        if not which and repaired_passes(entry["name"], repaired):
+            counts[REPAIRED] += 1
+            continue
+        counts[why] += 1
+        print("%s\t%s" % ("%s (%s)" % (why, which) if which else why, entry["name"]))
     return counts
 
 
@@ -206,31 +286,52 @@ def verify(folder, report, originals=None):
         problems.append("maps.json does not list exactly the folder's maps in order")
     by_name = {e["name"]: e for e in report}
     for row in listed:
-        if row["file"] in by_name and row["file"] in data_of and row != manifest_entry(by_name[row["file"]], data_of[row["file"]]):
+        said = row.get("repaired")
+        if "repaired" in row and not (isinstance(said, str) and 0 < len(said) <= REPAIRED_FIELD_MAX and said.isascii() and said.isprintable()):
+            problems.append("%s: its \"repaired\" in maps.json is not a sentence of printable ASCII (1 to %d characters)" % (row["file"], REPAIRED_FIELD_MAX))
+        plain = {k: v for k, v in row.items() if k != "repaired"}
+        if row["file"] in by_name and row["file"] in data_of and plain != manifest_entry(by_name[row["file"]], data_of[row["file"]]):
             problems.append("%s: its line in maps.json is not what the file and the sweep say" % row["file"])
     return problems
 
 
+USAGE_ARGS = {"repair": (5,), "build": (5, 7), "discards": (4, 6), "verify": (4,)}
+
+
 def main(argv):
-    if len(argv) < 2 or {"build": 5, "discards": 4, "verify": 4}.get(argv[1]) != len(argv):
+    if len(argv) < 2 or len(argv) not in USAGE_ARGS.get(argv[1], ()):
         print(__doc__)
         return 2
+    command = argv[1]
+    optional = {"build": 5, "discards": 4}.get(command)           # (where the optional REPAIRED_DIR REPAIRED_SWEEP_REPORT begin)
+    path = argv[3]
     try:
-        report = load_report(argv[3])
+        report = load_report(path)
+        repaired = None
+        if optional is not None and len(argv) == optional + 2:
+            path = argv[optional + 1]
+            repaired = (argv[optional], load_report(path))
     except (OSError, ValueError, KeyError, TypeError) as err:
-        print("%s: the sweep report cannot be read (%s: %s)" % (argv[3], err.__class__.__name__, err), file=sys.stderr)
+        print("%s: the sweep report cannot be read (%s: %s)" % (path, err.__class__.__name__, err), file=sys.stderr)
         return 1
     originals = load_originals()
     if not originals:
         print("note: %s is not there, so only the names tell an original map" % ORIGINALS_DIR, file=sys.stderr)
-    if argv[1] == "build":
-        print("%d maps taken in" % build(argv[2], report, argv[4], originals))
-        return 0
-    if argv[1] == "discards":
-        counts = discards(argv[2], report, originals)
-        for why in REASONS + (ORIGINAL,):
-            print("%d\t%s" % (counts[why], why), file=sys.stderr)
-        return 0
+    try:
+        if command == "repair":
+            print("%d maps repaired" % repair(argv[2], report, argv[4], originals))
+            return 0
+        if command == "build":
+            print("%d maps taken in" % build(argv[2], report, argv[4], originals, repaired))
+            return 0
+        if command == "discards":
+            counts = discards(argv[2], report, originals, repaired)
+            for why in REASONS + ((REPAIRED,) if repaired else ()) + (ORIGINAL,):
+                print("%d\t%s" % (counts[why], why), file=sys.stderr)
+            return 0
+    except (OSError, ValueError, KeyError, TypeError) as err:
+        print("%s: %s: %s" % (command, err.__class__.__name__, err), file=sys.stderr)
+        return 1
     problems = verify(argv[2], report, originals)
     for line in problems:
         print(line)
