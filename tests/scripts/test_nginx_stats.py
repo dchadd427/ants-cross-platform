@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """docker/nginx.conf routes the numbers of the front page: GET /stats and POST /stats/local (run by ./run_tests.sh --fast and by the CI where docker works).
 
-ants_server answers both on its WebSocket port (docs/NETWORK_PORT.md "Site statistics"); the page's nginx forwards them like /busy, as the one request each takes and nothing else:
+ants_server answers both on its WebSocket port (docs/SERVER.md "The site statistics, GET /stats and POST /stats/local"); the page's nginx forwards them like /busy, as the one request each takes and nothing else:
 
   - /stats: a GET without a query (405 and 404 otherwise), twenty a second for each client address with a burst of 100, answered from a cache of five seconds (one entry for everybody: the game
     server is asked about once in five seconds however many people look; an old answer is served while the new one is fetched and when the server does not answer);
@@ -171,21 +171,18 @@ class TheLocations(unittest.TestCase):
         self.assertEqual(sorted(set(re.findall(r"\bproxy_cache\w*|\bproxy_ignore_headers", STATS))), sorted(set(l.split()[0] for l in CACHE_LINES)))   # (the cache is these six lines and no more)
 
     def test_the_documents_say_what_the_blocks_do(self):
-        notes = read("docs", "NETWORK_PORT.md")
+        notes = read("docs", "SERVER.md")
         for needle in ("`GET /stats`", "`POST /stats/local`", '{"now":{"matches":N,"players":M},"online":{"day":D,"total":T},"local":{"day":d,"total":t},"since":"YYYY-MM-DD"}', "site-stats.json",
                        "at most 120 reports count in any 60 seconds", "twenty a second per address with a burst of 100", "answered from a cache of 5 seconds", "sixty a minute per address with a burst of 20",
                        "cross-site", "nothing of the visitor's headers", "a body over 1 KiB is 413"):
             self.assertIn(needle, notes)
-        server_page = read("docs", "SERVER.md")
-        for needle in ("`GET /stats`", "`POST /stats/local`", "site-stats.json", "at most 120 count a minute"):
-            self.assertIn(needle, server_page)
 
     def test_the_counting_rule_of_the_documents_is_the_one_of_the_code(self):
         header = read("include", "ants_server", "site_stats.hpp")
         ticks = re.search(r"kMinTicks\s*=\s*(\d+)\s*;", header)
         self.assertIsNotNone(ticks)
         self.assertEqual(ticks.group(1), "600")                                              # 30 seconds of play at 20 ticks a second
-        for name in (os.path.join("docs", "NETWORK_PORT.md"), os.path.join("docs", "SERVER.md"), os.path.join("docs", "audit", "site_stats_notes.md")):
+        for name in (os.path.join("docs", "SERVER.md"),):
             self.assertIn("at least 600 ticks (30 seconds of play)", read(name), name)
 
 

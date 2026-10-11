@@ -29,6 +29,8 @@ int main() {
     run_merge_tests();
     run_cantgo_tests();
     run_flower_tests();
+    run_war_tests();
+    run_stand_tests();
     if (ai_test::g_test_count == 0) {
         std::cout << "\n no test ran: the filter ANTS_TEST_FILTER matches no test of this suite (a misspelt or forgotten filter must not turn the suite green)\n";
         ++ai_test::g_test_failures;

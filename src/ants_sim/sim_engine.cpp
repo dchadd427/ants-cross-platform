@@ -102,6 +102,11 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
     impl_->grid_.init_from_level(level);
+    const bool mode187 = impl_->game_mode_ == GameMode::Kills187;
+    if (mode187) {
+        // 187: no food and no power-ups on any map; everything else (the start markers, the starting ants, the eggs, the ant types) is the map's own
+        impl_->grid_.strip_pickups();
+    }
     impl_->stats_.reset();
     impl_->last_attacked_ms_.fill(-1000000);          // player +0x4c: no team has been attacked yet
     uint32_t match_minutes = (level.default_minutes > 0) ? level.default_minutes : 12;
@@ -154,7 +159,10 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     // The original has no further source: a map without such a pair has no dropper, whatever its size (the remake once added the droppers of SMALL.LVL to every
     // 40 x 40 map without one; SMALL.LVL itself never ran that block, its droppers come from its waypoints).
 
-    uint32_t starting_eggs = level.boundary_param;                          // the level's last word, as the original copies it to every team (+0x4a, FUN_0100dc94)
+    if (mode187) impl_->flower_droppers_.clear();                           // no power-ups: the plants stay as scenery, they drop nothing
+
+    // the level's last word, as the original copies it to every team (+0x4a, FUN_0100dc94)
+    const uint32_t starting_eggs = level.boundary_param;
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, (roster_mask & (1u << p)) != 0 ? starting_eggs : 0u);
     }
@@ -421,6 +429,7 @@ bool SimulationEngineImpl::checkgo_ends_for(uint8_t local) const {
 }
 
 bool SimulationEngineImpl::checkgo_end_rules() const {
+    if (game_mode_ == GameMode::Kills187) return end_rule_187();
     for (uint8_t local = 0; local < MAX_PLAYERS; ++local) {
         if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;     // a dropped team's machine is gone
         if (checkgo_ends_for(local)) return true;
@@ -452,7 +461,51 @@ uint32_t SimulationEngineImpl::other_sides(uint8_t team) const {
 }
 
 MatchResult SimulationEngineImpl::make_match_result() const {
-    return stats_.evaluate_victory(static_cast<uint8_t>(roster_mask_ & ~dropped_mask_ & 0x0Fu), quitter_);
+    MatchResult result = stats_.evaluate_victory(static_cast<uint8_t>(roster_mask_ & ~dropped_mask_ & 0x0Fu), quitter_);
+    if (game_mode_ == GameMode::Kills187) {
+        for (const auto& a : ants_) {
+            if (a != nullptr && !a->removed && a->player_id < MAX_PLAYERS) ++result.ants_left[a->player_id];
+        }
+        if (match_state_ == MatchState::GameOver) {
+            result.standing = last_standing_187();
+            result.decide_winners();                     // the cues follow the rows, which follow the team that is left
+        }
+    }
+    return result;
+}
+
+uint32_t SimulationEngineImpl::alive_sides() const {
+    uint32_t sides = 0;
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        if ((roster_mask_ & (1u << k)) == 0 || team_dropped(k) || !team_alive(k)) continue;
+        const uint8_t ally = stats_.get_alliance(k);
+        // an alliance that has two live teams is one side, counted at its lower-numbered team
+        if (ally < MAX_PLAYERS && ally < k && stats_.get_alliance(ally) == k && (roster_mask_ & (1u << ally)) != 0 && !team_dropped(ally) && team_alive(ally)) continue;
+        ++sides;
+    }
+    return sides;
+}
+
+bool SimulationEngineImpl::end_rule_187() const {
+    uint32_t in_match = 0;
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
+    }
+    const uint32_t sides = alive_sides();
+    if (sides == 0) return true;                                // nobody has anything left (the original's rule too)
+    return in_match >= 2 && sides == 1;                         // the last side standing wins at once, whatever its score (a match of one team has no one to beat)
+}
+
+uint8_t SimulationEngineImpl::last_standing_187() const {
+    uint32_t in_match = 0;
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
+    }
+    if (in_match < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;
+    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
+        if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;
+    }
+    return PLAYER_NEUTRAL;
 }
 
 bool SimulationEngine::issue_order(const AntOrder& order) {
@@ -618,8 +671,11 @@ SimulationEngine::HatchResult SimulationEngineImpl::hatch_request(uint8_t player
         return HatchResult::NotEnoughPoints;
     }
     post_news(player_id, strings::kHatching);
-    const int32_t cost = std::min<int32_t>(static_cast<int32_t>(HATCH_COST_POINTS), std::max<int32_t>(0, score));
-    add_score(player_id, -cost);                                                        // "-N" bubble and scoredn
+    // 187: the score is the kills and a hatch is no purchase (the free hatch of a team without an ant must not eat its kills)
+    if (game_mode_ != GameMode::Kills187) {
+        const int32_t cost = std::min<int32_t>(static_cast<int32_t>(HATCH_COST_POINTS), std::max<int32_t>(0, score));
+        add_score(player_id, -cost);                                                    // "-N" bubble and scoredn
+    }
     stats_.set_egg_count(player_id, stats_.get_egg_count(player_id) - 1);
     stats_.get_player_stats_mut(player_id).ants_hatched++;
     stats_.get_player_stats_mut(player_id).new_hatched++;
@@ -856,6 +912,7 @@ const WorldState& SimulationEngine::get_world_state() const {
         impl_->world_state_cache_.plants = impl_->grid_.plants();
         impl_->world_state_cache_.dropped_mask = impl_->dropped_mask_;
         impl_->world_state_cache_.match_result = impl_->make_match_result();
+        impl_->world_state_cache_.game_mode = impl_->game_mode_;
         impl_->world_state_cache_.fog_of_war_enabled = impl_->fog_of_war_enabled_;
         impl_->world_state_cache_.fog_revealed = impl_->fog_revealed_;
         impl_->world_state_dirty_ = false;
@@ -871,6 +928,15 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
     // Test hook: the clock jumps; CHECKGO looks at it at its next run (the stage and threshold of the warnings stay)
     impl_->set_match_clock(static_cast<int64_t>(ms));
     impl_->checkgo_next_ms_ = impl_->match_clock_ms_;
+}
+
+void SimulationEngine::set_game_mode(GameMode mode) {
+    impl_->game_mode_ = mode;
+    impl_->world_state_dirty_ = true;
+}
+
+GameMode SimulationEngine::game_mode() const noexcept {
+    return impl_->game_mode_;
 }
 
 void SimulationEngine::set_fog_of_war_enabled(bool enabled) {

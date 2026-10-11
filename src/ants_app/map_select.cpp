@@ -63,9 +63,9 @@ void MapSelectScreen::init(const std::string& maps_dir) {
     previews_.clear();                                                      // (the pictures of the wide screen belong to the files that were listed)
 
     // The highlight. The original selects the first entry of its list: FUN_01013de7 ends with FindClose and FUN_010298fc(list, 0), which puts the list's cursor on its head, and the screen's
-    // constructor (FUN_01013b36) ends with FUN_01013fc9(this, 0), which selects the entry at the cursor. THE REMAKE DEVIATES ON PURPOSE, at the owner's request (Treasure is the map that is played
+    // constructor (FUN_01013b36) ends with FUN_01013fc9(this, 0), which selects the entry at the cursor. THE REMAKE DEVIATES ON PURPOSE, on request (Treasure is the map that is played
     // most, and it is to be the default of everything): TREASURE.LVL is highlighted when the folder holds it (any case), else the first entry, as the original does.
-    // Only the highlight differs: the list, its order, the keys, START and the labels are the original's (docs/AUDIT_ONE_TO_ONE.md, 3b).
+    // Only the highlight differs: the list, its order, the keys, START and the labels are the original's (docs/ORIGINAL_PROGRAM.md, "Differences made on purpose").
     selected_index_ = 0;
     for (size_t i = 0; i < maps_.size(); ++i) {
         if (same_file_name(maps_[i].filename, DEFAULT_MAP_FILE)) {

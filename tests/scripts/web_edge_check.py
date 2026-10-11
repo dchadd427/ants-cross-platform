@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The pointer of a FULLSCREEN game page in a REAL browser (opt-in; see tests/scripts/test_web_edge.sh and docs/NETWORK_PORT.md, "The pointer in fullscreen").
+"""The pointer of a FULLSCREEN game page in a REAL browser (opt-in; see tests/scripts/test_web_edge.sh and docs/PLAY_IN_BROWSER.md, "The pointer in fullscreen").
 
 Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it on a port; the game server is not needed), a Chromium-based browser and Python 3; nothing
 else (the DevTools protocol is spoken with the client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own profile, its own
@@ -7,7 +7,7 @@ port; nothing of yours is touched), starts a match (Enter at the quick help, Ent
 pointer's position on the picture, whether it takes the pointer as gone, the map view's origin, whether a dialog is open, the zoom). The browser is a 1440 x 900 window (a 16:10 screen)
 whose fullscreen is REAL (headless Chrome enters it): the 16:9 picture is 1440 x 810 with a bar of 45 px above and below. What it checks:
 
-  * the BARS (the owner: "if I go off the edge of the game, it no longer pans"): a pointer over the top or the bottom bar is, for the game, at the picture's nearest edge pixel and the map
+  * the BARS (going off the edge of the game must not stop the panning): a pointer over the top or the bottom bar is, for the game, at the picture's nearest edge pixel and the map
     scrolls up or down; a corner of the bars scrolls diagonally; a pointer that moves from the picture into a bar goes on scrolling (the game is not told that the pointer left); back in
     the picture the scrolling stops; a click, a wheel and a ctrl + wheel over a bar reach the game as nothing (the canvas gets no event, the game does not zoom, the page does not either);
     the WINDOWED page is unchanged (a pointer that leaves the game's box is gone for the game and the scrolling stops); a pointer that goes on over a bar and then the fullscreen
@@ -22,14 +22,14 @@ whose fullscreen is REAL (headless Chrome enters it): the 16:9 picture is 1440 x
     the pointer is the normal one; leaving fullscreen lets the lock go; a click on the game takes the lock again where the browser let it go, the cursor staying where the click is;
     a browser that REFUSES the lock still gets the bars' rules; the setting Free (and the control under the game: its markup, its click, the remembered key `ants.pointerlock`) asks
     for no lock and no Esc; the page's own fullscreen asks for none either.
-  * the MARGIN of the WINDOWED page (the owner: "go off the screen with the mouse and it not screw up the scrolling"; agreed: the map keeps scrolling while the pointer is just past the
+  * the MARGIN of the WINDOWED page (going off the screen with the mouse must not spoil the scrolling: the map keeps scrolling while the pointer is just past the
     game's edge, about an inch, and stops when it goes farther): in a 1800 x 1000 window the pointer 1, 40, 90 and 96 CSS px beyond the left, right, top and bottom edges and 90 px beyond each
     corner is the game's pointer at the picture's edge pixel and the map scrolls; 97 and 120 px beyond it is gone and the view stays; over the picture's and the mouse's selectors under the
     game and over the links above it (a control of the page) it is gone at once, from the margin and from the middle of the picture; a click, a right click, a wheel and a ctrl + wheel in the
     margin reach the page (the canvas gets none of them, the wheel scrolls the page, the page's menu opens, the game does not zoom or open anything); the pointer that leaves the browser window
     is gone; back on the picture the scrolling stops and the edges work as before; a page that scrolls under a pointer that did not move looks again; a tap in the margin does nothing; the
     first leave of a page's life (which SDL 2.28.4 drops) is delivered.
-What headless Chrome cannot show, and the owner's Mac must: the Dock and the menu bar that appear at the screen's edge (a real screen, not a headless one), that Esc is the game's and
+What headless Chrome cannot show, and a real Mac must: the Dock and the menu bar that appear at the screen's edge (a real screen, not a headless one), that Esc is the game's and
 HOLDING it leaves fullscreen (the browser's own interface does that, not the page), the browser's bubble ("Press Esc to show your cursor"), Safari and Firefox (no Keyboard Lock API:
 Esc gives the pointer back first), a real mouse's own acceleration and its fractional movement on a Retina screen.
 

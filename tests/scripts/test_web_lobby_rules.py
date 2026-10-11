@@ -6,7 +6,7 @@ shows and may do, the START button and the plan sentence), the teams (the rules 
 sentences of the server (which of them means what) and every message strip of the page.
 
   - tests/scripts/web_lobby_rules_check.js holds all of it to tables: every exported function is called with real inputs (the check fails when one is never called), the Room messages of the
-    tables are real bytes that web/front/lobby_net.js reads, the pictures of the owner's design are compared word for word (pictures 1, 2, 3, 5, 5b, 6, 13, 13b and the strips of 15),
+    tables are real bytes that web/front/lobby_net.js reads, the pictures of the design are compared word for word (pictures 1, 2, 3, 5, 5b, 6, 13, 13b and the strips of 15),
     and a few hundred seeded random rooms must keep the rules that hold in every room;
   - this file also changes one thing at a time in a COPY of the library (a letter in the alphabet, a rule of the teams, a word, a number) and in the page's copies of the name block, or in a
     level file or a sentence of the server: the check must then fail, so a check that passes whatever the library does would be seen here.

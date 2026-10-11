@@ -69,7 +69,7 @@ class TheFrontPageMarkup(PageCase):
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
-        self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (AGENTS.md rule 7)")
+        self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (docs/VIEW_AND_HUD.md, Wording)")
         # the room: its heading and code, the invitation, the colours; the match: the map, the line about it and START
         self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><h2 id="room-h">Your room</h2><span class="code">Room code <b id="code"></b></span></div>', self.markup)
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colours"></ul>', self.markup)
@@ -193,10 +193,10 @@ class TheFrontPageMarkup(PageCase):
             self.assertGreaterEqual(ratio(colour(ink), colour(ground)), 4.5, "a %s button: %s on %s" % (look, ink, ground))
         # a pressed button is told from a loose one by more than its hue: its edge is far lighter than the loose edge (3 : 1 is the least that a state needs against what it is told from)
         self.assertGreaterEqual(ratio(colour(edge(pressed)), colour(edge(base))), 3.0, "the edge of a pressed button against the edge of a loose one")
-        # a place for them on every width: 36 px high on a wide page, 40 on a phone, and a narrower phone only makes the letters and the room around them smaller
+        # a place for them on every width: 36 px high on a wide page, 34 on a phone (the shorter cards of the approved picture; they were 40), and a narrower phone only makes the letters and the room around them smaller
         self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", base).group(1)), 36)
         phone = self.style[self.style.index("@media (max-width: 720px)"):self.style.index("@media (max-width: 374px)")]
-        self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 40px; \}")
+        self.found(phone, r"\.teamset button \{ flex: 1 1 0; max-width: 112px; min-height: 34px; \}")
         narrow = self.style[self.style.index("@media (max-width: 374px)"):]
         self.found(narrow, r"\.teamset button \{ padding: 3px 4px; font-size: 14px; \}")
         # the script puts the buttons in a group of their own, named for the colour, inside the text of the card (so they follow the name and the status in the reading order)
@@ -571,8 +571,10 @@ class TheDocuments(unittest.TestCase):
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)
         notes = read("docs", "NETWORK_PORT.md")
-        for needle in ("The front page", "localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "`antsStartArg`", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+        for needle in ("The front page", "`antsStartArg`"):
             self.assertIn(needle, notes, needle)
+        for needle in ("localArguments", "$arg_join", "`--play`", "**The lobby**", "**START!** (`StartRequest`)", "`ants.lobby`", "**The leader's game starts the match**", "N5.83 - N5.85", "the block `STATS`", "`web/front/`"):
+            self.assertIn(needle, page, needle)
         readme = read("README.md")
         self.assertNotIn("**More ways to play**", page)                                     # (the button and the test room are gone: the map selection screen is the only way to play)
         self.assertNotIn("### The old test room", page)

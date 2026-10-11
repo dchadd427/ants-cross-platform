@@ -484,6 +484,8 @@ public:
     }
 
     void clear_powerup(int32_t x, int32_t y) noexcept;
+    /// The 187 mode: every food pile and every power-up of the map is taken off (the cells become empty ground; the plants and the obstacles stay)
+    void strip_pickups() noexcept;
     void place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept;
 
 private:

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The owner: "This page layout didn't get updated". The game page (web/shell.html, served as /play.html and, as "/", for
+"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The page layout had not been updated. The game page (web/shell.html, served as /play.html and, as "/", for
 a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
 the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
 
   - the colours are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
-    text, where the front page (the lobby, drawn as the owner's approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
+    text, where the front page (the lobby, drawn as the approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
     sheen) and their edges are bevelled on all four sides (the bevel tokens), on the front page, this page, the changelog pages' style sheet and Sprites and sounds
   - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
     the other six
@@ -57,7 +57,7 @@ def rule(style, selector, nth=0):
 # is a rule of the family)
 FAMILY_CLASSES = ("btn", "banner", "startbtn", "sit", "sort-btn", "copy-btn", "ctrl-btn", "stage-pill-btn", "stage-mini-btn", "view-toggle-btn", "filter-chip", "sound-quick-play", "anim-link-chip", "step-link-btn", "tab-btn")
 FAMILY = re.compile(r"(?<![\w-])\.(?:%s)(?![\w-])|\.pair label|\.seg button" % "|".join(FAMILY_CLASSES))
-# The front page (the lobby) is drawn as the owner's approved pictures draw it and names its pieces differently: its `.banner` is the picture's message strip, a black box with a frame (not a teal
+# The front page (the lobby) is drawn as the approved pictures draw it and names its pieces differently: its `.banner` is the picture's message strip, a black box with a frame (not a teal
 # face, not a button: it is not in the family), its teal heading banner is `.name-step-title`, and its two-state buttons are the labels of the footer's radio buttons
 # (`.shape .seg label`, the chosen one is `.shape .seg input:checked + label`). (`.pair label` stays in both patterns, so that the old front page's pair cannot come back unchecked.)
 LOBBY_FAMILY_CLASSES = tuple(name for name in FAMILY_CLASSES if name != "banner") + ("name-step-title",)
@@ -157,8 +157,8 @@ class TheLookIsTheFrontPages(PageCase):
         }
 
     def test_the_buttons_have_rounded_corners_on_every_page(self):
-        # The owner, 2026-10-05: "can you make the buttons slightly rounded on the corners?" (they were 2 px, which reads as square), then, seeing 6 px: "round a little more", then, seeing 10 px:
-        # "maybe a little less curved on the corners" (8 px). One radius for everything that is cut like the menus' teal button (the buttons, the two-state buttons, the heading banners that look like them),
+        # Requested on 2026-10-05: the buttons slightly rounded on the corners (they were 2 px, which reads as square), then, at 6 px: a little more round, then, at 10 px:
+        # a little less curved on the corners (8 px). One radius for everything that is cut like the menus' teal button (the buttons, the two-state buttons, the heading banners that look like them),
         # on the front page, the game page and the style sheet of the changelog pages.
         radius = {where: declarations["border-radius"] for where, declarations in self.faces_and_corners().items()}
         for where, value in radius.items():
@@ -216,7 +216,7 @@ class TheLookIsTheFrontPages(PageCase):
         self.assertGreaterEqual(tags, 1, "the style attributes of the family's buttons: found %d" % tags)
 
     def test_the_teal_buttons_are_lit_from_above_on_every_page(self):
-        # The owner, 2026-10-05: "make the buttons appear a little less flat". The face of every teal button is its colour with the sheen over it: a light edge at the top and shade toward the bottom.
+        # Requested on 2026-10-05: the buttons appear a little less flat. The face of every teal button is its colour with the sheen over it: a light edge at the top and shade toward the bottom.
         # The same sheen on every page; a chosen (pressed in) button is a flat dark plate, and the hover changes only the colour and keeps the sheen.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         catalogue = style_of(read("asset_catalog", "index.html"))
@@ -256,8 +256,8 @@ class TheLookIsTheFrontPages(PageCase):
         self.assertEqual(stops[-1][0], (0, 0, 0), sheen)                                               # (the bottom is the darkest part)
 
     def test_the_teal_buttons_are_bevelled_on_all_four_edges_on_every_page(self):
-        # The owner, 2026-10-05, about the left edge of START! (a flat light strip beside a bevel that lit only the top and shaded only the bottom): "i was hoping the circled area would look more
-        # beveled". The bevel is lit on the top AND the left edge and shaded on the bottom AND the right edge, so it turns the rounded corners; it is one pair of tokens that every page shares
+        # Requested on 2026-10-05, about the left edge of START! (a flat light strip beside a bevel that lit only the top and shaded only the bottom): that area should look more
+        # beveled. The bevel is lit on the top AND the left edge and shaded on the bottom AND the right edge, so it turns the rounded corners; it is one pair of tokens that every page shares
         # (the front page, this page, the style sheet of the changelog pages that Sprites and sounds links), and every teal face takes its inset shadows from them, none draws its own.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         roots = {"the front page": rule(self.lobby_style, ":root"), "the game page": rule(self.style, ":root"), "the style sheet of the changelog pages": rule(classic, ":root")}
@@ -293,11 +293,11 @@ class TheLookIsTheFrontPages(PageCase):
         button, label = rule(self.style, ".seg button"), rule(self.lobby_style, ".shape .seg label")
         for name in ("line-height", "color", "background", "border", "border-radius"):
             self.assertEqual(button[name], label[name], name)
-        # the shadow: the same small bevel, then a red shadow without blur. Pending the owner's word (reported): the offset of the red shadow differs, `.seg button` 2px 3px 0 var(--shadow)
+        # the shadow: the same small bevel, then a red shadow without blur. Pending a decision (reported): the offset of the red shadow differs, `.seg button` 2px 3px 0 var(--shadow)
         # against `.shape .seg label` 2px 2px 0 var(--shadow), so the offset is not compared.
         for shadow in (button["box-shadow"], label["box-shadow"]):
             self.assertRegex(shadow, r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
-        # Pending the owner's word (reported): the gap between the two buttons is 6px on this page (`.seg`) and 8px on the front page (`.shape .seg`), so it is not compared.
+        # Pending a decision (reported): the gap between the two buttons is 6px on this page (`.seg`) and 8px on the front page (`.shape .seg`), so it is not compared.
         chosen, theirs = rule(self.style, '.seg button[aria-checked="true"]'), rule(self.lobby_style, ".shape .seg input:checked + label")
         for name in ("color", "background", "transform", "box-shadow"):
             self.assertEqual(chosen[name], theirs[name], name)
@@ -325,7 +325,7 @@ class TheLookIsTheFrontPages(PageCase):
         for name in ("color", "font-size", "background", "border-top", "box-shadow"):
             self.assertEqual(footer[name], theirs[name], name)
         self.assertEqual(rule(self.style, ".bar .ver")["background"], rule(self.lobby_style, ".bar .ver")["background"])
-        # Pending the owner's word (reported): the spacer's basis differs, `.bar .grow` flex 1 1 280px on this page against 1 1 40px on the front page, so only that it grows and shrinks alike is compared.
+        # Pending a decision (reported): the spacer's basis differs, `.bar .grow` flex 1 1 280px on this page against 1 1 40px on the front page, so only that it grows and shrinks alike is compared.
         self.assertEqual(rule(self.style, ".bar .grow")["flex"].split()[:2], rule(self.lobby_style, ".bar .grow")["flex"].split()[:2])
 
     def test_the_picture_has_the_frame_of_the_front_pages_pictures(self):

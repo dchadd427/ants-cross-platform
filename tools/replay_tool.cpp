@@ -111,10 +111,10 @@ void print_info(std::ostream& out, const Replay& r, size_t file_bytes, const std
     const Header& h = r.head;
     out << "File:      " << path << " (" << with_commas(file_bytes) << " bytes)\n";
     out << "Format:    " << h.format_version << ", rules: simulation " << (sim_rules_of(h) == 0 ? std::string("unknown") : std::to_string(sim_rules_of(h))) << ", network protocol " << h.engine_rules
-        << (plays_here(h) ? " (this build plays it)" : " (this build plays simulation rules " + std::to_string(kSimRules) + ")") << "\n";
+        << (plays_here(h) ? " (this build plays it)" : " (this build plays simulation rules " + played_rules_text() + ")") << "\n";
     out << "Made by:   " << (h.game_version.empty() ? "unknown" : h.game_version) << (h.build_id.empty() ? "" : " (build " + h.build_id + ")") << "\n";
     if (!h.venue.empty()) out << "Played as: " << h.venue << (h.recorder_seat < sim::MAX_PLAYERS ? ", recorded at " + seat_label(h, h.recorder_seat) : std::string()) << "\n";
-    out << "Map:       " << h.map_name << " (hash " << hex64(h.map_hash) << "), seed " << h.seed << ", Fog of War " << (h.fog ? "on" : "off") << "\n";
+    out << "Map:       " << h.map_name << " (hash " << hex64(h.map_hash) << "), seed " << h.seed << ", Fog of War " << (h.fog ? "on" : "off") << (h.mode != 0 ? std::string(", game mode ") + sim::game_mode_name(static_cast<sim::GameMode>(h.mode)) : std::string()) << "\n";
     out << "Seats:     " << seats_text(h) << "\n";
     out << "Teams:     " << teams_text(h) << "\n";
     out << "Length:    " << r.total_turns << " turns (" << format_time(r.total_turns) << ")" << (r.complete ? "" : ", INCOMPLETE: the recording stops here") << "\n";
@@ -417,8 +417,9 @@ std::vector<std::string> csv_fields(const std::string& line) {
 
 /// A match on TINY, recorded as a game on one machine records it: every 40 turns each seat sends two of its ants to a tile, the first seat asks the second for a team, and the third gives a
 /// special order to a worker (a worker has none to carry out: the list says what the engine said)
-bool make_sample(const assets::LevelData& level, uint64_t map_hash, uint32_t turns, std::vector<uint8_t>& bytes, std::string& why) {
+bool make_sample(const assets::LevelData& level, uint64_t map_hash, uint32_t turns, std::vector<uint8_t>& bytes, std::string& why, uint8_t mode = 0) {
     sim::SimulationEngine engine;
+    engine.set_game_mode(static_cast<sim::GameMode>(mode));
     engine.init(level, 7, 0x0F);
     Header head;
     head.game_version = "v0.0.0";
@@ -430,6 +431,7 @@ bool make_sample(const assets::LevelData& level, uint64_t map_hash, uint32_t tur
     head.roster = 0x0F;
     head.names[1] = "Bot (Hard)";
     head.names[2] = "Ann";                                       // (a person who typed a name; the other two seats have none and are their colours)
+    head.set_mode(mode);
     Recorder recorder(head);
     for (uint32_t turn = 0; turn < turns; ++turn) {
         std::vector<sim::Command> commands;
@@ -681,14 +683,28 @@ int selftest() {
         const Run brief_run = run_words({"verify", dir.file("brief.antsrep")});
         t.check(brief_run.status == 0 && has(brief_run.out, "OK: 60 turns (0:03.0), 0 hashes and the final state match"), "verify of a finished match with no hash in it compares the final state");
 
+        // a match of game mode 187: the head says the mode and the rules number 2, the tool plays it by them and every hash is right; the same file with the mode taken away is no file
+        std::vector<uint8_t> mode187;
+        t.check(make_sample(level, map_hash, 450, mode187, why, 1) && write_bytes(dir.file("mode187.antsrep"), mode187), "a match of game mode 187 is recorded and written: " + why);
+        const Run mode_info = run_words({"info", dir.file("mode187.antsrep")});
+        t.check(mode_info.status == 0 && has(mode_info.out, "Fog of War off, game mode 187") && has(mode_info.out, "rules: simulation " + std::to_string(kSimRulesMode187) + ", network protocol " + std::to_string(net::kProtocolVersion) + " (this build plays it)"), "info says the game mode and the rules number 2");
+        const Run mode_verify = run_words({"verify", dir.file("mode187.antsrep")});
+        t.check(mode_verify.status == 0 && mode_verify.err.empty() && has(mode_verify.out, "OK: 450 turns (0:22.5), 4 hashes and the final state match"), "verify plays it by its mode and every hash is right");
+        t.check(!has(run_words({"info", file}).out, "game mode"), "a match of the original's game says no game mode");
+        Replay half187;
+        t.check(decode(mode187.data(), mode187.size(), half187, why), "the file of mode 187 reads back");
+        half187.head.mode = 0;
+        std::string refused;
+        t.check(encode(half187, refused).empty() && has(refused, "game mode"), "a head with the rules number of mode 187 and no mode is not written");
+
         // a recording of other rules: it reads, it is not played
         Replay other = sample;
-        other.head.sim_rules = static_cast<uint16_t>(kSimRules + 1);
+        other.head.sim_rules = static_cast<uint16_t>(kSimRulesMode187 + 1);              // (a number that no build plays: 2 is the rules of game mode 187)
         t.check(write_bytes(dir.file("other.antsrep"), encode(other, error)), "a file of other rules is written");
         const Run rules_info = run_words({"info", dir.file("other.antsrep")});
         t.check(rules_info.status == 0 && has(rules_info.out, "this build plays simulation rules " + std::to_string(kSimRules)), "info reads it and says which rules it needs");
         const Run rules_verify = run_words({"verify", dir.file("other.antsrep")});
-        t.check(rules_verify.status == 1 && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules + 1)) && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules)), "verify does not play it, exit 1, and names both numbers");
+        t.check(rules_verify.status == 1 && has(rules_verify.err, "simulation rules " + std::to_string(kSimRulesMode187 + 1)) && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules)), "verify does not play it, exit 1, and names both numbers");
 
         // a recording that is not what was played: the hashes say so
         Replay changed = sample;

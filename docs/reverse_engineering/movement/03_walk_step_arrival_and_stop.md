@@ -4,7 +4,7 @@ Every claim below comes from Capstone disassembly of `Original-Ants/Ants.exe` (i
 Ghidra output was used only to find my way around. Addresses are VAs, and `this` = ant (ecx).
 Instruction dumps of FUN_0101ee84, FUN_0101b8cb, FUN_0101c4f2, FUN_0101ccaf, FUN_0100f4ab and FUN_0101f780 were used.
 
-## 0. Corrections and additions to the lead's claims
+## 0. Corrections and additions to the claims
 
 | Claim | Verdict |
 |---|---|
@@ -58,7 +58,7 @@ struct TileQuery {
 };
 ```
 
-Ant fields touched here, beyond the lead's list:
+Ant fields touched here, beyond the earlier list:
 - +0x0e sprite flags (|=0x40 on SetPosition).
 - +0x68 home state (0 none, 1 heading to own anthill entrance, 2 arrived). +0x6c and +0x70 are home timers.
 - +0x76 last damage source team.
@@ -663,7 +663,7 @@ For orders whose PathComplete case dispatches a message (handled=1), the snap de
 - Scheduler (world+0xe88): **the default is the sorted list (vtable 0x1005208, `0x10310e8` tick, one task per call); the timing wheel of 1024 slots × 8 ms (vtable 0x1005248, FUN_01031465 / FUN_010313cb) is used only with the command-line flag `newtask`** (corrected in the verification section below). `Add(task, delay, period, 0)` (wheel: 0x10312bd). The timed-task wrapper 0x10305a8 calls onStart the first time (+0x2c==0) and reschedules by `period` if `+0x30==0`; the second time it calls onFire.
 - Direction table words at 0x1002b28 = {7,0,1,6,0,2,5,4,3}, index `(drow+1)*3+(dcol+1)` (FUN_01017531 raw deltas; FUN_01017560 sign of deltas).
 - CHD frame events: 3 only in get-hit, get-blown and bump animations (landing frame); 4 in attack animations; 5 in `…h0`. Walk animations use only the 11111 sentinel, so blocks B–E of WalkStep never fire during a normal walk. They fire when actions 0xa/0xe/0x13 (hit/flight/bounce) call WalkStep with status≠2.
-- Walk animation names: `a?w{g,s,d,m}{3,7,8,9,2}01` (g grass, s sand, d dirt, m mud; digit 3=S 7=N 8=NE 9=E 2=SE; idx 816–820 = worker grass). Swim/dive/climb are the lead's `assw`/`asdi`/`asgo`.
+- Walk animation names: `a?w{g,s,d,m}{3,7,8,9,2}01` (g grass, s sand, d dirt, m mud; digit 3=S 7=N 8=NE 9=E 2=SE; idx 816–820 = worker grass). Swim/dive/climb are `assw`/`asdi`/`asgo`.
 
 ---
 

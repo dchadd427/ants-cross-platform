@@ -29,7 +29,7 @@ What is checked, for each profile:
     does not. The boundaries (a lift between 400 and 450 ms is neither) are the model's tests'. Every part starts from a clean state (no finger down, no window open),
     so that one failure cannot make the next parts fail;
   * the same in the page's FULLSCREEN (the browser's own on a Pixel; the page's own where there is no Fullscreen API: an iPhone), where the box is another size.
-What headless Chrome cannot show, and the owner's phone must: that the first touch of a page grants the sound (the autoplay policy is switched off for the check), the system's own gestures
+What headless Chrome cannot show, and a real phone must: that the first touch of a page grants the sound (the autoplay policy is switched off for the check), the system's own gestures
 (Android's back swipe from an edge, iOS's swipe from the left edge, pull to refresh: the page's overscroll-behavior-y only asks for none), a finger's real width (a thumb's resting
 touch that holds, a palm), the real multi-touch glass (a finger's jitter within the slop), Safari and Firefox (WebKit's gesture events and callout), the vibration motor.
 

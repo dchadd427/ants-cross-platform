@@ -212,7 +212,7 @@ suite() {
 
 # The worker bot's pinned table is left out of the sanitizer pass. The test filters of a developer (W_ONLY, W_SKIP, ANTS_TEST_FILTER) must not leak into the master run:
 # a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan (unoptimised) the 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and
-# checks numbers, not memory: the sanitizer pass leaves those two out (docs/audit/B3_notes.md).
+# checks numbers, not memory: the sanitizer pass leaves those two out.
 run_worker_bot_suite() {
     if [ "$RUN_ASAN" -eq 1 ]; then
         env -u W_ONLY -u ANTS_TEST_FILTER W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
@@ -255,6 +255,7 @@ define_suites() {
     suite "2.8"    sim    1 "test_powerup_actions"       "Power-Up Actions (test_powerup_actions)"                   "ORIGINAL POWER-UP ACTIONS SUITE (pick-up, cancel window, immunity)"                '"./$BUILD_DIR/tests/test_sim/test_powerup_actions"'
     suite "2.9"    sim    1 "test_food_actions"          "Food Actions (test_food_actions)"                          "ORIGINAL FOOD ACTIONS SUITE (food objects, grab clip, bite, stages)"               '"./$BUILD_DIR/tests/test_sim/test_food_actions"'
     suite "2.9.1"  sim    1 "test_level_defaults"        "Level Defaults (test_level_defaults)"                      "LEVEL DEFAULTS SUITE (default ant type of a level, power-ups and droppers by tile id)" '"./$BUILD_DIR/tests/test_sim/test_level_defaults"'
+    suite "2.9.2"  sim    1 "test_game_mode"             "Game Mode 187 (test_game_mode)"                            "GAME MODE SUITE (187: no food, kills as the score, the last side standing)" '"./$BUILD_DIR/tests/test_sim/test_game_mode"'
     suite "2.10"   sim    1 "test_commands"              "Commands + State Hash (test_commands)"                     "COMMAND LAYER SUITE (commands, validation, lock-step state hash)"                  '"./$BUILD_DIR/tests/test_sim/test_commands"'
     suite "2.11"   sim    0 "test_lockstep"              "Lock-Step Network Core (test_lockstep)"                    "LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)"             'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lockstep"' "cost=58"
     suite "2.12"   sim    1 "test_lobby"                 "Room / Start Barrier (test_lobby)"                         "ROOM SUITE (joining, roster, start barrier)"                                       'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lobby"'

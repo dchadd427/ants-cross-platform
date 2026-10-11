@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock, and the margin of a WINDOWED one (run by ./run_tests.sh --fast and by the CI). The owner: on a 16:10 screen the
+"""The pointer of a FULLSCREEN game page: the black bars, and the pointer lock, and the margin of a WINDOWED one (run by ./run_tests.sh --fast and by the CI). On a 16:10 screen the
 16:9 picture has bars above and below, and a pointer that went over a bar no longer scrolled the map (the browser sends the game nothing there and says that the pointer LEFT the canvas); and on
-a Mac a pointer at the screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer. In a window the same loss: "go off the screen with the
-mouse and it not screw up the scrolling": a pointer within 96 CSS pixels (about an inch) beyond the game's box still scrolls the map at the box's edge.
+a Mac a pointer at the screen's edge makes the Dock and the menu bar appear, which a web page can only prevent by locking the pointer. In a window the same loss: going off the screen with the
+mouse must not spoil the scrolling; a pointer within 96 CSS pixels (about an inch) beyond the game's box still scrolls the map at the box's edge.
 
   - the page's own code is RUN (node, when it is installed): the pixel that the game reads for a pointer over a bar and the position that makes the game read it, the cursor of a locked
     pointer (its start, the motion by the mouse's distance, the edges, the corners, the slow mouse), the choice "Fullscreen mouse: Locked / Free" and its storage key (`ants.pointerlock`,
@@ -168,7 +168,7 @@ class TheWindowedMargin(PageCase):
 
     def test_a_click_the_wheel_and_the_menu_in_the_margin_are_left_to_the_page(self):
         """Nothing in the margin's code cancels an event (the page keeps its clicks, its wheel and its menu): no preventDefault in the margin's section."""
-        start = self.page.index("THE MARGIN OF A WINDOWED PAGE (the owner: \"go off the screen with the mouse and it not screw up the scrolling\"; agreed")
+        start = self.page.index("THE MARGIN OF A WINDOWED PAGE (requested: the mouse can go off the screen without breaking the scrolling; agreed")
         end = self.page.index("// THE POINTER LOCK. On the Mac")
         section = self.page[start:end]
         self.not_found(section, r"preventDefault\(\)")
@@ -179,11 +179,10 @@ class TheWindowedMargin(PageCase):
         self.assertIn("In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch)", self.page)
 
     def test_the_browser_page_and_the_notes_say_what_the_margin_is(self):
-        notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))
-        self.assertIn("The margin of a windowed page", notes)
-        self.assertIn("ANTS_EDGE_MARGIN", notes)
-        self.assertIn("test_web_edge.sh --only margin", notes)
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
+        self.assertIn("The margin of a windowed page", page)
+        self.assertIn("ANTS_EDGE_MARGIN", page)
+        self.assertIn("test_web_edge.sh --only margin", page)
         self.assertIn("up to 96 CSS pixels (about an inch) beyond the box", page)
 
 

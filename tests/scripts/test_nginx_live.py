@@ -133,7 +133,7 @@ class TheLocations(unittest.TestCase):
 
 class TheAllowancesAndTheCache(unittest.TestCase):
     def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address: docs/audit/site_stats_notes.md; an allowance per visitor would be one for everybody)
+        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
         for zone_name, block, rate, burst in (("ants_live", LIST, 20, 100), ("ants_live_files", SNAPSHOT, 30, 60)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)

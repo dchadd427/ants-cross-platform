@@ -1,6 +1,6 @@
 // The rules and the words of the front page's lobby (web/lobby.html): everything that decides what the page shows and sends, with no browser in it, so that node can run it
-// (tests/scripts/web_lobby_rules_check.js). The page reads a Room message of network protocol 16 (web/front/lobby_net.js) through modelOf(), asks viewOf() what each colour card
-// and the map side show, and asks planWith(), moveOf() and the team functions what to send. The pictures that these words and rules belong to are the lobby's (the owner's cards).
+// (tests/scripts/web_lobby_rules_check.js). The page reads a Room message of network protocol 17 (web/front/lobby_net.js) through modelOf(), asks viewOf() what each colour card
+// and the map side show, and asks planWith(), moveOf() and the team functions what to send. The pictures that these words and rules belong to are the lobby's (the approved cards).
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyRules, node gets module.exports.
 //   * Seats are the server's: Green 0, Red 1, Blue 2, Black 3. The cards lie Black, Green, Red, Blue (GRID: the four hills of the maps, top left to bottom right) and are built in that
 //     reading order, so that Tab and a screen reader follow what is on screen.
@@ -28,7 +28,7 @@
         { key: 'treasure', name: 'Treasure', file: 'TREASURE.LVL', info: "One person's trash... (12 min)" },
         { key: 'islands', name: 'Islands', file: 'ISLANDS.LVL', info: 'Island hopping, expert map (12 min)' }
     ];
-    // Treasure is the map that is played most: it is the default of everything (the owner's request)
+    // Treasure is the map that is played most: it is the default of everything (requested)
     var DEFAULT_MAP_KEY = 'treasure';
     var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
 
@@ -196,7 +196,8 @@
     }
 
     // ---- what the leader asks the room (PlanMsg, SeatMove) --------------------------------------------------------------------------------------------------------------------------
-    // The plan as the leader wants it: { map: file name or '' (the room's own stays), kinds: four plan values, teamA, teamB }. `change` can hold { map: key, seat + kind: a plan word, teams: sides }.
+    // The plan as the leader wants it: { map: file name or '' (the room's own stays), kinds: four plan values, teamA, teamB, mode }. The page has no control for the game type, so it sends the room's own mode back
+    // (a leader that chose 187 by another way, the control interface or a native host, keeps it when the page changes the map). `change` can hold { map: key, seat + kind: a plan word, teams: sides }.
     function planWith(room, model, change) {
         var kinds = room.plan.slice(), teamA = room.teamA, teamB = room.teamB, map = '';
         if (change && change.map && mapByKey(change.map)) map = mapByKey(change.map).file;
@@ -209,7 +210,9 @@
             var t2 = teamBytes(sidesOfPair(teamA, teamB), playingAfter(model, kinds));
             teamA = t2.teamA; teamB = t2.teamB;
         }
-        return { map: map, kinds: kinds, teamA: teamA, teamB: teamB };
+        var plan = { map: map, kinds: kinds, teamA: teamA, teamB: teamB };
+        if (typeof room.mode === 'number') plan.mode = room.mode;
+        return plan;
     }
     function sidesOfPair(a, b) { var out = [0, 0, 0, 0]; if (a !== NO_TEAM && b !== NO_TEAM && a < PLAYERS && b < PLAYERS) { out[a] = 1; out[b] = 1; } return out; }
     // The colours that would play if the plan were `kinds`: every colour that a person holds, and every other colour whose plan is a bot

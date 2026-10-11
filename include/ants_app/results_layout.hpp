@@ -1,6 +1,6 @@
 #pragma once
 
-// The results screen at 960 x 540 (widescreen work, after the setup screen; the owner approved the mock-ups: "Approved").
+// The results screen at 960 x 540 (widescreen work, after the setup screen; the mock-ups were approved).
 //
 // The original's results screen is a 640 x 480 page, the animation `re_screen` (149 pieces: the frame, the clay tiles, the banner "Game Results", "YOUR SCORE", the art of the column headers, the
 // labels "Winner!" and "other players...", and the two black boxes that the rows stand in), the button Leave Game, and the rows that the program adds (the name, four numbers and the ants of each

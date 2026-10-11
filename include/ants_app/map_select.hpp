@@ -40,7 +40,7 @@ struct MapSelectEntry {
  * FUN_01013fc9, keys FUN_01014076, START FUN_010140c5; docs 5.50).
  *
  * The maps are every `*.lvl` of the Maps folder in the byte order of their file names; the list starts with DEFAULT_MAP_FILE highlighted when the folder has it (the original highlights
- * its first entry: a deliberate deviation at the owner's request), else with the first entry. All labels, the portraits and the thumbs appear with the
+ * its first entry: a deliberate deviation made on request), else with the first entry. All labels, the portraits and the thumbs appear with the
  * first run of the refresh task, 500 ms after the screen was created. The buttons are the original's button class (ScreenButton: the callback runs at the release);
  * the keys are Up / Down (previous / next map, wrapping), Enter, S and s (START), Q, q, X and x (Leave); nothing else does anything. START locks the screen.
  *
@@ -52,8 +52,8 @@ class MapSelectScreen {
 public:
     static constexpr double REFRESH_MS = 500.0;    // the refresh task's delay (FUN_01031e92(task, 500, 0)): until then the labels are empty and nobody is listed
 
-    /// The map that the list highlights when the screen is made, if the Maps folder holds it (any case): the map that is played most, at the owner's request. A DELIBERATE DEVIATION from
-    /// the original, which highlights the first entry of its list (docs/AUDIT_ONE_TO_ONE.md, 3b); the list, its order and everything else of the screen stay the original's.
+    /// The map that the list highlights when the screen is made, if the Maps folder holds it (any case): the map that is played most, on request. A DELIBERATE DEVIATION from
+    /// the original, which highlights the first entry of its list (docs/ORIGINAL_PROGRAM.md, "Differences made on purpose"); the list, its order and everything else of the screen stay the original's.
     static constexpr const char* DEFAULT_MAP_FILE = "TREASURE.LVL";
 
     // The labels of the screen (FUN_01012ce0): the map name (36, 312) 179 x 26, its description (36, 380) 293 x 26, the prompt (36, 447) 293 x 35 with 14 px lines,

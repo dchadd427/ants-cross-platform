@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The routes of docker/nginx.conf, run for real (run by ./run_tests.sh --fast and by the CI where docker works).
 
-The front page and the game page share the address "/" (the owner: the Play online page is the front page, which is the lobby now; every address that the game
+The front page and the game page share the address "/" (the Play online page is the front page, which is the lobby now; every address that the game
 page ever had keeps opening it): "/" is the lobby unless the query has join=..., /four.html is a permanent redirect to "/" with the same query, /play.html is the game page. The
 rules cannot be seen by reading the file (what a `rewrite` or an `if` does with a query string, which headers an answer ends with), so this starts the real nginx of the image's own base
 (nginx:alpine) with the repository's docker/nginx.conf and two stand-in pages that carry the markers of the real ones, and asks it, with tests/scripts/web_routes_check.py (which the CI also
-runs against the real web image; the stand-in docroot also has the Classic look's stylesheet and font and the three other pages of the site). Skipped, with the reason, where docker or the nginx
+runs against the real web image; the stand-in docroot also has the Classic look's stylesheet and font and the two other pages of the site). Skipped, with the reason, where docker or the nginx
 image is not available. Static checks of the file's text run everywhere.
 """
 import os
@@ -94,7 +94,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
-        for name, text in (("lobby.html", LOBBY_PAGE), ("watch.html", WATCH_PAGE), ("replay_page.js", "window.AntsReplay = {};\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("changelog_archive.html", CLASSIC_PAGE),
+        for name, text in (("lobby.html", LOBBY_PAGE), ("watch.html", WATCH_PAGE), ("replay_page.js", "window.AntsReplay = {};\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)

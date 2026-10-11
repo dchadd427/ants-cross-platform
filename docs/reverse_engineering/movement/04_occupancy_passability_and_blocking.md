@@ -356,7 +356,7 @@ The check ignores terrain and occupants. FUN_0101d822(t) is true if t is any liv
 **FUN_01022c57(tTeam,tIdx,aTeam,aIdx, dword tTile, dword aTile, int16 dir, int isCombat)** [ret 0x20] builds command message type 8, size 0x20, via FUN_010221fa(8,0x20), which writes header {+0 size, +4 type}. Fields: +8 tTeam, +0xa tIdx, +0xc aTeam, +0xe aIdx, +0x10 tTile, +0x14 aTile, +0x18 dir, +0x1c isCombat. It is dispatched through FUN_0100d791(msg,0xa,0), so it executes locally at once and is also sent. The handler is 0x1022ca1 (resolved in the combat cluster).
 
 ---------------------------------------------------------------------------------------------------
-## 5. Pause / retry (verifies lead claim C12, with one correction)
+## 5. Pause / retry (verifies claim C12, with one correction)
 
 **FUN_0101cc1e(int on)** [ret 4] (@101cc1e..101ccac):
 ```
@@ -448,5 +448,5 @@ v_ad02.txt (SetAction), v_fc50.txt (re-issue order).
 - FUN_0101fc50 (re-path) calls FUN_0101ab87 first (@101fd14), which zeroes the order +0xa8 (@101ab94). The order is then re-derived from the target tile by FUN_01020655(t,a3,a2) (@101fd48, e.g. own hill -> order 2 @1020688, enemy hill -> 0xb). A "re-path" therefore re-issues a command to a tile; it does not preserve the order type. If the a2 gate FUN_0101ff5a fails (@101fc84 -> 0x101fef5), fc50 returns 0 without clearing the order or broadcasting. TryEnterTile has already freed the waypoints and set the ant idle, so the ant is left idle with a stale order and no path.
 - FUN_0101fc50 and the stop handler FUN_01021664 (reached synchronously through FUN_010214d9 -> dispatch 0xa -> 0x10236c1) both SetPosition to the centre of the ant's current pixel tile. After TryEnterTile returns 0, the caller's d = CentreOf(+0x5a) - pos is therefore 0 (visible snap-to-centre on re-path, stop or "can't").
 - FUN_0100f17f edge case: when leaving a MULTI cell and 0 other ants remain, only bit 8 is cleared and the low byte keeps the departing ant's team/idx. When leaving a non-MULTI cell, the low byte is set to 0xff unconditionally.
-- Ant vtable slot +0x28 is 0x101a93a = SetPosition(x,y). The lead's "0x102b7bb?" guess is wrong: the vtable dword at 0x1004c08 is 0x101a93a. Slot +0x18 0x101a928 = SetPosition(point), which forwards to it.
+- Ant vtable slot +0x28 is 0x101a93a = SetPosition(x,y). The "0x102b7bb?" guess is wrong: the vtable dword at 0x1004c08 is 0x101a93a. Slot +0x18 0x101a928 = SetPosition(point), which forwards to it.
 - world == app object: the scheduler pointer at +0xe88 is the same whether reached via [0x104b478] or [0x104b350]. The world ctor calls the app ctor chain at @100a2ea -> 0x102c317 -> 0x10314c6.

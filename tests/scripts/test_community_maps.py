@@ -343,9 +343,8 @@ class TheList(unittest.TestCase):
 
     def test_the_other_documents_give_the_same_numbers(self):
         n = len(self.rows)
-        self.assertIn("(the %d that pass its checks are in `Community-Maps/`" % n, read_text(REPO, "docs", "NETWORK_PORT.md"))
-        self.assertEqual(len(re.findall(r"Community-Maps/` (?:now )?holds the %d |the repository holds the %d of its maps|Community-Maps/` holds the %d that pass" % (n, n, n),
-                                         read_text(REPO, "docs", "BOTS.md"))), 3)
+        self.assertEqual(len(re.findall(r"Community-Maps/` holds the %d that pass" % n, read_text(REPO, "docs", "BOTS.md"))), 1)
+        self.assertIn("the repository holds only the part of the maps that is in `Community-Maps/`", read_text(REPO, "docs", "GAME_REVERSE_ENGINEERING.md"))
 
 
 class Made(unittest.TestCase):

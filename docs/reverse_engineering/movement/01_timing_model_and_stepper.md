@@ -129,7 +129,7 @@ outer 0x102b997 (now=t1): d=frame_k, edi=frame_{k+1}, call 0x101ee84
      SetPosition(x + d.x, y + d.y)   (d as possibly rewritten by 0x101b8cb, e.g. the snap)
      +0x2c = head ; +0x10 += dur0  => t2 + 2*dur0
 ```
-Same-list variant (missed by lead): if the callback replays the **same** template (same list pointer), for example on the water-to-mud case for a non-swimmer where both classes map to terrain 3 so terrA!=terrB triggers a restart, then the outer `if list changed` test is false. edi stays = frame_{k+1} of the old run, while the cursor is reset to head.
+Same-list variant (missed by the claims): if the callback replays the **same** template (same list pointer), for example on the water-to-mud case for a non-swimmer where both classes map to terrain 3 so terrA!=terrB triggers a restart, then the outer `if list changed` test is false. edi stays = frame_{k+1} of the old run, while the cursor is reset to head.
 Result: `+0x10 = t2 + dur0 + dur(frame_{k+1})`. All walk anims have constant per-frame durations, so this is also 2x for walking.
 If an animation is played outside a step callback (orders, ANTPAUSE task), the first frame lasts dur0 once.
 
@@ -225,7 +225,7 @@ The other animations:
 ## C10: FUN_0101b8cb walk step callback. The core is CONFIRMED; see "full pseudocode" for the complete version
 
 It is called only from 0x101f692. That call is reached for actions 0 and 1 (0x101eefc), for action 3 when status!=2 (0x101f063), for 0xe/0x13 when status!=2 (0x101f5c8), and for 0xa when status!=2 and vtbl+0x40()==0 (0x101f636).
-The lead said actions 0/1 only.
+The claim said actions 0/1 only.
 The core claims check out: status 0 returns; the +0x88 && status==2 case snaps and arrives; the new-tile and off-path tests; the nudge; the c4f2 test; the ≤2 tolerance (0x101c038 `cmp bx,2; ja` on abs() from 0x1034f20, an unsigned-16 compare); the new-tile FUN_0101ad02(1,+0xe0,terr(+0x5a,+0x5c),terr(ntile),0,1); and the arrive sequence.
 Corrections and omissions:
 1. The nudge is `s = (d>0) ? +1 : -1` per axis (0x101bf3a setle/dec/and 2/dec). **An axis with d==0 gets -1.**
@@ -351,7 +351,7 @@ ARRIVE:                                                                         
 // TerrainClass(r,c) = FUN_01008af7: layer2 id in {0x22..0x25} ? 3 : tileinfo[layer1 id].word0 (16-bit result).
 ```
 
-## Other things the lead missed (summary)
+## Other things the claims missed (summary)
 * ant vtable slot +0x28 is 0x101a93a, which does fog reveal radius 6 and the occupancy update. Slot +0x18 is 0x101a928.
 * FUN_0101ad02: early-exit cases (old action 0xc always; 0xf; 0xa/0xe/0x13 with hp==0). +8 is set to [world+0x4a7c] during the call and cleared at exit. arg6 is unused.
 * A path does not start walking by itself: FUN_0101ab87 (0x101ab87) only stores the path, sets idx=0 and the order (for order 5 also +0xb4/+0xb0).
@@ -404,7 +404,7 @@ I found no claim that is wrong in substance. Three small refinements are listed 
 ## Corrections / refinements
 1. C8: the ID tables at 0x1002fb8 (walk) and 0x1003738 (carry) are really [4 colour][6 type][5 terrain][8 dir] ushort, which is 960 entries, not 240. The loader FUN_010175ad reads only the colour-0 block. FUN_01018d48 reads W[240*c + 40*type + 8*t + d] (0x1018e25 / 0x1018e4c, [ebp-0x24] = c*0xf0) as the ID for the recoloured copies of colours 1..3. Those blocks hold synthetic IDs for all 8 dirs, starting at 1352 (c1), 1934 (c2) and 2516 (c3). The same layout probably applies to 0x1002cb8/0x1002e38 (idle), with stride 48*c.
 2. C5 evidence: the xref list of vtbl+0x24 calls omits 0x102e870. That call is a DirectSound interface call, so the conclusion does not change.
-3. "Other things the lead missed", on path-start latency: this is not "about 100-150 ms" in a loose sense. When the path arrives by the path message (see Additional #3), the idle anim is restarted outside a callback just before the path is stored. The walk therefore starts exactly one idle first-frame duration later: 150 ms for types 0, 4 and 5 (agst/acst/asst), 100 ms for types 1, 2 and 3 (abst/afst/atst). The first pixel move comes 2x the walk dur0 after that. For a worker on grass that is 150+100 = 250 ms from order handling to the first pixel.
+3. "Other things the claims missed", on path-start latency: this is not "about 100-150 ms" in a loose sense. When the path arrives by the path message (see Additional #3), the idle anim is restarted outside a callback just before the path is stored. The walk therefore starts exactly one idle first-frame duration later: 150 ms for types 0, 4 and 5 (agst/acst/asst), 100 ms for types 1, 2 and 3 (abst/afst/atst). The first pixel move comes 2x the walk dur0 after that. For a worker on grass that is 150+100 = 250 ms from order handling to the first pixel.
 
 ## Additional findings (same functions)
 1. Blocked response inside FUN_0101c4f2 (reached from the walk callback). Every site that sets the wait calls FUN_0101cc1e(1) first, which creates the task and saves action=1 (walk) and the current dir. At 0x101c7ee (non-swimmer) it then does SetPosition(centre(pixel tile)) via vtbl+0x18 (0x101c81a) and then ace3(0). At 0x101c848 (swimmer with order 3/0xf) it does SetPosition(centre(tile at [ebp-0x18])) (0x101c86e) and then ace3(0). At 0x101c8ea it calls ace3(0) only. Because the callback runs before the move, "pixel tile" is the tile being LEFT. The blocked ant snaps back to that tile's centre, idles, and 300 ms later resumes the walk (dur0 not doubled, since this is outside a callback).
@@ -417,7 +417,7 @@ I found no claim that is wrong in substance. Three small refinements are listed 
    - In the walk handler, t>4 falls to 0x101b10a with ecx=[ebp+0xc] (the dir) as the "template", which would crash if a restart happens.
    - FUN_01017531 does not clamp its deltas.
    - 0x1002b40 is a duplicate of the direction table and is the one FUN_01017560 uses.
-7. FUN_0100f9cb(0) returns +0x54 when it is nonzero, else FUN_01021087(map+0x70), which maps 0x3e..0x42 to 4,3,1,5,2 and anything else to 0. This is consistent with the lead's convention.
+7. FUN_0100f9cb(0) returns +0x54 when it is nonzero, else FUN_01021087(map+0x70), which maps 0x3e..0x42 to 4,3,1,5,2 and anything else to 0. This is consistent with the claimed convention.
 
 ## Unverified
 - How often the view update (0x1009c51 -> FUN_01008952) runs, and what triggers it. The report also left this open.

@@ -76,7 +76,7 @@ A click on the entry, or `Up` from Single player (the first panel preselects Sin
 Every failure comes back to the panel with a line of its own: never a crash, a hang or a silent return.
 
 - The server cannot be reached (the line names it).
-- **A server that does not answer** says "The server <name> did not answer". It is one line for all three ways of staying silent: a name that is never resolved, a connection that is never made (the attempt's limit is **20 s**), and a server that accepts the connection and never sends its Welcome (**10 s**, the room's limit).
+- A server that does not answer, and the time limits of an attempt, are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#joining-and-hosting-from-the-desktop-start-menu-start_menuhpp-application_menucpp-v0097).
 - A server that hangs up: the connection was lost before the room.
 - No room with that code (the line names the code and says "capital letters matter"), the room is full, the match has already started, you were removed from the room, the request was not accepted, the server is busy (when hosting).
 - Another version: "This game is <version>, but the server runs another version of the game". The version is the running game's own.
@@ -91,7 +91,7 @@ After a network match the game is back **at the start menu** instead of ending t
 
 - None of these starts a match, a room, a test run or a screenshot, so a plain `ants`, `ants --name Bob`, `ants --server play.example.org` and `./start_game.sh` (or `./start_game.sh --single`) show it.
 - These options choose a mode and **skip the menu**: `--map`, `--map-select`, `--play`, `--alone`, `--host`, `--join`, `--join-url`, `--room`, `--token`, `--seat`, `--bot`, `--headless`, `--screenshot`, `--player` / `-pnum`, `--select-ant`, `--select-base`, `--open-options`, `--scorecard`.
-- **`--start-menu` forces it**, also with `--headless` and `--screenshot` (for the tests and the screenshots). Combined with `--map`, `--open-options`, `--scorecard`, `--host`, `--join` or `--join-url` it is refused: they start a match or a room at once. So it is with `--alone`: the menu's Single player chooses who plays.
+- The option `--start-menu`, which forces the menu, is described in [`COMMAND_LINE.md`](COMMAND_LINE.md#mode-and-map).
 - `--map-select` starts on the setup screen, without the menu.
 - The four windows of the `./start_game.sh --players 4` test rig each have `--host` or `--join` and never show it.
 
@@ -102,7 +102,7 @@ The options themselves are in [`COMMAND_LINE.md`](COMMAND_LINE.md).
 The original's setup screen ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.50). What differs is named below: the highlight at the start, the 16:9 page and the screens of a network room.
 
 - **The map list is searched, not built in**: every `.lvl` file of `Original-Ants/Maps/` is listed, sorted by the bytes of the file names (capitals before small letters). A map that you drop into that folder (one of the community's maps, say) appears on the screen at once. The name is the file's name without `.lvl`; the description and the minutes come from the file's own header.
-- **The highlight at the start is Treasure** (`TREASURE.LVL`, when the folder holds it; else the first map). The owner asked for it because Treasure is the map that is played most, so a player who only presses START plays it. This is the one deliberate difference from the original, which highlights the first entry of its list (`GAUNTLET.LVL` for the six maps; [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md) section 3b). The list, its order, the keys, START and the labels are the original's; the 16:9 page and the rooms add what the next sections describe. A guest and the leader of a server's room show the room's map, never this highlight.
+- **The highlight at the start is Treasure** (`TREASURE.LVL`, when the folder holds it; else the first map). It was chosen because Treasure is the map that is played most, so a player who only presses START plays it. This is the one deliberate difference from the original, which highlights the first entry of its list (`GAUNTLET.LVL` for the six maps; [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). The list, its order, the keys, START and the labels are the original's; the 16:9 page and the rooms add what the next sections describe. A guest and the leader of a server's room show the room's map, never this highlight.
 - **Keys**: `Up` / `Down` (or the arrow buttons) select the previous / next map, wrapping round. `Enter`, `KP Enter` or `S` (or the `START` button) start. `Q` or `X` (or the Leave Game button) leave. The original's setup screen knows no other key: `Esc`, digits, `Left` / `Right`, `Space`, `F` and `D` do nothing. In a network room `T` opens the waiting-room chat ([below](#in-a-network-room)).
 - **The buttons are the original's button class**: a press captures the button and the action happens at the release; moving off the button before the release cancels it ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.45, which also has the hit test).
 - The **Fog of War On / Off** pair is silent and starts on Off. `START` locks the screen. START! of the quick help is not at the same place as the setup screen's START: the setup screen's START lies 3 px to the left and 2 px lower (the original's own data says so, section 5.52).
@@ -211,7 +211,7 @@ What a click does after that:
 
 ## Touch Controls
 
-A **tap** is the left click, a **hold** the right click (a ring closes around the finger, and the phone buzzes where the browser can), a **drag** the rubber band, **two fingers** move the map and a **pinch** zooms it. It is the game's own input: the commands, the selection and the zoom are the mouse's, and the simulation, the network and every state hash never see it.
+The gestures of a touch screen, and why they have these numbers, are described in [`TOUCH.md`](TOUCH.md#the-gestures-and-why-these-numbers).
 
 | Action | Touch | Same as the mouse's |
 |---|---|---|
@@ -254,7 +254,7 @@ The original's keys (`Ants.exe` `FUN_0102609a`, [`GAME_REVERSE_ENGINEERING.md`](
 | **`Ctrl + N` / `Ctrl + P`** | Select the next / previous ant (from the lowest selected one) and scroll just far enough to show it. |
 | **`Ctrl + S`** | Stop the selected ants (no flash, no lock, no deselect). |
 | **`Ctrl + O` / `Ctrl + Q`** | Options / quit dialog (quit dialog: `Y` yes, `N` or `Esc` no). |
-| **`Ctrl + L`** | Show / hide every ant's hit points as white numbers. The numbers are **on by default**, a deliberate difference from the original, which starts with them off ([`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md) section 3b). |
+| **`Ctrl + L`** | Show / hide every ant's hit points as white numbers. The numbers are **on by default**, a deliberate difference from the original, which starts with them off ([`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose)). |
 | *In a team dialog* | The offer to team up (section 5.42): `A` accepts, `D` / `Esc` declines; while you wait for the answer: `W` / `Esc` withdraws the offer; "Doing this will break your team": `Y` yes, `N` / `Esc` no. A dialog takes every key and click until it is answered ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#alliance-texts--chat-log) has the texts). |
 
 The mouse wheel, by device:

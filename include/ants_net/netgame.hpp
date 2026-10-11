@@ -341,6 +341,8 @@ public:
     void set_map(const std::string& map_name);
     /// Fog of War on is refused while a bot sits in the room (a bot would see through it): the option stays off and the status line says why
     void set_fog(bool fog);
+    /// Host only, in the room: the rules of the match (protocol 17; sim::GameMode as a byte), told to every guest in the Room message and put in the Start. A byte this build does not know is not taken.
+    void set_mode(uint8_t mode);
     /// Host only, in the room: a computer player takes `seat` (docs/BOTS.md). The room shows it as a bot with the good thumb; the machine's own bot (ants_ai) is
     /// built by the application once the match begins and sends its commands with submit_bot(). False when the seat is taken, the room is full or Fog of War is on.
     bool add_bot(uint8_t seat, const std::string& name);

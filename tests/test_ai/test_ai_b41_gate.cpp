@@ -54,6 +54,7 @@ LevelPlan gate_plan(bool gate, uint32_t staged = 8) {
     LevelPlan p = plan_for(Level::Hard);
     p.gate = gate;
     p.gate_max_staged = staged;
+    p.ramp_unjam = false;                // (the tests of the gate pin the gate's own rules: an ant that stands on the ramp stays there; the unjam is the stand batch's, AI25.4)
     return p;
 }
 

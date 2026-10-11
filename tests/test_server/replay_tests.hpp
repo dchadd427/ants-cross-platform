@@ -1034,4 +1034,137 @@ void run_replay_tests() {
         w.reset();
         ASSERT_TRUE(reads > before);
     } TEST_END();
+    TEST_CASE("S3.185 The Game Mode Through The Door (Protocol 17): The Control Interface Makes A Room Of Mode 187 With The Word \"187\" (\"highest-score\" Or No Word Is The Original's Game, Any Other Word Or Value Is A 400 And Makes No Room, A Specification With A Byte Above The Last Is Refused); The Status, The Room List, Every Player's Engine And The File Of The Match Say 187: The File Carries Mode 1 And Rules 2, Is Listed With Its Mode, And Plays Out On A Fresh Engine To The Final Hash Of The Match (As The Original's Game It Would Not)") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-mode", &clock), false, why));
+        {   // the rooms: by the word, by the other word, by none
+            ctl::HttpResponse made = replay_call(w.mgr, "POST", "/rooms", "", R"({"map":"TINY.LVL","code":"GM-187","players":2,"seed":4242,"mode":"187"})");
+            ASSERT_EQ(made.status, 201);
+            ASSERT_EQ(replay_json_of(made).get("mode").str(), std::string("187"));
+            made = replay_call(w.mgr, "POST", "/rooms", "", R"({"map":"TINY.LVL","code":"GM-HS","players":2,"seed":4242,"mode":"highest-score"})");
+            ASSERT_EQ(made.status, 201);
+            ASSERT_EQ(replay_json_of(made).get("mode").str(), std::string("highest-score"));
+            made = replay_call(w.mgr, "POST", "/rooms", "", R"({"map":"TINY.LVL","code":"GM-DEF","players":2,"seed":4242})");
+            ASSERT_EQ(made.status, 201);
+            ASSERT_EQ(replay_json_of(made).get("mode").str(), std::string("highest-score"));
+            ASSERT_EQ(w.mgr.room_count(), size_t{3});
+            ASSERT_EQ(static_cast<int>(w.status("GM-187").mode), 1);
+            ASSERT_EQ(static_cast<int>(w.status("GM-HS").mode), 0);
+            ASSERT_EQ(static_cast<int>(w.status("GM-DEF").mode), 0);
+            // a word that is not one is a 400 whatever its kind, and no room is made
+            for (const char* bad : {"\"mode\":\"2\"", "\"mode\":1", "\"mode\":0", "\"mode\":\"\"", "\"mode\":\"187 \"", "\"mode\":\"Highest-Score\"", "\"mode\":\"kills\"", "\"mode\":null", "\"mode\":true", "\"mode\":[\"187\"]"}) {
+                const ctl::HttpResponse refused = replay_call(w.mgr, "POST", "/rooms", "", std::string("{\"map\":\"TINY.LVL\",\"code\":\"GM-BAD\",\"players\":2,") + bad + "}");
+                ASSERT_EQ(refused.status, 400);
+                ASSERT_TRUE(replay_json_of(refused).get("error").str().find("\"mode\" must be") != std::string::npos);
+            }
+            ASSERT_EQ(w.mgr.room_count(), size_t{3});
+            // a specification that was made by hand with a byte this build does not know (the control interface cannot say it) is refused too, and not played as another mode
+            for (const uint8_t mode : {uint8_t{2}, uint8_t{3}, uint8_t{255}}) {
+                RoomSpec spec = spec_of("GM-HAND", 2);
+                spec.mode = mode;
+                const CreateResult refused = w.mgr.create_room(spec, w.now);
+                ASSERT_TRUE(!refused.ok && refused.http_status == 400 && refused.error.find("game mode") != std::string::npos);
+            }
+            ASSERT_EQ(w.mgr.room_count(), size_t{3});
+            // the room list and the room's own call say it
+            const ctl::JsonValue list = replay_json_of(replay_call(w.mgr, "GET", "/rooms"));
+            ASSERT_EQ(list.get("rooms").size(), size_t{3});
+            std::map<std::string, std::string> modes;
+            for (size_t i = 0; i < list.get("rooms").size(); ++i) modes[list.get("rooms").at(i).get("code").str()] = list.get("rooms").at(i).get("mode").str();
+            ASSERT_TRUE(modes["GM-187"] == "187" && modes["GM-HS"] == "highest-score" && modes["GM-DEF"] == "highest-score");
+            ASSERT_EQ(replay_json_of(replay_call(w.mgr, "GET", "/rooms/GM-187")).get("mode").str(), std::string("187"));
+            ASSERT_TRUE(w.mgr.close_room("GM-HS", w.now) && w.mgr.close_room("GM-DEF", w.now));
+        }
+        // the match: two machines load the Start, whose mode they set on their engines before the first init (the server's engine does the same: a state it did not share would be a desync, and
+        // the file's hashes are the server's own)
+        start_pair(w, "GM-187", 38000);
+        RoomStatus s = w.status("GM-187");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600 && static_cast<int>(s.mode) == 1);
+        ASSERT_EQ(status_to_json(s).get("mode").str(), std::string("187"));
+        ASSERT_EQ(w.clients.size(), size_t{2});
+        for (const auto& c : w.clients) {
+            ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && c->lobby->start_info().mode == 1);
+            std::array<uint32_t, sim::MAX_PLAYERS> ants{};
+            for (const sim::AntSnapshot& a : c->sim.get_world_state().ants) {
+                if (a.player_id < sim::MAX_PLAYERS) ++ants[a.player_id];
+            }
+            ASSERT_TRUE(ants[0] + ants[1] > 0);                                                     // (a seat that is not in the roster has no ants; the two that are fight on)
+            ASSERT_TRUE(ants[2] == 0 && ants[3] == 0);
+            for (const sim::TileCell& cell : c->sim.get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        }
+        ASSERT_TRUE(w.mgr.close_room("GM-187", w.now));
+        s = w.status("GM-187");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty() && ReplayStore::valid_file_name(s.replay_file));
+        const ReplayStore& store = *w.mgr.replay_store();
+        const StoredReplay f = load_stored(store, s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.complete && f.rep.total_turns >= 600);
+        ASSERT_TRUE(f.rep.head.mode == 1 && f.rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(f.rep.head));
+        std::string again;
+        ASSERT_TRUE(replay::encode(f.rep, again) == f.bytes);                                      // (the reader gives back what the writer wrote, the mode with it)
+        const std::vector<ReplayEntry> entries = store.list();
+        ASSERT_TRUE(entries.size() == 1 && entries[0].readable && entries[0].mode == 1 && entries[0].sim_rules == replay::kSimRulesMode187);
+        // the lists say so, on the owner's door and on the public one, and the file that the public door gives is the same bytes
+        const ctl::JsonValue owner = replay_json_of(replay_call(w.mgr, "GET", "/replays"));
+        ASSERT_TRUE(owner.get("replays").size() == 1 && owner.get("replays").at(0).get("mode").str() == "187" && owner.get("replays").at(0).get("sim_rules").as_int_or(0) == replay::kSimRulesMode187);
+        const ctl::JsonValue open = replay_json_of(public_call(w.mgr, "GET", "/replays"));
+        ASSERT_TRUE(open.get("replays").size() == 1 && open.get("replays").at(0).get("mode").str() == "187" && open.get("replays").at(0).get("sim_rules").as_int_or(0) == replay::kSimRulesMode187);
+        ASSERT_TRUE(body_bytes(public_call(w.mgr, "GET", "/replays/" + s.replay_file)) == f.bytes);
+        // it plays out on a fresh engine to every hash and to the final hash that the server's engine had: the player makes the mode before the first init
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));
+        ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5 && played.hash == f.rep.final_hash);
+        // the same file taken for the original's game does not: it is another match from the first hash on (the mode is part of the state)
+        replay::Replay as_original = f.rep;
+        as_original.head.set_mode(0);
+        replay::Outcome wrong;
+        ASSERT_FALSE(plays_out(as_original, wrong));
+        ASSERT_TRUE(!wrong.ok && wrong.first_bad_turn > 0 && wrong.first_bad_turn <= 2 * replay::kHashPeriodTurns);
+        // and a file that names rules 2 without the mode (or the mode with rules 1) is no file at all
+        replay::Replay half = f.rep;
+        half.head.mode = 0;
+        std::string refusal;
+        ASSERT_TRUE(replay::encode(half, refusal).empty() && !refusal.empty());
+        half = f.rep;
+        half.head.sim_rules = replay::kSimRules;
+        refusal.clear();
+        ASSERT_TRUE(replay::encode(half, refusal).empty() && !refusal.empty());
+    } TEST_END();
+
+    TEST_CASE("S3.190 The Teams Of A Match Of Game Mode 187 Are In The Head Of Its File Next To The Mode (Protocols 13 And 17), And The File Plays Out On A Fresh Engine To Every Hash And To The Server's Final One (A File That Lacked The Teams Would Diverge At The First Check)") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-teams-187", &clock), false, why));
+        RoomSpec spec = spec_of("RT-187", 4);
+        spec.mode = 1;
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        Client& ann = w.connect("Ann", "RT-187");
+        w.run(500);
+        ASSERT_TRUE(ann.lobby->request_start(net::StartRequestMsg::all(net::FillLevel::Medium).fill, sim::StartTeams{true, 0, 2}));        // one person and three bots, Green + Red against Blue + Black
+        w.run(1500);
+        for (int guard = 0; guard < 4000 && w.status("RT-187").state == RoomState::Running && w.status("RT-187").turns < 700; ++guard) w.run(250);
+        if (w.status("RT-187").state == RoomState::Running) ASSERT_TRUE(w.mgr.close_room("RT-187", w.now));
+        const RoomStatus s = w.status("RT-187");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty() && s.turns >= 600);
+        ASSERT_TRUE(static_cast<int>(s.mode) == 1 && s.teams == "0+2");
+        const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x0F && !f.rep.head.fog);
+        ASSERT_TRUE(f.rep.head.mode == 1 && f.rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(f.rep.head));
+        ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));                            // (the teams of the Start are in the head in this mode as in the original's)
+        ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+        std::string again;
+        ASSERT_TRUE(replay::encode(f.rep, again) == f.bytes);                                      // (the reader gives back what the writer wrote: the mode and the teams with it)
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));
+        ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked > 5 && played.hash == f.rep.final_hash);
+        if (s.state == RoomState::Finished) ASSERT_EQ(played.hash, s.referee_hash);
+        // the same file without its teams is another match from the first hash on
+        replay::Replay no_teams = f.rep;
+        no_teams.head.teams = sim::StartTeams{};
+        replay::Outcome wrong;
+        ASSERT_FALSE(plays_out(no_teams, wrong));
+        ASSERT_TRUE(!wrong.ok && wrong.first_bad_turn > 0 && wrong.first_bad_turn <= 2 * replay::kHashPeriodTurns);
+    } TEST_END();
 }

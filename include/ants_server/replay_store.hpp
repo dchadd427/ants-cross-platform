@@ -61,6 +61,7 @@ struct ReplayEntry {
     uint16_t rules{0};                               // net::kProtocolVersion of the build that recorded it (information: a file plays on its sim_rules)
     uint16_t sim_rules{0};                           // the rules number of the simulation that the match needs (replay::sim_rules_of: the head's own, else the table's; 0: unknown): a build plays a file only when it has the same number
     std::string game;                                // "v0.10.1"
+    uint8_t mode{0};                                 // the game mode of the match (sim::GameMode as a byte; the head's field 17): 0 the original's highest score, 1 "187"
     uint32_t turns{0};
     bool finished{false};                            // the rules ended the match (false: it was left, or it ran into the room's time limit)
     std::vector<std::string> players;                // the seats that played, "Green (Ann)", "Green" (no name) or "Red (Bot (Medium))", in seat order

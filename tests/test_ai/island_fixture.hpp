@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <cstdlib>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -75,6 +76,8 @@ struct Match {
     uint8_t roster{0};
     std::vector<uint8_t> prev_bridge;                    // the finished bridge tiles of the tick before
     std::set<uint32_t> drowning;                         // the ants that have been seen to drown
+    std::vector<uint8_t> prev_bomb;                      // the colour (1 + the owner's seat) of the bomb on each tile in the tick before, 0: none
+    std::map<size_t, std::pair<uint64_t, int>> blasts;   // tile -> (tick, seat) of the last bomb that left it (a mine that went off: the ant that stepped on it is thrown four tiles, into a lake too)
     int collapsed[4] = {0, 0, 0, 0};                     // per team: ants that started to drown on a tile that was a finished bridge a tick before
     int other_drowned[4] = {0, 0, 0, 0};                 // per team: ants that drowned elsewhere (a blow of an enemy that flung the ant into the water included: fought)
     int fought[4] = {0, 0, 0, 0};                        // per team: of those, ants with an enemy ant within three tiles when they started to drown
@@ -139,6 +142,16 @@ struct Match {
             if (a.player_id >= 4) continue;
             (prev_bridge[idx] != 0 ? collapsed : other_drowned)[a.player_id] += 1;
             if (prev_bridge[idx] != 0) continue;
+            bool mined = false;                                                                           // an enemy's mine went off within six tiles in the last 80 ticks: it threw the ant
+            for (const auto& b : blasts) {
+                const int bx = static_cast<int>(b.first % grid.width());
+                const int by = static_cast<int>(b.first / grid.width());
+                mined = mined || (b.second.second != a.player_id && sim.current_tick() <= b.second.first + 80 && std::abs(bx - a.tile_x) <= 6 && std::abs(by - a.tile_y) <= 6);
+            }
+            if (mined) {
+                fought[a.player_id] += 1;
+                continue;
+            }
             for (const auto& o : sim.get_world_state().ants) {
                 if (o.player_id != a.player_id && std::abs(o.tile_x - a.tile_x) <= 3 && std::abs(o.tile_y - a.tile_y) <= 3) {
                     fought[a.player_id] += 1;
@@ -147,6 +160,13 @@ struct Match {
             }
         }
         for (size_t i = 0; i < prev_bridge.size(); ++i) prev_bridge[i] = grid.cells()[i].has_completed_bridge() ? 1 : 0;
+        if (prev_bomb.size() != grid.cells().size()) prev_bomb.assign(grid.cells().size(), 0);
+        for (size_t i = 0; i < prev_bomb.size(); ++i) {
+            const ants::sim::TileCell& cell = grid.cells()[i];
+            const uint8_t now = cell.has_bomb() ? static_cast<uint8_t>(1 + cell.interactive_id - ants::sim::BOMB_BLACK) : 0;
+            if (prev_bomb[i] != 0 && now == 0) blasts[i] = {sim.current_tick(), prev_bomb[i] - 1};
+            prev_bomb[i] = now;
+        }
     }
 
     void run(int ticks) {
@@ -159,7 +179,8 @@ struct Match {
     const IslandTask& island(uint8_t seat) { return bot(seat)->islands(); }
     int total_collapsed() const { return collapsed[0] + collapsed[1] + collapsed[2] + collapsed[3]; }
     /// Ants that drowned for a reason of their own bot's making (a bridge that went under them, a flight): not the blows of an enemy. An ant that drowns with an enemy within three tiles counts
-    /// as fought, whoever threw it: a drowning in a crowded landing is not seen here when an enemy stands near (the matches of four bots, AI16, print how many were fought: none today). The
+    /// as fought, whoever threw it; so does one that drowns within 80 ticks of an enemy's mine going off within six tiles (a mine throws the ant that steps on it four tiles, into a lake too; the stand
+    /// batch lays fields of them): a drowning in a crowded landing is not seen here when an enemy stands near (the matches of four bots, AI16, print how many were fought). The
     /// flights are covered by the matches of one seat, with no enemy on the map (AI17.3, AI17.10)
     int total_unforced() const {
         int n = 0;

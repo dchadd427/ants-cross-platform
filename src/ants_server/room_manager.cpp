@@ -63,9 +63,10 @@ std::string spec_range_error(const RoomSpec& spec) {
     if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return "resume_countdown_seconds must be 0 to 60";
     if (spec.max_connections < spec.players || spec.max_connections > 4096) return "max_connections must be the number of players to 4096";
     if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return "the limit of the turn log must be 1 KiB to 1 GiB";
+    if (!sim::valid_game_mode(spec.mode)) return "the game mode must be one that this server knows (\"highest-score\" or \"187\")";           // (a mode that is not known is never played as another)
     if (spec.lobby) {                                                // (protocol 16: a lobby room is made by the server's door alone, and its numbers are the server's own)
         if (spec.players != sim::MAX_PLAYERS || !spec.early_start || !spec.leader_starts || !spec.reconnect) return "a lobby room needs four players, an early start, a leader that starts it and reconnect";
-        if (spec.fog || !spec.bots.empty() || spec.teams.set) return "a lobby room has no Fog of War, bots or teams of its own: its leader's plan decides";
+        if (spec.fog || !spec.bots.empty() || spec.teams.set || spec.mode != 0) return "a lobby room has no Fog of War, bots, teams or game mode of its own: its leader's plan decides";
         if (spec.hold_ms < 1000 || spec.hold_ms > 3600u * 1000u) return "the hold of a lobby room's seat must be 1 to 3600 seconds";
         if (spec.start_wait_ms < 1000 || spec.start_wait_ms > 600u * 1000u) return "the wait of a lobby room's START must be 1 to 600 seconds";
         if (spec.silence_ms < 1000 || spec.silence_ms > 3600u * 1000u) return "the silence of a lobby room's link must be 1 to 3600 seconds";
@@ -89,7 +90,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (!spec.code.empty() && (!net::valid_room_code(spec.code))) return fail(400, "the room code may hold letters, digits, '_' and '-' only (up to 32 characters)");
     if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || restoring_has(spec.code))) return fail(409, "a room with this code exists");     // (a record that waits for its replay is a room)
     if (const std::string range = spec_range_error(spec); !range.empty()) return fail(400, range);
-    // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
+    // The bots of the room (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
     // A bots-only room (RoomSpec::bots_only; the server's own match of computer players) seats a bot at every seat of the room and nobody else, and holds no seat
     if (spec.bots_only && (spec.bots.size() != spec.players || spec.lobby || spec.public_room || spec.reconnect)) return fail(400, "bots_only: every seat is a bot, and the room is no lobby, no public room and holds no seats");
     if (!spec.bots.empty()) {

@@ -6,23 +6,7 @@ Prerequisites and how to build: [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md).
 
 ## The three tiers
 
-The tests come in three tiers. [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers") says when each one runs.
-
-- **Quick**, for every change: `./run_tests.sh --fast` (below).
-- **Full**, for every pull request: the full matrix of GitHub Actions, the one full gate ([Continuous Integration](#continuous-integration)). `main` takes a change only through a pull request whose checks pass.
-- **Deep**, for changes to the network, the rules or fairness: mutation batteries (`tools/mutate.py`), AddressSanitizer, soak runs and browser checks.
-
-## Quick tier (every change)
-
-```bash
-./run_tests.sh --fast
-```
-
-It builds what it needs and runs the asset, simulation, network-core, bot and application suites that finish in seconds, plus the repository checks (the version and changelog consistency check and the python tests of `tests/scripts`).
-
-On a 10-core Mac the test time is about 25 seconds in the default parallel run (about 100 seconds one suite after the other); the build comes on top.
-
-It leaves out the E2E runner, the script suites that start the game, the sanitizer and the slow suites (the lock-step core, the control interface, the map sweep, the dedicated server and its way back, the worker bot, the whole-match engine copies, the network application, the start menu application and the way back in the application). The table below marks every suite that only the full run has, and `./run_tests.sh --fast --list` names what the quick tier runs.
+Quick (`./run_tests.sh --fast`, after every change), full (CI, for every pull request) and deep (mutation checks, AddressSanitizer, soak and browser runs, for changes to the network, the rules or fairness): what each one is, when it runs and what it costs is in [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers"). `./run_tests.sh --fast --list` names the suites of the quick tier, and the table below marks every suite that only the full run has. The quick tier's test time on a 10-core Mac is about 25 seconds in the default parallel run (about 100 seconds one suite after the other); the build comes on top.
 
 ## Master Test Suite
 
@@ -32,7 +16,7 @@ To run all test suites:
 ./run_tests.sh
 ```
 
-Independent suites run side by side, up to as many as the machine has cores. Each suite's output is printed in the order of the table, and the result of every suite is the same as in a serial run. [`WORKFLOW.md`](WORKFLOW.md) ("The three test tiers") describes the parallel runner.
+The parallel runner is described in [`WORKFLOW.md`](WORKFLOW.md#the-three-test-tiers) ("The three test tiers").
 
 It runs the same suites as the Linux and macOS jobs of CI. CI also builds on Windows and builds the web and server images ([Continuous Integration](#continuous-integration)).
 
@@ -89,7 +73,7 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 | 2.19.1 Way back of a NetGame (full tier) | The game's own network layer in a match that holds seats: real NetGames over loopback sockets against a real room manager come back by themselves after a cut link and after a restart of the server over its records, join again from nothing with their key, start again from nothing when the server lost turns, end every refusal with its own words and its rule for the key, give up in time, show the missing seats and the vote (checked field by field against a scripted server), say in their Hello what a server needs, and leave in every state; the state of every machine and of the referee agrees at the end; the prediction of one's own orders is off while the way back runs; a room on the local network and a room that holds no seats are what they were. |
 | 2.19.2 Replay store | `test_replay_store`: the folder of the matches that the server keeps, on a real folder with a clock, a disk, a delete and a rename that the test sets: the file names (what the store could have made and nothing else), the 30 days, the size limit (the oldest go first), the hour's budget of saves, the free-space reserve, other files and folders left alone, a crashed half-written file, a write or a rename that fails, damaged files (kept, listed to the owner only), files of other rules (listed to everybody with their rules number), same-second matches in order, a file read, listed and deleted by name only, 280 files found by name and purged by half, and a refusal that repeats, told once and then counted. The server's own tests (`test_server`, `test_ctl`) add the room's side: a match that ran 600 turns (30 seconds) is kept however it ended (the rules, a Quit, a close, the time limit) and a shorter one is not, restored rooms and `"record": false` rooms keep nothing, demo rooms (also those made through the control interface) only when asked, a person's seat keeps the name that was typed (`replay_person_name`: the words "Player" and "Player 1" to "Player 4" and an empty name leave the seat to its colour, a name with a quote, a backslash or angle brackets keeps both lists valid JSON), a bot's seat keeps its display name, teams and fog are in its head, the control interface's list and file calls, and the public read-only door (which answers on the loopback address only unless it is opened wider).; a file that somebody else puts in the folder is listed at the next look and one that is taken away is forgotten (RS9.1, RS9.2). |
 | 2.19.3 Live board | `test_live_board`: the board of the matches that run now (no network, no room: recorders that the test feeds, a clock of its own): the id of a match (the map and the second it began in, `-2`, `-3` ... in one second, never from a name, a seed or a room, unique among the matches that run and the ones that ended lately, none left after 9999), its shape check, the list (30 seconds, no failed recording, the newest start first, at most 50, the players written as the replay list writes them), the snapshot and its cache (the same bytes for as long as the clock is in one second, a clock set back), the memory of the matches that ended (the file they were kept as, 15 minutes, 256 of them, a clock set back). The live door in front of real rooms is in `test_server` (S3.176 - S3.178: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map, the id answers with the file that the public list has when the match ends, no room code anywhere, a room that is destroyed takes its match off the board). |
-| 2.20 Computer players | The bots' read-only view and map analysis (checked against the engine's path finder), the controller's budget and timing, the idle bot and bot seats in rooms, the arena's match runner (determinism, replay without a bot, limits) and the standard bot (power-up guard, strike back, the team-up rule and the opening, fights, the gate, styles, harassment, sabotage and ambush, cost and robustness, the contest play, the island play, and the order in which the tasks take ants: [`BOTS.md`](BOTS.md) "Testing"). |
+| 2.20 Computer players | The bots' read-only view and map analysis (checked against the engine's path finder), the controller's budget and timing, the idle bot and bot seats in rooms, the arena's match runner (determinism, replay without a bot, limits) and the standard bot (power-up guard, strike back, the team-up rule and the opening, fights, the gate, styles, harassment, sabotage and ambush, cost and robustness, the contest play, the island play, and the order in which the tasks take ants: [`BOTS.md`](BOTS.md) "Testing" and "Task ranks"). |
 | 2.21 Bot arena | `bot_arena --selftest`: command line, baseline table, seat arrangements, determinism, replay without a bot, refusals, threads and the report. `--save-replays`: the match is kept as a replay of the server's kind, reads back, plays back to the arena's own hash, and a match under 30 seconds is not kept. |
 | 2.22 Worker bot (full tier) | The worker bot's economy on every shipped map, learning from refused orders, the endgame, the command budget and its pinned baselines. |
 | 2.23 Ping, delay and waiting | The ping and delay meters, a host and a guest over a simulated link, and what the player sees when the game waits (stalls, bunched turns, hidden windows). |
@@ -126,7 +110,7 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 | 3.25 Touch model | Every rule of the touch model with an injected clock, no SDL: tap, hold, drag, the minimap, the second and the third finger, pan and pinch (judged once per frame), cancels, the clock, the slop's size, a soak of random sessions, and the feedback's geometry (the ring and the pulse). |
 | 3.26 Touch in the application | Synthetic finger events through the real event loop of a headless application: a tap, a drag and a hold against the mouse's click, band and right click (point by point), the hold's timing, the pan and the pinch at three zooms, every place where two fingers do nothing, cancels, a press that waited on a dialog that opened, the other screens, SDL's letterbox, an inset picture, the slop's size, and the ring and the pulse in the picture (nothing else of it changes). |
 | 3.27 Replays in the application | `test_replay_app`: a real headless application records a game on this computer (the HUD's order, the computer players' orders and the quit; a clock that runs out; teams made at the start; the direct start) and a match of the network (both machines' orders, the names and seats of the Start), and each file plays out to the state in which the match ended; the names are the ones that were typed; the desktop game keeps the file in the folder `replays` beside its settings and never replaces one; a match that is left before its end keeps its file when an order was given or a minute went by, and leaves nothing otherwise. The replay viewer's controls (RA7.1 - RA7.6): state, jump, speed, restart, the end, a cut-short file and the refusals (older, newer, no map, diverged) that the page shows as cards. |
-| 4 E2E (full tier) | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see `tests/TEST_INFRA.md`). |
+| 4 E2E (full tier) | Opaque-box scenarios in four tiers, run against the suite's own model of the rules (`tests/e2e/e2e_model.hpp`; it links no engine code and still has the early combat rules, see [Standalone E2E Test Runner](#standalone-e2e-test-runner)). |
 | 5.1 Version consistency | `tools/check_version_consistency.py`: the file `VERSION`, the top release heading of `CHANGELOG.md`, and the version line of `README.md` name the same release. |
 | 5.2 Tool and script tests | The python tests of `tests/scripts` (every `test_*.py`): the pages of the site, the version, release, mutation and deploy tools, the web build without Docker, `run_tests.sh` itself and the CI workflow; the list is below the table. |
 
@@ -136,10 +120,10 @@ The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names 
 
 Suite 5.2 runs every `tests/scripts/test_*.py`:
 
-- **Pages of the site:** the two changelog pages (their structure, in the Classic look), Sprites and sounds (`test_web_catalog.py`), the Classic look of every page of the site (`test_web_pages_classic.py`) and the 16:9 default of the pages (`test_web_aspect_default.py`).
+- **Pages of the site:** the changelog page (its structure, in the Classic look), Sprites and sounds (`test_web_catalog.py`), the Classic look of every page of the site (`test_web_pages_classic.py`) and the 16:9 default of the pages (`test_web_aspect_default.py`).
 - **The front page:** its art and font (`test_web_front.py`), its rules and words (`test_web_lobby.py`, `test_web_lobby_rules.py`, `test_web_lobby_net.py`), the line of numbers in its footer (`test_web_stats.py`) and the count of single-player games (`test_web_report.py`).
 - **The game page:** its look (`test_web_game.py`), the pointer at its edge (`test_web_edge.py`) and touch screens (`test_web_touch.py`).
-- **Watching replays on the web:** the shared code of the list page and the player (the address, the day and time, the length, the maps, the players, the chips) run with node (`tests/scripts/web_replay_check.js`), and `test_web_replay.py` reads the markup (the one place of the footer link and of the header buttons, the pieces the glue finds by id, text never becomes markup, the files in the image, the CI and the local web build). The list and the player were also checked by eye in a real browser against the owner's pictures (wide, side and phone, fullscreen, every card). Watching a match that is being played has the same two layers (the live words and helpers in `web_replay_check.js`, the live glue in `test_web_replay.py`) and an opt-in check in a real browser that needs no image and no server, `tests/scripts/test_web_live.sh` (the pages against a fake door and a stand-in for the game).
+- **Watching replays on the web:** the shared code of the list page and the player (the address, the day and time, the length, the maps, the players, the chips) run with node (`tests/scripts/web_replay_check.js`), and `test_web_replay.py` reads the markup (the one place of the footer link and of the header buttons, the pieces the glue finds by id, text never becomes markup, the files in the image, the CI and the local web build). The list and the player were also checked by eye in a real browser against the approved pictures (wide, side and phone, fullscreen, every card). Watching a match that is being played has the same two layers (the live words and helpers in `web_replay_check.js`, the live glue in `test_web_replay.py`) and an opt-in check in a real browser that needs no image and no server, `tests/scripts/test_web_live.sh` (the pages against a fake door and a stand-in for the game).
 - **The player's name on the web pages:** the rules of a name, the name step of a shared link and the whole front page (the real lobby with its two front scripts and a scripted game server), run with node and a small fake of the browser's DOM (`tests/scripts/web_name_check.js`).
 - **The front page's Rejoin button:** its block run by node (`tests/scripts/web_rejoin_block_check.js`) and the pins of `test_web_rejoin.py`. The check in real browsers, `web_rejoin_check.py`, is opt-in.
 - **nginx:** the site's block for `/busy` (`test_nginx_conf.py`), and the routes and the `/stats` routing run against a real nginx where docker works (`test_nginx_routes.py`, `test_nginx_stats.py`). The two blocks of the recorded matches (`/replays`, `/replays/<file>`) are pinned in `test_nginx_replays.py` (the names that pass, the methods and queries that never reach the server, what is passed on, the two allowances and the five-second cache of the list, the port the stack and the image agree on and that the stack does not publish) and, where docker works, run against a real nginx with a stand-in for the server. The two blocks of the matches that run now (`/live`, `/live/<id>`) are pinned the same way in `test_nginx_live.py` (the ids that pass, the methods and queries that never reach the server, what is passed on, their own two allowances, the two-second cache with a key for each id, and that an old answer is served only while a new one is fetched) and run against a real nginx where docker works.
@@ -151,7 +135,14 @@ Suite 5.2 runs every `tests/scripts/test_*.py`:
 
 ## Standalone E2E Test Runner
 
-The E2E suite exercises the game's features in four tiers. It is a CMake project of its own and runs against its own model of the rules: it links none of the game's code, and its model still has the early combat rules. A pass says that the model agrees with the documents, not that the engine does; the engine's rules are checked by the golden, integration and differential suites above. The status note and the feature list are in [`tests/TEST_INFRA.md`](../tests/TEST_INFRA.md).
+The E2E suite is a CMake project of its own (`tests/e2e/`) and links none of the game's code (no `ants_sim`, `ants_assets` or `ants_app`). It runs against its own model of the rules (`tests/e2e/e2e_model.hpp`), which was written from the early, paraphrased rules of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) and was never brought in line with the audit of the original program: its melee, knock-back, stun and "guard AI" rules, and its bomb knock-back and fire ricochet, are the model's, not the engine's (the engine's combat rules are section 5.36 of the specification, checked by the golden, integration and differential suites above). A pass here says that the model agrees with the documents, not that the engine matches the 1998 game.
+
+The tests are written opaque-box: they assert only on observable inputs, outputs, states and events (decoded structures, simulation tick outputs, state transitions, audio events, scorecard numbers), never on internals; the expected values come from the specification and never from fitting to what passes; each test sets up its own state, runs deterministically and depends on no other test or on the order. Four tiers:
+
+1. **Feature coverage** (category-partition): the happy paths and the modes of every feature.
+2. **Boundaries and corner cases**: coordinates at the edges of the grid, exact tick boundaries (a bridge at 179,950, 180,000 and 180,050 ms; the match clock at 0:01 and 0:00), numeric limits (food theft with a score of 0, 25, 50 and 75; hit points 0 to 10), invalid input refused.
+3. **Cross-feature pairs**: knock-back with fire walls and ricochets, bridges with the collapse and drowning, the thief's dive with the alarm and the dropped lunchbox, alliances with scores.
+4. **Whole matches** on the shipped maps at 20 Hz to 0:00: the freeze, the winner's and the losers' sound, the four statistics of the scorecard.
 
 ```bash
 # Build standalone E2E runner
@@ -168,13 +159,13 @@ cmake --build build_e2e
 ./build_e2e/e2e_runner --tier 4   # Tier 4: Real-World Workloads (full matches)
 ```
 
-`--list` names the registered tests, and `-v` also prints a `[PASS]` line with its time for every test that passes (a test that fails is always printed).
+`--list` names the registered tests, and `-v` also prints a `[PASS]` line with its time for every test that passes (a test that fails is always printed). The exit code is 0 when every executed test passed and otherwise the number of failures; the output has the test names, their times, the subtotals of the tiers, and the file and line of every failure.
 
 ## Continuous Integration
 
 Every pull request, every push to `main` and to `staging`, and every manual run is built and tested by GitHub Actions (`.github/workflows/ci.yml`). A newer push to a branch or pull request cancels the run of the older one.
 
-`main` is protected: it takes a change only through a pull request whose five checks (the five jobs of the table below) pass on a branch that is up to date with `main`, merged with a merge commit ([`WORKFLOW.md`](WORKFLOW.md), "Branches, pull requests and releases"). The merge deploys the beta site through the sixth job once the deploy secret is set ([the deploy job](#the-deploy-job), below).
+The five jobs of the table below are the checks that `main` requires, as [`WORKFLOW.md`](WORKFLOW.md#branches-pull-requests-and-releases) describes; the deploy that follows a merge is described under [the deploy job](#the-deploy-job), below.
 
 The five jobs run side by side. A run takes about 10 to 15 minutes: the web job about 4 minutes, the others 8 to 13.
 
@@ -196,11 +187,7 @@ The rule covers the game, the server and every test program, with three exceptio
 
 ### The deploy job
 
-The sixth job, **Deploy (Portainer webhook)**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed (five on `main`, four on `staging`, which has no MSVC 2022 build). It deploys only when the push changed something that an image contains, or the stack file (`tools/deploy_filter.py`). `CHANGELOG.md`, `VERSION` and the changelog archive count, because an image copies them. The other documents, `.github/`, `tests/` and the tools that no image runs do not.
-
-A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server. It polls the site's public `/busy` (the repository variable `DEPLOY_BUSY_URL`; the beta site's `/busy` when it is not set) every minute and goes on when no match runs, after `DEPLOY_MAX_WAIT_MINUTES` (a repository variable, 180 by default, 300 at the most) whatever runs, or when the address has not answered for five minutes (`tools/deploy_wait.py`). On `staging` it waits only when the variable `STAGING_BUSY_URL` is set. A newer push cancels a job that waits, and a push that is no longer the tip of its branch after the wait is not deployed.
-
-The job then calls the Portainer webhook that the repository secret `PORTAINER_WEBHOOK_URL` (staging: `PORTAINER_STAGING_WEBHOOK_URL`) holds, never printing it. Without the secret it says "deploy secret not set: skipped" and does nothing, so a merge deploys only once the secret is set. [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site") has how to switch it on, the wait and the staging stack.
+The sixth job, **Deploy (Portainer webhook)**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed, and deploys only when the push changed something that an image contains (`tools/deploy_filter.py`). Before it calls the webhook (the repository secret `PORTAINER_WEBHOOK_URL`) it waits until the site's `/busy` shows no match running (`DEPLOY_MAX_WAIT_MINUTES` at the most). How it works, how to switch it on and the staging site: [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site").
 
 ### What CI does not cover
 

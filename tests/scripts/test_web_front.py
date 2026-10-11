@@ -537,7 +537,7 @@ class TheRosterAnts(unittest.TestCase):
                     self.assertEqual(colours[one] & colours[other], set(), "%s and %s share no colour of their body" % (one, other))
 
     def test_the_black_row_is_the_catalogs_pictures_of_the_sprites_as_they_are(self):
-        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/ASSET_CATALOG.md): they show that the reader above, and the tool's, read the right indices and the right palette
+        # the catalog's pictures are converted from the archive's paletted bitmaps (docs/PLAY_IN_BROWSER.md, "Interactive Asset Catalog"): they show that the reader above, and the tool's, read the right indices and the right palette
         _width, _height, rows = read_png_pixels(os.path.join(FRONT, "ants.png"), alpha=True)
         black = list(self.SHIFT).index("black")
         for column, number in enumerate(self.order):
@@ -781,7 +781,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
             self.assertIsNone(self.sheet.value(selector, "order"), selector + " has no CSS order")
         self.assertEqual(self.sheet.value(".slots", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr)")
         self.assertIn(".slots { grid-template-columns: minmax(0, 1fr);", self.phone)                           # (the four cards one under the other, in the same order)
-        self.assertIn(".slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 44px;", self.phone)     # (the dots get a column of their own, so they never sit on a name or a drop-down)
+        self.assertIn(".slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr) 36px;", self.phone)     # (the dots get a column of their own, so they never sit on a name or a drop-down; 36 px wide and 44 high, so the names keep room beside the narrower cards)
         self.assertIn("body.guest .slot { grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr);", self.phone)       # (a player has no dots: no column for them)
         self.assertIn(":root { --k: 2; }", self.phone)
         self.assertEqual(self.sheet.value(".grip", "position"), "absolute")                                    # (the dots lie on the card's corner, and on a phone they are a column of their own)

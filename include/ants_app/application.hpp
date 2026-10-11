@@ -186,6 +186,11 @@ struct ApplicationConfig {
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
     LocalTeams teams;
+    /// --game-mode highest-score | 187 (docs/COMMAND_LINE.md): the rules of the games that this machine makes: a game on this computer, and the room of --host (its Start carries the mode to every machine, protocol 17). Stored as
+    /// the byte of sim::GameMode (always one that this build knows: parse_arguments refuses any other word). 0, the default, is the original's game; a guest, a server's room, a visitor's create block and a replay take their mode from
+    /// the room or the file and refuse this option.
+    uint8_t game_mode{0};
+    bool game_mode_given{false};
     /// For the tests: builds the bot of a spec instead of the registry (which has the idle bot and, since B3, the worker bot), so that the application's door for a
     /// bot's commands (the local sink, the room's sink) can be exercised with a bot of the test's own that acts in a way it wants to. Empty in a game that is played.
     std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> bot_factory;
@@ -477,7 +482,7 @@ public:
     /// SDL_GetPerformanceFrequency per second) so that every rule of the time is checked exactly and without waiting. Nothing: the real clock.
     void set_clock(std::function<uint64_t()> counter) { clock_ = std::move(counter); }
     /// Called once for each game on this computer, when its first tick runs (never for a match of the network, whichever machine it is): the web build tells its page, which has the server count
-    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/NETWORK_PORT.md "Site statistics"). A native game sets nothing and so reports nothing.
+    /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
     /// The network's clock in ms: what the frames and the wake-ups have given the session so far
     double net_clock_ms() const noexcept { return net_time_ms_; }
@@ -736,7 +741,7 @@ private:
     bool pointer_outside_{false};                          // the pointer is not over the window (the window has been left, see handle_window_event)
 
     // The match set-up shared by the local game and the network game
-    bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog);   // level, simulation, renderer (no HUD, no sound)
+    bool load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode);   // level, simulation, renderer (no HUD, no sound)
     void enter_match(bool rejoin = false);                // music, start sound, camera, HUD reset, "Get ready", state Playing (a match that this machine rejoins: no start sound, no dialog)
     void post_tick();                                     // what every simulation tick shows: HUD, events, audio, the end of the match
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes

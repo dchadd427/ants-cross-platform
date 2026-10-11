@@ -2,6 +2,8 @@
 
 What you see in a match and how the game draws it: the 16:9 picture, the map view with its edge scrolling and zoom, the minimap, the score boxes, the status line and the chat log, the results screen, and the text and sound that go with them. Where the original program's own numbers matter, the section names the part of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) that holds them (for example 5.43). The rules of the game are in [`GAMEPLAY.md`](GAMEPLAY.md), the mouse, keys and touch gestures in [`CONTROLS.md`](CONTROLS.md), and the web page in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md).
 
+**Wording.** On-screen text says "player", never "friend" (`tests/scripts/test_web_lobby.py` checks the lobby page).
+
 ## 16:9 by default: a wider view with more of the map (desktop and web builds)
 
 The game opens in a 16:9 picture, a fixed canvas of 960 x 540. The original's own 640 x 480 picture is `--aspect 4:3` on the command line, `aspect=4:3` in the settings file, or, in the browser, `?aspect=4:3` on the page's address or the page's selector. Two more wide shapes are offered for other screens: `16:10` (960 x 600, laptops and 16:10 monitors) and `21:9` (1260 x 540, ultrawide monitors). The desktop window is created in the picture's shape from the first moment.
@@ -72,8 +74,9 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 - On the desktop the system's natural scrolling is undone (`SDL_MOUSEWHEEL_FLIPPED`), so the wheel rolled away zooms in whatever the setting is. In the browser the system's own setting applies (see [`CONTROLS.md`](CONTROLS.md)).
 - A mouse notch is one step: an event worth a step or more moves the nearest whole number of steps and keeps no fraction (the web page's 120 at 100 a step is 1.2, so one step). A trackpad's small deltas add up. A pause of half a second forgets a fraction, a change of direction starts again, and a wheel event that is not a number is ignored.
 - The wheel and the middle button act only over the map view (not over the panels). They do nothing during a rubber band, a pressed button, the minimap or the chat log's drag, nor with a dialog or the results open (options, quick help, quit, alliance, "get ready").
-- On the setup screens they do nothing, the 16:9 screens of a room with their chat box included, with the chat input closed or open. Typing in the match's chat goes on through every zoom step.
+- On the setup screens they do nothing, the 16:9 screens of a room with their chat box included, with the chat input closed or open.
 - In the browser the wheel and a trackpad's pinch (ctrl + wheel; Safari's gesture events) over the game canvas zoom the game and never scroll or zoom the page. The middle button over the canvas never starts the browser's autoscroll: the page cancels its press and its click, over the canvas only.
+- **Typing in the match's chat goes on through the zoom**: the characters of a line (`+`, `-`, `=`) are text and never a zoom key; the wheel and the middle button change the zoom in the middle of a line and leave it as typed, and Enter sends it whole to the room (N5.70).
 
 ### The zoom is the player's own view
 
@@ -95,7 +98,7 @@ The wheel over the map view zooms through many levels, one a notch, towards the 
 
 ## Touch controls (phones and tablets)
 
-A touch screen plays the whole game with the mouse's own commands (a tap is the left click, a hold the right click, a drag the rubber band, two fingers move the map and a pinch zooms it through the API above): the gestures and their numbers are in [`TOUCH.md`](TOUCH.md), and the controls table is in [`CONTROLS.md`](CONTROLS.md).
+The gestures and their numbers are in [`TOUCH.md`](TOUCH.md#the-gestures-and-why-these-numbers), and the controls table is in [`CONTROLS.md`](CONTROLS.md#touch-controls).
 
 ## The HUD
 

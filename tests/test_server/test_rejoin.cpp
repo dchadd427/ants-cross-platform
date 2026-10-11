@@ -460,6 +460,7 @@ struct Machine {
             const bool ok = !fail_load && level.load_lvl(maps_dir() + s.map_name) && net::hash_file(maps_dir() + s.map_name, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
+                sim.set_game_mode(s.game_mode());
                 sim.init(level, s.seed, s.roster);
                 for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.set_player_name(p, s.names[p]);
                 sim::apply_start_teams(sim, s.teams());                   // (after the names, as the application does: the News Flash names the players)
@@ -2491,7 +2492,7 @@ void run_way_back_tests() {
         lobby_block.flags = static_cast<uint8_t>(net::kCreateLeaderStarts | net::kCreateLobby);
         Page ann(w.server.port(), "Ann", "lob27001", lobby_block);                          // the first page makes the room with its Hello
         pages.push_back(&ann);
-        ASSERT_TRUE(w.run_until([&]() { return ann.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 4000));
+        ASSERT_TRUE(w.run_until([&]() { return ann.lobby->phase() == net::ClientLobby::Phase::InRoom && ann.lobby->is_leader() && ann.lobby->room().lobby(); }, 4000));   // (the Welcome sets InRoom; the leader and the lobby flag come with the next Room message, which a slow machine can deliver one pass later)
         ASSERT_TRUE(ann.lobby->created() && ann.lobby->is_leader() && ann.lobby->room().lobby() && ann.lobby->my_seat() == 0);
         Page bob(w.server.port(), "Bob", "lob27001", std::nullopt);                         // the second is seated in it
         pages.push_back(&bob);

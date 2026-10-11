@@ -134,7 +134,7 @@ LevelData level_with_default(uint16_t tile, const std::string& name_of_entry_62 
     LevelData level = tiny_level();
     level.ambient_flag = 0;
     level.ambient_tile_or_sound = tile;
-    level.tile_dictionary[62] = name_of_entry_62;                // the map of the owner's popcorn case: block 3 = 62 and the dictionary calls that entry "."
+    level.tile_dictionary[62] = name_of_entry_62;                // the map of the popcorn case: block 3 = 62 and the dictionary calls that entry "."
     return level;
 }
 
@@ -468,7 +468,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("1.3 The dictionary's NAME of the tile is not looked at: block 3 = 62 is Combat whether entry 62 is called \".\", pu_comb or anything else (the owner's POPcOrN case)") {
+    TEST_CASE("1.3 The dictionary's NAME of the tile is not looked at: block 3 = 62 is Combat whether entry 62 is called \".\", pu_comb or anything else (the POPcOrN case)") {
         for (const char* name : {".", "pu_comb", "rock1", "", "......."}) {
             const LevelData level = level_with_default(62, name);
             Grid g;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/NETWORK_PORT.md, "The front page").
+"""The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/PLAY_IN_BROWSER.md, "The front page").
 
-The front page is the owner's lobby (web/lobby.html, the pictures he approved; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
+The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
 Nobody; players are dragged between colours), the map and START! at its side, and the footer with the version, the links and the picture's shape (Screen: Classic 4:3, 16:10, 16:9, which is the default, or 21:9). A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
@@ -69,7 +69,7 @@ NAMES = ("Maple", "Clover", "Pebble", "Sorrel", "Fern", "Bramble", "Juniper", "F
 COLOURS = ("black", "green", "red", "blue")                                  # the cards in their reading order: the four hills of the maps, top left to bottom right
 SEAT = {"green": 0, "red": 1, "blue": 2, "black": 3}                         # (the number of a colour stays its seat)
 
-MAP_LINE_LEAST = 2.9                                                         # the map line's contrast at the tile's lightest end is 2.95:1 in the approved picture; it must not get worse (the owner decides whether the picture's colour stays)
+MAP_LINE_LEAST = 2.9                                                         # the map line's contrast at the tile's lightest end is 2.95:1 in the approved picture; it must not get worse (whether the picture's colour stays is a project decision)
 
 # The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
 # and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1), text in the footer against the ends of its gradient and text on a colour's card against the card's
@@ -103,7 +103,7 @@ CONTRAST_JS = """(function () {
     behind.forEach(function (back) {
       bgOf(el).forEach(function (bg) { worst = Math.min(worst, ratio(back ? mix(fg, back, op) : fg, back ? mix(bg, back, op) : bg)); });
     });
-    if (el.closest('#info')) { info = Math.round(worst * 100) / 100; continue; }          // (the map line: cream on the clay tile as the owner's picture 1 draws it, held apart below)
+    if (el.closest('#info')) { info = Math.round(worst * 100) / 100; continue; }          // (the map line: cream on the clay tile as picture 1 draws it, held apart below)
     rows.push([Math.round(worst * 100) / 100, t.slice(0, 40)]);
   }
   rows.sort(function (a, b) { return a[0] - b[0]; });
@@ -549,7 +549,7 @@ def main():
             found = json.loads(t.ev((prepare + "; " if prepare else "") + "var found = " + CONTRAST_JS + "; " + (restore + "; " if restore else "") + "found"))
             check(found["texts"] >= least and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
             if found.get("info") is not None:
-                check(found["info"] >= MAP_LINE_LEAST, "%s: ... but for the map line, which is cream on the clay tile as the owner's picture 1 draws it (his call: 4.5:1 would need another colour), it is not lower than %s:1 (%s)" % (where, MAP_LINE_LEAST, found["info"]))
+                check(found["info"] >= MAP_LINE_LEAST, "%s: ... but for the map line, which is cream on the clay tile as picture 1 draws it (a project decision: 4.5:1 would need another colour), it is not lower than %s:1 (%s)" % (where, MAP_LINE_LEAST, found["info"]))
             if forms:
                 f = json.loads(t.ev(FORMS_JS))
                 check(f["n"] >= 2 and f["lowest"][0][0] >= 4.5, "%s: ... and for all %d drop-downs and fields, with their placeholders (lowest: %s)" % (where, f["n"], f["lowest"]))

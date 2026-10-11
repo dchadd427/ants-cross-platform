@@ -13,7 +13,7 @@
 //                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
 //                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
-//                     the keys of apply_tune (the tournaments' ablations; listed in docs/audit/B4_1_notes.md).
+//                     the keys of apply_tune (the tournaments' ablations).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants.
 //                     idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
 //   --ticks full|N    play until the match is over (the map's own length, default) or at most N ticks (50 ms each)
@@ -484,7 +484,7 @@ void print_usage(std::FILE* to) {
         "  --out FILE         write the JSON report\n"
         "  --quiet            no line per match\n"
         "  --no-wall-time     leave wall times out of the report (the file is then bit-reproducible)\n"
-        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file, listed in docs/audit/B4_1_notes.md)\n"
+        "  --tune K=V,...     ablations of the standard bot's plan, for the tournaments (the keys are those of apply_tune in this file)\n"
         "  --maps-dir DIR     where map names are looked for\n"
         "  --selftest         check the tool itself\n"
         "  --write-baselines  print the pinned reference table of the worker bot (tests/test_ai/baselines.inc) to stdout\n",
@@ -553,7 +553,7 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     return true;
 }
 
-// --tune KEY=VALUE,...: the ablations of the standard bot's plan (docs/audit/B4_1_notes.md): every standard bot of the run gets the plan of its level with these values put over it.
+// --tune KEY=VALUE,...: the ablations of the standard bot's plan: every standard bot of the run gets the plan of its level with these values put over it.
 // Set while the options are parsed, before any match (and thread) starts, and only read afterwards.
 std::vector<std::pair<std::string, int64_t>> g_tune;
 
@@ -652,6 +652,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         return true;
     }
     if (key == "raidblack") { p.raid_black_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "unjam") return flag(p.raid_unjam);
     if (key == "sabotage") return flag(p.sabotage);
     if (key == "fireextra") { p.fire_extra = static_cast<uint32_t>(v); return true; }
     if (key == "sabkeeper") return flag(p.sabotage_spare_keeper);
@@ -716,6 +717,63 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         p.guards = false;
         return true;
     }
+    if (key == "war") {                                                               // the war batch of docs/BOTS.md, "The war batch" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_war_batch(p);
+        return true;
+    }
+    if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
+    if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
+    if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
+    if (key == "bt3") { p.behind_tier3 = static_cast<uint32_t>(v); return true; }
+    if (key == "bmin") { p.behind_min_leader = static_cast<uint32_t>(v); return true; }
+    if (key == "bfree") { p.behind_free_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "bease") { p.behind_odds_ease = static_cast<uint32_t>(v); return true; }
+    if (key == "bafter") { p.behind_assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "bsab") { p.behind_sabotage_after = static_cast<uint32_t>(v); return true; }
+    if (key == "wbomb") { p.war_bombers = static_cast<uint32_t>(v); return true; }
+    if (key == "wfire") { p.war_fires = static_cast<uint32_t>(v); return true; }
+    if (key == "mines") { p.mine_per_pile = static_cast<uint32_t>(v); return true; }
+    if (key == "minegate") { p.mine_gate = static_cast<uint32_t>(v); return true; }
+    if (key == "minemin") { p.mine_min_units = static_cast<uint32_t>(v); return true; }
+    if (key == "minepct") { p.mine_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "minere") { p.mine_replant_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "raider") return flag(p.raider_hunt);
+    if (key == "raiderr") { p.raider_radius = static_cast<int32_t>(v); return true; }
+    if (key == "warfree") return flag(p.war_free_only);
+    if (key == "raiderp") return flag(p.raider_piles);
+    if (key == "raiderx") { p.raider_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "assault") return flag(p.assault);
+    if (key == "asforce") { p.assault_force = static_cast<uint32_t>(v); return true; }
+    if (key == "asmin") { p.assault_min = static_cast<uint32_t>(v); return true; }
+    if (key == "asodds") { p.assault_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "asreach") { p.assault_reach = static_cast<int32_t>(v); return true; }
+    if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
+    if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_stand_batch(p);
+        return true;
+    }
+    if (key == "duel") return flag(p.fire_duel);
+    if (key == "draft") return flag(p.fire_draft);
+    if (key == "duelwalls") return flag(p.fire_duel_walls);
+    if (key == "draftfar") { p.fire_draft_far = static_cast<int32_t>(v); return true; }
+    if (key == "rampunjam") return flag(p.ramp_unjam);
+    if (key == "rampticks") { p.ramp_unjam_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "bmine") { p.behind_mine_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "bmgate") { p.behind_mine_gate = static_cast<uint32_t>(v); return true; }
+    if (key == "minehome") { p.mine_home = static_cast<uint32_t>(v); return true; }
+    if (key == "minehomeapart") { p.mine_home_apart = static_cast<uint32_t>(v); return true; }
+    if (key == "homeroute") return flag(p.mine_home_off_route);
+    if (key == "mineapart") { p.mine_apart = static_cast<uint32_t>(v); return true; }
+    if (key == "minehomeafter") { p.mine_home_after = static_cast<uint32_t>(v); return true; }
+    if (key == "rush") return flag(p.rush);
+    if (key == "rushtier") { p.rush_tier = static_cast<uint8_t>(v); return true; }
+    if (key == "rushworkers") return flag(p.rush_workers);
+    if (key == "rushdef") { p.rush_deficit = static_cast<uint32_t>(v); return true; }
+    if (key == "rushafter") { p.rush_after = static_cast<uint32_t>(v); return true; }
+    if (key == "rushleft") { p.rush_min_left = static_cast<uint32_t>(v); return true; }
+    if (key == "rushticks") { p.rush_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
         p.race = false;
@@ -759,7 +817,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
-    err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp, listed in docs/audit/B4_1_notes.md)";
+    err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp)";
     return false;
 }
 
@@ -1084,7 +1142,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
             return false;
         }
     }
@@ -1402,6 +1460,22 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("losses", uint64_t{s.losses});
             j.field("stalls", uint64_t{s.stalls});
             j.field("orders", uint64_t{s.orders});
+            j.field("attack_orders", uint64_t{s.attack_orders});
+            j.field("bombs_planted", uint64_t{s.bombs_planted});
+            j.field("fires_lit", uint64_t{s.fires_lit});
+            j.key("war_ticks");                                             // the ticks a standard bot spent at every war tier (0: not behind enough .. 3)
+            j.begin_object();
+            for (size_t k = 0; k < s.war_ticks.size(); ++k) j.field("t" + std::to_string(k), uint64_t{s.war_ticks[k]});
+            j.end_object();
+            j.key("stand");                                                 // the stand batch (docs/BOTS.md): hunts of the Fire Ant that fires the gate, mines laid, ants sent off the ramp, rushes begun, their ticks and attack orders
+            j.begin_object();
+            j.field("fire_hunts", uint64_t{s.fire_hunts});
+            j.field("mines_planted", uint64_t{s.mines_planted});
+            j.field("ramp_unjams", uint64_t{s.ramp_unjams});
+            j.field("rushes", uint64_t{s.rushes});
+            j.field("rush_ticks", uint64_t{s.rush_ticks});
+            j.field("rush_attacks", uint64_t{s.rush_attacks});
+            j.end_object();
             j.field("refused_orders", uint64_t{s.refused_orders});
             j.field("cantgo", uint64_t{s.cantgo});
             j.field("cantgo_began", uint64_t{s.cantgo_began});
@@ -2157,7 +2231,7 @@ void selftest_tool(SelfTest& t) {
             const auto num = [&s](const char* key) { return s.get(key) != nullptr ? s.get(key)->i64() : int64_t{-12345}; };
             fields_ok = num("seat") == r.spec.seat && num("score") == r.score && num("shown_score") == r.shown_score && num("ants") == r.ants && num("eggs") == r.eggs && num("hatched") == r.hatched &&
                         num("banked") == r.banked && num("raided") == r.raided && num("kills") == r.kills && num("losses") == r.losses && num("stalls") == r.stalls && num("decisions") == r.stats.decisions &&
-                        num("orders") == r.orders && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
+                        num("orders") == r.orders && num("attack_orders") == r.attack_orders && num("bombs_planted") == r.bombs_planted && num("fires_lit") == r.fires_lit && num("refused_orders") == r.refused_orders && num("cantgo") == r.cantgo && num("cantgo_began") == r.cantgo_began &&
                         num("took_at_flowers") == r.took_at_flowers && s.get("took") != nullptr && s.get("took")->get("fire") != nullptr && s.get("took")->get("fire")->u64() == r.took[2] &&
                         num("released") == r.stats.released && num("intents") == r.stats.intents && num("expired") == r.stats.expired && num("rejected") == r.stats.rejected &&
                         s.get("bot") != nullptr && s.get("bot")->text == spec_text(r.spec) && s.get("runs") != nullptr && s.get("runs")->text == r.runs;
@@ -2422,6 +2496,8 @@ int selftest() {
         t.check(cg.gate_leaver_ticks == 60u && apply_tune(cg, "gatehold", 0, tune_err) && cg.gate_leaver_ticks == 0u && apply_tune(cg, "gatehold", 7, tune_err) && cg.gate_leaver_ticks == 7u &&
                     !apply_tune(cg, "gatehold", -1, tune_err) && !apply_tune(cg, "gatehold", 1001, tune_err) && cg.gate_leaver_ticks == 7u,
                 "the key gatehold sets the ticks that the gate's click waits for an ant that leaves over the ramp (60 at Hard, 0: no wait, 0 to 1000 allowed)");
+        t.check(cg.raid_unjam && apply_tune(cg, "unjam", 0, tune_err) && !cg.raid_unjam && apply_tune(cg, "unjam", 1, tune_err) && cg.raid_unjam,
+                "the key unjam switches the step aside of a thief's own waiting thief of the plan (two thieves on one hole; on by default)");
         t.check(cg.island_fly_on && ai::plan_for(ai::Level::Medium).island_fly_on && !ai::plan_for(ai::Level::Easy).island_fly_on && apply_tune(cg, "ifly", 0, tune_err) && !cg.island_fly_on &&
                     apply_tune(cg, "ifly", 1, tune_err) && cg.island_fly_on,
                 "the key ifly switches the flying on of the expedition's Bomber (on at Medium and Hard, off at Easy)");

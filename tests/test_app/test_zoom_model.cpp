@@ -166,7 +166,7 @@ void test_levels() {
     for (int k = -1; k >= -48; --k) check(zoom::series(k) == ref_series(k), "in a loop over negative k alone, series(" + std::to_string(k) + ") is 2^(k/4): " + num(static_cast<double>(zoom::series(k))));
     check(zoom::series(4) == 2.0f && zoom::series(0) == 1.0f && zoom::series(-4) == 0.5f && zoom::series(-8) == 0.25f && zoom::series(-12) == 0.125f, "2, 1, 0.5, 0.25 and 0.125 are the exact levels");
     {
-        const double named[13] = {2.0, 1.68, 1.41, 1.19, 1.0, 0.84, 0.71, 0.59, 0.5, 0.42, 0.35, 0.30, 0.25};         // (as the owner's list names them)
+        const double named[13] = {2.0, 1.68, 1.41, 1.19, 1.0, 0.84, 0.71, 0.59, 0.5, 0.42, 0.35, 0.30, 0.25};         // (as the list names them)
         for (int i = 0; i < 13; ++i) check(std::fabs(static_cast<double>(zoom::series(4 - i)) - named[i]) < 0.005, "the level " + std::to_string(i) + " of the series is " + num(named[i]) + " to two decimals");
     }
     for (const float z : kEvery) check(std::fabs(static_cast<double>(z) / static_cast<double>(zoom::series(static_cast<int>(std::lround(std::log2(static_cast<double>(z)) * 4.0)))) - 1.0) < 1e-6,

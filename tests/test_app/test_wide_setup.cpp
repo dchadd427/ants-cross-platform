@@ -1,6 +1,6 @@
 // The wide setup screen (the setup / map selection screen of the original recomposed for the 16:9 picture of 960 x 540, with a map preview; include/ants_app/setup_layout.hpp,
 // map_preview.hpp, src/ants_app/map_select_wide.cpp):
-//   1. the layout: every rectangle of every variant (the host's screen of a local game, of a network game, the guest's screen) is the owner-approved mock-up's (the layout files that the mock-up
+//   1. the layout: every rectangle of every variant (the host's screen of a local game, of a network game, the guest's screen) is the approved mock-up's (the layout files that the mock-up
 //      tool wrote beside its pictures: every element's rectangle at 960 x 540), and the chat column does not touch anything else;
 //   2. the seams: every strip of art that the screen draws from runs of lines (the frame's side strips, the bottom and the sides of the black boxes, the widened map list box and
 //      status box, the narrowed chat input box) is checked against the art of ants.chd: every junction of two runs that do not follow each other is between lines that are identical,
@@ -310,7 +310,7 @@ void test_layout() {
     check_mock_table(kMockSingle, SetupVariant::Single, "single");
     check_mock_table(kMockOnline, SetupVariant::Online, "online host");
     check_mock_table(kMockGuest, SetupVariant::Guest, "guest");
-    // what the numbers add up to: the right column is the original's moved by 320, the bottom groups by 60 (the owner's mock-up: "just wider" plus the preview)
+    // what the numbers add up to: the right column is the original's moved by 320, the bottom groups by 60 (the mock-up: just wider plus the preview)
     check(SetupLayout::kRightDx == 960 - 640 && SetupLayout::kBottomDy == 540 - 480 && SetupLayout::kListDx == 70, "the moves are the canvas's extra width and height, and the map list's 70 columns");
     check(SetupLayout::supports(960, 540) && !SetupLayout::supports(640, 480) && !SetupLayout::supports(1280, 720) && !SetupLayout::supports(960, 541), "the wide screen is made for 960 x 540 and nothing else");
     const SetupLayout& s = SetupLayout::of(SetupVariant::Single);

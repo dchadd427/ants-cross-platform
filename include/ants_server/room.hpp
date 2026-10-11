@@ -83,10 +83,11 @@ struct RoomSpec {
     std::string code;                       // the room's code (net::valid_room_code, not empty): what a client puts in its Hello
     std::string map;                        // the map's file name in the map store
     bool fog{false};                        // the Fog of War option of the match
+    uint8_t mode{0};                        // the game mode of the match (protocol 17; sim::GameMode as a byte: 0 the original's highest score, 1 "187"; the control key "mode"): a byte above sim::kLastGameMode is refused. A lobby room has 0: its leader's plan decides
     uint8_t players{2};                     // 2 .. 4: the match starts when this many seats are taken (and takes no more)
     bool early_start{true};                 // the room's leader (the first player who joined) may start the match before all the seats are taken: with at least two players there
                                             // (the roster is then the seats that are taken). False: the room has no leader and starts only when every seat is taken. Demo rooms have it on.
-    /// Computer players that sit in the room from the start (docs/BOTS.md, B6; the control interface's "bots": [{"seat": 2, "bot": "medium"}]): each takes a seat that counts towards `players`,
+    /// Computer players that sit in the room from the start (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"; the control interface's "bots": [{"seat": 2, "bot": "medium"}]): each takes a seat that counts towards `players`,
     /// is shown as a bot ("Bot (Medium)") and is run by the server as a virtual client. At least one seat must be left for a person, the seats are distinct and Fog of War is off
     /// (RoomManager::create_room refuses anything else). Empty: no bot code runs in the room, unless its leader's START asks for a fill.
     std::vector<ai::BotSpec> bots;
@@ -175,6 +176,7 @@ struct RoomStatus {
     std::string code;
     std::string map;
     bool fog{false};
+    uint8_t mode{0};                        // the game mode that the room's match is (or will be) played by (sim::GameMode as a byte)
     uint8_t expected{0};
     bool early_start{true};                 // the room allows the leader's early start
     bool public_room{false};                // made by a visitor's create block (protocol 15): for the tests, not shown by the control interface
@@ -411,7 +413,7 @@ private:
     void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
-    // Bots (docs/BOTS.md B6): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
+    // Bots (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
     void unseat_fill();
     void notify_people(const std::string& text);             // the room says a line to every person in it (a notice)

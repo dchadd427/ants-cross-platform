@@ -759,9 +759,11 @@ int main() {
         // refused by a host of 13 the same way: its leader's StartRequest is two bytes and its Start has no team bytes, and the Hello does not tell. Protocol 13 (v0.8.0 to v0.8.2) is refused by a host of 14 by
         // the number alone: a client of 13 cannot send a SeatMove, and a host of 14 must not take a client that cannot be told "the leader moved you" for one that can. Protocol 14 (v0.10.0) is refused
         // by a host of 15 the same way: its Hello has no platform byte and no create block, and it cannot read the platform bytes and the room's teams and rules of the Room message. Protocol 15 (v0.11.0)
-        // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's.
-        ASSERT_EQ(kProtocolVersion, 16);
-        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}}) {
+        // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's. Protocol 16 (the first
+        // lobby pages) is refused by a host of 17 by the number as well: its Hello is byte for byte a Hello of 17, but its Start, Room and Plan messages lack the game mode, and a match played by
+        // a machine that cannot be told its game mode would be played by the original's rules whatever the room chose.
+        ASSERT_EQ(kProtocolVersion, 17);
+        for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});
             r8.host.add_connection(e8.first, 0);
@@ -5303,6 +5305,196 @@ int main() {
             ASSERT_TRUE(room.guests[ann].lobby->request_remove(2));                                           // (Fay is a person: the leader's screen shows her)
             room.run(100);
             ASSERT_EQ(room.host.removals(), 1u);
+        }
+    } TEST_END();
+
+    TEST_CASE("N4.38 The Game Mode (Protocol 17): A Room Starts With The Original's Mode 0; The Owner Of A Room Sets It (Open Room, A Mode This Build Knows), Only The Leader's Plan Sets It In A Lobby Room, It Is Shown To Everybody, Also To A Late Joiner, And The Start That Every Machine Decodes Carries It; A Plan Of Another Player, A Mode Above The Last, And A Room That Loads Change Nothing") {
+        using K = PlanKind;
+        {   // the leader's plan sets the mode (alone or with the rest), it is shown to everybody and the Start carries it
+            Room room(lobby_room_config(110));
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_EQ(room.host.mode(), 0);
+            for (const size_t g : {ann, bob}) ASSERT_EQ(room.guests[g].lobby->room().mode, 0);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Open})));
+            room.run(100);
+            ASSERT_EQ(room.host.plan_changes(), 0u);                                // (the plan of the mode 0 changes nothing)
+            PlanMsg wish = plan_of({K::Open, K::Open, K::Open, K::Open});
+            wish.mode = static_cast<uint8_t>(sim::GameMode::Kills187);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(wish));
+            room.run(100);
+            ASSERT_EQ(room.host.mode(), 1);
+            ASSERT_EQ(room.host.room().mode, 1);
+            ASSERT_EQ(room.host.plan_changes(), 1u);                                // (only the mode changed: it is a change of the plan, the room is shown anew)
+            for (const size_t g : {ann, bob}) ASSERT_EQ(room.guests[g].lobby->room().mode, 1);
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooo -"));
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(wish));                // the same plan again: nothing changed, nothing is shown
+            room.run(100);
+            ASSERT_EQ(room.host.plan_changes(), 1u);
+            const size_t cat = room.join_seat("Cat");                               // a late joiner hears it in its first Room message
+            ASSERT_EQ(room.guests[cat].lobby->room().mode, 1);
+            // a person who is not the leader is ignored and counted, the mode stays
+            PlanMsg back = plan_of({K::Open, K::Open, K::Open, K::Open});
+            ASSERT_FALSE(room.guests[bob].lobby->request_plan(back));               // (a client that does not lead sends nothing: a raw one does)
+            room.guests[bob].client_end->send(encode(back));
+            room.run(100);
+            ASSERT_EQ(room.host.mode(), 1);
+            ASSERT_EQ(room.host.ignored_plans(), 1u);
+            ASSERT_EQ(room.host.plan_changes(), 1u);
+            // the leader goes back to the original's mode
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(back));
+            room.run(100);
+            ASSERT_EQ(room.host.mode(), 0);
+            ASSERT_EQ(room.host.plan_changes(), 2u);
+            for (const size_t g : {ann, bob, cat}) ASSERT_EQ(room.guests[g].lobby->room().mode, 0);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(wish));
+            room.run(100);
+            ASSERT_EQ(room.host.mode(), 1);
+            // the Start carries it: the owner's copy and the copy of every guest
+            ASSERT_TRUE(room.host.start(5, 6, room.now));
+            ASSERT_EQ(room.host.start_info().mode, 1);
+            ASSERT_TRUE(room.host.start_info().game_mode() == sim::GameMode::Kills187);
+            room.run(100);
+            for (const size_t g : {ann, bob, cat}) {
+                ASSERT_EQ(room.guests[g].lobby->phase(), ClientLobby::Phase::Loading);
+                ASSERT_EQ(room.guests[g].lobby->start_info().mode, 1);
+                ASSERT_TRUE(room.guests[g].lobby->start_info().game_mode() == sim::GameMode::Kills187);
+            }
+            // a room that loads changes nothing: the owner's call is refused and so is a plan
+            room.host.set_mode(0);
+            ASSERT_EQ(room.host.mode(), 1);
+            ASSERT_EQ(room.host.start_info().mode, 1);
+        }
+        {   // a mode that this build does not know is never taken: not by the owner, not by a plan on the wire (which is garbage, eight of them throw the sender out)
+            Room room(lobby_room_config(111));
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            const uint8_t ann_seat = room.guests[ann].lobby->my_seat();
+            room.host.set_mode(static_cast<uint8_t>(sim::kLastGameMode + 1));
+            room.host.set_mode(255);
+            ASSERT_EQ(room.host.mode(), 0);
+            PlanMsg wish = plan_of({K::Open, K::Open, K::Open, K::Open});
+            wish.mode = static_cast<uint8_t>(sim::kLastGameMode + 1);
+            ASSERT_FALSE(room.guests[ann].lobby->request_plan(wish));                                    // (the client does not send it)
+            std::vector<uint8_t> bytes = encode(plan_of({K::Open, K::Open, K::Open, K::Open}));
+            ASSERT_EQ(bytes.back(), 0);
+            bytes.back() = static_cast<uint8_t>(sim::kLastGameMode + 1);
+            PlanMsg decoded;
+            ASSERT_FALSE(decode(bytes.data(), bytes.size(), decoded));
+            for (int i = 0; i < 7; ++i) room.guests[ann].client_end->send(bytes);
+            room.run(300);
+            ASSERT_TRUE(room.host.occupied(ann_seat));
+            room.guests[ann].client_end->send(bytes);
+            room.run(300);
+            ASSERT_FALSE(room.host.occupied(ann_seat));
+            ASSERT_EQ(room.host.mode(), 0);
+            ASSERT_EQ(room.host.plan_changes(), 0u);
+            ASSERT_EQ(room.host.ignored_plans(), 0u);                                // (garbage is no plan)
+        }
+        {   // a room that is no lobby room (a LAN host, a server's game room) has the owner's mode only, and its Start carries it; a room is shown anew when the owner changes the mode
+            HostLobby::Config hc = keyed_server_config(112);
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            room.join_seat("Bob");
+            ASSERT_EQ(room.guests[ann].lobby->room().mode, 0);
+            room.host.set_mode(1);
+            room.run(100);
+            ASSERT_EQ(room.host.mode(), 1);
+            ASSERT_EQ(room.guests[ann].lobby->room().mode, 1);
+            room.guests[ann].lobby->take_events();
+            room.host.set_mode(1);                                                    // (the same mode: nothing is sent again)
+            room.run(100);
+            ASSERT_TRUE(room.guests[ann].lobby->take_events().empty());
+            room.host.set_mode(0);
+            room.run(100);
+            ASSERT_EQ(room.guests[ann].lobby->room().mode, 0);
+            room.host.set_mode(1);
+            room.run(100);
+            ASSERT_TRUE(room.host.start(7, 8, room.now));
+            room.run(100);
+            ASSERT_EQ(room.host.start_info().mode, 1);
+            ASSERT_EQ(room.guests[ann].lobby->start_info().mode, 1);
+        }
+        {   // a Start of protocol 16 (no mode byte) or with a mode above the last is no Start for a client: it stays in the room and loads nothing (a machine never plays a match as the original's when the room meant another);
+            // a Room message of the same two kinds is not taken either; a Start with a mode that this build knows is
+            LoopbackNetwork net(9);
+            auto ends = net.connect({10, 0});
+            Connection* server = ends.first;
+            ClientLobby::Config cc;
+            cc.name = "Bob";
+            cc.want_seat = 1;
+            ClientLobby lobby(ends.second, cc);
+            uint32_t now = 0;
+            const auto step = [&](uint32_t ms) {
+                const uint32_t end = now + ms;
+                while (now < end) {
+                    now += 10;
+                    net.set_time(now);
+                    lobby.update(now);
+                }
+            };
+            step(30);
+            std::vector<uint8_t> m;
+            ASSERT_TRUE(server->poll(m));
+            WelcomeMsg w;
+            w.player = 1;
+            w.players = 4;
+            server->send(encode(w));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::InRoom);
+            StartMsg start;
+            start.seed = 31;
+            start.map_name = "TINY.LVL";
+            start.map_hash = 0x1234567890ABCDEFull;
+            start.roster = 0x03;
+            start.names[0] = "Ann";
+            start.names[1] = "Bob";
+            start.mode = 1;
+            const std::vector<uint8_t> good = encode(start);
+            std::vector<uint8_t> v16(good.begin(), good.end() - 1);                  // protocol 16's Start: the same bytes without the last
+            std::vector<uint8_t> too_high = good;
+            too_high.back() = static_cast<uint8_t>(sim::kLastGameMode + 1);
+            server->send(v16);
+            server->send(too_high);
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(lobby.take_events().empty());
+            RoomMsg room_msg;
+            room_msg.you = 1;
+            room_msg.map_name = "TINY.LVL";
+            room_msg.slots[0].state = SlotState::Client;
+            room_msg.slots[0].name = "Ann";
+            room_msg.slots[1].state = SlotState::Client;
+            room_msg.slots[1].name = "Bob";
+            std::vector<uint8_t> room_good = encode(room_msg);
+            std::vector<uint8_t> room_v16(room_good.begin(), room_good.end() - 1);
+            std::vector<uint8_t> room_high = room_good;
+            room_high.back() = static_cast<uint8_t>(sim::kLastGameMode + 1);
+            server->send(room_v16);
+            server->send(room_high);
+            step(30);
+            ASSERT_TRUE(lobby.take_events().empty());
+            server->send(room_good);                                                 // (the room of a mode that is known is taken)
+            step(30);
+            ASSERT_EQ(lobby.take_events().size(), size_t{1});
+            ASSERT_EQ(lobby.room().mode, 0);
+            server->send(good);
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loading);
+            ASSERT_EQ(lobby.start_info().mode, 1);
+        }
+        {   // a mode of 0 leaves the Start as it was in every other field: the same room, the same seed and map, with and without the call that sets the original's mode
+            Room plain(lobby_room_config(113));
+            plain.join_seat("Ann");
+            plain.join_seat("Bob");
+            ASSERT_TRUE(plain.host.start(9, 10, plain.now));
+            Room set(lobby_room_config(113));
+            set.join_seat("Ann");
+            set.join_seat("Bob");
+            set.host.set_mode(0);
+            ASSERT_TRUE(set.host.start(9, 10, set.now));
+            ASSERT_TRUE(encode(plain.host.start_info()) == encode(set.host.start_info()));
+            ASSERT_EQ(plain.host.start_info().mode, 0);
         }
     } TEST_END();
 

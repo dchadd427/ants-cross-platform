@@ -15,7 +15,7 @@ The game reads the original's own data files directly: no conversion tool and no
   - block 3 is the level's default ant type: on `POPcOrN` every ant is a combat ant, on `Bombz Away` a bomber (see Ants and their types).
 - The archive stores each directional animation in five of the eight directions. The other three are mirrored copies of the sprites, made once when `ants.chd` loads, so a direction is an O(1) table lookup (section 5.8).
 
-Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 3, 4 and 5.8. The sprites, sounds and animations of `ants.chd` can be browsed in the asset catalog ([`ASSET_CATALOG.md`](ASSET_CATALOG.md)). What comes from the original game is explained in [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md); which of its files the repository holds, and on what terms, is under [License](../README.md#license) in the README.
+Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 3, 4 and 5.8. The sprites, sounds and animations of `ants.chd` can be browsed in the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#interactive-asset-catalog)). What comes from the original game is explained in [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md); which of its files the repository holds, and on what terms, is under [License](../README.md#license) in the README.
 
 ## Deterministic 20Hz Simulation Engine
 
@@ -106,6 +106,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 ### Flower droppers
 
 - Daisy flowers (`flower1`, animation 421) on maps such as `SMALL.LVL` and `GAUNTLET.LVL` drop power-ups. A drop is a 9-frame falling droplet animation (`FD_*`: `FD_COMB`, `FD_SWIM`, `FD_THIEF`, `FD_FIRE` or `FD_BOMB`) with sound 62 (`powerdrip.wav`). After 820 ms the power-up lies on the ground tile in front of the flower.
+- The power-up lands on the drop tile, the tile one row below a daisy (a plant at (x, y) drops onto (x, y + 1)). The droplet falls for 820 ms, which is 16 or 17 ticks of 50 ms, and the kind of each drop is drawn from the match's random numbers.
 - The interval and the odds come from block 4 of the map: waypoints with five probabilities (bomber, combat, thief, swimmer, fire). On the shipped maps a class with probability 0 is never drawn; if the five probabilities of a map add up to less than 1, a draw above their total picks any of the five classes at random.
 - A dropper is a plant by the tile flag of its id (the clovers and flowers, whatever the dictionary calls them) with the first block 4 record at its cell when that record's flag is not 0.
 - The dropper task polls about every 3 s, so an interval is rounded up to a whole poll: the 8 s of `MEDIUM` is 9 s in play.
@@ -187,13 +188,13 @@ Every match opens with the original's dialog: its picture, `Get ready to play!  
 
 ### The "Get ready to play!" dialog does not cost match time (a deliberate deviation)
 
-- The original already runs the match clock and the ants behind the dialog, so in a game of one person you lose five seconds of the match (in a network game its clock starts at GO, so you lose less, or nothing).
+- How the original handles the match clock and the ants while the dialog is up is described in [GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md#21-match-start-get-ready-modal-mutual-friendly-bouncing--snapped-redirection-ground-truth-antsexe-0x1017127-0x1021cb0-0x101b938-rsrc-strings-100105), section 6.2, item 21.
 - Here the simulation waits: tick 0 runs when the dialog closes, and the clock shows the match's full time while the dialog is up.
 - The ants stand in the picture behind the dialog, locked until it closes. The original creates them when its GO message is handled, so it shows none while it waits for the others.
 - A game that starts straight into a match (`--map`) has no dialog.
 - In a network match every machine closes the dialog when its first turn runs ([`MULTIPLAYER.md`](MULTIPLAYER.md), "How a match runs").
 
-Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 6.2, item 21 ("Match Start 'Get Ready!' Modal ..."). The deviation is listed in [`AUDIT_ONE_TO_ONE.md`](AUDIT_ONE_TO_ONE.md#3b-deliberate-differences-requested-by-the-owner-tweaks).
+Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 6.2, item 21 ("Match Start 'Get Ready!' Modal ..."). The deviation is listed in [`ORIGINAL_PROGRAM.md`](ORIGINAL_PROGRAM.md#differences-made-on-purpose).
 
 ## Death & Burning
 
@@ -236,6 +237,20 @@ The match ends:
 The score is the food your ants have deposited at your hill, plus the loot your thieves have brought home, minus the loot that thieves took from you and minus the 200 points that each hatched egg costs. When the clock runs out, the results rank the teams by score; an alliance's two scores are added, and the top row wins. The results screen is described in [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md).
 
 Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.47 (the end rules) and 5.49 (the results and their ranking).
+
+## 187 (a game type of the remake)
+
+The room's **game type** is either *Highest score* (the original's game, everything above) or **187**, the remake's own: a fight with no food. The type is chosen with the room, is the same on every machine and is written into the replay (`GameMode`, `include/ants_sim/game_mode.hpp`). A match that does not ask for it plays exactly as before and keeps its state hash.
+
+In 187, on any map:
+
+- **No food and no power-ups.** Every food pile and power-up of the map is taken off when the match starts and the flower droppers are switched off (the plants stay as scenery). Nothing can turn an ant into another type, so the ants are the ones the map starts with.
+- **The start is the map's own.** The start markers, the starting ants and the starting eggs are those of the map, as in any match. The eggs are the lives of a team: a team that loses its last ant hatches one egg at once, as in the original, but the hatch costs 187 no points (the score is the kills and the hatch must not eat them). A player cannot hatch an egg by hand: that needs 200 points as always, and a score of kills never gets there.
+- **The score is the kills.** Every enemy ant that a team kills is one point, shown in the score boxes and added across an alliance as always. The kill goes to the team whose hit was the last on the ant, as the original counts "Enemy Ants Killed" (a push into the water counts); an ally's bomb or fire is no kill, and the ants of a team that dropped out die for nobody. Nothing else scores, and a kill makes no bubble and no cue (a fight has many).
+- **The match ends** when the clock runs out, when nobody has an ant left, or when **one side is left**: every other side has no ant (no egg and no hatch either), and the last side standing wins outright, whatever the kill counts are. An alliance whose two teams are both alive is one side. A match of one team has nobody to beat and does not end by this rule.
+- **The results** rank the side that is left first, then the rest by kills (an alliance's rows are added; a tie goes to the team of the screen, as in the original); the winner cue plays for the first row's team and its ally. The ants that each team has left are counted for the results page.
+
+The original ends a match by the best score and never lets a score of 0 win, which is why 187 has its own end rule. Code: `SimulationEngine::set_game_mode`, `SimulationEngineImpl::end_rule_187`, `MatchResult::standing`; tests: suite 2.9.2 (`tests/test_sim/test_game_mode.cpp`). The mode is hashed (only when it is not the original's), so a replay of a 187 match is refused by a build that does not know it (docs/REPLAYS.md).
 
 ## Ant Animation in Real Time
 

@@ -1,4 +1,4 @@
-// Runs the front page's OWN code for the Rejoin button (the owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back"): the block REJOIN_BEGIN ..
+// Runs the front page's OWN code for the Rejoin button (if a player's browser crashed or the power went out, the game is held paused until the player gets back): the block REJOIN_BEGIN ..
 // REJOIN_END of web/lobby.html, on tables, with a fake storage (length, key(i), getItem, setItem, removeItem: every call counted, any of them can be made to throw) and a clock that is a number:
 //   * which entries of the storage count: ants.rejoin.<room>.<seat> with a room by the page's own rule (1 - 32 letters, digits, - and _) and a seat 0 - 3, whose value is exactly the JSON that the game
 //     page writes ({"k": 32 hex digits that are not all zero, "s": a printable server, "t": a whole number of milliseconds}: no member more or less, no other type), and nothing else;

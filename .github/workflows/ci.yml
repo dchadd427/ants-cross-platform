@@ -8,12 +8,12 @@
 # application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
-# --asan, locally) and the browser-based checks are opt-in (tests/TEST_INFRA.md).
+# --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
 #
 # The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
 # or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
 # tools/deploy_wait.py: at most DEPLOY_MAX_WAIT_MINUTES, 180 by default), then calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging:
-# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until the owner sets it
+# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until it is set
 # (docs/WORKFLOW.md: the steps).
 name: CI
 
@@ -139,7 +139,7 @@ jobs:
 
       # Not `brew install sdl2`: Homebrew's sdl2 is now sdl2-compat (the SDL2 interface on top of SDL3), under which eight test programs failed in the first run of this job
       # (pointer, window and canvas checks, pixel fingerprints, one crash). The game is written for SDL2, so SDL2 and SDL2_ttf (with HarfBuzz, as Homebrew's and the distributions'
-      # SDL2_ttf have: the text widths that some tests pin to the pixel depend on it) are built from the release sources, the versions of the owner's Mac, and cached.
+      # SDL2_ttf have: the text widths that some tests pin to the pixel depend on it) are built from the release sources, the versions of a developer's Mac, and cached.
       - name: Install ccache and Ninja
         run: brew install ccache ninja
 
@@ -242,7 +242,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Visual Studio 2022 (MSVC 19.4x) is what the owner builds with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
+        # Visual Studio 2022 (MSVC 19.4x) is what developers build with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
         # MSVC 2026 runs for every pull request and push; MSVC 2022 for pull requests, pushes to main and manual runs (not for a push to staging), which is what the matrix
         # below says: the list is chosen here, because a job's own `if` cannot see its matrix.
         include: ${{ fromJSON(github.event_name == 'push' && github.ref != 'refs/heads/main' && '[{"name":"MSVC 2026","os":"windows-latest"}]' || '[{"name":"MSVC 2022","os":"windows-2022"},{"name":"MSVC 2026","os":"windows-latest"}]') }}
@@ -283,7 +283,7 @@ jobs:
         with:
           arch: x64
 
-      # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on the owner's PC.
+      # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on a developer's PC.
       - name: Configure (Ninja, Release, warnings are errors, sccache)
         run: |
           cmake --version | head -1
@@ -347,7 +347,7 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html watch.html replay_page.js index.js index.wasm index.data changelog.html changelog_archive.html front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/classic.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html watch.html replay_page.js index.js index.wasm index.data changelog.html front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/classic.css && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html watch.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has

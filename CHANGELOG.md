@@ -1,8 +1,8 @@
 # Changelog
 
-What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page. The long notes of every release up to v0.1.0, with their measured numbers and sources, are the detailed history, [`docs/CHANGELOG_ARCHIVE.md`](docs/CHANGELOG_ARCHIVE.md) (on the site: `/changelog_archive.html`).
+What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. Work that is merged without a release number is written up in the "Changelog entry" section of its pull request's description; the pull request of the next release collects those sections, and its own, under **Next** (a section headed `## Next`, above the newest release), and `tools/release.py` turns it into the entry when `VERSION` moves.
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
 
 <!--
 Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
@@ -17,31 +17,48 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 **Fixes:**
 - one line each (optional)
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/OLD...NEW)
 
 Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.3 - 2026-10-11 - Housekeeping: documentation of finished work removed
 
 **For players:**
-- **The front page is now the lobby.** Open it and your room is ready: a code of six letters and numbers (like `k7m 2xq`), a link to send, the four colours and the map. Players who open the link ask for a name first, take the next free colour and show up at once. The host drags a player onto another colour to move them (a taken colour swaps places; on a phone, tap the player's dots and then the colour), gives a free colour to an Easy, Medium or Hard computer player or to nobody, picks the map, makes teams with three or four players, removes a player (it asks first) and presses START for everybody. Everybody can rename themselves with the pencil on their colour.
-- A room lasts while anybody is in it: when the host leaves, the player who has been there longest becomes the host and everybody is told; after a match, Leave Game takes you to the front page, where a new room is ready. **Have a code?** joins a room by its code, and a link to a room that is gone, full or already playing starts a room of your own, with a line that says why.
-- The page tells you what happens in a strip at the top: the host left, the match did not start, the server has no place, the connection is lost (your colour is kept for a minute), the room was opened in another window, a newer version is out.
-- The old one-card page (Friend seats, Sit here, one invitation for each Friend) is gone.
-- **The map selection screen is the only way to play.** The **More ways to play** button and the testing page behind it (every colour played by yourself, in frames of the page or in windows of their own) are removed, and so are the old addresses that opened it (`?map=`, `?room=` with its choices, `&play=here`): they show the front page like any other address. Links that were shared (`?room=<code>`) and the game's own addresses (`?join=...`) work as before.
-- **Change the shape of the picture while you play.** The buttons under the game (Classic 4:3, 16:10, 16:9, 21:9) switch at once: no reload, no "Leave the match?" question, and a joined match keeps its seat and its room. A wider or taller picture shows more of the map.
-- **Two new shapes:** 16:10 for laptops and 16:10 monitors, 21:9 for ultrawide monitors (`?aspect=16:10` and `?aspect=21:9` in the browser, `--aspect` on the desktop). A small "fills your screen" tag stands under the shape nearest to your computer's screen.
-- In 16:10 and 21:9 the setup screen, the room, the loading screen, the help and the results are for now the 16:9 page, centred with black around it; the match fills the whole picture.
-- **The front page's Screen selector has the four shapes too:** Classic 4:3, 16:10, 16:9 (the default) and 21:9, with the same "fills your screen" tag under the shape nearest to your computer's screen (a computer with a mouse). A shape you picked in a game is shown there, and START, a link to join and every game link hand the shape on to the game; before, a 16:10 or 21:9 showed as 16:9 on the front page.
-- **One link to the matches: Watch matches.** The front page's two footer links, Watch live and Watch replays, are one, and the front page's header now has a **Watch matches** button at the right (on a phone, on the logo's row), the same page that lists the matches being played above the earlier ones. The game page has the button in its header after Menu (from a 1140 px window; in More on a phone; between the two the footer link is the way, so that the header stays one row) and the footer link; they open a new tab, so a match you are playing goes on. The list's tab is titled Watch matches.
-- **The players' maps are in the repository.** 502 of the 586 maps that players of the 1998 game made and shared are in the new folder `Community-Maps/`, with a list (`maps.json`) of each one's size, grid, minutes, players and description. The engine plays all 502 (the roster of all four teams, and green and black alone where the map has a start marker or a hill for both; three plays each, one state hash). 77 were left out: 39 that the engine cannot load, 6 that cannot place a team, 22 with tiles that the original draws as memory garbage and 10 that hold an email address; the other 7 files are the original game's maps (the six in `Original-Ants/Maps`, and one copy of Tiny under another name). Nothing in a menu or on a page offers them yet.
-- **The replay player: the tag out of the picture, and a fullscreen bar that stays away.** The REPLAY (or LIVE) tag no longer lies over the game: it sits just above the scrub bar (about 25 pixels of height for it), and in fullscreen above the bar's left end, going with the bar. In fullscreen a finger on the picture, a tap or a drag of the map, no longer brings the bar up; a tap or a swipe up along the bottom edge does, and a swipe down on the bar, or a tap on the small tab on its top edge, hides it at once, also while the match is paused. The first time the bar goes away after a finger was used, a note says how to bring it back. A mouse works as before.
+- No change to play; internal documentation of finished work was removed.
 
-**Rules / network:** none: the simulation and the protocol are untouched (a switched player's state hash after every tick is the one of a match that was never switched).
+**Rules / network:** none: the simulation and the protocol are untouched.
 
-**Details:** [view and HUD](docs/VIEW_AND_HUD.md), [play in the browser](docs/PLAY_IN_BROWSER.md), [network port](docs/NETWORK_PORT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/166ccc6...d9a8fb0)
+
+## v0.12.2 - 2026-10-10 - Housekeeping: the page of old releases is gone
+
+**For players:**
+- **The page of old releases is gone.** The detailed history (every release before v0.0.90, and the long notes of v0.0.90 to v0.1.0) was a second changelog page of the site, `/changelog_archive.html`, with a "Detailed history" button on the changelog page. It is no longer on the site or among the repository's files; the git history keeps it. The changelog page is the only one.
+- Nothing else changes in the game or on the site. The rest is housekeeping: the notes in the code say what was reported or decided, not who.
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/288c7de...221b7b3)
+
+## v0.12.1 - 2026-10-10 - The front page is the lobby, matches to watch, computer players that fight (network protocol 17)
+
+**For players:**
+- **The front page is now the lobby, and the only way to play.** Open it and your room is ready: a code of six letters and numbers (like `k7m 2xq`), a link to send, the four colours and the map. Players who open the link ask for a name first, take the next free colour and show up at once. The host drags a player onto another colour to move them (a taken colour swaps places; on a phone, tap the player's dots and then the colour), gives a free colour to an Easy, Medium or Hard computer player or to nobody, picks the map, makes teams with three or four players, removes a player (it asks first) and presses START for everybody; everybody can rename themselves with the pencil on their colour. A room lasts while anybody is in it: when the host leaves, the player who has been there longest becomes the host and everybody is told; after a match, Leave Game takes you to the front page, where a new room is ready. **Have a code?** joins a room by its code, and a link to a room that is gone, full or already playing starts a room of your own, with a line that says why. A strip at the top says what happens: the host left, the match did not start, the server has no place, the connection is lost (your colour is kept for a minute), the room was opened in another window, a newer version is out. The old one-card page (Friend seats, Sit here, one invitation for each Friend) is gone, and so are the **More ways to play** button and the testing page behind it, with the old addresses that opened it (`?map=`, `?room=` with its choices, `&play=here`), which show the front page like any other address; links that were shared (`?room=<code>`) and the game's own addresses (`?join=...`) work as before. On a phone, the colour cards are about 11% shorter and the host's a little narrower, with a strip beside them to scroll the page from (a touch that starts on a card's dots still picks that player up, not the page).
+- **Four picture shapes, changed while you play.** The buttons under the game (Classic 4:3, 16:10, 16:9, 21:9) switch at once: no reload, no "Leave the match?" question, and a joined match keeps its seat and its room; a wider or taller picture shows more of the map. 16:10 (laptops and 16:10 monitors) and 21:9 (ultrawide monitors) are new (`?aspect=16:10` and `?aspect=21:9` in the browser, `--aspect` on the desktop), and a small "fills your screen" tag stands under the shape nearest to your computer's screen (a computer with a mouse). The front page's Screen selector has all four, shows the shape you picked in a game, and START, a link to join and every game link hand it on to the game (before, a 16:10 or 21:9 showed as 16:9 there). In 16:10 and 21:9 the setup screen, the room, the loading screen, the help and the results are for now the 16:9 page, centred with black around it; the match fills the whole picture.
+- **Watch matches, also while they are played.** The server keeps the matches its rooms play that ran 30 seconds or more for 30 days (up to a size limit, the oldest go first); the list is public and shows the names the players typed (no address, room code or chat), and the name screens say so. The front page's header has a **Watch matches** button (on a phone, on the logo's row) and the game page has it in its header after Menu (from a 1140 px window; in More on a phone; in between, the footer link is the way, so that the header stays one row), and everywhere the footer link; it opens a new tab, so a match you are playing goes on. The page lists the matches being played ("Live now") above the earlier ones, with map, time, length and players; **Watch** plays one in the game page with the whole map showing: jump anywhere on the timeline, pause, speed it from 1/2x to 8x, go fullscreen, copy the link or download the file; a match that was left early says "Cut short" and plays as far as it goes. A match being played shows about 10 seconds behind the players, with a red LIVE mark, a timeline that grows and "Jump to live" when you are behind, and becomes a replay of the whole match when it ends. The server plays a match of computer players every hour (a free-for-all or, sometimes, two against two with four players, two against one with three), shown as "Bot (Medium)" or "Bot (Hard)", so there is usually something to watch.
+- **Computer players fight, stand their ground and cross the water.** At every level they go for each other's ants once they have nothing left to harvest (Easy later and only with the better odds, Hard soonest); Medium and Hard light fire walls round the gate of their best opponent, a Bomber lays bombs round the food an opponent works and in front of his gate, and every level hunts a Fire or Bomber Ant that comes near its hill. A player who is losing fights harder, the further behind the more (Hard soonest, Easy latest and gentlest): earlier, on worse odds, at the leader's ants first, with its Combat Ants off the food, with bombs at the piles the leader works (Hard) and in front of the gate (Medium and Hard) and, at Medium, fire walls from minute 1.5 instead of minute 4.5; a bot hundreds of points behind sends its typed ants (Combat, Fire, Bomber, Thief) at the leader's ants after the first three minutes, and one that is behind starts mining the enemy gate sooner (it used to wait for the last minutes). They bank about as much food as before against players who do not fight, and the order of the levels is the same. A bot whose gate is fired in by an enemy Fire Ant sends its own Fire Ant at it (the blow knocks it off the fire and the others finish it; before, nobody could reach an ant that stands on a fire wall, and the bot only waited); at Hard, an ant without food that blocks the ramp steps aside for a carrier; the Bomber is no longer held to three bombs (a Hard bot keeps up to ten mines at a pile an enemy works and twelve on the enemy's lanes to its own hill, never on its own carriers' way to the food, a Medium bot eight), so a rush has to walk into them and the other side loses its way to the food. Two of a bot's thieves on one hole no longer jam: the waiting thief steps aside, the first gets home and banks, and the second raids again. On ISLANDS they get their Swimmers across sooner and lose fewer ants: the Bomber flies over with the crew when it is needed, hops no longer wait for orders that cannot come, the team on the far side almost always gets all three Swimmers, and a Hard player takes a Swimmer through the Fire power-ups of a corner row with one ant and exactly timed clicks, not five ants one power-up at a time.
+- **The desktop game records its matches.** Every match it plays, against computer players or in a room, is saved in a `replays` folder next to its settings (one that you leave early is kept if you gave an order or it ran a minute). A new tool, `replay_tool`, plays a file back with no window: `verify` says whether the match plays out the same, `orders` lists every order with its time, place and the type of ant that got it. The browser game does not record.
+
+**Rules / network:** network protocol 17, so a game of an earlier release cannot join (reload the page once after the update): a match has a game mode, carried by the room's Start and Room messages, the leader's plan, a server room's `"mode"` and the game's `--game-mode`, and a replay of mode 187 has its own rules number; the original's game plays exactly as before (a switched player's state hash after every tick is the one of a match that was never switched). Recordings now say which simulation they need (`sim_rules`: 1 for the original's game, 2 for game mode 187), so a later protocol change that leaves the rules alone no longer strands them.
+
+**Fixes:**
+- The front page's four ants are drawn in the game's own team colours: the red ant no longer has purple legs and a bright rim round its eyes.
+- A player can take a seat back up to twelve times a minute (it was three), so a few lost connections or reloads in a row keep you in the match.
+- The replay player's REPLAY (or LIVE) tag sits just above the scrub bar (about 25 pixels of height), not over the picture, and in fullscreen above the bar's left end, going with the bar; there a finger on the picture, a tap or a drag of the map, no longer brings the bar up (a tap or swipe up along the bottom edge does, and a swipe down on the bar, or a tap on the small tab on its top edge, hides it at once, also while the match is paused), and the first time the bar goes away after a finger was used, a note says how to bring it back; a mouse works as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e10047d...7017ff3), [view and HUD](docs/VIEW_AND_HUD.md), [play in the browser](docs/PLAY_IN_BROWSER.md), [network port](docs/NETWORK_PORT.md)
 
 ## v0.12.0 - 2026-10-08 - The server's lobby rooms (network protocol 16; no page uses them yet)
 
@@ -153,7 +170,7 @@ Work that is not released yet is written in the same template under a heading th
 - A reload of the game page no longer asks for a name: it takes your seat back (the address carries your seat).
 - An online match that nobody comes back to gives its place up (it held a slot for as long as it was paused).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [the notes](docs/audit/persist_notes.md), [Network Port](docs/NETWORK_PORT.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [Network Port](docs/NETWORK_PORT.md)
 
 ## v0.5.1 - 2026-10-05 - Every page in the front page's look
 
@@ -166,7 +183,7 @@ Work that is not released yet is written in the same template under a heading th
 - The two changelog pages link to each other (the short page's links to the detailed history opened GitHub's file view).
 - A bullet after a blank line in a changelog was written outside its list.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283), [the pages](docs/audit/web_home_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283)
 
 ## v0.5.0 - 2026-10-04 - A new front page in the game's own look, with game statistics
 
@@ -174,7 +191,7 @@ Work that is not released yet is written in the same template under a heading th
 - **A new front page in the game's own look:** the 1998 game's menu style (the clay, the green frame, the teal buttons, the original "ants!" logo and START! button, a picture of the chosen map). Two cards: **Play vs the computer** (each opponent's level is a row of one-click buttons; Teams as before) and **Play online** (host a match or join one by its code); the help is behind "How it works". It fits phones and wide screens with no sideways scrolling, and every address, link and remembered choice works as before.
 - **Game statistics on the front page:** a line under the welcome banner shows the matches being played and the players online now, and the games played today and in all: online matches of 30 seconds or more, and single-player games (a game in the browser tells the server once that it began: a count, nothing else).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516), [the front page](docs/audit/web_home_notes.md), [the statistics](docs/audit/site_stats_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516)
 
 ## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
 
@@ -185,7 +202,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Your own orders can show at once in a network match** (off by default: add `?prediction=on` to the game's address, or start the desktop game with `--prediction on`): your ants answer a click as in a game on one computer instead of a round trip later; the corner's `delay` shows what a click feels. It switches itself off for a while on a device that is too slow for it, and is off in a hidden tab, in a pause and behind the "Get ready" dialog.
 - **Desktop:** `start_game.sh` / `start_game.bat` open one game with the start menu (Single player, Join, Host); the four-window test match is `--players 4`.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the zoom levels](docs/audit/view_fixes_notes.md), [the prediction](docs/audit/rollback_notes.md), [the bots](docs/BOTS.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the bots](docs/BOTS.md)
 
 ## v0.3.0 - 2026-10-04 - Computer players that fight; the front page is the lobby
 
@@ -199,7 +216,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - Behind the "Get ready to play!" dialog the ants are drawn again, standing, as in the original (since v0.2.0 only their hit-point numbers were).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/audit/B4_1_notes.md), [the front page](docs/audit/web_home_notes.md), [restart records](docs/audit/persist_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/BOTS.md)
 
 ## v0.2.0 - 2026-10-03 - The clock waits for the start dialog; every screen in 16:9; fullscreen mouse
 
@@ -216,7 +233,7 @@ Work that is not released yet is written in the same template under a heading th
 - A command that reaches the host before the first turn is sealed is discarded: a modified client could script an opening of up to 64 orders per seat that ran at the first tick, ahead of every person. Honest clients are not affected.
 - The loading screen drew the frame's pieces in the wrong order (145 pixels), and the results' numbers ran together ("20", "4", "10" as "204 10").
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md)
 
 ## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
 
@@ -239,14 +256,14 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** None: the rules and network protocol 11 are unchanged (v0.1.0 to v0.1.2 games play together).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/AUDIT_ONE_TO_ONE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/ORIGINAL_PROGRAM.md#differences-made-on-purpose)
 
 ## v0.1.1 - 2026-10-03 - Bots wait for the start dialog
 
 **For players:**
 - Computer players no longer move during the "Get ready to play!" dialog at the start of a match. Their first orders come after it closes, when you can give yours, and they come one by one at the speed of their level: about 5.4 s into the match at Hard, 6.2 s at Medium and 8 s at Easy. This holds in a game against `--bot` or the start menu's bots, in a room on the local network and on the online server.
 - The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.1 - build abc1234". The version in the corner plate is unchanged.
-- This changelog is short: one entry per release in a fixed template. The detailed history of every release up to v0.1.0 (the old 556 KB file, unchanged) is in `docs/CHANGELOG_ARCHIVE.md` and on the site at `/changelog_archive.html`, linked from the changelog page.
+- This changelog is short: one entry per release in a fixed template.
 - Internal: one version source (the file `VERSION`), a build id at every build, `./run_tests.sh --fast` (about a minute) with the time of every suite, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
 
 **Rules / network:** The rules did not change. Network protocol 11: v0.1.0 and v0.1.1 games play together (the bots run on one machine and their commands travel as data).
@@ -256,7 +273,7 @@ Work that is not released yet is written in the same template under a heading th
 - Test 12.108 no longer pins the value of the version. It checks the format; the value lives in the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
 - The reverse-engineering notes said that the dialog lasts 6.0 seconds; the program keeps it up at least 5.0 s, which is what the game does, and the notes now say so.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md), [notes](docs/audit/B3_notes.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md)
 
 ## v0.1.0 - 2026-10-02 - Online rooms: bots fill the empty seats at START, chat in the waiting room, team chat only to allies, and mouse-wheel zoom
 
@@ -272,7 +289,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - On Windows, the server retries reading its secret file for up to half a second when another program holds it.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5)
 
 ## v0.0.99 - 2026-10-02 - The game is 16:9 by default: more map, a frame grown from the original's art, the web page in 16:9, a new setup screen with a map preview
 
@@ -286,7 +303,7 @@ Work that is not released yet is written in the same template under a heading th
 - The web page downloads the game's data again when a download fails (with several games on one page it could stay at "Downloading data (0%)" for ever), and shows a card with a Reload button when the game's files cannot be loaded.
 - The web guide and footer lost some spaces ("Goal:get the most points"); fixed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb)
 
 ## v0.0.98 - 2026-10-02 - Reconnect, part A: the server can hold a lost player's seat (off by default)
 
@@ -297,7 +314,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** Network protocol 10 (the Hello and the Welcome carry a key, and five messages are new): a v0.0.97 game cannot join a v0.0.98 server's room or LAN game, and the other way round. The simulation rules did not change.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
 
 ## v0.0.97 - 2026-10-02 - The desktop start menu: Single player with bots, Join with a code, Host an online match
 
@@ -308,7 +325,7 @@ Work that is not released yet is written in the same template under a heading th
 - Host an online match: pick the map, 2 to 4 players and your name. The menu makes the room, shows its code in large letters with a Copy button, and puts you in as the leader. After an online game the program goes back to the menu.
 - The original's own screens are unchanged. `--map`, `--host`, `--join` and similar options skip the menu, `--start-menu` forces it, and `--server HOST[:PORT]` names the game server.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
 
 ## v0.0.96 - 2026-10-02 - The web game starts at once and keeps playing in a hidden tab
 
@@ -317,7 +334,7 @@ Work that is not released yet is written in the same template under a heading th
 - A network match keeps playing when its tab is hidden or its window is minimised. Before, a hidden seat was called lagging after 3 seconds and dropped after 30. Now it keeps up and the other players are not told it lags.
 - A hidden page plays no sound or music, and a local game stands still while its page is hidden. A sleeping computer or a phone with a locked screen still stops the page.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
 
 ## v0.0.95 - 2026-10-02 - Community maps play as in the original: their default ant types and power-ups by tile
 
@@ -329,7 +346,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** The end of every attack now resumes the saved auto-engage of any ant that still has it, as in the original. An ant that took another power-up during a Combat Ant's auto-engage walks back to where the engage began. This changes some plays of the shipped maps. Network protocol 9: a v0.0.94 game cannot join.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38)
 
 ## v0.0.94 - 2026-10-02 - Less lag: ping and delay next to the FPS counter, 50 ms turns, an adaptive buffer, and a lagging player no longer freezes the others
 
@@ -345,7 +362,7 @@ Work that is not released yet is written in the same template under a heading th
 - A burst of orders after a stuck connection is queued, not counted as violations that could throw the player out.
 - The frame-rate counter shows the real rate below 10 frames a second (it read "10 FPS").
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47)
 
 ## v0.0.93 - 2026-10-01 - The room leader can start early
 
@@ -360,7 +377,7 @@ Work that is not released yet is written in the same template under a heading th
 - One connection could flood the server with valid messages (pings, acknowledgements, chat and so on) and use a whole core and over a gigabyte of memory without being dropped. Inboxes are bounded, every connection has a message budget, and a flooder is dropped within a second.
 - Reloading the web game no longer downloads about 9 MB again: the files are revalidated and an unchanged build answers 304.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa)
 
 ## v0.0.92 - 2026-10-01 - The black bars of a wide window scroll the map, fullscreen keeps the mouse, four games in the corners of their hills, bot fixes
 
@@ -373,14 +390,14 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - A mouse button released outside the window, or a finger lifted from a touch screen, no longer leaves the map scrolling on its own.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2185be0...4344c0e), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2185be0...4344c0e)
 
 ## v0.0.91 - 2026-10-01 - The original program leaves the repository
 
 **For players:**
 - Internal: the original 1998 program (Ants.exe), its decompilation and the local tools of an installation of the original are no longer in the repository, which keeps only the data archive, the maps and the music. Nothing in the game, the server or the network protocol changed but the version number. Pulling this change into an existing checkout deletes those files from the working tree, so copy them aside first.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0)
 
 ## v0.0.90 - 2026-10-01 - Play online: host a match, join it with a code, any map, 2 to 4 players
 
@@ -391,8 +408,8 @@ Work that is not released yet is written in the same template under a heading th
 - Every game on the page reports its tick and state hash every 100 ticks, and the page says whether they agree ("In step").
 - Server operators: the room code chooses the map and the players (`demo-[<map>-][<n>p-]<anything>`), `--demo-maps A.LVL,B.LVL,...` lists the maps a code may choose, and a demo room now waits ten minutes (it waited one minute). The stack starts with the six original maps and 12 demo rooms.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea3bc89...64654b3), [detailed notes](docs/CHANGELOG_ARCHIVE.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea3bc89...64654b3)
 
 ## Older versions (v0.0.89 and before)
 
-Every release before v0.0.90, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are in the detailed history: [`docs/CHANGELOG_ARCHIVE.md`](docs/CHANGELOG_ARCHIVE.md).
+Every release before v0.0.90, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

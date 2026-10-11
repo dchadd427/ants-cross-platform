@@ -26,10 +26,15 @@ namespace ants::ai {
 
 /// Whether an attack order can reach the ant now: it is not on a power-up (an ant that stands on one cannot be attacked, and one that is about to take it will not be there in a few
 /// ticks), not on a hill tile (the order would be a plain move there), not on water, not in the middle of a hit, a flight, the enter clip or a burn
-bool attackable(const BotView& view, const AntView& enemy);
+/// `from_fire`: the attacker is a Fire Ant, which walks onto a fire wall and strikes an ant that stands on one (nobody else's order reaches it: the path ends on a tile that no other ant can enter)
+bool attackable(const BotView& view, const AntView& enemy, bool from_fire = false);
 
 /// Whether an own ant may be sent to fight: it takes orders, holds nothing, is healthy and is a worker (of the level's default type) or a Combat Ant, and does not stand on a power-up
 bool can_fight(const BotView& view, const AntView& ant);
+
+/// Whether an own ant of ANY type may be sent to strike (the members of the rush): it takes orders, holds nothing, is healthy and does not stand on a power-up. (The draft of the fire hunt,
+/// plan.fire_draft, has its own test, which lets a carrier that cannot bank strike too.)
+bool can_strike(const BotView& view, const AntView& ant);
 
 /// What it takes to KILL an ant of `hp` hit points in the real engine (measured: docs/BOTS.md, "Hunting the kill"): the engine lets ONE blow land per hit clip (about 22 ticks, however many ants
 /// strike), and an ant that is down to ONE hit point walks home at the speed of its hunters and is not caught. So only a punch (a Combat Ant: 2 hit points, every other blow 1) finishes an ant:
@@ -108,6 +113,11 @@ private:
         bool ally{false};                    // a blow on an ant of the ally: only ants within ally_help_radius of the target answer
         bool offence{false};                 // a skirmish of the bot's own (plan.skirmish): no blow came first, the force is skirmish_force and the fight ends by its strength and its clock
         bool fire{false};                    // the Fire Ant that lights fire walls on the ring round the own gate (plan.fire_defence): it is hunted while the walls stand
+        bool raider{false};                  // (with fire) an enemy Fire or Bomber Ant near the own hill or a pile the own ants work (plan.raider_hunt): hunted whether or not walls stand
+        bool assault{false};                 // (with offence) an assault of the free ants after the food (plan.assault): its own numbers
+        uint32_t force{0};                   // (with assault) the ants it was started with (plan.assault_force, one more for a bot that is far behind)
+        bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles, and the surplus of free ants is no longer asked for (plan.behind_free_tier)
+        uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         std::map<uint32_t, Defender> defenders;
     };
@@ -127,6 +137,8 @@ private:
     uint32_t offence_aborted_{0};
     uint64_t offence_pause_until_{0};
     uint32_t fire_hunts_{0};
+    uint32_t raider_hunts_{0};
+    uint32_t assaults_started_{0};
     uint32_t hunts_started_{0};
     uint32_t hunts_killed_{0};
     uint32_t clip_waits_{0};
@@ -135,6 +147,9 @@ private:
 public:
     /// Hunts of an enemy Fire Ant that fired the own gate in (plan.fire_defence)
     uint32_t fire_hunts() const noexcept { return fire_hunts_; }
+    /// Hunts of an enemy Fire or Bomber Ant near the own hill or piles (plan.raider_hunt), and the assaults of the free ants after the food (plan.assault)
+    uint32_t raider_hunts() const noexcept { return raider_hunts_; }
+    uint32_t assaults_started() const noexcept { return assaults_started_; }
     /// Whether the Fire Ant `ant` is hunted now
     bool hunting(uint32_t ant) const noexcept {
         const auto it = fights_.find(ant);
@@ -322,6 +337,71 @@ private:
     uint32_t failures_{0};
 };
 
+// ---- rank 4: the mines ------------------------------------------------------------------------------------------------------------------------------------
+
+/// Requested 2026-10-09: the bomber bombs up the food so that the others cannot eat it. The Bomber Ants of the bot (an own ant of type Bomber,
+/// claimed for a job and given back to the economy after it) lay mines, one job per Bomber at a time:
+///   at the food   on a pile that an enemy works (its walk there costs at most plan.mine_percent of the own, or one of its ants is near) and that holds plan.mine_min_units at least: the open
+///                 tiles two steps round the pile where the enemy is no further than the bot (the enemy's walking cost to the tile at most the own), the enemy-most first, plan.mine_per_pile standing
+///                 at a time. The engine's path finder goes round an own bomb and straight through an enemy's (an ant that steps on one loses 2 hit points, is thrown 4 tiles and loses its walk),
+///                 so the mines sit where the enemy walks and the bot does not
+///   at the gate   with plan.mine_gate and no pile to mine: the open tiles of the ring round the gate of the best opponent (SabotageTask::ring_of), plan.mine_gate standing at a time. The fire-in
+///                 lights the same tiles: a tile with a mine is not lit (it is no open tile), so up to mine_gate of the eight stay mines while the others burn
+///   behind        (plan.behind_war) a bot far enough behind (war tier from plan.behind_free_tier) lays them although its economy needs the hands, and a pile that the leader works comes first;
+///                 from plan.behind_mine_tier on (earlier) the mines of the gate ring are laid too, plan.behind_mine_gate of the eight at a time
+///   at home       (plan.mine_home, from plan.mine_home_after) round the own hill, where the enemy's walks to it go: open tiles five to nine tiles out whose two walking costs (the enemy's from his hill
+///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, plan.mine_home_apart tiles apart from every other mine, and (plan.mine_home_off_route)
+///                 never on the estimated way of the bot's own carriers to a pile. The engine's path finder goes
+///                 round an own bomb and straight through an enemy's, so the bot's carriers do not meet them and a rush (every ant of an enemy in one group, "select all and go") walks into them
+/// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up or a tile with an ant on it; the mines of a pile and of the gate never within
+/// six tiles of the own hill. Every job is
+/// checked with the engine's own prediction (a cursor that shows the target cursor), as the counters' are.
+class MineTask final : public Task {
+public:
+    MineTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "mines"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+    void finish(AntLedger& ledger) override;
+
+    // ---- for the tests and the reports ----
+    uint32_t planted() const noexcept { return planted_; }
+    uint32_t gone() const noexcept { return gone_; }
+    uint32_t failures() const noexcept { return failures_; }
+    size_t jobs() const noexcept { return jobs_.size(); }
+    /// The tiles that the bot's mines stand on now (as the last look saw them)
+    size_t standing() const noexcept { return known_.size(); }
+
+private:
+    static constexpr uint64_t kPending = ~uint64_t{0};
+    static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
+    static constexpr int32_t kHomeNear = 5;              // the home mines lie this far from the hill at least (never on the doorstep) ...
+    static constexpr int32_t kHomeFar = 9;               // ... and at most
+    static constexpr int32_t kRouteSlack = 80;           // cost units that a tile may lie off the estimated way of the own carriers to a pile and still count as on it
+    static constexpr int32_t kHomeLaneSlack = 60;        // cost units (three steps over grass) that a tile may lie off the enemy's shortest way to the hill
+    /// The bot is far enough behind (plan.behind_mine_tier) to lay the mines of the gate ring with ants that the economy needs
+    bool behind_mining() const noexcept { return tactics_.plan.behind_war && tactics_.standing.war >= 1 && tactics_.standing.war >= tactics_.plan.behind_mine_tier; }
+    struct Job {
+        sim::TileCoord tile{};
+        uint64_t decided{0};
+        uint64_t sent{kPending};
+    };
+    struct Target {
+        sim::TileCoord tile{};
+        int32_t score{0};
+    };
+    void collect_pile_targets(TaskContext& context, std::vector<Target>& out) const;
+    void collect_gate_targets(TaskContext& context, std::vector<Target>& out) const;
+    void collect_home_targets(TaskContext& context, std::vector<Target>& out) const;
+    Tactics& tactics_;
+    std::map<uint32_t, Job> jobs_;                       // by the Bomber's id
+    std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
+    std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
+    uint32_t planted_{0};
+    uint32_t gone_{0};
+    uint32_t failures_{0};
+};
+
 /// Whether a bomb or a fire wall on `tile` is in the way of the seat's economy: within `plan.counter_hill_radius` of its hill, or within `plan.counter_pile_radius` tiles of a pile
 /// with units that its hill reaches
 bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
@@ -342,6 +422,9 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 ///   are not guarded       (Hard) no enemy Combat Ant stands near the raid tile of the hill: its reflex would hit the thief before it gets there
 /// A hill that the thief did not get to (it stands where it stood after the order left) is left alone for LevelPlan::raid_black_ticks, and one whose raid click the controller refused (Fate::Filtered:
 /// a power-up lies on the entrance) for Params::filtered_ticks. The thief is ordered again as soon as it is idle and empty-handed.
+/// Two thieves on one hole (unjam, LevelPlan::raid_unjam): the second waits on a tile in front of the hole while the first raids. When the first has raided and sits shut in on the raid tile
+/// (idle, or in the can't-go loop) because an own ant stands on the last free tile in front of the hole and the walls or an enemy hold the others, that ant steps aside (a free tile a few steps
+/// off the hole, out of the raid task's hands for 80 ticks) and is sent to steal again afterwards; and no second thief is sent to a hole while an own thief is on its raid tile.
 class RaidTask final : public Task {
 public:
     struct Params {
@@ -362,6 +445,7 @@ public:
     uint32_t failures() const noexcept { return failures_; }
     uint32_t ambushes() const noexcept { return ambushes_; }
     size_t waiting() const noexcept { return waiting_.size(); }
+    uint32_t unjams() const noexcept { return unjams_; }
     int last_target() const noexcept { return last_target_; }
     bool black(uint8_t team, uint64_t tick) const noexcept;
     const Params& params() const noexcept { return params_; }
@@ -375,6 +459,7 @@ private:
         sim::TileCoord origin{};
     };
     bool launch(TaskContext& context, const AntView& thief);
+    void unjam(TaskContext& context);
     bool ambush(TaskContext& context, const AntView& thief);
     struct Waiting {
         uint8_t team{0};
@@ -388,6 +473,8 @@ private:
     uint64_t ambush_pause_until_{0};
     uint32_t ambushes_{0};
     std::map<uint32_t, Raid> raids_;
+    std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
+    uint32_t unjams_{0};
     std::map<uint8_t, uint64_t> black_;
     uint32_t raids_ordered_{0};
     uint32_t failures_{0};
@@ -446,9 +533,64 @@ private:
     uint32_t calls_off_{0};
 };
 
+// ---- rank 5: the rush ---------------------------------------------------------------------------------------------------------------------------------------
+
+/// Requested 2026-10-10: rushing the enemy with all the ants is always an option, because a bot that is down by a few hundred points is very unlikely to win by just continuing to eat: select all the ants and take them to their
+/// base. A bot that is far behind (plan.rush: the war tier plan.rush_tier and a deficit of plan.rush_deficit points, from tick plan.rush_after, not in the last plan.rush_min_left
+/// ticks) sends every TYPED ant that holds no food (Combat, Fire, Bomber and Thief Ants; the Workers only with plan.rush_workers, which no plan sets: a Worker kills nothing above two hit points) at the ants of the leader,
+/// whatever the odds, for at most plan.rush_ticks. The Fire Ant that keeps the walls of the thief hole stays while a thief threatens.
+///   gather   the ants go to a rally tile on their way, where the leader's walk from his hill costs 400 (about twenty tiles of grass), and wait for each other (70 percent within six tiles, or 1,500
+///            ticks), so that they come in as one group and not one by one into the leader's fighters
+///   assault  every ant is ordered at the nearest ant of the leader (and its ally) within 18 tiles of his hill, a carrier first, and again after every blow (one order is one blow), as the strike does;
+///            with no ant in sight they stand on the tiles of the ring round his gate, where they are in the way of his carriers (and of the ants that leave)
+///   ends     after plan.rush_ticks, when the bot has caught up (the deficit has fallen below half of rush_deficit and the war tier below plan.rush_tier), with fewer than two ants left, in the last 100
+///            ticks, or when the leader's hill is gone or another team leads; the next one is not begun before 1,800 ticks have passed
+/// Ants that carry food are not called (they bank first and join at the look after), and neither are those that a pick-up, a raid, the sabotage or the islands hold (the ledger: rank 3). A fight at
+/// home (the Fight task has the same rank) keeps its defenders.
+class RushTask final : public Task {
+public:
+    RushTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
+    const char* name() const noexcept override { return "rush"; }
+    void step(TaskContext& context) override;
+    void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+
+    // ---- for the tests and the reports ----
+    bool active() const noexcept { return active_; }
+    /// Whether the force has gathered at the rally tile (the assault has begun)
+    bool assaulting() const noexcept { return active_ && assault_; }
+    size_t force() const noexcept { return force_.size(); }
+    int target() const noexcept { return target_; }
+    sim::TileCoord rally() const noexcept { return rally_; }
+    uint32_t rushes_started() const noexcept { return rushes_started_; }
+    uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
+    /// The ticks that a rush lasted, summed (counted at the looks)
+    uint64_t rush_ticks() const noexcept { return rush_ticks_; }
+
+private:
+    static constexpr uint64_t kPending = ~uint64_t{0};
+    struct Member {
+        uint64_t decided{0};
+        uint64_t sent{kPending};
+        bool ordered{false};
+    };
+    void disband(TaskContext& context, uint64_t now);
+    Tactics& tactics_;
+    std::map<uint32_t, Member> force_;
+    bool active_{false};
+    bool assault_{false};
+    int target_{-1};
+    uint64_t started_{0};
+    uint64_t paused_until_{0};
+    uint64_t last_look_{0};
+    sim::TileCoord rally_{-1, -1};
+    uint32_t rushes_started_{0};
+    uint32_t attacks_ordered_{0};
+    uint64_t rush_ticks_{0};
+};
+
 // ---- rank 4: sabotage ---------------------------------------------------------------------------------------------------------------------------------------
 
-/// "if somebody stole your fire power-up, they could fire your whole basin and then you cannot eat" (the owner): the Fire Ant of the bot, when its own work (the walls in front of the own thief
+/// The idea: a stolen fire power-up could fire the whole basin of the victim, who then cannot eat. The Fire Ant of the bot, when its own work (the walls in front of the own thief
 /// hole, the enemy walls and bombs in the way of the own economy) is done, lights fire walls on the tiles around the gate of the BEST OPPONENT: the row two tiles above the queue row and the
 /// tiles at its ends (bx - 1 .. bx + 3, by - 2; bx - 1, by - 1; bx + 3, by - 1; bx - 1, by), which seal the queue row from every side but the mound. Nobody can reach the gate until the victim puts one of
 /// them out (its own Fire Ant, if it has one) or they burn out (3,600 ticks). The ant is claimed only while it has a tile to light that its cursor would accept, one order at a time (every tile
@@ -506,7 +648,7 @@ private:
 
 // ---- rank 4: harassment ---------------------------------------------------------------------------------------------------------------------------------------
 
-/// The harassment squad ("Hard bots should be really aggressive", the owner): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
+/// The harassment squad (Hard bots should be really aggressive): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
 /// of the other teams. A blow clears the walk of a carrier and it stands with its food until its owner sends it on, so a squad that stays with its target keeps a team's income down:
 /// in the bench ONE Combat Ant of an aggressor costs a Medium bot half of its score and a Hard bot a quarter (docs/BOTS.md, "Aggression"). Targets are carriers that an attack order can
 /// reach (attackable()), the best opponent's first (by the score boxes: the margin to the best other is what a match is won by), the ones far from their hill and from help, near the
@@ -617,6 +759,7 @@ public:
         uint32_t ramp_wait_ticks{200};       // it waits this long for an own ant that stands on the ramp (a longer one is not waited for: the click is refused and the stop above takes over)
         bool cantgo_aware{true};             // the gate asks that field before it guides, places only the carriers that it joins to the hill, and waits for the ramp: LevelPlan::cantgo_aware
         uint32_t leaver_wait_ticks{0};       // the entrance click waits at most this long while an own ant without food stands on the ramp (0: it does not wait; it does not either with cantgo_aware off): LevelPlan::gate_leaver_ticks
+        uint32_t unjam_ticks{0};             // an own ant without food that has stood on the ramp this long (idle or in the can't-go loop) while a carrier waits is sent to a free tile at the side of the doorstep (0: never): LevelPlan::ramp_unjam_ticks
         bool predictive{true};
         int32_t doorstep_dx0{-4};
         int32_t doorstep_dx1{6};
@@ -634,6 +777,8 @@ public:
     uint32_t takeovers() const noexcept { return takeovers_; }
     uint32_t parks() const noexcept { return parks_; }
     uint32_t user_failures() const noexcept { return user_failures_; }
+    /// Ants that stood on the ramp and were sent aside (Params::unjam_ticks)
+    uint32_t ramp_unjams() const noexcept { return ramp_unjams_; }
     /// Times the gate stopped guiding because its clicks delivered nothing (Params::user_fail_limit)
     uint32_t pauses() const noexcept { return pauses_; }
     uint32_t user() const noexcept { return user_; }
@@ -685,6 +830,8 @@ private:
     int64_t ramp_since_{-1};                      // the tick at which an own ant was first seen standing on the ramp (-1: none does)
     int64_t leaver_since_{-1};                    // the tick at which an own ant without food was first seen on the ramp (-1: none is)
     uint32_t bite_waited_{0};
+    uint64_t unjam_next_{0};                      // no ant is sent aside before this tick (an order needs time to be carried out)
+    uint32_t ramp_unjams_{0};
     uint32_t user_{0};
     uint64_t user_release_{0};
     int user_cost0_{0};

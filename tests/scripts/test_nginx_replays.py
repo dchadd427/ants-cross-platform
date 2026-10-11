@@ -150,7 +150,7 @@ class TheLocations(unittest.TestCase):
             self.assertRegex(read("Dockerfile.server"), r"(?m)^EXPOSE [0-9 ]*\b%s\b" % target.group(2))
 
     def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address: docs/audit/site_stats_notes.md; an allowance per visitor would be one for everybody)
+        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
         for zone_name, block, low, high, burst in (("ants_replays", LIST, 10.0, 30.0, 100), ("ants_replay_files", FILES, 5.0, 20.0, 20)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)
@@ -231,9 +231,9 @@ class TheLocations(unittest.TestCase):
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
-        # the owner chose "Add the line" (2026-10-08): the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
+        # decided on 2026-10-08: the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
         # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so). The two pages word the second sentence differently:
-        # the front page as the owner's lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
+        # the front page as the lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         lobby = read("web", "lobby.html")
         shell = read("web", "shell.html")

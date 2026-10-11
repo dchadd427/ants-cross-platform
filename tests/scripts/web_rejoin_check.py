@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The way back to a running match, in REAL browsers (opt-in; see tests/scripts/test_web_rejoin.sh and docs/NETWORK_PORT.md, "What the clients do in release B").
 
-The owner: "if your browser crashed or your power went out, you could ... hold the game paused until you get back". The server holds the seat of a player whose connection is lost (the default since
+The requirement: if a player's browser crashed or the power went out, the game is held paused until the player gets back. The server holds the seat of a player whose connection is lost (the default since
 release B), the game page comes back to its seat by itself (a reload, a restart of the server), and the front page (the lobby) has a Rejoin strip with a button for the player who closed the tab. Nothing but a browser
 can show that the whole chain works: the page's storage, the game's WebSocket through nginx, the server, the catch-up, the other player's screen.
 

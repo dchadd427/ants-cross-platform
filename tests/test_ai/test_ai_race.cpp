@@ -1,5 +1,5 @@
-// The race of the standard bot (contest batch, AI20.1): "they eat their food in a weird order ... the center food in the treasure map is contested on all four sides, so that is usually the starting
-// food" (the owner) and what followed from it (docs/BOTS.md, "The race for contested food"). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
+// The race of the standard bot (contest batch, AI20.1): the report that the bots eat their food in a weird order, while the center food in the treasure map is contested on all four sides, so that is usually the starting
+// food, and what followed from it (docs/BOTS.md, "The race for contested food"). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
 //
 //   AI20.1  the ants that the gate cannot use go to the contested piles first (on TREASURE every level, a contested pile before a safe one of higher value, the gate keeps its own ants, a pile that
 //           an enemy army holds is no race, a pile with two competitors stays one though an enemy is far nearer, the window, where nothing is contested and with fewer than six ants nothing changes)
@@ -22,7 +22,7 @@ void run_race_tests() {
         const size_t centre = treasure_centre(pmap);
         const size_t treasure_piles = probe.grid().food_objects().size();
         {   // (a) TREASURE (seed 7): the ants that the gate cannot use go to the centre first. Easy has no power-up trips, so every seat sends 3 to 4 of its 6 ants there and its first harvest order is
-            //     the centre's (the owner: "they start eating the Cheerios"); Medium and Hard send three ants for power-ups first, and of the three left the centre gets the ones beyond what fills the
+            //     the centre's (reported after play: the bots start eating the Cheerios); Medium and Hard send three ants for power-ups first, and of the three left the centre gets the ones beyond what fills the
             //     gate: 1, 0, 3 and 1 ants at seats 0 to 3 (seat 1's three ants all work its own piles, whose trips are long); with the race off Easy sends none
             const size_t at_least[3][4] = {{3, 3, 3, 3}, {1, 0, 3, 1}, {1, 0, 3, 1}};
             for (size_t li = 0; li < 3; ++li) {

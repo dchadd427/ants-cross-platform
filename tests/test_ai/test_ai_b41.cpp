@@ -392,7 +392,7 @@ void run_b41_tests() {
             sim.get_unit(carrier).pick_up_food(1, 25);
             sim.get_unit(weak).hp = 3;
             const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 27});
-            Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
+            Rig rig(sim, 0, level, std::make_unique<StandardBot>(peace_plan(level)), 4, 4);
             const size_t want = level == Level::Easy ? 1u : level == Level::Medium ? 2u : 3u;
             bool hit = false;
             for (int t = 0; t < 700; ++t) {
@@ -583,7 +583,7 @@ void run_b41_tests() {
         for (const Case& k : cases) {
             WallWorld w;
             w.build(k.thief_ant, k.thief_powerup);
-            LevelPlan plan = plan_for(k.level);
+            LevelPlan plan = peace_plan(k.level);
             plan.secure_side = false;                                                                  // the walls only: the own-side Fire power-up is the next test's subject
             Rig rig(w.sim, 0, k.level, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
@@ -605,7 +605,7 @@ void run_b41_tests() {
             WallWorld w;
             w.build(true, 1);
             w.sim.grid_mut().set_terrain_class(8, 6, 3);
-            LevelPlan plan = plan_for(level);
+            LevelPlan plan = peace_plan(level);
             plan.secure_side = false;
             Rig rig(w.sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
@@ -618,7 +618,7 @@ void run_b41_tests() {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             WallWorld w;
             w.build(true, 1, 350);
-            LevelPlan plan = plan_for(level);
+            LevelPlan plan = peace_plan(level);
             plan.secure_side = false;
             Rig rig(w.sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(300);
@@ -1132,7 +1132,7 @@ void run_b41_tests() {
         sim::SimulationEngine sim;
         start_match(sim, "TREASURE", 5, 0x0F);
         const MapInfo map(sim);
-        // the pinned layout of the shipped map (tile -> side with four teams): the owner's words, "each base has one of each type of power-up on its side", checked against the analysis
+        // the pinned layout of the shipped map (tile -> side with four teams): the rule that each base has one of each type of power-up on its side, checked against the analysis
         struct Pin {
             int32_t x;
             int32_t y;
@@ -1292,7 +1292,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, true, 10);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             rig.run(500);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_FALSE(sim.grid().has_bomb_at(bomb_tile));
@@ -1314,7 +1314,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, false, 10);
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             rig.run(500);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_FALSE(sim.grid().has_bomb_at(bomb_tile));
@@ -1336,7 +1336,7 @@ void run_b41_tests() {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, variant == 3, variant == 0 ? 5 : 10);
             if (variant == 1) sim.get_unit(ids.worker).pick_up_food(1, 25);
-            LevelPlan plan = plan_for(Level::Medium);
+            LevelPlan plan = peace_plan(Level::Medium);
             plan.bomb_hit = variant != 2;
             plan.counters = variant != 3;                                                                 // (variant 3: a Bomber stands by, but the plan has no counters)
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
@@ -1357,20 +1357,20 @@ void run_b41_tests() {
         {
             sim::SimulationEngine own;
             build(own, 0, bomb_tile, true, 10);
-            Rig r1(own, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig r1(own, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             r1.run(200);
             ASSERT_TRUE(own.grid().has_bomb_at(bomb_tile));
             ASSERT_EQ(r1.proposed_count(CommandType::GroupSpecial), 0u);
             sim::SimulationEngine allied;
             build(allied, 1, bomb_tile, true, 10);
             allied.form_alliance(0, 1);
-            Rig r2(allied, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig r2(allied, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             r2.run(200);
             ASSERT_TRUE(allied.grid().has_bomb_at(bomb_tile));
             ASSERT_EQ(r2.proposed_count(CommandType::GroupSpecial), 0u);
             sim::SimulationEngine far;
             build(far, 1, TileCoord{40, 40}, true, 10);
-            Rig r3(far, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig r3(far, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             r3.run(200);
             ASSERT_TRUE(far.grid().has_bomb_at(TileCoord{40, 40}));
             ASSERT_EQ(r3.proposed_count(CommandType::GroupSpecial), 0u);
@@ -1385,7 +1385,7 @@ void run_b41_tests() {
                     if (dx != 0 || dy != 0) sim.set_terrain(bomb_tile.x + dx, bomb_tile.y + dy, sim::TERRAIN_OBSTACLE);
                 }
             }
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             rig.run(250);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_EQ(bot.bombs().failures(), 1u);

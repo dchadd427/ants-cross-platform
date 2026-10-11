@@ -214,6 +214,7 @@ struct Peer {
             const bool ok = level.load_lvl(maps_dir() + "/" + s.map_name) && net::hash_file(maps_dir() + "/" + s.map_name, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
+                sim.set_game_mode(s.game_mode());                         // (the mode of the Start, before the first init: what the application does)
                 sim.init(level, s.seed, s.roster);
                 sim::apply_start_teams(sim, s.teams());
             }
@@ -251,9 +252,10 @@ struct Duo {
 
 // A match of two on TINY: the bare machine hosts as Alice (seat 0), the application joins as Bob (seat 1). Returns the stepper once the match is begun on both machines (the "Get ready" dialog may
 // still be up), nullptr when it could not be started.
-std::unique_ptr<Duo> start_duo(Application& app, Peer& host, uint32_t seed) {
+std::unique_ptr<Duo> start_duo(Application& app, Peer& host, uint32_t seed, uint8_t mode = 0) {
     if (!host.net.host(0, "Alice", true)) return nullptr;
     host.net.set_map("TINY.LVL");
+    host.net.set_mode(mode);
     ApplicationConfig cfg;
     cfg.headless = true;
     cfg.start_in_map_select = true;
@@ -284,7 +286,7 @@ struct Handmade {
     std::vector<uint64_t> hash_at;        // the state hash after turn t, for t = 0 .. turns (index 0: the start)
 };
 
-Handmade make_handmade(uint32_t turns, bool quit_at_end, uint32_t seed = 21) {
+Handmade make_handmade(uint32_t turns, bool quit_at_end, uint32_t seed = 21, uint8_t mode = 0) {
     Handmade out;
     assets::LevelData level;
     const std::string path = maps_dir() + "/TINY.LVL";
@@ -303,8 +305,10 @@ Handmade make_handmade(uint32_t turns, bool quit_at_end, uint32_t seed = 21) {
     head.fog = true;
     head.names[0] = "Ann";
     head.names[1] = "Bot (Medium)";
+    head.set_mode(mode);
     sim::SimulationEngine engine;
     engine.set_fog_of_war_enabled(true);
+    engine.set_game_mode(static_cast<sim::GameMode>(mode));
     engine.init(level, seed, roster);
     replay::Recorder rec(head);
     out.hash_at.push_back(engine.state_hash().total);
@@ -413,6 +417,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(rep.head.recorder_seat, 0);
         ASSERT_FALSE(rep.head.fog);
         ASSERT_FALSE(rep.head.teams.set);
+        ASSERT_TRUE(rep.head.mode == 0 && rep.head.sim_rules == replay::kSimRules && app.sim().game_mode() == sim::GameMode::HighestScore);       // (no --game-mode: the original's game, as every file before the modes)
         ASSERT_EQ(rep.head.engine_rules, net::kProtocolVersion);
         ASSERT_EQ(rep.head.names[1], "Bot (Medium)");
         bool saw_stop = false;
@@ -800,6 +805,76 @@ int main(int argc, char* argv[]) {
         app.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA1.10 --game-mode 187 on this computer: the game plays by it from the first tick (no food on the map), the file carries game mode 1 and the rules number 2 and plays out to the state in which the match ended, and the next game of the same program plays by it too; a game without the option stays the original's") {
+        Application app;
+        ApplicationConfig cfg = local_config(0x02);
+        cfg.game_mode = 1;
+        cfg.game_mode_given = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.recorder() != nullptr);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_TRUE(app.recorder()->replay().head.mode == 1 && app.recorder()->replay().head.sim_rules == replay::kSimRulesMode187);
+        app.hud().dismiss_match_start_modal();
+        for (int i = 0; i < 400; ++i) app.update_simulation(0.05f);
+        const std::vector<uint32_t> own = ants_of(app.sim(), 0);
+        ASSERT_FALSE(own.empty());
+        app.hud().select_ant(own[0]);
+        app.hud().stop_selected(app.sim());
+        for (int i = 0; i < 20; ++i) app.update_simulation(0.05f);
+        quit_match(app);
+        ASSERT_TRUE(app.sim().is_match_over());
+        replay::Replay rep;
+        std::string why;
+        ASSERT_TRUE(read_back(app, rep, why));
+        ASSERT_TRUE(rep.complete && rep.match_over);
+        ASSERT_TRUE(rep.head.mode == 1 && rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(rep.head));
+        ASSERT_TRUE(rep.final_hash == app.sim().state_hash().total);
+        ASSERT_TRUE(plays_to(rep, app.sim(), why));
+        // the next game of the program: back to the setup screen and START again (a "Play again" keeps the engine's mode, a start from the setup screen takes the option's)
+        app.return_to_map_select();
+        ASSERT_TRUE(app.start_game(cfg.default_map_path));
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187);
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        app.shutdown();
+        // no option: the original's game, with food on the map
+        Application plain;
+        ASSERT_TRUE(plain.init(local_config(0x02)));
+        ASSERT_TRUE(plain.sim().game_mode() == sim::GameMode::HighestScore);
+        bool food = false;
+        for (const auto& cell : plain.sim().get_world_state().cells) food = food || cell.is_food;
+        ASSERT_TRUE(food);
+        ASSERT_TRUE(plain.recorder() != nullptr && plain.recorder()->replay().head.mode == 0 && plain.recorder()->replay().head.sim_rules == replay::kSimRules);
+        plain.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA1.10b --game-mode 187 with a map and bots (the game starts at once, with no setup screen): the engine is made with the mode before its first init, so the first tick has no food and the file says game mode 1 and rules 2; no option: the original's game") {
+        Application app;
+        ApplicationConfig cfg = local_config(0x02);
+        cfg.start_in_map_select = false;                                               // (init makes the engine itself: the setup screen's START, which sets the mode in load_match, never comes)
+        cfg.game_mode = 1;
+        cfg.game_mode_given = true;
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(app.state() == AppState::Playing);
+        ASSERT_EQ(app.sim().roster_mask(), 0x03);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_TRUE(app.sim().get_world_state().flower_droppers.empty());
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1 && app.recorder()->replay().head.sim_rules == replay::kSimRulesMode187);
+        app.shutdown();
+        Application plain;
+        ApplicationConfig cfg0 = local_config(0x02);
+        cfg0.start_in_map_select = false;
+        ASSERT_TRUE(plain.init(cfg0));
+        ASSERT_TRUE(plain.sim().game_mode() == sim::GameMode::HighestScore);
+        bool food = false;
+        for (const auto& cell : plain.sim().get_world_state().cells) food = food || cell.is_food;
+        ASSERT_TRUE(food);
+        ASSERT_TRUE(plain.recorder() != nullptr && plain.recorder()->replay().head.mode == 0 && plain.recorder()->replay().head.sim_rules == replay::kSimRules);
+        plain.shutdown();
+    } TEST_END();
+
     TEST_CASE("RA2.1 A match of the network: the machine's file holds every machine's orders and the quit, names and seats as the Start gave them, and plays out to the state of the match") {
         Peer host;
         Application app;
@@ -857,6 +932,35 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(rep.total_turns == app.sim().current_tick() || rep.total_turns == app.sim().current_tick() + 1);     // (the tick of the turn that ended the match does not count itself in the engine's counter)
         ASSERT_TRUE(rep.final_hash == app.sim().state_hash().total);
         ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash());
+        ASSERT_TRUE(plays_to(rep, app.sim(), why));
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA2.4 A match of the network in a room of game mode 187: the Start carries the mode, the machine that joined makes its engine with it before the first init (no food, the same state as the host's), its file has game mode 1 and the rules number 2 and plays out to the state of the match") {
+        Peer host;
+        Application app;
+        const std::unique_ptr<Duo> duo = start_duo(app, host, 4711, 1);
+        ASSERT_TRUE(duo != nullptr);
+        ASSERT_EQ(app.net()->start_info().mode, 1);
+        ASSERT_TRUE(app.sim().game_mode() == sim::GameMode::Kills187 && host.sim.game_mode() == sim::GameMode::Kills187);
+        ASSERT_TRUE(app.recorder() != nullptr && app.recorder()->replay().head.mode == 1 && app.recorder()->replay().head.sim_rules == replay::kSimRulesMode187);
+        for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        duo->step(8000);
+        ASSERT_TRUE(app.sim().current_tick() > 20);
+        const std::vector<uint32_t> own = ants_of(app.sim(), 1);
+        ASSERT_FALSE(own.empty());
+        app.hud().select_ant(own[0]);
+        app.hud().stop_selected(app.sim());
+        duo->step(400);
+        quit_match(app);
+        ASSERT_TRUE(duo->until([&]() { return app.sim().is_match_over() && host.sim.is_match_over(); }, 4000));
+        ASSERT_TRUE(app.recorder() == nullptr);
+        replay::Replay rep;
+        std::string why;
+        ASSERT_TRUE(read_back(app, rep, why));
+        ASSERT_TRUE(rep.complete && rep.match_over && rep.head.venue == "network game");
+        ASSERT_TRUE(rep.head.mode == 1 && rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(rep.head));
+        ASSERT_TRUE(rep.final_hash == app.sim().state_hash().total && app.sim().state_hash() == host.sim.state_hash());
         ASSERT_TRUE(plays_to(rep, app.sim(), why));
         app.shutdown();
     } TEST_END();
@@ -977,6 +1081,32 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
         ASSERT_TRUE(v.app.sim().is_match_over());
         v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA7.8 A recording of game mode 187 is watched like any other: the viewer plays it by the file's mode (no food on the map from the first picture), every turn lands in the recorded state, and it ends in the recorded final state with the results; the same match watched as the original's game is not this one") {
+        const Handmade made = make_handmade(700, true, 21, 1);
+        ASSERT_FALSE(made.bytes.empty());
+        ASSERT_TRUE(made.file.complete && made.file.match_over && made.file.head.mode == 1 && made.file.head.sim_rules == replay::kSimRulesMode187);
+        Viewer v(made.bytes);
+        ASSERT_TRUE(v.ok && v.app.replay_mode() && v.app.replay_failure() == ReplayFailure::None);
+        ASSERT_TRUE(v.app.sim().game_mode() == sim::GameMode::Kills187);
+        for (const auto& cell : v.app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[0]);
+        v.frames(100);
+        ASSERT_EQ(v.turn(), 100u);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[100]);
+        v.app.replay_control(ReplayControl::Seek, 50);
+        v.frames(1);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.hash_at[v.turn()]);             // (a jump back starts the engine again: with the file's mode)
+        ASSERT_TRUE(v.app.sim().game_mode() == sim::GameMode::Kills187);
+        v.frames(2000);
+        ASSERT_TRUE(v.state() == ReplayState::Ended);
+        ASSERT_EQ(v.app.sim().state_hash().total, made.file.final_hash);
+        ASSERT_TRUE(v.app.sim().is_match_over());
+        v.app.shutdown();
+        const Handmade original = make_handmade(700, true, 21, 0);                      // (the same seed, orders and turns as the original's game: another state from the first hash on)
+        ASSERT_FALSE(original.bytes.empty());
+        ASSERT_TRUE(original.hash_at[0] != made.hash_at[0] && original.file.final_hash != made.file.final_hash);
     } TEST_END();
 
     TEST_CASE("RA7.2 The HUD's orders do nothing while a recording is watched: an ant that is ordered to stop and moved on every turn changes nothing of the match") {
@@ -1107,7 +1237,7 @@ int main(int argc, char* argv[]) {
         };
         ASSERT_TRUE(failure_of(std::vector<uint8_t>{'n', 'o', 't', ' ', 'a', ' ', 'r', 'e', 'p', 'l', 'a', 'y'}, ReplayFailure::Unreadable));
         ASSERT_TRUE(failure_of(std::vector<uint8_t>{}, ReplayFailure::Unreadable));
-        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = static_cast<uint16_t>(replay::kSimRules + 1); }), ReplayFailure::Newer));
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = static_cast<uint16_t>(replay::kSimRulesMode187 + 1); }), ReplayFailure::Newer));      // (rules 2 are the ones of game mode 187: the first number that no build plays)
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 14; }), ReplayFailure::Older));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 200; }), ReplayFailure::Newer));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_hash ^= 1u; }), ReplayFailure::NoMap));

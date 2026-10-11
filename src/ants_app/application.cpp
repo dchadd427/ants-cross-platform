@@ -480,6 +480,14 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (!parse_local_teams(argv[++i], cfg.teams, why) && cfg.startup_error.empty()) {
                 cfg.startup_error = "--teams " + std::string(argv[i]) + ": " + why;
             }
+        } else if (std::strcmp(argv[i], "--game-mode") == 0) {                 // the rules of the games this machine makes: highest-score (the original's) | 187 (ApplicationConfig::game_mode)
+            if (i + 1 >= argc) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--game-mode needs highest-score or 187";
+            } else if (net::parse_game_mode_name(argv[++i], cfg.game_mode)) {
+                cfg.game_mode_given = true;
+            } else if (cfg.startup_error.empty()) {
+                cfg.startup_error = "--game-mode " + std::string(argv[i]) + ": the game types are highest-score and 187";
+            }
         } else if (std::strcmp(argv[i], "--replay") == 0 && i + 1 < argc) {   // the match of a .antsrep file (ApplicationConfig::replay_path)
             cfg.replay_path = argv[++i];
             cfg.start_in_map_select = false;
@@ -498,6 +506,10 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         cfg.startup_error = "--replay shows a recorded match: it cannot be combined with --host, --join, --join-url, --bot, --alone or --play.";
     }
     if (cfg.replay_live && cfg.replay_path.empty() && cfg.startup_error.empty()) cfg.startup_error = "--replay-live follows the file of --replay: it needs --replay FILE.";
+    if (cfg.game_mode_given && cfg.startup_error.empty()) {      // the mode is the choice of whoever makes the game: this machine for a game of its own and for the room of --host, nobody else's
+        if (!cfg.replay_path.empty()) cfg.startup_error = "--game-mode cannot be combined with --replay: the file says which game was played.";
+        else if (cfg.net_role == ApplicationConfig::NetRole::Join || !cfg.net_room.empty() || cfg.net_create) cfg.startup_error = "--game-mode is the choice of the room's host: it cannot be used with --join, --join-url, --room or the --room-* options of a room that a server makes.";
+    }
     if (cfg.alone && !cfg.bots.empty() && cfg.startup_error.empty()) cfg.startup_error = "--alone cannot be used with --bot: a game for one has no other player.";
     if (cfg.play_at_once) cfg.start_in_map_select = true;                      // (--map names the map; it would start it at once, without the screens and without the START's own path)
 #if !defined(__EMSCRIPTEN__)
@@ -593,6 +605,7 @@ bool Application::init(const ApplicationConfig& config) {
 
     // 4. Initialize Simulation Engine. A local game that starts at once with bots (or --alone) plays the seats that are taken (you and the bots): a team nobody plays has no hill
     // and no ants (the setup screen's game does the same in start_game)
+    sim_.set_game_mode(static_cast<sim::GameMode>(config_.game_mode));     // (a game of this machine plays by --game-mode; every init() after this one keeps it, "Play again" too. A room's match sets its own in load_match)
     if (local_seats && !config_.start_in_map_select) {
         if (local_roster_ != 0x0F) current_level_ = current_level_.for_roster(local_roster_);
         sim_.init(current_level_, config_.random_seed, local_roster_);
@@ -812,6 +825,7 @@ bool Application::init(const ApplicationConfig& config) {
             }
         }
         attach_net();
+        if (net_->is_host() && config_.game_mode != 0) net_->set_mode(config_.game_mode);       // (--game-mode: the room's Start carries it to every machine)
         if (net_->is_host() && !map_select_.get_maps().empty()) net_->set_map(map_select_.get_maps()[static_cast<size_t>(map_select_.get_selected_index())].filename);
         sync_room_view();
     } else {
@@ -1230,7 +1244,7 @@ bool Application::start_game(const std::string& map_path) {
         roster = bot_roster(local_player_id_ < 4 ? local_player_id_ : uint8_t{0});
         local_roster_ = roster;
     }
-    if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled())) return false;
+    if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled(), config_.game_mode)) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
     const bool teams_made = form_start_teams();                       // --teams: the teams are made before the first tick (the dialog of the start is up)
@@ -1240,9 +1254,9 @@ bool Application::start_game(const std::string& map_path) {
     return true;
 }
 
-// The level, the simulation and the renderer of a match (the map file, the seed, the teams that play and the Fog of War option are the whole
+// The level, the simulation and the renderer of a match (the map file, the seed, the teams that play, the Fog of War option and the game mode are the whole
 // shared state: every machine of a network match calls this with the same values).
-bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog) {
+bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t roster, bool fog, uint8_t game_mode) {
     ants::assets::LevelValidation verdict;
     if (!current_level_.load_from_file(map_path, &verdict)) {
         std::cerr << "[Application] Failed to load level: " << map_path << std::endl;
@@ -1260,6 +1274,7 @@ bool Application::load_match(const std::string& map_path, uint32_t seed, uint8_t
     if ((roster & 0x0Fu) != 0x0Fu) current_level_ = current_level_.for_roster(roster);      // no hill art for a team without a player
 
     sim_.set_fog_of_war_enabled(fog);
+    sim_.set_game_mode(static_cast<sim::GameMode>(game_mode));               // (before init, like the fog: the rules of the match, the same on every machine; the Start decoder and parse_arguments let no other byte through)
     sim_.set_viewing_player_id(local_player_id_);
     sim_.init(current_level_, seed, roster);
 
@@ -1444,6 +1459,7 @@ void Application::begin_local_recording(uint32_t seed, bool teams_made) {
     head.seed = seed;
     head.roster = sim_.roster_mask();
     head.fog = sim_.is_fog_of_war_enabled();
+    head.set_mode(static_cast<uint8_t>(sim_.game_mode()));        // (the rules the engine plays by: field 17 and the rules number of the file when it is not the original's game)
     std::array<std::string, 4> names = config_.bots.empty() ? config_.team_names : local_team_names();
     if (local_player_id_ < 4 && player_name_ != get_system_username()) names[local_player_id_] = player_name_;
     for (uint8_t p = 0; p < 4; ++p) head.names[p] = ((head.roster >> p) & 1u) != 0 ? names[p] : std::string();
@@ -3012,7 +3028,7 @@ void Application::net_load_match() {
     local_player_id_ = net_->my_seat();
     bool ok = net::hash_file(path, hash) && hash == start.map_hash;
     if (!ok) std::cerr << "[Application] The map " << start.map_name << " here is not the host's file" << std::endl;
-    ok = ok && load_match(path, start.seed, start.roster, start.fog);
+    ok = ok && load_match(path, start.seed, start.roster, start.fog, start.mode);
     if (ok) {
         if (renderer_) renderer_->set_hud_team(local_player_id_);
         apply_team_names(start.names, start.roster);

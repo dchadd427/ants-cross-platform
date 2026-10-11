@@ -1993,6 +1993,26 @@ void run_suite_7_input_controls() {
             ASSERT_TRUE(app.bots() != nullptr && app.bots()->stats(1).released > 0);                       // (the bots played)
             app.shutdown();
         }
+        {   // the same game in 187 (--game-mode 187): the teams are made at the start there too, on the engine that has no food; the match goes on with them
+            ApplicationConfig cfg = config({bot(1), bot(2), bot(3)}, LocalTeams{true, 0, 1});
+            cfg.game_mode = 1;
+            cfg.game_mode_given = true;
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_EQ(app.state(), AppState::Playing);
+            ASSERT_TRUE(app.sim().game_mode() == ants::sim::GameMode::Kills187);
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(allies_of(app), std::string("1032"));                                                // 0 + 1 and 2 + 3, before the first tick
+            for (const auto& cell : app.sim().get_world_state().cells) ASSERT_FALSE(cell.is_food);
+            app.hud().dismiss_match_start_modal();
+            app.update_simulation(0.05f);
+            ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 2u);
+            for (int t = 0; t < 200; ++t) app.update_simulation(0.05f);
+            ASSERT_TRUE(app.sim().current_tick() > 100);
+            ASSERT_TRUE(app.sim().game_mode() == ants::sim::GameMode::Kills187);
+            ASSERT_EQ(allies_of(app), std::string("1032"));                                                // (the bots never break a team)
+            app.shutdown();
+        }
         {   // the first seat of the pair is the one that invites: 3+2 makes the same two teams, and the News Flash names Black first
             Application app;
             ASSERT_TRUE(app.init(config({bot(1), bot(2), bot(3)}, LocalTeams{true, 3, 2})));
@@ -2619,7 +2639,7 @@ void run_suite_7_input_controls() {
     } TEST_END();
 
     TEST_CASE("7.8f A FULLSCREEN Window Whose Shape Is Not The Picture's Has Bars Inside The Window (SDL Maps A Position Over A Bar To One Outside The Picture): The Pointer Over A Bar Is On The Picture's Nearest Edge Pixel, Corners Included, And Is Not Gone; A Window Of Another Shape (4:3 Picture In A Wide Window) Does The Same At The Sides (A Real Fullscreen Window Of SDL's Dummy Video Driver, The 16:9 Canvas, The Setup Screen)") {
-        // The same clamp as 7.8 .. 7.8d, but in a window that is FULLSCREEN (SDL_WINDOW_FULLSCREEN_DESKTOP, which is how the owner's 16:10 screen shows the 16:9 picture: bars of 45 rows above and
+        // The same clamp as 7.8 .. 7.8d, but in a window that is FULLSCREEN (SDL_WINDOW_FULLSCREEN_DESKTOP, which is how a 16:10 screen shows the 16:9 picture: bars of 45 rows above and
         // below at 1440 x 900, of 66 at 1512 x 982): the clamp does not look at fullscreen, so the bars of a window and the bars of a fullscreen screen are the same rule. The dummy driver's
         // display is 4:3 (1024 x 768 with SDL 2.32), so a 16:9 canvas has bars above and below (96 rows) and the 4:3 canvas none; what the window really is decides the geometry (CanvasLayout::fit is
         // SDL's own arithmetic, pinned in test_canvas_layout), and a driver whose display happens to have the canvas's shape has no bars to test.
@@ -2747,7 +2767,7 @@ void run_suite_8_unit_health_and_map_select() {
             }
         }
 
-        // Initial selection: TREASURE.LVL, the last entry of this list (the one deliberate deviation of the screen, at the owner's request: the original highlights the first entry; 8.9 has it)
+        // Initial selection: TREASURE.LVL, the last entry of this list (the one deliberate deviation of the screen, as requested: the original highlights the first entry; 8.9 has it)
         ASSERT_EQ(screen.get_selected_index(), 5);
         ASSERT_EQ(maps[5].filename, "TREASURE.LVL");
         ASSERT_FALSE(screen.get_selected_map_path().empty());
@@ -8981,8 +9001,8 @@ void run_suite_12_unit_selection_and_occupied_tile_movement() {
     } TEST_END();
 
     TEST_CASE("12.108: Version Format, Build Id & Fog of War Cursor Concealment Parity") {
-        // 1. Verify the FORMAT of the version, not its value. The value lives in one place, the file VERSION (CMake generates ants_app/version.hpp from it) and moves for a
-        // batch or a milestone only (docs/WORKFLOW.md), so a test that pinned "v0.1.0" failed at every release for no reason. What stays pinned: the text is
+        // 1. Verify the FORMAT of the version, not its value. The value lives in one place, the file VERSION (CMake generates ants_app/version.hpp from it) and moves with
+        // each change that goes live (docs/WORKFLOW.md), so a test that pinned "v0.1.0" failed at every release for no reason. What stays pinned: the text is
         // "vMAJOR.MINOR.PATCH" (digits only, no leading zeros of a longer number, nothing after the third number), the three numbers agree with it, and the build id names the build.
         {
             const std::string text(ants::VERSION_STRING);

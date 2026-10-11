@@ -17,7 +17,7 @@ constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsig
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
-    // The contest batch (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the owner's report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
+    // The contest batch (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
     // switches these flags off again (the strategy of v0.5.0, for the tournaments' comparison; the controller's refusal of special orders onto an ant is no plan field and stays)
     p.race = true;
     p.health_aware = true;
@@ -47,7 +47,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
-            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves (docs/BOTS.md, "The expedition batch")
+            p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -110,7 +110,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.strike_force = 4;
             p.hatch_extra = 2;
             p.gate = true;                       // guiding for eating: +4 to +23 percent alone on every shipped map (docs/BOTS.md)
-            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches; docs/BOTS.md, "The can't-go loop")
+            p.gate_leaver_ticks = 60;            // the click waits for the ant that leaves over the ramp (a small gain: 170 to 140 refused gate clicks in 240 matches)
             p.avoids_guarded_hills = false;      // (a Combat Ant of the enemy is a worker that fights, not a guard: the raids of this bot go where the hole is open; measured, docs/BOTS.md "Aggression")
             p.raid_min_loot = 15;                // a raid for 15 points is a swing of 30 and a trip of a few hundred ticks: it pays (raidmin 10 / 30 / 60: 96.5 / 94.1 / 93.1 percent against Medium, Medium, Easy)
             p.hunt_force = 3;
@@ -126,7 +126,106 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_builders = 0;
             break;
     }
+    // The war batch (docs/BOTS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their
+    // fire ant if they try to come for them, and the bomber bombs up the food). Every level fights over the food that is left and, with the food gone and an ant of nothing to do, goes for the
+    // enemy ants; the weaker the level the later it starts and the better the odds it asks for. Medium and Hard also light the ring round the gate of the best opponent whether or not he can put the fire out (a
+    // Fire Ant is cheap, and the walls that stand cost the owner his way out), hunt the Fire and Bomber Ants that come near the own hill, and lay mines at the piles an enemy works and round his gate while
+    // an ant has nothing to harvest. `--tune war=0` switches all of it off again (tools/bot_arena.cpp)
+    switch (level) {
+        case Level::Easy:
+            p.assault = true;
+            p.assault_force = 2;
+            p.assault_min = 2;
+            p.assault_odds_percent = 200;
+            p.assault_after = 1800;
+            p.raider_hunt = true;
+            p.raider_radius = 4;
+            p.behind_war = true;
+            p.behind_tier1 = 45;
+            p.behind_tier2 = 100;
+            p.behind_tier3 = 180;
+            p.behind_free_tier = 3;
+            p.behind_odds_ease = 8;
+            p.behind_assault_after = 900;
+            p.fire_duel = true;                      // (the stand batch: the Fire Ant strikes the Fire Ant that fires the gate in; Easy has no gate to clear, drafts nobody, mines nowhere and never rushes)
+            break;
+        case Level::Medium:
+            p.assault = true;
+            p.assault_force = 2;
+            p.assault_min = 2;
+            p.assault_odds_percent = 100;
+            p.assault_after = 900;
+            p.sabotage = true;
+            p.sabotage_safe = false;
+            p.sabotage_after = 5400;                 // (Hard lights from tick 600: the walls cost the victim the food that he would still bring in; Medium's economy is slower, it waits until tick 5,400: the last 3.5 minutes on SMALL, 1.5 on TINY, 7.5 on TREASURE; from tick 1,800 when it is behind)
+            p.war_fires = 2;
+            p.raider_hunt = true;
+            p.raider_radius = 5;
+            p.war_free_only = true;
+            p.war_bombers = 1;
+            p.mine_gate = 2;
+            p.behind_war = true;
+            p.behind_tier1 = 25;
+            p.behind_tier2 = 55;
+            p.behind_tier3 = 105;
+            p.behind_free_tier = 3;
+            p.behind_odds_ease = 10;
+            p.behind_assault_after = 600;
+            p.fire_duel = true;                      // (the ramp unjam is the gate's, which is Hard's)
+            p.behind_mine_tier = 2;
+            p.behind_mine_gate = 3;
+            p.mine_home = 8;
+            p.mine_home_apart = 2;
+            p.rush = true;
+            p.rush_deficit = 300;
+            break;
+        case Level::Hard:
+            p.assault = true;
+            p.assault_force = 3;
+            p.assault_min = 2;
+            p.assault_odds_percent = 60;
+            p.assault_after = 600;
+            p.sabotage = true;
+            p.sabotage_safe = false;
+            p.war_fires = 2;
+            p.raider_hunt = true;
+            p.raider_radius = 6;
+            p.war_free_only = true;
+            p.war_bombers = 1;                       // (two Bombers wanted cost the ISLANDS expedition 5 percent of its food: the crew needs the Bombers of its row)
+            p.mine_per_pile = 10;                    // (requested 2026-10-10: the bomber places more than three bombs and bombs up a whole area: 10 at a pile, mines that touch, and 12 round the own hill, off the way of the own carriers (four bots that all mine the lanes lose food); the gate keeps 3 (5 for a loser) so that the fire-in still has tiles to light: docs/BOTS.md, "The stand batch")
+            p.mine_apart = 1;
+            p.mine_gate = 3;
+            p.behind_war = true;                     // (tiers 15, 35, 70; the odds 12 percent less at every tier, the Combat Ants off the piles from tier 3: from tier 2 they cost Hard 4 percent of its food four against four)
+            p.fire_duel = true;                      // the stand batch (docs/BOTS.md, "The stand batch"; fire_draft stays off: the draft cost food and won nothing the duel did not)
+            p.ramp_unjam = true;
+            p.behind_mine_tier = 2;                  // (tier 1 cost four Hard bots against four 10 percent of their food on TREASURE, tier 2 four percent, tier 3 nothing)
+            p.behind_mine_gate = 5;
+            p.mine_home = 12;
+            p.mine_home_apart = 2;
+            p.rush = true;
+            p.rush_deficit = 200;
+            break;
+    }
     return p;
+}
+
+void without_stand_batch(LevelPlan& p) noexcept {
+    p.fire_duel = p.fire_draft = p.ramp_unjam = p.rush = false;
+    p.behind_mine_tier = 4;
+    p.behind_mine_gate = p.mine_home = 0;
+    p.mine_per_pile = std::min<uint32_t>(p.mine_per_pile, 3);                  // (the field of mines at the piles is the batch's: three were all there was)
+    p.mine_apart = 2;
+    p.mine_home_apart = 3;
+}
+
+void without_war_batch(LevelPlan& p) noexcept {
+    without_stand_batch(p);
+    p.war_bombers = p.war_fires = p.mine_per_pile = p.mine_gate = p.raider_extra = p.assault_force = 0;
+    p.raider_hunt = p.raider_piles = p.assault = p.war_free_only = false;
+    p.sabotage = p.level == Level::Hard && p.style == Style::Aggressive;
+    p.sabotage_safe = true;
+    p.sabotage_after = LevelPlan{}.sabotage_after;
+    p.behind_war = false;
 }
 
 namespace {
@@ -142,7 +241,7 @@ uint32_t jitter(uint32_t v, uint32_t pct, BotRng& rng) noexcept {
 
 Style draw_style(Level level, BotRng& rng) noexcept {
     static const Style all[4] = {Style::Aggressive, Style::Economic, Style::Raider, Style::Defensive};
-    if (level == Level::Hard) return rng.below(2) == 0 ? Style::Aggressive : Style::Raider;       // "Hard bots should be really aggressive"
+    if (level == Level::Hard) return rng.below(2) == 0 ? Style::Aggressive : Style::Raider;       // Hard bots should be really aggressive
     return all[rng.below(4)];
 }
 
@@ -168,7 +267,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 if (hard) {
                     p.max_combat = 2;                                                        // (the second Combat Ant is a theft: Hard's)
                     p.combat_extra = 0;
-                    p.sabotage = true;                                                       // "they could fire your whole basin and then you cannot eat": a stolen Fire Ant walls in the gate of the best opponent
+                    p.sabotage = true;                                                       // a stolen Fire Ant walls in the gate of the best opponent, so that its whole basin is fired and it cannot eat
                     p.fire_extra = 1;
                     p.strikes = true;                                                        // behind the leader, a force goes for its carriers
                 } else {                                                                     // Medium: a milder one, careful odds
@@ -456,11 +555,16 @@ Standing standing_of(const LevelPlan& plan, const BotView& view, const MapInfo& 
         if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) {
             st.tier = st.pressure >= plan.catchup_tier3 ? 3 : st.pressure >= plan.catchup_tier2 ? 2 : st.pressure >= plan.catchup_tier1 ? 1 : 0;
         }
+        if (plan.behind_war && best >= static_cast<int32_t>(plan.behind_min_leader)) {
+            st.war = st.pressure >= plan.behind_tier3 ? 3 : st.pressure >= plan.behind_tier2 ? 2 : st.pressure >= plan.behind_tier1 ? 1 : 0;
+        }
     }
     if (plan.endgame && view.ticks_left() <= plan.endgame_ticks) {
         if (st.ahead) st.guard = true;                                                        // with the lead and little time left: protect it
         else if (plan.catchup && best >= static_cast<int32_t>(plan.catchup_min_leader)) st.tier = 3;       // behind with little time left: all-in
+        if (!st.ahead && plan.behind_war && best >= static_cast<int32_t>(plan.behind_min_leader)) st.war = 3;
     }
+    st.tier = std::max(st.tier, st.war);                                                      // (the war tier is a tier of the catch-up too: raids for a smaller loot, the strike, the Combat Ants)
     return st;
 }
 

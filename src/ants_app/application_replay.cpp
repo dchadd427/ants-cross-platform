@@ -69,7 +69,7 @@ bool continues(const replay::Replay& now, const replay::Replay& later) {
     const replay::Header& a = now.head;
     const replay::Header& b = later.head;
     if (a.format_version != b.format_version || a.engine_rules != b.engine_rules || a.sim_rules != b.sim_rules || a.game_version != b.game_version || a.build_id != b.build_id || a.venue != b.venue ||
-        a.map_name != b.map_name || a.map_hash != b.map_hash || a.seed != b.seed || a.roster != b.roster || a.fog != b.fog || a.names != b.names || !(a.teams == b.teams) || a.recorder_seat != b.recorder_seat ||
+        a.map_name != b.map_name || a.map_hash != b.map_hash || a.seed != b.seed || a.roster != b.roster || a.fog != b.fog || a.mode != b.mode || a.names != b.names || !(a.teams == b.teams) || a.recorder_seat != b.recorder_seat ||
         a.hash_period != b.hash_period) {
         return false;
     }
@@ -121,6 +121,7 @@ void Application::begin_net_recording() {
     head.seed = start.seed;
     head.roster = start.roster;
     head.fog = start.fog;
+    head.set_mode(start.mode);
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) head.names[p] = ((start.roster >> p) & 1u) != 0 ? start.names[p] : std::string();
     head.teams = start.teams();
     head.recorder_seat = net_->my_seat() < sim::MAX_PLAYERS ? net_->my_seat() : replay::kNoSeat;
