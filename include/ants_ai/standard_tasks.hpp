@@ -339,7 +339,7 @@ private:
 
 // ---- rank 4: the mines ------------------------------------------------------------------------------------------------------------------------------------
 
-/// "The bomber doesn't place any bombs currently, but he should be bombing up the food so they can't eat it" (the owner, 2026-10-09). The Bomber Ants of the bot (an own ant of type Bomber,
+/// Requested 2026-10-09: the bomber bombs up the food so that the others cannot eat it. The Bomber Ants of the bot (an own ant of type Bomber,
 /// claimed for a job and given back to the economy after it) lay mines, one job per Bomber at a time:
 ///   at the food   on a pile that an enemy works (its walk there costs at most plan.mine_percent of the own, or one of its ants is near) and that holds plan.mine_min_units at least: the open
 ///                 tiles two steps round the pile where the enemy is no further than the bot (the enemy's walking cost to the tile at most the own), the enemy-most first, plan.mine_per_pile standing
@@ -535,8 +535,8 @@ private:
 
 // ---- rank 5: the rush ---------------------------------------------------------------------------------------------------------------------------------------
 
-/// "Rushing them with all their ants is always an option. If you're down by a few hundred points, you're very unlikely to win by just continuing to eat. So why not select all your ants and take them to their
-/// base?" (the owner, 2026-10-10). A bot that is far behind (plan.rush: the war tier plan.rush_tier and a deficit of plan.rush_deficit points, from tick plan.rush_after, not in the last plan.rush_min_left
+/// Requested 2026-10-10: rushing the enemy with all the ants is always an option, because a bot that is down by a few hundred points is very unlikely to win by just continuing to eat: select all the ants and take them to their
+/// base. A bot that is far behind (plan.rush: the war tier plan.rush_tier and a deficit of plan.rush_deficit points, from tick plan.rush_after, not in the last plan.rush_min_left
 /// ticks) sends every TYPED ant that holds no food (Combat, Fire, Bomber and Thief Ants; the Workers only with plan.rush_workers, which no plan sets: a Worker kills nothing above two hit points) at the ants of the leader,
 /// whatever the odds, for at most plan.rush_ticks. The Fire Ant that keeps the walls of the thief hole stays while a thief threatens.
 ///   gather   the ants go to a rally tile on their way, where the leader's walk from his hill costs 400 (about twenty tiles of grass), and wait for each other (70 percent within six tiles, or 1,500
@@ -590,7 +590,7 @@ private:
 
 // ---- rank 4: sabotage ---------------------------------------------------------------------------------------------------------------------------------------
 
-/// "if somebody stole your fire power-up, they could fire your whole basin and then you cannot eat" (the owner): the Fire Ant of the bot, when its own work (the walls in front of the own thief
+/// The idea: a stolen fire power-up could fire the whole basin of the victim, who then cannot eat. The Fire Ant of the bot, when its own work (the walls in front of the own thief
 /// hole, the enemy walls and bombs in the way of the own economy) is done, lights fire walls on the tiles around the gate of the BEST OPPONENT: the row two tiles above the queue row and the
 /// tiles at its ends (bx - 1 .. bx + 3, by - 2; bx - 1, by - 1; bx + 3, by - 1; bx - 1, by), which seal the queue row from every side but the mound. Nobody can reach the gate until the victim puts one of
 /// them out (its own Fire Ant, if it has one) or they burn out (3,600 ticks). The ant is claimed only while it has a tile to light that its cursor would accept, one order at a time (every tile
@@ -648,7 +648,7 @@ private:
 
 // ---- rank 4: harassment ---------------------------------------------------------------------------------------------------------------------------------------
 
-/// The harassment squad ("Hard bots should be really aggressive", the owner): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
+/// The harassment squad (Hard bots should be really aggressive): the Combat Ants of the bot (and, with harass_workers, workers that the economy can spare) hunt the carriers
 /// of the other teams. A blow clears the walk of a carrier and it stands with its food until its owner sends it on, so a squad that stays with its target keeps a team's income down:
 /// in the bench ONE Combat Ant of an aggressor costs a Medium bot half of its score and a Hard bot a quarter (docs/BOTS.md, "Aggression"). Targets are carriers that an attack order can
 /// reach (attackable()), the best opponent's first (by the score boxes: the margin to the best other is what a match is won by), the ones far from their hill and from help, near the

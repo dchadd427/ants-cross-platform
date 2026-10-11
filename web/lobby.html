@@ -8,7 +8,7 @@
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
     <style>
     /* The look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes. The pictures and the font (the game's own
-       Libre Franklin, SIL OFL) are in web/front/, made by tools/front_page_art/make_art.py; nothing is loaded from another site. The lobby (the four colours, the map, START) is drawn as the owner's
+       Libre Franklin, SIL OFL) are in web/front/, made by tools/front_page_art/make_art.py; nothing is loaded from another site. The lobby (the four colours, the map, START) is drawn as the
        approved pictures draw it (docs/PLAY_IN_BROWSER.md); the tile's and the ants' addresses end in ?v= and the first 8 hex digits of the file's sha256, because the server lets a browser keep a .png
        for a week (tests/scripts/test_web_front.py keeps them equal to the files). */
     @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
@@ -428,7 +428,7 @@
             if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE NAME STEP of a link that somebody else shared (the owner: "when joining a link from somebody else, it should ask you first what you want your name to be"): the field is filled in with
+        // THE NAME STEP of a link that somebody else shared (requested: when joining a link from somebody else, the page asks you first what you want your name to be): the field is filled in with
         // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
         // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
         // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).

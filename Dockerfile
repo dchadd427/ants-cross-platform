@@ -39,7 +39,7 @@ RUN BUILD_TIME=$(date +%s) && \
     ! grep -q '@@DATA_SIZE@@' "$PAGE" && \
     ! grep -Eq 'index\.js\?v=[0-9]+\?v=' "$PAGE"
 
-# Which build this is (the page's footer and the head of the changelog pages name it), found AFTER the compile layers so that a new commit does not recompile the game
+# Which build this is (the page's footer and the footer of the changelog page name it), found AFTER the compile layers so that a new commit does not recompile the game
 # (the page is the only place of the web build that shows it; the compiled game's own ants::BUILD_ID is "unknown" here and nothing in the browser prints it). The first of:
 # the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) .; a compose file's build.args), the commit named by the HEAD and refs files
 # of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only these three through, never .git/config), the UTC build time.
@@ -71,16 +71,13 @@ RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
-# Build the changelog pages (CHANGELOG.md -> changelog.html, the short default page; docs/CHANGELOG_ARCHIVE.md -> changelog_archive.html, the detailed history; no dependencies)
-# after the compile layers so that editing the changelog does not rebuild the game
+# Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game
 COPY CHANGELOG.md /src/changelog/CHANGELOG.md
-COPY docs/CHANGELOG_ARCHIVE.md /src/changelog/CHANGELOG_ARCHIVE.md
 COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog_archive.html --other-label "Detailed history" --page-link docs/CHANGELOG_ARCHIVE.md=changelog_archive.html && \
-    python3 changelog_to_html.py CHANGELOG_ARCHIVE.md changelog_archive.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --other-page changelog.html --other-label "Short changelog" --page-link CHANGELOG.md=changelog.html --link-base docs
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}"
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
@@ -112,9 +109,9 @@ COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 COPY --from=builder /src/watch.html /usr/share/nginx/html/watch.html
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 
-# The changelog pages (built from CHANGELOG.md and docs/CHANGELOG_ARCHIVE.md, linked from the page header and from each other); they are in the Classic look of the front page: they link
-# /front/classic.css and show /front/logo.png, which the web/front/ copy above puts in the image
-COPY --from=builder /src/changelog/changelog.html /src/changelog/changelog_archive.html /usr/share/nginx/html/
+# The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
+# /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
+COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

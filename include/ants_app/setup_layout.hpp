@@ -4,7 +4,7 @@
 //
 // The original's setup screen is a 640 x 480 page: the host's screen is the animation 106 `st_screen` (Host Game Set-Up, Pick a Map, Players' Status, Fog of War, START, Leave Game), the
 // screen of a guest is the animation 107 `nh_start` (WAITING FOR GAME TO START!, a fixed "Fog of War?" box). In a 960 x 540 picture the page is not a centred window any more: every piece of its
-// art is put where the owner chose in the mock-ups of 2026-10-02 (option C) and the pieces that have to be bigger are made bigger from the art itself, by repeating (or dropping) only lines
+// art is put where the chosen mock-ups of 2026-10-02 (option C) have it and the pieces that have to be bigger are made bigger from the art itself, by repeating (or dropping) only lines
 // that are IDENTICAL in every piece that crosses them, so that no seam can show and nothing is scaled:
 //   * the clay is the tile dclay96 laid at its own pitch of 96; the frame is the pieces dfram1 ... dfram8 (corners, dfram296 / dfram796 strips with their 16 pixel pieces dfram2 / dfram7, the
 //     side strips dfram496 / dfram596 stacked as whole pieces and cut once, at a row that is identical to the piece's own neighbour): wide_page.hpp, which the loading screen, the quick help,
@@ -14,7 +14,7 @@
 //     the chat box (209 x 99);
 //   * the map list box w_map and the status box statline are made 70 columns wider by repeating one column inside each of three runs of identical columns; the chat input box is statline's
 //     box (rows 11 .. 40, without its "status" label) made 96 columns narrower by dropping columns inside runs of identical columns.
-// All numbers are the owner-approved mock-ups' own (2026-10-02, option C: "I like the chat and map preview"; the chat column restyled in the setup screen's own style: black efram box, statline's
+// All numbers are the approved mock-ups' own (2026-10-02, option C, with the chat and map preview; the chat column restyled in the setup screen's own style: black efram box, statline's
 // input box, TrueType in the labels' colours); tests/test_app/test_wide_setup.cpp compares every rectangle with them, checks every seam against the art of ants.chd and the composed pictures against
 // the mock-ups pixel for pixel.
 //

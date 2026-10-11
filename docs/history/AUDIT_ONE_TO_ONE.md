@@ -43,7 +43,7 @@ recheck everything.
 * **Earlier audits** (per area, before the releases v0.0.25 .. v0.0.43 re-derived those systems) listed deviations such as F1..F15 for the ants. They were
   never checked again. **Phase 1** of this audit re-checked every one of those findings against today's code (13 independent agents, each with its own probes
   linked against a frozen copy of the libraries) and looked for new deviations in the same area. Two areas had no earlier audit and were audited fresh: the
-  original's scheduler tasks and food / economy / scoring. The per-area results are in [`audit/`](audit/) (one ledger per area, status words FIXED / PARTIAL /
+  original's scheduler tasks and food / economy / scoring. The per-area results are in [`fidelity-audit/`](fidelity-audit/) (one ledger per area, status words FIXED / PARTIAL /
   OPEN / REGRESSED / BY DECISION / WRONG, NEW for findings that no earlier report had).
 * **Phase 2** (seams between systems, cross-machine cases) produced one finding before the audit started and none in Phase 1: the refusal cue plays on the
   decliner's machine too (fixed in v0.0.50). The sound audit checked every two-machine case of the original and found no second one.
@@ -61,7 +61,7 @@ recheck everything.
 
 ## 3. What differs, in the proposed order of fixing
 
-Every item names its ledger (`L` + area letter; IDs as in `audit/ledger_*.md`) and, where known, the tests that encode the old behaviour.
+Every item names its ledger (`L` + area letter; IDs as in `history/fidelity-audit/ledger_*.md`) and, where known, the tests that encode the old behaviour.
 
 ### Batch 1 - rules that change outcomes (proposed v0.0.51)
 1. **Hill queue** (LH NEW-1, NEW-2, NEW-3; LM probe): a carrier that is re-routed while it waits for the hill loses its queue flag, a carrier blocked on its ring
@@ -139,25 +139,12 @@ release, Drop only with a bad ping), options (slider model with the exact hit re
 * The differential harnesses written for the movement audit are worth keeping as regression tests (LM NEW-M8). **Done in v0.0.77**: the walk model and the A* model became `tests/test_sim/test_movement_differential.cpp` (1,500 maps, 1,000 walks, a self-check that breaks each rule of the walk model); the table comparison was not ported because `test_movement_tables` already compares every clip cell and every table with `Ants.exe` and `ants.chd`.
 
 ## 3b. Deliberate differences (tweaks)
-The goal is a one-to-one copy; tweaks on top of it are each recorded here and in the CHANGELOG so that they are not mistaken for deviations:
-* v0.0.51: the hit-point numbers above the ants (`Ctrl + L`) are **on by default** (the original starts with them off).
-* Treasure is the default map (decided in October 2026: it is the map that is played most, and it is to be the default of everything). The one deviation from an original screen: the **setup screen highlights `TREASURE.LVL` when it starts** (when the Maps folder holds it; else the first entry, as the original does). The original highlights the first entry of its list (`GAUNTLET.LVL` for the six maps): `FUN_01013de7` ends with `FUN_010298fc(list, 0)`, which puts the list's cursor on its head, and the host screen's constructor `FUN_01013b36` ends with `FUN_01013fc9(this, 0)`, which announces the entry at the cursor. Only the highlight differs (`MapSelectScreen::init`, with the comment at the line): the list, its order (`strcmp`), Up / Down, START, the keys and the labels are the original's, and a guest and the leader of a server's room show the room's map. The same decision makes Treasure the default of the remake's own choices of a map, none of them a screen of the original: the start menu's Host panel until a `host_map` is stored, the form of `web/lobby.html` until a choice is remembered, the map of the stack's server for a demo room whose create block names none (`docker-compose.stack.yml`: `ANTS_DEMO_MAP`, default `TREASURE.LVL`), and the map of a run that skips the setup screen without `--map`.
-* v0.2.0: **the match clock waits for the "Get ready to play!" dialog** (reported after play: the wait wastes about five or six seconds). The original runs the clock and the ants behind the dialog (`GAME_REVERSE_ENGINEERING.md` section 6.2, item 21: the GO handler `0x1022432` that releases the dialog also starts the clock), so a person loses the 5 s of its task KWFO; the remake keeps the dialog (picture, texts, 5 s, input swallowing) but its simulation does not run while it is up, so the match's whole time is playable. Local games count the dialog in real time; in a match of the network the host seals the first turn 5 s after the match began and a machine closes its dialog when its first turn executes (network protocol 12). A game that starts straight into a match (`--map`) has no dialog. The bots wait for nothing (no tick, no look) and open with one token. The ants are drawn behind the dialog, standing and locked (requested: the ants are shown but cannot move until the game actually starts): the original has none before GO (CreateAnt `0x100ef18`, from the GO handler), the remake's snapshot shows the first frame of the idle clip that its first tick starts (`GAME_REVERSE_ENGINEERING.md` section 21).
-* v0.0.99: **the 16:9 picture is the default** (the widescreen work; the desktop game and the web page): a fixed canvas of 960 x 540 with a 762 x 500 map view instead of 442 x 440, so a player sees about twice the area at once. The original's own 640 x 480 picture is unchanged and one option away (`--aspect 4:3`, the settings key `aspect`, the page's selector), and every screen outside a match is composed for the wide canvas from the original's own art. Nothing is drawn that the original does not have (`VIEW_AND_HUD.md`, "16:9 by default").
-* v0.1.0, many levels since v0.4.0: **the mouse-wheel zoom, a remake addition** (the original has none): the wheel over the map view steps through the levels 2, 1.68, 1.41, 1.19, 1, 0.84 ... down to the map's limit, four to a doubling, towards the pointer, and the middle button goes back to 1, the original's picture, which is drawn exactly as before. The zoom is the player's own view: it never reaches the simulation, the network, the bots or a state hash, and every kind of match has the same levels (`VIEW_AND_HUD.md`, "Mouse-wheel zoom"; `docs/NETWORK_PORT.md`, "The view's zoom and the network").
-* **A declined team-up says why** (reported after play: when a player tries to team up with a bot, the bot just declines): when a computer player rejects the local player's invitation the original's text, "%s rejected teaming up" (string 80, the status line), is unchanged and the game adds ONE line of the chat log after it: "Bots team up only while three or more teams play.", "You already have a teammate.", "<name> already has a teammate." or "This bot never teams up." (the worker bot). The reason is the bot's own accept rule asked again (`ai::team_up_answer`), never a second rule; nothing is added for a person's answer. The engine's news carries the answering seat (`NewsEvent::subject`), which no rule or hash reads (`docs/BOTS.md`, "Alliances").
-* **Teams chosen before a local game** (requested: the teams can be pre-selected): `--teams ffa|A+B`, the start menu's Teams row and the web page's Team 1 and Team 2 switches. The game makes the teams at the start of the match with the original's own commands (an invitation, its acceptance), so the original's texts and sounds are the ones of a team made in play; nothing in the match's rules, in the network protocol (12) or in a state hash changes. A team that would be the whole match is refused with the reason: the original ends such a match at once (`checkgo_ends_for`).
-* **One level for each bot in single player** (requested: the difficulty can be set for each bot individually): the start menu's Single player panel already had a row for each seat; the web page's Opponents select became one select for each of Red, Blue and Black, and later a group of four level buttons (None, Easy, Medium, Hard) for each. The panel also has a **Your name** field now (the one remembered name of Join and Host; the game is played under it, not under the computer's user name), so the Single player panel is no longer the mock-up's of the 16:9 pages (its numbers in `tests/test_app/test_wide_pages.cpp` are the panel as it is drawn).
+
+Moved to [`ORIGINAL_PROGRAM.md`](../ORIGINAL_PROGRAM.md#differences-made-on-purpose), where the differences that are made on purpose are kept up to date.
 
 ## 4. Decisions needed
-* Start-up: the 3 s publisher-logo splash and its jingle are the original's artwork (LR R4.2a, LS NEW-7); the Single / Multi choice screen that the original shows (LR R4.2c); the "More Help" dialog and its dead web address (LR R4.2d, LU NEW-11).
-* Web build: what "Leave" does on the results screen (the original exits the program).
-* Text: anti-aliased bundled font versus the original's GDI draft quality (D4, BY DECISION so far).
-* Developer shortcuts (team switch Ctrl+1..4 / Ctrl+C / Ctrl+Tab and others): keep for local games behind a developer switch, or remove (LI NEW-5).
-* Input tick: queue mouse events to the original's 20 Hz input pass and read the pointer then (LI I-29), or keep event-time handling.
-* Minimise: the original never pauses; the remake pauses the local simulation (LR NEW-7, LX).
-* The minimap hit flash (see Batch 6): implement only if a screenshot of the real game confirms it.
-* Tests: the 506 E2E tests run against the suite's own model with the early combat rules; rewrite them to drive `SimulationEngine` (large), keep them as they are (now labelled), or retire them. The dormant `tests/test_sim/test_challenger_m2_it2_deep_stress.cpp` was removed; its alliance cases are cases 4.8 and 4.9 of `test_challenger_m2_2.cpp`. AGENTS.md: rule 8 still names a "Combat Ant guard post patrol" (the original only auto-engages; there is no guard post) and the counts in rule 2 (77 integration tests, 506 E2E tests) are old.
+
+Open decisions are not kept in this repository.
 
 ## 5. Corrections to statements made earlier in this project
 * "Hatch retry is about 8 ms" (audit H, docs) is wrong; the retry is 1000 ms (list scheduler).
@@ -169,6 +156,5 @@ The goal is a one-to-one copy; tweaks on top of it are each recorded here and in
 * LA NEW-6 ("the `L` digit toggle needs no Ctrl"): `FUN_0102609a` returns before the letter switch unless the state word of key 0x17 (Ctrl, `W + 0x3e`) is set; Ctrl+L is right (docs 5.45, 5.58).
 
 ## 6. What static analysis cannot settle (needs the real game)
-Screenshots of the original (cnc-ddraw in a local copy of the original game's folder, `Original-Ants/`, saves the game's own 640 x 480 picture with the Print Screen key) would settle:
-the minimap hit flash, the start view, the setup and results layouts and the start-up timeline, the splash jingle, the score-box edge and minimap frame, the real refresh cadence (hence bubble and task periods),
-the 180 s life of fire walls and bridges (0.3-2.2 s spread), contact latency of fights, and whether pressed-button clicks play sounds at the press. A stopwatch recording of a fire wall's life would settle the timers.
+
+Moved to [`ORIGINAL_PROGRAM.md`](../ORIGINAL_PROGRAM.md#what-only-the-real-game-can-settle).

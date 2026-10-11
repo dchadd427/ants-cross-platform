@@ -12,18 +12,18 @@
 //     shared between them (ScreenLayout::cut_share: equal parts, the leftmost takes the remainder);
 //   * Cut row r: the piece is made dy taller by repeating its row r (the part below the cut moves down).
 //
-// The owner's idea (2026-10-01): "I sliced out one pixel and then just repeated that one pixel", and the art allows it: the green texture has only a vertical gradient, so the pieces hold long
+// The idea (2026-10-01): slice out one pixel and then just repeat that one pixel, and the art allows it: the green texture has only a vertical gradient, so the pieces hold long
 // runs of identical rows and columns. The cuts are inside those runs and never inside a decoration, a score box or a clock box (measured on the art of ants.chd, and checked again by
 // tests/test_app/test_wide_hud.cpp, group "cuts"):
 //
 //   x0y0 (top bar)         column 140: the plain green between the clock box and the name; columns 138 .. 143 are identical (the black clock box and the score box are never stretched)
-//   x17y461 (bottom strip) three cuts, so that the score boxes are spread over the strip (the owner: "can you expand between the scores so they're not all offset to the right?"):
+//   x17y461 (bottom strip) three cuts, so that the score boxes are spread over the strip (requested: expand between the scores so they are not all offset to the right):
 //                          column 15, the plain band left of the first score box (columns 13 .. 17 are identical); column 188, the plain run 186 .. 190 right of the first box and left of the
 //                          second team's label; column 346, the plain run 345 .. 348 left of the third team's label. dx is shared in thirds (the left cut takes the remainder), so at 960 x 540 the
 //                          boxes sit at x 213, 468 and 722. NEVER inside columns 458 .. 482: those are the right panel's own fill
 //   x0y22 (left strip)     row 300: below the horizontal rule (it stays aligned with the chat header); rows 294 .. 314 are identical
 //   x458y35, wchat, x521y254 (the strip between the map and the panel, the chat box, the right edge strip): row 322, 59 and 103, which are ONE canvas row, y = 357 of the classic picture,
-//                          where all three are plain between their ant decorations (the owner's choice, 2026-10-02: "further down on the chat there's a spot that can repeat cleanly"). The
+//                          where all three are plain between their ant decorations (the choice of 2026-10-02: further down on the chat there is a spot that can repeat cleanly). The
 //                          rows are not identical there (the strips are a dithered gradient: neighbouring rows differ by at most 5 pixels), the chat box is flat
 //
 // With dx = dy = 0 (the classic picture) a piece is one span that is the whole piece at its own place: exactly what the original draws. No SDL here.

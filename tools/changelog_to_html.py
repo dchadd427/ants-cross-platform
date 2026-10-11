@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-"""Turns a changelog (Markdown) into a standalone page of the beta site: CHANGELOG.md (the short changelog) into /changelog.html and
-docs/CHANGELOG_ARCHIVE.md (the detailed history up to v0.1.0) into /changelog_archive.html.
+"""Turns the changelog (Markdown) into a standalone page of the beta site: CHANGELOG.md into /changelog.html.
 
 Usage: changelog_to_html.py IN.md OUT.html [REPO_BLOB_URL]
            [--version vX.Y.Z] [--build-id ID]
-           [--other-page FILE.html --other-label TEXT]
-           [--page-link MD_PATH=PAGE.html ...] [--link-base DIR]
 
   --version, --build-id   shown in the footer of the page ("v0.1.0 - build abc1234"): which build of the site this is
-  --other-page, --other-label
-                          a button in the header for the page's counterpart (the short page links to the detailed history and the other way round)
-  --page-link             a relative link of the Markdown that names this file (docs/CHANGELOG_ARCHIVE.md) is pointed at that page of the site
-                          instead of the repository; repeatable
-  --link-base             the folder of the Markdown file inside the repository (docs for docs/CHANGELOG_ARCHIVE.md): a relative link is resolved from it,
-                          so ../README.md and BOTS.md both point at the right file of the repository
 
 An HTML comment (<!-- ... -->, the template at the top of CHANGELOG.md) is dropped.
 
@@ -78,7 +69,7 @@ PAGE = """<!DOCTYPE html>
 <header class="site-head">
 <a class="logo" href="/" aria-label="ants! - the front page"><img src="/front/logo.png" alt="ants!" width="581" height="218"></a>
 <div><h1 class="banner gold">{title}</h1>
-<nav class="links" aria-label="Pages"><a class="btn sm" href="/">Play</a>{other}<a class="btn sm" href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a></nav></div>
+<nav class="links" aria-label="Pages"><a class="btn sm" href="/">Play</a><a class="btn sm" href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a></nav></div>
 </header>
 <main>
 {intro}
@@ -96,23 +87,22 @@ PAGE = """<!DOCTYPE html>
 """
 
 
-def repo_path(url, link_base=""):
-    """A relative link of the Markdown file as a path from the repository's root ("../README.md" in docs/ is "README.md"; ./ and a leading / are dropped)."""
+def repo_path(url):
+    """A relative link of the changelog (a file in the repository's root) as a path from the root: "./docs/BOTS.md" is "docs/BOTS.md" (./ and a leading / are dropped, a #anchor is kept)."""
     path = url.split("#", 1)[0]
     anchor = url[len(path):]
     if path.startswith("/"):
         joined = path.lstrip("/")
     else:
-        joined = posixpath.normpath(posixpath.join(link_base, path)) if path else link_base
+        joined = posixpath.normpath(path) if path else ""
     joined = joined.lstrip("./")
     if path.endswith("/") and joined and not joined.endswith("/"):
         joined += "/"
     return joined + anchor
 
 
-def inline(text, repo_blob, page_links=None, link_base=""):
-    """Escape, then turn `code`, **bold** and [text](url) into HTML. A relative link whose path is a key of page_links goes to that page of the site."""
-    page_links = page_links or {}
+def inline(text, repo_blob):
+    """Escape, then turn `code`, **bold** and [text](url) into HTML. A relative link goes to the file of the repository (repo_blob + its path)."""
     text = html.escape(text, quote=False)
     codes = []
 
@@ -126,8 +116,7 @@ def inline(text, repo_blob, page_links=None, link_base=""):
     def link(m):
         label, url = m.group(1), m.group(2)
         if not re.match(r"^(https?://|#|mailto:)", url):
-            target = repo_path(url, link_base)
-            url = page_links[target] if target in page_links else repo_blob + target
+            url = repo_blob + repo_path(url)
         return '<a href="%s">%s</a>' % (html.escape(url, quote=True), label)
 
     text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, text)
@@ -155,8 +144,7 @@ def slug(heading):
     return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-") or "section"
 
 
-def convert(md, repo_blob, version="", build_id="", other_page="", other_label="", source="CHANGELOG.md", page_links=None, link_base=""):
-    page_links = page_links or {}
+def convert(md, repo_blob, version="", build_id="", source="CHANGELOG.md"):
     md = re.sub(r"<!--.*?-->", "", md, flags=re.S)
     title = "Changelog"
     intro, sections, nav = [], [], []
@@ -166,7 +154,7 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
     def flush_paragraph():
         nonlocal paragraph
         if paragraph:
-            block = "<p>" + inline(" ".join(paragraph), repo_blob, page_links, link_base) + "</p>"
+            block = "<p>" + inline(" ".join(paragraph), repo_blob) + "</p>"
             (current[2] if current else intro).append(block)
             paragraph = []
 
@@ -178,7 +166,7 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
                 target.append("<ul>")
             elif target[-1].endswith("</ul>"):
                 target[-1] = target[-1][:-len("</ul>")]                  # a bullet after a blank line goes on with the list (it was left outside it, with a stray </ul> at the end)
-            target[-1] += "<li>" + inline(" ".join(item), repo_blob, page_links, link_base) + "</li>"
+            target[-1] += "<li>" + inline(" ".join(item), repo_blob) + "</li>"
             item = None
 
     def close_lists(blocks):
@@ -200,10 +188,10 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
             m = re.match(r"^(v\d+(?:\.\d+)*)\s*(.*)$", heading)
             if m:
                 rest = re.sub(r"^[-\s]+", "", m.group(2))
-                head_html = '<span class="rel">%s</span>%s' % (html.escape(m.group(1)), (" " + inline(rest, repo_blob, page_links, link_base)) if rest else "")
+                head_html = '<span class="rel">%s</span>%s' % (html.escape(m.group(1)), (" " + inline(rest, repo_blob)) if rest else "")
                 short = m.group(1)
             else:
-                head_html = inline(heading, repo_blob, page_links, link_base)
+                head_html = inline(heading, repo_blob)
                 short = heading.split("(")[0].strip() or heading
             current = [slug(heading), head_html, []]
             nav.append('<a href="#%s">%s</a>' % (current[0], html.escape(short)))
@@ -232,10 +220,7 @@ def convert(md, repo_blob, version="", build_id="", other_page="", other_label="
 
     body = "\n".join('<section id="%s" class="panel"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
     intro_html = '<div class="intro panel">%s</div>' % "\n".join(intro)
-    other = ""
-    if other_page:
-        other = '<a class="btn sm" href="%s">%s</a>' % (html.escape(other_page, quote=True), html.escape(other_label or other_page))
-    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id), other=other,
+    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id),
                        github=html.escape(repo_home(repo_blob), quote=True), source=html.escape(source))
 
 
@@ -246,25 +231,14 @@ def main(argv):
     parser.add_argument("repo_blob", nargs="?", default=DEFAULT_REPO_BLOB, help="the address that relative links are pointed at")
     parser.add_argument("--version", default="", help="the game's version, shown under the title")
     parser.add_argument("--build-id", default="", help="the build id, shown under the title")
-    parser.add_argument("--other-page", default="", help="the counterpart page (a link in the header)")
-    parser.add_argument("--other-label", default="", help="the text of that link")
-    parser.add_argument("--link-base", default="", help="the folder of the Markdown file in the repository (docs)")
-    parser.add_argument("--page-link", action="append", default=[], metavar="MD_PATH=PAGE", help="a relative link to this file goes to this page of the site")
     args = parser.parse_args(argv[1:])
     repo_blob = args.repo_blob
     if not repo_blob.endswith("/"):
         repo_blob += "/"
-    page_links = {}
-    for item in args.page_link:
-        if "=" not in item:
-            sys.stderr.write("--page-link needs MD_PATH=PAGE, got %r\n" % item)
-            return 2
-        key, value = item.split("=", 1)
-        page_links[repo_path(key)] = value
     with open(args.input, encoding="utf-8") as f:
         md = f.read()
     source = args.input.replace("\\", "/").split("/")[-1]
-    out = convert(md, repo_blob, version=args.version, build_id=args.build_id, other_page=args.other_page, other_label=args.other_label, source=source, page_links=page_links, link_base=args.link_base.strip('/'))
+    out = convert(md, repo_blob, version=args.version, build_id=args.build_id, source=source)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(out)
     return 0

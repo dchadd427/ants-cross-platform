@@ -187,7 +187,7 @@ The suites, the tiers and CI are in [`TESTING.md`](TESTING.md) and [`WORKFLOW.md
 - The version is the one line of the file `VERSION` (`MAJOR.MINOR.PATCH`). CMake generates the C++ header `ants_app/version.hpp` from it into the build folder.
 - It moves in the pull request of each change that goes live: **PATCH** by default, **MINOR** for a milestone. The network protocol number moves separately, by its own rule ([`WORKFLOW.md`](WORKFLOW.md#version-policy), [`NETWORK_PORT.md`](NETWORK_PORT.md)).
 - `./run_tests.sh --fast` fails when the top release heading of `CHANGELOG.md` or the version line of the `README.md` names another release than `VERSION`.
-- The changelog is [`../CHANGELOG.md`](../CHANGELOG.md) (the detailed history up to v0.1.0: [`CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md)). How work goes from a commit to a release: [`WORKFLOW.md`](WORKFLOW.md).
+- The changelog is [`../CHANGELOG.md`](../CHANGELOG.md). How work goes from a commit to a release: [`WORKFLOW.md`](WORKFLOW.md).
 
 Every build also has a **build id**, which says which build it is. Where the version and the build id show (in the examples, vX.Y.Z is the version and N the network protocol number):
 
@@ -196,7 +196,7 @@ Every build also has a **build id**, which says which build it is. Where the ver
 | `ants --version`, `ants_server --version` | one line: the program's name, the version, the build id and the network protocol, for example `ants vX.Y.Z build abc1234 (network protocol N)`. No window and no assets; native builds only |
 | the server's start-up log line | the same words, followed by the maps folder |
 | the corner of the game window, next to the FPS meter | the version only |
-| the footer of the web pages | "Version vX.Y.Z - build abc1234" on the game page and the front page; "vX.Y.Z - build abc1234" on the changelog pages |
+| the footer of the web pages | "Version vX.Y.Z - build abc1234" on the game page and the front page; "vX.Y.Z - build abc1234" on the changelog page |
 
 Where the id comes from:
 
@@ -230,9 +230,8 @@ What the image serves:
 | `/play.html` | the game page ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#the-game-page-and-its-addresses)) |
 | `/asset_catalog/` | the asset catalog ([`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md#interactive-asset-catalog)) |
 | `/changelog.html` | the short changelog, built from `CHANGELOG.md` when the image is built |
-| `/changelog_archive.html` | the detailed history, built from `docs/CHANGELOG_ARCHIVE.md` |
 
-The footer of the game page, the front page and the changelog pages names the version and the build. Give the build id with the build argument: `docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -t ants-beta .`, or `args:` of the compose file (it passes the variable `ANTS_BUILD_ID` on). Without it the image works the id out from the clone's `.git` files, or from the build time ([Versioning and the Build Id](#versioning-and-the-build-id)). A stack that a tool builds from a clone of the repository has those files; the build context holds them and nothing else of `.git`. The game server's image (`Dockerfile.server`) gets its id the same way (`ants_server --version`).
+The footer of the game page, the front page and the changelog page names the version and the build. Give the build id with the build argument: `docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -t ants-beta .`, or `args:` of the compose file (it passes the variable `ANTS_BUILD_ID` on). Without it the image works the id out from the clone's `.git` files, or from the build time ([Versioning and the Build Id](#versioning-and-the-build-id)). A stack that a tool builds from a clone of the repository has those files; the build context holds them and nothing else of `.git`. The game server's image (`Dockerfile.server`) gets its id the same way (`ants_server --version`).
 
 ### Building the Web Port Locally
 

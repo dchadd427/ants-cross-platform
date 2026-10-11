@@ -34,7 +34,7 @@
 //      the 762 x 500 view (a map smaller than the view is centred) and the pixels of the real renderer on the 960 x 540 canvas (six maps, nine cameras of two of them, two synthetic small
 //      maps, and whole Application frames: the setup screen, the quick help and the results, each composed for the whole canvas (their wide pages: the quick help and the results were centred pages of the original until then), the match screen and its windows).
 //
-// WHAT IS NOT COVERED (the blind spots; the places that hard-code 640 / 480 / 442 / 440 / the margins with a covered / not covered note: docs/audit/M0_notes.md)
+// WHAT IS NOT COVERED (the blind spots; the places that hard-code 640 / 480 / 442 / 440 / the margins with a covered / not covered note: docs/history/M0_notes.md)
 //   - the glyph pixels of TrueType text (the CALLS that draw it are fingerprinted: string, place, size, colour; the text boxes are masked in the pixel hashes);
 //   - the frame-rate counter, its sparkline and the version text (Application::render_frame: their width depends on the font and the version changes every release);
 //   - the network overlay (Application::render_net_overlay: it needs a network match and sockets);

@@ -9,7 +9,6 @@ build_*
 dist
 tests
 docs
-!docs/CHANGELOG_ARCHIVE.md
 Original-Ants/*.exe
 Original-Ants/*.dll
 Original-Ants/ddraw.ini

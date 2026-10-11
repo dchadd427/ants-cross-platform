@@ -6,12 +6,12 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
 
   - the reading of the Dockerfile: the repository's own file is read to the end, the Emscripten version is the one of its FROM, and a form that the tool cannot play is an error, never a
     step that is left out
-  - the .dockerignore: what the image's build gets of the repository's own file (the three entries of .git, the archive of the changelog, no scripts, no tests, no program of the original
+  - the .dockerignore: what the image's build gets of the repository's own file (the three entries of .git, the changelog as the one document, no scripts, no tests, no program of the original
     game) and the rules of the matching (* inside a name, **, ! brings back, a folder takes its content with it)
   - the replay of small Dockerfiles: COPY (files, folders, patterns, --from), the folders that are moved (nothing is written to this machine's /src), ARG and --build-arg (with the quotes
     of a value taken out), ENV, WORKDIR, and the errors: a path that is not moved, a COPY flag that the tool would leave out, an unbalanced quote
   - the replay of the REAL Dockerfile with a fake compiler (Linux): every step but the compile runs as in the image, so the pages have what CI's checks of the image look for (the version,
-    the build id, no placeholder left, the staging label, the changelog pages, the files of the runner stage)
+    the build id, no placeholder left, the staging label, the changelog page, the files of the runner stage)
   - the emsdk: the version that is there is taken as it is when its install was finished, another one or a strange folder is an error, a missing one or one that a cut-short run left half
     way is cloned, installed and activated, and one whose environment has no emcc is an error
   - the ports that Emscripten would download (read from the port files of the installed Emscripten) and how they are put in its cache, from a git tag or from the mirror (an answer that is
@@ -125,7 +125,7 @@ class TheDockerfileIsRead(unittest.TestCase):
 class TheDockerIgnore(unittest.TestCase):
     def test_what_the_image_build_gets_of_the_repository(self):
         ignore = wd.DockerIgnore(read(".dockerignore"))
-        for path in (".git/HEAD", ".git/packed-refs", ".git/refs/heads/main", ".gitignore", ".gitattributes", "CHANGELOG.md", "docs/CHANGELOG_ARCHIVE.md", "docker/resolve_build_id.sh",
+        for path in (".git/HEAD", ".git/packed-refs", ".git/refs/heads/main", ".gitignore", ".gitattributes", "CHANGELOG.md", "docker/resolve_build_id.sh",
                      "docker/nginx.conf", "Original-Ants/ants.chd", "src/ants_app/main.cpp", "web/shell.html", "web/front/logo.png", "tools/changelog_to_html.py", "asset_catalog/index.html", "VERSION"):
             self.assertFalse(ignore.excluded(path), path)
         for path in (".git/config", ".git/objects/ab/cdef", ".github/workflows/ci.yml", "tests/scripts/x.py", "docs/WORKFLOW.md", "README.md", "AGENTS.md", "run_tests.sh", "start_game.sh",
@@ -135,9 +135,9 @@ class TheDockerIgnore(unittest.TestCase):
 
     def test_which_folders_can_hold_something_of_the_context(self):
         ignore = wd.DockerIgnore(read(".dockerignore"))
-        for folder in (".git", ".git/refs", ".git/refs/heads", "docs", "src", "src/ants_app"):
+        for folder in (".git", ".git/refs", ".git/refs/heads", "src", "src/ants_app"):
             self.assertTrue(ignore.may_contain_included(folder), folder)
-        for folder in (".git/objects", "tests", "docs/audit", "scratch", "build_web", ".github", "Original-Ants/Shaders"):
+        for folder in (".git/objects", "tests", "docs", "docs/audit", "scratch", "build_web", ".github", "Original-Ants/Shaders"):          # (nothing of docs/ is in the context)
             self.assertFalse(ignore.may_contain_included(folder), folder)
 
     def test_the_matching_rules(self):
@@ -303,7 +303,7 @@ class TheRealDockerfileReplayed(Scratch):
             return f.read()
 
     def test_the_files_that_the_image_has_are_there(self):
-        for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "changelog.html", "changelog_archive.html", "favicon.png", os.path.join("front", "logo.png"),
+        for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
                      os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
@@ -340,9 +340,11 @@ class TheRealDockerfileReplayed(Scratch):
             self.assertIn("(staging)</title>", text, name)
             self.assertIn('id="site-label">staging<', text, name)
 
-    def test_the_changelog_pages_are_made_from_the_changelogs(self):
-        self.assertIn("v" + read("VERSION").strip(), self.page("plain", "changelog.html"))
-        self.assertGreater(os.path.getsize(self.html("plain", "changelog_archive.html")), os.path.getsize(self.html("plain", "changelog.html")))
+    def test_the_changelog_page_is_made_from_the_changelog_and_is_the_only_one(self):
+        page = self.page("plain", "changelog.html")
+        self.assertIn("v" + read("VERSION").strip(), page)
+        self.assertIn("Generated from CHANGELOG.md when the site image is built", page)
+        self.assertEqual(sorted(name for name in os.listdir(self.html("plain")) if name.startswith("changelog")), ["changelog.html"])
 
     def test_the_builder_got_what_the_dockerignore_lets_through_and_nothing_else(self):
         src = os.path.join(self.site["plain"], "src")
@@ -350,7 +352,7 @@ class TheRealDockerfileReplayed(Scratch):
             self.assertTrue(os.path.exists(os.path.join(src, name)), name)
         for name in ("tests", "docs", "README.md", "run_tests.sh", ".github"):
             self.assertFalse(os.path.exists(os.path.join(src, name)), name)
-        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog")))[:2], ["CHANGELOG.md", "CHANGELOG_ARCHIVE.md"])
+        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py"])
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
 
 

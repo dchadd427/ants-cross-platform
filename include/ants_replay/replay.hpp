@@ -1,8 +1,7 @@
 #pragma once
 
 // Replay files (.antsrep). A lock-step match is its start data plus the commands of its turns, so a recording is exactly that, with a few state hashes that say whether another
-// machine plays it out the same way. docs/REPLAYS.md says how to record and read one; docs/replays/DESIGN.md is the design this follows (the parts that are built: the file, the
-// recorder, the player that checks a file and lists its orders; watching a replay inside the game is not built). This header is the file itself: the data, the writer and the strict reader.
+// machine plays it out the same way. docs/REPLAYS.md says how to record, read and watch one. This header is the file itself: the data, the writer and the strict reader.
 //
 // A file is a chunked container like PNG: a reader skips what it does not know, a file that was cut still plays up to the cut, and no library is needed. All numbers are little endian.
 //

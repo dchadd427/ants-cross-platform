@@ -1,6 +1,6 @@
 #pragma once
 
-// The scripted AGGRESSOR of the bench (docs/audit/B4_1_notes.md, acceptance A4): a TEST-ONLY bot that is never in the registry (make_bot does not know it; the arena and the tests hand
+// The scripted AGGRESSOR of the bench (docs/history/B4_1_notes.md, acceptance A4): a TEST-ONLY bot that is never in the registry (make_bot does not know it; the arena and the tests hand
 // it to a match through ArenaSpec::factory). It exists to measure what the standard bot keeps of its score against an opponent that attacks:
 //
 //   it takes a Thief power-up with the nearest idle worker (two of them in the double-thief opening, kind "aggressor2"), and up to two Combat power-ups,

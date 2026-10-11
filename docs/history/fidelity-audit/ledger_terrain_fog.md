@@ -1,6 +1,6 @@
 # Audit ledger: Terrain, fog of war, passability
 
-Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../../AUDIT_ONE_TO_ONE.md).
+Result of the residual-findings audit of this area against commit 4aa985f (v0.0.50 plus the cleanup pass). It compares the remake with `Original-Ants/Ants.exe` (Capstone disassembly) and `ants.chd`; nothing was run in the original. `<scratch>` and `SCRATCH` stand for a scratch folder of the audit session that is not part of the repository: the data files named below (probes, CSV tables, disassembly dumps) are not kept here. The synthesis and the ranked list of changes are in [`../AUDIT_ONE_TO_ONE.md`](../AUDIT_ONE_TO_ONE.md).
 
 Terrain is now identical to the original, and fog rendering is identical with one rare exception. The remaining differences are in how fog gets revealed and in the minimap. The full tables, logs and probes are in `SCRATCH/audit/LT/` (main file `ledger_LT.md`; data in `template_durations.csv`, `radar_model_vs_remake.csv`, `run_nofog_all.log`, `run_fog_a.log`; probes are the `lt_*.cpp` / `lt_*.py` files there).
 

@@ -78,7 +78,7 @@ struct Strength {
 };
 
 // What answers a blow near `centre`: the enemy ants within `radius` tiles that do not carry food (a carrier is no fighter) and are not `exclude`, the `cap` strongest of them (the standard
-// bot of Hard sends three). Hit points are on the view for every ant (the owner's decision).
+// bot of Hard sends three). Hit points are on the view for every ant (a project decision).
 Strength enemy_strength(const BotView& v, sim::TileCoord centre, int32_t radius, uint32_t exclude, uint32_t cap) {
     std::vector<std::pair<uint32_t, uint32_t>> near;                              // (hit points, damage)
     for (const AntView& e : v.others()) {
@@ -320,7 +320,7 @@ void FightTask::start_fights(TaskContext& c) {
     }
 }
 
-// The defence against being fired in (plan.fire_defence, the owner's report: "the other team just extinguishes all of the fire, it does not try to kill the fire ant that is firing them in"): while
+// The defence against being fired in (plan.fire_defence, after a report that the other team just extinguishes all of the fire and does not try to kill the fire ant that is firing them in): while
 // fire walls stand on the ring round the own gate the enemy Fire Ant that lights them, an enemy Fire Ant within plan.fire_defence_radius tiles of the own hill, is hunted by the fighters (the
 // level's defenders and plan.fire_defence_extra more, a Combat Ant first), a wounded one first; the walls are put out afterwards (WallTask)
 void FightTask::start_fire_defence(TaskContext& c) {
@@ -354,7 +354,7 @@ void FightTask::start_fire_defence(TaskContext& c) {
     for (const auto& f : fights_) {
         if (f.second.fire) return;                                                                   // one hunt at a time
     }
-    // (plan.raider_hunt, the war batch; the owner: "try to kill their fire ant if they try to come for them") an enemy Fire or Bomber Ant near the own hill, or at a pile the own ants work, whether
+    // (plan.raider_hunt, the war batch; requested: try to kill their fire ant if they try to come for them) an enemy Fire or Bomber Ant near the own hill, or at a pile the own ants work, whether
     // or not walls stand: the blows stop what it is doing (a hit cancels an ability) and send it home when it is down to one hit point
     const auto near_work = [&](const AntView& e) {
         if (e.tile.chebyshev_dist(hill.origin) <= plan.raider_radius) return true;
@@ -651,7 +651,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             return;
         }
     }
-    // a wounded target is finished: the fight lingers on and the leash is longer (the owner: "if they're attacking an ant and it is low on health, they should continue and try to kill it")
+    // a wounded target is finished: the fight lingers on and the leash is longer (requested: if they are attacking an ant and it is low on health, they continue and try to kill it)
     const bool wounded = waits_for_clip && target->hp > 0 && target->hp <= 4;
     if (f.thief) {
         const HillInfo& hill = c.map.hill(c.seat);
@@ -958,7 +958,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
             best_cost = cost;
         }
         if (best == nullptr) continue;
-        const uint32_t walk = static_cast<uint32_t>(MapInfo::walking_ticks(best_cost)) + 5u;           // the pick-up comes 8 d + 5 ticks after the order on grass (measured in the engine, docs/audit/B4_1_notes.md)
+        const uint32_t walk = static_cast<uint32_t>(MapInfo::walking_ticks(best_cost)) + 5u;           // the pick-up comes 8 d + 5 ticks after the order on grass (measured in the engine, docs/history/B4_1_notes.md)
         if (walk > params_.max_trip_ticks) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
         // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate)
@@ -1217,7 +1217,7 @@ void PowerUpTask::step(TaskContext& c) {
 
 // ---- WallTask -------------------------------------------------------------------------------------------------------------------------------------------
 
-// Whether a fire wall of the ring round the own gate is not to be put out now (the owner's report: the bots "just extinguish all of the fire" and leave the Fire Ant that lights it free to light it
+// Whether a fire wall of the ring round the own gate is not to be put out now (a report after play: the bots just extinguish all of the fire and leave the Fire Ant that lights it free to light it
 // again): an enemy Fire Ant is near the tile (the fighters go after it, FightTask::start_fire_defence) for plan.fire_defence_hold ticks at the most (`hold_over`: one that no blow reaches, on a wall
 // or a power-up, would hold the walls for the 3,600 ticks that they burn), or the enemy's force near it is stronger than the own (the Fire Ant would walk into it)
 bool fired_in_wall(const BotView& v, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile, bool hold_over) {

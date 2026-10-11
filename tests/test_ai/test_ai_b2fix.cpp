@@ -1,4 +1,4 @@
-// Tests that came out of the adversarial review of milestone B2 (docs/audit/B2_notes.md, "Review"): each of them fails without the fix of the finding it belongs to.
+// Tests that came out of the adversarial review of milestone B2 (docs/history/B2_notes.md, "Review"): each of them fails without the fix of the finding it belongs to.
 //
 //   AI1.21  the state of another team's ants is what the screen draws (an ant that has an order but still stands in its idle clip is idle)
 //   AI1.21b the same on a level with a default ant type: the guard of a default Combat ant, swimming for a default swimmer on its lake

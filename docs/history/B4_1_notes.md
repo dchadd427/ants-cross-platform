@@ -421,5 +421,5 @@ The island keys (`docs/BOTS.md` "Islands"): `islands` (0: the standard bot as it
 **Fixes:**
 - `docs/GAME_REVERSE_ENGINEERING.md`: the mud "humping" bullet, the cost of a forced hatch (`min(200, score)`, not free) and the emergence invulnerability were wrong.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.2.0...v0.3.0), [detailed notes](docs/audit/B4_1_notes.md).
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.2.0...v0.3.0), [detailed notes](docs/history/B4_1_notes.md).
 ```

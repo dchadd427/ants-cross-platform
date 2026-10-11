@@ -312,14 +312,14 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         self.assertNotIn("No page loads it yet", doc)
 
     def test_no_document_says_that_the_switch_is_off_or_that_the_front_pages_button_is_still_to_come(self):
-        for parts in (("README.md",), ("docs", "PLAY_IN_BROWSER.md"), ("docs", "SERVER.md"), ("docs", "NETWORK_PORT.md"), ("docs", "audit", "persist_notes.md")):
+        for parts in (("README.md",), ("docs", "PLAY_IN_BROWSER.md"), ("docs", "SERVER.md"), ("docs", "NETWORK_PORT.md"), ("docs", "history", "persist_notes.md")):
             text = read(*parts)
             for stale in ("the switch is still off", "Left for the next work package (WP4)", "that page is being redesigned elsewhere", "that page is being redesigned on another branch"):
                 self.assertNotIn(stale, text, "/".join(parts))
         self.assertIn("kReconnectByDefault = true", read("include", "ants_server", "room_manager.hpp"))
 
     def test_the_documents_say_what_the_review_of_phase_2_changed(self):
-        """The fixes of the independent review (docs/audit/persist_notes.md): what is said in the network document, the browser page and the server page is what the code does."""
+        """The fixes of the independent review (docs/history/persist_notes.md): what is said in the network document, the browser page and the server page is what the code does."""
         doc = read("docs", "NETWORK_PORT.md")
         pages = read("docs", "PLAY_IN_BROWSER.md") + read("docs", "SERVER.md")
         for needle in ("kDemoMaxPauseMs", "kDemoAbandonedMs", "`ants_leave_match()`", "`kRejoinMaxAgeMs`", "never makes a room and never replaces an ended one", "`window.antsSeatKnown(seat)`",
@@ -337,7 +337,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         self.assertIn("kRejoinMaxAgeMs = int64_t{3} * 3600 * 1000;", read("include", "ants_app", "rejoin_store.hpp"))
 
     def test_the_documents_say_what_the_re_check_of_the_fixes_changed(self):
-        """The re-check's N3 and N4 (docs/audit/persist_notes.md): the words of the documents are what the code does."""
+        """The re-check's N3 and N4 (docs/history/persist_notes.md): the words of the documents are what the code does."""
         doc = network_document_and_its_history()
         server_page = read("docs", "SERVER.md")
         for needle in ("a new player's key at the Start, a rejoin's at its Welcome", "a waiting room that another player's Hello made", "up to ten seconds (200) on a slow disk",
@@ -348,7 +348,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
             self.assertNotIn(stale, doc, stale)
         for stale in ("built; the switch is off", "a server with the switch off changes nothing"):
             self.assertNotIn(stale, server_page, stale)
-        self.assertIn("**The re-check of these fixes.**", read("docs", "audit", "persist_notes.md"))
+        self.assertIn("**The re-check of these fixes.**", read("docs", "history", "persist_notes.md"))
 
     def test_the_network_document_names_the_parts_of_the_check_and_what_it_stands_on(self):
         doc = network_document_and_its_history()
@@ -357,7 +357,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
             self.assertIn("| `%s` |" % part, section, part)
         for needle in ("tests/scripts/web_rejoin_check.py", "tests/scripts/test_web_rejoin.sh", "`ants_probe(16)`", "`holdsThisSeat`", "`REJOINKEY`", "`--no-reconnect`", "Known limits"):
             self.assertIn(needle, section, needle)
-        self.assertIn("The switch, the front page's Rejoin button and the check in a real browser", read("docs", "audit", "persist_notes.md"))
+        self.assertIn("The switch, the front page's Rejoin button and the check in a real browser", read("docs", "history", "persist_notes.md"))
         self.assertIn("web_rejoin_check.py", read("docs", "TESTING.md"))
 
 

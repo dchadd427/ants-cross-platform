@@ -10,9 +10,9 @@ usage: deploy_filter.py (--base REV --head REV | --files) [--root DIR] [--compos
   --explain               print the verdict of every changed file
 
 A change counts when it can alter an image or the stack: a file that a Dockerfile COPYs from the build context and that .dockerignore lets through, the
-Dockerfiles, .dockerignore and the stack file. Both come from the real files (docs/WORKFLOW.md lists the result): documents (README.md, AGENTS.md, docs/
-except docs/CHANGELOG_ARCHIVE.md), .github/, tests/ and the tools that no image runs change nothing that a player or the server sees, so they do not redeploy the site (a
-redeploy restarts it and ends the matches that are running). Exceptions, files that are copied and still change nothing: see COPIED_UNUSED below.
+Dockerfiles, .dockerignore and the stack file. Both come from the real files (docs/WORKFLOW.md lists the result): documents (README.md, AGENTS.md, docs/), .github/,
+tests/ and the tools that no image runs change nothing that a player or the server sees, so they do not redeploy the site (a redeploy restarts it and ends the matches that
+are running). Exceptions, files that are copied and still change nothing: see COPIED_UNUSED below.
 Prints "deploy: ..." or "skip: ..." and always exits 0 (a wrong call is exit 2).
 """
 import argparse
@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 # Copied into a build context and still not in any image. tools/: the server image copies the folder because CMakeLists.txt names the sources of the tools that it does
-# not build; the web image copies the one script that makes the changelog pages. .gitattributes and .gitignore: `COPY VERSION .git*` copies them so that the copy works
+# not build; the web image copies the one script that makes the changelog page. .gitattributes and .gitignore: `COPY VERSION .git*` copies them so that the copy works
 # when the context has no .git folder.
 COPIED_UNUSED = (
     ("tools/", "tools/changelog_to_html.py", "the server image copies tools/ only for CMake; none of it is built there"),

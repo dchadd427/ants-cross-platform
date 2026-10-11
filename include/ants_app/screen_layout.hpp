@@ -85,7 +85,7 @@ struct ScreenLayout {
     static constexpr size_t kClassicScoreSlots = 4;
     /// The bottom strip (x17y461) of a wider picture is widened at THREE plain cuts of its art (shell_layout.hpp: its piece columns 15, 188 and 346), one left of each score box, and the
     /// extra width dx is shared between them in thirds (the leftmost takes the remainder), so that the three boxes are spread evenly over the strip instead of sitting together at its right
-    /// end (the owner: "can you expand between the scores so they're not all offset to the right?"). At 960 x 540 (dx = 320) the cuts add 108, 106 and 106 and the boxes sit at x 213, 468
+    /// end (requested: expand between the scores so they are not all offset to the right). At 960 x 540 (dx = 320) the cuts add 108, 106 and 106 and the boxes sit at x 213, 468
     /// and 722. A box and its label are anchored to each other: they move by what the cuts left of the box add. A strip with more score slots (later) would get one more cut for each, with
     /// the extra width shared equally between them: the boxes stay evenly spaced.
     static constexpr size_t kBottomSlots = 3;

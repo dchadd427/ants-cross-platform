@@ -23,7 +23,7 @@ namespace touch {
 
 /// A tap is up before this (a lift between it and kHoldMs does nothing: the finger lingered, and neither a click nor a right click was meant). Android's long-press time is 400 ms.
 inline constexpr uint32_t kTapMs = 400;
-/// A finger within the slop this long is a hold. To be tuned on the owner's phone.
+/// A finger within the slop this long is a hold. To be tuned on a phone.
 inline constexpr uint32_t kHoldMs = 450;
 /// The ring around a held finger starts to close here, so that a plain tap (a tenth of a second or two) never shows one
 inline constexpr uint32_t kRingStartMs = 150;
