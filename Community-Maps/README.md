@@ -53,7 +53,7 @@ Odd things that the engine handles as the original does and that were kept: obje
 
 ## The previews
 
-`previews/<file name without .lvl>.png` is the map as the game's own setup screen draws it in its map preview: `tools/map_previews.py` runs the real game headless on that screen with only that map in its Maps folder (the method of the six `web/front/preview_*.png`), cuts the preview out and saves it at 200 x 200 pixels in 16 colours (about 13 KB each, 7.5 MB in all; a map that is not square has black bars, as on the screen). `previews.json` is `{"<map file>": {"hash", "picture"}}`: the hash is the one of `maps.json`, and a picture is drawn again only when its map's hash is not the listed one or the picture is missing. Nothing else reads them yet; `maps.json` is not changed.
+`previews/<file name without .lvl>.webp` is the map as the game's own setup screen draws it in its map preview: `tools/map_previews.py` runs the real game headless on that screen with only that map in its Maps folder (the method of the six `web/front/preview_*.png`), cuts the preview out (300 x 300 pixels; a map that is not square has black bars, as on the screen) and saves it as a lossy WebP at quality 85 (about 16 KB each, about 9 MB in all; smaller pictures or a 16-colour PNG wiped out the small sprites). The setup screen's preview is the map, not a match: no ants, no fog, no HUD. `previews.json` is `{"<map file>": {"hash", "picture", "encoding"}}`: the hash is the one of `maps.json`, the encoding names the size and quality; a picture is drawn again only when its map's hash or the encoding is not the listed one or the picture is missing. Nothing else reads them yet; `maps.json` is not changed.
 
 ```
 cmake --build build --target ants

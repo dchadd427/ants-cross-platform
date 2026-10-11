@@ -4,16 +4,18 @@
 usage: map_previews.py [FOLDER] [--ants PROGRAM] [--out DIR] [--jobs N] [--force]
 
 For every .lvl file of FOLDER the game (--ants, default build/src/ants_app/ants) is run headless on its map-select setup screen with only that map in its Maps folder
-(tools/front_page_art/make_art.run_game), the mouse arrow is painted out and the map preview of the screen is cut out (PREVIEW_BOX, 300 x 300), then it is reduced to
-SIZE x SIZE pixels and COLOURS colours and saved as a small PNG: DIR/<file name without .lvl>.png (DIR is FOLDER/previews).
+(tools/front_page_art/make_art.run_game), the mouse arrow is painted out and the map preview of the screen is cut out (PREVIEW_BOX, 300 x 300) and saved as it is, as a lossy WebP
+(QUALITY): DIR/<file name without .lvl>.webp (DIR is FOLDER/previews).
 
-FOLDER/previews.json says what is done: {"<map file>": {"hash": "<FNV-1a 64 of the file, as in maps.json>", "picture": "<file name of the picture>"}}. A map whose hash and picture
+FOLDER/previews.json says what is done: {"<map file>": {"hash": "<FNV-1a 64 of the file, as in maps.json>", "picture": "<file name of the picture>",
+"encoding": "<ENCODING: size and quality>"}}. A map whose hash, picture and encoding
 are as listed is skipped, so a run is resumable and a repaired or changed map is drawn again; a picture of a map that is gone is removed. --force draws everything again.
-The pictures are the same every time (the game is deterministic, the reduction has no dither and no randomness).
+The pictures are the same every time (the game is deterministic, the encoder has no randomness).
 """
 import argparse
 import json
 import os
+import struct
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -24,9 +26,10 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "front_page_art"))
 from community_maps import fnv1a64                                         # noqa: E402  (the hash of maps.json and of the network protocol)
 
-COLOURS = 16                                                               # the palette of a picture
-SIZE = 200                                                                 # the picture's side: PREVIEW_BOX is 300 x 300, and at 200 x 200 (16 colours) the 558 pictures are about 8 MB, not 14 MB (300 x 300, 64 colours)
-SOURCE = 300                                                               # the side of the game's preview (make_art.PREVIEW_BOX)
+SIZE = 300                                                                 # the picture's side: the game's preview as it is (make_art.PREVIEW_BOX); smaller or fewer colours wiped out the small sprites
+QUALITY = 85                                                               # lossy WebP: the sprites and the hill art stay clear; the 558 pictures are about 9 MB (q80: 7.4 MB, a PNG of Iceworld alone is 164 KB)
+ENCODING = "webp-%d-q%d" % (SIZE, QUALITY)                                 # recorded with every picture: a changed encoding draws the picture again without --force
+EXTENSION = ".webp"
 INDEX = "previews.json"
 FOLDER_DEFAULT = HERE.parent / "Community-Maps"
 ANTS_DEFAULT = HERE.parent / "build" / "src" / "ants_app" / "ants"
@@ -38,8 +41,8 @@ def level_files(folder):
 
 
 def picture_name(file):
-    """The picture of a map file: its name without the .lvl, plus .png."""
-    return file[:-4] + ".png"
+    """The picture of a map file: its name without the .lvl, plus .webp."""
+    return file[:-4] + EXTENSION
 
 
 def file_hash(path):
@@ -56,7 +59,7 @@ def read_index(path):
         return {}
     if not isinstance(data, dict):
         return {}
-    return {k: v for k, v in data.items() if isinstance(v, dict) and isinstance(v.get("hash"), str) and isinstance(v.get("picture"), str)}
+    return {k: v for k, v in data.items() if isinstance(v, dict) and isinstance(v.get("hash"), str) and isinstance(v.get("picture"), str) and isinstance(v.get("encoding"), str)}
 
 
 def write_index(path, index):
@@ -69,17 +72,37 @@ def write_index(path, index):
 
 def up_to_date(index, file, digest, out):
     entry = index.get(file)
-    return bool(entry) and entry["hash"] == digest and entry["picture"] == picture_name(file) and os.path.isfile(os.path.join(out, entry["picture"]))
+    return bool(entry) and entry["hash"] == digest and entry["encoding"] == ENCODING and entry["picture"] == picture_name(file) and os.path.isfile(os.path.join(out, entry["picture"]))
+
+
+def webp_size(path):
+    """(width, height) of a WebP file from its header (no Pillow needed: the repository's checks run where there is none); None when it is not a WebP."""
+    with open(path, "rb") as f:
+        head = f.read(32)
+    if len(head) < 30 or head[:4] != b"RIFF" or head[8:12] != b"WEBP":
+        return None
+    kind, data = head[12:16], head[20:30]
+    if kind == b"VP8 " and data[3:6] == b"\x9d\x01\x2a":                         # lossy: the frame header's 14-bit sizes
+        return struct.unpack("<HH", data[6:10])[0] & 0x3FFF, struct.unpack("<HH", data[6:10])[1] & 0x3FFF
+    if kind == b"VP8L" and data[0] == 0x2F:                                   # lossless: 14 bits each, minus one
+        bits = struct.unpack("<I", data[1:5])[0]
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if kind == b"VP8X":                                                       # extended: 24 bits each, minus one
+        return int.from_bytes(head[24:27], "little") + 1, int.from_bytes(head[27:30], "little") + 1
+    return None
 
 
 def encode(image):
-    """The 300 x 300 preview as a SIZE x SIZE picture of COLOURS colours (box filter, median cut, no dither: the same bytes every time)."""
-    from PIL import Image
+    """The preview as the picture that is saved: an RGB image of SIZE x SIZE (the game's 300 x 300 preview, not resized)."""
     image = image.convert("RGB")
-    if image.size != (SOURCE, SOURCE):
-        raise ValueError("the preview is %d x %d, not %d x %d" % (image.width, image.height, SOURCE, SOURCE))
-    image = image.resize((SIZE, SIZE), Image.Resampling.BOX)
-    return image.quantize(COLOURS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    if image.size != (SIZE, SIZE):
+        raise ValueError("the preview is %d x %d, not %d x %d" % (image.width, image.height, SIZE, SIZE))
+    return image
+
+
+def save(image, path):
+    """Lossy WebP at QUALITY (method 6, the slowest and smallest; the same bytes every time)."""
+    image.save(path, format="WEBP", quality=QUALITY, method=6)
 
 
 def game_renderer(ants):
@@ -116,10 +139,10 @@ def update(folder, out, render, jobs=1, force=False, log=None):
     def one(name):
         picture = encode(render(os.path.join(folder, name)))
         target = os.path.join(out, picture_name(name))
-        picture.save(target + ".tmp", format="PNG", optimize=True)
+        save(picture, target + ".tmp")
         os.replace(target + ".tmp", target)
         with lock:
-            index[name] = {"hash": digests[name], "picture": picture_name(name)}
+            index[name] = {"hash": digests[name], "picture": picture_name(name), "encoding": ENCODING}
             write_index(index_path, index)
             if log:
                 log("%s  %d bytes" % (picture_name(name), os.path.getsize(target)))
