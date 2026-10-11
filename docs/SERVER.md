@@ -55,6 +55,7 @@ A later start does not print the secret again. With demo rooms, a line "public r
 | `--restart-vote-seconds N` | 90 | After a restart the others may vote on going on without a seat that has not come back once it has been away N seconds (30 - 3600; never less than the room's own vote time). |
 | `--restart-budget-mb N` | 256 | The disk that all the restart records together may take (1 - 4096; one record is at most 48 MiB). |
 | `--replays-dir DIR`, `--no-replays` | the folder `replays` in `--results-dir` | Where the server keeps the replays of the matches that its rooms play ("Replays"), and the option that keeps none. Without a results folder the server keeps none and its log says so. A `--replays-dir` that cannot be used stops the server with status 1. The two options exclude each other (status 2). |
+| `--db FILE`, `--no-db` | `ants.db` in `--results-dir` | The database file ("The database") and the option that keeps none. Without a results folder and without `--db` the server keeps none and its log says so. A file that cannot be opened, is damaged or was made by a newer program stops the server with status 1 and is left as it is. The two options exclude each other (status 2). |
 | `--replay-demo` | off | The matches of demo rooms, the games of the front page, are kept too (the rooms of the control interface always are, unless the room says `"record": false`). |
 | `--replays-days N` | 30 | A replay is deleted N days after its match ended (1 - 3650). |
 | `--replays-max-mb N` | 100 | All the replays together may take N MiB; past it the oldest are deleted first (1 - 4096). |
@@ -69,8 +70,8 @@ A value outside its range, or one that is no number, stops the server with statu
 ### Exit statuses
 
 - `0`: the server was stopped by `SIGTERM` or `SIGINT` (its log says "stopping"), or `--help` or `--version` was asked.
-- `1`: a port cannot be opened (the log says "cannot listen on ... port N"; the control port also refuses an `ANTS_SERVER_SECRET` that holds anything but visible ASCII characters), or an explicit `--restart-dir` or `--replays-dir` cannot be used.
-- `2`: a mistake in the options (an unknown option, a missing or out-of-range value, `--maps` missing or not a folder, no game port, `--restart-dir` together with `--no-restart-records`, `--replays-dir` together with `--no-replays`, a demo-room or lobby-room mistake), a secret file that is no usable secret, or a control port with no secret and no place to keep one.
+- `1`: a port cannot be opened (the log says "cannot listen on ... port N"; the control port also refuses an `ANTS_SERVER_SECRET` that holds anything but visible ASCII characters), an explicit `--restart-dir` or `--replays-dir` cannot be used, or the database cannot be opened or brought to this program's schema ("The database").
+- `2`: a mistake in the options (an unknown option, a missing or out-of-range value, `--maps` missing or not a folder, no game port, `--restart-dir` together with `--no-restart-records`, `--replays-dir` together with `--no-replays`, `--db` together with `--no-db`, a demo-room or lobby-room mistake), a secret file that is no usable secret, or a control port with no secret and no place to keep one.
 
 ### Demo rooms
 
@@ -314,6 +315,18 @@ What moves the network protocol number, and how a game of another number is refu
 
 - The game says "This version cannot play with the host's version." (the web page adds "Reload the page to update."; the desktop start menu says "This game is vX.Y.Z, but the server runs another version of the game. Update the game, or wait until the server is updated.").
 - So update the game, the server and the page together. The current number is `kProtocolVersion` in `include/ants_net/protocol.hpp`, which also holds the rule and what each number changed; `ants_server --version` prints it.
+
+## The database
+
+The server keeps one SQLite database file for its records (match history, map play counts, site statistics and the restart records are meant to move into it, one step at a time). **Today it holds no record**: the foundation only, a `meta` table with the time the file was made and the table `schema_version`.
+
+- **Where**: `ants.db` in `--results-dir` (the Docker image: `/results/ants.db`, on the volume), or the file named by `--db`; `--no-db` keeps none. The library is SQLite 3.53.4, vendored in `third_party/sqlite/` (public domain, [`README`](../third_party/sqlite/README.md)), behind the small wrapper `ants_db` (`include/ants_db/`): no exceptions, one `Database` object, used from the server's one main thread (SQLite is built without mutexes).
+- **How it is opened**: in WAL mode with `synchronous=NORMAL` and foreign keys on, so a crash loses at most the last transactions and never corrupts the file. Beside `ants.db` the server therefore has `ants.db-wal` and `ants.db-shm` while it runs; they belong to the file.
+- **Start**: the server opens the file, brings it to the schema of this program and logs one line, `database <file>: schema version N`. A file that is not a database, is damaged, cannot be written or was made by a **newer** program (its version is higher than this program's last migration) stops the server with status 1 and a message; the file is never changed or deleted by that, and `--no-db` starts the server without a database.
+- **Schema versions**: the list of migrations is in `src/ants_server/db_schema.cpp`; each is a number and SQL, applied in order, each in a transaction with its row in `schema_version`, so a migration that fails leaves the database as it was. A change to the schema is a new entry at the end, never an edit of an old one. Version 1 makes `meta`.
+- **Backup**: copy the file while the server is **stopped** (a clean stop leaves one self-contained `ants.db`; copy `-wal` and `-shm` with it if they are there), or let the program make a consistent copy while it runs (`Database::backup_to`, SQLite's online backup; nothing calls it yet).
+
+Tests: the suite `test_db` ([`TESTING.md`](TESTING.md), 2.31) and the options part of `tests/scripts/test_ants_server.sh`.
 
 ## The stack (Docker)
 

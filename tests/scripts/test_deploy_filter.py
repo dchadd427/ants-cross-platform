@@ -24,14 +24,15 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 import deploy_filter as df     # noqa: E402
 
 DEPLOYS = [
-    "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp",
+    "VERSION", "CMakeLists.txt", "cmake/ants_stamp_build_id.cmake", "cmake/ants_test_paths.cpp.in", "include/ants_sim/sim_engine.hpp", "src/ants_sim/sim_engine.cpp", "include/ants_db/database.hpp", "src/ants_db/database.cpp",
+    "third_party/sqlite/sqlite3.c", "third_party/sqlite/sqlite3.h", "third_party/sqlite/CMakeLists.txt",
     "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
     "Dockerfile", "Dockerfile.server", ".dockerignore", "docker-compose.stack.yml",
     "CHANGELOG.md", "tools/changelog_to_html.py",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
 SKIPS = [
-    "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md",
+    "third_party/sqlite/README.md", "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md",
     "docs/reverse_engineering/notes.txt", ".github/workflows/ci.yml", ".github/dependabot.yml",
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/e2e/e2e_model.hpp",
     "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
@@ -77,7 +78,7 @@ class TheList(unittest.TestCase):
         for path in tracked.stdout.splitlines():
             counts, why = self.classifier.verdict(path)
             top = path.split("/")[0]
-            if top in ("src", "include", "cmake", "web", "asset_catalog"):
+            if top in ("src", "include", "cmake", "web", "asset_catalog") or (top == "third_party" and not path.endswith(".md")):
                 self.assertTrue(counts, "%s is under %s/, which the images copy (%s)" % (path, top, why))
             elif top in ("tests", ".github"):
                 self.assertFalse(counts, "%s: tests and CI files are in no image (%s)" % (path, why))
@@ -91,7 +92,7 @@ class TheList(unittest.TestCase):
     def test_the_sources_of_the_dockerfiles_are_derived_from_the_real_files(self):
         sources = [s for s, _ in self.classifier.sources]
         for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md",
-                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION"):
+                         "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/"):
             self.assertIn(expected, sources)
         self.assertEqual([s for s in sources if s.startswith("docs")], [])                  # no image copies a document of docs/
         self.assertNotIn("/src/build_web/src/ants_app/index.*", sources)                  # COPY --from=builder reads another stage, not the context

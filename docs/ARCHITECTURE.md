@@ -66,6 +66,7 @@ ants-cross-platform/
 │   │                                   # (tasks, tactics, styles, teams), match runner, baselines
 │   ├── ants_replay/                    # The replay file (.antsrep), the recorder that a game feeds and the player
 │   │                                   # that plays a file out and lists its orders
+│   ├── ants_db/                        # The game server's database: a thin wrapper over SQLite, schema migrations
 │   ├── ants_ctl/                       # Strict JSON and the HTTP server of the game server's control interface (a
 │   │                                   # bearer secret; a read-only door without one for the public replay list)
 │   ├── ants_server/                    # The dedicated server: map store, rooms, the door, control calls, restart
@@ -96,6 +97,7 @@ ants-cross-platform/
 │   │                                   # WebSocket server (native) and the browser's WebSocket client (web)
 │   ├── ants_ai/                        # Computer players (virtual clients; no SDL, no sockets, no threads)
 │   ├── ants_replay/                    # The replay file, its recorder and its player (no SDL, no sockets)
+│   ├── ants_db/                        # SQLite behind a thin wrapper, schema migrations (native only)
 │   ├── ants_ctl/                       # JSON library and HTTP server (a bearer secret, or a read-only door)
 │   ├── ants_server/                    # ants_server: the dedicated game server program (main.cpp; the rest is the
 │   │                                   # library ants_server_core)
@@ -118,6 +120,7 @@ ants-cross-platform/
 │   │                                   # styles, teams, the contest play, the island play, the order of the
 │   │                                   # tasks)
 │   ├── test_ctl/                       # JSON library and control HTTP server suites
+│   ├── test_db/                        # The database wrapper, the migrations and the server's schema (test_db)
 │   ├── test_server/                    # Dedicated server suite (map store, rooms, the door, control calls, site
 │   │                                   # statistics) and the way back of the game's NetGame (test_rejoin)
 │   ├── test_app/                       # Application integration, render parity, HUD, status line, input, pointer,
@@ -148,6 +151,8 @@ ants-cross-platform/
 │   │   └── web_*_check.*               # Helpers of the web checks: the pages' own code run under node, and the
 │   │                                   # browser drivers
 │   └── data/                           # Golden sample data (edge scrolling)
+├── third_party/                        # Code that is not ours, built from source: sqlite/ (the SQLite amalgamation, public
+│                                       # domain, with its README and its CMake target ants_sqlite)
 ├── tools/                              # Reverse-engineering, generator and release tools, and the headless programs
 │                                       # that are built on request
 │   ├── analyze_binary.py               # Capstone function map of Ants.exe (needs your own copy of the program)
@@ -229,7 +234,7 @@ ants-cross-platform/
 
 ## Architecture Overview
 
-The code is split into eight layers: `ants_assets`, `ants_sim`, `ants_net`, `ants_ai`, `ants_replay`, `ants_ctl`, `ants_server` and `ants_app`. Each has its own folder in `include/` and `src/` and is built as a static library (`libants_<name>.a`, or `ants_<name>.lib` with MSVC; the server's is `libants_server_core.a`). A layer uses only the layers listed before it. Two programs sit on top: the game (`ants`, from `ants_app`) and the dedicated server (`ants_server`). `ants_ctl` and `ants_server` are native only; the web build compiles the other six layers with Emscripten.
+The code is split into nine layers: `ants_assets`, `ants_sim`, `ants_net`, `ants_ai`, `ants_replay`, `ants_db`, `ants_ctl`, `ants_server` and `ants_app`. Each has its own folder in `include/` and `src/` and is built as a static library (`libants_<name>.a`, or `ants_<name>.lib` with MSVC; the server's is `libants_server_core.a`). A layer uses only the layers listed before it. Two programs sit on top: the game (`ants`, from `ants_app`) and the dedicated server (`ants_server`). `ants_db`, `ants_ctl` and `ants_server` are native only; the web build compiles the other six layers with Emscripten.
 
 A command is how a player or a bot changes the simulation. A local game applies it at once; in a network game the host's sequencer seals the commands of every 50 ms into a numbered turn, and every machine runs the same turns on the same tick. The state hash, reported every 20th turn (once a second), shows when a copy of the match goes its own way.
 
@@ -298,11 +303,12 @@ The big boxes are the layers. Solid arrows show what feeds what; dotted arrows a
 | `ants_net` | Lock-step play: the protocol, the host's sequencer, the runner, sessions, the room before a match, prediction of one's own orders, the jitter buffer, the reconnect rules, LAN discovery; transports for TCP, WebSocket and in-memory tests | Everywhere. TCP, LAN discovery and the WebSocket server are native only; the browser's WebSocket client is web only |
 | `ants_ai` | Computer players as virtual clients: view, map analysis, controller (reaction delay, command budget), task model, worker bot, standard bot, match runner. No SDL, no sockets, no threads | Everywhere: in the game and in the server's rooms |
 | `ants_replay` | The replay file (`.antsrep`), the recorder that a game or a room of the server feeds, and the player that plays a file out and lists its orders ([`REPLAYS.md`](REPLAYS.md)). No SDL, no sockets, no threads | Everywhere |
+| `ants_db` | The game server's database: a thin C++17 wrapper over SQLite (`Database`, `Statement`, `Transaction`, the online backup, no exceptions) and the schema migrations. SQLite itself is vendored in `third_party/sqlite/` as the static library `ants_sqlite` ([`SERVER.md`](SERVER.md#the-database)). No SDL, no sockets, no threads | Native only |
 | `ants_ctl` | Strict JSON and a small HTTP server: the control interface of the game server (a bearer secret), and a read-only door without one that the server opens for the public list of its replays | Native only |
-| `ants_server` | The dedicated game server: map store, rooms (a referee per room that also runs the room's bots), the door, control calls, restart records, site statistics, the store of the replays of its rooms' matches. The program `ants_server` is `main.cpp` plus the library `ants_server_core` | Native only |
+| `ants_server` | The dedicated game server: map store, rooms (a referee per room that also runs the room's bots), the door, control calls, restart records, site statistics, the store of the replays of its rooms' matches, the schema of its database. The program `ants_server` is `main.cpp` plus the library `ants_server_core` | Native only |
 | `ants_app` | The game: SDL2 window and main loop, renderer, HUD, audio mixer, start menu and the other screens, touch controls, zoom | Native and web |
 
-Two small libraries sit beside them: `ants_version` (the generated `ants_app/version.hpp` and `ants::BUILD_ID`, linked by the game and the server) and `ants_test_paths` (where the checkout is, for tests and tools).
+`third_party/` holds code that is not ours and is built from source (SQLite today; the music decoder `dr_mp3.h` is in `include/ants_app/`). Two small libraries sit beside them: `ants_version` (the generated `ants_app/version.hpp` and `ants::BUILD_ID`, linked by the game and the server) and `ants_test_paths` (where the checkout is, for tests and tools).
 
 Where to read more:
 
