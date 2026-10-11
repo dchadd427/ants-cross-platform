@@ -425,7 +425,6 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
 // rectangle; without a band a release with the pointer on the map is a 1 x 1 rectangle at the pointer, anywhere else nothing happens. A rectangle
 // of at most 4 px in both directions is a click at the release point, a bigger one selects the local team's ants whose hit box overlaps it.
 void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
-    if (view_only_) return;
     const bool latched = slot_latched_[0] || slot_latched_[1];
     BandRect rect{};
     if (is_dragging_ && !latched) rect = band_rect();
