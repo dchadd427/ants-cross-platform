@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.8 - 2026-10-11 - Spectators choose the picture's shape
+
+**For players:**
+- Watching a live match or a replay, you can now pick the picture shape (4:3, 16:10, 16:9, 21:9) from the replay bar.
+- The replay bar is as wide as the picture in every shape (a short window keeps it full width).
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f0eaf2de...6400ded7)
+
 ## v0.12.7 - 2026-10-11 - The match server keeps a history of every match
 
 **For players:**
@@ -436,17 +446,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0)
 
-## v0.0.90 - 2026-10-01 - Play online: host a match, join it with a code, any map, 2 to 4 players
+## Older versions (v0.0.90 and before)
 
-**For players:**
-- The Play online page (linked from the game page) now hosts matches: choose one of the six maps of the original and 2, 3 or 4 players, then "Create the match". The page makes a room code, shows a link for anybody, and offers "Play here", "Open a window" and "Copy link" for each seat, plus "All seats on this page" and "All seats in separate windows".
-- Join: type the code and your name, and the game opens with the first free seat. A link that names a room (`four.html?room=...`) opens its panel at once, and a reload or a bookmark comes back to it.
-- The match starts by itself when every seat is taken. A room waits up to ten minutes for the others. A running match takes nobody new, and a code whose room is over makes a new room when it is used again. Rooms of this page have no computer players yet.
-- Every game on the page reports its tick and state hash every 100 ticks, and the page says whether they agree ("In step").
-- Server operators: the room code chooses the map and the players (`demo-[<map>-][<n>p-]<anything>`), `--demo-maps A.LVL,B.LVL,...` lists the maps a code may choose, and a demo room now waits ten minutes (it waited one minute). The stack starts with the six original maps and 12 demo rooms.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea3bc89...64654b3)
-
-## Older versions (v0.0.89 and before)
-
-Every release before v0.0.90, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.91, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

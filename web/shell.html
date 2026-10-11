@@ -1036,7 +1036,11 @@
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
 
         /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
-        .rbar { position: relative; width: min(100%, 1280px, calc((100vh - var(--chrome)) * 16 / 9)); width: min(100%, 1280px, calc((100dvh - var(--chrome)) * 16 / 9)); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
+        .rbar { position: relative; --ar-w: 16; --ar-h: 9; --bar-max: 1280px; width: min(100%, var(--bar-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--bar-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; }
+        /* the bar is as wide as the picture, whatever its shape (the same numbers as #game-stage above; the bar follows the stage in the page, and floats over it in fullscreen, where .over has its own width) */
+        #game-stage[data-aspect="4:3"] ~ .rbar { --ar-w: 4; --ar-h: 3; --bar-max: 960px; }
+        #game-stage[data-aspect="16:10"] ~ .rbar { --ar-w: 8; --ar-h: 5; }
+        #game-stage[data-aspect="21:9"] ~ .rbar { --ar-w: 7; --ar-h: 3; }
         body:not(.replay) .rbar { display: none; }
         .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; }
         .rbar .rplay svg { width: 24px; height: 24px; fill: currentColor; display: block; }
@@ -1053,6 +1057,15 @@
         .clock { grid-area: clock; font-variant-numeric: tabular-nums; font-size: 20px; white-space: nowrap; text-align: right; min-width: 118px; }
         .clock small { font-size: 17px; opacity: .72; }
         .rbar .speed { grid-area: speed; }
+        /* the Picture button (spectators choose the picture's shape, as the players do in .view-bar) and the small window above it with the four shapes: the page's own .seg buttons and fit-tag */
+        .rbar .picwrap { grid-area: pic; position: relative; }
+        .rbar .picwrap > .btn { min-height: 36px; }
+        .picpop { position: absolute; right: 0; box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px); bottom: calc(100% + 12px); z-index: 70; display: grid; gap: 8px; justify-items: start; padding: 12px 16px 32px; white-space: nowrap; color: var(--cream); background: rgba(7, 11, 15, .94); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+        .picpop[hidden] { display: none; }
+        .picpop h3 { font-size: 15px; font-weight: 500; }
+        .picpop .seg { flex-wrap: wrap; }                                       /* (a window under about 380 px wide: the four shapes take two lines, and the window stays on the screen) */
+        .picpop .fit-tag { color: var(--cream); }
+        @media (hover: none) { .picpop { padding-bottom: 14px; } }
         .rbar .fsx { grid-area: fsx; display: none; min-width: 44px; padding: 6px 10px; }
         .rbar .fsx svg { width: 22px; height: 22px; fill: currentColor; display: block; }
 
@@ -1095,7 +1108,7 @@
             .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
             .rtag { font-size: 12px; bottom: calc(100% + 5px); }
             .rbar.over .rtab { left: auto; right: 14px; transform: none; }          /* (the tag at the left can be long, and a phone upright has no room for the tab in the middle) */
-            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl" "play clock fsx" "speed speed speed"; gap: 4px 12px; }
+            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "tl tl tl tl" "play clock pic fsx" "speed speed speed speed"; gap: 4px 12px; }
             .rbar .clock { text-align: left; font-size: 19px; }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
         }
@@ -1106,10 +1119,11 @@
             .rtag { font-size: 11px; bottom: calc(100% + 5px); }
             .rbar.over .rtag { font-size: 13px; }
             .rhead h2 { font-size: 20px; } .rhead h2 small { font-size: 13px; }
-            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "play tl clock speed fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
+            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock speed pic fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
             .rbar.over .clock { text-align: right; font-size: 16px; min-width: 0; }
             .rbar.over .speed { justify-self: auto; display: inline-flex; } .rbar.over .speed button { flex: none; min-width: 34px; min-height: 32px; font-size: 14px; padding: 3px 6px; }
             .rbar.over .rplay { min-width: 48px; min-height: 40px; padding: 4px 10px; } .rbar.over .rplay svg { width: 20px; height: 20px; }
+            .rbar.over .picwrap > .btn { min-height: 32px; padding: 3px 8px; font-size: 14px; }
             .rbar.over .tl { height: 40px; } .rbar.over .tl .ticks { display: none; } .rbar.over .tl .track { top: 8px; }
             .rbar.over .tl .thumb { height: 30px; }
         }
@@ -1125,18 +1139,18 @@
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
         .rbar.islive .tl .edge { display: block; }
         .rbar .livebox { grid-area: live; display: none; }
-        .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock live speed fsx"; }
+        .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play tl clock live speed pic fsx"; }
         .rbar.islive .livebox { display: flex; align-items: center; }
         .rbar.islive .clock { min-width: 0; }
         .livenow { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 14px; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; color: #ffc3bd; background: #3a0d11; border: 2px solid var(--edge); border-radius: 8px; box-shadow: inset 0 0 0 1px #9d0d17; }
         .livenow::before, .jtl::before { content: ""; width: 10px; height: 10px; flex: none; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 0 1px #000, 0 0 6px rgba(255, 90, 79, .9); }
         .rbar.over .livenow { background: rgba(58, 13, 17, .9); }
         @media (max-width: 700px) {
-            .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "tl tl tl tl" "play clock live fsx" "speed speed speed speed"; }
+            .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed"; }
             .rbar.islive .clock { text-align: left; }
         }
         @media (max-height: 520px) {
-            .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "play tl clock live speed fsx"; }
+            .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play tl clock live speed pic fsx"; }
             .rbar.over.islive .livenow, .rbar.over.islive .jtl { min-height: 32px; padding: 3px 10px; font-size: 14px; }
         }
     </style>
@@ -1252,6 +1266,7 @@
         <div class="clock" id="clock"><b id="t-now">0:00</b> <small id="t-all">/ 0:00</small></div>
         <div class="livebox" id="livebox"><span class="livenow" id="livenow" hidden>Live</span><button class="btn sm jtl" type="button" id="b-live" hidden>Jump to live</button></div>
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
+        <div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop" title="The picture's shape: Classic 4:3, 16:10, 16:9 or 21:9">Picture &#9652;</button><div class="picpop" id="picpop" role="group" aria-labelledby="picpop-h" hidden><h3 id="picpop-h">Picture</h3><div class="seg" role="radiogroup" aria-labelledby="picpop-h"><span class="shape"><button type="button" role="radio" data-aspect="4:3" aria-checked="false" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</button><span class="fit-tag" hidden>fills your screen</span></span><span class="shape"><button type="button" role="radio" data-aspect="16:10" aria-checked="false" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</button><span class="fit-tag" hidden>fills your screen</span></span><span class="shape"><button type="button" role="radio" data-aspect="16:9" aria-checked="true" title="16:9: the wide picture (960 x 540)">16:9</button><span class="fit-tag" hidden>fills your screen</span></span><span class="shape"><button type="button" role="radio" data-aspect="21:9" aria-checked="false" title="21:9: ultrawide monitors (1260 x 540)">21:9</button><span class="fit-tag" hidden>fills your screen</span></span></div></div></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
         <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
@@ -1848,7 +1863,7 @@
         var ANTS_ARGS = [];
         // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
-        // no map, no bots, no name): its arguments are the 16:9 picture and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
+        // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else 16:9) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
         var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
         var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
@@ -1876,7 +1891,6 @@
             var remembered = null;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
-            if (ANTS_REPLAY_MODE) { fromAddress = '16:9'; remembered = null; }      // (a recording is shown in the wide picture only)
             var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered);
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
@@ -3361,7 +3375,7 @@
                 var bar = $('rbar');
                 if (!bar.classList.contains('over')) return;
                 clearTimeout(idleTimer);
-                if (dragging) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline is a touch of the bar: it looks again)
+                if (dragging || !$('picpop').hidden) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline, or the Picture window open, is a touch of the bar: it looks again)
                 bar.classList.add('idle');
                 syncEdge();
                 if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
@@ -3402,6 +3416,45 @@
             $('copy-more').addEventListener('click', copy);
             $('fullscreen-btn-r').addEventListener('click', function () { $('fullscreen-btn').click(); });
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
+            // PICTURE_POPOVER_BEGIN (tests/scripts/web_picture_popover_check.js runs this block on a page of fakes)
+            // The Picture button: the small window with the four shapes opens above the bar and closes with a second press, a click elsewhere, Esc (focus goes back to the button) or the focus leaving it. The
+            // shape buttons in it are the page's own selector (data-aspect: antsSetAspect remembers the choice and puts it in the address); the bar of a fullscreen page stays while the window is open.
+            var picWrap = $('picwrap'), picBtn = $('picbtn'), picPop = $('picpop');
+            function picOpen() { return !picPop.hidden; }
+            function picShow(open, focusBack) {
+                picPop.hidden = !open;
+                picBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (!open && focusBack) picBtn.focus();
+                wake();
+            }
+            picBtn.addEventListener('click', function () { picShow(!picOpen(), false); });
+            document.addEventListener('click', function (ev) { if (picOpen() && !picWrap.contains(ev.target)) picShow(false, false); });
+            picWrap.addEventListener('focusout', function (ev) { if (picOpen() && ev.relatedTarget && !picWrap.contains(ev.relatedTarget)) picShow(false, false); });
+            // Enter and Space press the buttons here ourselves: the game's own key handling (SDL) takes the browser's press of a focused button away on this page, for the shape buttons as for the Picture button
+            picWrap.addEventListener('keydown', function (ev) {
+                if ((ev.key !== 'Enter' && ev.key !== ' ') || !ev.target || ev.target.tagName !== 'BUTTON') return;
+                ev.preventDefault();
+                if (!ev.repeat) ev.target.click();
+            });
+            picPop.addEventListener('keydown', function (ev) {                                  // the arrows move along the four shapes and choose, as in any radio group
+                var at = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key);
+                var shapes = picPop.querySelectorAll('button[data-aspect]');
+                var from = -1;
+                for (var i = 0; i < shapes.length; i++) if (shapes[i] === ev.target) from = i;
+                if (at === -1 || from === -1) return;
+                ev.preventDefault();
+                var to = shapes[(from + (at < 2 ? shapes.length - 1 : 1)) % shapes.length];
+                to.focus();
+                to.click();
+            });
+            picWrap.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });          // (the browser would press a second time at the Space key's release)
+            window.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Escape' || !picOpen()) return;
+                ev.preventDefault();
+                ev.stopImmediatePropagation();                                // (the key closes the window: the game does not get it)
+                picShow(false, true);
+            }, true);
+            // PICTURE_POPOVER_END
             var tl = $('tl');
             tl.addEventListener('pointerdown', function (ev) {
                 if (!isReadyToPlay || shown) return;
