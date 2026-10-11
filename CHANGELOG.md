@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.15 - 2026-10-11 - Auto camera for replays and live matches
+
+**For players:**
+- **Auto camera for replays and live matches.** The picture goes to the busiest place (fights, thefts, fires, bombs) and stays there at least 3 seconds; rings on the minimap show where things happen. **Manual camera** leaves the picture where you put it. Moving the picture by hand (the edge of the screen, the minimap, two fingers) switches to Manual; zooming does not. The button is in the bar (a row of its own on a phone, an icon in fullscreen) and what you chose is remembered on the device.
+- **Nothing can be picked in a replay:** no click, drag box, corner marks, Move and Stop buttons, order markers, voices or inspect panel. Matches you play are the same.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.14...v0.12.15); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+
 ## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
 
 **For players:**
@@ -448,22 +456,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38)
 
-## v0.0.94 - 2026-10-02 - Less lag: ping and delay next to the FPS counter, 50 ms turns, an adaptive buffer, and a lagging player no longer freezes the others
+## Older versions (v0.0.94 and before)
 
-**For players:**
-- "ping NN ms" and "delay NN ms" now show next to the frame rate in a room and in a network match, on the web too (never in a game of one machine).
-- Commands reach the game about 100 ms sooner on a steady link: turns are 50 ms instead of 100 ms, and the buffer adapts from one to four turns to the link's jitter.
-- A server's room no longer waits for a lagging player. The others see "Bob is lagging (12 s behind)" from 3 seconds, and the laggard sees "You are lagging" and "Catching up..." while its game runs the backlog at up to 4x. A player 60 seconds behind, or silent for 30, is dropped and told "You were away too long and were dropped from the match." A LAN host with a seat still waits up to 3 seconds for a friend.
-
-**Rules / network:** Network protocol 8 (a new Lag message): a v0.0.93 game cannot join. The simulation rules did not change.
-
-**Fixes:**
-- "Waiting for the other players..." no longer stays on screen after a stall, and turns that piled up (a hidden window, a frozen link) are run down instead of leaving a game half a second behind for good.
-- A burst of orders after a stuck connection is queued, not counted as violations that could throw the player out.
-- The frame-rate counter shows the real rate below 10 frames a second (it read "10 FPS").
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47)
-
-## Older versions (v0.0.93 and before)
-
-Every release before v0.0.94, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.95, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
