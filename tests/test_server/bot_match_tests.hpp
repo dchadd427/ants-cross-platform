@@ -1,6 +1,6 @@
 // The tests of the server's own matches of computer players (RoomSpec::bots_only, RoomManager::enable_bot_matches / start_bot_match; docs/SERVER.md "Matches of computer players"): a room whose seats are
 // all bots starts with nobody in it, is not closed for lack of people and is kept like any other match; the specification that cannot be such a room is refused; the timer makes one match at a time, only
-// when the server keeps replays, and chooses the same things from the same seed. Included by test_server.cpp, which holds the harness (TEST_CASE, ASSERT_*, World) and calls run_bot_match_tests().
+// when the server keeps replays, and chooses the same things from the same seed. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
 #pragma once
 
 namespace {

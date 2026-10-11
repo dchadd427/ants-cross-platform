@@ -4,7 +4,7 @@
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
 // public one) answer as they should. The live door (S3.176 - S3.178: GET /live and GET /live/<id> in front of real rooms: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map,
 // the id says where the file is when the match ends, no room code is anywhere). The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
-// the cache, the memory of ended matches) test_live_board.cpp. Included by test_server.cpp, which holds the harness (TEST_CASE, ASSERT_*, World, PWorld, Client) and calls run_replay_tests().
+// the cache, the memory of ended matches) test_live_board.cpp. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, PWorld, Client); test_server.cpp calls run_replay_tests().
 #pragma once
 
 namespace {

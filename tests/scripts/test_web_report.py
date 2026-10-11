@@ -5,7 +5,7 @@ game runs in the browser tab, so the page tells the server when one begins (docs
   - the page's own function is RUN (node, when it is installed): antsReportLocalGame makes one POST of /stats/local with nothing in it for each call, and no failure of any kind reaches the
     game or is retried (tests/scripts/web_report_check.js);
   - the game's side is read from the source: the web build (and only the web build) installs a hook that calls that page function, the hook is called in one place (the first tick of a game
-    on this computer, never in a match of the network: tests/test_app/test_app_integration.cpp 7.6h and test_network_app.cpp N5.90 run it);
+    on this computer, never in a match of the network: tests/test_app/test_app_integration.cpp 7.6h and test_network_app_basics.cpp N5.90 run it);
   - the front page itself never reports (its frames are matches of the network, and a game on this computer opens the game page, which reports it): web/lobby.html has no POST to /stats/local.
 """
 import os

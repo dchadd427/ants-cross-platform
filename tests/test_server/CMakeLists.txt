@@ -1,5 +1,12 @@
 add_executable(test_server
     test_server.cpp
+    test_server_core.cpp
+    test_server_reconnect.cpp
+    test_server_bots.cpp
+    test_server_persist.cpp
+    test_server_process.cpp
+    test_server_files.cpp
+    test_server_lobby.cpp
 )
 
 target_link_libraries(test_server PRIVATE

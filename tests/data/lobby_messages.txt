@@ -1,5 +1,5 @@
 # Messages of network protocol 19 as the C++ encoders write them: <kind> <name> <hex of the message>; a Room message is followed (after the rooms) by a line `hash <name> <8 hex digits>`, its seating_hash.
-# tests/test_net/test_lockstep.cpp N2.111 makes each message from its fields and compares the bytes with these (ANTS_WRITE_LOBBY_MESSAGES=1 prints the whole file again after a layout changed);
+# tests/test_net/test_lockstep_protocols.cpp N2.111 makes each message from its fields and compares the bytes with these (ANTS_WRITE_LOBBY_MESSAGES=1 prints the whole file again after a layout changed);
 # tests/scripts/web_lobby_net_check.js decodes and encodes the same bytes with web/front/lobby_net.js.
 hello page-new-room 0113000550726979610000ff066b376d32787100000000000000000000000000000000000000000000010c54524541535552452e4c564c04ffff03
 hello page-with-key 0113000353616d0000ff06616263323334000102030405060708090a0b0c0d0e0f100000000013010004ffff03
