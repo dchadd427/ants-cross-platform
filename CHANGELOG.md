@@ -30,6 +30,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the simulation and the protocol are untouched.
 
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0a6a7cf...46f7b115)
+
 ## v0.12.5 - 2026-10-11 - The match server keeps a database file
 
 **For players:**
