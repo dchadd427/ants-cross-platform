@@ -102,6 +102,17 @@
    "description": "!Visit pbcguild.cjb.net ..."
   },
   {
+   "file": "!!MoDE!! ViCToRY.lvl",
+   "size": 20212,
+   "hash": "effa84cc848cc5c5",
+   "width": 31,
+   "height": 31,
+   "minutes": 25,
+   "players": 4,
+   "description": "*2 TeAM oR NoT 2 Team   ...",
+   "repaired": "Text-transfer damage undone: 8 zero bytes put back behind a 0x0D byte."
+  },
+  {
    "file": "!-Midz-!.lvl",
    "size": 19144,
    "hash": "56ce27f3cfe98011",
@@ -200,6 +211,17 @@
    "minutes": 20,
    "players": 4,
    "description": "*WhAtS SpY gOt To Do WIT..."
+  },
+  {
+   "file": "!Suicide!.lvl",
+   "size": 19276,
+   "hash": "9226ce14e3231c7e",
+   "width": 31,
+   "height": 31,
+   "minutes": 16,
+   "players": 4,
+   "description": "*xpert-by:Black_Tiger66 ...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
   },
   {
    "file": "!TreasureIsland.lvl",
@@ -382,6 +404,17 @@
    "description": "*by Angel/Eclipse       ..."
   },
   {
+   "file": "AFT_RANK MAP.lvl",
+   "size": 19396,
+   "hash": "361fb72e3f5ee05b",
+   "width": 31,
+   "height": 31,
+   "minutes": 20,
+   "players": 4,
+   "description": "*AFT'S R RANKED ON THIS ...",
+   "repaired": "Text-transfer damage undone: 4 zero bytes put back behind a 0x0D byte."
+  },
+  {
    "file": "AGGRIVATION.lvl",
    "size": 58853,
    "hash": "13bc93f68adac9e0",
@@ -390,6 +423,17 @@
    "minutes": 25,
    "players": 4,
    "description": "Watch your step"
+  },
+  {
+   "file": "ALL IN ONE !.lvl",
+   "size": 19126,
+   "hash": "c79b403bf5cab4d6",
+   "width": 31,
+   "height": 31,
+   "minutes": 16,
+   "players": 4,
+   "description": "*ThinK FasT: AS_GANGSTA1...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
   },
   {
    "file": "ANT ZONE.lvl",
@@ -462,6 +506,17 @@
    "description": "*Choose your armys fate!..."
   },
   {
+   "file": "A_Coaster_Mix_Turnament_Map.lvl",
+   "size": 19130,
+   "hash": "06e75d2670976f8b",
+   "width": 31,
+   "height": 31,
+   "minutes": 20,
+   "players": 4,
+   "description": "!Crunchy bite & Spicy Bi...",
+   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
+  },
+  {
    "file": "Ac League Army Map.lvl",
    "size": 19906,
    "hash": "2a77226406eef829",
@@ -480,6 +535,17 @@
    "minutes": 30,
    "players": 4,
    "description": "*Food And Fighting      ..."
+  },
+  {
+   "file": "Acid Blood.lvl",
+   "size": 19300,
+   "hash": "3de8729ff08ee03e",
+   "width": 31,
+   "height": 31,
+   "minutes": 16,
+   "players": 4,
+   "description": "*Can You Survive?-_sK_Ac...",
+   "repaired": "Text-transfer damage undone: 1 zero byte put back behind a 0x0D byte."
   },
   {
    "file": "Active Ants.lvl",
@@ -1122,6 +1188,16 @@
    "description": "!your hill is arrested -..."
   },
   {
+   "file": "Bombzzzzz away!!!.lvl",
+   "size": 59000,
+   "hash": "b629c5e2032964cb",
+   "width": 60,
+   "height": 60,
+   "minutes": 30,
+   "players": 4,
+   "description": "Bigger and Better"
+  },
+  {
    "file": "Bridge.lvl",
    "size": 34190,
    "hash": "cd6213336b2ac873",
@@ -1252,6 +1328,17 @@
    "description": "*Its crazy baby         ..."
   },
   {
+   "file": "CRISS CROSS.lvl",
+   "size": 19102,
+   "hash": "25c0e19e00307dfd",
+   "width": 31,
+   "height": 31,
+   "minutes": 7,
+   "players": 3,
+   "description": "cris cross,run across the mud",
+   "repaired": "Tiles outside the dictionary: 2 cells of layer 1 given the tile that most neighbouring cells have."
+  },
+  {
    "file": "CaNDy.lvl",
    "size": 19426,
    "hash": "a65e5c81282288c1",
@@ -1282,6 +1369,16 @@
    "description": "!Rot Ya Teeth           ..."
   },
   {
+   "file": "Candy Time.lvl",
+   "size": 19451,
+   "hash": "d7a7e05ead0cad74",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "Candy Land"
+  },
+  {
    "file": "Castle Conflict.lvl",
    "size": 19180,
    "hash": "eb137fe228c16341",
@@ -1300,6 +1397,66 @@
    "minutes": 8,
    "players": 4,
    "description": "*by: Black_Tiger_66     ..."
+  },
+  {
+   "file": "Changing Gaunt.lvl",
+   "size": 58721,
+   "hash": "a6e42ad11edabc45",
+   "width": 60,
+   "height": 60,
+   "minutes": 10,
+   "players": 4,
+   "description": "***BURP***"
+  },
+  {
+   "file": "Changing Isles.lvl",
+   "size": 58977,
+   "hash": "be62e9c0582ca3f8",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "yummm yummm"
+  },
+  {
+   "file": "Changing Medium.lvl",
+   "size": 58594,
+   "hash": "83f90a3031cde7a1",
+   "width": 60,
+   "height": 60,
+   "minutes": 10,
+   "players": 4,
+   "description": "Snack Time!!!"
+  },
+  {
+   "file": "Changing Small.lvl",
+   "size": 34403,
+   "hash": "3c881524a75f839c",
+   "width": 40,
+   "height": 40,
+   "minutes": 8,
+   "players": 4,
+   "description": "***Sugar***"
+  },
+  {
+   "file": "Changing Tiny.lvl",
+   "size": 19525,
+   "hash": "f6ab9eecb075daeb",
+   "width": 31,
+   "height": 31,
+   "minutes": 6,
+   "players": 4,
+   "description": "Energyyyyyy"
+  },
+  {
+   "file": "Changing Trez.lvl",
+   "size": 59110,
+   "hash": "7f3ca376ebfc5d8a",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "***Munch Munch***"
   },
   {
    "file": "Chaos.lvl",
@@ -1330,6 +1487,50 @@
    "minutes": 13,
    "players": 4,
    "description": "King Me!~Dragonz~"
+  },
+  {
+   "file": "Cherry_Cream.lvl",
+   "size": 19306,
+   "hash": "e37ad53bddf05ee8",
+   "width": 31,
+   "height": 31,
+   "minutes": 25,
+   "players": 4,
+   "description": "*!Cherry cream!*pink_div...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
+  },
+  {
+   "file": "Chicken Battles.lvl",
+   "size": 19102,
+   "hash": "5af03f738cca31c1",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "The Ultimate Ninga Battle",
+   "repaired": "1 start marker outside the grid put on the cell that the low bytes of its coordinates name."
+  },
+  {
+   "file": "ChickenBattles.lvl",
+   "size": 19102,
+   "hash": "5af03f738cca31c1",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "The Ultimate Ninga Battle",
+   "repaired": "1 start marker outside the grid put on the cell that the low bytes of its coordinates name."
+  },
+  {
+   "file": "Christmas_Lakes.lvl",
+   "size": 19120,
+   "hash": "8fb1875acda12b2f",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "!Go_TO_THE_CHRISTMAS_ISL...",
+   "repaired": "Text-transfer damage undone: 2 0x0D 0x0A pairs made a single 0x0A byte again."
   },
   {
    "file": "CoAsTeR TrYoUtS 2.lvl",
@@ -1512,6 +1713,17 @@
    "description": "*Live, Eat, Help!       ..."
   },
   {
+   "file": "DANGERWORLD!.lvl",
+   "size": 19570,
+   "hash": "f30260c5aef89bd8",
+   "width": 31,
+   "height": 31,
+   "minutes": 20,
+   "players": 4,
+   "description": "*Live,Eat,Help!         ...",
+   "repaired": "Text-transfer damage undone: 3 zero bytes put back behind a 0x0D byte."
+  },
+  {
    "file": "DEATCHMATCH2o0o.LVL",
    "size": 19102,
    "hash": "8e1770859aa84f31",
@@ -1530,6 +1742,17 @@
    "minutes": 12,
    "players": 4,
    "description": "FIGHT FOR FOOD......."
+  },
+  {
+   "file": "DEATH WAR!!!!!!!!!!!!ARENA 3.lvl",
+   "size": 19708,
+   "hash": "903b507ee2150d2a",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "*ALL OUT WAR IN MIDDLE  ...",
+   "repaired": "Text-transfer damage undone: 8 zero bytes put back behind a 0x0D byte, 4 0x0D 0x0A pairs made a single 0x0A byte again."
   },
   {
    "file": "DEATH2000.LVL",
@@ -1762,6 +1985,50 @@
    "description": "*looks like popcorn     ..."
   },
   {
+   "file": "EM_WAR_OR_DEAD.lvl",
+   "size": 20158,
+   "hash": "194bb7c8fa9c7116",
+   "width": 31,
+   "height": 31,
+   "minutes": 30,
+   "players": 4,
+   "description": "*dead or war?           ...",
+   "repaired": "Text-transfer damage undone: 6 zero bytes put back behind a 0x0D byte."
+  },
+  {
+   "file": "Easy jungle.lvl",
+   "size": 113880,
+   "hash": "e1cb309016269a12",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "MoreChange = More Fun!",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "Easyjungle.lvl",
+   "size": 113880,
+   "hash": "6587c510a51232f3",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "MoreChange = More Fun!",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "Easyjungle2.lvl",
+   "size": 113880,
+   "hash": "db3c6a88b484bdc0",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "MoreChange = More Fun!",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
    "file": "EatClanMap.lvl",
    "size": 27081,
    "hash": "df50516c54b826ac",
@@ -1890,6 +2157,17 @@
    "minutes": 8,
    "players": 4,
    "description": "No powerups needed"
+  },
+  {
+   "file": "Fight Food.lvl",
+   "size": 19294,
+   "hash": "60c7bb7b1df7726e",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "*A real fight 4 food    ...",
+   "repaired": "Text-transfer damage undone: 3 zero bytes put back behind a 0x0D byte."
   },
   {
    "file": "Fighter Dream 2.lvl",
@@ -2032,6 +2310,17 @@
    "description": "Love for Flowers is the Key"
   },
   {
+   "file": "FlowerPatch2.lvl",
+   "size": 19504,
+   "hash": "a1fd078ca8e75e26",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "The return of flower patch !",
+   "repaired": "Tiles outside the dictionary: 3 cells of layer 2 emptied."
+  },
+  {
    "file": "FlowerPatch3.lvl",
    "size": 19312,
    "hash": "50e55a5210556744",
@@ -2080,6 +2369,17 @@
    "minutes": 30,
    "players": 4,
    "description": "*Get Food From Every Sid..."
+  },
+  {
+   "file": "ForestFire.lvl",
+   "size": 113880,
+   "hash": "6335cf1bda793a25",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Fire Jungle!",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
   },
   {
    "file": "FortCombat.lvl",
@@ -2162,6 +2462,17 @@
    "description": "*Made By ArCaDe         ..."
   },
   {
+   "file": "GRiM-FAiT.lvl",
+   "size": 19246,
+   "hash": "7e565bd15f7d15b9",
+   "width": 31,
+   "height": 31,
+   "minutes": 24,
+   "players": 2,
+   "description": "1 v 1 ExPeRTz -AntsGamer..",
+   "repaired": "Text-transfer damage undone: 1 zero byte put back behind a 0x0D byte."
+  },
+  {
    "file": "Gant2.lvl",
    "size": 58508,
    "hash": "d5e7a4bed6e8bc4c",
@@ -2230,6 +2541,17 @@
    "minutes": 12,
    "players": 4,
    "description": "*Just bomb and hope     ..."
+  },
+  {
+   "file": "Grid.LVL",
+   "size": 19102,
+   "hash": "f78bb4567e9a5266",
+   "width": 31,
+   "height": 31,
+   "minutes": 7,
+   "players": 4,
+   "description": "Time to STEAL!!!",
+   "repaired": "Tiles outside the dictionary: 2 cells of layer 1 given the tile that most neighbouring cells have."
   },
   {
    "file": "HELL.lvl",
@@ -2390,6 +2712,17 @@
    "minutes": 12,
    "players": 4,
    "description": "I CaN sWiM JimmY!"
+  },
+  {
+   "file": "HiTLer.lvl",
+   "size": 19108,
+   "hash": "bb02cdd928108a47",
+   "width": 31,
+   "height": 31,
+   "minutes": 12,
+   "players": 4,
+   "description": "*X-Cecution TIME*       ...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
   },
   {
    "file": "Holiday.lvl",
@@ -2572,6 +2905,72 @@
    "description": "Is it small,not anymore"
   },
   {
+   "file": "Jedi Owns.lvl",
+   "size": 19156,
+   "hash": "bf5094aad395c074",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "!Ownage                 ...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
+  },
+  {
+   "file": "JuNgLe2.lvl",
+   "size": 113880,
+   "hash": "ed33ae013b2527c4",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Jungle !",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "JuNgLe5.lvl",
+   "size": 113880,
+   "hash": "5c52d28bee761db0",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Jungle !",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "Jungle.lvl",
+   "size": 113880,
+   "hash": "ed33ae013b2527c4",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Jungle !",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "Jungle2000.lvl",
+   "size": 113880,
+   "hash": "ed33ae013b2527c4",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Jungle !",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
+   "file": "Jungle3.lvl",
+   "size": 113880,
+   "hash": "3afac697d6fd7771",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Swim across the Water !",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
+  },
+  {
    "file": "K-P.lvl",
    "size": 19312,
    "hash": "22ec5990c46ff261",
@@ -2590,6 +2989,17 @@
    "minutes": 16,
    "players": 4,
    "description": "!KA_ Is BaK KA_Playa2   ..."
+  },
+  {
+   "file": "KiM Trez.lvl",
+   "size": 58853,
+   "hash": "9d8f04844a1a49bd",
+   "width": 60,
+   "height": 60,
+   "minutes": 13,
+   "players": 4,
+   "description": "Who do u think i like?!?!?!",
+   "repaired": "Tiles outside the dictionary: 1 cell of layer 2 emptied."
   },
   {
    "file": "Killing Spree.LVL",
@@ -2922,6 +3332,17 @@
    "description": "Look more easy and mixed yay"
   },
   {
+   "file": "Monkeys on Islands.lvl",
+   "size": 58776,
+   "hash": "697b54d48014f3ca",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "Island hopping, expert map",
+   "repaired": "Tiles outside the dictionary: 10 cells of layer 1 given the tile that most neighbouring cells have."
+  },
+  {
    "file": "MuD_FiGhT.lvl",
    "size": 19204,
    "hash": "85d97003b9896bd8",
@@ -2950,6 +3371,17 @@
    "minutes": 12,
    "players": 4,
    "description": "!War at home            ..."
+  },
+  {
+   "file": "Mud Wars.lvl",
+   "size": 19342,
+   "hash": "9e7fd5a9a14b3be6",
+   "width": 31,
+   "height": 31,
+   "minutes": 12,
+   "players": 4,
+   "description": "Moving slow            ...",
+   "repaired": "Tiles outside the dictionary: 1 cell of layer 2 emptied."
   },
   {
    "file": "Muddy Feet.lvl",
@@ -3102,6 +3534,17 @@
    "description": "*Just like boot camp :) ..."
   },
   {
+   "file": "Obstacles.lvl",
+   "size": 19228,
+   "hash": "98ccd595b67963be",
+   "width": 31,
+   "height": 31,
+   "minutes": 12,
+   "players": 4,
+   "description": "*made by:Hawkmon_92     ...",
+   "repaired": "Text-transfer damage undone: 2 zero bytes put back behind a 0x0D byte."
+  },
+  {
    "file": "OcEaNx.lvl",
    "size": 112334,
    "hash": "0e06d8343e8018e2",
@@ -3110,6 +3553,17 @@
    "minutes": 10,
    "players": 4,
    "description": "Water land  everywhere"
+  },
+  {
+   "file": "Odd.lvl",
+   "size": 112334,
+   "hash": "0374b112edc2ff94",
+   "width": 100,
+   "height": 81,
+   "minutes": 10,
+   "players": 4,
+   "description": "Hiccup Hiccup Hiccup~~",
+   "repaired": "Tiles outside the dictionary: 9 cells of layer 2 emptied."
   },
   {
    "file": "On The Edge.lvl",
@@ -3262,6 +3716,17 @@
    "description": "FOOD, FOOD, FUN!!!"
   },
   {
+   "file": "PoP KoRn Trez.lvl",
+   "size": 58853,
+   "hash": "3d39efe2f876b55f",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "One person's trash...",
+   "repaired": "Tiles outside the dictionary: 1 cell of layer 2 emptied."
+  },
+  {
    "file": "PoP iT Up  PoPcOrN.lvl",
    "size": 19192,
    "hash": "ebed2d96987d33bf",
@@ -3312,6 +3777,28 @@
    "description": "*MoRe FooD! ~MasTeR     ..."
   },
   {
+   "file": "PoPcOrN-ReVoLuTiOn.lvl",
+   "size": 19336,
+   "hash": "cc51891acd67eab2",
+   "width": 31,
+   "height": 31,
+   "minutes": 15,
+   "players": 4,
+   "description": "*iTs BacK!              ...",
+   "repaired": "Text-transfer damage undone: 4 zero bytes put back behind a 0x0D byte."
+  },
+  {
+   "file": "PoWeR.LVL",
+   "size": 19102,
+   "hash": "b4030be3297e5278",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "Watch out for the trap...",
+   "repaired": "Tiles outside the dictionary: 5 cells of layer 2 emptied."
+  },
+  {
    "file": "Poor Black.LVL",
    "size": 19102,
    "hash": "57a2ef06a0ed87e2",
@@ -3330,6 +3817,17 @@
    "minutes": 20,
    "players": 4,
    "description": "*Its Hard To Get The Foo..."
+  },
+  {
+   "file": "Popcorn 3.0.lvl",
+   "size": 19108,
+   "hash": "0bb6b326916ca6c3",
+   "width": 31,
+   "height": 31,
+   "minutes": 15,
+   "players": 4,
+   "description": "!Ny XxBoMbeRManXx       ...",
+   "repaired": "Text-transfer damage undone: 4 zero bytes put back behind a 0x0D byte."
   },
   {
    "file": "Popcorn War.lvl",
@@ -3622,6 +4120,17 @@
    "description": "Be Fast or Die!!!"
   },
   {
+   "file": "ShowDown.lvl",
+   "size": 19312,
+   "hash": "2542dbc3fd2600b5",
+   "width": 31,
+   "height": 31,
+   "minutes": 12,
+   "players": 2,
+   "description": "Showdown eat your way out",
+   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
+  },
+  {
    "file": "Sights_Unseen.lvl",
    "size": 58543,
    "hash": "da1a5039fa97cbd6",
@@ -3770,6 +4279,17 @@
    "minutes": 12,
    "players": 4,
    "description": "*PoP Pop !!! ( 12min )  ..."
+  },
+  {
+   "file": "Super jungle.lvl",
+   "size": 113880,
+   "hash": "b8f04a71414aacde",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "One Change = More Fun!",
+   "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
   },
   {
    "file": "Surrounded.lvl",
@@ -4102,6 +4622,28 @@
    "description": "water fire!!"
   },
   {
+   "file": "TheGreatSea.lvl",
+   "size": 19102,
+   "hash": "6de8787a47937dda",
+   "width": 31,
+   "height": 31,
+   "minutes": 10,
+   "players": 4,
+   "description": "Zig za your way to be the best",
+   "repaired": "1 start marker outside the grid put on the cell that the low bytes of its coordinates name."
+  },
+  {
+   "file": "TheGrid.LVL",
+   "size": 19096,
+   "hash": "204b89386e04140c",
+   "width": 31,
+   "height": 31,
+   "minutes": 14,
+   "players": 4,
+   "description": "Time to STEAL!!!",
+   "repaired": "1 start marker outside the grid dropped."
+  },
+  {
    "file": "TheOven.lvl",
    "size": 19102,
    "hash": "7d70bed728487968",
@@ -4120,6 +4662,17 @@
    "minutes": 10,
    "players": 4,
    "description": "water fire!!"
+  },
+  {
+   "file": "Thief craker.lvl",
+   "size": 12262,
+   "hash": "e8b213250d7d0488",
+   "width": 20,
+   "height": 20,
+   "minutes": 10,
+   "players": 4,
+   "description": "by perfect_chaos",
+   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
   },
   {
    "file": "ThiefFrenzy.lvl",
@@ -4410,6 +4963,26 @@
    "minutes": 9,
    "players": 4,
    "description": "Battle of the army ants"
+  },
+  {
+   "file": "WaTcHoUt BOMBZ!!! No.2.lvl",
+   "size": 59036,
+   "hash": "cb4e0b028df52371",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "ExPeRt VeRsIoN"
+  },
+  {
+   "file": "WaTcHoUt BOMBZ!!!.lvl",
+   "size": 59036,
+   "hash": "c84cb340ed7775a0",
+   "width": 60,
+   "height": 60,
+   "minutes": 12,
+   "players": 4,
+   "description": "NeWbIe VeRsIoN"
   },
   {
    "file": "WaTeR_AnD_FiRe.lvl",
@@ -4712,6 +5285,17 @@
    "description": "tiny with bigger timei!i!."
   },
   {
+   "file": "eze jungal.lvl",
+   "size": 113880,
+   "hash": "0e9c57c705853de2",
+   "width": 100,
+   "height": 81,
+   "minutes": 23,
+   "players": 4,
+   "description": "Rumble in the Jungle !",
+   "repaired": "Tiles outside the dictionary: 1 cell of layer 1 given the tile that most neighbouring cells have, the default ant tile of block 3 set to the empty tile."
+  },
+  {
    "file": "fire away.lvl",
    "size": 19312,
    "hash": "5ed2e88e29d97eca",
@@ -4972,6 +5556,17 @@
    "description": "*by ice                 ..."
   },
   {
+   "file": "thief craker2.0.lvl",
+   "size": 12358,
+   "hash": "bf87619d04a0f151",
+   "width": 20,
+   "height": 20,
+   "minutes": 10,
+   "players": 4,
+   "description": "by perfect_chaos",
+   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
+  },
+  {
    "file": "towerplaza2.lvl",
    "size": 19126,
    "hash": "4fa0b198fb30fe64",
@@ -5010,6 +5605,17 @@
    "minutes": 25,
    "players": 4,
    "description": "!Be QuicK!              ..."
+  },
+  {
+   "file": "~~PlAyEr'S_rEvEnGe2.lvl",
+   "size": 19078,
+   "hash": "66d0c643a97bf770",
+   "width": 31,
+   "height": 31,
+   "minutes": 16,
+   "players": 4,
+   "description": "!playa's revenge        ...",
+   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
   },
   {
    "file": "~~~~PrOpErTy LiNeS~~~~.lvl",
