@@ -827,6 +827,7 @@ int main() {
         if (at.size() != 2 || food == 0) return;
         for (const uint16_t tile : {food, uint16_t{294}}) {                 // 294 medrock2: an object, no food
             LevelData l = level;
+            name_tile(l, 294, "medrock2");
             ants::assets::FoodSchedule fs;
             fs.y = static_cast<uint16_t>(at[0].y);
             fs.x = static_cast<uint16_t>(at[0].x);
@@ -871,6 +872,134 @@ int main() {
         CHECK(flag_only.size() == 33);
         CHECK((name_only == std::set<std::string>{"!TreasureIsland.lvl", "Arena101.lvl"}));
         CHECK(mismatches == 0);
+    });
+
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 6: SetTile refuses a tile whose graphic is not loaded (FUN_01007352): an id the dictionary calls "." that is not one of the 62 forced ids
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF6.1 Which Graphics Are Loaded: Every Dictionary Entry But \".\", Plus The 62 Forced Ids Whatever Their Entry; An Id Past The Dictionary Is Not; A World Made By Hand Has All", [] {
+        LevelData level = tiny();
+        for (std::string& name : level.tile_dictionary) name = ".";
+        level.tile_dictionary[300] = "";                              // (an empty entry is not \".\": kept)
+        level.tile_dictionary[301] = "........";                      // (nor is a longer run of dots)
+        level.tile_dictionary[302] = "medrock1";
+        Grid g;
+        CHECK(g.init_from_level(level));
+        int forced = 0;
+        for (uint16_t id = 0; id < movement::kTileIdCount; ++id) {
+            const bool is_forced = (id >= 34 && id <= 37) || id == 40 || id == 53 || (id >= 62 && id <= 66) || (id >= 129 && id <= 135) || id == 160 || (id >= 162 && id <= 178) || id == 230 ||
+                                   (id >= 245 && id <= 248) || id == 356 || (id >= 404 && id <= 408) || (id >= 410 && id <= 416) || id == 420 || id == 421 || (id >= 422 && id <= 426) || id == 1177;
+            forced += is_forced;
+            const bool want = is_forced || id == 300 || id == 301 || id == 302;
+            if (g.tile_graphic_loaded(id) != want) { CHECK(false); std::cout << "    (id " << id << ")\n"; return; }
+        }
+        CHECK(forced == 62);
+        Grid by_hand;
+        CHECK(by_hand.init_empty(8, 8));
+        for (uint16_t id = 0; id < 2000; ++id) CHECK(by_hand.tile_graphic_loaded(id));
+        // a level that is read after one with a dictionary keeps nothing of it
+        level = tiny();
+        CHECK(g.init_from_level(level) && g.tile_graphic_loaded(2) == (level.tile_dictionary[2] != "."));
+    });
+
+    run_case("LF6.2 A Food Object Whose Stage Tile Is Called \".\" (And Is Not A Forced Id): The Old Tile At The Anchor Is Cleared And The Stage Tile Is Not Placed; Called By A Name, It Is Placed", [] {
+        const LevelData base = open_ground();
+        const uint16_t food = a_food_id(base);
+        const std::vector<TileCoord> at = open_tiles(base, 1);
+        CHECK(food != 0 && at.size() == 1);
+        if (food == 0 || at.empty()) return;
+        for (const bool loaded : {true, false}) {
+            LevelData level = base;
+            level.food_schedules.clear();
+            set_layer2(level, at[0], 294);                              // what the file holds at the anchor (an object of another kind)
+            name_tile(level, 294, "medrock2");
+            name_tile(level, food, loaded ? "fdname" : ".");
+            ants::assets::FoodSchedule fs;
+            fs.y = static_cast<uint16_t>(at[0].y);
+            fs.x = static_cast<uint16_t>(at[0].x);
+            fs.initial_delay = 5;
+            fs.respawn_interval = 10;
+            ants::assets::FoodItemVariant v;
+            v.weight = 5;
+            v.tile_id = food;
+            fs.variants.push_back(v);
+            level.food_schedules.push_back(fs);
+            Grid g;
+            CHECK(g.init_from_level(level));
+            CHECK(g.food_objects().size() == 1);                        // (the object is there with its units)
+            CHECK(loaded ? cell_at(g, at[0]).interactive_id == food : cell_at(g, at[0]).is_empty_overlay());
+            CHECK(!loaded ? !cell_at(g, at[0]).is_food && !g.is_solid_object(at[0]) : cell_at(g, at[0]).is_food);
+        }
+    });
+
+    run_case("LF6.3 The Same At Run Time: The Pile Whose Next Stage Is A Tile That Is Not Loaded Vanishes At The Bite That Changes Its Stage (The Object Keeps Its Units)", [] {
+        LevelData level = open_ground();
+        const uint16_t food = a_food_id(level);
+        const std::vector<TileCoord> at = open_tiles(level, 1);
+        CHECK(food != 0 && at.size() == 1);
+        if (food == 0 || at.empty()) return;
+        uint16_t second = 0;
+        for (uint16_t id = 0; id < level.tile_dictionary.size() && second == 0; ++id)
+            if (id != food && (movement::tile_flags_of(id) & movement::kTileFlagFood) != 0 && level.tile_dictionary[id].rfind("fd", 0) == 0) second = id;
+        CHECK(second != 0);
+        level.food_schedules.clear();
+        name_tile(level, second, ".");                                   // the next stage's entry is left out
+        ants::assets::FoodSchedule fs;
+        fs.y = static_cast<uint16_t>(at[0].y);
+        fs.x = static_cast<uint16_t>(at[0].x);
+        fs.initial_delay = 4;
+        fs.respawn_interval = 10;
+        ants::assets::FoodItemVariant a, b;
+        a.weight = 4; a.tile_id = food;
+        b.weight = 2; b.tile_id = second;
+        fs.variants = {a, b};
+        level.food_schedules.push_back(fs);
+        Grid g;
+        CHECK(g.init_from_level(level));
+        CHECK(cell_at(g, at[0]).interactive_id == food);
+        bool changed = false;
+        g.take_food(0, 2, changed);
+        CHECK(changed);
+        g.set_food_tile(at[0], g.food_objects()[0].stage_tile());
+        CHECK(cell_at(g, at[0]).is_empty_overlay());
+        CHECK(g.food_objects()[0].remaining == 2);
+    });
+
+    run_case("LF6.4 The Forced Ids Are Placed Whatever The Dictionary Says: A Fire Wall, The Placeholder, A Bridge Stage And A Bomb Through set_layer2; A Tile That Is Not Loaded Is Refused After Clearing The Old One", [] {
+        LevelData level = open_ground();
+        const std::vector<TileCoord> at = open_tiles(level, 2);
+        CHECK(at.size() == 2);
+        if (at.size() != 2) return;
+        for (uint16_t id = 0; id < level.tile_dictionary.size(); ++id) level.tile_dictionary[id] = ".";
+        Grid g;
+        CHECK(g.init_from_level(level));
+        for (const uint16_t id : {uint16_t{134}, uint16_t{160}, uint16_t{34}, uint16_t{37}, uint16_t{129}, uint16_t{356}}) {
+            g.set_layer2(static_cast<uint32_t>(at[0].x), static_cast<uint32_t>(at[0].y), id, 0);
+            CHECK(cell_at(g, at[0]).interactive_id == id);
+        }
+        g.set_layer2(static_cast<uint32_t>(at[0].x), static_cast<uint32_t>(at[0].y), TILE_RESERVED, 0);
+        CHECK(cell_at(g, at[0]).static_solid);
+        g.set_layer2(static_cast<uint32_t>(at[0].x), static_cast<uint32_t>(at[0].y), 300, 0);        // 300 is called "." and not forced
+        CHECK(cell_at(g, at[0]).is_empty_overlay() && !cell_at(g, at[0]).static_solid);
+    });
+
+    run_case("LF6.5 The Community Library: The Block-2 Stage Tiles Of 35 Maps Name Entries That Are \".\" And Not Forced (The Original Does Not Place Them)", [] {
+        long maps = 0, refused_cells = 0;
+        for_each_community_map([&](const std::string&, const LevelData& level) {
+            Grid g;
+            if (!g.init_from_level(level)) return;
+            bool any = false;
+            for (const auto& fs : level.food_schedules) {
+                for (const auto& v : fs.variants) {
+                    if (v.tile_id == ants::assets::LVL_EMPTY_TILE || v.tile_id == 0x7FFE) continue;
+                    if (!g.tile_graphic_loaded(v.tile_id)) { any = true; ++refused_cells; }
+                }
+            }
+            maps += any;
+        });
+        std::cout << "\n    " << maps << " maps, " << refused_cells << " stage tiles\n";
+        CHECK(maps == 35);                                                  // (the notes' 40 also count 5 maps whose entry is empty: strcmp(\"\", \".\") != 0, so the original keeps those graphics)
     });
 
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";

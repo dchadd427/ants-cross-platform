@@ -250,6 +250,7 @@ public:
             cell.static_solid = false;
         }
         exact_solid_bits_ = false;
+        graphic_kept_.clear();
         anthills_.clear();
         plants_.clear();
         food_objects_.clear();
@@ -264,6 +265,12 @@ public:
 
     /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
     bool exact_solid_bits() const noexcept { return exact_solid_bits_; }
+
+    /// Is the graphic (the animation template) of this tile id loaded? SetTile (FUN_01007352) refuses to place a layer-2 tile whose template is missing, after it has cleared the
+    /// cell's old object. A level loads the template of every id whose dictionary entry is not "." and of the 62 ids of the forced table (0x1001ba8); a world made by hand has all.
+    bool tile_graphic_loaded(uint16_t id) const noexcept {
+        return graphic_kept_.empty() || (id < graphic_kept_.size() && graphic_kept_[id] != 0);
+    }
 
     /// The level's DEFAULT ANT TYPE (LVL block 3, Ants.exe FUN_01007025 -> level+0x70): the tile id of one of the five power-up tiles (62 Combat, 63 Thief,
     /// 64 Bomber, 65 Swimmer, 66 Fire), or 0x7FFE (none: every shipped map). Every ant whose own type is Worker (0) is of that type wherever the game asks
@@ -505,6 +512,7 @@ public:
     void place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept;
 
 private:
+    std::vector<uint8_t> graphic_kept_;   // per tile id: its template is loaded (empty: all, a world made by hand)
     bool exact_solid_bits_{false};   // true once solid bits come from an LVL file (init_from_level)
 
     uint32_t width_{0};

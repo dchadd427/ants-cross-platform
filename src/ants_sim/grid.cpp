@@ -7,6 +7,13 @@ namespace ants::sim {
 
 static_assert(TILE_PIXELS == 32, "Tile pixels must be 32");
 
+namespace {
+// The ids whose graphics the original forces to load whatever the dictionary says (FUN_010068be, the 62 words at 0x1001ba8): bridges, effects, power-ups, bombs, fire wall, the
+// placeholder, 162 .. 178, the hills, the lunchbox, the plants and droplets
+constexpr uint16_t kForcedGraphics[62] = {34, 35, 36, 37, 40, 53, 62, 63, 64, 65, 66, 129, 130, 131, 132, 133, 134, 135, 160, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176,
+                                          177, 178, 230, 245, 246, 247, 248, 356, 404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421, 422, 423, 424, 425, 426, 1177};
+}  // namespace
+
 bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
     height_ = level.height;
@@ -16,6 +23,11 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     // fresh engine, which the lock-step state hash relies on)
     cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
     exact_solid_bits_ = false;
+
+    // Which templates the original has loaded (FUN_0100674e mode 0: the keep flag of an id is dictionary entry != ".", an entry past the dictionary is not kept; FUN_010068be: the 62 forced ids)
+    graphic_kept_.assign(movement::kTileIdCount, 0);
+    for (size_t i = 0; i < level.tile_dictionary.size() && i < graphic_kept_.size(); ++i) graphic_kept_[i] = level.tile_dictionary[i] != "." ? 1 : 0;
+    for (const uint16_t id : kForcedGraphics) graphic_kept_[id] = 1;
 
     // LVL block 3 (FUN_01007025, 0x1007025): the level's default ant type. The word is a tile index and the index is the tile id (the dictionary remap is the
     // identity, 0x10067a5 - 0x10067c8); it is kept only when that tile has the power-up flag (0x1007068), so a level has a default type exactly when block 3 names
@@ -457,6 +469,14 @@ void Grid::collapse_bridge(uint32_t x, uint32_t y) noexcept {
 void Grid::set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
     auto& cell = get_cell_mut(x, y);
+    if (cell.interactive_id != id && id != TILE_EMPTY && !tile_graphic_loaded(id)) {
+        // FUN_01007352 clears the old object, then refuses a tile whose template is not loaded: the cell stays empty
+        if (!cell.is_empty_overlay() && y > 0) cell.static_solid = false;
+        cell.interactive_id = TILE_EMPTY;
+        cell.interactive_owner = 255;
+        cell.timer_ticks = 0;
+        return;
+    }
     if (cell.interactive_id != id) {
         // FUN_01007352: the old object's footprint is cleared first (solid bit off, row 0 never), then the new tile's flag 0x01 sets it
         if (!cell.is_empty_overlay() && y > 0) cell.static_solid = false;
@@ -543,6 +563,7 @@ void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
         clear_cell(anchor);
     }
     if (tile == 0x7FFEu || tile == TILE_EMPTY) return;
+    if (!tile_graphic_loaded(tile)) return;                            // FUN_01007352 returns 0 here: the old object is gone (cleared above) and the new tile is not placed
     const movement::FootprintSpan span = movement::food_footprint(tile);
     for (size_t k = 0; k < span.count; ++k) {
         set_cell(TileCoord{anchor.x + span.cells[k].dcol, anchor.y + span.cells[k].drow});
