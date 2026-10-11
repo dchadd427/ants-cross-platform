@@ -323,9 +323,9 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         doc = read("docs", "NETWORK_PORT.md")
         pages = read("docs", "PLAY_IN_BROWSER.md") + read("docs", "SERVER.md")
         for needle in ("kDemoMaxPauseMs", "kDemoAbandonedMs", "`ants_leave_match()`", "`kRejoinMaxAgeMs`", "never makes a room and never replaces an ended one", "`window.antsSeatKnown(seat)`",
-                       "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**A native player's key travels in clear**", "**The review of phase 2**", "L8 and L9 in the known limits"):
+                       "none older than three hours", "`--no-reconnect` has no keys", "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**A native player's key travels in clear**", "**The review of phase 2**", "L8 and L9 in the known limits"):
             self.assertIn(needle, doc, needle)
-        for needle in ("for three hours", "none older than three hours", "`--no-reconnect` has no keys", "(10 in a demo room)", "leaving through the web page's Menu button"):
+        for needle in ("for three hours", "(10 in a demo room)", "leaving through the web page's Menu button"):
             self.assertIn(needle, pages, needle)
         for stale in ("none older than 24 hours", "(24 hours, removed when read)", "not older than 24 hours or more than a minute ahead", "An entry older than a day is removed", "the next is told `Full`;"):
             self.assertNotIn(stale, doc, stale)
@@ -343,7 +343,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         for needle in ("a new player's key at the Start, a rejoin's at its Welcome", "a waiting room that another player's Hello made", "up to ten seconds (200) on a slow disk",
                        "about **0.77 s of every second**", "the first IPv4 address, else the first IPv6 one with its scope", "N1 - N5"):
             self.assertIn(needle, doc, needle)
-        self.assertIn("ten seconds on a slow disk", server_page)
+        self.assertIn("ten seconds on a slow disk", doc)                                      # (the restart record's writing is told in the network document)
         for stale in ("(every Welcome that hands one, a rejoin's included)", "(a demo room that the Hello made again)", "more than a second a second: not possible"):
             self.assertNotIn(stale, doc, stale)
         for stale in ("built; the switch is off", "a server with the switch off changes nothing"):

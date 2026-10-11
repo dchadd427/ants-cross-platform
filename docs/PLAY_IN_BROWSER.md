@@ -61,7 +61,7 @@ The lobby has no field for it at the top: your room is ready when the page opens
 
 - **A link that somebody sends you asks for your name first, every time**, except on a reload of a page whose seat this browser holds (the reload takes the seat back and asks nobody). A card over the page, titled "Join the room k7m 2xq", shows your remembered name with a **Join** button (or press Enter), the hint "The name the other players see.", the recording notice and a button **Start a room of my own instead**, for a link that was opened by mistake. The page behind it shows no names and no map ("Joining a room"); the lobby does not connect before you have chosen. The same card comes from **Have a code?**. The game page's own `?join=...&room=...` link asks the same, in the game page's own card; the address that START leads to does not, because it carries the name and this browser holds the key of its seat.
 - A visitor who opens the plain page is not asked: the room is made at once.
-- **A line says what the server does with an online match**: "Online matches are recorded and kept for 30 days. The recordings are public and show the players' names." It is in the footer of the lobby, in the name card of a link and in the game page's name card, and not in the step of a game on this computer (the server does not record that game). Its words, and what an operator who runs the server with other settings changes: [`SERVER.md`](SERVER.md#replays).
+- The line about recorded online matches (its words, where the pages show it and what an operator who runs the server with other settings changes) is described in [`SERVER.md`](SERVER.md#replays), "The notice on the pages".
 
 ### Rejoin your match (CODE)
 
@@ -69,7 +69,7 @@ While this browser holds a fresh key of a seat on this site's game server, a str
 
 - The game page keeps a key for every seat that it plays, for three hours, and lets go of it when the match ends, the seat is dropped or the player leaves.
 - The button takes this tab to the game page of that seat (the newest, when there are several). The game page finds the key itself: it is in no address, text or log. The match goes on where it was. The line shows the code as a screen does (`k7m 2xq`); the address that the button opens has the plain code, the seat and no create block, so a match that has ended is not made again by it.
-- The exceptions: the others voted to go on without you (they may after 30 seconds), or the pauses of the match reached their cap, 30 minutes (10 in a demo room). Then the game says so. The rules of a held seat are in [`MULTIPLAYER.md`](MULTIPLAYER.md), "Lag, silence and drop-outs", and [`SERVER.md`](SERVER.md#reconnect).
+- The exceptions: the others voted to go on without you (they may after 30 seconds), or the pauses of the match reached their cap, 30 minutes (10 in a demo room). Then the game says so. The rules of a held seat are in [`MULTIPLAYER.md`](MULTIPLAYER.md), "Lag, silence and drop-outs", and [`NETWORK_PORT.md`](NETWORK_PORT.md#the-behaviour-that-is-decided) (the vote and the cap); the options are in [`SERVER.md`](SERVER.md#reconnect).
 
 ### The game page and its addresses
 
