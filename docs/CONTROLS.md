@@ -76,7 +76,7 @@ A click on the entry, or `Up` from Single player (the first panel preselects Sin
 Every failure comes back to the panel with a line of its own: never a crash, a hang or a silent return.
 
 - The server cannot be reached (the line names it).
-- **A server that does not answer** says "The server <name> did not answer". It is one line for all three ways of staying silent: a name that is never resolved, a connection that is never made (the attempt's limit is **20 s**), and a server that accepts the connection and never sends its Welcome (**10 s**, the room's limit).
+- A server that does not answer, and the time limits of an attempt, are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#joining-and-hosting-from-the-desktop-start-menu-start_menuhpp-application_menucpp-v0097).
 - A server that hangs up: the connection was lost before the room.
 - No room with that code (the line names the code and says "capital letters matter"), the room is full, the match has already started, you were removed from the room, the request was not accepted, the server is busy (when hosting).
 - Another version: "This game is <version>, but the server runs another version of the game". The version is the running game's own.
@@ -91,7 +91,7 @@ After a network match the game is back **at the start menu** instead of ending t
 
 - None of these starts a match, a room, a test run or a screenshot, so a plain `ants`, `ants --name Bob`, `ants --server play.example.org` and `./start_game.sh` (or `./start_game.sh --single`) show it.
 - These options choose a mode and **skip the menu**: `--map`, `--map-select`, `--play`, `--alone`, `--host`, `--join`, `--join-url`, `--room`, `--token`, `--seat`, `--bot`, `--headless`, `--screenshot`, `--player` / `-pnum`, `--select-ant`, `--select-base`, `--open-options`, `--scorecard`.
-- **`--start-menu` forces it**, also with `--headless` and `--screenshot` (for the tests and the screenshots). Combined with `--map`, `--open-options`, `--scorecard`, `--host`, `--join` or `--join-url` it is refused: they start a match or a room at once. So it is with `--alone`: the menu's Single player chooses who plays.
+- The option `--start-menu`, which forces the menu, is described in [`COMMAND_LINE.md`](COMMAND_LINE.md#mode-and-map).
 - `--map-select` starts on the setup screen, without the menu.
 - The four windows of the `./start_game.sh --players 4` test rig each have `--host` or `--join` and never show it.
 
@@ -211,7 +211,7 @@ What a click does after that:
 
 ## Touch Controls
 
-A **tap** is the left click, a **hold** the right click (a ring closes around the finger, and the phone buzzes where the browser can), a **drag** the rubber band, **two fingers** move the map and a **pinch** zooms it. It is the game's own input: the commands, the selection and the zoom are the mouse's, and the simulation, the network and every state hash never see it.
+The gestures of a touch screen, and why they have these numbers, are described in [`TOUCH.md`](TOUCH.md#the-gestures-and-why-these-numbers).
 
 | Action | Touch | Same as the mouse's |
 |---|---|---|

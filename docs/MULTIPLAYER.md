@@ -4,7 +4,7 @@ A network match is a lock-step game: every machine runs the whole match, and onl
 
 ## Network Port
 
-The original game runs a full TCP mesh on port 4001. Every machine simulates only its own team and broadcasts the results, and there is no host or join screen: an external lobby starts every machine with its roster on the command line. What the original does is recorded in sections 5.46 to 5.48 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md).
+What the original's network does is recorded in sections 5.46 to 5.48 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md).
 
 The remake runs **one deterministic simulation on every machine** and sends only the players' intent, a lock-step of commands. The host is the sequencer: it stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 50 ms with the commands in canonical order and sends it to everybody. The host is a player's machine (a game on the local network) or a dedicated server (`ants_server`) that plays nobody (a room of the game server). This also makes web play possible.
 
@@ -88,9 +88,7 @@ A player who leaves, is thrown out or is dropped drops out at the same tick on e
 
 The original has no sequencer: it is a full mesh in which every machine simulates its own team, a peer that is lost is only a drop-out of its team, and there is no host migration ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.46 and 5.47). The remake sends every command through one sequencer, so in a game on the local network the role of sealing turns moves to another machine when the host leaves: the host is only that role, because every machine already holds the whole match.
 
-- While the map loads, every guest connects to the guests above its seat (each announces a port in its `Hello`, and the host passes the addresses on with the roster). Every machine keeps the last 30 s of turns.
-- When the host's connection closes, or the host is silent for 10 s, the guests elect the lowest seat they still see alive. It fetches the turns it lacks, becomes the host and sends the others the turns they miss. Its first turn drops the old host, and any seat that did not follow, on every machine at the same tick.
-- The game shows "The host left. Choosing a new host..." while it happens and "Bob is the host now." afterwards. Orders that were not yet in a sealed turn when the host went are lost and must be given again. A match with one machine left goes on for it alone.
+- The peer links between the guests, the turns that every machine keeps, the election, the texts shown meanwhile and the orders that are lost are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#host-migration-milestone-4b-shipped-in-v0047).
 - A server's room has no host to lose and never migrates. [`NETWORK_PORT.md`](NETWORK_PORT.md) "Host migration" has the election and the resync.
 
 ### Checks and flood control
@@ -104,10 +102,7 @@ The original has no sequencer: it is a full mesh in which every machine simulate
 
 The prediction is **off by default**. Switch it on with `--prediction on`, the settings key `prediction` or `?prediction=on` on the address of a network game (a `?join=...` link; the front page does not pass it on) (`--prediction off` and `--no-prediction` switch it off, and the command line wins). There is no protocol change, and no other machine can tell.
 
-- On, a second engine (`net::Prediction`) shows your own orders at once: the confirmed engine, plus the turns that are in hand, plus your own orders that no turn has carried yet, advanced by a lead (the median lag of your last five orders). The ants answer a click as they do in a game on your own computer. The second engine is rebuilt only when a confirmed turn disagrees with what it assumed.
-- The screen, the HUD's picks and your own action sounds read it. The news, the combat sounds, the hashes, the bots and the end of the match stay the confirmed engine's. Group moves, specials, attacks and Stop are predicted. Hatching and the alliance commands wait for their turn.
-- It is off by default because the ants of other players hop about a dozen pixels when their orders arrive. It is off in a pause, a catch-up, a host change, a hidden tab and before the first tick (the "Get ready to play!" dialog).
-- When its work costs more than 12 ms of the thread's CPU time four times within ten seconds, it switches itself off for 10 s, and each further time for twice as long, up to 160 s.
+- How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" and [`history/rollback_notes.md`](history/rollback_notes.md) have the design and the measurements.
 
 ## Limits
