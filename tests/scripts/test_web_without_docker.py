@@ -556,6 +556,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("root /w/fs/usr/share/nginx/html;", text)
         self.assertIn("alias /w/fs/usr/share/nginx/html/asset_catalog/sprites/;", text)
         self.assertIn("proxy_cache_path /w/cache/ants_stats ", text)
+        self.assertIn("proxy_cache_path /w/cache/ants_history ", text)
         self.assertNotIn("/usr/share/nginx", text.replace("/w/fs/usr/share/nginx/html", ""))
         self.assertNotIn("/var/cache/nginx", text)
         self.assertIn("location = /busy", text, "the rest of the file is as it was")

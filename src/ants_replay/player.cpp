@@ -129,7 +129,12 @@ Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& 
     for (; next < replay.commands.size() && replay.commands[next].turn == replay.total_turns; ++next) give(replay.commands[next]);     // (after the last tick: a Quit that ends the match)
     out.hash = engine.state_hash().total;
     out.match_over = engine.is_match_over();
-    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) out.scores[seat] = ((replay.head.roster >> seat) & 1u) != 0 ? engine.get_display_score(seat) : 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        const bool plays = ((replay.head.roster >> seat) & 1u) != 0;
+        out.scores[seat] = plays ? engine.get_display_score(seat) : 0;
+        if (plays && engine.is_player_dropped(seat)) out.dropped_mask = static_cast<uint8_t>(out.dropped_mask | (1u << seat));
+    }
+    out.result = engine.get_world_state().match_result;                 // (the engine's own make_match_result: also the side that is left in mode 187, which a bare evaluate_victory does not know)
     out.ran = true;
     if (replay.complete && out.hash != replay.final_hash) {
         out.first_bad_turn = replay.total_turns;

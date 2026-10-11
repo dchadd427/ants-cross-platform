@@ -4,11 +4,14 @@ add_library(ants_server_core STATIC
     room.cpp
     room_manager.cpp
     control.cpp
+    control_history.cpp
     secret.cpp
     restart_record.cpp
     site_stats.cpp
     replay_store.cpp
     live_board.cpp
+    history_record.cpp
+    history_store.cpp
     db_schema.cpp
 )
 target_include_directories(ants_server_core PUBLIC

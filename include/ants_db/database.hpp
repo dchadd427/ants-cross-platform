@@ -27,6 +27,7 @@ constexpr int kErrBadMigrations = -2;       // the list of migrations is not in 
 constexpr int kErrNested = -3;              // a transaction is open already
 constexpr int kErrNotOpen = -4;             // the database (or statement) is not open
 constexpr int kErrRange = -5;               // a column or parameter index out of range
+constexpr int kErrInterrupted = 9;          // SQLite's SQLITE_INTERRUPT: a statement stopped by the progress handler
 constexpr int kErrForeign = -6;             // a database that this program did not make (it has tables and no schema_version)
 
 struct Error {
@@ -74,6 +75,10 @@ public:
     // Asks for a journal mode ("WAL"): `mode` receives the one the file has afterwards, which differs from the request when the file system cannot give it (no error then). With "wal" the
     // synchronous level becomes NORMAL. This WRITES to the file header: for a file that is not yet known to be ours, call it only after the version check (open_and_migrate does).
     Error use_journal(const std::string& request, std::string& mode);
+
+    // Calls `fn(arg)` about every `ops` virtual-machine steps of a running statement; a nonzero result interrupts the statement, which then fails with code kErrInterrupted (SQLite's SQLITE_INTERRUPT).
+    // A time box for a statement that a visitor can make heavy. `fn` == nullptr removes the handler. Does nothing on a closed database.
+    void set_progress_handler(int (*fn)(void*), void* arg, int ops);
 
     sqlite3* handle() const { return db_; }
 

@@ -134,7 +134,7 @@ JSON.stringify((function () {
            fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), pseudo: stage.classList.contains('pseudo-fullscreen'),
            stage: r(stage), box: r(box), canvas: r(cv), bar: r(bar), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
            scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight],
-           checked: Array.prototype.map.call(document.querySelectorAll('.seg button[data-aspect]'), function (b) { return b.getAttribute('data-aspect') + '=' + b.getAttribute('aria-checked'); }) };
+           checked: Array.prototype.map.call(document.querySelectorAll('#view-bar .seg button[data-aspect]'), function (b) { return b.getAttribute('data-aspect') + '=' + b.getAttribute('aria-checked'); }) };
 })())
 """
 
@@ -1553,10 +1553,10 @@ def main():
         for w, h, want in ((1280, 720, "16:9"), (1440, 900, "16:10"), (2560, 1080, "21:9"), (1280, 1024, "4:3"), (1100, 1100, None)):
             tag_tab.emulate(w, h, 1, touch=False)
             tag_tab.open(web)
-            shown = tag_tab.ev("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('.seg .shape'), function (s) { var t = s.querySelector('.fit-tag'); return [s.querySelector('button').getAttribute('data-aspect'), !t.hidden && getComputedStyle(t).display !== 'none']; }).filter(function (x) { return x[1]; }).map(function (x) { return x[0]; }))")
+            shown = tag_tab.ev("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('#view-bar .seg .shape'), function (s) { var t = s.querySelector('.fit-tag'); return [s.querySelector('button').getAttribute('data-aspect'), !t.hidden && getComputedStyle(t).display !== 'none']; }).filter(function (x) { return x[1]; }).map(function (x) { return x[0]; }))")
             check(json.loads(shown) == ([want] if want else []), "a %d x %d screen: the tag \"fills your screen\" is under %s (%s)" % (w, h, want, shown))
             if want:
-                tag = json.loads(tag_tab.ev("JSON.stringify((function(){var t=document.querySelector('.fit-tag:not([hidden])').getBoundingClientRect(), b=document.getElementById('aspect-%s').getBoundingClientRect(); return [t.x+t.width/2-(b.x+b.width/2), t.y-(b.y+b.height)];})())" % want.replace(":", "-")))
+                tag = json.loads(tag_tab.ev("JSON.stringify((function(){var t=document.querySelector('#view-bar .fit-tag:not([hidden])').getBoundingClientRect(), b=document.getElementById('aspect-%s').getBoundingClientRect(); return [t.x+t.width/2-(b.x+b.width/2), t.y-(b.y+b.height)];})())" % want.replace(":", "-")))
                 check(abs(tag[0]) < 1.5 and 0 <= tag[1] < 14, "%d x %d: the tag is centred under its button, close below it (%s)" % (w, h, tag))
                 g = tag_tab.geometry()
                 check(g["bar"][1] + g["bar"][3] + 28 <= g["inner"][1] + 1.0 or g["scroll"][2] > g["scroll"][3], "%d x %d: the bar has room for the tag (%s)" % (w, h, g["bar"]))

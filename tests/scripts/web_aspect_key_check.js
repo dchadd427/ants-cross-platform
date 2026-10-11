@@ -102,6 +102,7 @@ function runShell(path, search, stored, options) {
     if (!hook) throw new Error(path + ': the postRun hook of the Module was not found');
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen);
+    win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
     const buttons = SHELL_SHAPES.map((shape) => {
         const button = element({ 'data-aspect': shape, 'aria-checked': shape === '16:9' ? 'true' : 'false' });
@@ -258,6 +259,30 @@ try {
         expect('shell.html, ' + label + ' (the selector shows it)', r.checked, checkedString(aspect));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
+    }
+    // a spectator (a replay or a live match) is a visitor like any other: ?aspect=, then what the selector remembered, then 16:9 (it used to be 16:9 whatever the address and the browser said)
+    for (const [label, search, stored, aspect, source] of [
+        ['a replay, nothing remembered', '?replay=a', {}, '16:9', 'default'],
+        ['a replay, 4:3 remembered', '?replay=a', { [NEW_KEY]: '4:3' }, '4:3', 'remembered'],
+        ['a replay, 21:9 remembered', '?replay=a', { [NEW_KEY]: '21:9' }, '21:9', 'remembered'],
+        ['a replay, the address asks for 16:10 over a remembered 4:3', '?replay=a&aspect=16:10', { [NEW_KEY]: '4:3' }, '16:10', 'address'],
+        ['a replay, the address asks for 4:3', '?aspect=4:3&replay=a', {}, '4:3', 'address'],
+        ['a replay, storage refused, the address asks for 21:9', '?replay=a&aspect=21:9', THROWS, '21:9', 'address'],
+        ['a live match, nothing remembered', '?live=a', {}, '16:9', 'default'],
+        ['a live match, 16:10 remembered', '?live=a', { [NEW_KEY]: '16:10' }, '16:10', 'remembered'],
+        ['a live match, the address asks for 21:9 over a remembered 4:3', '?live=a&aspect=21:9', { [NEW_KEY]: '4:3' }, '21:9', 'address'],
+    ]) {
+        const r = runShell(shellPath, search, stored);
+        expect('shell.html, ' + label + ' (the shape)', r.aspect, aspect);
+        expect('shell.html, ' + label + ' (where it came from)', r.source, source);
+        expect('shell.html, ' + label + ' (--aspect for the game)', r.args.slice(-2).join(' '), '--aspect ' + aspect);
+        expect('shell.html, ' + label + ' (the stage)', r.stage.attributes['data-aspect'], aspect);
+        expect('shell.html, ' + label + ' (the buttons show it)', r.checked, checkedString(aspect));
+    }
+    {   // the spectator's pick is the player's: remembered under the same key and put in the address
+        const r = runShell(shellPath, '?replay=a', {});
+        r.buttons[0].listeners.click();
+        expect('shell.html, a replay: a pick of 4:3 is remembered, shown and given to the stage', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + r.stage.attributes['data-aspect'], JSON.stringify([[NEW_KEY, '4:3']]) + ' 4:3 4:3');
     }
     // ?embed=1 is no frame of another page any more (the front page has no frames): the game page reads the remembered shape for it as for any address
     for (const [label, search, stored, aspect, source] of [

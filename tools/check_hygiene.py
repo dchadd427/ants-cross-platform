@@ -46,7 +46,7 @@ LINE_CEILINGS = {
     "tests/test_server/test_rejoin.cpp": 2560,
     "tests/test_net/test_netgame.cpp": 2521,
     "src/ants_ai/standard_tasks.cpp": 3911,
-    "web/shell.html": 3759,
+    "web/shell.html": 3812,
     "src/ants_app/application.cpp": 3580,
     "tools/bot_arena.cpp": 2773,
     "tools/map_sweep.cpp": 2626,

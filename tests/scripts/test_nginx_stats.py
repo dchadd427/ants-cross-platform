@@ -412,7 +412,7 @@ class Rig:
             if not self.nginx_answers():
                 break
             time.sleep(0.05)
-        subprocess.run(["docker", "exec", self.front, "sh", "-c", "rm -f /var/cache/nginx/ants_stats/*"], capture_output=True)
+        subprocess.run(["docker", "exec", self.front, "sh", "-c", "rm -f /var/cache/nginx/ants_stats/* /var/cache/nginx/ants_history/*"], capture_output=True)
         subprocess.run(["docker", "exec", "-d", self.front, "sh", "-c", START_NGINX], capture_output=True)
         for _ in range(100):
             if self.nginx_answers():
