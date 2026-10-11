@@ -90,7 +90,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     if (!spec.code.empty() && (!net::valid_room_code(spec.code))) return fail(400, "the room code may hold letters, digits, '_' and '-' only (up to 32 characters)");
     if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || restoring_has(spec.code))) return fail(409, "a room with this code exists");     // (a record that waits for its replay is a room)
     if (const std::string range = spec_range_error(spec); !range.empty()) return fail(400, range);
-    // The bots of the room (docs/BOTS.md B6): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
+    // The bots of the room (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): distinct seats, a kind that exists, at least one seat left for a person, and never together with Fog of War (a bot would see through it)
     // A bots-only room (RoomSpec::bots_only; the server's own match of computer players) seats a bot at every seat of the room and nobody else, and holds no seat
     if (spec.bots_only && (spec.bots.size() != spec.players || spec.lobby || spec.public_room || spec.reconnect)) return fail(400, "bots_only: every seat is a bot, and the room is no lobby, no public room and holds no seats");
     if (!spec.bots.empty()) {

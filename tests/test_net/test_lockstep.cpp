@@ -6393,7 +6393,7 @@ void run_reconnect_session_tests() {
             }, 20000));
             ASSERT_TRUE(saw_catching_up);
             std::cout << "\n      [reconnect] a machine that starts from nothing was given " << total << " turns (" << m.host->log().bytes() << " bytes of log) and was back " << m.now - reload_at
-                      << " ms after its page opened (links of 30 - 40 ms one way; the work itself is measured in docs/history/NETWORK_PORT_history.md)" << std::flush;
+                      << " ms after its page opened (links of 30 - 40 ms one way)" << std::flush;
             ASSERT_EQ(m.host->attendance().rejoins(), 1u);
             ASSERT_TRUE(m.clients[2]->runner().next_turn_to_execute() >= total);
             m.run(5000);

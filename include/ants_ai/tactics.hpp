@@ -332,7 +332,7 @@ void without_war_batch(LevelPlan& plan) noexcept;
 
 /// The three tiles in front of a hill's thief hole: (bx + 4, by + 1 .. by + 3), east of the raid tile (bx + 3, by + 2). A thief reaches the raid tile only by stepping from one of them
 /// (the other neighbours of the raid tile are tiles of the mound), so a thief cannot raid a hill whose three tiles are all shut. Verified against the engine's own raid order
-/// (docs/history/B4_1_notes.md): with a fire wall on each of them the order ends in "Can't go there." and the victim keeps its points; with two walls, or three one tile further east, the
+///: with a fire wall on each of them the order ends in "Can't go there." and the victim keeps its points; with two walls, or three one tile further east, the
 /// raid goes through.
 std::array<sim::TileCoord, 3> east_tiles(const HillInfo& hill) noexcept;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// The numbers of the front page (docs/NETWORK_PORT.md "Site statistics"): online games (a match that ran at least 30 seconds and ended) and single-player games that browsers report, each for the last 24
+// The numbers of the front page (docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"): online games (a match that ran at least 30 seconds and ended) and single-player games that browsers report, each for the last 24
 // hours (24 buckets of an hour on the server's clock) and for all time, kept in one small file. Numbers only, never a code, name, address or key. Single threaded like the server's loop.
 
 #include <array>

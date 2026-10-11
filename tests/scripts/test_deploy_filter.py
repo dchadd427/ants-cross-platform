@@ -31,7 +31,7 @@ DEPLOYS = [
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
 SKIPS = [
-    "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md", "docs/history/B3_notes.md",
+    "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md",
     "docs/reverse_engineering/notes.txt", ".github/workflows/ci.yml", ".github/dependabot.yml",
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/e2e/e2e_model.hpp",
     "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
@@ -135,7 +135,7 @@ class Pushes(unittest.TestCase):
     def test_the_changelog_is_the_one_document_that_deploys(self):
         self.assertTrue(self.verdict(["CHANGELOG.md"]).startswith("deploy:"))
         self.assertTrue(self.verdict(["docs/WORKFLOW.md"]).startswith("skip:"))                    # nothing of docs/ is in an image
-        self.assertTrue(self.verdict(["docs/history/AUDIT_ONE_TO_ONE.md"]).startswith("skip:"))
+        self.assertTrue(self.verdict(["docs/BOTS.md"]).startswith("skip:"))
 
     def test_each_site_has_its_own_stack_file(self):
         self.assertTrue(self.verdict(["docker-compose.stack.yml"]).startswith("deploy:"))

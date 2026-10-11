@@ -1,5 +1,5 @@
 // What a look of the standard bot costs (B4-1, AI13.1, acceptance A6): the time of one look (BotView::build + think) at the three levels on every shipped map, in the middle of a match with
-// four bots, next to the worker's. A measurement with a loose bound (the machine of a test run is shared and busy); the numbers are printed and are the ones of docs/history/BOTS_history.md ("Cost").
+// four bots, next to the worker's. A measurement with a loose bound (the machine of a test run is shared and busy); the numbers are printed.
 //
 //   AI13.1  the cost of a look: the worker's and the standard bot's, at every level, on every shipped map after 3,000 ticks of a match
 //   AI13.2  whole matches of four standard bots (A5): the budget in every window of releases, nothing filtered or rejected, bit-reproducible, replayed without any bot

@@ -150,7 +150,7 @@ class TheLocations(unittest.TestCase):
             self.assertRegex(read("Dockerfile.server"), r"(?m)^EXPOSE [0-9 ]*\b%s\b" % target.group(2))
 
     def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address: docs/history/site_stats_notes.md; an allowance per visitor would be one for everybody)
+        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
         for zone_name, block, low, high, burst in (("ants_replays", LIST, 10.0, 30.0, 100), ("ants_replay_files", FILES, 5.0, 20.0, 20)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)

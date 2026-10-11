@@ -1,7 +1,7 @@
 // Differential regression tests for the original movement and path search.
 //
 // Two independent models of the original executable are compared with the remake on many random scenarios. The
-// models were written from the disassembly of Ants.exe for the movement audit (docs/history/AUDIT_ONE_TO_ONE.md, batch 8)
+// models were written from the disassembly of Ants.exe for the movement audit
 // and read only the raw data of the game files: the static animation tables of Ants.exe and the Table-4 frames of
 // ants.chd. They share no code with src/ants_sim, so a change of a table, of the stepping rules or of the search
 // cannot pass unnoticed even when the hand-written golden cases (test_movement_golden, test_path_planner) do not

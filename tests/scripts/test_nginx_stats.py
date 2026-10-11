@@ -182,7 +182,7 @@ class TheLocations(unittest.TestCase):
         ticks = re.search(r"kMinTicks\s*=\s*(\d+)\s*;", header)
         self.assertIsNotNone(ticks)
         self.assertEqual(ticks.group(1), "600")                                              # 30 seconds of play at 20 ticks a second
-        for name in (os.path.join("docs", "SERVER.md"), os.path.join("docs", "history", "site_stats_notes.md")):
+        for name in (os.path.join("docs", "SERVER.md"),):
             self.assertIn("at least 600 ticks (30 seconds of play)", read(name), name)
 
 

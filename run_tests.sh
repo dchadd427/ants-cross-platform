@@ -212,7 +212,7 @@ suite() {
 
 # The worker bot's pinned table is left out of the sanitizer pass. The test filters of a developer (W_ONLY, W_SKIP, ANTS_TEST_FILTER) must not leak into the master run:
 # a forgotten W_ONLY would run one test and print PASSED. Under ASan + UBSan (unoptimised) the 18-row pinned table (AI3.9, AI3.12) is about four fifths of the run time and
-# checks numbers, not memory: the sanitizer pass leaves those two out (docs/history/B3_notes.md).
+# checks numbers, not memory: the sanitizer pass leaves those two out.
 run_worker_bot_suite() {
     if [ "$RUN_ASAN" -eq 1 ]; then
         env -u W_ONLY -u ANTS_TEST_FILTER W_SKIP=AI3.9,AI3.12 "./$BUILD_DIR/tests/test_ai/test_ai_worker"
