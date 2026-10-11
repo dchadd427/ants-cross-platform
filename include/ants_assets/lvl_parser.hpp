@@ -12,6 +12,19 @@ constexpr uint32_t LVL_EXPECTED_VERSION = 8;
 constexpr uint32_t LVL_GAME_MODE_STANDARD = 1;   // what the shipped maps hold; the original stores the dword (map + 0x74) and never reads it again, so it is no condition
 constexpr uint16_t LVL_EMPTY_TILE = 0x7FFE; // 32,766 = Empty interactive overlay sentinel
 constexpr uint32_t LVL_MAX_GRID_SIDE = 256;       // rows and columns of a grid the remake hosts (the anchor bytes of a layer-2 object are 8 bit)
+// Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the colour ids are 0 black, 1 blue, 2 red, 3 green, the hill of a colour is
+// the layer-2 id 245 + colour (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + colour (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
+// 0 green, 1 red, 2 blue, 3 black. Both functions answer -1 for any other id.
+constexpr uint16_t LVL_HILL_FIRST = 245;
+constexpr uint16_t LVL_HILL_LAST = 248;
+constexpr uint16_t LVL_START_MARKER_FIRST = 152;
+constexpr uint16_t LVL_START_MARKER_LAST = 155;
+constexpr int hill_team_of_id(uint16_t id) noexcept {
+    return id == 245 ? 3 : id == 246 ? 2 : id == 247 ? 1 : id == 248 ? 0 : -1;
+}
+constexpr int start_marker_team_of_id(uint16_t id) noexcept {
+    return id == 152 ? 3 : id == 153 ? 2 : id == 154 ? 0 : id == 155 ? 1 : -1;
+}
 constexpr size_t   LVL_MAX_DICTIONARY_ENTRIES = 0x540;   // the original's tile tables (a 0x1500 byte buffer of dwords is filled with one entry per dictionary name)
 
 /**
@@ -88,10 +101,10 @@ struct MapCell {
  * @brief Anthill starting spawn position (Block 1).
  */
 struct AnthillSpawn {
-    uint16_t tile_id{0}; // Tile dictionary index: BSTART, USTART, RSTART, GSTART
+    uint16_t tile_id{0}; // Tile id (the dictionary index is the animation id): 152 .. 155 are the start markers
     uint16_t y{0};       // Grid row coordinate
     uint16_t x{0};       // Grid column coordinate
-    uint8_t  team_id{0}; // 0 = Black, 1 = Blue, 2 = Red, 3 = Green, 255 = Other
+    uint8_t  team_id{0}; // the remake's team of a start marker tile (start_marker_team_of_id: 0 green, 1 red, 2 blue, 3 black), 255 = any other record (a plant ...)
 };
 
 /**
@@ -252,7 +265,7 @@ public:
 
     /// The level as it is played by the teams of `roster_mask` (bit t = team t takes part): a team without a player has no hill, no start marker
     /// (so no starting ant) and no eggs. The original keeps a NULL entry in its team table for such a team (CHECKGO skips it), so nothing of it exists.
-    /// Team t is the colour of the hill tile GREENHILL (0), REDHILL (1), BLUEHILL (2), BLACKHILL (3) and of the start markers of the same id.
+    /// Team t is the colour of the hill tile 248 (green, 0), 247 (red, 1), 246 (blue, 2), 245 (black, 3) and of the start marker 154, 155, 153, 152 (by tile id, not by name).
     LevelData for_roster(uint8_t roster_mask) const;
 
     /// Is this level playable by the teams of `roster_mask`, and what is odd about it? The loader's own notes (load_notes) plus the checks that need the whole level:

@@ -109,6 +109,40 @@ target_link_libraries(test_file_bombs_render PRIVATE ants_test_paths)
 add_test(NAME test_file_bombs_render COMMAND test_file_bombs_render)
 set_tests_properties(test_file_bombs_render PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The map loader as the original's (docs/reverse_engineering/map_loader_fidelity.md), on the screen: the picture follows the tile ids of the file, not the names of its dictionary
+add_executable(test_loader_fidelity_render
+    test_loader_fidelity_render.cpp
+)
+
+target_include_directories(test_loader_fidelity_render PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_loader_fidelity_render PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_loader_fidelity_render PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_loader_fidelity_render PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_loader_fidelity_render PRIVATE ants_test_paths)
+
+add_test(NAME test_loader_fidelity_render COMMAND test_loader_fidelity_render)
+set_tests_properties(test_loader_fidelity_render PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # HUD layout: the real HUD drives a recording IRenderer; draw calls are checked against the original's coordinates
 add_executable(test_hud_layout
     test_hud_layout.cpp

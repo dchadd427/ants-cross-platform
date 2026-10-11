@@ -127,6 +127,19 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                 // object (no obstacle overlay): it is solid to every order but the power-up order, and the arrival of that order takes it.
                 cell.is_powerup = true;
                 cell.powerup_type = movement::ant_type_of_powerup_tile(c2.tile_index);
+            } else if (assets::hill_team_of_id(c2.tile_index) >= 0) {
+                // A hill is a tile id (245 .. 248, FUN_0100ecac), never a dictionary name: the table of forced graphics has the four ids, so a hill is drawn and played whatever the entry says
+                if ((c2.flags & 1) != 0) {
+                    // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).
+                    cell.terrain_type = TERRAIN_WALKABLE;
+                    cell.is_obstacle_overlay = false;
+                } else {
+                    cell.is_obstacle_overlay = true;
+                }
+            } else if (assets::start_marker_team_of_id(c2.tile_index) >= 0) {
+                // (a start marker is a block-1 record; one in layer 2 is walkable ground)
+                cell.terrain_type = TERRAIN_WALKABLE;
+                cell.is_obstacle_overlay = false;
             } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                 const std::string& tname = level.get_tile_name(c2.tile_index);
                 if (!tname.empty() && tname != ".") {
@@ -134,17 +147,6 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                     for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
                     if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
                         cell.is_food = true;
-                    } else if (lower_name.find("hill") != std::string::npos) {
-                        if ((c2.flags & 1) != 0) {
-                            // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).
-                            cell.terrain_type = TERRAIN_WALKABLE;
-                            cell.is_obstacle_overlay = false;
-                        } else {
-                            cell.is_obstacle_overlay = true;
-                        }
-                    } else if (lower_name.find("start") != std::string::npos) {
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.is_obstacle_overlay = false;
                     } else if (lower_name.find("bridge") != std::string::npos ||
                                (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
                                c2.tile_index == TILE_BRIDGE4B) {
@@ -182,21 +184,14 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     for (uint32_t y = 0; y < height_; ++y) {
         for (uint32_t x = 0; x < width_; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            if (c2.tile_index < level.tile_dictionary.size()) {
-                const std::string& tname = level.tile_dictionary[c2.tile_index];
-                int team = -1;
-                if (tname == "GREENHILL" || tname == "greenhill") team = 0;
-                else if (tname == "REDHILL" || tname == "redhill") team = 1;
-                else if (tname == "BLUEHILL" || tname == "bluehill") team = 2;
-                else if (tname == "BLACKHILL" || tname == "blackhill") team = 3;
-                if (team >= 0) {
-                    size_t st = static_cast<size_t>(team);
-                    if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {
-                        hill_origins[st].x = static_cast<int32_t>(x);
-                    }
-                    if (hill_origins[st].y < 0 || static_cast<int32_t>(y) < hill_origins[st].y) {
-                        hill_origins[st].y = static_cast<int32_t>(y);
-                    }
+            const int team = assets::hill_team_of_id(c2.tile_index);                // the hill of a colour is a tile id (245 .. 248), not a dictionary name (FUN_0100ecac)
+            if (team >= 0) {
+                size_t st = static_cast<size_t>(team);
+                if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {
+                    hill_origins[st].x = static_cast<int32_t>(x);
+                }
+                if (hill_origins[st].y < 0 || static_cast<int32_t>(y) < hill_origins[st].y) {
+                    hill_origins[st].y = static_cast<int32_t>(y);
                 }
             }
         }

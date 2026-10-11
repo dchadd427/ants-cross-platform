@@ -1334,7 +1334,7 @@
    "width": 31,
    "height": 31,
    "minutes": 7,
-   "players": 3,
+   "players": 4,
    "description": "cris cross,run across the mud",
    "repaired": "Tiles outside the dictionary: 2 cells of layer 1 given the tile that most neighbouring cells have."
   },
@@ -1589,7 +1589,7 @@
    "width": 31,
    "height": 31,
    "minutes": 13,
-   "players": 3,
+   "players": 4,
    "description": "Conquer Stratgey! But Dont Die"
   },
   {

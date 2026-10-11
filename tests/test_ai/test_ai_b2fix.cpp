@@ -889,11 +889,9 @@ void run_b2fix_tests() {
     TEST_CASE("AI1.29 The First Hill Of A Team Is The Hill: A Map Without Hill Art Falls Back To Its Start Markers And May Name A Team Twice, The Engine Takes The First (Grid::find_anthill), So Does MapInfo") {
         assets::LevelData level = level_of("TINY");
         size_t renamed = 0;
-        for (std::string& name : level.tile_dictionary) {
-            std::string upper = name;
-            for (char& ch : upper) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            if (upper == "GREENHILL" || upper == "REDHILL" || upper == "BLUEHILL" || upper == "BLACKHILL") {
-                name = "NOHILL";
+        for (assets::MapCell& cell : level.layer2_interactive) {                                  // (a hill is its tile id, 245 .. 248, not its dictionary name: take the hills away)
+            if (assets::hill_team_of_id(cell.tile_index) >= 0) {
+                cell = assets::MapCell{};
                 ++renamed;
             }
         }

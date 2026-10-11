@@ -90,25 +90,13 @@ int32_t LevelData::find_tile_index(const std::string& name) const noexcept {
     return -1;
 }
 
-namespace {
-// The team whose hill a layer-2 tile is (GREENHILL 0, REDHILL 1, BLUEHILL 2, BLACKHILL 3), -1 for any other tile
-int hill_team_of_tile(const std::string& name) {
-    std::string low = name;
-    for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    if (low == "greenhill") return 0;
-    if (low == "redhill") return 1;
-    if (low == "bluehill") return 2;
-    if (low == "blackhill") return 3;
-    return -1;
-}
-}  // namespace
+
 
 LevelData LevelData::for_roster(uint8_t roster_mask) const {
     LevelData out(*this);
     if ((roster_mask & 0x0Fu) == 0x0Fu) return out;
     for (MapCell& cell : out.layer2_interactive) {
-        if (cell.tile_index >= out.tile_dictionary.size()) continue;
-        const int team = hill_team_of_tile(out.tile_dictionary[cell.tile_index]);
+        const int team = hill_team_of_id(cell.tile_index);       // (by tile id: FUN_0100ecac erases the hill of a colour that nobody plays, whatever the dictionary calls it)
         if (team >= 0 && (roster_mask & (1u << team)) == 0) cell = MapCell{};
     }
     auto& spawns = out.anthill_spawns;
@@ -451,22 +439,9 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
         AnthillSpawn& sp = lvl.anthill_spawns[i];
         r.read_u16(sp.tile_id); r.read_u16(sp.y); r.read_u16(sp.x);
 
-        const std::string& tname = lvl.get_tile_name(sp.tile_id);
-        if (tname.find("GSTART") != std::string::npos || tname.find("GREENHILL") != std::string::npos ||
-            tname.find("ghill") != std::string::npos || tname.find("gstart") != std::string::npos) {
-            sp.team_id = 0; // Green
-        } else if (tname.find("RSTART") != std::string::npos || tname.find("REDHILL") != std::string::npos ||
-                   tname.find("rhill") != std::string::npos || tname.find("rstart") != std::string::npos) {
-            sp.team_id = 1; // Red
-        } else if (tname.find("USTART") != std::string::npos || tname.find("BLUEHILL") != std::string::npos ||
-                   tname.find("blhill") != std::string::npos || tname.find("ustart") != std::string::npos) {
-            sp.team_id = 2; // Blue
-        } else if (tname.find("BSTART") != std::string::npos || tname.find("BLACKHILL") != std::string::npos ||
-                   tname.find("bkhill") != std::string::npos || tname.find("bstart") != std::string::npos) {
-            sp.team_id = 3; // Black
-        } else {
-            sp.team_id = 255;
-        }
+        // A start marker is its tile id (the table at 0x1002468 by colour, FUN_0100ec18), whatever the dictionary calls the entry; every other record is no marker
+        const int marker_team = start_marker_team_of_id(sp.tile_id);
+        sp.team_id = marker_team >= 0 ? static_cast<uint8_t>(marker_team) : uint8_t{255};
     }
 
     // block 2 (0x1006d19): a word count, then per object five words (row, column, units, points, stages) and `stages` pairs of words (threshold, tile). An object

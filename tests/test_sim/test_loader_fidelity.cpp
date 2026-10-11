@@ -436,6 +436,130 @@ int main() {
         CHECK(arrived && seen.count({at[0].x, at[0].y}) == 0 && sim.grid().has_powerup_at(at[0]));
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 2: the hill of a colour is the layer-2 id 245 .. 248 and its start marker the block-1 id 152 .. 155, never a dictionary name (FUN_0100ecac, table 0x1002468)
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF2.1 The Ids: Hills 245 Black, 246 Blue, 247 Red, 248 Green; Start Markers 152 Black, 153 Blue, 154 Green, 155 Red (The Remake's Teams: 0 Green, 1 Red, 2 Blue, 3 Black)", [] {
+        using ants::assets::hill_team_of_id;
+        using ants::assets::start_marker_team_of_id;
+        CHECK(hill_team_of_id(245) == 3 && hill_team_of_id(246) == 2 && hill_team_of_id(247) == 1 && hill_team_of_id(248) == 0);
+        CHECK(start_marker_team_of_id(152) == 3 && start_marker_team_of_id(153) == 2 && start_marker_team_of_id(154) == 0 && start_marker_team_of_id(155) == 1);
+        for (uint16_t id : {uint16_t{0}, uint16_t{151}, uint16_t{156}, uint16_t{244}, uint16_t{249}, uint16_t{0x7FFE}}) CHECK(hill_team_of_id(id) < 0 && start_marker_team_of_id(id) < 0);
+        // TINY's own dictionary says the same (the shipped maps name them as the original does)
+        const LevelData level = tiny();
+        CHECK(level.tile_dictionary[245] == "BLACKHILL" && level.tile_dictionary[246] == "BLUEHILL" && level.tile_dictionary[247] == "REDHILL" && level.tile_dictionary[248] == "GREENHILL");
+        CHECK(level.tile_dictionary[152] == "BSTART" && level.tile_dictionary[153] == "USTART" && level.tile_dictionary[154] == "GSTART" && level.tile_dictionary[155] == "RSTART");
+    });
+
+    run_case("LF2.2 A Dictionary That Damages Or Permutes The Names Of The Hills And Start Markers Changes Nothing: The Same State Hash At The Start And 200 Ticks Later As TINY's Own", [] {
+        const LevelData original = tiny();
+        const auto hash_of = [&](const LevelData& level, uint32_t ticks) {
+            SimulationEngine sim;
+            sim.init(level, 3, 0x0F);
+            for (uint32_t t = 0; t < ticks; ++t) sim.tick();
+            return sim.state_hash().total;
+        };
+        const uint64_t at0 = hash_of(original, 0), at200 = hash_of(original, 200);
+        LevelData dotted = original;
+        for (const uint16_t id : std::initializer_list<uint16_t>{245, 246, 247, 248, 152, 153, 154, 155}) dotted.tile_dictionary[id] = ".";
+        CHECK(hash_of(dotted, 0) == at0 && hash_of(dotted, 200) == at200);
+        LevelData permuted = original;
+        std::swap(permuted.tile_dictionary[245], permuted.tile_dictionary[248]);      // black <-> green
+        std::swap(permuted.tile_dictionary[246], permuted.tile_dictionary[247]);      // blue <-> red
+        std::swap(permuted.tile_dictionary[152], permuted.tile_dictionary[155]);
+        std::swap(permuted.tile_dictionary[153], permuted.tile_dictionary[154]);
+        CHECK(hash_of(permuted, 0) == at0 && hash_of(permuted, 200) == at200);
+        LevelData misnamed = original;                                                 // the names of other entries
+        misnamed.tile_dictionary[245] = "rock1";
+        misnamed.tile_dictionary[154] = "hill";
+        CHECK(hash_of(misnamed, 0) == at0 && hash_of(misnamed, 200) == at200);
+        // and the four teams have their hill and their three start ants where TINY puts them
+        SimulationEngine sim;
+        sim.init(permuted, 3, 0x0F);
+        CHECK(sim.grid().anthills().size() == 4);
+        for (uint8_t team = 0; team < 4; ++team) {
+            CHECK(sim.grid().find_anthill(team) != nullptr);
+        }
+    });
+
+    run_case("LF2.3 A Team Without A Player Loses Its Hill And Its Start Ants By The Id, Whatever The Dictionary Calls Them (LevelData::for_roster)", [] {
+        LevelData level = tiny();
+        for (const uint16_t id : std::initializer_list<uint16_t>{245, 246, 247, 248, 152, 153, 154, 155}) level.tile_dictionary[id] = ".";
+        const LevelData two = level.for_roster(0x09);                  // green and black play
+        int hills[4] = {0, 0, 0, 0}, starts[4] = {0, 0, 0, 0};
+        for (const auto& c : two.layer2_interactive) if (ants::assets::hill_team_of_id(c.tile_index) >= 0) ++hills[ants::assets::hill_team_of_id(c.tile_index)];
+        for (const auto& sp : two.anthill_spawns) if (sp.team_id < 4) ++starts[sp.team_id];
+        CHECK(hills[0] == 16 && hills[3] == 16 && hills[1] == 0 && hills[2] == 0);
+        CHECK(starts[0] == 3 && starts[3] == 3 && starts[1] == 0 && starts[2] == 0);
+        SimulationEngine sim;
+        sim.init(level, 3, 0x09);
+        CHECK(sim.grid().anthills().size() == 2 && sim.grid().find_anthill(0) != nullptr && sim.grid().find_anthill(3) != nullptr);
+    });
+
+    run_case("LF2.4 The Community Library: 7 Maps Had A Hill Found By A Damaged Or Permuted Name (4 Lost A Hill, 3 Swapped Colours), 6 Had A Start Marker Read By Name Differently; None Is A Difference Now", [] {
+        // the loader's rule before this change, by name: the hill tile names of lvl_parser / grid, the substrings of the start markers
+        const auto old_hill_team = [](std::string n) {
+            for (char& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return n == "greenhill" ? 0 : n == "redhill" ? 1 : n == "bluehill" ? 2 : n == "blackhill" ? 3 : -1;
+        };
+        const auto old_start_team = [](const std::string& n) {
+            const auto has = [&](const char* w) { return n.find(w) != std::string::npos; };
+            if (has("GSTART") || has("GREENHILL") || has("ghill") || has("gstart")) return 0;
+            if (has("RSTART") || has("REDHILL") || has("rhill") || has("rstart")) return 1;
+            if (has("USTART") || has("BLUEHILL") || has("blhill") || has("ustart")) return 2;
+            if (has("BSTART") || has("BLACKHILL") || has("bkhill") || has("bstart")) return 3;
+            return 255;
+        };
+        std::vector<std::string> hill_maps, start_maps;
+        for_each_community_map([&](const std::string& name, const LevelData& level) {
+            bool hills_differ = false, starts_differ = false;
+            for (const auto& c : level.layer2_interactive) {
+                if (c.tile_index >= level.tile_dictionary.size()) { if (ants::assets::hill_team_of_id(c.tile_index) >= 0) hills_differ = true; continue; }
+                if (old_hill_team(level.tile_dictionary[c.tile_index]) != ants::assets::hill_team_of_id(c.tile_index)) hills_differ = true;
+            }
+            for (const auto& sp : level.anthill_spawns) {
+                const std::string& n = level.get_tile_name(sp.tile_id);
+                if (old_start_team(n) != static_cast<int>(sp.team_id)) starts_differ = true;     // (team_id is the id's team now)
+            }
+            if (hills_differ) hill_maps.push_back(name);
+            if (starts_differ) start_maps.push_back(name);
+        });
+        std::cout << "\n    hills differ in " << hill_maps.size() << " maps, start markers in " << start_maps.size() << "\n";
+        CHECK((hill_maps == std::vector<std::string>{"CRISS CROSS.lvl", "Conquer.lvl", "LIFELESS.lvl", "NO LIMIT.lvl", "TREZ OF COMBAT.lvl", "TREZ OF LIFE.lvl", "X-pRtfight.lvl"}));
+        CHECK((start_maps == std::vector<std::string>{"BOMBERWORLD.lvl", "CRISS CROSS.lvl", "Conquer.lvl", "NO LIMIT.lvl", "TREZ OF COMBAT.lvl", "TREZ OF LIFE.lvl"}));
+        // every map of the library that holds hills has them all, found by id: each present colour has 16 cells and a hill in the grid
+        int maps_with_hills = 0, wrong = 0;
+        for_each_community_map([&](const std::string&, const LevelData& level) {
+            int cells[4] = {0, 0, 0, 0};
+            for (const auto& c : level.layer2_interactive) if (ants::assets::hill_team_of_id(c.tile_index) >= 0) ++cells[ants::assets::hill_team_of_id(c.tile_index)];
+            Grid g;
+            if (!g.init_from_level(level)) return;
+            bool any = false;
+            for (uint8_t t = 0; t < 4; ++t) {
+                any = any || cells[t] > 0;
+                bool found = false;
+                for (const auto& a : g.anthills()) found = found || a.team_id == t;
+                if ((cells[t] > 0) != found && !(cells[0] + cells[1] + cells[2] + cells[3] == 0)) ++wrong;
+            }
+            maps_with_hills += any;
+        });
+        CHECK(wrong == 0);
+        CHECK(maps_with_hills > 500);
+    });
+
+    run_case("LF2.5 CRISS CROSS And Conquer (Community-Maps) Have All Four Teams Now: A Hill And Their Start Ants For Each", [] {
+        for (const char* file : {"CRISS CROSS.lvl", "Conquer.lvl"}) {
+            const LevelData level = community(file);
+            SimulationEngine sim;
+            sim.init(level, 3, 0x0F);
+            CHECK(sim.grid().anthills().size() == 4);
+            int ants_of[4] = {0, 0, 0, 0};
+            for (const auto& a : sim.get_world_state().ants) if (a.player_id < 4) ++ants_of[a.player_id];
+            CHECK(ants_of[0] > 0 && ants_of[1] > 0 && ants_of[2] > 0 && ants_of[3] > 0);
+        }
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
