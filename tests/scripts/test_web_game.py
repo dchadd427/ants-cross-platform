@@ -306,7 +306,7 @@ class TheLookIsTheFrontPages(PageCase):
                        'id="lock-off" data-lock="off" aria-checked="false"'):
             self.assertIn(markup, self.page)
         self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:aspect-16-9|aspect-4-3|lock-on|lock-off)"', self.page)), 4)
-        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 3)           # (the picture and the mouse, and the replay bar's speed: TheReplayPage)
+        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 4)           # (the picture and the mouse, the replay bar's speed and the replay bar's Picture window: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
         # (the front page's black box with its frame is `.panel`; its name card, the same card as this page's own, has the same field)
