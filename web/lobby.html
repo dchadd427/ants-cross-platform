@@ -180,7 +180,7 @@
     .bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
     .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 2px 10px; border-radius: 2px; color: #fff; }
     .live { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; vertical-align: -1px; }
-    .shape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 17px; color: var(--cream); }     /* the Picture row of the match column; in a window too narrow for the label and four buttons the label sits above them */
+    .shape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 16px; color: var(--cream); }     /* the Picture row of the match column; in a window too narrow for the label and four buttons the label sits above them */
 
     .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; max-width: min(520px, 92vw); text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
     .how { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); overflow: auto; }
@@ -207,8 +207,8 @@
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
     @media (max-width: 1040px) {
         .grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
-        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; }
-        .side .maprow { grid-row: span 2; }
+        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto auto 1fr; }     /* the map's column is tall: the Picture row and START! stack at the top of theirs, the spare height is the third row's */
+        .side .maprow { grid-row: span 3; }
     }
     @media (max-width: 720px) {
         :root { --k: 2; }

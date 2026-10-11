@@ -707,6 +707,12 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertEqual(sheet.value(".shape .seg input:focus-visible + label", "outline"), "3px solid var(--gold)")        # the focused button shows it
         self.assertIsNotNone(sheet.value(".shape .seg input:checked + label", "background"))                                 # and so does the chosen one
 
+    def test_the_picture_row_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
+        """The map's column spans three rows, the third takes the spare height, so the Picture row and START! sit under each other beside the top of the map (not spread over its height)."""
+        wide = self.style[self.style.index("@media (max-width: 1040px)"):self.style.index("@media (max-width: 720px)")]
+        self.assertIn("grid-template-rows: auto auto 1fr;", wide)
+        self.assertIn(".side .maprow { grid-row: span 3; }", wide)
+
     def test_the_picture_row_tags_the_shape_nearest_the_screen_only_for_a_mouse_and_leaves_room_for_the_tag(self):
         """The picture draws "fills your screen" under one shape's button (the script un-hides one tag, and the Picture row gets the room for it); a phone or a tablet (no hover) shows no tag and no extra room."""
         tags = re.findall(r'<span class="fit-tag" id="fit-([0-9-]+)" hidden>fills your screen</span>', self.page)
@@ -769,7 +775,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         narrower = media(self.style, "(max-width: 1040px)")
         self.assertIn(".grid { grid-template-columns: minmax(0, 1fr);", narrower)
         self.assertIn(".side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr);", narrower)                 # (one column: the map's picture beside its drop-down and START)
-        self.assertIn(".side .maprow { grid-row: span 2; }", narrower)
+        self.assertIn(".side .maprow { grid-row: span 3; }", narrower)
         self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants 4 times their size instead of 3, only where both the width and the height have room)
         self.assertEqual(self.sheet.value(".wrap", "max-width"), self.sheet.value(".bar-in", "max-width"))          # (the footer lines up with the page)
 
