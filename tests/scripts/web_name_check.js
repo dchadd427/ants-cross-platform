@@ -844,6 +844,13 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     gone.last().receive(reject(6));
     const again = gone.last().open().sent[0];
     check('a link whose room took the page and is lost later (a restart) makes the room again, as before: no key, the lobby block, the same code, no card', gone.sockets.length === 2 && gone.$('name-step').hidden && hex(again) === hex(helloBytes('Zed', 'k7m2xq')), hex(again));
+    const retry2 = link('Zed');
+    retry2.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    retry2.last().receive(reject(6));
+    retry2.last().open().receive(reject(6));
+    check('a joined link, a restart, and the server has no place to make the room again: the busy strip with Try again', !retry2.$('banner').hidden && retry2.$('banner-x').textContent === 'Try again' && retry2.$('name-step').hidden && retry2.sockets.length === 2);
+    retry2.$('banner-x').click();
+    check('... a lobby frees up: Try again sends the create block (the room is made again, not asked for with a Hello that only joins) and no card appears', retry2.sockets.length === 3 && hex(retry2.last().open().sent[0]) === hex(helloBytes('Zed', 'k7m2xq')) && retry2.$('name-step').hidden);
     const lost = link('Zed');
     lost.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     lost.last().receive(reject(6));

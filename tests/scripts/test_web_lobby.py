@@ -268,6 +268,7 @@ class TheFrontPageMarkup(PageCase):
 
     def test_how_it_works_is_a_dialog_behind_a_footer_button_with_its_steps_and_the_two_sheets(self):
         self.assertIn('<button class="lnk" type="button" id="how-open">How it works</button>', self.markup)
+        self.assertIn('a link to a room that is gone says that there is no room with that code, and offers to start a room of your own.</p>', self.markup)      # ("When the host leaves": a link never makes the room of its code)
         self.found(self.markup, r'<div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">\s*<div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>')
         how = self.markup[self.markup.index('<div class="how" id="how" hidden>'):]
         how = how[:how.index("<div class=\"name-modal\"")]
@@ -303,7 +304,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("done: function (name) { forgetSession(); connect({ code: wantedCode, name: name, own: false, joinFirst: true }); },", card)      # (a link only joins until the room has taken the page: a code with no room is not made)
         self.assertIn("offline = 'join';", card)                                                                  # (the page behind the card waits with no names and no map)
         refused = script[script.index("function onRefused(e) {"):script.index("function startOwn(kind) {")]
-        self.assertIn("if (e.reason === R.NoSuchRoom && lastParams && lastParams.joinFirst && client && client.joinOnly) askLink(lastParams.code, Rules.TEXT.noroom());", refused)      # (A: a link to a code with no room says so on the name card and offers a room of one's own; it starts none)
+        self.assertIn("if (e.reason === R.NoSuchRoom && lastParams && lastParams.joinFirst && client && client.joinOnly) askLink(lastParams.code, Rules.TEXT.noroom());", refused)      # (a link to a code with no room says so on the name card and offers a room of one's own; it starts none)
         self.assertIn("var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';", run)      # (a room code is lower case: a link that came in capitals leads to the same room)
         # this tab's room and the seat's key live in the tab's session storage, a seat that a game holds in the browser's local storage; a stored room is believed only when it is shaped as the page writes it
         self.assertIn("var LOBBY_KEY = 'ants.lobby';", script)

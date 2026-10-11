@@ -13,7 +13,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
   * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link and Have a code? (there is no other way to play on the page);
              the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
              and notice; Screen with 16:9 the default and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
-             a room that is gone (and the room of its own, with the strip that says so); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
+             a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
              strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
   * lobby    one host and guests, each a browser of its own: a guest joins through the link and its name card (a bad name is refused with the reason) and takes the next free colour; the host drags a player onto an
@@ -784,7 +784,7 @@ def main():
             check(alphabet_ok and len(set(codes)) == len(codes) and any(ch.isdigit() for c in codes for ch in c) and any(ch.isalpha() for c in codes for ch in c),
                   "every new tab makes a room of its own with a new code of six letters and numbers (%d codes seen, all different: %s)" % (len(codes), " ".join(codes)))
 
-            # a link to a room that is gone: the name card first, then a room of the visitor's own, with the strip that says so
+            # a link to a room that is gone: the name card first, then the card again with the line that there is no room, then (its button) a room of the visitor's own
             fresh_tab()
             tab.emulate(1440, 900, 1)
             tab.open(web + "?room=qqqqqq", wait=False)
@@ -809,7 +809,7 @@ def main():
             time.sleep(0.4)
             check("Bot (" in json.loads(value(NAME_CARD_JS))["msg"], "a name that begins like a computer player's is refused too (%r)" % json.loads(value(NAME_CARD_JS))["msg"][:60])
             fill_name_card(tab, "Iris")
-            # A: a link to a code that no room has takes nobody into a room: the card comes back with the line, the name filled in, and the button for a room of one's own
+            # a link to a code that no room has takes nobody into a room: the card comes back with the line, the name filled in, and the button for a room of one's own
             again = wait_for(lambda: open_name_card(tab) and json.loads(value(NAME_CARD_JS))["msg"] != "", 10)
             card = json.loads(value(NAME_CARD_JS))
             st = lobby()
