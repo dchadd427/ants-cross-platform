@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the simulation and the protocol are untouched.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/166ccc6...v0123)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/166ccc6...d9a8fb0)
 
 ## v0.12.2 - 2026-10-10 - Housekeeping: the page of old releases is gone
 
