@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.8 - 2026-10-11 - Spectators choose the picture's shape
 
 **For players:**
 - Watching a live match or a replay, you can now pick the picture shape (4:3, 16:10, 16:9, 21:9) from the replay bar.
