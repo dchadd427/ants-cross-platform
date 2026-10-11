@@ -247,9 +247,9 @@ MapPreview render_map_preview(const assets::LevelData& level, const std::array<a
     for (int64_t y = 0; y < rows; ++y) {
         for (int64_t x = 0; x < cols; ++x) {
             const sim::TileCell& cell = grid.get_cell(static_cast<uint32_t>(x), static_cast<uint32_t>(y));
-            const uint16_t id = cell.interactive_id;
+            const uint16_t id = minimap_object_id(cell);          // (a bomb of the grid, planted or from the file, is the original's 129: terrain colour, as in the minimap)
             uint8_t index;
-            if (id != sim::TILE_EMPTY && id != 0xFFFFu && !minimap_is_bomb(id)) {
+            if (id != kMinimapNoObject && !minimap_is_bomb(id)) {
                 index = static_cast<uint8_t>(minimap_object_entry(id) & 0xffu);
             } else {
                 const uint8_t cls = minimap_class(cell);

@@ -131,6 +131,7 @@ A special order plays the original's action clip, with its frame sounds. A melee
 - Defuses a bomb of any team (about 1.1 s).
 - A bomb goes off when an ant walks onto it: the ant loses 2 hit points and is thrown 4 tiles. One bomb in five is a dud (see Death & Burning).
 - With several ants selected, the move click sends them all to the bomb, and the first one to step on it sets it off.
+- A map file can hold bombs of its own (the original's tile ids 129 red, 130 green, 131 black and 132 blue, whatever the map's dictionary calls them: 208 community maps do, `Bombz Away` fills its floor with them). They are drawn in that colour and are owned by the team that the map file names with each (most maps name team 0, the first player; a number that is no team owns it for nobody): only the ants of the owner and its ally route around such a bomb, and the first ant of any team that steps on one sets it off ([the report](reverse_engineering/map_file_bombs.md)).
 
 ### Fire
 

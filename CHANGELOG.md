@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.5 - 2026-10-10 - The bombs of the community maps work
+
+**For players:**
+- **The bombs of the community maps work.** 208 of the players' maps carry the original game's own bombs, laid out in the map file (`Bombz Away` is a floor of them). The remake used to treat them as invisible rocks. Now they are shown on the field in their colours (red, green, black, blue), and the first ant that steps on one sets it off, as in the original: 2 hit points and a throw of 4 tiles. Each bomb has an owner team named in the map file (most maps name the first player): that team's ants and its ally walk around it, as around a bomb a bomber planted, and every other ant walks onto it. A bomb on a cell the map marks solid leaves the cell open when it goes off.
+- Maps without such bombs (the six originals and most of the others) play exactly as before.
+
+**Rules / network:** the way a level is read changed, so network protocol 18: a v0.12.4 game cannot join a v0.12.5 room. Replays: the rules numbers are 3 (the original's game) and 4 (game mode 187); recordings made before this update stay in the list under "Earlier versions".
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d4...v0125)
+
 ## v0.12.4 - 2026-10-11 - A link to a missing room says so
 
 **For players:**
