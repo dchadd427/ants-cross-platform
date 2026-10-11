@@ -105,7 +105,7 @@ class PlayOnlinePage(unittest.TestCase):
 
     def test_a_new_room_opens_on_treasure_and_a_room_that_is_kept_keeps_its_map(self):
         # a plain visit makes a room of a new code whose Hello asks for the default map; the page before the first message of the room shows it too
-        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, platform: platform()", self.page)
+        self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()", self.page)
         self.assertEqual(len(re.findall(r"Rules\.mapByKey\(Rules\.DEFAULT_MAP_KEY\)\.file", self.page)), 2)            # (the Hello, and the blank model of the page before the room speaks)
         self.assertIn("connect({ code: newCode(), name: myName(), own: true });", self.page)
         # the map is the room's, not the page's: a reload takes the seat back in the room it kept, with the map that the room has, and the page remembers no map of its own

@@ -809,7 +809,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     env.$('name-step-input').key('Enter');
     check('Enter with a good name joins: the card goes away, the page connects (one socket) and the browser remembers the name', env.$('name-step').hidden && env.sockets.length === 1 && env.storage.data['ants.name'] === 'Zed');
     const hello = env.last().open().sent[0];
-    check('... the Hello is the name that was typed, in the room of the link, with the lobby block (a room that is gone is made again, as picture 9 shows) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq')) && env.replaced.length === 0, hex(hello));
+    check('... the Hello is the name that was typed, in the room of the link, with no lobby block (a link only joins: a code with no room is not made) and no key', hex(hello) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && env.replaced.length === 0, hex(hello));
 }
 {
     const env = runLobby('?room=k7m2xq', {});
@@ -820,9 +820,44 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
 }
 {   // a link whose room is gone, full, running or a seat that was refused: a room of the visitor's own, under the same name, with the strip's sentence
     const link = (name) => { const e = runLobby('?room=k7m2xq', {}); e.type('name-step-input', name); e.$('name-step-go').click(); return e; };
+    const NOROOM = 'There is no room with that code. Check it, or ask the host to send the link again.';
+    const none = link('Zed');
+    check('a link is a Hello that only joins (no lobby block), so that a code with no room is not made', none.sockets.length === 1 && hex(none.last().open().sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })));
+    none.last().receive(reject(6));
+    check('a link to a code that no room has (NoSuchRoom): no room is made (one socket, no second Hello) and the name card is back, with the same name, the line for a code with no room (aria-invalid) and the button for a room of one\'s own', none.sockets.length === 1 && !none.$('name-step').hidden && none.$('name-step-input').value === 'Zed' && none.$('name-step-msg').textContent === NOROOM && none.$('name-step-input').getAttribute('aria-invalid') === 'true' && none.$('name-step-own').textContent === 'Start a room of my own instead' && none.$('name-step-go').textContent === 'Join', none.$('name-step-msg').textContent);
+    check('... the address stays the link (nothing replaced) and no strip is shown', none.replaced.length === 0 && none.$('banner').hidden);
+    none.$('name-step-own').click();
+    const mine = none.last().open().sent[0];
+    check('... "Start a room of my own instead" then makes a room of its own under the same name (a new code, no key, the lobby block) and puts the plain address in the bar', none.sockets.length === 2 && none.$('name-step').hidden && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.replaced.length === 1 && none.replaced[0][2] === '/');
+    const retry = link('Zed');
+    retry.last().receive(reject(6));
+    retry.$('name-step-go').click();
+    check('... and Join on the card asks the room again, as a link does (a Hello with no block, no new code)', retry.sockets.length === 2 && retry.$('name-step').hidden && hex(retry.last().open().sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })));
+    retry.last().receive(reject(6));
+    check('... and if the room is still not there the card comes back again', !retry.$('name-step').hidden && retry.$('name-step-msg').textContent === NOROOM && retry.sockets.length === 2);
+    const full = link('Zed');
+    full.last().open().receive(reject(1));
+    full.last().open().receive(reject(6));
+    check('a link to a code that is full, on a server that has no place for a lobby: the page makes its own room once, that is refused too, and the strip is the busy one with its Try again button (no third socket, no card)', full.sockets.length === 2 && full.$('name-step').hidden && !full.$('banner').hidden && full.$('banner-x').textContent === 'Try again' && /server is full/.test(full.$('banner-text').textContent));
     const gone = link('Zed');
+    gone.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    gone.last().receive(reject(6));
+    const again = gone.last().open().sent[0];
+    check('a link whose room took the page and is lost later (a restart) makes the room again, as before: no key, the lobby block, the same code, no card', gone.sockets.length === 2 && gone.$('name-step').hidden && hex(again) === hex(helloBytes('Zed', 'k7m2xq')), hex(again));
+    const retry2 = link('Zed');
+    retry2.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    retry2.last().receive(reject(6));
+    retry2.last().open().receive(reject(6));
+    check('a joined link, a restart, and the server has no place to make the room again: the busy strip with Try again', !retry2.$('banner').hidden && retry2.$('banner-x').textContent === 'Try again' && retry2.$('name-step').hidden && retry2.sockets.length === 2);
+    retry2.$('banner-x').click();
+    check('... a lobby frees up: Try again sends the create block (the room is made again, not asked for with a Hello that only joins) and no card appears', retry2.sockets.length === 3 && hex(retry2.last().open().sent[0]) === hex(helloBytes('Zed', 'k7m2xq')) && retry2.$('name-step').hidden);
+    const lost = link('Zed');
+    lost.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    lost.last().receive(reject(6));
+    lost.last().open().receive(reject(6));
+    check('a link that took a seat, lost its room and finds the server with no place for the room: the strip is the busy one (not the card with the line for a code with no room, which is for the first Hello only), and no third socket', lost.sockets.length === 2 && lost.$('name-step').hidden && !lost.$('banner').hidden && lost.$('banner-x').textContent === 'Try again' && /server is full/.test(lost.$('banner-text').textContent));
     gone.arrive({ flags: 2, seats: [[C, 'Zed'], [E, ''], [E, ''], [E, '']] });
-    same('a link to a room that has gone (the Hello made a new one): the strip says so, with the page\'s own sentence', [gone.$('banner').hidden, gone.$('banner-text').textContent, gone.$('banner-x').textContent], [false, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 'OK']);
+    same('... and the strip says that the room is gone, with the page\'s own sentence', [gone.$('banner').hidden, gone.$('banner-text').textContent, gone.$('banner-x').textContent], [false, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 'OK']);
     const joined = link('Zed');
     joined.arrive({ seat: 1, flags: 0, seats: [[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
     check('a link to a room that is there joins it: no strip, the room is the host\'s', joined.$('banner').hidden && joined.$('room-h').textContent === 'Maya’s room' && joined.$('code').textContent === 'k7m 2xq');
@@ -923,6 +958,10 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     p.receive(roomMessage([[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], { you: 1, leader: 0 }));
     check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && ok.$('link').value === 'https://play.test/?room=k7m2xq' && ok.$('joinbox').hidden);
     same('... and this tab keeps that room (session storage), not the old one: the code, the key, the name, and that the page did not make it', JSON.parse(ok.session.data['ants.lobby']), { c: 'k7m2xq', k: hex(Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i))), n: 'Zed', o: 0 });
+    p.receive(reject(6));
+    const asked = ok.last().open();
+    asked.receive(reject(6));
+    check('a typed code whose room is lost later (a restart): the Hello that asks again has no block, and its NoSuchRoom is the busy strip, not the card of a link (only a link\'s first Hello is told "no room with that code")', ok.sockets.length === 3 && hex(ok.sockets[2].sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && !ok.$('banner').hidden && ok.$('banner-x').textContent === 'Try again' && ok.$('name-step').hidden);
     const away = runLobby('', {});
     away.arrive({ key: KEY });
     away.$('havecode').click();
