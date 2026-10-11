@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #include "ants_app/application.hpp"
 #include "ants_app/touch_feedback.hpp"
@@ -96,7 +97,15 @@ bool Application::pan_view(int32_t dx, int32_t dy) {
     const float before_x = camera.x;
     const float before_y = camera.y;
     camera.scroll_screen(-dx, -dy, current_level_.width(), current_level_.height());
-    return camera.x != before_x || camera.y != before_y;
+    const bool moved = camera.x != before_x || camera.y != before_y;
+    if (moved && replay_mode_) {                              // two fingers moving the view of a replay take the camera; the pixel or two that a pinch drifts do not (what is panned within 300 ms adds up)
+        constexpr double kTakePixels = 10.0;
+        const double now = auto_camera_.now_ms();
+        camera_pan_px_ = (now - camera_pan_at_ms_ > 300.0 ? 0.0 : camera_pan_px_) + std::abs(dx) + std::abs(dy);
+        camera_pan_at_ms_ = now;
+        if (camera_pan_px_ >= kTakePixels) take_camera();
+    }
+    return moved;
 }
 
 void Application::cancel_touch() {

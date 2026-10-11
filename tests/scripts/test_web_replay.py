@@ -201,7 +201,7 @@ class ThePlayerPage(unittest.TestCase):
 
     def test_the_pieces_that_the_glue_finds_by_id_are_all_there(self):
         for ident in ("r-title", "r-meta", "all-btn", "copy-btn", "fullscreen-btn-r", "copy-more", "rtag", "endnote", "veil", "veil-t", "veil-f", "rm", "rm-title", "rm-body", "rbar", "b-play", "tl", "rail",
-                      "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote"):
+                      "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote", "b-cam", "cam-lbl", "camnote"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
         self.assertEqual(len(re.findall(r'data-s="(?:0\.5|1|2|4|8)"', self.page)), 5)
         self.assertIn('href="/watch.html"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
@@ -385,11 +385,11 @@ class TheSpectatorsPicture(unittest.TestCase):
                 self.assertNotIn("--bar-max", bar, shape)
 
     def test_every_layout_of_the_bar_has_a_place_for_the_button(self):
-        for areas in ('"play tl clock speed pic fsx"', '"tl tl tl tl" "play clock pic fsx" "speed speed speed speed"', '"play tl clock live speed pic fsx"',
-                      '"tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed"'):
+        for areas in ('"play tl clock cam speed pic fsx"', '"tl tl tl tl" "play clock pic fsx" "speed speed speed speed" "cam cam cam cam"', '"play tl clock live cam speed pic fsx"',
+                      '"tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed" "cam cam cam cam cam"'):
             self.assertIn("grid-template-areas: " + areas, self.page, areas)
-        self.assertEqual(self.page.count('"play tl clock speed pic fsx"'), 2)                                 # (the bar, and the fullscreen bar of a short window)
-        self.assertEqual(self.page.count('"play tl clock live speed pic fsx"'), 2)
+        self.assertEqual(self.page.count('"play tl clock cam speed pic fsx"'), 2)                              # (the bar, and the fullscreen bar of a short window)
+        self.assertEqual(self.page.count('"play tl clock live cam speed pic fsx"'), 2)
         self.assertIn(".rbar .picwrap { grid-area: pic; position: relative; }", self.page)
 
     def test_the_window_stays_on_a_narrow_screen(self):
@@ -416,6 +416,64 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotIn("stage-max", self.glue)
         self.assertNotIn("'16:9'", self.glue)
         self.assertNotIn("--aspect", self.glue)                                                              # (the shape is the page's, passed on once with the game's other arguments)
+
+
+class TheCameraButton(unittest.TestCase):
+    """The Auto camera / Manual camera button (docs/REPLAYS.md "Camera"): in the bar between the clock and the speeds, on a phone a row of its own under the speeds, in fullscreen an icon; its code is
+    web/replay_page.js (run by web_replay_check.js), the game moves the view (tests/test_app/test_replay_app.cpp RA8). tests/scripts/web_live_check.py (part camera) shows it in a real browser."""
+    page = read("web", "shell.html")
+    glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
+    script = read("web", "replay_page.js")
+
+    def test_the_button_is_in_the_bar_between_the_clock_and_the_speeds_with_both_icons_and_its_note_is_in_the_picture(self):
+        bar = self.page[self.page.index('<div class="rbar rep-only" id="rbar">'):self.page.index('id="b-tab"')]
+        self.assertLess(bar.index('id="clock"'), bar.index('id="b-cam"'))
+        self.assertLess(bar.index('id="b-cam"'), bar.index('id="speed"'))
+        button = bar[bar.index('<button class="btn sm camb"'):bar.index("</button>", bar.index('id="b-cam"')) + 9]
+        self.assertIn('data-mode="auto"', button)                                                          # (Auto is the default)
+        self.assertEqual(button.count("<svg"), 2)                                                          # (the crosshair for Auto, the arrows for Manual: no markup is made by the script)
+        self.assertIn('id="cam-lbl">Auto camera</span>', button)
+        stage = self.page[self.page.index('<div id="game-stage"'):self.page.index('<div class="name-modal" id="name-step"')]
+        self.assertIn('id="camnote"', stage)
+        self.assertIn("You have the camera. Press&#8197;<b>Auto camera</b>&#8197;to follow the action again.", stage)  # (the approved words; the image's HTML minifier takes plain spaces away beside a tag, as in the tip above the guide)
+
+    def test_phone_fullscreen_and_narrow_bars_have_their_own_looks(self):
+        phone = block(self.page, "@media (max-width: 700px) {\n            body.replay header { flex-wrap: wrap; }")
+        self.assertIn('"speed speed speed speed" "cam cam cam cam"', phone)                                # (its own full-width row under the speeds)
+        self.assertIn(".rbar:not(.over) .camb { justify-self: stretch;", phone)
+        self.assertIn(".rbar.over .camb .lbl { display: none; }", self.page)                               # (fullscreen: an icon)
+        self.assertIn("@container rbar (max-width: 899px) { .rbar .camb .lbl { display: none; } }", self.page)   # (a bar too narrow for the word keeps the icon and the name for a screen reader)
+        self.assertIn("container: rbar / inline-size;", self.page)
+        self.assertIn('aria-label="Auto camera"', self.page)
+        self.assertIn('.rbar .camb[data-mode="auto"]', self.page)                                          # (Auto is lit)
+
+    def test_the_game_is_told_and_asked_by_the_numbers_of_its_enums(self):
+        view = read("include", "ants_app", "replay_view.hpp")
+        self.assertRegex(view, r"SetCamera = 7")
+        self.assertRegex(view, r"Camera = 10,")
+        self.assertRegex(view, r"CameraTaken = 11")
+        self.assertIn("complete: 9, camera: 10, taken: 11", self.glue)
+        self.assertIn("liveOver: 6, camera: 7", self.glue)
+        self.assertIn("R.cameraControl(", self.glue)
+        for call in ("cam.look(ready);", "cam.wire(", "cam.fullscreen(over);"):
+            self.assertIn(call, self.glue, call)
+
+    def test_what_the_device_chose_is_kept_in_one_key_in_a_try_and_taking_the_camera_is_not_a_choice(self):
+        self.assertIn("var CAM_KEY = 'ants.cam';", self.script)
+        for call in ("storage.getItem(CAM_KEY)", "storage.setItem(CAM_KEY"):
+            line = next(l for l in self.script.splitlines() if call in l or call in l.replace("\n", ""))
+            self.assertTrue(self.script.index(call) > self.script.rindex("try", 0, self.script.index(call)), call)
+        press = self.script[self.script.index("press: function"):self.script.index("wire: function")]
+        self.assertIn("camSave(env.storage, pref);", press)
+        look = self.script[self.script.index("look: function"):self.script.index("press: function")]
+        self.assertNotIn("camSave", look)                                                                  # (the game says the camera was taken: that is not written down)
+        self.assertNotIn("window.localStorage", self.script)                                               # (the page passes its storage in, inside a try)
+        self.assertIn("try { return window.localStorage; } catch (e) { return null; }", self.glue)
+
+    def test_the_script_makes_no_markup_for_the_button(self):
+        control = self.script[self.script.index("function cameraControl"):self.script.index("var api = {")]
+        for bad in ("innerHTML", "insertAdjacentHTML", "outerHTML", "document.write"):
+            self.assertNotIn(bad, control, bad)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Picture button's code was NOT run (tests/scripts/web_picture_popover_check.js)")

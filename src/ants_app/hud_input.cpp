@@ -146,6 +146,11 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
         }
     }
 
+    if (view_only_) {                                                                         // a replay: the picture is not a place to click, the pointer over it is the plain arrow
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
     // 3. Outside the map rectangle (16, 21) - (458, 461) of the original: the plain pointer. So it is over the black around a map that is smaller than the view (a 16 x 16 map in the
     //    16:9 view is centred in it): there is no ground under the pointer there
     if (!over_ground(screen_x, screen_y, camera, grid)) {
@@ -345,6 +350,7 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 
 // FUN_010277f4: the click at the release point, by the cursor mode found there
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
+    if (view_only_) return;
     const auto& world = sim.get_world_state();
     if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
     sim_query_ = &sim;                                      // (the special-target question is asked of the engine whose world the click picks from: the one the screen shows)
@@ -420,6 +426,7 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
 // rectangle; without a band a release with the pointer on the map is a 1 x 1 rectangle at the pointer, anywhere else nothing happens. A rectangle
 // of at most 4 px in both directions is a click at the release point, a bigger one selects the local team's ants whose hit box overlaps it.
 void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
+    if (view_only_) return;
     const bool latched = slot_latched_[0] || slot_latched_[1];
     BandRect rect{};
     if (is_dragging_ && !latched) rect = band_rect();
@@ -438,6 +445,7 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
 // FUN_01027b51: the right button executes at its release with the tile of the press point
 void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera, int capture, int32_t press_x, int32_t press_y,
                               int32_t x, int32_t y) {
+    if (view_only_) return;
     const auto& world = sim.get_world_state();
     const PanelMode panel = panel_mode(world);
     if (capture == 2) {                                        // pressed on the minimap: own ants only; the press point is a point of the map

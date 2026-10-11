@@ -253,6 +253,21 @@ public:
         return !is_modal_open() && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed &&
                !send_to_button_.is_pressed && !team_button_.is_pressed;
     }
+    /// A replay is for looking: the picture is not a place to click. With this on nothing can be picked (no click, no drag box, no corner marks, no Move and Stop buttons, no order markers, no
+    /// ant voice, no Ctrl+A / H / N / P, no inspect panel) and the pointer over the map is the plain arrow; the minimap, the edge scroll, the zoom and the buttons work as ever. Only a replay
+    /// sets it (Application::start_replay): a match that is played is the same.
+    void set_view_only(bool on) noexcept { view_only_ = on; }
+    bool view_only() const noexcept { return view_only_; }
+    /// The ring on the minimap that shows where the busiest place is (the camera of a replay, docs/REPLAYS.md "Camera"): solid when the camera follows it, dashed when it is only a hint
+    void set_camera_ring(bool shown, int32_t world_x, int32_t world_y, bool solid) noexcept {
+        ring_shown_ = shown;
+        ring_x_ = world_x;
+        ring_y_ = world_y;
+        ring_solid_ = solid;
+    }
+    bool is_dragging() const noexcept { return is_dragging_; }
+    bool camera_ring_shown() const noexcept { return ring_shown_; }
+    bool camera_ring_solid() const noexcept { return ring_solid_; }
     /// Every press that is in progress ends with no act: the rubber band (no selection), the minimap's and the right button's press (no order), the chat log's drag and the pressed buttons
     /// (nothing fires). For a touch that the browser took away, or that a second finger turned into a gesture. The options window's own press ends here too (a slider's drag, with no value written);
     /// the other dialogs' and pages' buttons end as a release away from them.
@@ -573,6 +588,11 @@ private:
 
     // Minimap drag navigation state
     bool is_radar_dragging_{false};
+    bool view_only_{false};                     // a replay: nothing can be picked (set_view_only)
+    bool ring_shown_{false};                    // the ring of the camera's busiest place on the minimap (set_camera_ring)
+    int32_t ring_x_{0};
+    int32_t ring_y_{0};
+    bool ring_solid_{true};
 
     // Top Header Buttons
     UIButton help_button_{};
