@@ -14,6 +14,7 @@
 #include <random>
 #include <memory>
 #include "ants_test_paths.hpp"
+#include "../common/test_assert.hpp"
 
 using namespace ants::assets;
 
@@ -49,19 +50,9 @@ static int g_assert_count = 0;
         } \
     } while (0)
 
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
 
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
 
+#undef ASSERT_EQ
 #define ASSERT_EQ(a, b) \
     do { \
         ++g_assert_count; \
@@ -73,6 +64,7 @@ static int g_assert_count = 0;
         } \
     } while (0)
 
+#undef ASSERT_NE
 #define ASSERT_NE(a, b) \
     do { \
         ++g_assert_count; \
@@ -84,6 +76,7 @@ static int g_assert_count = 0;
         } \
     } while (0)
 
+#undef ASSERT_GT
 #define ASSERT_GT(a, b) \
     do { \
         ++g_assert_count; \
@@ -95,6 +88,7 @@ static int g_assert_count = 0;
         } \
     } while (0)
 
+#undef ASSERT_LT
 #define ASSERT_LT(a, b) \
     do { \
         ++g_assert_count; \

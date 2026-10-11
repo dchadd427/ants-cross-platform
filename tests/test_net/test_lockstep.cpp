@@ -27,6 +27,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 using namespace ants;
 using namespace ants::net;
@@ -57,20 +58,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
-#define ASSERT_NE(a, b) ASSERT_TRUE((a) != (b))
 
 // The sessions hand the runner hooks that capture `this` (the delay meters): a copy or a move would leave them pointing at a session that is gone, so neither exists
 static_assert(!std::is_copy_constructible<HostSession>::value && !std::is_copy_assignable<HostSession>::value, "a HostSession is never copied");
