@@ -283,6 +283,15 @@ check "without --results-dir and --db there is no database, and the log says so"
 printf 'this is not a database, it must be left exactly as it is, byte for byte, by a server that refuses to start on it\n' > "$WORK/db_junk.db"
 cp "$WORK/db_junk.db" "$WORK/db_junk.copy"
 check "a file that is no database stops the server (status 1) with a message that names the file, and the file is not changed" "$([ "$(exit_of --db "$WORK/db_junk.db")" = "1" ] && cmp -s "$WORK/db_junk.db" "$WORK/db_junk.copy" && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_junk.db" 2>&1 | grep -q 'db_junk.db.*not a database'; echo $?)"
+if python3 -c 'import sqlite3' 2> /dev/null; then
+    python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table schema_version (version integer primary key, name text not null, applied_at text not null)"); c.execute("insert into schema_version values (99, ?, ?)", ("future", "then")); c.commit(); c.close()' "$WORK/db_newer.db"
+    python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table somebody_elses (x text)"); c.commit(); c.close()' "$WORK/db_foreign.db"
+    cp "$WORK/db_newer.db" "$WORK/db_newer.copy"; cp "$WORK/db_foreign.db" "$WORK/db_foreign.copy"
+    check "a database of a NEWER program in the rollback journal (schema version 99) stops the server (status 1) and is byte for byte as it was, with no -wal, -shm or -journal file beside it" "$([ "$(exit_of --db "$WORK/db_newer.db")" = "1" ] && cmp -s "$WORK/db_newer.db" "$WORK/db_newer.copy" && [ ! -e "$WORK/db_newer.db-wal" ] && [ ! -e "$WORK/db_newer.db-shm" ] && [ ! -e "$WORK/db_newer.db-journal" ] && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_newer.db" 2>&1 | grep -q 'newer'; echo $?)"
+    check "a foreign SQLite file (tables, no schema_version) stops the server (status 1) and is left byte for byte as it was, with no side files" "$([ "$(exit_of --db "$WORK/db_foreign.db")" = "1" ] && cmp -s "$WORK/db_foreign.db" "$WORK/db_foreign.copy" && [ ! -e "$WORK/db_foreign.db-wal" ] && [ ! -e "$WORK/db_foreign.db-shm" ] && [ ! -e "$WORK/db_foreign.db-journal" ]; echo $?)"
+else
+    echo "  SKIP: python3 has no sqlite3 module: the refusal of a newer and of a foreign database file was NOT checked"
+fi
 check "... and --no-db starts the server in spite of it" "$([ "$(exit_of --results-dir "$WORK/db_off2" --no-db)" = "142" ]; echo $?)"
 check "--db that names a folder stops the server (status 1)" "$([ "$(exit_of --db "$WORK")" = "1" ]; echo $?)"
 mkdir -p "$WORK/maps_odd"

@@ -159,6 +159,73 @@ void run_migration_tests() {
         DB_CHECK(has_table(db, "a") && has_table(db, "b"));
     } DB_END;
 
+    DB_CASE("DB6.8 A database of a newer program in the default (rollback) journal is refused by open_and_migrate with the file byte for byte as it was, and no -wal, -shm or -journal appears") {
+        TempDir dir;
+        const std::string path = dir.file("newer.db");
+        {
+            Database db;
+            OpenOptions plain;
+            plain.wal = false;
+            DB_CHECK(db.open(path, plain).ok());
+            DB_CHECK(db.exec("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);"
+                             "INSERT INTO schema_version VALUES (99, 'future', 'then')").ok());
+        }
+        const std::string before = dbtest::read_all(path);
+        DB_CHECK(before.size() > 100 && before[18] == 1 && before[19] == 1);          // bytes 18, 19: 1 = rollback journal, 2 = WAL
+        Database db;
+        std::string mode;
+        int v = 0;
+        const Error e = open_and_migrate(db, path, ants::server::db_migrations(), OpenOptions(), &v, &mode);
+        DB_CHECK(e.code == kErrNewerSchema && v == 99);
+        DB_CHECK(!db.is_open());
+        DB_CHECK(dbtest::read_all(path) == before);
+        for (const char* side : {"-wal", "-shm", "-journal"}) DB_CHECK(!std::filesystem::exists(path + side));
+    } DB_END;
+
+    DB_CASE("DB6.9 A foreign SQLite file (tables, no schema_version) and a junk file are refused by open_and_migrate, untouched; an empty file and a new name become ours, in WAL") {
+        TempDir dir;
+        const std::string foreign = dir.file("foreign.db");
+        {
+            Database db;
+            OpenOptions plain;
+            plain.wal = false;
+            DB_CHECK(db.open(foreign, plain).ok());
+            DB_CHECK(db.exec("CREATE TABLE somebody_elses (x TEXT); INSERT INTO somebody_elses VALUES ('data')").ok());
+        }
+        const std::string before = dbtest::read_all(foreign);
+        Database db;
+        Error e = open_and_migrate(db, foreign, ants::server::db_migrations(), OpenOptions());
+        DB_CHECK(e.code == kErrForeign && e.message.find("not made by this program") != std::string::npos);
+        DB_CHECK(!db.is_open());
+        DB_CHECK(dbtest::read_all(foreign) == before);
+        for (const char* side : {"-wal", "-shm", "-journal"}) DB_CHECK(!std::filesystem::exists(foreign + side));
+        const std::string junk = dir.file("junk.db");
+        dbtest::write_all(junk, std::string(300, 'J'));
+        e = open_and_migrate(db, junk, ants::server::db_migrations(), OpenOptions());
+        DB_CHECK(!e.ok() && !db.is_open());
+        DB_CHECK(dbtest::read_all(junk) == std::string(300, 'J'));
+        dbtest::write_all(dir.file("empty.db"), "");
+        std::string mode;
+        int v = 0;
+        DB_CHECK(open_and_migrate(db, dir.file("empty.db"), ants::server::db_migrations(), OpenOptions(), &v, &mode).ok());
+        DB_CHECK(v == ants::server::db_schema_version() && mode == "wal");
+        db.close();
+        DB_CHECK(open_and_migrate(db, dir.file("new.db"), ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "wal");
+    } DB_END;
+
+    DB_CASE("DB6.10 open_and_migrate keeps the rollback journal when WAL is not possible (the request is refused by the file system), and reports it; :memory: works") {
+        TempDir dir;
+        OpenOptions odd;
+        odd.journal_request = "NO_SUCH_MODE";
+        Database db;
+        std::string mode;
+        int v = 0;
+        DB_CHECK(open_and_migrate(db, dir.file("r.db"), ants::server::db_migrations(), odd, &v, &mode).ok());
+        DB_CHECK(mode == "delete" && v == ants::server::db_schema_version());
+        db.close();
+        DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
+    } DB_END;
+
     DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at, and nothing else of its own") {
         const auto& list = ants::server::db_migrations();
         DB_CHECK(!list.empty() && list.front().version == 1);

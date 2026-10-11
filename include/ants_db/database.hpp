@@ -27,6 +27,7 @@ constexpr int kErrBadMigrations = -2;       // the list of migrations is not in 
 constexpr int kErrNested = -3;              // a transaction is open already
 constexpr int kErrNotOpen = -4;             // the database (or statement) is not open
 constexpr int kErrRange = -5;               // a column or parameter index out of range
+constexpr int kErrForeign = -6;             // a database that this program did not make (it has tables and no schema_version)
 
 struct Error {
     int code{0};                           // 0 = no error; SQLite's result code, or one of the kErr values
@@ -37,7 +38,9 @@ struct Error {
 struct OpenOptions {
     bool create{true};                     // make the file when it does not exist (false: a missing file is an error)
     int busy_timeout_ms{5000};             // how long a statement waits for another connection's lock
-    bool wal{true};                        // journal_mode=WAL with synchronous=NORMAL (not for ":memory:")
+    bool wal{true};                        // ask for journal_mode=WAL with synchronous=NORMAL right at open (not for ":memory:"). A file system that cannot do WAL (it needs a shared-memory file)
+                                           // is NOT an error: the file keeps its rollback journal and journal_mode() says so. open_and_migrate() asks AFTER the version check instead
+    std::string journal_request{"WAL"};    // what is asked for (a test asks for something a file cannot have, to see the fallback)
 };
 
 class Statement;
@@ -67,6 +70,10 @@ public:
 
     // A consistent copy of the live database into a new file (SQLite's online backup), to be made while the server runs. The target is written beside itself first and renamed when complete.
     Error backup_to(const std::string& path);
+
+    // Asks for a journal mode ("WAL"): `mode` receives the one the file has afterwards, which differs from the request when the file system cannot give it (no error then). With "wal" the
+    // synchronous level becomes NORMAL. This WRITES to the file header: for a file that is not yet known to be ours, call it only after the version check (open_and_migrate does).
+    Error use_journal(const std::string& request, std::string& mode);
 
     sqlite3* handle() const { return db_; }
 
@@ -126,7 +133,7 @@ public:
     const Error& error() const { return begin_error_; }      // the result of BEGIN: when it is not ok(), nothing is active
     bool active() const { return active_; }
     Error commit();
-    Error rollback();
+    Error rollback();                                       // a ROLLBACK that fails leaves the transaction active, so that the destructor tries again (its failure is ignored there)
 
 private:
     Database* db_;

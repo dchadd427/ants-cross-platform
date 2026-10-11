@@ -72,21 +72,28 @@ Error Database::open(const std::string& path, const OpenOptions& options) {
         return e;
     };
     sqlite3_busy_timeout(db_, options.busy_timeout_ms);
-    if (options.wal && !memory) {
-        Statement st;
-        Error e = prepare(st, "PRAGMA journal_mode=WAL");
-        if (!e.ok()) return fail("journal mode", e);
-        if (st.step() != Statement::Step::Row) return fail("journal mode", st.error());
-        const std::string mode = st.column_text(0);
-        if (mode != "wal") return fail("journal mode", make_error(SQLITE_ERROR, "WAL", ("the file system gave the journal mode '" + mode + "'").c_str()));
-        st = Statement();
-        e = exec("PRAGMA synchronous=NORMAL");
-        if (!e.ok()) return fail("synchronous", e);
-    }
     Error e = exec("PRAGMA foreign_keys=ON");
     if (!e.ok()) return fail("foreign keys", e);
-    e = exec("SELECT count(*) FROM sqlite_master");                 // reads the schema: a damaged file says so here
+    e = exec("SELECT count(*) FROM sqlite_master");                 // reads the schema: a damaged file says so here (nothing has been written yet)
     if (!e.ok()) return fail("reading the file", e);
+    if (options.wal && !memory) {
+        std::string mode;
+        e = use_journal(options.journal_request, mode);
+        if (!e.ok()) return fail("journal mode", e);                 // (a mode other than the one asked for is no error: the file keeps its rollback journal)
+    }
+    return Error();
+}
+
+Error Database::use_journal(const std::string& request, std::string& mode) {
+    mode.clear();
+    if (db_ == nullptr) return make_error(kErrNotOpen, "journal mode", "the database is not open");
+    Statement st;
+    Error e = prepare(st, "PRAGMA journal_mode=" + request);
+    if (!e.ok()) return e;
+    if (st.step() != Statement::Step::Row) return st.error();
+    mode = st.column_text(0);
+    st = Statement();
+    if (mode == "wal") return exec("PRAGMA synchronous=NORMAL");
     return Error();
 }
 
@@ -135,8 +142,14 @@ Error Database::backup_to(const std::string& path) {
     if (db_ == nullptr) return make_error(kErrNotOpen, "backup", "the database is not open");
     if (path.empty() || path == ":memory:") return make_error(SQLITE_CANTOPEN, "backup", "no file name");
     std::error_code ec;
-    if (!path_.empty() && path_ != ":memory:" && std::filesystem::equivalent(std::filesystem::u8path(path), std::filesystem::u8path(path_), ec)) {
-        return make_error(SQLITE_MISUSE, "backup", "the target is the database itself");
+    if (!path_.empty() && path_ != ":memory:") {
+        const auto target = std::filesystem::absolute(std::filesystem::u8path(path), ec).lexically_normal();
+        const auto own = std::filesystem::absolute(std::filesystem::u8path(path_), ec).lexically_normal();
+        bool same = std::filesystem::equivalent(std::filesystem::u8path(path), std::filesystem::u8path(path_), ec);
+        for (const char* suffix : {"", "-wal", "-shm", "-journal"}) {         // (the database's own side files too)
+            if (target == std::filesystem::path(own.native() + std::filesystem::path(suffix).native())) same = true;
+        }
+        if (same) return make_error(SQLITE_MISUSE, "backup", "the target is the database itself or one of its side files");
     }
     const std::string temp = path + ".partial";           // (the backup is complete only when it is renamed)
     std::filesystem::remove(std::filesystem::u8path(temp), ec);        // (our own leftover of an earlier try)
@@ -158,6 +171,7 @@ Error Database::backup_to(const std::string& path) {
         if (result.ok() && rc != SQLITE_OK) result = make_error(rc, "backup", sqlite3_errstr(rc));
     }
     sqlite3_exec(target, "PRAGMA journal_mode=DELETE", nullptr, nullptr, nullptr);       // (one self-contained file)
+    // (the destination connection is closed completely before the rename: Windows cannot move a file that is open; std::filesystem::rename replaces an existing target on POSIX and on Windows)
     sqlite3_close_v2(target);
     if (result.ok()) {
         std::filesystem::rename(std::filesystem::u8path(temp), std::filesystem::u8path(path), ec);
@@ -207,7 +221,8 @@ Error Statement::bind_double(int index, double value) {
 
 Error Statement::bind_text(int index, std::string_view value) {
     ANTS_DB_NEED_STATEMENT("bind");
-    const int rc = sqlite3_bind_text64(stmt_, index, value.data(), static_cast<sqlite3_uint64>(value.size()), SQLITE_TRANSIENT, SQLITE_UTF8);
+    static const char kEmpty[] = "";                  // (an empty view with no data pointer is the empty string, never NULL: sqlite binds NULL for a null pointer)
+    const int rc = sqlite3_bind_text64(stmt_, index, value.data() != nullptr ? value.data() : kEmpty, static_cast<sqlite3_uint64>(value.size()), SQLITE_TRANSIENT, SQLITE_UTF8);
     return rc == SQLITE_OK ? Error() : fail("bind", rc);
 }
 
@@ -299,9 +314,13 @@ Error Transaction::commit() {
 
 Error Transaction::rollback() {
     if (!active_) return make_error(kErrNotOpen, "rollback", "no transaction is active");
-    active_ = false;
-    if (!db_->in_transaction()) return Error();      // (SQLite rolled it back by itself after a full disk, for example)
-    return db_->exec("ROLLBACK");
+    if (!db_->in_transaction()) {                    // (SQLite rolled it back by itself after a full disk, for example)
+        active_ = false;
+        return Error();
+    }
+    Error e = db_->exec("ROLLBACK");
+    if (e.ok()) active_ = false;                     // (a ROLLBACK that fails leaves the transaction active: the caller or the destructor tries again)
+    return e;
 }
 
 }  // namespace ants::db

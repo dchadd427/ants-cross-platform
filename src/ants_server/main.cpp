@@ -529,14 +529,15 @@ int main(int argc, char** argv) {
         } else {
             if (path.empty()) path = (std::filesystem::path(o.results_dir) / "ants.db").u8string();
             std::filesystem::create_directories(std::filesystem::u8path(path).parent_path(), ec);          // (an empty parent, a file in the current folder, is fine)
-            ants::db::Error err = database.open(path);
             int version = 0;
-            if (err.ok()) err = ants::db::migrate(database, ants::server::db_migrations(), &version);
+            std::string journal;
+            const ants::db::Error err = ants::db::open_and_migrate(database, path, ants::server::db_migrations(), ants::db::OpenOptions(), &version, &journal);
             if (!err.ok()) {
                 std::fprintf(stderr, "database %s: %s\n(the file was not changed; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str());
                 return 1;
             }
-            log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + database.journal_mode() + ")");
+            log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
+                (journal == "wal" ? std::string() : std::string("; the file system gave no WAL, the rollback journal is used")));
         }
     }
     // Restart records (restart_record.hpp): in --restart-dir, else in the folder "restart" of the results folder, unless switched off. An explicit folder that cannot be used stops the server

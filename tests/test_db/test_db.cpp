@@ -107,6 +107,22 @@ void open_and_close_cases() {
     } DB_END;
 }
 
+void fallback_cases() {
+    DB_CASE("DB1.7 A journal mode that the file cannot have (as a file system without WAL) is no error: the rollback journal stays and the mode is reported") {
+        TempDir dir;
+        OpenOptions odd;
+        odd.journal_request = "NO_SUCH_MODE";                    // SQLite answers with the mode it keeps, as it does when WAL is impossible
+        Database db;
+        DB_CHECK(db.open(dir.file("f.db"), odd).ok());
+        DB_CHECK(db.journal_mode() == "delete");
+        std::string mode;
+        DB_CHECK(db.use_journal("WAL", mode).ok() && mode == "wal");        // (and a real request works afterwards)
+        DB_CHECK(db.use_journal("DELETE", mode).ok() && mode == "delete");
+        db.close();
+        DB_CHECK(!db.use_journal("WAL", mode).ok());
+    } DB_END;
+}
+
 void statement_cases() {
     DB_CASE("DB2.1 Every kind of value goes in and comes out: int64 limits, double, text with a NUL and UTF-8, a blob with zero bytes, an empty blob, NULL") {
         Database db;
@@ -174,6 +190,20 @@ void statement_cases() {
         Statement key;
         DB_CHECK(db.prepare(key, "SELECT k FROM u").ok() && key.step() == Statement::Step::Row);
         DB_CHECK(key.column_text(0) == "x'); DROP TABLE u; --");
+    } DB_END;
+
+    DB_CASE("DB2.5 An empty text is the empty string, never NULL, also from a string_view with no data pointer") {
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        Statement st;
+        DB_CHECK(db.prepare(st, "SELECT typeof(?1), length(?1)").ok());
+        DB_CHECK(st.bind_text(1, std::string_view()).ok());
+        DB_CHECK(st.step() == Statement::Step::Row);
+        DB_CHECK(st.column_text(0) == "text" && st.column_int64(1) == 0);
+        DB_CHECK(st.reset().ok() && st.bind_text(1, std::string_view("", 0)).ok() && st.step() == Statement::Step::Row);
+        DB_CHECK(st.column_text(0) == "text");
+        DB_CHECK(st.reset().ok() && st.bind_null(1).ok() && st.step() == Statement::Step::Row);
+        DB_CHECK(st.column_text(0) == "null");
     } DB_END;
 
     DB_CASE("DB2.3 Foreign keys are enforced from the start") {
@@ -341,8 +371,8 @@ void file_cases() {
         DB_CHECK(copy.open(dir.file("copy.db")).ok());
         DB_CHECK(count_rows(copy, "t") == 500);
         DB_CHECK(count_rows(db, "t") == 501);
+        copy.close();                                                          // (Windows cannot replace a file that a connection still holds open)
         DB_CHECK(db.backup_to(dir.file("copy.db")).ok());                      // (a second backup replaces the first)
-        copy.close();
         DB_CHECK(copy.open(dir.file("copy.db")).ok());
         DB_CHECK(count_rows(copy, "t") == 501);
     } DB_END;
@@ -355,6 +385,8 @@ void file_cases() {
         DB_CHECK(!db.backup_to(dir.file("no/such/dir/x.db")).ok());
         DB_CHECK(!std::filesystem::exists(dir.file("no")));
         DB_CHECK(!db.backup_to("").ok());
+        for (const char* side : {"-wal", "-shm", "-journal"}) DB_CHECK(!db.backup_to(dir.file("own.db") + side).ok());
+        DB_CHECK(!db.backup_to((dir.path / "." / "own.db").string()).ok());
         db.close();
         DB_CHECK(db.backup_to(dir.file("x.db")).code == kErrNotOpen);
         Database mem;
@@ -375,6 +407,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n=======================================================\n [SUITE] ants_db: the SQLite wrapper, the transactions, the migrations and the server's schema\n"
                  "=======================================================\n";
     open_and_close_cases();
+    fallback_cases();
     statement_cases();
     transaction_cases();
     file_cases();

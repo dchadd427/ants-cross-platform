@@ -45,6 +45,15 @@ Error migrate(Database& db, const Migration* migrations, size_t count, int* vers
     Error e = current_version(db, have);
     if (!e.ok()) return fail(e.code, "reading the schema version: " + e.message);
     if (version != nullptr) *version = have;
+    if (have == 0) {                                          // no schema_version: only an empty file may be made ours
+        Statement objects;
+        e = db.prepare(objects, "SELECT count(*) FROM sqlite_master");
+        if (!e.ok()) return fail(e.code, "reading the schema: " + e.message);
+        if (objects.step() != Statement::Step::Row) return fail(objects.error().code, "reading the schema: " + objects.error().message);
+        if (objects.column_int64(0) > 0 && count > 0) {
+            return fail(kErrForeign, "the database was not made by this program (it has tables and no schema_version); nothing was changed");
+        }
+    }
     if (have > newest) {
         return fail(kErrNewerSchema, "the database has schema version " + std::to_string(have) + ", newer than the " + std::to_string(newest) +
                                          " that this program knows: it was made by a newer program; nothing was changed");
@@ -80,5 +89,27 @@ Error migrate(Database& db, const Migration* migrations, size_t count, int* vers
 }
 
 Error migrate(Database& db, const std::vector<Migration>& migrations, int* version) { return migrate(db, migrations.data(), migrations.size(), version); }
+
+Error open_and_migrate(Database& db, const std::string& path, const std::vector<Migration>& migrations, const OpenOptions& options, int* version, std::string* journal_mode) {
+    OpenOptions plain = options;
+    plain.wal = false;                                       // (the journal mode is a write to the file header: not before the file is known to be ours)
+    Error e = db.open(path, plain);
+    if (!e.ok()) return e;
+    e = migrate(db, migrations, version);
+    if (!e.ok()) {
+        db.close();
+        return e;
+    }
+    std::string mode = db.journal_mode();
+    if (options.wal && path != ":memory:") {
+        e = db.use_journal(options.journal_request, mode);
+        if (!e.ok()) {
+            db.close();
+            return e;
+        }
+    }
+    if (journal_mode != nullptr) *journal_mode = mode;
+    return Error();
+}
 
 }  // namespace ants::db
