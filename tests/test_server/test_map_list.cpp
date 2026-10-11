@@ -153,7 +153,9 @@ int main() {
         copy_map(tiny, maps, "TINY.LVL");
         copy_map(tiny, community, "A B!#$&'~.lvl");
         copy_map(tiny, community, "UPPER.LVL");
-        copy_map(tiny, community, "a:b.lvl");                                                       // (Windows-forbidden)
+#ifndef _WIN32
+        copy_map(tiny, community, "a:b.lvl");                                                       // (a name that cannot travel; it cannot exist on Windows at all: ':' is forbidden there)
+#endif
         copy_map(tiny, community, ".hidden.lvl");
         copy_map(tiny, community, "x.txt");
         copy_map(tiny, community, "TINY.LVL");                                                      // (the maps folder wins)
@@ -360,7 +362,7 @@ int main() {
         MapEntry entry;
         assets::LevelData level;
         ASSERT_TRUE(s.load_map("!!!BLOCKADES!!!.lvl", entry, level));
-        ASSERT_EQ(entry.path, community_dir() + "/!!!BLOCKADES!!!.lvl");
+        ASSERT_TRUE(fs::path(entry.path).lexically_normal() == (fs::path(community_dir()) / "!!!BLOCKADES!!!.lvl").lexically_normal());      // (paths, not strings: the separators differ on Windows)
         ASSERT_TRUE(level.width > 0 && level.height > 0);
         ASSERT_FALSE(s.load_map("../x.lvl", entry, level));
     } TEST_END();
