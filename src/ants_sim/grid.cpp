@@ -147,9 +147,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         }
     }
 
-    // Mark flower plants from Block 1 (team_id == 255) as solid obstacles at their root stem
+    // Mark flower plants from Block 1 as solid obstacles at their root stem. Block 1 holds start markers, plants (tile flag 0x10 or 0x20) and nothing else that the original reads
+    // (FUN_0100dbb0: every other record is ignored), so only a plant can be one
     for (const auto& sp : level.anthill_spawns) {
-        if (sp.team_id == 255 && sp.tile_id < level.tile_dictionary.size()) {
+        if (sp.team_id == 255 && movement::is_plant_object_tile(sp.tile_id) && sp.tile_id < level.tile_dictionary.size()) {
             const std::string& tname = level.tile_dictionary[sp.tile_id];
             std::string lower_name = tname;
             for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
@@ -191,7 +192,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         }
     }
     if (anthills_.empty()) {
-        anthills_ = level.anthill_spawns;
+        // a map without hill cells: the start markers stand in (the remake's own fallback); the other records of block 1 are plants and ignored records, never a hill
+        for (const auto& sp : level.anthill_spawns) {
+            if (sp.team_id < 4) anthills_.push_back(sp);
+        }
         for (const auto& sp : anthills_) {
             configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)}, sp.team_id);
         }

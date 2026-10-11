@@ -14,6 +14,8 @@
 #include "ants_assets/asset_archive.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/grid.hpp"
+#include "ants_sim/movement_tables.hpp"
+#include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
 
 using namespace ants;
@@ -52,7 +54,7 @@ Image read_region(SDL_Renderer* sr, int x, int y, int w, int h) {
 }
 
 // The static map layers of the whole map, by tiling camera positions over the playfield (as tests/test_app/test_file_bombs_render.cpp does)
-Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh) {
+Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh, const sim::WorldState* entities = nullptr) {
     Image out(static_cast<int>(mw) * 32, static_cast<int>(mh) * 32);
     for (size_t i = 0; i < out.px.size(); i += 4) { out.px[i] = 255; out.px[i + 1] = 0; out.px[i + 2] = 255; out.px[i + 3] = 255; }
     std::vector<int> xs, ys;
@@ -66,7 +68,8 @@ Image capture_map(Renderer& r, const sim::Grid& grid, uint32_t mw, uint32_t mh) 
             r.camera().clamp_to_bounds(mw, mh);
             SDL_SetRenderDrawColor(sr, 255, 0, 255, 255);
             SDL_RenderClear(sr);
-            r.render_map_layers(grid, nullptr);
+            if (entities != nullptr) r.render_world(*entities, grid, -1);          // (everything: the object list of the map and the ants on it)
+            else r.render_map_layers(grid, nullptr);
             Image tile = read_region(sr, PLAYFIELD_X, PLAYFIELD_Y, PLAYFIELD_W, PLAYFIELD_H);
             const int camx = static_cast<int>(r.camera().x);
             const int camy = static_cast<int>(r.camera().y);
@@ -95,12 +98,19 @@ assets::LevelData tiny() {
     return level;
 }
 
-Image picture_of(Renderer& r, const assets::LevelData& level) {
-    sim::Grid g;
-    check(g.init_from_level(level), "init");
+Image picture_of(Renderer& r, const assets::LevelData& level, bool entities = false) {
     r.set_level(level);
     r.pin_animation_clock(0);
-    Image im = capture_map(r, g, level.width, level.height);
+    Image im;
+    if (entities) {
+        sim::SimulationEngine eng;
+        eng.init(level, 3, 0x0F);
+        im = capture_map(r, eng.grid(), level.width, level.height, &eng.get_world_state());
+    } else {
+        sim::Grid g;
+        check(g.init_from_level(level), "init");
+        im = capture_map(r, g, level.width, level.height);
+    }
     r.unpin_animation_clock();
     return im;
 }
@@ -128,6 +138,48 @@ void test_hills_by_id(Renderer& r) {
     check(image_diff(reference, bare) > 2000, "the hills are visible in the picture (" + std::to_string(image_diff(reference, bare)) + " pixels)");
 }
 
+// ---- Fix 4: block 1 holds start markers and plants; every other record is ignored ------------------------------------------------------------------------------------------------------------
+void test_ignored_block1_records(Renderer& r) {
+    std::printf("[block 1] a record that the original ignores is not drawn, whatever its dictionary entry says; a plant is\n");
+    const assets::LevelData original = tiny();
+    // a name that draws something: the dictionary entry of an object that TINY has on its map
+    std::string drawable;
+    uint16_t drawable_id = 0;
+    for (const auto& c : original.layer2_interactive) {
+        if (c.tile_index == assets::LVL_EMPTY_TILE || c.tile_index >= original.tile_dictionary.size() || (c.flags & 1) == 0) continue;
+        const std::string& n = original.tile_dictionary[c.tile_index];
+        if (n.empty() || n == "." || assets::hill_team_of_id(c.tile_index) >= 0 || sim::movement::is_powerup_tile(c.tile_index)) continue;
+        drawable = n;
+        drawable_id = c.tile_index;
+        break;
+    }
+    check(!drawable.empty(), "TINY has an object to take a name from");
+    Image reference = picture_of(r, original, true);
+    assets::LevelData with = original;
+    for (const uint16_t id : {uint16_t{0}, uint16_t{148}, uint16_t{151}, uint16_t{296}}) {
+        with.tile_dictionary[id] = drawable;
+        assets::AnthillSpawn sp;
+        sp.tile_id = id;
+        sp.x = static_cast<uint16_t>(8 + id % 7);
+        sp.y = static_cast<uint16_t>(14 + id % 5);
+        sp.team_id = 255;
+        with.anthill_spawns.push_back(sp);
+    }
+    Image a = picture_of(r, with, true);
+    check(image_diff(reference, a) == 0, "records of the ids 0, 148, 151 and 296 named like an object of the map (" + drawable + " = " + std::to_string(drawable_id) + ") draw nothing");
+    // a plant record is drawn, by its id, whatever its entry
+    assets::LevelData plant = original;
+    plant.tile_dictionary[410] = ".";
+    assets::AnthillSpawn sp;
+    sp.tile_id = 410;
+    sp.x = 9;
+    sp.y = 16;
+    sp.team_id = 255;
+    plant.anthill_spawns.push_back(sp);
+    Image b = picture_of(r, plant, true);
+    check(image_diff(reference, b) > 20, "a plant record (410, named \".\") is drawn (" + std::to_string(image_diff(reference, b)) + " pixels)");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -151,6 +203,7 @@ int main(int argc, char* argv[]) {
     }
 
     test_hills_by_id(r);
+    test_ignored_block1_records(r);
 
     r.shutdown();
     SDL_DestroyWindow(win);

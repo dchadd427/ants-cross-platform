@@ -656,14 +656,10 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         if (sp_item.team_id != 255) continue;
         // A plant (the clovers 404 .. 408, the flowers 410 .. 416, 420 and 421, ...) is its tile id, which indexes its animation directly, whatever the dictionary calls the entry
         // ("." in some community maps): the original's name pass makes the graphics of these ids load whatever the dictionary says (the table at 0x1001ba8), so the flowers of a
-        // dropper are always there to see. Any other record keeps the dictionary's name for the animation.
-        int32_t anim_id = -1;
-        if (ants::sim::movement::is_plant_object_tile(sp_item.tile_id)) {
-            if (sp_item.tile_id < anim_count) anim_id = static_cast<int32_t>(sp_item.tile_id);
-        } else if (sp_item.tile_id < level.tile_dictionary.size()) {
-            anim_id = tile_anim_id_[sp_item.tile_id];
-        }
-        if (anim_id < 0) continue;
+        // dropper are always there to see. Every other record of block 1 is ignored by the original (FUN_0100dbb0 makes world objects of the records with the tile flag 0x10 or 0x20
+        // only): it is not drawn, whatever the dictionary calls its entry.
+        if (!ants::sim::movement::is_plant_object_tile(sp_item.tile_id) || sp_item.tile_id >= anim_count) continue;
+        const int32_t anim_id = static_cast<int32_t>(sp_item.tile_id);
         ObjectListSprite spr{};
         spr.anim_id = anim_id;
         spr.px = static_cast<int32_t>(sp_item.x) * TILE_SIZE + TILE_SIZE / 2;

@@ -35,3 +35,13 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 **Now.** The class is the table's, by id, for every layer-1 cell (`determine_terrain_type` is gone).
 
 **Maps** (`LF3.5`): 16 maps. Water 476 left unnamed: 1,921 cells in 2 maps (Wata fight, hell2: ants crossed a lake of over 900 cells); mud 435 .. 444 in the Gant2 family (Gant2, gant 2, gauntlet2) and eze jungal; dirt 559 in the Turtle World family (!TurtleWorld, #Turtle World, Turtle World, Turtle); the flag 0x100 on unnamed tiles in IsLaNd FiRe BoOm (701 cells) and in Sand Box, SandBox and sand-box (1 each); and, found by the same rule, the id 1 (a wall in Bloom) and 2 (water in 's 4 Player Royal), one cell each. Sweep: the loaded terrain changes in these 16 maps and the play (2,400 ticks) in 11 of them (the other 5 only in the hash); no other map changes; no crash, no hang, every run deterministic. The pictures of the 16 maps change (the minimap and the map picture colour the cells by class).
+
+## 4. The block-1 records that the original ignores
+
+**The original.** Block 1 is a list of (tile id, row, column). The match screen (`FUN_0100dbb0`) starts an ant for each record whose id is the start marker of the local colour and makes a world object (drawn at the cell centre, `FUN_0100cd00`) of each record whose id has the tile flag 0x10 or 0x20 (plants, droppers, effect-like ids). Every other record is ignored: it is read and never used.
+
+**The remake did.** The renderer drew every ignored record as a sprite by the animation its dictionary entry names (id 296 even as a different rock than its own id), the grid made a flower stem an obstacle by the entry's name for any record, and a map without hill cells took every record of block 1, plants included, for a hill.
+
+**Now.** The renderer draws only the records with the tile flag 0x10 or 0x20 (by id), the stem overlay is for those records only, and the fallback hills are the start markers (team below 4) only. The reader keeps the records (the sweep still counts them).
+
+**Maps** (`LF4.4`): 736 records of the ids 0, 63 .. 66, 148, 151 and 296 in 20 maps (the dictionary names of 63 .. 66 are the power-ups'). Sweep: no state hash and no play of the 558 maps changes (the engine never used them); what changes is the picture of the maps whose ignored records name an animation.

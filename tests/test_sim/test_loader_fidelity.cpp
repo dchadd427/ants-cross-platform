@@ -697,6 +697,103 @@ int main() {
         CHECK(water476 == 1921);
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 4: block 1 holds start markers and plants (tile flag 0x10 or 0x20); every other record is ignored by the original (FUN_0100dbb0)
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF4.1 Block-1 Records The Original Ignores (Ids 0, 63 .. 66, 148, 151, 296 ...) Change Nothing In The Engine, Whatever Their Dictionary Entries Say, Even \"flower\"", [] {
+        const LevelData base = open_ground();
+        const std::vector<TileCoord> at = open_tiles(base, 4);
+        CHECK(at.size() == 4);
+        if (at.size() != 4) return;
+        const auto hash_of = [&](const LevelData& level) {
+            SimulationEngine sim;
+            sim.init(level, 3, 0x0F);
+            const uint64_t first = sim.state_hash().total;
+            for (int t = 0; t < 100; ++t) sim.tick();
+            return std::make_pair(first, sim.state_hash().total);
+        };
+        const auto reference = hash_of(base);
+        size_t k = 0;
+        for (const uint16_t id : {uint16_t{0}, uint16_t{63}, uint16_t{64}, uint16_t{66}, uint16_t{148}, uint16_t{151}, uint16_t{296}}) {
+            for (const char* name : {".", "flower1", "rock1", "GREENHILL"}) {
+                LevelData level = base;
+                name_tile(level, id, name);
+                ants::assets::AnthillSpawn sp;
+                sp.tile_id = id;
+                sp.x = static_cast<uint16_t>(at[k % 4].x);
+                sp.y = static_cast<uint16_t>(at[k % 4].y);
+                sp.team_id = ants::assets::start_marker_team_of_id(id) >= 0 ? static_cast<uint8_t>(ants::assets::start_marker_team_of_id(id)) : uint8_t{255};
+                level.anthill_spawns.push_back(sp);
+                ++k;
+                CHECK(sp.team_id == 255);
+                CHECK(hash_of(level) == reference);
+                Grid g;
+                CHECK(g.init_from_level(level) && g.plants().empty() && !cell_at(g, at[(k - 1) % 4]).is_obstacle_overlay);
+            }
+        }
+    });
+
+    run_case("LF4.2 A Plant Is A Plant By Its Id: A Flower Record Is A World Object And Its Stem An Obstacle Overlay, A Record Of Another Id With The Same Name Is Neither", [] {
+        for (const bool plant : {true, false}) {
+            LevelData level = open_ground();
+            const std::vector<TileCoord> at = open_tiles(level, 1);
+            CHECK(at.size() == 1);
+            if (at.empty()) return;
+            const uint16_t id = plant ? uint16_t{410} : uint16_t{148};
+            name_tile(level, id, "flower1");
+            ants::assets::AnthillSpawn sp;
+            sp.tile_id = id;
+            sp.x = static_cast<uint16_t>(at[0].x);
+            sp.y = static_cast<uint16_t>(at[0].y);
+            sp.team_id = 255;
+            level.anthill_spawns.push_back(sp);
+            Grid g;
+            CHECK(g.init_from_level(level));
+            CHECK(g.plants().size() == (plant ? 1u : 0u));
+            CHECK(cell_at(g, at[0]).is_obstacle_overlay == plant);
+        }
+    });
+
+    run_case("LF4.3 A Map Without Hill Cells Falls Back To Its Start Markers For Hills, Never To Its Plants Or Other Records", [] {
+        LevelData level = tiny();
+        for (auto& c : level.layer2_interactive) if (ants::assets::hill_team_of_id(c.tile_index) >= 0) c = ants::assets::MapCell{};
+        const size_t markers = level.anthill_spawns.size();
+        ants::assets::AnthillSpawn plant;
+        plant.tile_id = 410;
+        plant.x = 3;
+        plant.y = 20;
+        plant.team_id = 255;
+        level.anthill_spawns.push_back(plant);
+        ants::assets::AnthillSpawn ignored = plant;
+        ignored.tile_id = 148;
+        ignored.x = 5;
+        level.anthill_spawns.push_back(ignored);
+        Grid g;
+        CHECK(g.init_from_level(level));
+        CHECK(g.anthills().size() == markers);
+        for (const auto& a : g.anthills()) CHECK(a.team_id < 4);
+    });
+
+    run_case("LF4.4 The Community Library: 736 Block-1 Records Of Ids The Original Ignores (0, 63 .. 66, 148, 151, 296) In 20 Maps; No Other Record Is A Start Marker Or A Plant By Name Only", [] {
+        long ignored = 0;
+        std::set<std::string> maps;
+        std::set<uint16_t> ids;
+        for_each_community_map([&](const std::string& name, const LevelData& level) {
+            for (const auto& sp : level.anthill_spawns) {
+                if (ants::assets::start_marker_team_of_id(sp.tile_id) >= 0 || movement::is_plant_object_tile(sp.tile_id)) continue;
+                ++ignored;
+                maps.insert(name);
+                ids.insert(sp.tile_id);
+            }
+        });
+        std::cout << "\n    " << ignored << " records in " << maps.size() << " maps, ids:";
+        for (const uint16_t id : ids) std::cout << " " << id;
+        std::cout << "\n";
+        CHECK(ignored == 736 && maps.size() == 20);
+        CHECK((ids == std::set<uint16_t>{0, 63, 64, 65, 66, 148, 151, 296}));
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
