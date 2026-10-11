@@ -11,11 +11,17 @@ is checked too):
     its own that lets a newer deploy replace a waiting one)
   - the same suites as ./run_tests.sh: every test program of its table is registered with ctest (which Linux, macOS and Windows run), its other suites (tool self-tests, script
     suites, E2E runner, repository checks) are steps of the Linux and macOS jobs, and ctest has no test that the table lacks
+  - the players' maps: the Linux and macOS step that sweeps Community-Maps and runs `tools/community_maps.py verify` (and suite 2.18.1 of the runner) is run here against made-up
+    programs: a sweep or a check that fails fails the step or the suite, every finding of a failed sweep is shown, and the other tools of the step still run
   - every action is a first-party `actions/` one at a major version or a commit-pinned one; the sccache download is pinned and checked by its SHA-256
 """
 import glob
 import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -201,7 +207,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     def test_the_other_suites_of_the_runner_are_steps_of_the_linux_and_macos_jobs(self):
         for job in ("linux", "macos"):
             block = "\n".join(job_block(job))
-            for needle in ("build/map_sweep --selftest", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
+            for needle in ("build/map_sweep --selftest", "build/map_sweep Community-Maps --ticks 600", "python3 tools/community_maps.py verify Community-Maps", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
                            "tests/scripts/test_ants_server.sh --list-parts", "tests/scripts/test_ants_server.sh --part", "python3 tools/check_version_consistency.py",
                            "python3 tests/scripts/run_python_tests.py", "ctest --test-dir build"):
                 self.assertIn(needle, block, "%s: no step runs `%s`" % (job, needle))
@@ -214,6 +220,8 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("python3 tools/check_version_consistency.py", self.runner)
         self.assertIn("test_start_game.sh", self.runner)
         self.assertIn("map_sweep\" --selftest", self.runner)
+        self.assertIn("map_sweep\" Community-Maps", self.runner)
+        self.assertIn("python3 tools/community_maps.py verify Community-Maps", self.runner)
         self.assertIn("bot_arena\" --selftest", self.runner)
         self.assertIn("replay_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
@@ -223,6 +231,163 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         for needle in ("docker build -t ants-beta .", "docker build -f Dockerfile.server -t ants-server .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
                        "docker compose -f docker-compose.staging.yml config --quiet", "--build-arg ANTS_SITE_LABEL=staging", "(staging)</title>", "! grep -qi staging"):
             self.assertIn(needle, block)
+
+
+def step_of(job, needle):
+    """(the name, the shell script) of the step of `job` whose text holds `needle`; the script is what `run: |` holds, as GitHub writes it to a file."""
+    block = job_block(job)
+    starts = [i for i, l in enumerate(block) if re.match(r"^      - name: ", l)] + [len(block)]
+    for first, end in zip(starts, starts[1:]):
+        step = block[first:end]
+        if any(needle in l for l in step):
+            run_at = next(i for i, l in enumerate(step) if re.match(r"^        run: \|\s*$", l))
+            return step[0].split("name: ", 1)[1], "\n".join(l[10:] for l in step[run_at + 1:]).rstrip() + "\n"
+    raise AssertionError("%s: no step holds `%s`" % (job, needle))
+
+
+def function_of(script, name):
+    """The text of a shell function of a script (from `name() {` to the closing brace at the start of a line)."""
+    start = script.index("\n%s() {\n" % name) + 1
+    return script[start:script.index("\n}\n", start) + 3]
+
+
+def sweep_log(findings):
+    """What `map_sweep` prints for a folder: a line of progress for each finding, a table with a row for each play, the findings, the summary."""
+    lines = ["[%d/600] finding: Map %d.lvl" % (i + 1, i) for i in range(findings)]
+    lines += ["map                 bytes    w x h name loads team"] + ["Table row %d.lvl      19000    31x31 ok   yes   R15" % i for i in range(700)]
+    if findings:
+        lines += ["", "Findings"] + ["  Map %d.lvl: does not load: the file ends inside the tile dictionary" % i for i in range(findings)]
+    lines += ["", "Summary"] + ["  summary line %d" % i for i in range(25)]
+    return "\n".join(lines) + "\n"
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash is needed")
+class TheCommunityMapsFailTheirStep(unittest.TestCase):
+    """The step of the Linux and macOS jobs and suite 2.18.1 of ./run_tests.sh are run against made-up programs: a sweep or a check that fails fails them, and the other tools still run."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = tmp.name
+        for folder in ("build", "tools", "bin", "bd"):
+            os.makedirs(os.path.join(self.root, folder))
+        self.log = os.path.join(self.root, "fake_sweep.log")
+        os.symlink(sys.executable, os.path.join(self.root, "bin", "python3"))              # (the steps say python3)
+        sweep = ("#!/bin/sh\necho \"map_sweep $*\" >> ran.txt\n"
+                 "if [ \"$1\" = \"--selftest\" ]; then exit \"${FAKE_SELFTEST_EXIT:-0}\"; fi\n"
+                 "cat \"$FAKE_SWEEP_LOG\"\nexit \"${FAKE_SWEEP_EXIT:-0}\"\n")
+        tool = "#!/bin/sh\necho \"%s $*\" >> ran.txt\nexit \"${FAKE_TOOL_EXIT:-0}\"\n"
+        for folder in ("build", "bd"):
+            self.write_program("%s/map_sweep" % folder, sweep)
+        self.write_program("build/bot_arena", tool % "bot_arena")
+        self.write_program("build/replay_tool", tool % "replay_tool")
+        self.write_program("tools/community_maps.py", "import os, sys\nopen('ran.txt', 'a').write('community_maps ' + ' '.join(sys.argv[1:]) + '\\n')\nsys.exit(int(os.environ.get('FAKE_VERIFY_EXIT', '0')))\n")
+
+    def write_program(self, path, text):
+        full = os.path.join(self.root, path)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(full, 0o755)
+
+    def run_script(self, script, **env):
+        """(exit status, output, the lines of ran.txt) of a script run the way GitHub runs one (`bash -e FILE`) in the folder of the made-up programs."""
+        path = os.path.join(self.root, "script.sh")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(script)
+        env = dict(os.environ, PATH=os.path.join(self.root, "bin") + os.pathsep + os.environ["PATH"], FAKE_SWEEP_LOG=self.log, **env)
+        done = subprocess.run(["bash", "-e", path], cwd=self.root, env=env, capture_output=True, text=True, timeout=120)
+        ran, lines = os.path.join(self.root, "ran.txt"), []
+        if os.path.exists(ran):
+            lines = read(ran).splitlines()
+            os.remove(ran)
+        return done.returncode, done.stdout + done.stderr, lines
+
+    def with_log(self, text):
+        with open(self.log, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def steps(self):
+        for job in ("linux", "macos"):
+            yield job, step_of(job, "tools/community_maps.py verify")[1]
+
+    def test_both_steps_are_named_for_the_community_maps_and_the_windows_one_is_not(self):
+        for job in ("linux", "macos"):
+            self.assertIn("community maps", step_of(job, "tools/community_maps.py verify")[0], job)
+        self.assertNotIn("ommunity", step_of("windows", "map_sweep.exe --selftest")[0])
+        self.assertEqual(step_of("linux", "tools/community_maps.py verify")[0], step_of("macos", "tools/community_maps.py verify")[0])
+        self.assertEqual(step_of("linux", "tools/community_maps.py verify")[1], step_of("macos", "tools/community_maps.py verify")[1])
+
+    def test_a_step_where_everything_passes_runs_every_tool_and_passes(self):
+        self.with_log(sweep_log(0))
+        for job, script in self.steps():
+            status, out, ran = self.run_script(script)
+            self.assertEqual(status, 0, (job, out))
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], job)
+            self.assertIn("map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json", ran[1])
+            self.assertEqual(ran[2], "community_maps verify Community-Maps build/community_sweep.json")
+
+    def test_a_sweep_that_fails_fails_the_step_and_shows_every_finding(self):
+        self.with_log(sweep_log(60))
+        for job, script in self.steps():
+            status, out, ran = self.run_script(script, FAKE_SWEEP_EXIT="1")
+            self.assertNotEqual(status, 0, job)
+            for i in (0, 1, 30, 59):                                                      # (not the last seven only)
+                self.assertIn("Map %d.lvl: does not load" % i, out, (job, i))
+            self.assertIn("summary line 24", out, job)
+            self.assertNotIn("Table row", out, job)                                       # (the table of every play is not poured into the log)
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], "the other tools still run: " + job)
+
+    def test_a_sweep_that_stops_before_its_findings_shows_the_end_of_its_log(self):
+        self.with_log("".join("line %d\n" % i for i in range(100)))
+        for job, script in self.steps():
+            status, out, _ = self.run_script(script, FAKE_SWEEP_EXIT="2")
+            self.assertNotEqual(status, 0, job)
+            self.assertIn("line 99", out, job)
+            self.assertIn("line 60", out, job)
+            self.assertNotIn("line 30\n", out, job)
+
+    def test_a_check_that_fails_fails_the_step_and_the_other_tools_still_run(self):
+        self.with_log(sweep_log(0))
+        for job, script in self.steps():
+            status, out, ran = self.run_script(script, FAKE_VERIFY_EXIT="1")
+            self.assertNotEqual(status, 0, job)
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], job)
+
+    def test_a_tool_that_fails_its_selftest_still_fails_the_step(self):
+        self.with_log(sweep_log(0))
+        for job, script in self.steps():
+            self.assertNotEqual(self.run_script(script, FAKE_SELFTEST_EXIT="1")[0], 0, job)
+            self.assertNotEqual(self.run_script(script, FAKE_TOOL_EXIT="1")[0], 0, job)
+
+    def test_the_suite_of_the_runner_fails_when_the_sweep_or_the_check_fails(self):
+        runner = read(os.path.join(REPO, "run_tests.sh"))
+        function = function_of(runner, "run_community_maps_suite")
+        self.assertIn("run_community_maps_suite", runner[runner.index(function) + len(function):])        # (a suite of the table calls it)
+
+        def script_ok(asan):                                                               # (the function's status is told, as the runner's table gets it)
+            return "set -eo pipefail\nBUILD_DIR=bd\nRUN_ASAN=%d\n%s\nstatus=0\nrun_community_maps_suite || status=$?\necho \"suite status $status\"\n" % (asan, function)
+        self.with_log(sweep_log(0))
+        status, out, ran = self.run_script(script_ok(0))
+        self.assertIn("suite status 0", out)
+        self.assertEqual(ran, ["map_sweep Community-Maps --ticks 600 --jobs 2 --out bd/community_sweep.json", "community_maps verify Community-Maps bd/community_sweep.json"])
+        status, out, ran = self.run_script(script_ok(1))
+        self.assertEqual(ran[0], "map_sweep Community-Maps --ticks 100 --jobs 2 --out bd/community_sweep.json")
+        self.with_log(sweep_log(60))
+        status, out, ran = self.run_script(script_ok(0), FAKE_SWEEP_EXIT="1")
+        self.assertIn("suite status 1", out)
+        for i in (0, 1, 30, 59):
+            self.assertIn("Map %d.lvl: does not load" % i, out)
+        self.assertIn("summary line 24", out)
+        self.assertNotIn("Table row", out)
+        self.assertEqual([r.split()[0] for r in ran], ["map_sweep"], "a failed sweep ends the suite: the check has nothing to read")
+        self.with_log(sweep_log(0))
+        status, out, ran = self.run_script(script_ok(0), FAKE_VERIFY_EXIT="1")
+        self.assertIn("suite status 1", out)
+        self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "community_maps"])
+        self.with_log("".join("line %d\n" % i for i in range(100)))
+        status, out, ran = self.run_script(script_ok(0), FAKE_SWEEP_EXIT="2")
+        self.assertIn("suite status 1", out)
+        self.assertIn("line 99", out)
 
 
 class Windows(unittest.TestCase):

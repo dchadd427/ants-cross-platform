@@ -12,6 +12,7 @@ VERSION text eol=lf
 
 # The original game's folder and byte-exact test data: never touch a byte
 Original-Ants/**        -text
+Community-Maps/**       -text
 tests/data/*.csv        -text
 # a byte copy of the licence text beside the game's own font, which the front page serves (tools/front_page_art/make_art.py)
 web/front/LibreFranklin-OFL.txt  -text
@@ -23,6 +24,7 @@ web/front/LibreFranklin-OFL.txt  -text
 *.mp3   binary
 *.MID   binary
 *.LVL   binary
+*.lvl   binary
 *.ttf   binary
 *.zip   binary
 *.png   binary
