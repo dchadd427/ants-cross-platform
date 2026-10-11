@@ -1060,9 +1060,10 @@
         /* the Picture button (spectators choose the picture's shape, as the players do in .view-bar) and the small window above it with the four shapes: the page's own .seg buttons and fit-tag */
         .rbar .picwrap { grid-area: pic; position: relative; }
         .rbar .picwrap > .btn { min-height: 36px; }
-        .picpop { position: absolute; right: 0; bottom: calc(100% + 12px); z-index: 70; display: grid; gap: 8px; justify-items: start; padding: 12px 16px 32px; white-space: nowrap; color: var(--cream); background: rgba(7, 11, 15, .94); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+        .picpop { position: absolute; right: 0; box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px); bottom: calc(100% + 12px); z-index: 70; display: grid; gap: 8px; justify-items: start; padding: 12px 16px 32px; white-space: nowrap; color: var(--cream); background: rgba(7, 11, 15, .94); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
         .picpop[hidden] { display: none; }
         .picpop h3 { font-size: 15px; font-weight: 500; }
+        .picpop .seg { flex-wrap: wrap; }                                       /* (a window under about 380 px wide: the four shapes take two lines, and the window stays on the screen) */
         .picpop .fit-tag { color: var(--cream); }
         @media (hover: none) { .picpop { padding-bottom: 14px; } }
         .rbar .fsx { grid-area: fsx; display: none; min-width: 44px; padding: 6px 10px; }
@@ -3434,6 +3435,17 @@
                 if ((ev.key !== 'Enter' && ev.key !== ' ') || !ev.target || ev.target.tagName !== 'BUTTON') return;
                 ev.preventDefault();
                 if (!ev.repeat) ev.target.click();
+            });
+            picPop.addEventListener('keydown', function (ev) {                                  // the arrows move along the four shapes and choose, as in any radio group
+                var at = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key);
+                var shapes = picPop.querySelectorAll('button[data-aspect]');
+                var from = -1;
+                for (var i = 0; i < shapes.length; i++) if (shapes[i] === ev.target) from = i;
+                if (at === -1 || from === -1) return;
+                ev.preventDefault();
+                var to = shapes[(from + (at < 2 ? shapes.length - 1 : 1)) % shapes.length];
+                to.focus();
+                to.click();
             });
             picWrap.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });          // (the browser would press a second time at the Space key's release)
             window.addEventListener('keydown', function (ev) {

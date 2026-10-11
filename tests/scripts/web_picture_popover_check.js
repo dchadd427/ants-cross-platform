@@ -30,6 +30,8 @@ function setup() {
     const wrap = element('wrap'), button = element('btn'), pop = element('pop'), radio = element('radio'), outside = element('outside');
     for (const b of [button, radio]) { b.tagName = 'BUTTON'; b.pressed = 0; b.click = () => { b.pressed++; }; }
     wrap.children = [button, pop]; pop.children = [radio];
+    const shapes = ['4:3', '16:10', '16:9', '21:9'].map((v) => { const b = element(v); b.tagName = 'BUTTON'; b.pressed = 0; b.click = () => { b.pressed++; }; return b; });
+    pop.querySelectorAll = (q) => (q === 'button[data-aspect]' ? shapes : []);
     pop.hidden = true;
     const byId = { picwrap: wrap, picbtn: button, picpop: pop };
     const calls = { woke: 0 };
@@ -38,7 +40,7 @@ function setup() {
     const doc = { addEventListener(type, fn) { docListeners[type] = fn; } };
     new Function('$', 'wake', 'window', 'document', block)((id) => byId[id], () => { calls.woke++; }, win, doc);
     const key = (name) => { const ev = { key: name, prevented: 0, stopped: 0, preventDefault() { ev.prevented++; }, stopImmediatePropagation() { ev.stopped++; } }; winListeners.keydown.fn(ev); return ev; };
-    return { wrap, button, pop, radio, outside, calls, winListeners, key,
+    return { shapes, wrap, button, pop, radio, outside, calls, winListeners, key,
         click(target) { if (target === button) button.listeners.click.forEach((f) => f({ target })); docListeners.click({ target }); },
         press(name, target, repeat) {         // a key on a button inside the wrapper: what the page did with the key, and the presses it made
             const ev = { key: name, target, repeat: !!repeat, prevented: 0, preventDefault() { ev.prevented++; } };
@@ -46,6 +48,7 @@ function setup() {
             wrap.listeners.keydown.forEach((f) => f(ev));
             return { prevented: ev.prevented, pressed: target.pressed };
         },
+        arrow(name, target) { const ev = { key: name, target, prevented: 0, preventDefault() { ev.prevented++; } }; pop.listeners.keydown.forEach((f) => f(ev)); return ev.prevented; },
         release(name) { const ev = { key: name, prevented: 0, preventDefault() { ev.prevented++; } }; wrap.listeners.keyup.forEach((f) => f(ev)); return ev.prevented; },
         focusout(related) { wrap.listeners.focusout.forEach((f) => f({ relatedTarget: related })); },
         state() { return (p.pop.hidden ? 'closed' : 'open') + ' ' + p.button.attributes['aria-expanded']; } };
@@ -104,6 +107,14 @@ expect('Space on a button presses it once', p.press(' ', p.radio), { prevented: 
 expect('a key that is held presses once, not again', p.press('Enter', p.button, true), { prevented: 1, pressed: 0 });
 expect('another key is left alone', p.press('a', p.button), { prevented: 0, pressed: 0 });
 expect('the Space key\'s release is kept from pressing a second time', [p.release(' '), p.release('Enter')], [1, 0]);
+
+p = setup();
+const sh = (i) => [p.shapes[i].focused, p.shapes[i].pressed];
+expect('an arrow on a shape: the next shape is focused and chosen (the key is the window\'s)', [p.arrow('ArrowRight', p.shapes[1]), sh(2), sh(1)], [1, [1, 1], [0, 0]]);
+expect('ArrowLeft goes back one', [p.arrow('ArrowLeft', p.shapes[1]), sh(0)], [1, [1, 1]]);
+expect('the arrows go round: Right on the last is the first, Left on the first is the last', [p.arrow('ArrowRight', p.shapes[3]), p.arrow('ArrowUp', p.shapes[0]), p.shapes[0].pressed, p.shapes[3].pressed], [1, 1, 2, 1]);
+expect('ArrowDown is Right', [p.arrow('ArrowDown', p.shapes[0]), p.shapes[1].pressed], [1, 1]);
+expect('an arrow elsewhere in the window, or another key, is left alone', [p.arrow('ArrowRight', p.radio), p.arrow('a', p.shapes[0])], [0, 0]);
 
 console.log(failed === 0 ? 'web picture popover: every row holds' : 'web picture popover: ' + failed + ' failures');
 process.exit(failed === 0 ? 0 : 1);

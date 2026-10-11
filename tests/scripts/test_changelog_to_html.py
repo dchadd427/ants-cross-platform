@@ -352,6 +352,17 @@ class RealFile(unittest.TestCase):
             else:
                 self.assertEqual(href, "/", "a link that is neither the front page of the site nor an address: %s" % href)     # (a path of the repository is an address, not a file of the site)
 
+    def test_the_oldest_release_that_the_file_holds_is_the_one_the_readme_the_workflow_and_the_footer_name(self):
+        oldest = re.findall(r"^## v(\d+\.\d+\.\d+)", self.md, re.M)[-1]
+        number = int(oldest.split(".")[2])
+        first = "v0.0.%d" % number
+        self.assertIn("## Older versions (v0.0.%d and before)" % (number - 1), self.md)
+        self.assertIn("Every release before " + first + ",", self.md)
+        for path in ("README.md", os.path.join("docs", "WORKFLOW.md")):
+            text = read_text(os.path.join(os.path.dirname(__file__), "..", "..", path))
+            self.assertIn("before " + first + " are only in git history", text, path)
+        self.assertIn("releases since " + first + " are in the short", read_text(os.path.join(REPO, "README.md")))
+
     def test_the_changelog_is_short(self):
         self.assertLess(len(self.md), 60_000)
         releases = re.findall(r"^## v\d", self.md, re.M)

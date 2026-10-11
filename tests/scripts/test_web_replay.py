@@ -388,6 +388,19 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertEqual(self.page.count('"play tl clock live speed pic fsx"'), 2)
         self.assertIn(".rbar .picwrap { grid-area: pic; position: relative; }", self.page)
 
+    def test_the_window_stays_on_a_narrow_screen(self):
+        rule = re.search(r"\n\s*\.picpop \{([^}]*)\}", self.page).group(1)
+        self.assertIn("box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px);", rule)                    # (one line when it fits, never wider than the screen less a gutter at each side)
+        self.assertIn(".picpop .seg { flex-wrap: wrap; }", self.page)                                        # (the four shapes take two lines under about 380 px)
+        self.assertIn("right: 0;", rule)
+
+    def test_the_arrows_choose_a_shape_and_the_keys_are_not_overstated(self):
+        self.assertIn("['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].indexOf(ev.key)", self.glue)
+        entry = read("CHANGELOG.md")
+        entry = entry[entry.index("## v0.12.8"):entry.index("## v0.12.7")]
+        self.assertNotIn("Tab", entry)
+        self.assertNotIn("keyboard", entry.lower())                                                          # (Tab does not move the focus on the game page: the entry promises no keyboard reach)
+
     def test_the_bar_stays_while_the_window_is_open_and_esc_is_the_windows(self):
         self.assertIn("if (dragging || !$('picpop').hidden) {", self.glue)
         self.assertIn("ev.key !== 'Escape' || !picOpen()", self.glue)

@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Watching a live match or a replay, you can now pick the picture shape (4:3, 16:10, 16:9, 21:9) from the replay bar.
-- The replay bar is as wide as the picture in every shape.
+- The replay bar is as wide as the picture in every shape (a short window keeps it full width).
 
 **Rules / network:** none: the simulation and the protocol are untouched.
 

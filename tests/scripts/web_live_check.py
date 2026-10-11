@@ -458,6 +458,18 @@ def main():
             check(tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(); return !document.getElementById('picpop').hidden && p.left >= 0 && p.right <= window.innerWidth && p.bottom <= document.getElementById('picbtn').getBoundingClientRect().top; })()") is True, "a phone: the window opens above the button, inside the screen")
             shot(tab, "picture-phone")
             tab.close()
+            for width, height in ((320, 640), (360, 740), (390, 844)):
+                tab = new_tab(width, height, 2, True)
+                open_page(tab, "/play.html?replay=" + KEPT + "&aspect=21:9")
+                check(until(tab, READY) is True, "a %d px phone, 21:9: the replay starts" % width)
+                time.sleep(0.5)
+                bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+                tab.tap(bx[0], bx[1])
+                box = tab.ev("(function () { var p = document.getElementById('picpop').getBoundingClientRect(); return [Math.round(p.left), Math.round(p.right), Math.round(p.top), window.innerWidth, document.documentElement.scrollWidth]; })()")
+                check(not tab.ev("document.getElementById('picpop').hidden") is True and box[0] >= 0 and box[1] <= box[3] and box[2] >= 0 and box[4] <= box[3], "a %d px phone: the window lies inside the screen, with no sideways scroll (x %d to %d of %d)" % (width, box[0], box[1], box[3]))
+                if width == 320:
+                    shot(tab, "picture-320")
+                tab.close()
             tab = new_tab()
             open_page(tab, "/play.html?replay=" + KEPT + "&aspect=4:3")
             check(until(tab, READY) is True, "a replay in fullscreen: it starts")
