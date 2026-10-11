@@ -447,6 +447,17 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
     if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return handle_public_history(rooms, request);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
+    if (request.path == "/maps") {                                                          // the list of the maps (map_store.hpp): the same with and without a database, plays 0 without one
+        if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
+        std::vector<MapPlays> plays;
+        const HistoryStore* history = rooms.history_store();
+        const bool counted = history != nullptr && history->available() && history->map_plays(plays);
+        ctl::HttpResponse r;
+        r.status = 200;
+        r.content_type = "application/json";
+        r.body = rooms.store().list_json(counted ? &plays : nullptr);
+        return r;
+    }
     const ReplayStore* store = rooms.replay_store();
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
     if (request.path == "/replays") {

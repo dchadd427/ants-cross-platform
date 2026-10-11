@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
+
+**For players:**
+- **The server knows all the community maps** and the lobby can choose any of them, not only the six of the original game.
+- **The map list is public:** `GET /maps` lists every map with its size, players, minutes, how often it was played and a preview picture; the previews and the map files are served by the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.13...v0.12.14)
+
 ## v0.12.13 - 2026-10-11 - Chat on a phone
 
 **For players:**
