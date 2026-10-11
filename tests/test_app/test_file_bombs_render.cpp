@@ -4,7 +4,7 @@
 //     that its dictionary name would have made;
 //   * under Fog of War an unexplored file bomb is hidden like a planted one;
 //   * the minimap and the map picture show the terrain under a bomb, as the original does (FUN_01009596 excludes 0x81 .. 0x84).
-// New small file for the topic (software renderer, dummy video driver); no ASSERT_TRUE macro, the shared header comes with another change.
+// New small file for the topic (software renderer, dummy video driver); its own check() function (it counts and goes on), not the shared assert macros.
 #include <SDL.h>
 
 #include <algorithm>

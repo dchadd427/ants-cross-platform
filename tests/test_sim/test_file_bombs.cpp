@@ -2,7 +2,7 @@
 // blackbomb, bluebomb), and the original reads nothing else of a bomb cell: an ant that ends a step on one sets it off, whoever it is (0x101bb42, 0x101d44f). 208 community maps
 // carry them (the editor leaves their dictionary entries "."), and the remake used to take them for solid obstacles that nothing draws. Grid::init_from_level now turns each into the
 // planted bomb of its colour (id 100 + the colour's team) owned by the team that the cell's second word names, so that every rule of a planted bomb applies to it unchanged.
-// New file for the topic; its own small harness (no ASSERT_TRUE: the shared assert header comes with another change).
+// New file for the topic; its own small check() that counts and goes on (the shared tests/common/test_assert.hpp macros return from the case at the first failure, which the loops here do not want).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/grid.hpp"
 #include "ants_sim/sim_engine.hpp"
