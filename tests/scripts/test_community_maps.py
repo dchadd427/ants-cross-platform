@@ -244,8 +244,8 @@ class TheFolder(unittest.TestCase):
         with open(os.path.join(FOLDER, "maps.json"), encoding="utf-8") as f:
             cls.manifest = json.load(f)
 
-    def test_the_folder_holds_maps_and_nothing_but_their_list_and_its_readme(self):
-        self.assertEqual(sorted(os.listdir(FOLDER)), sorted(self.names + ["README.md", "maps.json"]))
+    def test_the_folder_holds_maps_and_nothing_but_their_list_their_previews_and_its_readme(self):
+        self.assertEqual(sorted(os.listdir(FOLDER)), sorted(self.names + ["README.md", "maps.json", "previews", "previews.json"]))   # the previews: tests/scripts/test_map_previews.py
         self.assertGreater(len(self.names), 400)
 
     def test_every_name_is_one_that_a_room_can_use(self):

@@ -85,7 +85,10 @@ def run_game(ants, maps, arguments):
             if entry.name != "Maps" and entry.suffix.lower() not in (".exe", ".dll"):
                 (work / "Original-Ants" / entry.name).symlink_to(entry)
         for name in maps:
-            (work / "Original-Ants" / "Maps" / (name.upper() + ".LVL")).symlink_to(ROOT / "Original-Ants" / "Maps" / (name.upper() + ".LVL"))
+            if isinstance(name, Path):                                     # a map file of any folder (tools/map_previews.py), under its own name
+                (work / "Original-Ants" / "Maps" / name.name).symlink_to(name.resolve())
+            else:
+                (work / "Original-Ants" / "Maps" / (name.upper() + ".LVL")).symlink_to(ROOT / "Original-Ants" / "Maps" / (name.upper() + ".LVL"))
         shot = work / "shot.bmp"
         command = [str(ants), "--headless", "--aspect", "16:9", "--settings", str(work / "settings.txt"), *arguments, "--screenshot", str(shot)]
         environment = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")

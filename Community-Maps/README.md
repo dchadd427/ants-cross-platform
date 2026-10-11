@@ -9,6 +9,8 @@ Maps that players of the 1998 game made and shared (`.lvl` files, the same forma
 - `*.lvl`: the maps, under the names they were shared with (spaces and signs included; the names follow the protocol's rule for a map name).
 - `maps.json`: one line for each map: `file`, `size`, `hash` (FNV-1a 64, the identity the network protocol gives a map file), `width`, `height`, `minutes`, `players` (the teams that have a hill or a start marker) and `description` (the 30 characters of the file's header that the setup screen shows as Map Info, as the maker wrote them); a repaired map has one more field, `repaired`, a sentence that says what was changed. Made by `tools/community_maps.py`.
 
+- `previews/` and `previews.json`: a picture of every map (below).
+
 503 of the 558 files are different maps; the other 55 are the same map shared under a second name (`AlleyAnts` and `Alley Ants`), kept because the collection lists both.
 
 ## The 46 repaired maps
@@ -44,6 +46,17 @@ Of the collection's 586 files: 7 are the original game's maps (the six in `Origi
 The 558 that are in the folder load and play without a crash, a hang or an error, and give the same state hash in three plays. `tools/map_sweep.cpp` plays the roster of all four teams on each and, where the map has a start marker or a hill for both the first and the last team (green and black), those two teams alone; it played two minutes of game time each when they were taken in, and suite 2.18.1 of `./run_tests.sh` plays 30 seconds of each on every full run.
 
 Odd things that the engine handles as the original does and that were kept: objects or waypoints outside the grid are ignored, a missing waypoint block means no waypoints, a mode word that is not 1 is ignored, and a missing egg stock gives every team no eggs (the original leaves it uninitialised).
+
+## The previews
+
+`previews/<file name without .lvl>.png` is the map as the game's own setup screen draws it in its map preview: `tools/map_previews.py` runs the real game headless on that screen with only that map in its Maps folder (the method of the six `web/front/preview_*.png`), cuts the preview out and saves it at 200 x 200 pixels in 16 colours (about 13 KB each, 7.5 MB in all; a map that is not square has black bars, as on the screen). `previews.json` is `{"<map file>": {"hash", "picture"}}`: the hash is the one of `maps.json`, and a picture is drawn again only when its map's hash is not the listed one or the picture is missing. Nothing else reads them yet; `maps.json` is not changed.
+
+```
+cmake --build build --target ants
+python3 tools/map_previews.py --jobs 4          # Community-Maps/ into Community-Maps/previews/; --ants PROGRAM, --out DIR, --force, another FOLDER
+```
+
+One map takes about 3 seconds; all 558 with 4 jobs about 7 minutes. A run that stops goes on where it was.
 
 ## To use them
 
