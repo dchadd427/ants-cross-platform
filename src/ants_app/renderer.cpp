@@ -642,7 +642,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             obj.anchor_x = static_cast<uint16_t>(x);
             obj.anchor_y = static_cast<uint16_t>(y);
 
-            obj.is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
+            obj.is_food = (ants::sim::movement::tile_flags_of(c2.tile_index) & ants::sim::movement::kTileFlagFood) != 0;      // food is the tile flag 0x02 of the id (FUN_010071dd), not a name
 
             object_index_by_cell_[static_cast<size_t>(y) * level.width + x] = static_cast<int32_t>(static_decor_objects_.size());
             static_decor_objects_.push_back(std::move(obj));

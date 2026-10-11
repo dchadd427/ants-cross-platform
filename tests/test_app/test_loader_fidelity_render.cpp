@@ -180,6 +180,31 @@ void test_ignored_block1_records(Renderer& r) {
     check(image_diff(reference, b) > 20, "a plant record (410, named \".\") is drawn (" + std::to_string(image_diff(reference, b)) + " pixels)");
 }
 
+// ---- Fix 5: food is the tile flag 0x02 -------------------------------------------------------------------------------------------------------------------------------------------------------
+void test_food_by_flag(Renderer& r, const assets::AssetArchive& arc) {
+    std::printf("[food] an object whose entry is called fd... but whose id is no food is an ordinary object and is drawn\n");
+    assets::LevelData level = tiny();
+    const int32_t g = arc.find_animation_id("g01a");
+    for (auto& c : level.layer1_terrain) { c.tile_index = static_cast<uint16_t>(g); c.flags = 0; c.properties = 0; }
+    if (level.tile_dictionary.size() <= static_cast<size_t>(g)) level.tile_dictionary.resize(static_cast<size_t>(g) + 1, ".");
+    level.tile_dictionary[static_cast<size_t>(g)] = "g01a";
+    for (auto& c : level.layer2_interactive) { c.tile_index = assets::LVL_EMPTY_TILE; c.flags = 0; c.properties = 0; }
+    level.anthill_spawns.clear();
+    level.food_schedules.clear();
+    level.waypoints.clear();
+    Image empty = picture_of(r, level);
+    // id 344 is called fdpez2b1 and is not food (tile flag 0x02 clear): an ordinary object
+    check((sim::movement::tile_flags_of(344) & sim::movement::kTileFlagFood) == 0, "344 is not a food id");
+    assets::LevelData with = level;
+    with.tile_dictionary[344] = "fdpez2b1";
+    auto& c = with.layer2_interactive[static_cast<size_t>(10) * with.width + 10];
+    c.tile_index = 344;
+    c.flags = 1;
+    c.properties = static_cast<uint16_t>((10 << 8) | 10);
+    Image a = picture_of(r, with);
+    check(image_diff(empty, a) > 50, "an fd... object that is no food is drawn (" + std::to_string(image_diff(empty, a)) + " pixels)");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -204,6 +229,7 @@ int main(int argc, char* argv[]) {
 
     test_hills_by_id(r);
     test_ignored_block1_records(r);
+    test_food_by_flag(r, arc);
 
     r.shutdown();
     SDL_DestroyWindow(win);

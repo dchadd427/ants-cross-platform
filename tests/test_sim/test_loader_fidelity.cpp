@@ -794,6 +794,85 @@ int main() {
         CHECK((ids == std::set<uint16_t>{0, 63, 64, 65, 66, 148, 151, 296}));
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 5: food is the tile flag 0x02 of the id (FUN_010071dd, 87 ids), not a name that starts with fd or food
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF5.1 A Layer-2 Id With The Food Flag Is Food Whatever The Dictionary Calls It (\".\", Nothing, Another Object's Name) And Is No Obstacle Overlay; An Entry Called fd... Of An Id Without The Flag (344, 287) Is Not Food", [] {
+        const LevelData base = open_ground();
+        const uint16_t food = a_food_id(base);
+        CHECK(food != 0);
+        CHECK((movement::tile_flags_of(344) & movement::kTileFlagFood) == 0 && (movement::tile_flags_of(287) & movement::kTileFlagFood) == 0);
+        for (const char* name : {".", "", "rock1", "fd_something"}) {
+            LevelData level = base;
+            const std::vector<TileCoord> at = open_tiles(level, 2);
+            CHECK(at.size() == 2);
+            if (at.size() != 2) return;
+            set_layer2(level, at[0], food);
+            set_layer2(level, at[1], 344);
+            name_tile(level, food, name);
+            name_tile(level, 344, std::string(name).rfind("fd", 0) == 0 ? name : "fdpez2b1");
+            Grid g;
+            CHECK(g.init_from_level(level));
+            CHECK(cell_at(g, at[0]).is_food && cell_at(g, at[0]).has_food() && !cell_at(g, at[0]).is_obstacle_overlay);
+            CHECK(!cell_at(g, at[1]).is_food && !cell_at(g, at[1]).has_food());
+        }
+    });
+
+    run_case("LF5.2 The Stage Tile Of A Food Object Makes Food Cells Only When Its Id Has The Flag (The Library Has Stage Tiles Of Other Kinds: Grass, Rocks, Power-Ups)", [] {
+        LevelData level = open_ground();
+        const uint16_t food = a_food_id(level);
+        const std::vector<TileCoord> at = open_tiles(level, 2);
+        CHECK(at.size() == 2 && food != 0);
+        if (at.size() != 2 || food == 0) return;
+        for (const uint16_t tile : {food, uint16_t{294}}) {                 // 294 medrock2: an object, no food
+            LevelData l = level;
+            ants::assets::FoodSchedule fs;
+            fs.y = static_cast<uint16_t>(at[0].y);
+            fs.x = static_cast<uint16_t>(at[0].x);
+            fs.initial_delay = 5;
+            fs.respawn_interval = 10;
+            ants::assets::FoodItemVariant v;
+            v.weight = 5;
+            v.tile_id = tile;
+            fs.variants.push_back(v);
+            l.food_schedules.push_back(fs);
+            Grid g;
+            CHECK(g.init_from_level(l));
+            CHECK(cell_at(g, at[0]).interactive_id == tile);
+            CHECK(cell_at(g, at[0]).is_food == (tile == food));
+        }
+    });
+
+    run_case("LF5.3 The Community Library: 33 Maps Hold Food Ids That Their Dictionaries Call \".\" Or Leave Unnamed, 2 Hold fd... Entries Of Ids That Are Not Food (!TreasureIsland, Arena101); The Grid's Food Is The Flag In Every Map", [] {
+        std::set<std::string> flag_only, name_only;
+        long mismatches = 0;
+        for_each_community_map([&](const std::string& name, const LevelData& level) {
+            Grid g;
+            if (!g.init_from_level(level)) return;
+            for (uint32_t y = 0; y < level.height; ++y) {
+                for (uint32_t x = 0; x < level.width; ++x) {
+                    const uint16_t id = level.get_cell_layer2(x, y).tile_index;
+                    if (id == ants::assets::LVL_EMPTY_TILE || id == 0xFFFFu) continue;
+                    const std::string& n = level.get_tile_name(id);
+                    std::string lo = n;
+                    for (char& c : lo) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    const bool dot = n.empty() || n == ".";
+                    const bool old_food = !dot && (lo.rfind("fd", 0) == 0 || lo.rfind("food", 0) == 0);
+                    const bool flag = (movement::tile_flags_of(id) & movement::kTileFlagFood) != 0;
+                    if (old_food && !flag) name_only.insert(name);
+                    if (!old_food && flag) flag_only.insert(name);
+                    const TileCell& c = g.get_cell(x, y);
+                    if (c.interactive_id == id && c.is_food != flag && !c.is_powerup && !c.has_bomb()) ++mismatches;     // (a pile of a food object may have replaced the cell: then it holds another id)
+                }
+            }
+        });
+        std::cout << "\n    flag only: " << flag_only.size() << " maps, name only: " << name_only.size() << " maps, cells where the grid differs from the flag: " << mismatches << "\n";
+        CHECK(flag_only.size() == 33);
+        CHECK((name_only == std::set<std::string>{"!TreasureIsland.lvl", "Arena101.lvl"}));
+        CHECK(mismatches == 0);
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

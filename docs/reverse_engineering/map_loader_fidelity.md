@@ -45,3 +45,13 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 **Now.** The renderer draws only the records with the tile flag 0x10 or 0x20 (by id), the stem overlay is for those records only, and the fallback hills are the start markers (team below 4) only. The reader keeps the records (the sweep still counts them).
 
 **Maps** (`LF4.4`): 736 records of the ids 0, 63 .. 66, 148, 151 and 296 in 20 maps (the dictionary names of 63 .. 66 are the power-ups'). Sweep: no state hash and no play of the 558 maps changes (the engine never used them); what changes is the picture of the maps whose ignored records name an animation.
+
+## 5. Food is the tile flag 0x02
+
+**The original.** A layer-2 cell is food when its id carries the tile flag 0x02 (`FUN_010071dd`; 87 ids), for the harvest rules, the fog (an unexplored anchor hides a pile), the minimap and the drop-tile tests. The dictionary's name is not asked.
+
+**The remake did.** `Grid::init_from_level` and the renderer took an entry called `fd...` or `food...` for food, so a food id that the dictionary leaves "." or names otherwise was an obstacle overlay that nobody could harvest by sight, and `fdpez2b1` (id 344) and `fdfrl7` (id 287), which are not food ids, were piles. A stage tile of a food object marked every cell of its footprint as food, flag or not.
+
+**Now.** `is_food` is the flag of the id: in the loader's layer-2 pass, in the footprint cells that `set_food_tile` writes, and in the renderer's static objects (stage drawing and fog). A food id is never an obstacle overlay.
+
+**Maps** (`LF5.3`): 33 maps hold food ids that their dictionaries leave "." or unnamed; 2 (!TreasureIsland, Arena101) hold `fd...` entries of ids that are not food; 15 more have a block-2 stage tile that is not a food id (grass, rocks, power-ups). 50 maps change in all; none changes in play within 2,400 ticks (the sweep's players harvest the piles that exist by id), they differ in the state hash and in the cells' obstacle overlay (35 maps).

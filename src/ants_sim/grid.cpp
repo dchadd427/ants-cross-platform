@@ -122,14 +122,16 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                 // (a start marker is a block-1 record; one in layer 2 is walkable ground)
                 cell.terrain_type = TERRAIN_WALKABLE;
                 cell.is_obstacle_overlay = false;
+            } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE && (movement::tile_flags_of(c2.tile_index) & movement::kTileFlagFood) != 0) {
+                // Food is the tile flag 0x02 of the id (FUN_010071dd: 87 ids), never the dictionary's name ("fd..." or "food..."): an id with the flag is food whatever the entry says ("." included),
+                // and an entry named fd... of an id without the flag (fdpez2b1 at 344, fdfrl7 at 287) is an ordinary object. Food is a removable object: no obstacle overlay.
+                cell.is_food = true;
             } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                 const std::string& tname = level.get_tile_name(c2.tile_index);
                 if (!tname.empty() && tname != ".") {
                     std::string lower_name = tname;
                     for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-                    if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
-                        cell.is_food = true;
-                    } else if (lower_name.find("bridge") != std::string::npos ||
+                    if (lower_name.find("bridge") != std::string::npos ||
                                (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
                                c2.tile_index == TILE_BRIDGE4B) {
                         cell.is_obstacle_overlay = false;
@@ -526,7 +528,7 @@ void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
         c.interactive_id = tile;
         c.interactive_owner = 255;
         c.timer_ticks = 0;
-        c.is_food = (tile != 0x7FFEu);
+        c.is_food = (tile != 0x7FFEu) && (movement::tile_flags_of(tile) & movement::kTileFlagFood) != 0;       // (FUN_010071dd: the tile flag 0x02)
         c.is_powerup = false;                                          // the cell now holds this tile: a power-up that the file had under the pile's footprint is gone with its tile
         c.powerup_type = 0;
         c.anchor_x = static_cast<int16_t>(anchor.x);
