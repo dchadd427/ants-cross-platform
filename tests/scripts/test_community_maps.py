@@ -2,15 +2,18 @@
 """The players' maps of the repository (Community-Maps/, tools/community_maps.py; run by ./run_tests.sh --fast and by the CI).
 
 What is read here from the files themselves (the engine's plays of them are suite 2.18.1 of ./run_tests.sh: map_sweep over the folder, then `community_maps.py verify`):
-  - the rule that decides which maps of a collection are taken in: every reason, in the order it applies, on made-up report entries and made-up bytes (each email form, each program
-    marker, each of the six original names, a copy of an original under another name, a name the protocol refuses, a report without the plays that the sweep makes);
-  - the tool as a program: `build`, `discards` and `verify` through `main` and as a process (what they print and their exit status 0 / 1 / 2), and `verify` on made-up folders: it
-    finds a rule broken, a file the report does not know, one that is missing, a hash that is not the file's, a line of maps.json that differs in any field, a list out of order,
-    a missing or unreadable maps.json, a copy of an original;
+  - the rule that decides which maps of a collection are taken in: every reason, in the order it applies, on made-up report entries and made-up bytes (each program marker, an email
+    address that does not keep a map out, each of the six original names, a copy of an original under another name, a name the protocol refuses, a report without the plays that the
+    sweep makes);
+  - the tool as a program: `repair`, `build`, `discards` and `verify` through `main` and as a process (what they print and their exit status 0 / 1 / 2), the repaired maps (taken in
+    only when the sweep of the repaired file passes, with the sentence that says what was changed), and `verify` on made-up folders: it finds a rule broken, a file the report does not
+    know, one that is missing, a hash that is not the file's, a line of maps.json that differs in any field, a bad `repaired` sentence, a list out of order, a missing or unreadable
+    maps.json, a copy of an original;
   - the folder: every file is a level the protocol can name (printable ASCII, no path or Windows-forbidden character, at most 64 characters, `.lvl` or `.LVL` and no other case of the
     extension: src/ants_net/protocol.cpp) and no name clashes with another on a computer that ignores the case of names, no file is one of Original-Ants/Maps under any name;
     no email address, no program and no byte of the folder's files is text to git (-text);
-  - maps.json: it lists exactly the files, in the order of their names, with the size and the FNV-1a 64 hash of each, the header's minutes and description, and a plausible grid;
+  - maps.json: it lists exactly the files, in the order of their names, with the size and the FNV-1a 64 hash of each, the header's minutes and description, a plausible grid and, for
+    a repaired map, the sentence that says what was changed (a repair is not applied twice: repairing a repaired file finds nothing to do);
   - the README's numbers are the folder's (and the other documents that give them).
 """
 import contextlib
@@ -19,6 +22,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -28,15 +32,18 @@ from unittest import mock
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import community_maps  # noqa: E402
+import repair_maps  # noqa: E402
 
 FOLDER = os.path.join(REPO, "Community-Maps")
 ORIGINAL_FOLDER = os.path.join(REPO, "Original-Ants", "Maps")
 TOOL = os.path.join(REPO, "tools", "community_maps.py")
 WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
 # What the folder cannot say about itself: the collection it was taken from had 586 files, 7 of them the original game's maps (the six
-# in Original-Ants/Maps by name, and FOOD.lvl, which has the bytes of TINY.LVL). Community-Maps/README.md gives both; change them here and there together with the folder.
+# in Original-Ants/Maps by name, and FOOD.lvl, which has the bytes of TINY.LVL), and 21 were neither taken in nor repaired. Community-Maps/README.md gives all three; change them here and
+# there together with the folder.
 COLLECTION = 586
 ORIGINALS = 7
+LEFT_OUT = 21
 SIX = ("GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE")
 
 
@@ -93,7 +100,6 @@ class TheRule(unittest.TestCase):
             (entry(runs=[play(15, status="crash")]), self.PLAIN, "play fails"),
             (entry(runs=[play(15, deterministic=False), play(9)]), self.PLAIN, "play fails"),
             (entry(problems=[{"kind": "tile_outside_dictionary", "severity": "warning"}]), self.PLAIN, "tile outside the dictionary"),
-            (entry(), self.PLAIN + b"\0write to me at someone@example.com\0", "email address inside"),
             (entry(), self.PLAIN + b"\0Reading SETVER.EXE file.\0", "program code inside"),
             (entry(), self.PLAIN + b"\0!This program cannot be run in DOS mode.\0", "program code inside"),
             (entry(name_ok=False), self.PLAIN, "name the protocol refuses"),
@@ -123,19 +129,15 @@ class TheRule(unittest.TestCase):
             self.assertEqual(community_maps.rosters_swept(entry(start_markers=markers, hill_cells=hills)), (15,))
             self.assertIsNone(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), (markers, hills))
 
-    def test_every_form_of_an_email_address_keeps_a_map_out(self):
-        email = community_maps.REASONS[4]
-        for text in (b"someone@example.com", b"ruth@earthlink.net", b"x@y.org", b"a@b.cd", b"UPPER@CASE.NET", b"first.last+tag@mail.example.co.uk", b"under_score-dash@a-b.example.net",
-                     b"mail me at bob@earthlink.net or call", b"bob@earthlink.net is my address", b"!!by Bob (bob@earthlink.net)", b"a.b@c.d.e.f", b"b0b123@x.net",
-                     b"bob.@x.net", b"bob+@x.net", b"bob-@x.net", b"bob_@x.net", b"x@a-b.net", b"x@sub-1.a-b.net"):
-            self.assertEqual(self.reason_of(text), email, text)
-
-    def test_what_is_no_email_address_is_left_alone(self):
-        for text in (b"price @ 5 each", b"see you @home", b"user@localhost", b"@handle", b"a@b", b"Built by Bob at earthlink.net", b"antsownz.com", b"!Visit pbcguild.cjb.net ..."):
+    def test_an_email_address_does_not_keep_a_map_out(self):
+        # (the owner's decision: an address in a map does not matter; only a program does)
+        self.assertFalse(hasattr(community_maps, "EMAIL"))
+        for text in (b"someone@example.com", b"ruth@earthlink.net", b"x@y.org", b"first.last+tag@mail.example.co.uk", b"mail me at bob@earthlink.net or call", b"!!by Bob (bob@earthlink.net)",
+                     b"price @ 5 each", b"user@localhost", b"@handle"):
             self.assertIsNone(self.reason_of(text), text)
 
     def test_every_marker_of_a_program_keeps_a_map_out(self):
-        program = community_maps.REASONS[5]
+        program = community_maps.REASONS[4]
         for text in (b"This program cannot be run in DOS mode.", b"this program requires Microsoft Windows", b"THIS PROGRAM CANNOT RUN", b"Reading SETVER.EXE file.", b"setup.exe",
                      b"MSVBVM60.DLL", b"vxd.sys", b"autoexec.bat", b"call kernel32 now", b"KERNEL32", b"Kernel32.lib"):
             self.assertEqual(self.reason_of(text), program, text)
@@ -149,25 +151,20 @@ class TheRule(unittest.TestCase):
 
     def test_text_is_read_one_printable_run_at_a_time(self):
         # (a NUL or any other byte ends a string: pieces of an address or of a name do not make one)
-        for text in (b"bob@earth\0link.net", b"setup.e\0xe", b"kernel\x0032", b"this program\0cannot", b"bob@\xffearthlink.net"):
+        for text in (b"setup.e\0xe", b"kernel\x0032", b"this program\0cannot", b"set\xffup.e\xffxe"):
             self.assertIsNone(self.reason_of(text), text)
 
     def test_the_first_reason_wins_in_the_order_of_the_list(self):
-        self.assertEqual(community_maps.reason(entry(loads=False, playable=False), self.PLAIN + b"a@b.cd"), community_maps.REASONS[0])
-        self.assertEqual(community_maps.reason(entry(playable=False, runs=[]), self.PLAIN + b"a@b.cd"), community_maps.REASONS[1])
+        program = b"\0Reading SETVER.EXE file.\0"
+        self.assertEqual(community_maps.reason(entry(loads=False, playable=False), self.PLAIN + program), community_maps.REASONS[0])
+        self.assertEqual(community_maps.reason(entry(playable=False, runs=[]), self.PLAIN + program), community_maps.REASONS[1])
         self.assertEqual(community_maps.reason(entry(runs=[], problems=[{"kind": "tile_outside_dictionary"}]), self.PLAIN), community_maps.REASONS[2])
-        self.assertEqual(community_maps.reason(entry(problems=[{"kind": "tile_outside_dictionary"}]), self.PLAIN + b"a@b.cd"), community_maps.REASONS[3])
-        self.assertEqual(community_maps.REASONS, ("does not load", "not playable", "play fails", "tile outside the dictionary", "email address inside", "program code inside",
-                                                  "name the protocol refuses"))
+        self.assertEqual(community_maps.reason(entry(problems=[{"kind": "tile_outside_dictionary"}]), self.PLAIN + program), community_maps.REASONS[3])
+        self.assertEqual(community_maps.REASONS, ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses"))
 
-    def test_an_email_address_is_named_before_a_program(self):
-        both = self.PLAIN + b"\0Reading SETVER.EXE file.\0write to me at someone@example.com\0"
-        self.assertEqual(community_maps.reason(entry(), both), community_maps.REASONS[4])
-        self.assertEqual(community_maps.reason(entry(), self.PLAIN + b"\0someone@example.com\0Reading SETVER.EXE file.\0"), community_maps.REASONS[4])
-
-    def test_a_program_and_an_email_address_are_named_before_a_name(self):
-        self.assertEqual(community_maps.reason(entry(name_ok=False), self.PLAIN + b"\0Reading SETVER.EXE file.\0"), community_maps.REASONS[5])
-        self.assertEqual(community_maps.reason(entry(name_ok=False), self.PLAIN + b"\0a@b.cd\0"), community_maps.REASONS[4])
+    def test_a_program_is_named_before_a_name(self):
+        self.assertEqual(community_maps.reason(entry(name_ok=False), self.PLAIN + b"\0Reading SETVER.EXE file.\0"), community_maps.REASONS[4])
+        self.assertEqual(community_maps.reason(entry(name_ok=False), self.PLAIN + b"\0a@b.cd\0"), community_maps.REASONS[5])
 
     def test_the_original_six_are_not_taken_in_whatever_their_case(self):
         self.assertEqual(sorted(community_maps.ORIGINAL_NAMES), sorted(SIX))
@@ -273,11 +270,10 @@ class TheFolder(unittest.TestCase):
         for name in self.names:
             self.assertNotIn(read_bytes(FOLDER, name), originals, "%s has the bytes of %s" % (name, originals.get(read_bytes(FOLDER, name))))
 
-    def test_no_file_holds_an_email_address_or_a_program(self):
+    def test_no_file_holds_a_program(self):
         for name in self.names:
             for text in community_maps.PRINTABLE_RUN.finditer(read_bytes(FOLDER, name)):
                 text = text.group().decode("ascii")
-                self.assertIsNone(community_maps.EMAIL.search(text), "%s: %r" % (name, text))
                 self.assertIsNone(community_maps.PROGRAM.search(text), "%s: %r" % (name, text))
 
     def test_every_file_is_a_version_8_level_the_size_of_a_map(self):
@@ -311,7 +307,7 @@ class TheList(unittest.TestCase):
         keys = ["file", "size", "hash", "width", "height", "minutes", "players", "description"]
         for row in self.rows:
             data = read_bytes(FOLDER, row["file"])
-            self.assertEqual(list(row), keys, row["file"])
+            self.assertEqual(list(row), keys + (["repaired"] if "repaired" in row else []), row["file"])         # (a repaired map has one field more, the last)
             self.assertEqual(row["size"], len(data), row["file"])
             self.assertEqual(row["hash"], community_maps.fnv1a64(data), row["file"])
             minutes, description = community_maps.header(data)
@@ -329,21 +325,46 @@ class TheList(unittest.TestCase):
             self.assertIn(row["players"], (2, 3, 4), row["file"])
             self.assertRegex(row["hash"], r"^[0-9a-f]{16}$")
 
+    def test_a_repaired_line_has_a_sentence_and_the_others_have_none(self):
+        repaired = [r for r in self.rows if "repaired" in r]
+        self.assertGreater(len(repaired), 0)
+        for row in repaired:
+            self.assertRegex(row["repaired"], r"^[A-Z0-9][\x20-\x7e]{10,%d}\.$" % (community_maps.REPAIRED_FIELD_MAX - 1), row["file"])
+
+    def test_a_repair_is_not_applied_twice(self):
+        # the folder's repaired files are repaired already: the repairs find nothing in them (a file that a repair still changed would be one that the folder should hold differently)
+        for row in self.rows:
+            if "repaired" in row:
+                fixed, notes = repair_maps.repair(read_bytes(FOLDER, row["file"]))
+                self.assertEqual((fixed, notes), (None, []), row["file"])
+
     def test_the_readme_says_the_numbers_of_the_folder(self):
         text = read_text(FOLDER, "README.md")
         different = len({r["hash"] for r in self.rows})
-        left_out = COLLECTION - ORIGINALS - len(self.rows)
+        repaired = [r for r in self.rows if "repaired" in r]
+        kinds = (sum(r["repaired"].startswith("Text-transfer damage") for r in repaired), sum("start marker" in r["repaired"] for r in repaired),
+                 sum(r["repaired"].startswith("Tiles outside the dictionary") for r in repaired))
+        self.assertEqual(sum(kinds), len(repaired))                                            # (three kinds of damage, each map one of them)
+        self.assertEqual(COLLECTION - ORIGINALS - LEFT_OUT, len(self.rows))
         self.assertIn("holds the **%d** of its %d maps" % (len(self.rows), COLLECTION), text)
+        self.assertIn("%d byte for byte as they were collected, and %d that were damaged and are repaired" % (len(self.rows) - len(repaired), len(repaired)), text)
         self.assertIn("%d of the %d files are different maps; the other %d are the same map" % (different, len(self.rows), len(self.rows) - different), text)
-        self.assertIn("The %d that remain" % len(self.rows), text)
+        self.assertIn("## The %d repaired maps" % len(repaired), text)
+        self.assertIn("The %d that are in the folder load and play" % len(self.rows), text)
         self.assertIn("Of the collection's %d files: %d are the original game's maps" % (COLLECTION, ORIGINALS), text)
-        self.assertIn("%d were not taken in" % left_out, text)
-        table = [int(m.group(1)) for m in re.finditer(r"(?m)^\| (\d+) \|", text)]
-        self.assertEqual(sum(table), left_out)                                             # (the rows of "what was left out" add up to the 77)
+        self.assertIn("%d were not taken in" % LEFT_OUT, text)
+        repaired_part, left_part = text.split("## What was left out, and why")
+        table = lambda part: [int(m.group(1)) for m in re.finditer(r"(?m)^\| (\d+) \|", part)]
+        self.assertEqual(table(repaired_part), list(kinds))                                    # (the rows of "the repaired maps" are the kinds of repair, in this order)
+        self.assertEqual(sum(table(left_part)), LEFT_OUT)                                      # (the rows of "what was left out" add up to the 21)
+        for row in repaired:
+            self.assertIn("`%s`" % row["file"][:-4], repaired_part, row["file"])               # (every repaired map is named)
 
     def test_the_other_documents_give_the_same_numbers(self):
         n = len(self.rows)
         self.assertEqual(len(re.findall(r"Community-Maps/` holds the %d that pass" % n, read_text(REPO, "docs", "BOTS.md"))), 1)
+        self.assertNotIn("email", read_text(REPO, "AGENTS.md").split("**The original game.**")[1].split("\n")[0])
+        self.assertNotIn("email", read_text(REPO, "docs", "TESTING.md").split("| 2.18.1 Community maps")[1].split("\n")[0])
         self.assertIn("the repository holds only the part of the maps that is in `Community-Maps/`", read_text(REPO, "docs", "GAME_REVERSE_ENGINEERING.md"))
 
 
@@ -597,12 +618,13 @@ class TheCommandLine(Made):
 
     def test_discards_names_each_map_with_its_reason_and_counts_them(self):
         report = [self.add("Good.lvl"), self.add("Bad.lvl", loads=False), self.add("Mail.lvl", self.map_bytes("by me") + b"\0write to me at someone@example.com\0"),
-                  self.add("Copy.lvl", self.original), self.add("TINY.LVL"), self.add("Odd.Lvl", name_ok=False), self.add("Idle.lvl", runs=[])]
+                  self.add("Prog.lvl", self.map_bytes("by me") + b"\0Reading SETVER.EXE file.\0"), self.add("Copy.lvl", self.original), self.add("TINY.LVL"),
+                  self.add("Odd.Lvl", name_ok=False), self.add("Idle.lvl", runs=[])]
         code, out, err = self.run_main("discards", self.src, self.report_file(report))
         self.assertEqual(code, 0)
-        self.assertEqual(out.splitlines(), ["does not load\tBad.lvl", "email address inside\tMail.lvl", "original map (the bytes of ORIG.LVL)\tCopy.lvl", "original map (its name)\tTINY.LVL",
-                                            "name the protocol refuses\tOdd.Lvl", "play fails\tIdle.lvl"])
-        self.assertEqual(err.splitlines(), ["1\tdoes not load", "0\tnot playable", "1\tplay fails", "0\ttile outside the dictionary", "1\temail address inside", "0\tprogram code inside",
+        self.assertEqual(out.splitlines(), ["does not load\tBad.lvl", "program code inside\tProg.lvl", "original map (the bytes of ORIG.LVL)\tCopy.lvl", "original map (its name)\tTINY.LVL",
+                                            "name the protocol refuses\tOdd.Lvl", "play fails\tIdle.lvl"])                          # (Mail.lvl, with an email address, is taken in)
+        self.assertEqual(err.splitlines(), ["1\tdoes not load", "0\tnot playable", "1\tplay fails", "0\ttile outside the dictionary", "1\tprogram code inside",
                                             "1\tname the protocol refuses", "2\toriginal map"])
 
     def test_an_original_is_not_counted_as_a_reason(self):
@@ -659,11 +681,13 @@ class TheCommandLine(Made):
 
     def test_a_usage_mistake_prints_the_usage_and_exits_2(self):
         report = self.report_file(self.report)
-        for args in ((), ("verify",), ("verify", self.folder), ("verify", self.folder, report, "more"), ("build", self.src, report), ("discards", self.src), ("discards", self.src, report, "x"),
+        for args in ((), ("verify",), ("verify", self.folder), ("verify", self.folder, report, "more"), ("build", self.src, report), ("build", self.src, report, "d", "x"),
+                     ("discards", self.src), ("discards", self.src, report, "x"), ("discards", self.src, report, "x", "y", "z"), ("repair", self.src, report), ("repair", self.src, report, "d", "x"),
                      ("bogus", self.folder, report), ("--help",)):
             code, out, err = self.run_main(*args)
             self.assertEqual(code, 2, args)
-            self.assertIn("usage: community_maps.py build SRC_DIR SWEEP_REPORT DEST_DIR", out, args)
+            self.assertIn("usage: community_maps.py repair SRC_DIR SWEEP_REPORT REPAIRED_DIR", out, args)
+            self.assertIn("community_maps.py build SRC_DIR SWEEP_REPORT DEST_DIR [REPAIRED_DIR REPAIRED_SWEEP_REPORT]", out, args)
             self.assertEqual(err, "", args)
 
     def test_a_report_that_cannot_be_read_exits_1_with_a_word_not_a_traceback(self):
@@ -705,6 +729,149 @@ class TheCommandLine(Made):
         self.assertEqual((code, out), (0, "does not load\tBad.lvl\n"))
         self.assertIn("1\tdoes not load\n", err)
         self.assertTrue(err.endswith("0\toriginal map\n"))
+
+
+class TheRepairs(Made):
+    """The repaired maps: `repair` writes the files and their sentences, `build` takes in the ones whose own sweep passes, `discards` counts them, `verify` checks the sentence."""
+
+    FIXED = b"the repaired bytes" * 10
+
+    def fake_repair(self, data):
+        """Stands for repair_maps.repair: the made-up maps are no levels. A file that holds b"BROKEN" is repaired; its sentence comes from two notes."""
+        self.asked.append(data)
+        return (self.FIXED + data[-4:], ["a thing was done", "another thing, too"]) if b"BROKEN" in data else (None, [])
+
+    def setUp(self):
+        super().setUp()
+        self.asked = []
+        patcher = mock.patch.object(community_maps.repair_maps, "repair", self.fake_repair)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.broken = self.map_bytes("A broken map") + b"BROKEN"
+        self.report = [self.add("Good.lvl"), self.add("Broken.lvl", self.broken, loads=False), self.add("Hopeless.lvl", self.map_bytes("Hopeless"), loads=False),
+                       self.add("TINY.LVL", self.broken, loads=False)]
+        self.repaired_dir = os.path.join(self.tmp, "repaired")
+
+    def sweep_of_repaired(self, **changes):
+        """The report of a sweep of the repaired folder (the file's own hash, as the sweep gives it)."""
+        return [entry(name="Broken.lvl", hash=community_maps.fnv1a64(read_bytes(self.repaired_dir, "Broken.lvl")), **changes)]
+
+    def test_repair_writes_the_files_that_have_a_repair_and_their_sentences(self):
+        self.assertEqual(community_maps.repair(self.src, self.report, self.repaired_dir, originals={}), 1)
+        self.assertEqual(sorted(os.listdir(self.repaired_dir)), ["Broken.lvl", "repairs.json"])
+        self.assertEqual(read_bytes(self.repaired_dir, "Broken.lvl"), self.FIXED + b"OKEN")
+        self.assertEqual(json.loads(read_text(self.repaired_dir, "repairs.json")), {"format": 1, "repairs": {"Broken.lvl": "A thing was done; another thing, too."}})
+        self.assertEqual(sorted(self.asked), sorted([self.broken, self.map_bytes("Hopeless")]))                       # (not the map that passes, nor TINY.LVL: the name tells that it is an original)
+
+    def test_repair_leaves_the_originals_alone(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        self.assertNotIn("TINY.LVL", os.listdir(self.repaired_dir))
+        self.asked.clear()
+        community_maps.repair(self.src, [self.add("Copy.lvl", self.original, loads=False)], self.repaired_dir, originals={self.original: "ORIG.LVL"})
+        self.assertEqual(self.asked, [])
+        self.assertEqual(json.loads(read_text(self.repaired_dir, "repairs.json"))["repairs"], {})
+
+    def test_the_sentence_has_a_capital_and_a_full_stop(self):
+        self.assertEqual(community_maps.sentence(["one thing", "two things"]), "One thing; two things.")
+        self.assertEqual(community_maps.sentence(["3 cells"]), "3 cells.")
+
+    def test_build_takes_in_a_repaired_map_whose_sweep_passes_with_its_sentence(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        dest = os.path.join(self.tmp, "dest")
+        taken = community_maps.build(self.src, self.report, dest, originals={}, repaired=(self.repaired_dir, self.sweep_of_repaired()))
+        self.assertEqual(taken, 2)
+        self.assertEqual(sorted(os.listdir(dest)), ["Broken.lvl", "Good.lvl", "maps.json"])
+        self.assertEqual(read_bytes(dest, "Broken.lvl"), self.FIXED + b"OKEN")                                           # (the repaired bytes, not the source's)
+        self.assertEqual(read_bytes(dest, "Good.lvl"), self.files["Good.lvl"])
+        rows = json.loads(read_text(dest, "maps.json"))["maps"]
+        self.assertEqual([r["file"] for r in rows], ["Broken.lvl", "Good.lvl"])
+        self.assertEqual(rows[0]["repaired"], "A thing was done; another thing, too.")
+        self.assertNotIn("repaired", rows[1])
+        self.assertEqual(rows[0]["hash"], community_maps.fnv1a64(self.FIXED + b"OKEN"))
+
+    def test_a_repaired_map_whose_sweep_fails_stays_out_and_is_counted_as_what_it_was(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        dest = os.path.join(self.tmp, "dest")
+        for changes in ({"loads": False}, {"problems": [{"kind": "tile_outside_dictionary"}]}, {"runs": []}, {"name_ok": False}):
+            repaired = (self.repaired_dir, self.sweep_of_repaired(**changes))
+            self.assertEqual(community_maps.build(self.src, self.report, dest, originals={}, repaired=repaired), 1, changes)
+            self.assertEqual(sorted(os.listdir(dest)), ["Good.lvl", "maps.json"], changes)
+            shutil.rmtree(dest)
+        with contextlib.redirect_stdout(io.StringIO()):
+            counts = community_maps.discards(self.src, self.report, {}, (self.repaired_dir, self.sweep_of_repaired(loads=False)))
+        self.assertEqual((counts["does not load"], counts["repaired"]), (2, 0))
+
+    def test_a_map_is_repaired_only_if_the_repairs_list_says_so(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        with open(os.path.join(self.repaired_dir, "repairs.json"), "w", encoding="utf-8") as f:
+            json.dump({"format": 1, "repairs": {}}, f)
+        dest = os.path.join(self.tmp, "dest")
+        self.assertEqual(community_maps.build(self.src, self.report, dest, originals={}, repaired=(self.repaired_dir, self.sweep_of_repaired())), 1)     # (the sweep alone is not enough)
+        os.remove(os.path.join(self.repaired_dir, "repairs.json"))
+        with self.assertRaises(FileNotFoundError):
+            community_maps.build(self.src, self.report, dest, originals={}, repaired=(self.repaired_dir, self.sweep_of_repaired()))
+
+    def test_a_sweep_of_other_bytes_is_an_error_not_a_silent_skip(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        wrong = [dict(self.sweep_of_repaired()[0], hash="0" * 16)]
+        with self.assertRaises(ValueError):
+            community_maps.build(self.src, self.report, os.path.join(self.tmp, "dest"), originals={}, repaired=(self.repaired_dir, wrong))
+
+    def test_discards_counts_the_repaired_maps_and_does_not_name_them(self):
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            counts = community_maps.discards(self.src, self.report, {}, (self.repaired_dir, self.sweep_of_repaired()))
+        self.assertEqual(out.getvalue().splitlines(), ["does not load\tHopeless.lvl", "original map (its name)\tTINY.LVL"])
+        self.assertEqual((counts["repaired"], counts["does not load"], counts["original map"]), (1, 1, 1))
+
+    def test_verify_checks_the_sentence_of_a_repaired_line(self):
+        folder = self.folder
+        listed = self.listing()
+        for sentence in ("Text-transfer damage undone: 2 zero bytes put back.", "x", "A" * community_maps.REPAIRED_FIELD_MAX):
+            listed["maps"][0]["repaired"] = sentence
+            self.write_listing(listed)
+            self.assertEqual(community_maps.verify(folder, [entry(name="Made Up.lvl", hash=community_maps.fnv1a64(self.data))], originals={}), [], sentence)
+        bad = "Made Up.lvl: its \"repaired\" in maps.json is not a sentence of printable ASCII (1 to 300 characters)"
+        for sentence in ("", "caf\xe9", "tab\there", "A" * (community_maps.REPAIRED_FIELD_MAX + 1), 5, None, ["a"]):
+            listed["maps"][0]["repaired"] = sentence
+            self.write_listing(listed)
+            found = community_maps.verify(folder, [entry(name="Made Up.lvl", hash=community_maps.fnv1a64(self.data))], originals={})
+            self.assertEqual(found, [bad], repr(sentence))
+        listed["maps"][0]["repaired"] = "A sentence."                                                                       # (any other field is still checked)
+        listed["maps"][0]["size"] = 1
+        self.write_listing(listed)
+        self.assertEqual(community_maps.verify(folder, [entry(name="Made Up.lvl", hash=community_maps.fnv1a64(self.data))], originals={}),
+                         ["Made Up.lvl: its line in maps.json is not what the file and the sweep say"])
+
+    def test_the_command_line_runs_the_whole_flow(self):
+        source = self.report_file(self.report)
+        code, out, err = self.run_main("repair", self.src, source, self.repaired_dir)
+        self.assertEqual((code, out, err), (0, "1 maps repaired\n", ""))
+        swept = self.report_file(self.sweep_of_repaired(), "repaired.json")
+        dest = os.path.join(self.tmp, "dest")
+        code, out, err = self.run_main("build", self.src, source, dest, self.repaired_dir, swept)
+        self.assertEqual((code, out, err), (0, "2 maps taken in\n", ""))
+        code, out, err = self.run_main("discards", self.src, source, self.repaired_dir, swept)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines(), ["does not load\tHopeless.lvl", "original map (its name)\tTINY.LVL"])
+        self.assertEqual(err.splitlines(), ["1\tdoes not load", "0\tnot playable", "0\tplay fails", "0\ttile outside the dictionary", "0\tprogram code inside", "0\tname the protocol refuses",
+                                            "1\trepaired", "1\toriginal map"])
+        final = self.report_file([entry(name="Broken.lvl", hash=community_maps.fnv1a64(self.FIXED + b"OKEN")), self.report[0]], "final.json")
+        self.assertEqual(self.run_main("verify", dest, final), (0, "", ""))
+
+    def test_a_repaired_report_that_cannot_be_read_exits_1_with_a_word(self):
+        source = self.report_file(self.report)
+        community_maps.repair(self.src, self.report, self.repaired_dir, originals={})
+        for command in ("build", "discards"):
+            args = (command, self.src, source) + ((os.path.join(self.tmp, "x"),) if command == "build" else ()) + (self.repaired_dir, os.path.join(self.tmp, "nowhere.json"))
+            code, out, err = self.run_main(*args)
+            self.assertEqual((code, out), (1, ""), command)
+            self.assertIn("nowhere.json: the sweep report cannot be read", err)
+        swept = self.report_file([dict(self.sweep_of_repaired()[0], hash="0" * 16)], "wrong.json")
+        code, out, err = self.run_main("build", self.src, source, os.path.join(self.tmp, "x"), self.repaired_dir, swept)
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("build: ValueError: Broken.lvl: the sweep report of the repaired files is not of this file", err)
 
 
 if __name__ == "__main__":
