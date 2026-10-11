@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.9 - 2026-10-11 - The bombs of the community maps work
+
+**For players:**
+- **The bombs of 208 community maps work.** The original's bombs, laid out in the map file (`Bombz Away` is a floor of them), were invisible rocks. Now they show in their colours and the first ant that steps on one sets it off (2 hit points, a throw of 4 tiles). Each bomb has an owner team named in the file (mostly the first player): that team's ants and its ally walk around it. Other maps play as before.
+
+**Rules / network:** network protocol 18 (a v0.12.8 game cannot join); replay rules 3 and 4, older recordings stay under "Earlier versions".
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6400ded7...8e93ca3f)
+
 ## v0.12.8 - 2026-10-11 - Spectators choose the picture's shape
 
 **For players:**

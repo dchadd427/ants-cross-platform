@@ -147,10 +147,10 @@ class TheListPage(unittest.TestCase):
         self.assertRegex(self.page, r"\.sim_rules\s*(?:===|!==|==|!=)")
 
     def test_a_match_of_game_mode_187_is_playable_as_well_with_its_own_rules_number_and_its_mode(self):
-        # replay.hpp: kSimRulesMode187 = 2 and the list entry says "mode": "187"; an entry of rules 2 that does not say the mode is not one of that game
-        self.assertIn("var RULES_187 = 2;", self.page)
+        # replay.hpp: kSimRulesMode187 = 4 and the list entry says "mode": "187"; an entry of rules 4 that does not say the mode is not one of that game
+        self.assertIn("var RULES_187 = 4;", self.page)
         header = read("include", "ants_replay", "replay.hpp")                                                # (the page's number is the header's, or the game of a mode would move to "Earlier versions")
-        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 2;")
+        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 4;")
         self.assertRegex(self.page, r"e\.sim_rules\s*===\s*RULES_187\s*&&\s*e\.mode\s*===\s*'187'")
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's rule for a playable match was NOT run")
@@ -160,22 +160,24 @@ class TheListPage(unittest.TestCase):
         function = re.search(r"^\s*function playable\(e, rules\) \{.*\}$", self.page, re.M)
         self.assertTrue(number and function)
         table = [  # (the list's sim_rules, an entry's sim_rules, the entry's mode, playable)
-            (1, 1, None, True),           # the original's game on a build of rules 1 (entries of servers before 187 say no mode)
-            (1, 1, "highest-score", True),
-            (1, 2, "187", True),          # a match of 187 on that build
-            (1, 2, "highest-score", False),  # rules 2 are the rules of 187 only: the entry does not say it
-            (1, 2, None, False),
-            (1, 2, "", False),
-            (1, 1, "187", True),          # (rules 1 are this build's: the mode word is not looked at)
-            (1, 3, "187", False),         # rules that no build plays yet
-            (1, 3, "highest-score", False),
-            (1, 0, "187", False),
-            (1, 0, None, False),          # an entry of unknown rules is an earlier version
-            (1, None, "187", False),         # an entry that names no rules at all
+            (3, 3, None, True),           # the original's game on a build of rules 3 (entries of servers before 187 say no mode)
+            (3, 3, "highest-score", True),
+            (3, 4, "187", True),          # a match of 187 on that build
+            (3, 4, "highest-score", False),  # rules 4 are the rules of 187 only: the entry does not say it
+            (3, 4, None, False),
+            (3, 4, "", False),
+            (3, 3, "187", True),          # (rules 3 are this build's: the mode word is not looked at)
+            (3, 5, "187", False),         # rules that no build plays yet
+            (3, 5, "highest-score", False),
+            (3, 2, "187", False),         # the rules of 187 before the bombs of a map file: an earlier version
+            (3, 1, None, False),          # the original's game before them
+            (3, 0, "187", False),
+            (3, 0, None, False),          # an entry of unknown rules is an earlier version
+            (3, None, "187", False),         # an entry that names no rules at all
             (0, 0, None, False),          # a list that does not say the server's rules: nothing is playable
             (0, 0, "187", False),
-            (0, 2, "187", False),
-            (0, 1, "highest-score", False),
+            (0, 4, "187", False),
+            (0, 3, "highest-score", False),
         ]
         script = number.group(0) + "\n" + function.group(0) + "\n" + "const table = " + json.dumps(table) + ";\n" + (
             "let bad = [];\n"

@@ -8,7 +8,7 @@
 //   file  := magic chunk*                  magic = 89 41 52 50 4C 0D 0A 1A (a transfer that changes line ends is noticed)
 //   chunk := tag[4] u32 length payload u32 crc32(tag + payload)       a tag whose first letter is UPPER case is critical (a reader that does not know it refuses the file), lower case is skipped
 //   HEAD  := u16 format_version, u16 engine_rules, then fields { varint id, varint length, bytes }; unknown ids are skipped (field 16: sim_rules, u16; field 17: the game mode, u8, written only when it is not 0 (the
-//            original's game) and then always with sim_rules 2, so that a build that skips field 17 refuses the file for its rules number)
+//            original's game) and then always with sim_rules = kSimRulesMode187, so that a build that skips field 17 refuses the file for its rules number)
 //   CMDS  := u32 first_turn, u32 count, then count records { varint gap, the command in its wire form (ants_sim/command.hpp, 8 + 4 n bytes) }
 //            gap = turns since the record before it (the first record: since first_turn); a chunk spans at most 30 s of game time and 4,096 commands
 //   hash  := u32 period, then u32 values: the low 32 bits of the state hash after period, 2 period, 3 period ... turns
@@ -50,11 +50,13 @@ inline constexpr uint8_t kNoSeat = 255;
 /// The rules number of the simulation: it changes ONLY when a match plays out differently (a golden hash moves: the engine, the map reader, the original's tables). A file says the number of the build that
 /// recorded it (the head's field `sim_rules`) and plays on a build with the same number, whatever the network protocol did meanwhile: a protocol bump that leaves the simulation alone strands no file.
 /// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
-inline constexpr uint16_t kSimRules = 1;
+/// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colours (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
+/// the community maps that hold them: the original's game is 3 since then and game mode 187 (which plays on those maps too) is 4. A file of 1 or 2 is an earlier version's.
+inline constexpr uint16_t kSimRules = 3;
 /// The rules number of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and this number in field 16. A build that
 /// predates the mode skips field 17 and refuses the file for its rules number (it plays kSimRules only), so no older build plays a 187 match as the original's game; every file of mode 0 keeps kSimRules and plays
 /// wherever it did. A change of the original's rules after this takes the next number that is neither of these two (the static_assert below stops the one that would collide).
-inline constexpr uint16_t kSimRulesMode187 = 2;
+inline constexpr uint16_t kSimRulesMode187 = 4;
 static_assert(kSimRulesMode187 != kSimRules, "a mode of its own has rules of its own");
 
 /// The rules number that a match of game mode `mode` is recorded under (0: no mode of that number exists)

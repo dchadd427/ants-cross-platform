@@ -1231,16 +1231,8 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_hash ^= 1u; }), ReplayFailure::NoMap));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_name = "NOWHERE.LVL"; }), ReplayFailure::NoMap));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.seed += 1; }), ReplayFailure::Diverged));
-        // an older file that the table of protocol numbers knows plays (the field is absent, protocol 15)
-        {
-            replay::Replay r = made.file;
-            r.head.sim_rules = 0;
-            r.head.engine_rules = 15;
-            std::string error;
-            Viewer v(replay::encode(r, error));
-            ASSERT_TRUE(v.ok && v.state() == ReplayState::Playing && v.app.replay_failure() == ReplayFailure::None);
-            v.app.shutdown();
-        }
+        // an older file that the table of protocol numbers knows (the field is absent, protocol 15: rules 1) is an earlier version's since the bombs of a map file (rules 3)
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 15; }), ReplayFailure::Older));
         // the page's own questions on an application that shows no replay
         Application plain;
         ApplicationConfig cfg;

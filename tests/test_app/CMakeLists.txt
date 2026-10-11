@@ -75,6 +75,40 @@ target_link_libraries(test_render_parity PRIVATE ants_test_paths)
 add_test(NAME test_render_parity COMMAND test_render_parity)
 set_tests_properties(test_render_parity PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# Bombs that a map file holds (layer-2 ids 129 .. 132): drawn like planted bombs, no ghost, hidden in the fog, terrain on the minimap
+add_executable(test_file_bombs_render
+    test_file_bombs_render.cpp
+)
+
+target_include_directories(test_file_bombs_render PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_file_bombs_render PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_file_bombs_render PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_file_bombs_render PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_file_bombs_render PRIVATE ants_test_paths)
+
+add_test(NAME test_file_bombs_render COMMAND test_file_bombs_render)
+set_tests_properties(test_file_bombs_render PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # HUD layout: the real HUD drives a recording IRenderer; draw calls are checked against the original's coordinates
 add_executable(test_hud_layout
     test_hud_layout.cpp

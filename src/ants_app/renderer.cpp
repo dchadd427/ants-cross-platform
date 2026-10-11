@@ -626,8 +626,8 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             const auto& c2 = level.get_cell_layer2(x, y);
             if (c2.is_empty() || c2.tile_index == 0xFFFF || c2.tile_index == 0x7FFE) continue;
             // A power-up is its tile id (62 .. 66), whatever the dictionary calls the entry ("." in many community maps): the ground power-up is drawn exclusively through
-            // cell.has_powerup() (below), the same sprite of the same kind on every map
-            if (ants::sim::movement::is_powerup_tile(c2.tile_index)) continue;
+            // cell.has_powerup() (below), the same sprite of the same kind on every map; a file bomb (129 .. 132) likewise, via cell.has_bomb() (docs/reverse_engineering/map_file_bombs.md)
+            if (ants::sim::movement::is_powerup_tile(c2.tile_index) || ants::sim::is_original_bomb_tile(c2.tile_index)) continue;
             if (c2.tile_index >= level.tile_dictionary.size()) continue;
 
             const std::string& tname = level.tile_dictionary[c2.tile_index];
@@ -1234,7 +1234,7 @@ void Renderer::render_terrain_layer2_structures(const ants::sim::Grid& grid, con
                 continue;
             }
             if (cell.has_bomb()) {
-                if (explored(c, r)) draw_template_world(anim_id_bomb_[cell.interactive_owner % 4u], wx, wy);
+                if (explored(c, r)) draw_template_world(anim_id_bomb_[(cell.interactive_id - ants::sim::BOMB_BLACK) % 4u], wx, wy);
                 continue;
             }
             if (cell.has_lunchbox()) {

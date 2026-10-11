@@ -683,7 +683,7 @@ int selftest() {
         const Run brief_run = run_words({"verify", dir.file("brief.antsrep")});
         t.check(brief_run.status == 0 && has(brief_run.out, "OK: 60 turns (0:03.0), 0 hashes and the final state match"), "verify of a finished match with no hash in it compares the final state");
 
-        // a match of game mode 187: the head says the mode and the rules number 2, the tool plays it by them and every hash is right; the same file with the mode taken away is no file
+        // a match of game mode 187: the head says the mode and kSimRulesMode187, the tool plays it by them and every hash is right; the same file with the mode taken away is no file
         std::vector<uint8_t> mode187;
         t.check(make_sample(level, map_hash, 450, mode187, why, 1) && write_bytes(dir.file("mode187.antsrep"), mode187), "a match of game mode 187 is recorded and written: " + why);
         const Run mode_info = run_words({"info", dir.file("mode187.antsrep")});
@@ -699,7 +699,7 @@ int selftest() {
 
         // a recording of other rules: it reads, it is not played
         Replay other = sample;
-        other.head.sim_rules = static_cast<uint16_t>(kSimRulesMode187 + 1);              // (a number that no build plays: 2 is the rules of game mode 187)
+        other.head.sim_rules = static_cast<uint16_t>(kSimRulesMode187 + 1);              // (a number that no build plays: the one after the rules of game mode 187)
         t.check(write_bytes(dir.file("other.antsrep"), encode(other, error)), "a file of other rules is written");
         const Run rules_info = run_words({"info", dir.file("other.antsrep")});
         t.check(rules_info.status == 0 && has(rules_info.out, "this build plays simulation rules " + std::to_string(kSimRules)), "info reads it and says which rules it needs");
