@@ -7,7 +7,7 @@ Exit 0 when everything is in order, 1 when there are findings (one line each), 2
 Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --tools and by CI). The checks:
   1. a document (docs/**/*.md, root *.md) is at most DOC_LIMIT bytes, except the pages of DOC_CEILINGS (ceilings that may only shrink);
   2. every docs/*.md and docs/<folder>/README.md is reachable from README.md by relative markdown links (a link to a folder reaches its README.md);
-  3. no tracked text file names a private planning document, a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED;
+  3. no tracked text file names a private planning document, a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED and the vendored files of VENDORED_CODE;
   4. a test file has at most TEST_LINES lines and a production file at most PROD_LINES, except the files of LINE_CEILINGS (ceilings that may only shrink);
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
   6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS.
@@ -61,6 +61,7 @@ LINE_CEILINGS = {
 ASSERT_TRUE_DEFINITIONS = 2  # tests/common/test_assert.hpp and the throwing ASSERT_TRUE of tests/e2e/e2e_framework.hpp: a third one is a new copy to remove
 
 FORBIDDEN = re.compile(r"implementation_plan|ants-plans|DECISIONS\.md|claude\.ai/code|Co-Authored-By|Claude-Session|project thread|the other thread", re.I)
+VENDORED_CODE = {"third_party/sqlite/sqlite3.c", "third_party/sqlite/sqlite3.h"}       # (the files of other people's code that are copied unchanged; our own files beside them are checked)
 FORBIDDEN_ALLOWED = {"AGENTS.md", "docs/WORKFLOW.md", ".gitignore", "tools/check_hygiene.py", "tests/scripts/test_hygiene.py"}
 
 CMAKE_EXCEPTIONS = set()
@@ -172,7 +173,7 @@ def looks_binary(data):
 def check_forbidden(root, files, allowed=FORBIDDEN_ALLOWED):
     out = []
     for rel in files:
-        if rel in allowed or rel.startswith("previews/") or "/previews/" in rel:
+        if rel in allowed or rel.startswith("previews/") or "/previews/" in rel or rel in VENDORED_CODE:       # (vendored code is not ours: SQLite's own comments say "the other thread")
             continue
         if os.path.splitext(rel)[1].lower() in TEXT_SUFFIXES_SKIPPED:
             continue

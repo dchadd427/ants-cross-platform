@@ -28,6 +28,12 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - Licence: dr_mp3 is available under a choice of the public domain (Unlicense) or MIT No Attribution (MIT-0). The full text of both is at the end
   of `include/ants_app/dr_mp3.h`. The note about minimp3 (dedicated to the public domain, CC0 1.0) is the last comment of the same file.
 
+### SQLite (database library)
+
+- Where: `third_party/sqlite/` (`sqlite3.c` and `sqlite3.h`, the official amalgamation, unchanged; `README.md` there names the version, the source and the hashes). Built as the static library `ants_sqlite` and linked by the dedicated server (not by the game or the web build).
+- What: SQLite 3.53.4, <https://www.sqlite.org/>, by D. Richard Hipp and the SQLite developers.
+- Licence: public domain. The author disclaims copyright to the source code (the blessing at the top of `sqlite3.h`); <https://www.sqlite.org/copyright.html>.
+
 ### Libre Franklin (font)
 
 - Where: `Original-Ants/LibreFranklin-Medium.ttf`, with its licence in `Original-Ants/LibreFranklin-OFL.txt`. The web build preloads both files

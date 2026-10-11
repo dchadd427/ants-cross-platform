@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.5 - 2026-10-11 - The match server keeps a database file
+
+**For players:**
+- No change to play. The match server now keeps a database file for records (nothing is stored in it yet).
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9889d7d...0a6a7cf4)
+
 ## v0.12.4 - 2026-10-11 - A link to a missing room says so
 
 **For players:**
