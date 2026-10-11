@@ -7,16 +7,6 @@ namespace ants::sim {
 
 static_assert(TILE_PIXELS == 32, "Tile pixels must be 32");
 
-uint8_t Grid::determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept {
-    if (tile_index == 2 || (flags & 0x0100u) != 0) {
-        return TERRAIN_WATER;
-    }
-    if (tile_index == 1) {
-        return TERRAIN_OBSTACLE;
-    }
-    return TERRAIN_WALKABLE;
-}
-
 bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
     height_ = level.height;
@@ -47,7 +37,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             auto& cell = get_cell_mut(x, y);
             cell.terrain_id = c1.tile_index;
             cell.flags = c1.flags;
-            cell.terrain_type = determine_terrain_type(c1.tile_index, c1.flags);
+            cell.terrain_type = TERRAIN_WALKABLE;
             // Original engine: the layer-1 solid bit is stored verbatim from the file's cell flags by the
             // level reader (Ants.exe FUN_010069d8: word0 = (tile << 1) | (flags & 1)).
             cell.static_solid = (c1.flags & 1u) != 0;
@@ -55,34 +45,26 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.is_mud = false;
             cell.surface_type = SurfaceType::Grass;
 
-            // Terrain class of the layer-1 tile from the original tile-info table (Ants.exe 0x1001360 pairs,
-            // FUN_0100724c; LVL tile indices are CHD Table-4 indices). On the shipped maps this agrees with
-            // the tile names' first letter (w water, s sand, d dirt, m mud, otherwise grass).
-            const std::string& l1_name = level.get_tile_name(c1.tile_index);
-            if (!l1_name.empty() && l1_name != ".") {
-                switch (movement::terrain_class_of_tile(c1.tile_index)) {
-                    case movement::kTerrainWater:
-                        cell.terrain_type = TERRAIN_WATER;
-                        cell.surface_type = SurfaceType::Water;
-                        break;
-                    case movement::kTerrainSand:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Slate;
-                        break;
-                    case movement::kTerrainDirt:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Gravel;
-                        break;
-                    case movement::kTerrainMud:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Mud;
-                        cell.is_mud = true;
-                        break;
-                    default:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Grass;
-                        break;
-                }
+            // Terrain class of the layer-1 tile from the original tile-info table (Ants.exe 0x1001360 pairs, FUN_0100724c, FUN_01008af7; LVL tile indices are CHD Table-4 indices), by the
+            // ID and nothing else: the dictionary's name of the entry ("." in the community maps that leave a lake or a mud path unnamed) and the flag bits of the cell other than the solid
+            // bit play no part in the original, whose class table is indexed by the tile id alone.
+            switch (movement::terrain_class_of_tile(c1.tile_index)) {
+                case movement::kTerrainWater:
+                    cell.terrain_type = TERRAIN_WATER;
+                    cell.surface_type = SurfaceType::Water;
+                    break;
+                case movement::kTerrainSand:
+                    cell.surface_type = SurfaceType::Slate;
+                    break;
+                case movement::kTerrainDirt:
+                    cell.surface_type = SurfaceType::Gravel;
+                    break;
+                case movement::kTerrainMud:
+                    cell.surface_type = SurfaceType::Mud;
+                    cell.is_mud = true;
+                    break;
+                default:
+                    break;
             }
 
             if (cell.terrain_type == TERRAIN_WALKABLE) {

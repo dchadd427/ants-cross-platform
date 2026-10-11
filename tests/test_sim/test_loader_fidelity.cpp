@@ -560,6 +560,143 @@ int main() {
         }
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 3: the terrain class of a layer-1 cell is the original's table by tile id (FUN_01008af7): water 476 .. 484, mud 431 .. 474 (even), dirt 523 .. 569 ..., never the dictionary's name
+    // or a flag bit of the cell other than the solid bit
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF3.1 A Layer-1 Id Of Water, Mud Or Dirt Is That Terrain Whatever The Dictionary Calls It (476 Water, 435 .. 444 Mud, 559 Dirt, A Sand Id): The Class Table By Id, For Every Id Of The CHD", [] {
+        for (uint16_t id = 0; id < movement::kTileIdCount; ++id) {
+            LevelData level = open_ground();
+            level.layer1_terrain[40].tile_index = id;
+            level.layer1_terrain[40].flags = 0;
+            for (const char* name : {".", "", "whatever"}) {
+                name_tile(level, id, name);
+                Grid g;
+                CHECK(g.init_from_level(level));
+                const TileCoord t{static_cast<int32_t>(40 % level.width), static_cast<int32_t>(40 / level.width)};
+                if (g.terrain_class_at(t) != movement::terrain_class_of_tile(id)) { CHECK(false); std::cout << "    (id " << id << " name \"" << name << "\")\n"; return; }
+                CHECK((cell_at(g, t).terrain_type == TERRAIN_WATER) == (movement::terrain_class_of_tile(id) == movement::kTerrainWater));
+                CHECK(cell_at(g, t).terrain_type != TERRAIN_OBSTACLE);
+            }
+        }
+        const auto class_of = [](uint16_t id) { LevelData level = open_ground(); level.layer1_terrain[40].tile_index = id; name_tile(level, id, "."); Grid g; g.init_from_level(level); return g.terrain_class_at(TileCoord{static_cast<int32_t>(40 % level.width), static_cast<int32_t>(40 / level.width)}); };
+        CHECK(class_of(476) == movement::kTerrainWater);
+        for (uint16_t id = 435; id <= 444; ++id) CHECK(class_of(id) == movement::kTerrainMud);
+        CHECK(class_of(559) == movement::kTerrainDirt);
+        CHECK(class_of(571) == movement::kTerrainSand);
+    });
+
+    run_case("LF3.2 Layer-1 Flag Bit 0x100 Is Not Water: The Original Keeps Bit 0 Of The Cell Word And Nothing Else (FUN_010069d8); A Tile Of Grass With The Bit Is Grass, Named Or Not", [] {
+        LevelData base = open_ground();
+        const uint16_t grass = 300;                                  // (a tile of the table's class 0)
+        base.layer1_terrain[40].tile_index = grass;
+        CHECK(movement::terrain_class_of_tile(grass) == movement::kTerrainGrass);
+        for (const char* name : {".", ""}) {
+            for (const uint16_t flags : {uint16_t{0x100}, uint16_t{0x101}, uint16_t{0xFFFE}}) {
+                LevelData level = base;
+                level.layer1_terrain[40].flags = flags;
+                name_tile(level, grass, name);
+                Grid g;
+                CHECK(g.init_from_level(level));
+                const TileCoord t{static_cast<int32_t>(40 % level.width), static_cast<int32_t>(40 / level.width)};
+                CHECK(cell_at(g, t).terrain_type == TERRAIN_WALKABLE && g.terrain_class_at(t) == movement::kTerrainGrass);
+                CHECK(cell_at(g, t).static_solid == ((flags & 1u) != 0));            // (bit 0 is the solid bit and the only one that is kept)
+            }
+        }
+    });
+
+    run_case("LF3.3 The Tile Ids 1 And 2 Are Grass In The Original's Table (The Remake Made 1 A Wall And 2 Water When The Dictionary Left Them \".\")", [] {
+        CHECK(movement::terrain_class_of_tile(1) == movement::kTerrainGrass && movement::terrain_class_of_tile(2) == movement::kTerrainGrass);
+        for (const uint16_t id : {uint16_t{1}, uint16_t{2}}) {
+            LevelData level = open_ground();
+            level.layer1_terrain[40].tile_index = id;
+            level.layer1_terrain[40].flags = 0;
+            name_tile(level, id, ".");
+            Grid g;
+            CHECK(g.init_from_level(level));
+            const TileCoord t{static_cast<int32_t>(40 % level.width), static_cast<int32_t>(40 / level.width)};
+            CHECK(cell_at(g, t).terrain_type == TERRAIN_WALKABLE && !g.is_solid_object(t));
+        }
+    });
+
+    run_case("LF3.4 A Lake Named \".\" Stops A Worker And Not A Swimmer; Mud Named \".\" Is Mud (The Walk Takes The Mud's Pace)", [] {
+        const auto run = [&](uint16_t id, AntType type, bool* arrived) {
+            LevelData level = open_ground();
+            const std::vector<TileCoord> at = open_tiles(level, 1);
+            if (at.empty()) { CHECK(false); return TileCoord{0, 0}; }
+            const int32_t x0 = at[0].x - 3;
+            for (uint32_t y = 0; y < level.height; ++y)
+                for (int32_t x = x0 + 2; x <= x0 + 4; ++x) {                     // a band three columns wide across the whole map: no way around
+                    level.layer1_terrain[y * level.width + static_cast<uint32_t>(x)].tile_index = id;
+                    level.layer1_terrain[y * level.width + static_cast<uint32_t>(x)].flags = 0;
+                }
+            name_tile(level, id, ".");
+            SimulationEngine sim;
+            sim.init(level, 5, 0x0F);
+            const uint32_t ant = sim.spawn_unit(0, type, TileCoord{x0, at[0].y});
+            sim.issue_move_order(ant, TileCoord{x0 + 7, at[0].y});
+            for (int t = 0; t < 600; ++t) sim.tick();
+            *arrived = sim.get_unit(ant).pos == TileCoord{x0 + 7, at[0].y};
+            return sim.get_unit(ant).pos;
+        };
+        bool worker_arrives = true, swimmer_arrives = false, mud_worker_arrives = false;
+        run(476, AntType::Worker, &worker_arrives);
+        run(476, AntType::Swimmer, &swimmer_arrives);
+        run(440, AntType::Worker, &mud_worker_arrives);
+        CHECK(!worker_arrives);
+        CHECK(swimmer_arrives);
+        CHECK(mud_worker_arrives);
+    });
+
+    run_case("LF3.5 The Community Library: 16 Maps Had A Layer-1 Class Of Their Own Making (Water 476 In 2: 1,921 Cells; Mud 435 .. 444 In 5 Of The Gant2 Family And eze jungal; Dirt 559 In 5 Of The Turtle World Family; Flag 0x100 In 4; The Ids 1 And 2 In 2) And Are The Original's Now", [] {
+        std::set<std::string> changed;
+        long water476 = 0, mud = 0, dirt559 = 0, flag100 = 0, id1 = 0, id2 = 0;
+        for_each_community_map([&](const std::string& name, const LevelData& level) {
+            Grid g;
+            if (!g.init_from_level(level)) return;
+            for (uint32_t y = 0; y < level.height; ++y) {
+                for (uint32_t x = 0; x < level.width; ++x) {
+                    const auto& c = level.get_cell_layer1(x, y);
+                    const std::string& n = level.get_tile_name(c.tile_index);
+                    const bool dot = n.empty() || n == ".";
+                    if (dot && c.tile_index == 476) ++water476;
+                    // the loader's rule before this change
+                    uint8_t old_type = TERRAIN_WALKABLE;
+                    uint8_t old_class = movement::kTerrainGrass;
+                    if (dot) {
+                        if (c.tile_index == 2 || (c.flags & 0x100u) != 0) old_type = TERRAIN_WATER;
+                        else if (c.tile_index == 1) old_type = TERRAIN_OBSTACLE;
+                    } else {
+                        old_class = movement::terrain_class_of_tile(c.tile_index);
+                        old_type = old_class == movement::kTerrainWater ? TERRAIN_WATER : TERRAIN_WALKABLE;
+                    }
+                    const TileCoord t{static_cast<int32_t>(x), static_cast<int32_t>(y)};
+                    const TileCell& cell = cell_at(g, t);
+                    // the layer-1 class of the cell, as the loader stored it (terrain_class_at would say mud under a bridge of layer 2, and the cells beside a hill are made walkable whatever they are)
+                    const uint8_t now_class = cell.surface_type == SurfaceType::Water ? movement::kTerrainWater : cell.is_mud ? movement::kTerrainMud : cell.surface_type == SurfaceType::Slate ? movement::kTerrainSand
+                                              : cell.surface_type == SurfaceType::Gravel ? movement::kTerrainDirt : movement::kTerrainGrass;
+                    if (cell.terrain_type == TERRAIN_OBSTACLE) continue;                       // (the mound of a hill: obstacle in both)
+                    if (now_class != movement::terrain_class_of_tile(c.tile_index)) { CHECK(false); std::cout << "\n    " << name << " (" << x << "," << y << ") id " << c.tile_index << " class " << int{now_class} << " want " << int{movement::terrain_class_of_tile(c.tile_index)} << " type " << int{cell.terrain_type} << " l2 " << cell.interactive_id; return; }         // (the table's, by id)
+                    const int old_effective = old_type == TERRAIN_OBSTACLE ? 100 : old_type == TERRAIN_WATER ? int{movement::kTerrainWater} : int{old_class};
+                    const bool differs = old_effective != now_class;
+                    if (!differs) continue;
+                    changed.insert(name);
+                    if (dot && c.tile_index >= 435 && c.tile_index <= 444) ++mud;
+                    else if (dot && c.tile_index == 559) ++dirt559;
+                    else if (dot && c.tile_index == 1) ++id1;
+                    else if (dot && c.tile_index == 2) ++id2;
+                    else if (dot && (c.flags & 0x100u) != 0) ++flag100;
+                }
+            }
+        });
+        std::cout << "\n    " << changed.size() << " maps: water 476 " << water476 << " cells, mud " << mud << ", dirt 559 " << dirt559 << ", flag 0x100 " << flag100 << ", id 1 " << id1 << ", id 2 " << id2 << "\n";
+        const std::set<std::string> want = {"!TurtleWorld.lvl", "#Turtle World.lvl", "'s 4 Player Royal.lvl", "Bloom.lvl", "Gant2.lvl", "IsLaNd FiRe BoOm.lvl", "Sand Box.lvl", "SandBox.lvl", "Turtle World.lvl", "Turtle.lvl", "Wata fight.LVL",
+                                            "eze jungal.lvl", "gant 2.lvl", "gauntlet2.lvl", "hell2.lvl", "sand-box.lvl"};
+        CHECK(changed == want);
+        CHECK(water476 == 1921);
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

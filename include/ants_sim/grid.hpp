@@ -505,7 +505,6 @@ public:
     void place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept;
 
 private:
-    uint8_t determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept;
     bool exact_solid_bits_{false};   // true once solid bits come from an LVL file (init_from_level)
 
     uint32_t width_{0};
