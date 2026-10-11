@@ -40,6 +40,8 @@ cmake-build-*/
 !asset_catalog/sprites/**
 !web/front/
 !web/front/**
+!Community-Maps/previews/
+!Community-Maps/previews/**
 
 # Test artifacts and temporary captures
 tests/temp/
