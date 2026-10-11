@@ -616,16 +616,6 @@ void read_header(const std::vector<uint8_t>& d, MapInfo& info) {
     }
 }
 
-// The team whose hill a layer-2 tile is (GREENHILL 0, REDHILL 1, BLUEHILL 2, BLACKHILL 3), -1 for any other tile (the numbering of lvl_parser.cpp)
-int hill_team(const std::string& tile_name) {
-    const std::string low = lower_ascii(tile_name);
-    if (low == "greenhill") return 0;
-    if (low == "redhill") return 1;
-    if (low == "bluehill") return 2;
-    if (low == "blackhill") return 3;
-    return -1;
-}
-
 // Reads the file, fills what can be known about it and loads the level (`level` is only valid when info.loads)
 void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& level) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -667,8 +657,7 @@ void analyze_map(const std::string& path, MapInfo& info, assets::LevelData& leve
         if ((sim::movement::tile_flags_of(sp.tile_id) & 0x30u) != 0) ++info.plants;     // the plants of Grid::init_from_level
     }
     for (const assets::MapCell& cell : level.layer2_interactive) {
-        if (cell.tile_index >= level.tile_dictionary.size()) continue;
-        const int team = hill_team(level.tile_dictionary[cell.tile_index]);
+        const int team = assets::hill_team_of_id(cell.tile_index);
         if (team >= 0) ++info.hills[static_cast<size_t>(team)];
     }
     info.food = static_cast<uint32_t>(level.food_schedules.size());

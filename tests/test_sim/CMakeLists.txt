@@ -216,6 +216,24 @@ target_link_libraries(test_file_bombs PRIVATE ants_test_paths)
 
 add_test(NAME test_file_bombs COMMAND test_file_bombs)
 
+# The map loader as the original's (docs/reverse_engineering/map_loader_fidelity.md): tile ids, tables and the file's solid bits instead of dictionary names and rules of the remake's own
+add_executable(test_loader_fidelity
+    test_loader_fidelity.cpp
+)
+
+target_link_libraries(test_loader_fidelity PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_loader_fidelity PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_loader_fidelity PRIVATE ants_test_paths)
+
+add_test(NAME test_loader_fidelity COMMAND test_loader_fidelity)
+
 add_executable(test_commands
     test_commands.cpp
 )

@@ -889,11 +889,9 @@ void run_b2fix_tests() {
     TEST_CASE("AI1.29 The First Hill Of A Team Is The Hill: A Map Without Hill Art Falls Back To Its Start Markers And May Name A Team Twice, The Engine Takes The First (Grid::find_anthill), So Does MapInfo") {
         assets::LevelData level = level_of("TINY");
         size_t renamed = 0;
-        for (std::string& name : level.tile_dictionary) {
-            std::string upper = name;
-            for (char& ch : upper) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            if (upper == "GREENHILL" || upper == "REDHILL" || upper == "BLUEHILL" || upper == "BLACKHILL") {
-                name = "NOHILL";
+        for (assets::MapCell& cell : level.layer2_interactive) {                                  // (a hill is its tile id, 245 .. 248, not its dictionary name: take the hills away)
+            if (assets::hill_team_of_id(cell.tile_index) >= 0) {
+                cell = assets::MapCell{};
                 ++renamed;
             }
         }
@@ -1277,8 +1275,8 @@ void run_b2fix_tests() {
         }();
         const ArenaResult p = play_match(pinned);
         ASSERT_TRUE(p.error.empty() && p.ticks == 600);
-        if (p.hash != 0x60174838e5ae019full) std::cout << "\n    the pinned scripted match now ends at hash " << std::hex << p.hash << std::dec << " (" << p.seats[0].stats.released << " + " << p.seats[1].stats.released << " commands)\n";
-        ASSERT_EQ(p.hash, 0x60174838e5ae019full);
+        if (p.hash != 0x28ed082ca04cb128ull) std::cout << "\n    the pinned scripted match now ends at hash " << std::hex << p.hash << std::dec << " (" << p.seats[0].stats.released << " + " << p.seats[1].stats.released << " commands)\n";
+        ASSERT_EQ(p.hash, 0x28ed082ca04cb128ull);
         ASSERT_TRUE(p.seats[0].stats.released == 98 && p.seats[1].stats.released == 29);
         // the same match with the product's opening (the arena's default, kStartHoldTicks: one token in the bucket to begin with, the refill from the first tick; the first look is on tick 1 + seat as it
         // was in v0.1.0): another match with a pin of its own, and not one command is applied before a bot's first reaction time is over
@@ -1288,8 +1286,8 @@ void run_b2fix_tests() {
         const ArenaResult h = play_match(held);
         ASSERT_TRUE(h.error.empty() && h.ticks == 600 && !h.log.empty());
         ASSERT_TRUE(h.log.front().tick >= ai::kStartHoldTicks);
-        if (h.hash != 0x95c9094978ca5f46ull) std::cout << "\n    the pinned scripted match with the product's opening now ends at hash " << std::hex << h.hash << std::dec << " (" << h.seats[0].stats.released << " + " << h.seats[1].stats.released << " commands)\n";
-        ASSERT_EQ(h.hash, 0x95c9094978ca5f46ull);
+        if (h.hash != 0x2d264a9679d48fd1ull) std::cout << "\n    the pinned scripted match with the product's opening now ends at hash " << std::hex << h.hash << std::dec << " (" << h.seats[0].stats.released << " + " << h.seats[1].stats.released << " commands)\n";
+        ASSERT_EQ(h.hash, 0x2d264a9679d48fd1ull);
         ASSERT_TRUE(h.seats[0].stats.released == 91 && h.seats[1].stats.released == 29);                 // (98 and 29 with the full bucket of v0.1.0: the one token holds the first look's commands back a little)
         // and with a long hold (the mechanism: v0.1.1's 100 ticks, in which the bots waited for the dialog while the simulation ran): another match with a pin of its own, the bots walk 500 ticks of
         // the 600, and not one command is applied before the hold's end
@@ -1299,8 +1297,8 @@ void run_b2fix_tests() {
         const ArenaResult lr = play_match(longer);
         ASSERT_TRUE(lr.error.empty() && lr.ticks == 600 && !lr.log.empty());
         ASSERT_TRUE(lr.log.front().tick >= 100);
-        if (lr.hash != 0x6ce648347dbc5a25ull) std::cout << "\n    the pinned scripted match with a hold of 100 ticks now ends at hash " << std::hex << lr.hash << std::dec << " (" << lr.seats[0].stats.released << " + " << lr.seats[1].stats.released << " commands)\n";
-        ASSERT_EQ(lr.hash, 0x6ce648347dbc5a25ull);                                                       // (v0.1.1's pin of this match was 0x5b22a0b40e3231f5 with the same counts: its refill started one tick later)
+        if (lr.hash != 0x54dfa70962635e8eull) std::cout << "\n    the pinned scripted match with a hold of 100 ticks now ends at hash " << std::hex << lr.hash << std::dec << " (" << lr.seats[0].stats.released << " + " << lr.seats[1].stats.released << " commands)\n";
+        ASSERT_EQ(lr.hash, 0x54dfa70962635e8eull);                                                       // (v0.1.1's pin of this match was 0x5b22a0b40e3231f5 with the same counts: its refill started one tick later)
         ASSERT_TRUE(lr.seats[0].stats.released == 76 && lr.seats[1].stats.released == 25);
     } TEST_END();
 

@@ -541,9 +541,9 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         const std::string& name = level.tile_dictionary[i];
         if (name.empty() || name == ".") continue;
 
-        // Editor start markers are never drawn in game
+        // Editor start markers (the ids 152 .. 155) are never drawn in game
         const std::string low = lower(name);
-        if (low == "bstart" || low == "ustart" || low == "rstart" || low == "gstart") continue;
+        if (ants::assets::start_marker_team_of_id(static_cast<uint16_t>(i)) >= 0) continue;
 
         int32_t id = -1;
         if (i < anim_count && lower(archive_->get_animation(static_cast<uint32_t>(i)).name) == low) {
@@ -579,14 +579,6 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     anim_id_hill_[3] = archive_->find_animation_id("BLACKHILL");
 
     // Identify 4x4 anthill footprints and their layer-2 anchor cells
-    auto hill_team_of = [&](const std::string& tname) -> int {
-        const std::string low = lower(tname);
-        if (low == "greenhill") return 0;
-        if (low == "redhill") return 1;
-        if (low == "bluehill") return 2;
-        if (low == "blackhill") return 3;
-        return -1;
-    };
     for (size_t t = 0; t < 4; ++t) {
         anthill_bases_[t] = { -1, -1 };
         hill_anchor_cell_[t] = { -1, -1 };
@@ -595,8 +587,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
     for (uint32_t y = 0; y < level.height; ++y) {
         for (uint32_t x = 0; x < level.width; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            if (c2.tile_index >= level.tile_dictionary.size()) continue;
-            const int team = hill_team_of(level.tile_dictionary[c2.tile_index]);
+            const int team = ants::assets::hill_team_of_id(c2.tile_index);     // a hill is its tile id (245 .. 248), whatever the dictionary calls the entry
             if (team < 0) continue;
             const size_t st = static_cast<size_t>(team);
             if (anthill_bases_[st].x < 0 || static_cast<int32_t>(x) < anthill_bases_[st].x) {
@@ -628,15 +619,14 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             // A power-up is its tile id (62 .. 66), whatever the dictionary calls the entry ("." in many community maps): the ground power-up is drawn exclusively through
             // cell.has_powerup() (below), the same sprite of the same kind on every map; a file bomb (129 .. 132) likewise, via cell.has_bomb() (docs/reverse_engineering/map_file_bombs.md)
             if (ants::sim::movement::is_powerup_tile(c2.tile_index) || ants::sim::is_original_bomb_tile(c2.tile_index)) continue;
+            // anthills are drawn from their own templates, start markers never; both are tile ids (245 .. 248, 152 .. 155), whatever the dictionary calls them
+            if (ants::assets::hill_team_of_id(c2.tile_index) >= 0 || ants::assets::start_marker_team_of_id(c2.tile_index) >= 0) continue;
             if (c2.tile_index >= level.tile_dictionary.size()) continue;
 
             const std::string& tname = level.tile_dictionary[c2.tile_index];
             if (tname.empty() || tname == ".") continue;
 
             const std::string low = lower(tname);
-            if (low.find("hill") != std::string::npos || low.find("start") != std::string::npos) {
-                continue; // anthills are drawn from their own templates, start markers never
-            }
             if (low.rfind("pu_", 0) == 0 || low.rfind("pu", 0) == 0) {
                 continue; // Dynamic powerups on ground: rendered exclusively via cell.has_powerup()
             }
@@ -652,7 +642,7 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
             obj.anchor_x = static_cast<uint16_t>(x);
             obj.anchor_y = static_cast<uint16_t>(y);
 
-            obj.is_food = (low.rfind("fd", 0) == 0 || low.rfind("food", 0) == 0);
+            obj.is_food = (ants::sim::movement::tile_flags_of(c2.tile_index) & ants::sim::movement::kTileFlagFood) != 0;      // food is the tile flag 0x02 of the id (FUN_010071dd), not a name
 
             object_index_by_cell_[static_cast<size_t>(y) * level.width + x] = static_cast<int32_t>(static_decor_objects_.size());
             static_decor_objects_.push_back(std::move(obj));
@@ -666,14 +656,10 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         if (sp_item.team_id != 255) continue;
         // A plant (the clovers 404 .. 408, the flowers 410 .. 416, 420 and 421, ...) is its tile id, which indexes its animation directly, whatever the dictionary calls the entry
         // ("." in some community maps): the original's name pass makes the graphics of these ids load whatever the dictionary says (the table at 0x1001ba8), so the flowers of a
-        // dropper are always there to see. Any other record keeps the dictionary's name for the animation.
-        int32_t anim_id = -1;
-        if (ants::sim::movement::is_plant_object_tile(sp_item.tile_id)) {
-            if (sp_item.tile_id < anim_count) anim_id = static_cast<int32_t>(sp_item.tile_id);
-        } else if (sp_item.tile_id < level.tile_dictionary.size()) {
-            anim_id = tile_anim_id_[sp_item.tile_id];
-        }
-        if (anim_id < 0) continue;
+        // dropper are always there to see. Every other record of block 1 is ignored by the original (FUN_0100dbb0 makes world objects of the records with the tile flag 0x10 or 0x20
+        // only): it is not drawn, whatever the dictionary calls its entry.
+        if (!ants::sim::movement::is_plant_object_tile(sp_item.tile_id) || sp_item.tile_id >= anim_count) continue;
+        const int32_t anim_id = static_cast<int32_t>(sp_item.tile_id);
         ObjectListSprite spr{};
         spr.anim_id = anim_id;
         spr.px = static_cast<int32_t>(sp_item.x) * TILE_SIZE + TILE_SIZE / 2;

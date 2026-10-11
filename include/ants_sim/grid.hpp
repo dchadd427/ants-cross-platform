@@ -250,6 +250,7 @@ public:
             cell.static_solid = false;
         }
         exact_solid_bits_ = false;
+        graphic_kept_.clear();
         anthills_.clear();
         plants_.clear();
         food_objects_.clear();
@@ -264,6 +265,12 @@ public:
 
     /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
     bool exact_solid_bits() const noexcept { return exact_solid_bits_; }
+
+    /// Is the graphic (the animation template) of this tile id loaded? SetTile (FUN_01007352) refuses to place a layer-2 tile whose template is missing, after it has cleared the
+    /// cell's old object. A level loads the template of every id whose dictionary entry is not "." and of the 62 ids of the forced table (0x1001ba8); a world made by hand has all.
+    bool tile_graphic_loaded(uint16_t id) const noexcept {
+        return graphic_kept_.empty() || (id < graphic_kept_.size() && graphic_kept_[id] != 0);
+    }
 
     /// The level's DEFAULT ANT TYPE (LVL block 3, Ants.exe FUN_01007025 -> level+0x70): the tile id of one of the five power-up tiles (62 Combat, 63 Thief,
     /// 64 Bomber, 65 Swimmer, 66 Fire), or 0x7FFE (none: every shipped map). Every ant whose own type is Worker (0) is of that type wherever the game asks
@@ -310,14 +317,18 @@ public:
 
     /**
      * @brief Original layer-1 "solid object" bit (FUN_0100cf0f): object footprints (LVL cell flag bit0),
-     * Block-4 entries, row 0 and the removable objects (food, power-ups, lunchboxes, fire walls).
+     * Block-4 entries, row 0 and the removable objects (food, power-ups, lunchboxes, fire walls), which set the bit
+     * when they are placed and clear it when they go (a level from a file; a world made by hand counts them solid by themselves).
      * Walls added at run time as TERRAIN_OBSTACLE count too; in worlds without LVL solid bits (test worlds)
      * the remake's obstacle overlays stand in for them. Out-of-bounds tiles count as solid.
      */
     bool is_solid_object(TileCoord t) const noexcept {
         if (!in_bounds(t)) return true;
         const auto& c = get_cell(t);
-        if (c.static_solid || c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food() || c.has_reserved()) return true;
+        if (c.static_solid) return true;
+        // A level read from a file has the original's rule: the layer-1 solid bit decides, for a power-up, food, a fire wall, a lunchbox and the placeholder as for a rock (they set and clear
+        // the bit when they are placed and removed). A world made by hand (init_empty: tests and tools) has no file bits, and its objects count as solid themselves.
+        if (!exact_solid_bits_ && (c.has_fire() || c.has_lunchbox() || c.has_powerup() || c.has_food() || c.has_reserved())) return true;
         if (c.is_base_hole) return false;
         return c.terrain_type == TERRAIN_OBSTACLE || (!exact_solid_bits_ && c.is_obstacle_overlay);
     }
@@ -440,6 +451,7 @@ public:
         auto& cell = get_cell_mut(pos);
         cell.interactive_id = TILE_FIREWALL;
         cell.timer_ticks = timer_ticks;
+        cell.static_solid = true;                   // as SetTile does: the fire wall's tile flag 0x01 sets the layer-1 solid bit
     }
 
     void set_bridge_at(TileCoord pos, int stage, uint32_t timer_ticks) noexcept {
@@ -500,7 +512,7 @@ public:
     void place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept;
 
 private:
-    uint8_t determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept;
+    std::vector<uint8_t> graphic_kept_;   // per tile id: its template is loaded (empty: all, a world made by hand)
     bool exact_solid_bits_{false};   // true once solid bits come from an LVL file (init_from_level)
 
     uint32_t width_{0};

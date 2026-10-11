@@ -7,15 +7,12 @@ namespace ants::sim {
 
 static_assert(TILE_PIXELS == 32, "Tile pixels must be 32");
 
-uint8_t Grid::determine_terrain_type(uint16_t tile_index, uint16_t flags) const noexcept {
-    if (tile_index == 2 || (flags & 0x0100u) != 0) {
-        return TERRAIN_WATER;
-    }
-    if (tile_index == 1) {
-        return TERRAIN_OBSTACLE;
-    }
-    return TERRAIN_WALKABLE;
-}
+namespace {
+// The ids whose graphics the original forces to load whatever the dictionary says (FUN_010068be, the 62 words at 0x1001ba8): bridges, effects, power-ups, bombs, fire wall, the
+// placeholder, 162 .. 178, the hills, the lunchbox, the plants and droplets
+constexpr uint16_t kForcedGraphics[62] = {34, 35, 36, 37, 40, 53, 62, 63, 64, 65, 66, 129, 130, 131, 132, 133, 134, 135, 160, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176,
+                                          177, 178, 230, 245, 246, 247, 248, 356, 404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421, 422, 423, 424, 425, 426, 1177};
+}  // namespace
 
 bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
@@ -26,6 +23,11 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     // fresh engine, which the lock-step state hash relies on)
     cells_.assign(static_cast<size_t>(width_ * height_), TileCell{});
     exact_solid_bits_ = false;
+
+    // Which templates the original has loaded (FUN_0100674e mode 0: the keep flag of an id is dictionary entry != ".", an entry past the dictionary is not kept; FUN_010068be: the 62 forced ids)
+    graphic_kept_.assign(movement::kTileIdCount, 0);
+    for (size_t i = 0; i < level.tile_dictionary.size() && i < graphic_kept_.size(); ++i) graphic_kept_[i] = level.tile_dictionary[i] != "." ? 1 : 0;
+    for (const uint16_t id : kForcedGraphics) graphic_kept_[id] = 1;
 
     // LVL block 3 (FUN_01007025, 0x1007025): the level's default ant type. The word is a tile index and the index is the tile id (the dictionary remap is the
     // identity, 0x10067a5 - 0x10067c8); it is kept only when that tile has the power-up flag (0x1007068), so a level has a default type exactly when block 3 names
@@ -47,7 +49,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             auto& cell = get_cell_mut(x, y);
             cell.terrain_id = c1.tile_index;
             cell.flags = c1.flags;
-            cell.terrain_type = determine_terrain_type(c1.tile_index, c1.flags);
+            cell.terrain_type = TERRAIN_WALKABLE;
             // Original engine: the layer-1 solid bit is stored verbatim from the file's cell flags by the
             // level reader (Ants.exe FUN_010069d8: word0 = (tile << 1) | (flags & 1)).
             cell.static_solid = (c1.flags & 1u) != 0;
@@ -55,34 +57,26 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
             cell.is_mud = false;
             cell.surface_type = SurfaceType::Grass;
 
-            // Terrain class of the layer-1 tile from the original tile-info table (Ants.exe 0x1001360 pairs,
-            // FUN_0100724c; LVL tile indices are CHD Table-4 indices). On the shipped maps this agrees with
-            // the tile names' first letter (w water, s sand, d dirt, m mud, otherwise grass).
-            const std::string& l1_name = level.get_tile_name(c1.tile_index);
-            if (!l1_name.empty() && l1_name != ".") {
-                switch (movement::terrain_class_of_tile(c1.tile_index)) {
-                    case movement::kTerrainWater:
-                        cell.terrain_type = TERRAIN_WATER;
-                        cell.surface_type = SurfaceType::Water;
-                        break;
-                    case movement::kTerrainSand:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Slate;
-                        break;
-                    case movement::kTerrainDirt:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Gravel;
-                        break;
-                    case movement::kTerrainMud:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Mud;
-                        cell.is_mud = true;
-                        break;
-                    default:
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.surface_type = SurfaceType::Grass;
-                        break;
-                }
+            // Terrain class of the layer-1 tile from the original tile-info table (Ants.exe 0x1001360 pairs, FUN_0100724c, FUN_01008af7; LVL tile indices are CHD Table-4 indices), by the
+            // ID and nothing else: the dictionary's name of the entry ("." in the community maps that leave a lake or a mud path unnamed) and the flag bits of the cell other than the solid
+            // bit play no part in the original, whose class table is indexed by the tile id alone.
+            switch (movement::terrain_class_of_tile(c1.tile_index)) {
+                case movement::kTerrainWater:
+                    cell.terrain_type = TERRAIN_WATER;
+                    cell.surface_type = SurfaceType::Water;
+                    break;
+                case movement::kTerrainSand:
+                    cell.surface_type = SurfaceType::Slate;
+                    break;
+                case movement::kTerrainDirt:
+                    cell.surface_type = SurfaceType::Gravel;
+                    break;
+                case movement::kTerrainMud:
+                    cell.surface_type = SurfaceType::Mud;
+                    cell.is_mud = true;
+                    break;
+                default:
+                    break;
             }
 
             if (cell.terrain_type == TERRAIN_WALKABLE) {
@@ -127,25 +121,29 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                 // object (no obstacle overlay): it is solid to every order but the power-up order, and the arrival of that order takes it.
                 cell.is_powerup = true;
                 cell.powerup_type = movement::ant_type_of_powerup_tile(c2.tile_index);
+            } else if (assets::hill_team_of_id(c2.tile_index) >= 0) {
+                // A hill is a tile id (245 .. 248, FUN_0100ecac), never a dictionary name: the table of forced graphics has the four ids, so a hill is drawn and played whatever the entry says
+                if ((c2.flags & 1) != 0) {
+                    // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).
+                    cell.terrain_type = TERRAIN_WALKABLE;
+                    cell.is_obstacle_overlay = false;
+                } else {
+                    cell.is_obstacle_overlay = true;
+                }
+            } else if (assets::start_marker_team_of_id(c2.tile_index) >= 0) {
+                // (a start marker is a block-1 record; one in layer 2 is walkable ground)
+                cell.terrain_type = TERRAIN_WALKABLE;
+                cell.is_obstacle_overlay = false;
+            } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE && (movement::tile_flags_of(c2.tile_index) & movement::kTileFlagFood) != 0) {
+                // Food is the tile flag 0x02 of the id (FUN_010071dd: 87 ids), never the dictionary's name ("fd..." or "food..."): an id with the flag is food whatever the entry says ("." included),
+                // and an entry named fd... of an id without the flag (fdpez2b1 at 344, fdfrl7 at 287) is an ordinary object. Food is a removable object: no obstacle overlay.
+                cell.is_food = true;
             } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                 const std::string& tname = level.get_tile_name(c2.tile_index);
                 if (!tname.empty() && tname != ".") {
                     std::string lower_name = tname;
                     for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-                    if (lower_name.rfind("fd", 0) == 0 || lower_name.rfind("food", 0) == 0) {
-                        cell.is_food = true;
-                    } else if (lower_name.find("hill") != std::string::npos) {
-                        if ((c2.flags & 1) != 0) {
-                            // The terrain class stays that of the layer-1 tile (Ants.exe FUN_01008af7).
-                            cell.terrain_type = TERRAIN_WALKABLE;
-                            cell.is_obstacle_overlay = false;
-                        } else {
-                            cell.is_obstacle_overlay = true;
-                        }
-                    } else if (lower_name.find("start") != std::string::npos) {
-                        cell.terrain_type = TERRAIN_WALKABLE;
-                        cell.is_obstacle_overlay = false;
-                    } else if (lower_name.find("bridge") != std::string::npos ||
+                    if (lower_name.find("bridge") != std::string::npos ||
                                (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
                                c2.tile_index == TILE_BRIDGE4B) {
                         cell.is_obstacle_overlay = false;
@@ -156,16 +154,17 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                         // Solid obstacle overlay: rocks, cans, pencils, grass clusters (grass1..4, grassbig*, grassmed*), toys, flowers, etc.
                         cell.is_obstacle_overlay = true;
                     }
-                } else {
-                    cell.is_obstacle_overlay = true;
                 }
+                // An entry called "." or left empty is no reason for anything: the name never changes behaviour in the original (only whether the graphic is loaded), and what blocks is the
+                // file's solid bit. Such a cell is an object like any other without the remake's name-based obstacle overlay.
             }
         }
     }
 
-    // Mark flower plants from Block 1 (team_id == 255) as solid obstacles at their root stem
+    // Mark flower plants from Block 1 as solid obstacles at their root stem. Block 1 holds start markers, plants (tile flag 0x10 or 0x20) and nothing else that the original reads
+    // (FUN_0100dbb0: every other record is ignored), so only a plant can be one
     for (const auto& sp : level.anthill_spawns) {
-        if (sp.team_id == 255 && sp.tile_id < level.tile_dictionary.size()) {
+        if (sp.team_id == 255 && movement::is_plant_object_tile(sp.tile_id) && sp.tile_id < level.tile_dictionary.size()) {
             const std::string& tname = level.tile_dictionary[sp.tile_id];
             std::string lower_name = tname;
             for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
@@ -182,21 +181,14 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     for (uint32_t y = 0; y < height_; ++y) {
         for (uint32_t x = 0; x < width_; ++x) {
             const auto& c2 = level.get_cell_layer2(x, y);
-            if (c2.tile_index < level.tile_dictionary.size()) {
-                const std::string& tname = level.tile_dictionary[c2.tile_index];
-                int team = -1;
-                if (tname == "GREENHILL" || tname == "greenhill") team = 0;
-                else if (tname == "REDHILL" || tname == "redhill") team = 1;
-                else if (tname == "BLUEHILL" || tname == "bluehill") team = 2;
-                else if (tname == "BLACKHILL" || tname == "blackhill") team = 3;
-                if (team >= 0) {
-                    size_t st = static_cast<size_t>(team);
-                    if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {
-                        hill_origins[st].x = static_cast<int32_t>(x);
-                    }
-                    if (hill_origins[st].y < 0 || static_cast<int32_t>(y) < hill_origins[st].y) {
-                        hill_origins[st].y = static_cast<int32_t>(y);
-                    }
+            const int team = assets::hill_team_of_id(c2.tile_index);                // the hill of a colour is a tile id (245 .. 248), not a dictionary name (FUN_0100ecac)
+            if (team >= 0) {
+                size_t st = static_cast<size_t>(team);
+                if (hill_origins[st].x < 0 || static_cast<int32_t>(x) < hill_origins[st].x) {
+                    hill_origins[st].x = static_cast<int32_t>(x);
+                }
+                if (hill_origins[st].y < 0 || static_cast<int32_t>(y) < hill_origins[st].y) {
+                    hill_origins[st].y = static_cast<int32_t>(y);
                 }
             }
         }
@@ -214,7 +206,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         }
     }
     if (anthills_.empty()) {
-        anthills_ = level.anthill_spawns;
+        // a map without hill cells: the start markers stand in (the remake's own fallback); the other records of block 1 are plants and ignored records, never a hill
+        for (const auto& sp : level.anthill_spawns) {
+            if (sp.team_id < 4) anthills_.push_back(sp);
+        }
         for (const auto& sp : anthills_) {
             configure_anthill_cells(TileCoord{static_cast<int32_t>(sp.x), static_cast<int32_t>(sp.y)}, sp.team_id);
         }
@@ -250,7 +245,9 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
         set_food_tile(TileCoord{static_cast<int32_t>(o.col), static_cast<int32_t>(o.row)}, o.stage_tile());
     }
 
-    // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag:
+    // Original-engine solid bits (layer-1 cell bit0) beyond the per-cell file flag. The file's bit is the ONLY source of an object's solidity, power-ups, food, fire walls and
+    // lunchboxes included (FUN_0100cf0f reads the bit; FUN_010069d8 stored it verbatim): a power-up that the file leaves on a cell without the bit is walkable ground, and the run-time
+    // placement and removal of an object set and clear the bit as SetTile does (Grid::place_powerup, clear_powerup, place_firewall, set_food_tile, set_layer2 ...).
     //  * every Block-4 entry marks its tile solid (Ants.exe FUN_01006f0e -> FUN_0100660c(row, col, 1));
     //    this is what makes daisy-flower stems block ants, including entries without a plant;
     //  * row 0 is always solid (level loader loop at 0x1006592; FUN_0100660c never clears row 0).
@@ -261,16 +258,6 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     }
     for (uint32_t x = 0; x < width_; ++x) {
         get_cell_mut(x, 0).static_solid = true;
-    }
-    // Removable objects (food, power-ups, lunchboxes, fire walls) are tracked dynamically by
-    // is_solid_object(), mirroring object placement/removal (FUN_01007a22 / FUN_0100744f).
-    for (uint32_t y = 1; y < height_; ++y) {
-        for (uint32_t x = 0; x < width_; ++x) {
-            auto& cell = get_cell_mut(x, y);
-            if (cell.is_food || cell.is_powerup || cell.has_lunchbox() || cell.has_fire()) {
-                cell.static_solid = false;
-            }
-        }
     }
     // The anthill set-up clears the entrance and the tile above it (FUN_0100ecdf -> FUN_0100660c(.., 0)).
     for (const auto& ah : anthills_) {
@@ -401,6 +388,7 @@ void Grid::place_firewall(uint32_t x, uint32_t y, uint8_t owner_player) noexcept
     cell.interactive_id = TILE_FIREWALL;
     cell.interactive_owner = owner_player;
     cell.timer_ticks = LIFETIME_180S_TICKS;
+    cell.static_solid = true;                               // SetTile copies the tile flag 0x01 of the fire wall (id 134) to the layer-1 solid bit (FUN_01007a22)
 }
 
 void Grid::clear_firewall(uint32_t x, uint32_t y) noexcept {
@@ -409,6 +397,7 @@ void Grid::clear_firewall(uint32_t x, uint32_t y) noexcept {
     if (cell.interactive_id == TILE_FIREWALL) {
         cell.interactive_id = TILE_EMPTY;
         cell.timer_ticks = 0;
+        if (y > 0) cell.static_solid = false;               // SetTile(empty) clears the footprint's solid bit (FUN_0100744f -> FUN_0100660c(.., 0); row 0 never)
     }
 }
 
@@ -424,6 +413,7 @@ void Grid::place_bomb(uint32_t x, uint32_t y, uint8_t team_id) noexcept {
     cell.interactive_id = static_cast<uint16_t>(BOMB_BLACK + (team_id % 4u));
     cell.interactive_owner = team_id;
     cell.timer_ticks = 0;
+    if (y > 0) cell.static_solid = false;                   // SetTile clears what the cell held before (the placeholder 160 of a plant in progress is solid); a bomb has no solid flag itself
 }
 
 void Grid::clear_bomb(uint32_t x, uint32_t y) noexcept {
@@ -479,6 +469,19 @@ void Grid::collapse_bridge(uint32_t x, uint32_t y) noexcept {
 void Grid::set_layer2(uint32_t x, uint32_t y, uint16_t id, uint8_t owner) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
     auto& cell = get_cell_mut(x, y);
+    if (cell.interactive_id != id && id != TILE_EMPTY && !tile_graphic_loaded(id)) {
+        // FUN_01007352 clears the old object, then refuses a tile whose template is not loaded: the cell stays empty
+        if (!cell.is_empty_overlay() && y > 0) cell.static_solid = false;
+        cell.interactive_id = TILE_EMPTY;
+        cell.interactive_owner = 255;
+        cell.timer_ticks = 0;
+        return;
+    }
+    if (cell.interactive_id != id) {
+        // FUN_01007352: the old object's footprint is cleared first (solid bit off, row 0 never), then the new tile's flag 0x01 sets it
+        if (!cell.is_empty_overlay() && y > 0) cell.static_solid = false;
+        if (id != TILE_EMPTY && (movement::tile_flags_of(id) & movement::kTileFlagSolid) != 0) cell.static_solid = true;
+    }
     cell.interactive_id = id;
     cell.interactive_owner = (id == TILE_EMPTY) ? uint8_t{255} : owner;
     cell.timer_ticks = 0;
@@ -545,9 +548,12 @@ void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
         c.interactive_id = tile;
         c.interactive_owner = 255;
         c.timer_ticks = 0;
-        c.is_food = (tile != 0x7FFEu);
+        c.is_food = (tile != 0x7FFEu) && (movement::tile_flags_of(tile) & movement::kTileFlagFood) != 0;       // (FUN_010071dd: the tile flag 0x02)
+        c.is_powerup = false;                                          // the cell now holds this tile: a power-up that the file had under the pile's footprint is gone with its tile
+        c.powerup_type = 0;
         c.anchor_x = static_cast<int16_t>(anchor.x);
         c.anchor_y = static_cast<int16_t>(anchor.y);
+        if ((movement::tile_flags_of(tile) & movement::kTileFlagSolid) != 0) c.static_solid = true;     // the tile flag 0x01 is copied to the layer-1 solid bit
     };
     if (a.interactive_id != TILE_EMPTY && a.interactive_id != 0xFFFFu && a.interactive_id != 0x7FFEu) {
         const movement::FootprintSpan old = movement::food_footprint(a.interactive_id);
@@ -557,6 +563,7 @@ void Grid::set_food_tile(TileCoord anchor, uint16_t tile) noexcept {
         clear_cell(anchor);
     }
     if (tile == 0x7FFEu || tile == TILE_EMPTY) return;
+    if (!tile_graphic_loaded(tile)) return;                            // FUN_01007352 returns 0 here: the old object is gone (cleared above) and the new tile is not placed
     const movement::FootprintSpan span = movement::food_footprint(tile);
     for (size_t k = 0; k < span.count; ++k) {
         set_cell(TileCoord{anchor.x + span.cells[k].dcol, anchor.y + span.cells[k].drow});
@@ -583,6 +590,7 @@ void Grid::clear_powerup(int32_t x, int32_t y) noexcept {
     cell.is_powerup = false;
     cell.powerup_type = 0;
     cell.interactive_id = TILE_EMPTY;
+    if (y > 0) cell.static_solid = false;                   // SetTile(2, tile, 0x7ffe) clears the footprint's solid bit (row 0 never)
 }
 
 void Grid::strip_pickups() noexcept {
@@ -612,6 +620,7 @@ void Grid::place_powerup(int32_t x, int32_t y, uint8_t powerup_type) noexcept {
     cell.is_powerup = true;
     cell.powerup_type = powerup_type;
     cell.interactive_id = 0x8000u | static_cast<uint16_t>(powerup_type);
+    cell.static_solid = true;                               // SetTile copies the power-up tile's flag 0x01 (ids 62 .. 66) to the layer-1 solid bit
 }
 
 } // namespace ants::sim
