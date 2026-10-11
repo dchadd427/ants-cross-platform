@@ -473,11 +473,12 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
 
 void RoomManager::update(uint32_t now_ms) {
     if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
-    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, and only while nobody plays: it takes about a tenth of a second)
+    if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, and only while nobody plays: a recording takes 0.4 - 0.5 s for a match of 10 - 12 minutes, so the gap after it is four times that)
         history_feeder_->step([this]() {
             if (!restoring_.empty()) return false;
             for (const auto& kv : rooms_) {
-                if (kv.second->state() == RoomState::Running) return false;
+                const RoomState state = kv.second->state();
+                if (state == RoomState::Running || state == RoomState::Loading) return false;       // (a room that loads is about to start: it gets the thread too)
             }
             return true;
         }, now_ms);
@@ -590,10 +591,10 @@ bool RoomManager::enable_replays(ReplayConfig config, bool include_demo, std::st
     return true;
 }
 
-bool RoomManager::enable_history(db::Database& database, std::string& why) {
+bool RoomManager::enable_history(db::Database& database, std::string& why, HistoryStore::Config config) {
     history_feeder_.reset();
     history_.reset();
-    auto store = std::make_unique<HistoryStore>(database);
+    auto store = std::make_unique<HistoryStore>(database, std::move(config));
     if (!store->prepare(why)) return false;
     history_ = std::move(store);
     if (replays_ != nullptr) history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory());

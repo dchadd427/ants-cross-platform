@@ -64,7 +64,7 @@ struct HistoryRecord {
     int quitter{-1};                     // the seat whose quit ended the match, -1 when none did
     std::string mode;                    // kHistoryModeScore or kHistoryMode187
     std::string format;                  // "1v1", "2v1", "2v2", "ffa3", "ffa4" (or "solo"): how the match began (the teams it started with)
-    bool draw{false};                    // see the rule above, and nobody quit
+    bool draw{false};                    // the first two rows tie on the numbers of the rule above and neither is the quitter's or the side left standing
     bool computers_only{false};          // no person played
     std::vector<HistorySeat> seats;      // the seats that played, in seat order
     std::vector<HistoryRow> rows;        // the results, ranked

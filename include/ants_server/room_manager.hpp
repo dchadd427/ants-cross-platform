@@ -160,7 +160,7 @@ public:
     /// room runs or restores a match (the matches that are in the replay store now are counted too, the newest first). The history needs the replays to count from: without them what the database holds is listed
     /// and nothing is added. Call it after enable_replays(). `database` must be open, have the schema of the server (db_migrations) and outlive the manager or be released with disable_history(). False, with the
     /// reason, when the tables cannot be read (the server then keeps none).
-    bool enable_history(db::Database& database, std::string& why);
+    bool enable_history(db::Database& database, std::string& why, HistoryStore::Config config = HistoryStore::Config());
     /// Stops the history and lets go of the database (the server closes it after this)
     void disable_history();
     /// The server's match history (null when it keeps none)

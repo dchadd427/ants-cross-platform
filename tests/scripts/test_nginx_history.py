@@ -12,9 +12,9 @@ forwards the two addresses like /replays and /live (tests/scripts/test_nginx_rep
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
   - allowances of their own, sized for the whole site (behind a reverse proxy every visitor has the proxy's address) and not shared with the recorded or the live matches': ten a second for the list,
     twenty for single matches (503 beyond);
-  - only the list WITHOUT a query is cached, for five seconds, in one entry for everybody in the cache of /stats, and an old list is served while a new one is fetched and when the server does not answer;
-    a list with filters and a single match are asked of the server every time (made-up filters and ids must not fill the small cache that the numbers of the front page share); a server that has no such
-    door is answered 404 with a JSON body.
+  - the list WITHOUT a query is cached for five seconds in one entry for everybody in the cache of /stats, and an old list is served while a new one is fetched and when the server does not answer; a list
+    WITH a query (a search is dear for the game server) has a low allowance (two a second, a burst of five) and is cached for five seconds under its arguments in a small cache of its own (so that made-up
+    queries cannot push the numbers of the front page out); a single match is asked of the server every time; a server that has no such door is answered 404 with a JSON body.
 
 The text of the file is checked everywhere. Where docker works the blocks are RUN: the real file in front of a stand-in server (a second nginx that logs what it was sent), so that what reaches the
 server, and what does not, is seen. (The real ants_server with a real match is tests/scripts/test_ants_server.sh, part replays: its public door, asked directly.)
@@ -22,6 +22,7 @@ server, and what does not, is seen. (The real ants_server with a real match is t
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -186,40 +187,60 @@ class TheLocations(unittest.TestCase):
 class TheAllowancesAndTheCache(unittest.TestCase):
     def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
         # (behind a reverse proxy every visitor has the proxy's address: docs/audit/site_stats_notes.md; an allowance per visitor would be one for everybody)
-        for zone_name, block, rate, burst in (("ants_history", LIST, 10, 50), ("ants_history_items", ITEM, 20, 40)):
-            zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
+        # The list has two allowances, one for a request without a query (ten a second) and a much lower one for a request with one (two a second): the zone's key is the address for the one kind of
+        # request and empty (not counted) for the other, chosen by $is_args
+        for zone_name, key, rate in (("ants_history", "$history_plain_key", 10), ("ants_history_query", "$history_query_key", 2), ("ants_history_items", "$binary_remote_addr", 20)):
+            zone = re.search(r"limit_req_zone \%s zone=%s:(\d+)m rate=(\d+)r/([sm]);" % (key, zone_name), CONF)
             self.assertIsNotNone(zone, zone_name)
             self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))              # http context: before the server block
             self.assertEqual((int(zone.group(1)), int(zone.group(2)), zone.group(3)), (1, rate, "s"), zone_name)
-            self.assertIn("limit_req zone=%s burst=%d nodelay;" % (zone_name, burst), block, zone_name)
-            self.assertIn("limit_req_status 503;", block, zone_name)
+        self.assertIn("limit_req zone=ants_history burst=50 nodelay;", LIST)
+        self.assertIn("limit_req zone=ants_history_query burst=5 nodelay;", LIST)           # (a search is dear for the game server: five at once, two a second)
+        self.assertIn("limit_req zone=ants_history_items burst=40 nodelay;", ITEM)
+        for block in BOTH:
+            self.assertIn("limit_req_status 503;", block[1], block[0])
+        maps = dict(re.findall(r"map \$is_args (\$history_\w+) \{(.*?)\n\}", HEAD, re.S))
+        self.assertEqual(set(maps), {"$history_plain_key", "$history_query_key", "$history_cache"})
+        self.assertRegex(maps["$history_plain_key"], r'default\s+"";\s+""\s+\$binary_remote_addr;')       # (no query: the address; a query: nothing to count)
+        self.assertRegex(maps["$history_query_key"], r'default\s+\$binary_remote_addr;\s+""\s+"";')           # (a query: the address; none: nothing to count)
         for block in (LIST, ITEM):
             self.assertNotRegex(block, r"zone=ants_(replays|replay_files|live|live_files|stats|busy|local)\b")      # (the others' allowances are theirs: a page that filters does not use up the downloads')
-        self.assertNotIn("zone=ants_history ", ITEM)
-        self.assertNotIn("zone=ants_history_items ", LIST)
+        self.assertNotIn("zone=ants_history_items", LIST)
+        self.assertNotRegex(ITEM, r"zone=ants_history(_query)? ")
         for block in (REPLAYS_LIST, REPLAYS_FILES, LIVE_LIST, LIVE_ITEM, STATS):
             self.assertNotRegex(block, r"zone=ants_history")
 
-    def test_only_the_list_without_a_query_is_cached_for_five_seconds_in_the_cache_of_the_numbers(self):
-        for directive in ("proxy_cache ants_stats_cache;", "proxy_cache_valid 200 5s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;", "proxy_no_cache $is_args;",
-                          "proxy_cache_bypass $is_args;", "proxy_cache_use_stale updating error timeout;"):
+    def test_the_list_without_a_query_and_each_list_with_one_are_cached_for_five_seconds_each_in_its_own_cache(self):
+        for directive in ("proxy_cache $history_cache;", "proxy_cache_valid 200 5s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;", "proxy_cache_use_stale updating error timeout;"):
             self.assertIn(directive, LIST, directive)
-        self.assertEqual(len(re.findall(r"\bproxy_cache_valid\b", LIST)), 1)                  # (only a 200: the 404 of a server with no history is asked each time)
+        self.assertNotRegex(LIST, r"proxy_(no_cache|cache_bypass)")                          # (a list with a query is kept too, under its own key)
+        self.assertEqual(len(re.findall(r"\bproxy_cache_valid\b", LIST)), 1)                  # (only a 200: the 404 of a server with no history, and the 503 of a query that is too heavy, are asked each time)
         self.assertLess(LIST.index("limit_req "), LIST.index("proxy_cache "))                # (a request over the limit never reaches the cache)
         self.assertLess(LIST.index("proxy_cache "), LIST.index("proxy_pass"))
         key = re.search(r'proxy_cache_key "([^"]+)";', LIST).group(1)
-        self.assertNotRegex(key, r"\$")                                                       # (one entry for everybody: the key holds nothing of the visitor, nor of the query)
+        self.assertEqual(key, "ants-history$is_args$args")                                    # (the same arguments, the same entry; no list without a query shares an entry with one that has; nothing of the visitor)
+        cache = re.search(r"map \$is_args \$history_cache \{(.*?)\n\}", HEAD, re.S).group(1)
+        self.assertRegex(cache, r"default\s+ants_history_cache;\s+\"\"\s+ants_stats_cache;")      # (the list without a query is in the cache of the numbers, as before; the others in their own)
         for directive in ("proxy_cache", "proxy_cache_key", "proxy_cache_valid", "proxy_no_cache", "proxy_cache_bypass", "proxy_ignore_headers"):
-            self.assertNotRegex(ITEM, r"\b%s\b" % directive, directive)                      # (a match is never kept here: one for every id would push the numbers of the front page out)
+            self.assertNotRegex(ITEM, r"\b%s\b" % directive, directive)                      # (a match is never kept here: one for every id would fill a cache)
 
-    def test_its_entry_is_its_own_and_the_cache_is_the_small_one_that_the_numbers_share(self):
-        key = re.search(r'proxy_cache_key "([^"]+)";', LIST).group(1)
+    def test_the_entries_are_their_own_and_the_caches_are_small(self):
+        key = re.search(r'proxy_cache_key "([^"]+)";', LIST).group(1).split("$")[0]
         others = [re.search(r'proxy_cache_key "([^"]+)";', b).group(1) for b in (STATS, REPLAYS_LIST, LIVE_LIST, LIVE_ITEM)]
         for other in others:
             self.assertFalse(other.startswith(key) or key.startswith(other), (other, key))   # (no other door's entry is this one's)
-        path = re.search(r"proxy_cache_path (\S+) keys_zone=ants_stats_cache:(\d+)m max_size=(\d+)m", HEAD)
-        self.assertIsNotNone(path)
-        self.assertEqual(int(path.group(3)), 8)                                               # (one list is some tens of kilobytes: the cache stays as small as the numbers' test wants it)
+        stats_path = re.search(r"proxy_cache_path (\S+) keys_zone=ants_stats_cache:(\d+)m max_size=(\d+)m", HEAD)
+        self.assertIsNotNone(stats_path)
+        self.assertEqual(int(stats_path.group(3)), 8)                                         # (one list is some tens of kilobytes: the cache stays as small as the numbers' test wants it)
+        own = re.search(r"proxy_cache_path (\S+) keys_zone=ants_history_cache:(\d+)m max_size=(\d+)m inactive=(\d+)m", HEAD)
+        self.assertIsNotNone(own)
+        self.assertNotEqual(own.group(1), stats_path.group(1))                                # (a folder of its own: made-up queries cannot push the numbers of the front page out)
+        self.assertEqual((int(own.group(2)), int(own.group(3))), (1, 8))
+
+    def test_the_comments_do_not_call_a_list_with_a_query_cheap(self):
+        for text in (read("docker", "nginx.conf"),):
+            self.assertNotRegex(text, r"(?i)with filters[^.\n]*\bcheap\b[^.\n]*but not free")      # (the claim of the first draft: a search can scan every match on the game server's one thread)
+            self.assertIn("is not cheap", text)
 
     def test_it_has_short_timeouts_and_adds_nothing_of_its_own(self):
         for what, block in BOTH:
@@ -319,7 +340,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertEqual(body, ('{"history":[],"count":0,"query":"%s"}' % query).encode(), query)     # (the server is sent the query to the byte, and what it answers is not the entry of the list without one)
             self.assertEqual(self.sent("/history", before_list + 1)[before_list]["args"], query)
 
-    def test_a_list_with_a_query_and_a_match_are_asked_of_the_server_every_time_and_the_list_without_one_is_kept_for_everybody(self):
+    def test_the_list_without_a_query_is_kept_for_everybody_a_list_with_one_under_its_arguments_and_a_match_is_asked_every_time(self):
         time.sleep(6.5)                                                                       # (an entry that an earlier test made is over: five seconds, counted in whole seconds)
         before = self.stub_lines()
         first = self.ask("GET", "/history")
@@ -332,13 +353,15 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.stub_lines(before + 1) - before, 1)                             # the server was asked once for the nine
         for _ in range(4):
             status, _, body = self.ask("GET", "/history?limit=1")
-            self.assertEqual((status, body), (200, b'{"history":[],"count":0,"query":"limit=1"}'))      # never the list without a query, and never a stored one
-        self.assertEqual(self.stub_lines(before + 5) - before, 5)                             # four more asks: a list with a query is not kept
+            self.assertEqual((status, body), (200, b'{"history":[],"count":0,"query":"limit=1"}'))      # never the list without a query
+        self.assertEqual(self.stub_lines(before + 2) - before, 2)                             # four asks of one search: one request to the server (kept five seconds under its arguments)
+        self.assertEqual(self.ask("GET", "/history?limit=2")[2], b'{"history":[],"count":0,"query":"limit=2"}')      # another search is another entry
+        self.assertEqual(self.stub_lines(before + 3) - before, 3)
         for _ in range(4):
             self.assertEqual(self.ask("GET", "/history/" + ITEM_ID)[1:], self.ask("GET", "/history/" + ITEM_ID)[1:])
-        self.assertEqual(self.stub_lines(before + 13) - before, 13)                           # eight asks of one match: none came from a cache
+        self.assertEqual(self.stub_lines(before + 11) - before, 11)                           # eight asks of one match: none came from a cache
         self.assertEqual(self.ask("GET", "/history")[2], first[2])                            # (the list without a query is still the one entry: the queries did not take its place)
-        self.assertEqual(self.stub_lines() - before, 13)
+        self.assertEqual(self.stub_lines() - before, 11)
 
     def test_the_404_of_a_match_that_the_server_does_not_know_passes_with_its_json_and_is_asked_every_time(self):
         before = self.stub_lines()
@@ -360,8 +383,18 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         for query in BAD_QUERIES:
             if not query.isascii():
                 continue
-            target = query.replace("#", "%23").replace(" ", "%20").replace("\\", "%5C").replace("?", "%3F")
+            target = query.replace("#", "%23").replace(" ", "%20").replace("\\", "%5C").replace("?", "%3F")      # (as a browser writes them)
+            if query_pattern().match(target):
+                continue                                                                      # (a percent escape is allowed: it is the game server that reads it and refuses what no name holds; see below)
             self.assertEqual(self.ask("GET", "/history?" + target)[0], 400, query)            # (the characters that no filter is made of)
+        # the same characters as they would be if they were sent raw (a space in the request line is something nginx accepts as part of the address): refused here as well
+        for raw in ("q=a b", "q=a b&limit=3", "q=%41 b"):
+            sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
+            try:
+                sock.sendall(("GET /history?%s HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" % raw).encode())
+                self.assertTrue(sock.recv(200).startswith(b"HTTP/1.1 400"), raw)
+            finally:
+                sock.close()
         for name in ("", "x", "ants-TREASURE", "ants-" + "A" * 25 + "-20261008-143209Z", "ants-TREASURE-20261008-143209Z-12345", "ants-TREASURE-20261008-143209z", "ants-TREASURE-20261008-143209Z.antsrep",
                      "sub/" + ITEM_ID, ITEM_ID + "/", ITEM_ID + "/x", ITEM_ID + "%0A", ITEM_ID + "%20", ".", ".hidden", "TREASURE-20261008-143209Z"):
             self.assertEqual(self.ask("GET", "/history/" + name)[0], 404, name)               # (an address under /history/ of a shape that the history does not make: refused here)
@@ -370,6 +403,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertNotEqual(body, b"a stand-in record", name)
         self.assertIn(self.ask("GET", "/history/" + ITEM_ID + "%00")[0], (400, 404))          # (a NUL in the address: nginx refuses it itself)
         self.assertEqual(self.stub_lines(), before)                                           # none of these reached the server (not a request, not a line of its log), and none used up the allowance
+        self.assertEqual(self.ask("GET", "/history?q=a%20b")[0], 200)                         # (a percent escape is a character of the allowed set: the game server decodes it and judges)
         self.assertEqual(self.ask("GET", "/history?")[0], 200)                                # (a "?" with nothing behind it carries no query: nginx's $args is empty)
         self.assertEqual(self.ask("GET", "/history/" + ITEM_ID + "?")[0], 200)
         self.assertEqual(self.stub_lines(before + 1) - before >= 1, True)
@@ -405,7 +439,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
 
     def test_the_list_may_be_asked_ten_times_a_second_by_the_whole_site_with_a_burst_of_fifty_and_the_matches_have_an_allowance_of_their_own(self):
         started = time.monotonic()
-        codes = [self.ask("GET", "/history?limit=1")[0] for _ in range(150)]
+        codes = [self.ask("GET", "/history")[0] for _ in range(150)]
         took = time.monotonic() - started
         allowed = codes.count(200)
         self.assertTrue(set(codes) <= {200, 503}, set(codes))
@@ -413,6 +447,22 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(codes[:51], [200] * 51)                                              # (the refusals come after the allowance, none between)
         self.assertEqual(self.ask("GET", "/history/" + ITEM_ID)[0], 200)                      # the matches are another zone: a flood of the list does not use their allowance
         self.assertEqual(self.ask("GET", "/live")[0], 404)                                    # (nor the live matches': the stand-in has none, its 404 and not nginx's 503)
+
+    def test_a_list_with_a_query_may_be_asked_two_times_a_second_with_a_burst_of_five_and_the_same_query_is_asked_of_the_server_once(self):
+        time.sleep(6.5)
+        before = len(self.stub_requests("/history"))
+        codes = [self.ask("GET", "/history?limit=%d" % (n + 1))[0] for n in range(12)]         # twelve different searches
+        self.assertTrue(set(codes) <= {200, 503}, set(codes))
+        self.assertEqual(codes[:6], [200] * 6)                                                # the first and the burst of five
+        self.assertLessEqual(codes.count(200), 6 + 2)                                         # (two a second while this goes on)
+        self.assertGreaterEqual(codes.count(503), 4)
+        self.assertEqual(self.ask("GET", "/history")[0], 200)                                  # the list without a query has its own zone
+        self.assertEqual(self.ask("GET", "/history/" + ITEM_ID)[0], 200)
+        time.sleep(3)
+        again = len(self.stub_requests("/history", before + 1))
+        for _ in range(4):
+            self.assertEqual(self.ask("GET", "/history?sort=score&limit=7")[0], 200)           # the same search again and again: one request to the server (cached five seconds under its arguments)
+        self.assertEqual(len(self.stub_requests("/history", again + 1)) - again, 1)
 
     def test_twenty_matches_a_second_for_the_whole_site_with_a_burst_of_forty_and_the_rest_is_503(self):
         time.sleep(6.5)                                                                       # (the list's flood of the test before is paid for)
@@ -445,7 +495,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.wait_stub(False)
             status, _, body = self.ask("GET", "/history")
             self.assertEqual((status, body), (200, b'{"history":[],"count":0,"query":""}'))    # the list that grows slowly: an old one is a list
-            for path in ("/history?limit=1", "/history/" + ITEM_ID):                           # a list with filters and a match are not kept: the truth is the 404
+            for path in ("/history?limit=1", "/history/" + ITEM_ID):                           # a list with filters (that was not asked before) and a match are not there: the truth is the 404
                 started = time.monotonic()
                 status, headers, body = self.ask("GET", path)
                 self.assertEqual(status, 404, path)

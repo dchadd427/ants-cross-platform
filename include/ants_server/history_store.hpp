@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <set>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -57,7 +58,11 @@ struct HistoryQuery {
 };
 
 struct HistoryPage {
-    bool ok{true};                                   // false: the database did not answer (the store is unavailable now)
+    /// Why a list could not be made: Unavailable (the database did not answer: the store is unavailable now), TooHeavy (the query ran into its time box: narrow the search), Busy (the public door's budget
+    /// of query time is used up: nothing was asked of the database)
+    enum class Fail : uint8_t { None, Unavailable, TooHeavy, Busy };
+    bool ok{true};                                   // false: see `fail`
+    Fail fail{Fail::None};
     size_t count{0};                                 // the records that fit the filters
     std::vector<HistoryRecord> items;                // the page asked for
 };
@@ -69,8 +74,20 @@ public:
     /// Longest `search` text of a match (the map's name and the shown names of its seats): the column of the list's q
     static constexpr size_t kMaxSearchBytes = 512;
 
+    /// A list is asked for by the public door (a visitor: a small time box and a share of the server's budget) or by the owner (a larger box, no budget)
+    enum class Door : uint8_t { Public, Owner };
+    /// The time box of one list: the database stops a query that runs longer (the answer is TooHeavy). A query runs on the server's main thread, so a visitor's query is boxed small.
+    static constexpr uint32_t kPublicBoxMs = 15;
+    static constexpr uint32_t kOwnerBoxMs = 100;
+    /// The budget of the public door's queries, a token bucket of milliseconds of query time: it holds kBudgetBurstMs at the most, earns kBudgetPerSecondMs for each second, and a query is paid for by the
+    /// time it took. When it is empty the answer is Busy at once. So the public door can take at most about 5 % of the main thread, whatever the number of visitors.
+    static constexpr uint32_t kBudgetBurstMs = 100;
+    static constexpr uint32_t kBudgetPerSecondMs = 50;
+    static constexpr int kProgressOps = 200;                // the database looks at the clock about every this many steps of a statement
+
     struct Config {
         std::function<int64_t()> clock_s;                   // seconds since 1970 UTC (empty: the system clock); the time a marker was made
+        std::function<uint64_t()> clock_us;                 // a steady clock in microseconds (empty: std::chrono::steady_clock); the time box and the budget (the tests make it deterministic)
     };
 
     /// `database` must stay open and outlive the store (the server's main keeps it for its whole run); it must have the schema of migration 2.
@@ -102,11 +119,14 @@ public:
     bool find(const std::string& id, HistoryRecord& out) const;
     /// True when the match is in the history, or the owner took it out (it must not be counted again). An unavailable store knows everything (nothing is counted while it is down).
     bool knows(const std::string& id) const;
-    /// Removes from `ids` the ones the history knows (a record or a marker), keeping the order: one statement for all. False when the database did not answer (`ids` is then empty).
+    /// Loads the ids of every record and every marker with ONE statement. False (and `out` empty) when the database did not answer.
+    bool known_ids(std::unordered_set<std::string>& out) const;
+    /// Removes from `ids` the ones the history knows (a record or a marker), keeping the order: one statement for all (known_ids). False when the database did not answer (`ids` is then empty).
     bool keep_unknown(std::vector<std::string>& ids) const;
 
-    /// The page of records that fit `query`; `recording` says for each record what became of its recording (called only when the query filters by it)
-    HistoryPage query(const HistoryQuery& query, const std::function<Recording(const std::string& id)>& recording) const;
+    /// The page of records that fit `query`; `recording` says for each record what became of its recording (a lookup in memory; called only when the query filters by it). The query is time boxed and
+    /// the public door's is paid from the budget (see Door); a page that could not be made has `ok` false and says why.
+    HistoryPage query(const HistoryQuery& query, const std::function<Recording(const std::string& id)>& recording, Door door = Door::Public) const;
 
     /// Lines for the server's log (a failure of the database, the way back), once each
     std::vector<std::string> take_notes();
@@ -118,6 +138,8 @@ private:
     void fail(const std::string& what, const db::Error& error) const;
     db::Error refresh_counts() const;
     int64_t now_s() const;
+    uint64_t now_us() const;
+    static int time_box_expired(void* self);
 
     db::Database& db_;
     Config cfg_;
@@ -128,21 +150,27 @@ private:
     mutable bool retry_armed_{false};
     mutable uint32_t retry_at_ms_{0};
     mutable std::vector<std::string> notes_;
+    mutable uint64_t deadline_us_{0};                // the end of the query that runs now
+    mutable bool budget_armed_{false};
+    mutable int64_t budget_us_{0};                   // the public door's budget (microseconds of query time left)
+    mutable uint64_t budget_at_us_{0};
 };
 
-/// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again (about a tenth of a second to a third) with no screen and its numbers go to the
-/// history in one transaction. The work is never done on the server's loop in a burst: one file at most per call, at least kPaceMs after the last one, and only when the caller says the server is idle (no room
+/// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
+/// history in one transaction. The work is never done on the server's loop in a burst: one file at most per call, the gap after it at least kPaceMs and kPaceFactor times what the file took, and only when the caller says the server is idle (no room
 /// runs or restores a match). The files that the replay store holds when the server starts (up to 30 days of them) are counted the same way, the newest first, and so are the matches that arrive later (the
 /// room's own, and the files that the bot arena puts in the folder). A file that cannot be counted (another simulation's rules, a map that is not here, a file that does not play out the same here) is left out
 /// with one line in the log, and tried again only when the server starts again. While the store is unavailable nothing is played.
 class HistoryFeeder {
 public:
-    static constexpr uint32_t kPaceMs = 250;
+    static constexpr uint32_t kPaceMs = 250;          // the least gap between two recordings
+    static constexpr uint32_t kPaceFactor = 4;        // ... and at least this many times the time that the last one took (a long match is paid for with a longer gap: the main thread is mostly free)
     static constexpr size_t kMaxSkipLines = 10;       // the lines about files that were left out, one each; the rest are counted in the summary
     static constexpr uint32_t kPruneEveryMs = 3600u * 1000u;
 
-    /// `maps_dir` is the folder that replay::load_map looks for the match's map in. The three objects must outlive the feeder.
-    HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir);
+    /// `maps_dir` is the folder that replay::load_map looks for the match's map in. The three objects must outlive the feeder. `clock_us` is a steady clock in microseconds that times the work of a pass
+    /// (empty: std::chrono::steady_clock; the tests inject one).
+    HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us = std::function<uint64_t()>());
 
     /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
@@ -159,6 +187,7 @@ private:
     HistoryStore& history_;
     const ReplayStore& replays_;
     std::string maps_dir_;
+    std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)
     std::set<std::string> skipped_;                   // ids that were left out since the server started

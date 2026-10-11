@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <chrono>
 #include <exception>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "ants_net/clock.hpp"
 #include "ants_replay/player.hpp"
@@ -103,49 +106,81 @@ bool read_match(db::Statement& st, HistoryRecord& r) {
     return true;
 }
 
-db::Error load_seats(db::Database& d, HistoryRecord& r) {
+// The seats of many records with ONE statement (`WHERE match_id IN (?, ?, ...)`: the question marks are all the text that depends on the number of records, at most a page)
+db::Error load_seats_many(db::Database& d, std::vector<HistoryRecord>& recs) {
+    if (recs.empty()) return db::Error();
+    std::string marks = "?";
+    for (size_t k = 1; k < recs.size(); ++k) marks += ", ?";
     db::Statement st;
-    db::Error e = d.prepare(st, (std::string("SELECT ") + kSeatColumns + " FROM history_seats WHERE match_id = ?1 ORDER BY seat").c_str());
+    db::Error e = d.prepare(st, (std::string("SELECT match_id, ") + kSeatColumns + " FROM history_seats WHERE match_id IN (" + marks + ") ORDER BY match_id, seat").c_str());
     if (!e.ok()) return e;
-    e = st.bind_text(1, r.id);
-    if (!e.ok()) return e;
+    std::unordered_map<std::string, size_t> at;
+    for (size_t k = 0; k < recs.size(); ++k) {
+        e = st.bind_text(static_cast<int>(k) + 1, recs[k].id);
+        if (!e.ok()) return e;
+        at[recs[k].id] = k;
+        recs[k].seats.clear();
+    }
     for (;;) {
         const db::Statement::Step step = st.step();
         if (step == db::Statement::Step::Failed) return st.error();
         if (step == db::Statement::Step::Done) return db::Error();
+        const auto it = at.find(st.column_text(0));
+        if (it == at.end()) continue;
         HistorySeat s;
-        s.seat = static_cast<uint8_t>(st.column_int64(0));
-        s.name = st.column_text(1);
-        s.bot = st.column_text(2);
-        s.score = to_i32(st.column_int64(3));
-        s.killed = to_u32(st.column_int64(4));
-        s.lost = to_u32(st.column_int64(5));
-        s.hatched = to_u32(st.column_int64(6));
-        s.bombs_planted = to_u32(st.column_int64(7));
-        s.bombs_defused = to_u32(st.column_int64(8));
-        s.fires_lit = to_u32(st.column_int64(9));
-        s.left = st.column_int64(10) != 0;
-        s.winner = st.column_int64(11) != 0;
-        r.seats.push_back(std::move(s));
+        s.seat = static_cast<uint8_t>(st.column_int64(1));
+        s.name = st.column_text(2);
+        s.bot = st.column_text(3);
+        s.score = to_i32(st.column_int64(4));
+        s.killed = to_u32(st.column_int64(5));
+        s.lost = to_u32(st.column_int64(6));
+        s.hatched = to_u32(st.column_int64(7));
+        s.bombs_planted = to_u32(st.column_int64(8));
+        s.bombs_defused = to_u32(st.column_int64(9));
+        s.fires_lit = to_u32(st.column_int64(10));
+        s.left = st.column_int64(11) != 0;
+        s.winner = st.column_int64(12) != 0;
+        recs[it->second].seats.push_back(std::move(s));
     }
+}
+
+// The records `ids` (a page: at most 100), in that order, with their seats, in two statements whatever the number; an id that is not there is left out
+db::Error load_many(db::Database& d, const std::vector<std::string>& ids, std::vector<HistoryRecord>& out) {
+    out.clear();
+    if (ids.empty()) return db::Error();
+    std::string marks = "?";
+    for (size_t k = 1; k < ids.size(); ++k) marks += ", ?";
+    db::Statement st;
+    db::Error e = d.prepare(st, (std::string("SELECT ") + kMatchColumns + " FROM history_matches m WHERE m.id IN (" + marks + ")").c_str());
+    if (!e.ok()) return e;
+    for (size_t k = 0; k < ids.size(); ++k) {
+        e = st.bind_text(static_cast<int>(k) + 1, ids[k]);
+        if (!e.ok()) return e;
+    }
+    std::unordered_map<std::string, HistoryRecord> got;
+    for (;;) {
+        const db::Statement::Step step = st.step();
+        if (step == db::Statement::Step::Failed) return st.error();
+        if (step == db::Statement::Step::Done) break;
+        HistoryRecord r;
+        read_match(st, r);
+        const std::string id = r.id;
+        got[id] = std::move(r);
+    }
+    for (const std::string& id : ids) {
+        const auto it = got.find(id);
+        if (it != got.end()) out.push_back(std::move(it->second));
+    }
+    return load_seats_many(d, out);
 }
 
 // One whole record by its id; `found` says whether there is one
 db::Error load_one(db::Database& d, const std::string& id, HistoryRecord& out, bool& found) {
-    found = false;
-    db::Statement st;
-    db::Error e = d.prepare(st, (std::string("SELECT ") + kMatchColumns + " FROM history_matches m WHERE m.id = ?1").c_str());
-    if (!e.ok()) return e;
-    e = st.bind_text(1, id);
-    if (!e.ok()) return e;
-    const db::Statement::Step step = st.step();
-    if (step == db::Statement::Step::Failed) return st.error();
-    if (step == db::Statement::Step::Done) return db::Error();
-    read_match(st, out);
-    e = load_seats(d, out);
-    if (!e.ok()) return e;
-    found = true;
-    return db::Error();
+    std::vector<HistoryRecord> one;
+    const db::Error e = load_many(d, {id}, one);
+    found = e.ok() && !one.empty();
+    if (found) out = std::move(one[0]);
+    return e;
 }
 
 // What a seat shows on the pages: "Bot (Level)", the name that was typed, or the colour
@@ -406,40 +441,88 @@ bool HistoryStore::knows(const std::string& id) const {
     return n > 0;
 }
 
-bool HistoryStore::keep_unknown(std::vector<std::string>& ids) const {
-    if (!up_) {
-        ids.clear();
-        return false;
-    }
+bool HistoryStore::known_ids(std::unordered_set<std::string>& out) const {
+    out.clear();
+    if (!up_) return false;
     db::Statement st;
-    db::Error e = db_.prepare(st, "SELECT (SELECT count(*) FROM history_matches WHERE id = ?1) + (SELECT count(*) FROM history_markers WHERE id = ?1)");
-    std::vector<std::string> unknown;
-    for (size_t k = 0; e.ok() && k < ids.size(); ++k) {
-        e = st.reset();
-        if (e.ok()) e = st.bind_text(1, ids[k]);
-        if (!e.ok()) break;
+    db::Error e = db_.prepare(st, "SELECT id FROM history_matches UNION SELECT id FROM history_markers");
+    while (e.ok()) {
         const db::Statement::Step step = st.step();
-        if (step == db::Statement::Step::Failed) {
-            e = st.error();
-            break;
-        }
-        if (step == db::Statement::Step::Row && st.column_int64(0) == 0) unknown.push_back(ids[k]);
+        if (step == db::Statement::Step::Failed) e = st.error();
+        if (step != db::Statement::Step::Row) break;
+        out.insert(st.column_text(0));
     }
     if (!e.ok()) {
         fail("the records could not be looked up", e);
-        ids.clear();
+        out.clear();
         return false;
     }
-    ids.swap(unknown);
     return true;
 }
 
-HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recording(const std::string& id)>& recording) const {
+bool HistoryStore::keep_unknown(std::vector<std::string>& ids) const {
+    std::unordered_set<std::string> known;
+    if (!known_ids(known)) {
+        ids.clear();
+        return false;
+    }
+    ids.erase(std::remove_if(ids.begin(), ids.end(), [&](const std::string& id) { return known.count(id) != 0; }), ids.end());
+    return true;
+}
+
+uint64_t HistoryStore::now_us() const {
+    if (cfg_.clock_us) return cfg_.clock_us();
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+int HistoryStore::time_box_expired(void* self) {
+    const HistoryStore* store = static_cast<const HistoryStore*>(self);
+    return store->now_us() >= store->deadline_us_ ? 1 : 0;
+}
+
+HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recording(const std::string& id)>& recording, Door door) const {
     HistoryPage page;
     if (!up_) {
         page.ok = false;
+        page.fail = HistoryPage::Fail::Unavailable;
         return page;
     }
+    // The server-wide budget of the public door (a token bucket in microseconds of query time): over it, the answer is "busy" at once and the database is not touched
+    const uint64_t started = now_us();
+    if (door == Door::Public) {
+        if (budget_armed_) {
+            const uint64_t gone = started - budget_at_us_;
+            budget_us_ = std::min<int64_t>(static_cast<int64_t>(kBudgetBurstMs) * 1000, budget_us_ + static_cast<int64_t>(gone / 1000u * kBudgetPerSecondMs));
+        } else {
+            budget_armed_ = true;
+            budget_us_ = static_cast<int64_t>(kBudgetBurstMs) * 1000;
+        }
+        budget_at_us_ = started;
+        if (budget_us_ <= 0) {
+            page.ok = false;
+            page.fail = HistoryPage::Fail::Busy;
+            return page;
+        }
+    }
+    // The time box of this one query (the count, the page, the seats): the database stops it when the clock passes the deadline
+    deadline_us_ = started + static_cast<uint64_t>(door == Door::Public ? kPublicBoxMs : kOwnerBoxMs) * 1000u;
+    db_.set_progress_handler(&HistoryStore::time_box_expired, const_cast<HistoryStore*>(this), kProgressOps);
+    struct Release {
+        db::Database& d;
+        ~Release() { d.set_progress_handler(nullptr, nullptr, 0); }
+    } release{db_};
+    const auto finish = [&](const db::Error& e) {
+        if (door == Door::Public) budget_us_ -= static_cast<int64_t>(now_us() - started);
+        if (e.ok()) return;
+        page = HistoryPage();
+        page.ok = false;
+        if (e.code == db::kErrInterrupted) {
+            page.fail = HistoryPage::Fail::TooHeavy;                       // (the query was too heavy, the database is fine)
+        } else {
+            page.fail = HistoryPage::Fail::Unavailable;
+            fail("the list could not be read", e);
+        }
+    };
     // WHERE: pieces of fixed text with a "?" for each value, and the values in the same order
     std::string where;
     std::vector<Arg> args;
@@ -508,8 +591,10 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
                 page.items.push_back(std::move(r));
             }
         }
+        if (e.ok()) e = load_seats_many(db_, page.items);
     } else {
-        // the state of a recording is not in the database: every match that fits the other filters is asked about, in order, and the page is cut from those that fit
+        // the state of a recording is not in the database: the ids of the matches that fit the other filters are read from the index alone and asked about in order (`recording` is a lookup in memory),
+        // and the page is cut from those that have that state
         std::vector<std::string> window;
         db::Statement st;
         e = db_.prepare(st, ("SELECT m.id FROM history_matches m" + where + order).c_str());
@@ -525,26 +610,9 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
             if (page.count >= q.offset && window.size() < limit) window.push_back(id);
             ++page.count;
         }
-        for (size_t k = 0; e.ok() && k < window.size(); ++k) {
-            HistoryRecord r;
-            bool found = false;
-            e = load_one(db_, window[k], r, found);
-            if (e.ok() && found) page.items.push_back(std::move(r));
-        }
-        if (e.ok()) {
-            page.ok = true;
-            return page;
-        }
+        if (e.ok()) e = load_many(db_, window, page.items);
     }
-    // seats of the records on the page (the plain list did not load them yet)
-    for (size_t k = 0; e.ok() && k < page.items.size(); ++k) {
-        if (page.items[k].seats.empty()) e = load_seats(db_, page.items[k]);
-    }
-    if (!e.ok()) {
-        fail("the list could not be read", e);
-        page = HistoryPage();
-        page.ok = false;
-    }
+    finish(e);
     return page;
 }
 
@@ -552,7 +620,12 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
 // Counting the matches that the replay store keeps
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir) : history_(history), replays_(replays), maps_dir_(std::move(maps_dir)) {}
+HistoryFeeder::HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us)
+    : history_(history), replays_(replays), maps_dir_(std::move(maps_dir)), clock_us_(std::move(clock_us)) {
+    if (!clock_us_) {
+        clock_us_ = []() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()); };
+    }
+}
 
 void HistoryFeeder::skip(const std::string& id, const std::string& why) {
     skipped_.insert(id);
@@ -586,7 +659,10 @@ bool HistoryFeeder::work(const std::string& file) {
     if (entry == nullptr || !entry->readable) return false;                              // (it went in the meantime: its 30 days, or the owner)
     const std::string id = file.substr(0, file.size() - std::string(ReplayStore::kExtension).size());
     std::vector<uint8_t> bytes;
-    if (!replays_.read(file, bytes)) return false;
+    if (!replays_.read(file, bytes)) {
+        skip(id, "the recording cannot be read from the replay store");        // (it is listed but the read failed: told once, not tried again before the server starts again)
+        return true;
+    }
     replay::Replay rep;
     std::string why;
     if (!replay::decode(bytes.data(), bytes.size(), rep, why)) {
@@ -649,8 +725,11 @@ bool HistoryFeeder::step(const std::function<bool()>& idle, uint32_t now_ms) {
     const std::string file = queue_.back();
     queue_.pop_back();
     paced_ = true;
+    const uint64_t began = clock_us_();
     const bool played = work(file);
-    next_ms_ = now_ms + kPaceMs;
+    const uint64_t spent_ms = (clock_us_() - began + 999u) / 1000u;                      // (what the pass really took, which the server's clock of this pass does not show)
+    const uint64_t gap = std::max<uint64_t>(kPaceMs, spent_ms * kPaceFactor);
+    next_ms_ = now_ms + static_cast<uint32_t>(std::min<uint64_t>(spent_ms + gap, 60u * 1000u));       // (counted from the END of the work, so passes never run back to back)
     return played;
 }
 

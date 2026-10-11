@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <set>
+#include <unordered_map>
 
 #include "ants_replay/replay.hpp"
 #include "ants_server/control.hpp"
@@ -135,13 +136,11 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
             else if (value == kHistoryMode187) q.mode = HistoryQuery::Mode::Kills187;
             else return bad("all, highest-score or 187");
         } else if (key == "colour") {
-            std::string word = value;
-            std::transform(word.begin(), word.end(), word.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-            if (word == "all" || word == "any") q.colour = -1;
-            else if (word == "green") q.colour = 0;
-            else if (word == "red") q.colour = 1;
-            else if (word == "blue") q.colour = 2;
-            else if (word == "black") q.colour = 3;
+            if (value == "all") q.colour = -1;                              // (lower case, like every other word of the query)
+            else if (value == "green") q.colour = 0;
+            else if (value == "red") q.colour = 1;
+            else if (value == "blue") q.colour = 2;
+            else if (value == "black") q.colour = 3;
             else return bad("all, green, red, blue or black");
         } else if (key == "q") {
             if (value.size() > kMaxHistoryText) return bad("at most " + std::to_string(kMaxHistoryText) + " characters");
@@ -160,8 +159,23 @@ ctl::HttpResponse history_list_response(const HistoryStore& history, const Repla
     HistoryQuery q;
     std::string error;
     if (!parse_history_query(request.query, q, error)) return error_reply(400, error);
-    const HistoryPage page = history.query(q, [replays](const std::string& id) { return recording_of(replays, id); });
-    if (!page.ok) return unavailable(history, owner);
+    // The state of a recording is looked up in a hash set made once from the replay store's list (only when the query filters by it), not asked of the store for each row
+    std::unordered_map<std::string, Recording> states;
+    if (q.rec != HistoryQuery::Rec::All && replays != nullptr) {
+        const std::string extension = ReplayStore::kExtension;
+        for (const ReplayEntry& e : replays->entries()) {
+            if (e.readable) states[e.file.substr(0, e.file.size() - extension.size())] = entry_plays_here(e) ? Recording::Watch : Recording::Old;
+        }
+    }
+    const HistoryPage page = history.query(q, [&states](const std::string& id) {
+        const auto it = states.find(id);
+        return it != states.end() ? it->second : Recording::Removed;
+    }, owner ? HistoryStore::Door::Owner : HistoryStore::Door::Public);
+    if (!page.ok) {
+        if (page.fail == HistoryPage::Fail::TooHeavy) return error_reply(503, "that search is too heavy for the server: narrow it (a filter, a shorter text, a smaller offset)");
+        if (page.fail == HistoryPage::Fail::Busy) return error_reply(503, "the match history is busy: try again in a moment");
+        return unavailable(history, owner);
+    }
     JsonValue list = JsonValue::make_array();
     for (const HistoryRecord& r : page.items) {
         JsonValue e = history_record_to_json(r, false);

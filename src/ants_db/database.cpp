@@ -105,6 +105,10 @@ Error Database::close() {
     return rc == SQLITE_OK ? Error() : make_error(rc, "close", sqlite3_errstr(rc));
 }
 
+void Database::set_progress_handler(int (*fn)(void*), void* arg, int ops) {
+    if (db_ != nullptr) sqlite3_progress_handler(db_, fn != nullptr ? ops : 0, fn, arg);
+}
+
 Error Database::exec(const std::string& sql) {
     if (db_ == nullptr) return make_error(kErrNotOpen, "exec", "the database is not open");
     char* message = nullptr;
