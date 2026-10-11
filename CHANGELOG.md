@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** network protocol 18 (a v0.12.6 game cannot join); replay rules 3 and 4, older recordings stay under "Earlier versions".
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...v0127)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...c6f0d711)
 
 ## v0.12.6 - 2026-10-11 - The picture shape is chosen next to the map
 
