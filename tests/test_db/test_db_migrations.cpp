@@ -226,9 +226,9 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables and nothing else of its own") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 2 && list.front().version == 1 && list.back().version == 2);
+        DB_CHECK(list.size() == 3 && list.front().version == 1 && list.back().version == 3);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats");       // (no other data table yet)
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "history_markers,history_matches,history_seats,map_plays");       // (no other data table yet)
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -253,7 +253,7 @@ void run_migration_tests() {
         int v = 0;
         DB_CHECK(migrate(db, list.data(), 1, &v).ok() && v == 1);                              // (a server of the step before)
         DB_CHECK(rows_in(db, "meta") == 1 && !has_table(db, "history_matches"));
-        DB_CHECK(migrate(db, list, &v).ok() && v == 2 && has_table(db, "history_matches") && has_table(db, "history_seats") && has_table(db, "history_markers"));
+        DB_CHECK(migrate(db, list.data(), 2, &v).ok() && v == 2 && has_table(db, "history_matches") && has_table(db, "history_seats") && has_table(db, "history_markers"));
         DB_CHECK(rows_in(db, "meta") == 1);                                                   // (what was there is still there)
         Statement st;
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='history_matches' AND name LIKE 'history_matches_%' ORDER BY name)").ok());
@@ -279,5 +279,21 @@ void run_migration_tests() {
         DB_CHECK(db.exec("INSERT INTO history_seats VALUES ('m1', 0, 'Ann', '', 5, 5, 0, 0, 0, 0, 0, 0, 1)").ok());
         DB_CHECK(rows_in(db, "history_seats") == 1);
         DB_CHECK(db.exec("DELETE FROM history_matches WHERE id = 'm1'").ok() && rows_in(db, "history_seats") == 0);     // (the seats go with their match: foreign keys are on)
+    } DB_END;
+    DB_CASE("SV1.3 Version 3 (the play counts): a database of version 2 is brought to it with its history, the key is the map and its hash, a play is at least one, the hash is 16 digits") {
+        const auto& list = ants::server::db_migrations();
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list.data(), 2, &v).ok() && v == 2 && !has_table(db, "map_plays"));
+        DB_CHECK(db.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
+                         "('m1', 1, 'TINY.LVL', 'v1', 10, 1, NULL, '187', '1v1', 'draw', 0, 1, 1, 1, 'tiny', '[]', 1)").ok());
+        DB_CHECK(migrate(db, list, &v).ok() && v == 3 && has_table(db, "map_plays") && rows_in(db, "map_plays") == 0);
+        DB_CHECK(rows_in(db, "history_matches") == 1 && rows_in(db, "schema_version") == 3);                  // (the history is as it was)
+        DB_CHECK(db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', '0123456789abcdef', 1, 5)").ok());
+        DB_CHECK(!db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', '0123456789abcdef', 1, 6)").ok());      // (one row for each map and hash)
+        DB_CHECK(db.exec("INSERT INTO map_plays VALUES ('TINY.LVL', 'fedcba9876543210', 2, 5)").ok());       // (another file of the same name is another map)
+        DB_CHECK(!db.exec("INSERT INTO map_plays VALUES ('X.LVL', 'abc', 1, 5)").ok() && !db.exec("INSERT INTO map_plays VALUES ('X.LVL', '0123456789abcdef', 0, 5)").ok());
+        DB_CHECK(rows_in(db, "map_plays") == 2);
     } DB_END;
 }

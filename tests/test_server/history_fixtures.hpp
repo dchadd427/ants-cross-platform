@@ -1,4 +1,4 @@
-// Shared by the match history's tests that need real matches and a database (test_history_store.cpp, test_history_rooms.cpp): recordings made with the engine on the shipped TINY map, a temporary
+// Shared by the match history's tests that need real matches and a database (test_history_store.cpp, test_history_rooms.cpp, test_map_plays.cpp): recordings made with the engine on the shipped TINY map, a temporary
 // folder, a database of the server's schema in it, and the replay store, history store and feeder between them. Included once by each test program; everything is in an unnamed namespace.
 #pragma once
 
@@ -252,5 +252,121 @@ struct Played {
     return p;
 }
 
+
+// ---- a replay store and a history in a temporary folder, with the feeder between them ----------------------------------------------
+
+struct Rig {
+    TempDir temp;
+    int64_t now{kT0};                                    // the replay store's clock (a file is named for the second it was kept in)
+    fs::path replay_dir;
+    db::Database database;
+    bool db_ok;
+    ReplayStore replays;
+    HistoryStore history;
+    HistoryFeeder feeder;
+    uint32_t ms{1000};
+    int idle_asked{0};
+    uint64_t work_us{1000};                              // what the feeder's clock says that each look takes (the pace follows it)
+    uint64_t work_clock{0};
+
+    explicit Rig(const std::string& maps = maps_dir())
+        : replay_dir(temp.path / "replays"), db_ok(open_server_db(database, (temp.path / "ants.db").string())), replays(replay_config()), history(database, history_config()), feeder(history, replays, maps, [this]() { return work_clock += work_us; }) {}
+
+    ReplayConfig replay_config() {
+        ReplayConfig c;
+        c.dir = replay_dir.string();
+        c.game_version = "v0.12.0-test";
+        c.build_id = "test";
+        c.clock_s = [this]() { return now; };
+        c.min_free_bytes = 0;
+        c.settle_s = 0;
+        return c;
+    }
+    HistoryStore::Config history_config() {
+        HistoryStore::Config c;
+        c.clock_s = [this]() { return now; };
+        return c;
+    }
+    bool open() {
+        std::string why;
+        return db_ok && replays.prepare(why) && history.prepare(why);
+    }
+    // keeps a recording, `after_s` seconds after the last one; the id it has
+    std::string keep(const std::vector<uint8_t>& bytes, int64_t after_s = 10) {
+        now += after_s;
+        const ReplaySave saved = replays.save(bytes);
+        return saved.kept ? saved.file.substr(0, saved.file.size() - std::string(ReplayStore::kExtension).size()) : std::string();
+    }
+    // the next piece of work, 300 ms after the last (the pace is 250)
+    bool step(bool idle = true) {
+        ms += 300;
+        return feeder.step([&]() {
+            ++idle_asked;
+            return idle;
+        }, ms);
+    }
+    // the feeder to the end (every file that is due, then the summary line)
+    void drain(int max_steps = 40) {
+        for (int i = 0; i < max_steps; ++i) step();
+    }
+    // the replay folder was changed from outside (the arena puts a file there): a look at it
+    size_t touch_and_rescan() {
+        static int touches = 0;
+        fs::last_write_time(replay_dir, fs::file_time_type(std::chrono::hours(100000 + ++touches)));
+        return replays.rescan();
+    }
+};
+
+// ---- the control interface in front of a RoomManager ---------------------------------------------------------------------------------
+
+struct Server {
+    TempDir temp;
+    int64_t now{kT0};
+    db::Database database;
+    bool db_ok;
+    RoomManager mgr;
+    uint32_t ms{1000};
+
+    Server() : db_ok(open_server_db(database, (temp.path / "ants.db").string())), mgr(MapStore(maps_dir())) {}
+
+    bool open(bool with_history = true, HistoryStore::Config history_config = HistoryStore::Config()) {
+        ReplayConfig rc;
+        rc.dir = (temp.path / "replays").string();
+        rc.game_version = "v0.12.0-test";
+        rc.build_id = "test";
+        rc.clock_s = [this]() { return now; };
+        rc.min_free_bytes = 0;
+        rc.settle_s = 0;
+        std::string why;
+        if (!db_ok || !mgr.enable_replays(rc, false, why)) return false;
+        return !with_history || mgr.enable_history(database, why, std::move(history_config));
+    }
+    ~Server() { mgr.disable_history(); }
+    std::string keep(const std::vector<uint8_t>& bytes) {
+        now += 10;
+        const ReplaySave saved = mgr.replay_store()->save(bytes);
+        return saved.kept ? saved.file.substr(0, saved.file.size() - std::string(ReplayStore::kExtension).size()) : std::string();
+    }
+    void run_updates(int n = 30) {
+        for (int i = 0; i < n; ++i) {
+            ms += 300;
+            mgr.update(ms);
+        }
+    }
+    ctl::HttpResponse control(const char* method, const std::string& path, const std::string& query = std::string()) {
+        ctl::HttpRequest rq;
+        rq.method = method;
+        rq.path = path;
+        rq.query = query;
+        return handle_control(mgr, rq, ms);
+    }
+    ctl::HttpResponse door(const char* method, const std::string& path, const std::string& query = std::string()) const {
+        ctl::HttpRequest rq;
+        rq.method = method;
+        rq.path = path;
+        rq.query = query;
+        return handle_public_replays(mgr, rq);
+    }
+};
 
 }  // namespace

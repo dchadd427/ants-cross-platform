@@ -114,6 +114,24 @@ target_include_directories(test_history_store PRIVATE
 add_test(NAME test_history_store COMMAND test_history_store)
 set_tests_properties(test_history_store PROPERTIES COST 6)
 
+# The play counts of the maps (HistoryStore::put and map_plays, table map_plays): the 30-second and people-only rules, one play for each match however often it is kept, the key of file name and hash, the
+# count in the file, a database that stops answering, and real recordings counted by the feeder. No network, no room that runs a match
+add_executable(test_map_plays
+    test_map_plays.cpp
+)
+
+target_link_libraries(test_map_plays PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_map_plays PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_map_plays COMMAND test_map_plays)
+set_tests_properties(test_map_plays PROPERTIES COST 3)
+
 # The match history in front of real rooms (ants_server/history_store.hpp): rooms of computer players play whole matches in both game modes on a room manager with a replay store and a database; the history
 # counts them from the recordings when no room runs a match, and both doors list them. No network
 add_executable(test_history_rooms

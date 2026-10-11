@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.11 - 2026-10-11 - The server counts how often each map is played
+
+**For players:**
+- **The server counts how often each map is played** (a person took part and the match ran 30 seconds), for a later map list.
+- The original maps are counted like the community maps.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.10...v0.12.11)
+
 ## v0.12.10 - 2026-10-11 - The maps load the way the original loads them
 
 **For players:**

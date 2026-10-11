@@ -28,6 +28,9 @@ inline constexpr int64_t kHistoryVersion = 1;
 inline constexpr const char* kHistoryModeScore = "highest-score";
 inline constexpr const char* kHistoryMode187 = "187";
 
+/// The shortest match that counts as a play of its map: 30 seconds at 20 ticks a second (the same as SiteStats::kMinTicks)
+inline constexpr uint32_t kMapPlayMinTurns = 600;
+
 /// What one seat came to. All numbers are the engine's own (`replay::Outcome::result`).
 struct HistorySeat {
     uint8_t seat{0};                     // 0 Green, 1 Red, 2 Blue, 3 Black
@@ -58,6 +61,7 @@ struct HistoryRecord {
     std::string id;                      // the replay's file name without ".antsrep"
     int64_t ended_s{0};                  // seconds since 1970 UTC (the time in the file's name)
     std::string map;                     // "TREASURE.LVL"
+    uint64_t map_hash{0};                // FNV-1a 64 of the map file the match was played on (not kept in the history's tables; the key of the map's play count with `map`)
     std::string game;                    // "v0.12.0": the game that recorded the match
     uint32_t turns{0};
     bool finished{false};                // the rules ended the match (false: a player left it, or the room's time ran out)
@@ -70,6 +74,9 @@ struct HistoryRecord {
     std::vector<HistoryRow> rows;        // the results, ranked
     std::string details;                 // JSON text, "" when none: reserved for what a later version keeps about a match (events); stored and given back as it is
     uint32_t seconds() const noexcept { return turns / 20; }
+    /// Whether the match counts as one play of its map (docs/SERVER.md "The database", map_plays): a person took part (a match of computer players only does not count) and it ran at least kMapPlayMinTurns,
+    /// however it ended (a draw, a quit and a time-out count as the history records them). The site's count of online games has the same two rules (SiteStats).
+    bool counts_as_map_play() const noexcept { return !computers_only && turns >= kMapPlayMinTurns; }
     /// "draw", "cut" (a player left, or the time ran out, or the recording stops before the rules ended the match) or "decided"
     const char* result() const noexcept { return draw ? "draw" : (!finished || quitter >= 0) ? "cut" : "decided"; }
 };

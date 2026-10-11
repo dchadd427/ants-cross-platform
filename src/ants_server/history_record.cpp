@@ -107,6 +107,7 @@ HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const 
     rec.id = id;
     rec.ended_s = ended_s;
     rec.map = replay.head.map_name;
+    rec.map_hash = replay.head.map_hash;
     rec.game = replay.head.game_version;
     rec.turns = outcome.turns;
     rec.finished = outcome.match_over;
