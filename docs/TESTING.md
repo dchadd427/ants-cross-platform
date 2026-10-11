@@ -131,6 +131,7 @@ Suite 5.2 runs every `tests/scripts/test_*.py`:
 - **The web build without Docker:** `tools/web_without_docker.py` (`test_web_without_docker.py`): the replay of the Dockerfile and of `.dockerignore`, the ports and nginx's file. The tool itself is described in [`WORKFLOW.md`](WORKFLOW.md) ("Browser checks without Docker").
 - **The runners:** `run_tests.sh` (its tiers, the parallel run, the table's resources) and the python runner itself.
 - **Defaults:** the default map (the stack file, the front page and the program name the same one, Treasure).
+- **Repository hygiene:** `tools/check_hygiene.py` (`test_hygiene.py`; `--list` prints the current numbers) fails the tools tier, so CI, when the repository gets worse: a document over 100 KB, a document README.md does not reach by links, a private planning name or a commit trailer in a public file, a test file over 2,500 lines or a production file over 1,500, more `ASSERT_TRUE` definitions than today's 45, a `.cpp` that no `CMakeLists.txt` names. Today's oversize documents and files are a ratchet table in the tool: a ceiling never grows and is lowered when the page or file shrinks (the check says so).
 - **Release, deploy and CI:** the release, mutation and deploy tools (`tools/release.py`, `tools/mutate.py`, `tools/deploy_filter.py`, `tools/deploy_wait.py`, `tools/deploy_webhook.sh`), the staging stack and its site label, and the CI workflow (the required job names, the deploy job's secrets and its wait).
 
 ## Standalone E2E Test Runner
