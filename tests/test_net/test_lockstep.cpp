@@ -923,7 +923,7 @@ struct LoneSession {
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 18);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
+        ASSERT_EQ(kProtocolVersion, 19);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::Remove));
@@ -1476,7 +1476,7 @@ void run_protocol_tests() {
 
     TEST_CASE("N2.40 Protocol 10: Keys In Hello And Welcome, Three More Rejections, Presence (With The Resume Countdown), Vote, CatchUp, TurnBatch And CaughtUp: Numbers, Layouts Byte By Byte, Every Truncation, Every Range Rule, The Batch Encoders Agree") {
         // ---- the numbers ----
-        ASSERT_EQ(kProtocolVersion, 18);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 17: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, and 16 the Hello, the Welcome's flags, the Room and added the PlanMsg, and 17 the mode byte at the end of the Room, the Start and the PlanMsg, which this test reads where it says so)
+        ASSERT_EQ(kProtocolVersion, 19);                                 // (the layouts of protocol 10 below are still the layouts of protocols 11 to 17: 11 and 13 changed the StartRequest (13 the Start too), 12 no message, 14 added the SeatMove; 15 changed the Hello, the Room and the Start, and 16 the Hello, the Welcome's flags, the Room and added the PlanMsg, and 17 the mode byte at the end of the Room, the Start and the PlanMsg, which this test reads where it says so)
         ASSERT_TRUE(static_cast<int>(MsgType::Presence) == 26 && static_cast<int>(MsgType::Vote) == 27 && static_cast<int>(MsgType::CatchUp) == 28 &&
                     static_cast<int>(MsgType::TurnBatch) == 29 && static_cast<int>(MsgType::CaughtUp) == 30 && static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Plan) == 32 && static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Last) == 34);
         ASSERT_TRUE(static_cast<int>(RejectReason::Dropped) == 7 && static_cast<int>(RejectReason::RejoinFailed) == 8 && static_cast<int>(RejectReason::Superseded) == 9);
@@ -9229,7 +9229,7 @@ void run_reconnect_session_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 18);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 19);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -9844,7 +9844,7 @@ StartMsg start_of_hold(const HoldMatch& m) {
 
 void run_protocol13_tests() {
     TEST_CASE("N2.100 Protocol 13, The Messages: StartRequest Is The Type, A Level For Each Seat (0 .. 3) And Two Team Bytes (None Both, Or Two Different Seats 0 .. 3), Seven Bytes And Nothing Else; Start Ends With The Same Two Bytes And Its Decoder Takes Only Teams That Its Own Roster Can Make; The Notice Fits A Line Of Chat") {
-        ASSERT_EQ(kProtocolVersion, 18);                                                       // (the messages of protocol 13 are the messages of protocols 14 to 17 too: 14 added the SeatMove, N2.101; 15 the platform and the create block, N2.102 - N2.104; 16 the lobby room, N2.105 - N2.107; 17 the game mode, N2.112)
+        ASSERT_EQ(kProtocolVersion, 19);                                                       // (the messages of protocol 13 are the messages of protocols 14 to 17 too: 14 added the SeatMove, N2.101; 15 the platform and the create block, N2.102 - N2.104; 16 the lobby room, N2.105 - N2.107; 17 the game mode, N2.112)
         ASSERT_TRUE(kNoTeam == 255 && kFillLevelLast == 3);
         StartRequestMsg out;
         // the layout, byte by byte: the type, the levels of seats 0 to 3, team_a, team_b
@@ -10030,7 +10030,7 @@ void run_protocol13_tests() {
     } TEST_END();
 
     TEST_CASE("N2.101 Protocol 14 And 15, The Message: SeatMove Is The Type 31, Two Different Seats 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Seven Bytes And Nothing Else; Every Other Pair Of Seats, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, The Layout Of Protocol 14 Is Refused, And No Other Message Is Taken For It; The Guard Is The Seating Hash: The State And The Name Of Each Seat, Nothing Else Of The Room Message") {
-        ASSERT_EQ(kProtocolVersion, 18);
+        ASSERT_EQ(kProtocolVersion, 19);
         ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 34);
         // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes, the guard
         ASSERT_TRUE(encode(SeatMoveMsg{0, 1, 0x04030201u}) == (std::vector<uint8_t>{31, 0, 1, 1, 2, 3, 4}));
@@ -10181,7 +10181,7 @@ void run_protocol15_tests() {
         return key;
     };
     const auto hello_prefix = [&](const std::string& room) {
-        std::vector<uint8_t> bytes = {1, 18, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
+        std::vector<uint8_t> bytes = {1, 19, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
         bytes.insert(bytes.end(), room.begin(), room.end());
         const std::vector<uint8_t> token = {3, 't', 'o', 'k'};
         bytes.insert(bytes.end(), token.begin(), token.end());
@@ -10205,7 +10205,7 @@ void run_protocol15_tests() {
     };
 
     TEST_CASE("N2.102 Protocol 15 And 16, The Hello: The Platform Byte Follows The Turns, A Create Block (A Map Name, The Seats, The Two Team Bytes And The Rule Flags) Ends The Message When The Hello Makes A Room; The Decoder Reads The Block Strictly, Refuses Every Value An Honest Client Does Not Send, Every Truncation Of The Block And Every Extra Byte; The Layout Of Protocol 14 Is No Hello Of This Protocol But Its Version And Name Are Read") {
-        ASSERT_EQ(kProtocolVersion, 18);
+        ASSERT_EQ(kProtocolVersion, 19);
         ASSERT_TRUE(kCreateLeaderStarts == 1 && kRoomLeaderStarts == kCreateLeaderStarts && kNoTeam == 255);
         // the layout, byte by byte, without a block: the platform byte and the client kind are the last two (Linux in a browser: 3 + 0x10; a game)
         {
@@ -10215,7 +10215,7 @@ void run_protocol15_tests() {
             want.push_back(0);
             ASSERT_TRUE(encode(h) == want);
             HelloMsg back;
-            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == 18 && back.client_kind == kClientGame);
+            ASSERT_TRUE(decode(want, back) && back.platform == 0x13 && !back.create && back.room == "k7m2xq" && back.name == "Ann" && back.have_turns == 5 && back.version == 19 && back.client_kind == kClientGame);
             ASSERT_TRUE(encode(back) == want);
         }
         // with a block: the map's name, the seats, team_a, team_b, the flags
@@ -10594,7 +10594,7 @@ void run_protocol15_tests() {
 
 void run_protocol16_tests() {
     TEST_CASE("N2.105 Protocol 16, The Hello And The Welcome: The Client Kind (A Game Or A Lobby Page) Follows The Platform Byte And Leads The Create Block; The Lobby Flag Of The Block Needs A Leader Who Starts And All Four Colours; The Welcome Says When Its Hello Made The Room, And Only For A Seat That Has A Key; Every Other Value, Truncation And Extra Byte Is Refused, And The Layout Of Protocol 15 Is No Hello Of This Protocol") {
-        ASSERT_EQ(kProtocolVersion, 18);
+        ASSERT_EQ(kProtocolVersion, 19);
         ASSERT_TRUE(kClientGame == 0 && kClientPage == 1 && kCreateLeaderStarts == 1 && kCreateLobby == 2 && kWelcomeRejoin == 1 && kWelcomeCreated == 2);
         // a lobby page's Hello that makes a lobby room, byte by byte: the platform byte, the client kind, then the block (map, seats, team_a, team_b, flags)
         HelloMsg h;
@@ -10606,7 +10606,7 @@ void run_protocol16_tests() {
         block.map_name = "TREASURE.LVL";
         block.flags = static_cast<uint8_t>(kCreateLeaderStarts | kCreateLobby);
         h.create = block;
-        std::vector<uint8_t> want = {1, 18, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
+        std::vector<uint8_t> want = {1, 19, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
         want.insert(want.end(), size_t{16 + 4}, uint8_t{0});                                           // the key and the turns: a new player has neither
         want.push_back(static_cast<uint8_t>(kOsMacos | kPlatformBrowser));
         want.push_back(1);                                                                              // the client kind: a lobby page
@@ -11292,7 +11292,7 @@ void run_protocol16_tests() {
 
 void run_protocol17_tests() {
     TEST_CASE("N2.112 Protocol 17, The Game Mode: The Start, The Room And The Plan End With One Byte, 0 (The Original's Highest Score) Or 1 (187); Every Byte Above sim::kLastGameMode Is Refused In Each Of Them (Never Played As Another Mode), So Are The Layouts Of Protocol 16 (No Byte), A Byte More And Every Truncation; The Mode Is Not Part Of The Seating Hash; The Words Of The Modes Parse Exactly") {
-        ASSERT_TRUE(kProtocolVersion == 18 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
+        ASSERT_TRUE(kProtocolVersion == 19 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
         ASSERT_TRUE(static_cast<uint8_t>(sim::GameMode::HighestScore) == 0 && static_cast<uint8_t>(sim::GameMode::Kills187) == 1);
         // the Start: the last byte, after the platforms of the four seats
         {

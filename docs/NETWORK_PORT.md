@@ -908,9 +908,9 @@ A request (2026-10-09): the game gets a second set of rules, **187** ([`GAMEPLAY
 
 * **Not part of it.** The computer players and the bot arena stay as they are: there is no rule against bots in mode 187, and the arena plays the original's game.
 
-## Protocol 18: the bombs of a map file (v0.12.9)
+## Protocol 18 and 19: the level loader
 
-Nothing on the wire changed; the way a level is read did (the layer-2 ids 129 .. 132 became bombs: [report](reverse_engineering/map_file_bombs.md)), so a Hello of 17 is refused and the replay rules numbers are 3 and 4 ([REPLAYS.md](REPLAYS.md#the-file)).
+Nothing on the wire changed, the way a level is read did: 18 made the ids 129 .. 132 bombs ([report](reverse_engineering/map_file_bombs.md)), 19 made the loader the original's ([report](reverse_engineering/map_loader_fidelity.md)). A Hello of 17 or 18 is refused; replay rules 5 and 6 ([REPLAYS.md](REPLAYS.md#the-file)).
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
