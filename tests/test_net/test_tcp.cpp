@@ -19,13 +19,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #ifndef _WIN32
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants;

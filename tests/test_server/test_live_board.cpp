@@ -23,13 +23,13 @@
 #include <string>
 #include <system_error>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
 #define ANTS_GETPID _getpid
 #else
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #define ANTS_GETPID getpid
 #endif
 

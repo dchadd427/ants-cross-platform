@@ -35,13 +35,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
 #define getpid _getpid
 #else
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants;

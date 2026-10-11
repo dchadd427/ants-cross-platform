@@ -46,6 +46,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -53,7 +54,6 @@
 #else
 #include <sys/stat.h>
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants;

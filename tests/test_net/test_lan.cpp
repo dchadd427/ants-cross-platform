@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -24,7 +25,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants::net;

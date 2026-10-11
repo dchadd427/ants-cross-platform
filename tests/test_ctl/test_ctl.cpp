@@ -27,6 +27,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -42,7 +43,6 @@ static constexpr sock_t kBadSock = INVALID_SOCKET;
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 using sock_t = int;
 using iolen_t = size_t;
 static constexpr sock_t kBadSock = -1;

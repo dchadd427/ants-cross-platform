@@ -35,6 +35,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -46,7 +47,6 @@
 #include <process.h>
 #else
 #include <unistd.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants;

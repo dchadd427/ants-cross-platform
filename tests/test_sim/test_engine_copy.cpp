@@ -36,12 +36,12 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "../common/test_assert.hpp"
 
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
 #elif defined(__GLIBC__)
 #include <malloc.h>
-#include "../common/test_assert.hpp"
 #endif
 
 using namespace ants::sim;
