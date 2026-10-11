@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.7 - 2026-10-11 - The match server keeps a history of every match
+
+**For players:**
+- No change to play or to any screen. The match server now keeps what every online match came to (winner, scores or kills, losses, names) for good, beyond the 30 days a recording is kept; the highest score wins, a tie goes to the kills, equal kills is a draw (in 187: the last side standing, then the kills).
+- The list is at `/history` and one match at `/history/<id>`; no page uses them yet.
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...v01207)
+
 ## v0.12.6 - 2026-10-11 - The picture shape is chosen next to the map
 
 **For players:**
