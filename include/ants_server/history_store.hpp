@@ -74,8 +74,10 @@ public:
     /// Longest `search` text of a match (the map's name and the shown names of its seats): the column of the list's q
     static constexpr size_t kMaxSearchBytes = 512;
 
-    /// A list is asked for by the public door (a visitor: a small time box and a share of the server's budget) or by the owner (a larger box, no budget)
-    enum class Door : uint8_t { Public, Owner };
+    /// A list is asked for by the public door (a visitor: a small time box and a share of the server's budget), by the public door with NO query at all (PublicPlain: the page's own list, a fraction of a
+    /// millisecond and kept by the site's nginx for five seconds: it has the visitor's box but is not held back by the budget, so that a flood of heavy searches cannot lock the plain list out) or by the owner
+    /// (a larger box, no budget)
+    enum class Door : uint8_t { Public, PublicPlain, Owner };
     /// The time box of one list: the database stops a query that runs longer (the answer is TooHeavy). A query runs on the server's main thread, so a visitor's query is boxed small.
     static constexpr uint32_t kPublicBoxMs = 15;
     static constexpr uint32_t kOwnerBoxMs = 100;

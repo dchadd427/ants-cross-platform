@@ -157,6 +157,12 @@ struct TickClock {
         ++calls;
         return base + calls * step_us;
     }
+    // Changes the step WITHOUT moving time (the clock never goes back: what has passed is added to the base first)
+    void set_step(uint64_t step) {
+        base += calls * step_us;
+        calls = 0;
+        step_us = step;
+    }
 };
 
 // ---- a database with the history store on it -------------------------------------------------------------------------------------------
@@ -637,17 +643,17 @@ int main() {
         ASSERT_TRUE(store.prepare(why) && store.count() == 3000);
         HistoryQuery scan;
         scan.text = "zzzz";                                                     // matches nothing: the whole table is read to know it
-        clock.step_us = 0;                                                      // (time stands still: nothing is too long)
+        clock.set_step(0);                                                      // (time stands still: nothing is too long)
         HistoryPage page = store.query(scan, kNoRecordings);
         ASSERT_TRUE(page.ok && page.count == 0 && page.fail == HistoryPage::Fail::None);
-        clock.step_us = 1000;                                                   // a millisecond at every look: the scan has hundreds of looks
+        clock.set_step(1000);                                                   // a millisecond at every look: the scan has hundreds of looks
         page = store.query(scan, kNoRecordings);
         ASSERT_FALSE(page.ok);
         ASSERT_TRUE(page.fail == HistoryPage::Fail::TooHeavy && page.items.empty());
         ASSERT_TRUE(store.available() && store.unavailable_reason().empty());   // (the database is fine: a heavy query is no failure of it)
         ASSERT_TRUE(store.take_notes().size() == 1);                           // (the line of prepare() and nothing else: no failure was logged)
         // 0.1 ms a look: the scan takes more than the visitor's 15 ms and less than the owner's 100 ms
-        clock.step_us = 100;
+        clock.set_step(100);
         ASSERT_TRUE(store.query(scan, kNoRecordings, HistoryStore::Door::Public).fail == HistoryPage::Fail::TooHeavy);
         page = store.query(scan, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == 0);
@@ -655,7 +661,7 @@ int main() {
         page = store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Public);
         ASSERT_TRUE(page.ok || page.fail == HistoryPage::Fail::Busy);
         // the handler is taken off after a query: a statement of the database outside of it is not boxed
-        clock.step_us = 1000000;
+        clock.set_step(1000000);
         ASSERT_EQ(number_from(d.database, "SELECT count(*) FROM history_matches WHERE search LIKE '%zzzz%'"), int64_t{0});
     } TEST_END();
 
@@ -670,7 +676,7 @@ int main() {
         ASSERT_TRUE(store.prepare(why));
         HistoryQuery scan;
         scan.text = "zzzz";
-        clock.step_us = 1000;
+        clock.set_step(1000);
         int heavy = 0;
         HistoryPage page;
         for (; heavy < 40; ++heavy) {                                             // every one costs its box (15 ms): the 100 ms of the burst last about seven
@@ -686,13 +692,21 @@ int main() {
         ASSERT_TRUE(store.available());
         page = store.query(scan, kNoRecordings, HistoryStore::Door::Owner);       // the owner's door has no budget: its own box (100 ms) only
         ASSERT_TRUE(page.fail == HistoryPage::Fail::TooHeavy);
-        clock.step_us = 0;
+        clock.set_step(10);
+        page = store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::PublicPlain);       // the plain list has no part in the budget: it is answered while the budget is empty (and still has the box)
+        ASSERT_TRUE(page.ok && page.items.size() == 50);
+        clock.set_step(1000);
+        ASSERT_TRUE(store.query(scan, kNoRecordings, HistoryStore::Door::PublicPlain).fail == HistoryPage::Fail::TooHeavy);       // (it keeps the box)
+        while (store.query(scan, kNoRecordings).fail != HistoryPage::Fail::Busy) {}
+        clock.set_step(10);
+        ASSERT_TRUE(store.query(HistoryQuery(), kNoRecordings).fail == HistoryPage::Fail::Busy);    // (the same list asked as a searched one is held back)
+        clock.set_step(0);
         clock.base += 100000;                                                      // 0.1 s: five milliseconds earned
         ASSERT_TRUE(store.query(scan, kNoRecordings).fail == HistoryPage::Fail::None || store.query(scan, kNoRecordings).fail == HistoryPage::Fail::Busy);
         clock.base += 3000000;                                                     // three seconds: the burst is full again
         page = store.query(scan, kNoRecordings);
         ASSERT_TRUE(page.ok && page.count == 0);
-        clock.step_us = 1000;                                                      // and it can be used up again
+        clock.set_step(1000);                                                      // and it can be used up again
         int again = 0;
         while (again < 40 && store.query(scan, kNoRecordings).fail != HistoryPage::Fail::Busy) ++again;
         ASSERT_TRUE(again >= 5 && again <= 9);
@@ -741,6 +755,31 @@ int main() {
         // the plan of the seats statement: one search of the key for a page, not one for each record
         const std::string plan = plan_of(d.database, "SELECT match_id, seat FROM history_seats WHERE match_id IN (?, ?, ?) ORDER BY match_id, seat");
         ASSERT_TRUE(contains(plan, "PRIMARY KEY") || contains(plan, "SEARCH"));
+    } TEST_END();
+
+    TEST_CASE("HS2.11 The budget earns time in whole milliseconds and keeps the rest: calls spaced less than a millisecond apart do not lose what they should have earned") {
+        Db d;
+        ASSERT_TRUE(d.ok && fill_synthetic(d.database, 3000));
+        TickClock clock;
+        HistoryStore::Config config;
+        config.clock_us = [&clock]() { return clock(); };
+        HistoryStore store(d.database, config);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        HistoryQuery scan;
+        scan.text = "zzzz";
+        clock.set_step(1000);
+        while (store.query(scan, kNoRecordings).fail != HistoryPage::Fail::Busy) {}              // used up
+        // 400 us before each look: truncating at every look would earn nothing, ever; kept, the 20 ms of one second come
+        clock.set_step(0);
+        int busy_looks = 0;
+        for (int k = 0; k < 2500; ++k) {                                                        // 2500 looks of 400 us = one second of the clock
+            clock.base += 400;
+            if (store.query(HistoryQuery(), kNoRecordings).fail != HistoryPage::Fail::Busy) break;
+            ++busy_looks;
+        }
+        ASSERT_TRUE(busy_looks > 0 && busy_looks < 2500);                                       // (earned before the second was over: a query was let through)
+        ASSERT_TRUE(busy_looks > 100);                                                          // ... but not at once: the budget was empty, a few milliseconds of it come back at 5 %
     } TEST_END();
 
     // ---- markers ----------------------------------------------------------------------------------------------------------------------
@@ -1080,6 +1119,9 @@ int main() {
         ASSERT_EQ(parse_text(s.door("GET", "/history", "mode=187").body).get("count").as_int_or(-1), int64_t{0});
         ASSERT_EQ(parse_text(s.door("GET", "/history", "mode=highest-score").body).get("count").as_int_or(-1), int64_t{2});
         ASSERT_EQ(parse_text(s.door("GET", "/history", "colour=blue").body).get("count").as_int_or(-1), int64_t{1});
+        ASSERT_EQ(parse_text(s.door("GET", "/history", "rec=watch").body).get("count").as_int_or(-1), int64_t{2});         // (the state of a recording, made when the query asks for it)
+        ASSERT_EQ(parse_text(s.door("GET", "/history", "rec=removed").body).get("count").as_int_or(-1), int64_t{0});
+        ASSERT_EQ(parse_text(s.control("GET", "/history", "rec=old").body).get("count").as_int_or(-1), int64_t{0});
     } TEST_END();
 
     TEST_CASE("HS6.2 A query that is not understood is a 400 that names the key (a word that is not one, a key twice, a number out of range, an escape that is not one, a character no name has, a text too long, a key that does not exist); never a guess") {
@@ -1237,20 +1279,20 @@ int main() {
         ASSERT_TRUE(fill_synthetic(s.database, 3000));
         std::string why;
         ASSERT_TRUE(s.mgr.history_store()->prepare(why));                          // (the count of the rows made outside the store)
-        clock.step_us = 1000;
+        clock.set_step(1000);
         const ctl::HttpResponse door = s.door("GET", "/history", "q=zzzz");
         ASSERT_EQ(door.status, 503);
         ASSERT_EQ(parse_text(door.body).get("error").str(), std::string("that search is too heavy for the server: narrow it (a filter, a shorter text, a smaller offset)"));
         const ctl::HttpResponse owner = s.control("GET", "/history", "q=zzzz");
         ASSERT_EQ(owner.status, 503);                                              // (a millisecond a look is too much even for the owner's 100 ms)
         ASSERT_TRUE(contains(parse_text(owner.body).get("error").str(), "too heavy"));
-        clock.step_us = 100;
+        clock.set_step(100);
         ASSERT_EQ(s.door("GET", "/history", "q=zzzz").status, 503);
         const ctl::HttpResponse ok = s.control("GET", "/history", "q=zzzz");
         ASSERT_TRUE(ok.status == 200 && parse_text(ok.body).get("count").as_int_or(-1) == 0);
         ASSERT_TRUE(s.mgr.history_store()->available());
         // the budget: the heavy searches of the door use it up; then "busy", at once, and the owner's door is not affected
-        clock.step_us = 1000;
+        clock.set_step(1000);
         int refused = 0;
         std::string last;
         for (int k = 0; k < 40 && refused == 0; ++k) {
@@ -1260,8 +1302,11 @@ int main() {
         }
         ASSERT_TRUE(refused > 0 && refused < 12);
         ASSERT_EQ(last, std::string("the match history is busy: try again in a moment"));
-        ASSERT_EQ(s.door("GET", "/history").status, 503);                          // (any list: the budget is the door's, not the query's)
-        clock.step_us = 0;
+        ASSERT_EQ(s.door("GET", "/history", "limit=5").status, 503);               // (any list with a query: the budget is the door's)
+        clock.set_step(10);
+        const ctl::HttpResponse plain = s.door("GET", "/history");                 // ... but the plain list, which nginx keeps for five seconds, is not held back by it
+        ASSERT_TRUE(plain.status == 200 && parse_text(plain.body).get("count").as_int_or(-1) == 3000);
+        clock.set_step(0);
         ASSERT_EQ(s.control("GET", "/history").status, 200);
         ASSERT_EQ(s.control("GET", "/stats").status, 200);
         ASSERT_EQ(s.door("GET", "/history/nonsense").status, 404);                 // (a match by its id is no list: no budget)

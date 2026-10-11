@@ -445,7 +445,7 @@ bool HistoryStore::known_ids(std::unordered_set<std::string>& out) const {
     out.clear();
     if (!up_) return false;
     db::Statement st;
-    db::Error e = db_.prepare(st, "SELECT id FROM history_matches UNION SELECT id FROM history_markers");
+    db::Error e = db_.prepare(st, "SELECT id FROM history_matches UNION ALL SELECT id FROM history_markers");
     while (e.ok()) {
         const db::Statement::Step step = st.step();
         if (step == db::Statement::Step::Failed) e = st.error();
@@ -491,13 +491,14 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
     const uint64_t started = now_us();
     if (door == Door::Public) {
         if (budget_armed_) {
-            const uint64_t gone = started - budget_at_us_;
-            budget_us_ = std::min<int64_t>(static_cast<int64_t>(kBudgetBurstMs) * 1000, budget_us_ + static_cast<int64_t>(gone / 1000u * kBudgetPerSecondMs));
+            const uint64_t whole_ms = (started - budget_at_us_) / 1000u;                                  // (whole milliseconds only: the rest stays for the next look, it is not lost)
+            budget_us_ = std::min<int64_t>(static_cast<int64_t>(kBudgetBurstMs) * 1000, budget_us_ + static_cast<int64_t>(whole_ms * kBudgetPerSecondMs));
+            budget_at_us_ += whole_ms * 1000u;
         } else {
             budget_armed_ = true;
             budget_us_ = static_cast<int64_t>(kBudgetBurstMs) * 1000;
+            budget_at_us_ = started;
         }
-        budget_at_us_ = started;
         if (budget_us_ <= 0) {
             page.ok = false;
             page.fail = HistoryPage::Fail::Busy;
@@ -505,14 +506,14 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
         }
     }
     // The time box of this one query (the count, the page, the seats): the database stops it when the clock passes the deadline
-    deadline_us_ = started + static_cast<uint64_t>(door == Door::Public ? kPublicBoxMs : kOwnerBoxMs) * 1000u;
+    deadline_us_ = started + static_cast<uint64_t>(door == Door::Owner ? kOwnerBoxMs : kPublicBoxMs) * 1000u;
     db_.set_progress_handler(&HistoryStore::time_box_expired, const_cast<HistoryStore*>(this), kProgressOps);
     struct Release {
         db::Database& d;
         ~Release() { d.set_progress_handler(nullptr, nullptr, 0); }
     } release{db_};
     const auto finish = [&](const db::Error& e) {
-        if (door == Door::Public) budget_us_ -= static_cast<int64_t>(now_us() - started);
+        if (door == Door::Public) budget_us_ -= static_cast<int64_t>(now_us() - started);       // (the plain list is not paid for: it is not held back, and it costs next to nothing)
         if (e.ok()) return;
         page = HistoryPage();
         page.ok = false;

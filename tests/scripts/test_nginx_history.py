@@ -211,7 +211,7 @@ class TheAllowancesAndTheCache(unittest.TestCase):
             self.assertNotRegex(block, r"zone=ants_history")
 
     def test_the_list_without_a_query_and_each_list_with_one_are_cached_for_five_seconds_each_in_its_own_cache(self):
-        for directive in ("proxy_cache $history_cache;", "proxy_cache_valid 200 5s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;", "proxy_cache_use_stale updating error timeout;"):
+        for directive in ("proxy_cache $history_cache;", "proxy_cache_valid 200 5s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;", "proxy_cache_use_stale updating error timeout http_503;"):
             self.assertIn(directive, LIST, directive)
         self.assertNotRegex(LIST, r"proxy_(no_cache|cache_bypass)")                          # (a list with a query is kept too, under its own key)
         self.assertEqual(len(re.findall(r"\bproxy_cache_valid\b", LIST)), 1)                  # (only a 200: the 404 of a server with no history, and the 503 of a query that is too heavy, are asked each time)

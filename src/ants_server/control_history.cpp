@@ -159,18 +159,24 @@ ctl::HttpResponse history_list_response(const HistoryStore& history, const Repla
     HistoryQuery q;
     std::string error;
     if (!parse_history_query(request.query, q, error)) return error_reply(400, error);
-    // The state of a recording is looked up in a hash set made once from the replay store's list (only when the query filters by it), not asked of the store for each row
+    // The state of a recording is looked up in a hash set made from the replay store's list, ONCE and only when the query is far enough to ask (not for a query the budget refuses, and inside the time box)
     std::unordered_map<std::string, Recording> states;
-    if (q.rec != HistoryQuery::Rec::All && replays != nullptr) {
-        const std::string extension = ReplayStore::kExtension;
-        for (const ReplayEntry& e : replays->entries()) {
-            if (e.readable) states[e.file.substr(0, e.file.size() - extension.size())] = entry_plays_here(e) ? Recording::Watch : Recording::Old;
+    bool states_made = false;
+    const auto state_of = [&](const std::string& id) {
+        if (!states_made) {
+            states_made = true;
+            const std::string extension = ReplayStore::kExtension;
+            if (replays != nullptr) {
+                for (const ReplayEntry& e : replays->entries()) {
+                    if (e.readable) states[e.file.substr(0, e.file.size() - extension.size())] = entry_plays_here(e) ? Recording::Watch : Recording::Old;
+                }
+            }
         }
-    }
-    const HistoryPage page = history.query(q, [&states](const std::string& id) {
         const auto it = states.find(id);
         return it != states.end() ? it->second : Recording::Removed;
-    }, owner ? HistoryStore::Door::Owner : HistoryStore::Door::Public);
+    };
+    const HistoryStore::Door door = owner ? HistoryStore::Door::Owner : request.query.empty() ? HistoryStore::Door::PublicPlain : HistoryStore::Door::Public;
+    const HistoryPage page = history.query(q, state_of, door);
     if (!page.ok) {
         if (page.fail == HistoryPage::Fail::TooHeavy) return error_reply(503, "that search is too heavy for the server: narrow it (a filter, a shorter text, a smaller offset)");
         if (page.fail == HistoryPage::Fail::Busy) return error_reply(503, "the match history is busy: try again in a moment");
