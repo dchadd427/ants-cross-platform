@@ -179,11 +179,10 @@ class TheWindowedMargin(PageCase):
         self.assertIn("In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch)", self.page)
 
     def test_the_browser_page_and_the_notes_say_what_the_margin_is(self):
-        notes = read(os.path.join(REPO, "docs", "NETWORK_PORT.md"))
-        self.assertIn("The margin of a windowed page", notes)
-        self.assertIn("ANTS_EDGE_MARGIN", notes)
-        self.assertIn("test_web_edge.sh --only margin", notes)
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
+        self.assertIn("The margin of a windowed page", page)
+        self.assertIn("ANTS_EDGE_MARGIN", page)
+        self.assertIn("test_web_edge.sh --only margin", page)
         self.assertIn("up to 96 CSS pixels (about an inch) beyond the box", page)
 
 

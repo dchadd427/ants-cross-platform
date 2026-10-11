@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/NETWORK_PORT.md, "The front page").
+"""The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/PLAY_IN_BROWSER.md, "The front page").
 
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or

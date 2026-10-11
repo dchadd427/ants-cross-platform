@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The pointer of a FULLSCREEN game page in a REAL browser (opt-in; see tests/scripts/test_web_edge.sh and docs/NETWORK_PORT.md, "The pointer in fullscreen").
+"""The pointer of a FULLSCREEN game page in a REAL browser (opt-in; see tests/scripts/test_web_edge.sh and docs/PLAY_IN_BROWSER.md, "The pointer in fullscreen").
 
 Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it on a port; the game server is not needed), a Chromium-based browser and Python 3; nothing
 else (the DevTools protocol is spoken with the client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own profile, its own
