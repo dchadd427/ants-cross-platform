@@ -26,10 +26,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.7 - 2026-10-11 - The bombs of the community maps work
 
 **For players:**
-- **The bombs of the community maps work.** 208 of the players' maps carry the original game's own bombs, laid out in the map file (`Bombz Away` is a floor of them). The remake used to treat them as invisible rocks. Now they are shown on the field in their colours (red, green, black, blue), and the first ant that steps on one sets it off, as in the original: 2 hit points and a throw of 4 tiles. Each bomb has an owner team named in the map file (most maps name the first player): that team's ants and its ally walk around it, as around a bomb a bomber planted, and every other ant walks onto it. A bomb on a cell the map marks solid leaves the cell open when it goes off.
-- Maps without such bombs (the six originals and most of the others) play exactly as before.
+- **The bombs of 208 community maps work.** The original's bombs, laid out in the map file (`Bombz Away` is a floor of them), were invisible rocks. Now they show in their colours and the first ant that steps on one sets it off (2 hit points, a throw of 4 tiles). Each bomb has an owner team named in the file (mostly the first player): that team's ants and its ally walk around it. Other maps play as before.
 
-**Rules / network:** the way a level is read changed, so network protocol 18: a v0.12.6 game cannot join a v0.12.7 room. Replays: the rules numbers are 3 (the original's game) and 4 (game mode 187); recordings made before this update stay in the list under "Earlier versions".
+**Rules / network:** network protocol 18 (a v0.12.6 game cannot join); replay rules 3 and 4, older recordings stay under "Earlier versions".
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...v0127)
 
