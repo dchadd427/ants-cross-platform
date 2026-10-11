@@ -3,12 +3,11 @@
 
   - the pure logic on a made-up folder with a fake renderer (no game): the picture's name, the hash bookkeeping of previews.json, resumability (a second run draws nothing, an
     interrupted run goes on), a changed map is drawn again, a missing picture is drawn again, a map that is gone loses its picture, --force, a damaged index, parallel runs;
-  - the folder of the repository: previews.json lists exactly the maps of maps.json with their hashes, and every picture exists and is a PNG of the expected size.
+  - the folder of the repository: previews.json lists exactly the maps of maps.json with their hashes, and every picture exists and is a WebP of the expected size (read from its header: the folder checks need no Pillow).
 """
 import json
 import os
 import shutil
-import struct
 import sys
 import tempfile
 import unittest
@@ -17,7 +16,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import map_previews  # noqa: E402
 try:
-    from PIL import Image  # noqa: E402  (the runners of CI have no Pillow: the tests that draw or decode a picture are skipped there, the folder checks read the PNG header themselves)
+    from PIL import Image  # noqa: E402  (the runners of CI have no Pillow: the tests that draw or decode a picture are skipped there, the folder checks read the WebP header themselves)
 except ImportError:
     Image = None
 
@@ -36,7 +35,7 @@ class FakeRenderer:
             raise RuntimeError("the game did not make its screenshot")
         with open(path, "rb") as f:
             seed = sum(f.read()) % 256
-        return Image.new("RGB", (map_previews.SOURCE, map_previews.SOURCE), (seed, 255 - seed, 7))
+        return Image.new("RGB", (map_previews.SIZE, map_previews.SIZE), (seed, 255 - seed, 7))
 
 
 @unittest.skipUnless(Image, "Pillow is needed")
@@ -62,9 +61,9 @@ class Logic(unittest.TestCase):
         return json.load(open(os.path.join(self.folder, "previews.json"), encoding="utf-8"))
 
     def test_names(self):
-        self.assertEqual(map_previews.picture_name("Alpha.lvl"), "Alpha.png")
-        self.assertEqual(map_previews.picture_name("Beta !.LVL"), "Beta !.png")
-        self.assertEqual(map_previews.picture_name("a.b.lvl"), "a.b.png")
+        self.assertEqual(map_previews.picture_name("Alpha.lvl"), "Alpha.webp")
+        self.assertEqual(map_previews.picture_name("Beta !.LVL"), "Beta !.webp")
+        self.assertEqual(map_previews.picture_name("a.b.lvl"), "a.b.webp")
         self.assertEqual(map_previews.level_files(self.folder), ["Alpha.lvl", "Beta !.LVL"])
 
     def test_the_hash_is_the_one_of_maps_json(self):
@@ -75,12 +74,12 @@ class Logic(unittest.TestCase):
         drawn, skipped, removed = self.run_update(fake)
         self.assertEqual((drawn, skipped, removed), (["Alpha.lvl", "Beta !.LVL"], [], []))
         self.assertEqual(self.index(), {
-            "Alpha.lvl": {"hash": map_previews.fnv1a64(b"aaa"), "picture": "Alpha.png"},
-            "Beta !.LVL": {"hash": map_previews.fnv1a64(b"bbbb"), "picture": "Beta !.png"}})
-        for name in ("Alpha.png", "Beta !.png"):
+            "Alpha.lvl": {"hash": map_previews.fnv1a64(b"aaa"), "picture": "Alpha.webp", "encoding": map_previews.ENCODING},
+            "Beta !.LVL": {"hash": map_previews.fnv1a64(b"bbbb"), "picture": "Beta !.webp", "encoding": map_previews.ENCODING}})
+        for name in ("Alpha.webp", "Beta !.webp"):
             picture = Image.open(os.path.join(self.out, name))
-            self.assertEqual((picture.format, picture.size), ("PNG", (map_previews.SIZE, map_previews.SIZE)))
-            self.assertLessEqual(len(picture.getpalette()) // 3, 256)
+            self.assertEqual((picture.format, picture.size), ("WEBP", (map_previews.SIZE, map_previews.SIZE)))
+            self.assertEqual(map_previews.webp_size(os.path.join(self.out, name)), (map_previews.SIZE, map_previews.SIZE))
 
     def test_second_run_draws_nothing(self):
         self.run_update(FakeRenderer())
@@ -90,9 +89,28 @@ class Logic(unittest.TestCase):
 
     def test_the_pictures_are_the_same_every_time(self):
         self.run_update(FakeRenderer())
-        first = open(os.path.join(self.out, "Alpha.png"), "rb").read()
+        first = open(os.path.join(self.out, "Alpha.webp"), "rb").read()
         self.run_update(FakeRenderer(), force=True)
-        self.assertEqual(open(os.path.join(self.out, "Alpha.png"), "rb").read(), first)
+        self.assertEqual(open(os.path.join(self.out, "Alpha.webp"), "rb").read(), first)
+
+    def test_a_changed_encoding_draws_again_without_force(self):
+        self.run_update(FakeRenderer())
+        index = self.index()
+        for entry in index.values():
+            entry["encoding"] = "webp-200-q50"
+        with open(os.path.join(self.folder, "previews.json"), "w") as f:
+            json.dump(index, f)
+        self.assertEqual(self.run_update(FakeRenderer())[0], ["Alpha.lvl", "Beta !.LVL"])
+        self.assertEqual({e["encoding"] for e in self.index().values()}, {map_previews.ENCODING})
+
+    def test_the_header_reader_knows_the_three_kinds_of_webp(self):
+        path = os.path.join(self.dir, "x.webp")
+        for size, options in (((300, 300), {"quality": 80}), ((37, 91), {"quality": 50}), ((300, 120), {"lossless": True}), ((64, 33), {"quality": 80, "exif": b"Exif\0\0II*\0\x08\0\0\0\0\0"})):
+            Image.new("RGB", size, (9, 80, 200)).save(path, format="WEBP", **options)
+            self.assertEqual(map_previews.webp_size(path), size, options)
+        with open(path, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\0" * 40)
+        self.assertIsNone(map_previews.webp_size(path))
 
     def test_a_changed_map_is_drawn_again_and_only_it(self):
         self.run_update(FakeRenderer())
@@ -103,7 +121,7 @@ class Logic(unittest.TestCase):
 
     def test_a_missing_picture_is_drawn_again(self):
         self.run_update(FakeRenderer())
-        os.remove(os.path.join(self.out, "Beta !.png"))
+        os.remove(os.path.join(self.out, "Beta !.webp"))
         self.assertEqual(self.run_update(FakeRenderer())[0], ["Beta !.LVL"])
 
     def test_a_new_map_is_added_and_a_gone_map_loses_its_picture(self):
@@ -113,8 +131,8 @@ class Logic(unittest.TestCase):
         with open(os.path.join(self.out, "keep.png"), "wb") as f:
             f.write(b"not listed in the index: not touched")
         drawn, skipped, removed = self.run_update(FakeRenderer())
-        self.assertEqual((drawn, skipped, removed), (["Gamma.lvl"], ["Beta !.LVL"], ["Alpha.png"]))
-        self.assertEqual(sorted(os.listdir(self.out)), ["Beta !.png", "Gamma.png", "keep.png"])
+        self.assertEqual((drawn, skipped, removed), (["Gamma.lvl"], ["Beta !.LVL"], ["Alpha.webp"]))
+        self.assertEqual(sorted(os.listdir(self.out)), ["Beta !.webp", "Gamma.webp", "keep.png"])
         self.assertEqual(sorted(self.index()), ["Beta !.LVL", "Gamma.lvl"])
 
     def test_an_interrupted_run_goes_on(self):
@@ -163,22 +181,23 @@ class TheFolder(unittest.TestCase):
     def test_the_index_lists_exactly_the_maps_of_maps_json_with_their_hashes(self):
         self.assertEqual(sorted(self.index), sorted(self.maps))
         for file, entry in self.index.items():
-            self.assertEqual(sorted(entry), ["hash", "picture"], file)
+            self.assertEqual(sorted(entry), ["encoding", "hash", "picture"], file)
+            self.assertEqual(entry["encoding"], map_previews.ENCODING, file)
             self.assertEqual(entry["hash"], self.maps[file]["hash"], file)
             self.assertEqual(entry["picture"], map_previews.picture_name(file), file)
 
-    def test_every_picture_exists_is_a_png_of_the_expected_size_and_nothing_else_is_there(self):
+    def test_every_picture_exists_is_a_webp_of_the_expected_size_and_nothing_else_is_there(self):
         folder = os.path.join(FOLDER, "previews")
         self.assertEqual(sorted(os.listdir(folder)), sorted(e["picture"] for e in self.index.values()))
         for entry in self.index.values():
             with open(os.path.join(folder, entry["picture"]), "rb") as f:
-                head = f.read(24)
-            self.assertEqual(head[:8], b"\x89PNG\r\n\x1a\n", entry["picture"])
-            self.assertEqual(struct.unpack(">II", head[16:24]), (map_previews.SIZE, map_previews.SIZE), entry["picture"])
+                head = f.read(12)
+            self.assertTrue(head[:4] == b"RIFF" and head[8:12] == b"WEBP", entry["picture"])
+            self.assertEqual(map_previews.webp_size(os.path.join(folder, entry["picture"])), (map_previews.SIZE, map_previews.SIZE), entry["picture"])
 
     def test_the_pictures_are_small(self):
         folder = os.path.join(FOLDER, "previews")
-        self.assertLess(sum(os.path.getsize(os.path.join(folder, n)) for n in os.listdir(folder)), 8 * 1024 * 1024)
+        self.assertLess(sum(os.path.getsize(os.path.join(folder, n)) for n in os.listdir(folder)), 10 * 1024 * 1024)
 
 
 if __name__ == "__main__":
