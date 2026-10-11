@@ -31,6 +31,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the simulation and the protocol are untouched.
 
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/46f7b115...70b703d6)
+
 ## v0.12.6 - 2026-10-11 - The picture shape is chosen next to the map
 
 **For players:**
