@@ -445,6 +445,7 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
 // The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
 // players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request) {
+    if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return handle_public_history(rooms, request);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
     const ReplayStore* store = rooms.replay_store();
     if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
@@ -491,6 +492,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
         return error_response(405, "method not allowed");
     }
     if (path == "/replays" || path.compare(0, 9, "/replays/") == 0) return handle_replays(rooms, request);
+    if (path == "/history" || path.compare(0, 9, "/history/") == 0) return handle_history(rooms, request);
     if (path == "/stats") {
         if (request.method != "GET") return error_response(405, "method not allowed");
         JsonValue o = JsonValue::make_object();

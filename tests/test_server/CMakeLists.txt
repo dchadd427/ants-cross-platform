@@ -79,3 +79,55 @@ target_include_directories(test_live_board PRIVATE
 
 add_test(NAME test_live_board COMMAND test_live_board)
 set_tests_properties(test_live_board PROPERTIES COST 3)
+
+# What a record of the match history says of a match (ants_server/history_record.hpp): who won by the rule of the game mode, the ties, teams, a quitter, a seat that dropped out, the JSON. Pure: made-up engine results
+add_executable(test_history_record
+    test_history_record.cpp
+)
+
+target_link_libraries(test_history_record PRIVATE
+    ants_server_core
+)
+
+target_include_directories(test_history_record PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_history_record COMMAND test_history_record)
+set_tests_properties(test_history_record PROPERTIES COST 1)
+
+# The match history's store in the server's database (ants_server/history_store.hpp): records kept and read back, the filters, sorts and search of the list, the markers, the indexes, a database that stops
+# answering, the feeder that counts the replay store's matches (real recordings of the shipped TINY map) and the control interface's /history calls in front of a room manager. No network, no room that runs a match
+add_executable(test_history_store
+    test_history_store.cpp
+)
+
+target_link_libraries(test_history_store PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_history_store PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_history_store COMMAND test_history_store)
+set_tests_properties(test_history_store PROPERTIES COST 6)
+
+# The match history in front of real rooms (ants_server/history_store.hpp): rooms of computer players play whole matches in both game modes on a room manager with a replay store and a database; the history
+# counts them from the recordings when no room runs a match, and both doors list them. No network
+add_executable(test_history_rooms
+    test_history_rooms.cpp
+)
+
+target_link_libraries(test_history_rooms PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_history_rooms PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_history_rooms COMMAND test_history_rooms)
+set_tests_properties(test_history_rooms PROPERTIES COST 15)

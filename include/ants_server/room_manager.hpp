@@ -31,6 +31,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_server/history_store.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
@@ -155,6 +156,16 @@ public:
     /// The server's replays (null when it keeps none)
     ReplayStore* replay_store() noexcept { return replays_.get(); }
     const ReplayStore* replay_store() const noexcept { return replays_.get(); }
+    /// Starts to keep the match history (history_store.hpp, docs/REPLAYS.md "The match history") in the server's database: every match that the replay store keeps is counted from its recording, one at a time, while no
+    /// room runs or restores a match (the matches that are in the replay store now are counted too, the newest first). The history needs the replays to count from: without them what the database holds is listed
+    /// and nothing is added. Call it after enable_replays(). `database` must be open, have the schema of the server (db_migrations) and outlive the manager or be released with disable_history(). False, with the
+    /// reason, when the tables cannot be read (the server then keeps none).
+    bool enable_history(db::Database& database, std::string& why, HistoryStore::Config config = HistoryStore::Config());
+    /// Stops the history and lets go of the database (the server closes it after this)
+    void disable_history();
+    /// The server's match history (null when it keeps none)
+    HistoryStore* history_store() noexcept { return history_.get(); }
+    const HistoryStore* history_store() const noexcept { return history_.get(); }
     /// The matches that run now, which the public door shows live (live_board.hpp): the rooms that record register theirs here. Always there; empty on a server that keeps no replays. It takes its clock from the
     /// replay configuration (enable_replays).
     LiveBoard& live_board() noexcept { return live_board_; }
@@ -286,6 +297,8 @@ private:
     net::LogBudget log_budget_;                  // (declared before the rooms: they give their logs back when they are destroyed)
     std::unique_ptr<RestartStore> restart_;      // (also before the rooms: their records point at it)
     std::unique_ptr<ReplayStore> replays_;       // (and the store of the replays that they keep)
+    std::unique_ptr<HistoryStore> history_;      // (the history of the matches that the replay store keeps, and what counts them: after the store they read from)
+    std::unique_ptr<HistoryFeeder> history_feeder_;
     LiveBoard live_board_;                       // (and the board of the matches that they record while they run: before the rooms, which take their match off it when they go)
     bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;

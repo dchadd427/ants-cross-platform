@@ -397,6 +397,26 @@ void file_cases() {
         DB_CHECK(saved.open(dir.file("mem.db")).ok());
         DB_CHECK(count_rows(saved, "t") == 1);
     } DB_END;
+
+    DB_CASE("DB5.3 A progress handler stops a statement that runs too long (kErrInterrupted), the database goes on afterwards, and a removed handler stops nothing") {
+        Database db;
+        DB_CHECK(db.open(":memory:").ok());
+        static int looks;
+        looks = 0;
+        const std::string endless = "WITH RECURSIVE n(k) AS (SELECT 0 UNION ALL SELECT k + 1 FROM n WHERE k < 5000000) SELECT count(*) FROM n";
+        db.set_progress_handler([](void*) { return ++looks > 3 ? 1 : 0; }, nullptr, 100);
+        Statement st;
+        DB_CHECK(db.prepare(st, endless).ok());
+        DB_CHECK(st.step() == Statement::Step::Failed && st.error().code == ants::db::kErrInterrupted);
+        DB_CHECK(looks == 4);                                              // (it was asked every 100 steps and said stop at the fourth)
+        db.set_progress_handler(nullptr, nullptr, 0);
+        DB_CHECK(db.exec("CREATE TABLE t (a); INSERT INTO t VALUES (1)").ok() && count_rows(db, "t") == 1);       // (the connection is as it was)
+        Statement again;
+        DB_CHECK(db.prepare(again, "WITH RECURSIVE n(k) AS (SELECT 0 UNION ALL SELECT k + 1 FROM n WHERE k < 20000) SELECT count(*) FROM n").ok());
+        DB_CHECK(again.step() == Statement::Step::Row && again.column_int64(0) == 20001);
+        Database closed;
+        closed.set_progress_handler(nullptr, nullptr, 0);                  // (nothing to do on a closed database, and no crash)
+    } DB_END;
 }
 
 }  // namespace
