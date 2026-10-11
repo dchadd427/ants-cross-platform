@@ -185,7 +185,7 @@ The suites, the tiers and CI are in [`TESTING.md`](TESTING.md) and [`WORKFLOW.md
 ## Versioning and the Build Id
 
 - The version is the one line of the file `VERSION` (`MAJOR.MINOR.PATCH`). CMake generates the C++ header `ants_app/version.hpp` from it into the build folder.
-- It moves in the pull request of each change that goes live: **PATCH** by default, **MINOR** for a milestone. The network protocol number moves separately, by its own rule ([`WORKFLOW.md`](WORKFLOW.md#version-policy), [`NETWORK_PORT.md`](NETWORK_PORT.md)).
+- When the version moves, and the separate rule for the network protocol number, are described in [`WORKFLOW.md`](WORKFLOW.md#version-policy) and [`NETWORK_PORT.md`](NETWORK_PORT.md).
 - `./run_tests.sh --fast` fails when the top release heading of `CHANGELOG.md` or the version line of the `README.md` names another release than `VERSION`.
 - The changelog is [`../CHANGELOG.md`](../CHANGELOG.md). How work goes from a commit to a release: [`WORKFLOW.md`](WORKFLOW.md).
 
