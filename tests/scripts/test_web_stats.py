@@ -37,7 +37,7 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.assertEqual(self.page.count(line), 1)
         footer = self.page[self.page.index('<footer class="bar" id="footer-bar">'):self.page.index("</footer>")]
         self.assertIn(line, footer)
-        self.assertLess(footer.index('id="stats"'), footer.index('<div class="bar-row">'))                        # (above the version line, the footer links and the Screen buttons)
+        self.assertLess(footer.index('id="stats"'), footer.index('<div class="bar-row">'))                        # (above the version line, the footer links)
         # hidden until numbers come: the attribute is in the markup, and the style's own display for the line must not undo it
         self.assertIn("[hidden] { display: none !important; }", self.style)
         self.assertNotRegex(self.style, r"\.bar \.stats \{[^}]*display:")                                         # (the line is one text that flows and wraps, as the phone picture draws it: no flex row of parts)

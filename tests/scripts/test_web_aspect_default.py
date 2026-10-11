@@ -8,7 +8,7 @@ player picks Classic 4:3 again.
     the selectors' clicks, which must write the new key and nothing else (tests/scripts/web_aspect_key_check.js). The front page's selector: a pick keeps the match, changes the page at once and the hand-off
     address to the game carries the shape (the page has no game open, so a pick never asks and never reloads);
   - what needs no browser is read from the files: the new key is the one constant of each page and no call reads or writes the old key; the markup and the style of both pages start with
-    the 16:9 picture (the game page's box, its selector and the front page's "Screen" buttons in its footer); the front page's hand-offs to the game
+    the 16:9 picture (the game page's box, its selector and the front page's "Picture" row in the match column); the front page's hand-offs to the game
     (START, Rejoin, a game for one) pass the page's live shape on.
 The same cases in a real browser: tests/scripts/web_aspect_check.py (opt-in, against a running page).
 """
@@ -93,24 +93,27 @@ class PagesStartWith16x9(unittest.TestCase):
         page, shell = read(LOBBY), read(SHELL)
         bar = shell[shell.index('<div class="view-bar" id="view-bar">'):shell.index('id="lock-bar-label"')]
         game = [(shape, title, label) for shape, title, label in re.findall(r'data-aspect="([0-9:]+)" aria-checked="(?:true|false)" title="([^"]+)">([^<]+)</button>', bar)]
-        row = page[page.index('<span class="shape">Screen'):page.index('</footer>')]
+        row = page[page.index('<div class="shape" id="shape-row">'):page.index('</footer>')]
         front = re.findall(r'<input type="radio" name="aspect" id="aspect-[0-9-]+" value="([0-9:]+)"(?: checked)?><label for="aspect-[0-9-]+" title="([^"]+)">([^<]+)</label>', row)
         self.assertEqual([shape for shape, _, _ in front], ["4:3", "16:10", "16:9", "21:9"])
         self.assertEqual(front, game)                                                                     # the same names and the same hover texts as the game page's own buttons
         shapes = lambda text: re.search(r"var SHAPES = (\{.*?\});\n", text, re.S).group(1)
         self.assertEqual(shapes(page), shapes(shell))                                                     # (the table of the shapes is the game page's)
 
-    def test_the_front_page_buttons_are_the_screen_buttons_at_the_right_of_the_footer(self):
-        """The picture draws the footer as the version line, the footer links and, at the right, "Screen" with the buttons (the space that grows pushes them to the right; where the row is full they wrap to a line of their own)."""
+    def test_the_front_page_buttons_are_the_picture_row_of_the_match_column_under_the_map_and_above_start(self):
+        """The picture draws the match column as the map picker, the map's line, the "Picture" row with the four buttons and START! (a window too narrow for the label and the buttons wraps the label above them); the footer has no selector."""
         page = read(LOBBY)
+        side = page[page.index('<aside class="side"'):page.index('</aside>')]
         footer = page[page.index('<footer class="bar" id="footer-bar">'):page.index("</footer>")]
-        row = footer[footer.index('<div class="bar-row">'):]
-        self.assertLess(row.index('id="game-version-line"'), row.index('<nav aria-label="Footer links">'))
-        self.assertLess(row.index('</nav>'), row.index('<span class="grow"></span>'))
-        self.assertLess(row.index('<span class="grow"></span>'), row.index('<span class="shape">Screen <span class="seg" role="radiogroup" aria-label="Picture shape">'))
-        order = [row.index('id="aspect-%s"' % shape) for shape in ("4-3", "16-10", "16-9", "21-9")]
+        self.assertLess(side.index('id="map"'), side.index('<div class="shape" id="shape-row">'))
+        self.assertLess(side.index('id="info"'), side.index('<div class="shape" id="shape-row">'))
+        self.assertLess(side.index('<div class="shape" id="shape-row">'), side.index('id="start"'))
+        self.assertIn('<span class="shape-label" id="shape-label">Picture</span> <span class="seg" role="radiogroup" aria-labelledby="shape-label">', side)
+        order = [side.index('id="aspect-%s"' % shape) for shape in ("4-3", "16-10", "16-9", "21-9")]
         self.assertEqual(order, sorted(order))                                                             # Classic 4:3, 16:10, 16:9, 21:9, as drawn
-        self.assertEqual(row.count('name="aspect"'), 4)                                                    # (all four buttons are in that one place)
+        self.assertEqual(side.count('name="aspect"'), 4)                                                   # (all four buttons are in that one place)
+        for gone in ('name="aspect"', 'class="shape"', 'fit-tag', 'class="grow"', "Screen "):
+            self.assertNotIn(gone, footer, "the footer has no selector any more: " + gone)
 
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):

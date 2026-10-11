@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.6 - 2026-10-11 - The picture shape is chosen next to the map
+
+**For players:**
+- The picture shape (4:3, 16:10, 16:9, 21:9) is chosen next to the map, above START!, instead of at the bottom of the page.
+
+**Rules / network:** none: the simulation and the protocol are untouched.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0a6a7cf...46f7b115)
+
 ## v0.12.5 - 2026-10-11 - The match server keeps a database file
 
 **For players:**
