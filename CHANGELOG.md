@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.12 - 2026-10-11 - The site statistics live in the database
+
+**For players:**
+- **The server keeps the front page's game counts in its database**, with the files of older servers read in on the first start, so no count is lost on a redeploy. The numbers shown are the same.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.11...v0.12.12)
+
 ## v0.12.11 - 2026-10-11 - The server counts how often each map is played
 
 **For players:**
@@ -441,21 +448,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47)
 
-## v0.0.93 - 2026-10-01 - The room leader can start early
+## Older versions (v0.0.93 and before)
 
-**For players:**
-- The first player to join a server's room is its leader and can press START to begin the match with the players who are there (two at least). With fewer than two the can't-go cue plays and nothing is sent. When the leader leaves, the next earliest player leads. A LAN game has no leader: its host starts as before.
-- The leader's setup screen is the original's host screen: START works, and the map and Fog of War buttons show the room's choice and change nothing. The Play online page says that the first player can start early.
-- Server operators: `POST /rooms` takes `"early_start": true|false` (true when left out, on for demo rooms), and the room status shows `early_start`, `leader` and `ignored_start_requests`.
-
-**Rules / network:** Network protocol 7 (the Room message names the leader, and StartRequest is new): a v0.0.92 game cannot join. The simulation rules did not change.
-
-**Fixes:**
-- One connection could flood the server with valid messages (pings, acknowledgements, chat and so on) and use a whole core and over a gigabyte of memory without being dropped. Inboxes are bounded, every connection has a message budget, and a flooder is dropped within a second.
-- Reloading the web game no longer downloads about 9 MB again: the files are revalidated and an unchanged build answers 304.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa)
-
-## Older versions (v0.0.92 and before)
-
-Every release before v0.0.93, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.94, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
