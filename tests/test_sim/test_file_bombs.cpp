@@ -144,7 +144,7 @@ int main() {
         }
     });
 
-    run_case("FB1.2 The Ids Around Them Are Not Bombs: 128 And 133 Stay What They Were (A Solid Overlay), The Fire Wall 134 Stays A Fire Wall; A Cell With The Anchor Bit Clear Is A Bomb All The Same", [] {
+    run_case("FB1.2 The Ids Around Them Are Not Bombs: 128 And 133 Are No Bombs (Objects Like Any Other: A \".\" Entry Makes No Obstacle Overlay Of Them), The Fire Wall 134 Stays A Fire Wall; A Cell With The Anchor Bit Clear Is A Bomb All The Same", [] {
         LevelData level = open_ground();
         const std::vector<TileCoord> at = open_tiles(level, 5);
         CHECK(at.size() == 5);
@@ -157,8 +157,8 @@ int main() {
         for (const uint16_t id : {uint16_t{128}, uint16_t{133}, uint16_t{134}}) name_tile(level, id, ".");
         Grid g;
         CHECK(g.init_from_level(level));
-        CHECK(!cell_at(g, at[0]).has_bomb() && cell_at(g, at[0]).is_obstacle_overlay);
-        CHECK(!cell_at(g, at[1]).has_bomb() && cell_at(g, at[1]).is_obstacle_overlay);
+        CHECK(!cell_at(g, at[0]).has_bomb() && !cell_at(g, at[0]).is_obstacle_overlay && cell_at(g, at[0]).interactive_id == 128);
+        CHECK(!cell_at(g, at[1]).has_bomb() && !cell_at(g, at[1]).is_obstacle_overlay && cell_at(g, at[1]).interactive_id == 133);
         CHECK(cell_at(g, at[2]).has_fire() && !cell_at(g, at[2]).has_bomb());
         CHECK(cell_at(g, at[3]).has_bomb() && cell_at(g, at[3]).interactive_id == BOMB_BLACK + 3 && cell_at(g, at[3]).interactive_owner == 0);
         CHECK(cell_at(g, at[4]).has_bomb() && cell_at(g, at[4]).interactive_id == BOMB_BLACK + 0 && cell_at(g, at[4]).interactive_owner == 255);

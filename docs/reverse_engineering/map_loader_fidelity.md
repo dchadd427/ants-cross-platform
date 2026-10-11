@@ -65,3 +65,13 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 **Now.** `Grid` knows which templates the level loads (`tile_graphic_loaded`; a world made by hand has all) and `set_food_tile` / `set_layer2` clear the old object and place nothing when the new tile's template is missing. A food object whose first stage is such a tile has no pile on the map (the object keeps its units, nobody can see or harvest it); one whose next stage is such a tile loses its pile at the bite that changes the stage. An entry that is empty (not ".") keeps its graphic, as `strcmp` says; an id past the dictionary is taken as not loaded (the original reads an uninitialised table there).
 
 **Maps** (`LF6.5`): 35 maps have a block-2 stage tile whose entry is "." and not forced (the REA notes count 40 by also counting 5 maps whose entry is empty, which the program keeps). The loaded map differs at the start in 16 of them (the file's tile at the anchor is cleared and the stage tile is not put there) and the 2,400-tick play in 11; the other 19 only lose a later stage. Not a verified observation: the original was read, never run.
+
+## 7. No obstacle overlay from a "." entry
+
+**The original.** The dictionary's name never changes behaviour; it only decides whether a graphic is loaded (fix 6). A layer-2 cell with such an id exists, blocks exactly as its solid bit says and keeps the flags and class of its id.
+
+**The remake did.** Every layer-2 cell whose entry was "." or empty (and was not a power-up, bomb, hill or food) became an `is_obstacle_overlay` cell: impassable for the start-ant placement and the other tests of `TileCell::is_passable` and `is_obstacle`, whatever its solid bit said.
+
+**Now.** The "." branch is gone. (A named object keeps the remake's name-based overlay for rocks, grass clusters and so on; that is not changed here.)
+
+**Maps** (`LF7.3`): 101,806 layer-2 cells in 484 maps have an entry that is "." or empty; 339 maps changed in the overlay flag (and so in the state hash), 6 in play within 2,400 ticks (BattleGround!!, BattleGroundnn, COMBAT MIRAGE, FlowerPatch2, FlowerPatch3, FoReSt). Sweep of the 558: no crash, no hang, every run deterministic, `community_maps.py verify` clean.

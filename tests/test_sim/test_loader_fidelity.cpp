@@ -1002,6 +1002,77 @@ int main() {
         CHECK(maps == 35);                                                  // (the notes' 40 also count 5 maps whose entry is empty: strcmp(\"\", \".\") != 0, so the original keeps those graphics)
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 7: a layer-2 cell whose dictionary entry is "." (or empty) is no obstacle overlay by that name
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF7.1 An Object Whose Entry Is \".\" Or Empty Blocks Exactly As Its Solid Bit Says: Bit Clear, It Is Walkable Ground (No Obstacle Overlay); Bit Set, It Is Solid", [] {
+        for (const char* name : {".", ""}) {
+            for (const bool bit : {false, true}) {
+                LevelData level = open_ground();
+                const std::vector<TileCoord> at = open_tiles(level, 1);
+                CHECK(at.size() == 1);
+                if (at.empty()) return;
+                set_layer2(level, at[0], 294);                      // an object (medrock2) in a dictionary that left its entry out
+                name_tile(level, 294, name);
+                set_solid_bit(level, at[0], bit);
+                Grid g;
+                CHECK(g.init_from_level(level));
+                const TileCell& c = cell_at(g, at[0]);
+                CHECK(!c.is_obstacle_overlay && c.interactive_id == 294);
+                CHECK(g.is_solid_object(at[0]) == bit);
+                CHECK(c.is_passable() == true);                    // (the cell itself does not block; the solid bit does, in is_solid_object)
+            }
+        }
+    });
+
+    run_case("LF7.2 A Start Ant Stands On Its Marker When A \".\" Object Without A Solid Bit Lies There (The Overlay Made The Cell Impassable And Moved The Ant); A Named Rock Still Moves It", [] {
+        for (const int variant : {0, 1, 2}) {                      // 0: "." and no bit, 1: "." with the bit, 2: a named rock without the bit
+            LevelData level = tiny();
+            const ants::assets::AnthillSpawn* marker = nullptr;
+            for (const auto& sp : level.anthill_spawns) if (sp.team_id == 0) { marker = &sp; break; }
+            CHECK(marker != nullptr);
+            if (marker == nullptr) return;
+            const TileCoord m{marker->x, marker->y};
+            set_layer2(level, m, 294);
+            name_tile(level, 294, variant == 2 ? "medrock2" : ".");
+            set_solid_bit(level, m, variant == 1);
+            SimulationEngine sim;
+            sim.init(level, 3, 0x01);
+            bool on_marker = false;
+            for (const auto& a : sim.get_world_state().ants) on_marker = on_marker || (a.player_id == 0 && a.tile_x == m.x && a.tile_y == m.y);
+            if (variant != 2) CHECK(on_marker);                     // (the cell's own passability is the terrain and the overlay: the solid bit is asked of paths, not of the spawn)
+            else CHECK(!on_marker);
+        }
+    });
+
+    run_case("LF7.3 The Community Library: No Layer-2 Cell Is An Obstacle Overlay By An Empty Or \".\" Entry Any More; The Cells Named That Way Are Counted", [] {
+        long dot_cells = 0, dot_overlays = 0;
+        long maps_with_dots = 0;
+        for_each_community_map([&](const std::string&, const LevelData& level) {
+            Grid g;
+            if (!g.init_from_level(level)) return;
+            long here = 0;
+            for (uint32_t y = 0; y < level.height; ++y) {
+                for (uint32_t x = 0; x < level.width; ++x) {
+                    const uint16_t id = level.get_cell_layer2(x, y).tile_index;
+                    if (id == ants::assets::LVL_EMPTY_TILE || id == 0xFFFFu) continue;
+                    const std::string& n = level.get_tile_name(id);
+                    if (!(n.empty() || n == ".")) continue;
+                    ++dot_cells;
+                    ++here;
+                    const TileCell& c = g.get_cell(x, y);
+                    // (a hill's mound keeps its overlay: that is the hill, not the name)
+                    if (c.is_obstacle_overlay && c.interactive_id == id && c.base_owner_team == 255) ++dot_overlays;
+                }
+            }
+            maps_with_dots += here > 0;
+        });
+        std::cout << "\n    cells named \".\" or empty: " << dot_cells << " in " << maps_with_dots << " maps; of them overlays: " << dot_overlays << "\n";
+        CHECK(dot_overlays == 0);
+        CHECK(dot_cells > 90000);
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

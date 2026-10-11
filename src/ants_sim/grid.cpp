@@ -154,9 +154,9 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                         // Solid obstacle overlay: rocks, cans, pencils, grass clusters (grass1..4, grassbig*, grassmed*), toys, flowers, etc.
                         cell.is_obstacle_overlay = true;
                     }
-                } else {
-                    cell.is_obstacle_overlay = true;
                 }
+                // An entry called "." or left empty is no reason for anything: the name never changes behaviour in the original (only whether the graphic is loaded), and what blocks is the
+                // file's solid bit. Such a cell is an object like any other without the remake's name-based obstacle overlay.
             }
         }
     }
