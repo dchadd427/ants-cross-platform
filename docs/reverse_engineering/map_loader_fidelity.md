@@ -2,6 +2,10 @@
 
 Where the remake's level loader (`Grid::init_from_level`, the level reader, the renderer's copy of the hill search) decided by a dictionary NAME, by a guess or by its own rule, it now does what the original does, read from the program (the tile-info tables, the loader `FUN_01006349` and its helpers, `SetTile` `FUN_01007352`). The original was read, never run. Each fix is its own commit with its own test (`tests/test_sim/test_loader_fidelity.cpp`, suite 2.9.4) and was swept over the 558 community maps (`tools/map_sweep`, 2,400 ticks, two rosters, three runs each: no crash, no hang, every run deterministic).
 
+## All seven together
+
+Against v0.12.9, over the 558 community maps (the same sweep, `map_sweep` with its scripted players for 2,400 ticks, rosters of four teams and of green and black, three runs each; the loaded state compared with a scratch tool): the loaded walkability changes in 115 maps, the terrain in 22, the hills in 7, the start markers in 6, the food flags in 56 and the obstacle overlays in 348; the play changes in 116 maps, and the state hash of 440 more moves only because it now holds the solid bits that were cleared before (the six original maps play exactly as before). No crash, no hang, no run that is not deterministic.
+
 ## Numbers
 
 Every fix below changes how a level is read, so by the rule next to `kProtocolVersion` the network protocol is 19 (nothing on the wire changed) and the replay rules numbers are 5 (the original's game) and 6 (game mode 187); recordings of rules 1 to 4 are an earlier version's ([REPLAYS.md](../REPLAYS.md#the-file)). One bump covers all the fixes.

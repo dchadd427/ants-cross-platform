@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.10 - 2026-10-11 - The maps load the way the original loads them
+
+**For players:**
+- **Community maps load the way the original loads them.** The game now reads what the map file says (the numbers of its tiles and its solid-ground marks) and no longer guesses from the names the map maker gave the tiles.
+- **Power-ups are walkable only where the map says so.** On `POPcOrN` the power-ups no longer plug the corridors (94 maps are like that); on the original maps they stay obstacles that you take by clicking on them.
+- **Lakes, mud and dirt that a map leaves unnamed are what they are.** Ants no longer walk across the lakes of Wata fight and hell2, and the mud of the Gant2 maps and the dirt of Turtle World slow them (16 maps).
+- **Hills and start ants follow the colour of their tile.** Seven maps lost a hill or swapped two colours because of damaged names (CRISS CROSS and Conquer have four teams now).
+- Food piles are told by their tile, a food pile whose next stage has no picture in the map's list vanishes as in the original, and stray objects in a map's list of start positions are ignored and no longer drawn.
+
+**Rules / network:** network protocol 19 (a v0.12.9 game cannot join); replay rules 5 and 6, older recordings stay under "Earlier versions".
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aec2772a...6bc5cf52); how and why: [the report](docs/reverse_engineering/map_loader_fidelity.md)
+
 ## v0.12.9 - 2026-10-11 - The bombs of the community maps work
 
 **For players:**
@@ -435,26 +448,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4344c0e...ce61aaa)
 
-## v0.0.92 - 2026-10-01 - The black bars of a wide window scroll the map, fullscreen keeps the mouse, four games in the corners of their hills, bot fixes
+## Older versions (v0.0.92 and before)
 
-**For players:**
-- A wide window (fullscreen on a wide monitor) no longer ignores the pointer over its black bars: pushing the mouse into a bar scrolls the map like the edge does.
-- Fullscreen (`--fullscreen` or a macOS fullscreen Space) keeps the mouse inside the window while the game has focus. A windowed game never holds the mouse.
-- The Play online page and the four-window start script place the games by colour: Black top left, Green top right, Red bottom left, Blue bottom right.
-- Internal: a safety net for the planned widescreen work, a GCC 12 build with warnings as errors, and review fixes of the computer-player code. The classic picture and the simulation did not change.
-
-**Fixes:**
-- A mouse button released outside the window, or a finger lifted from a touch screen, no longer leaves the map scrolling on its own.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2185be0...4344c0e)
-
-## v0.0.91 - 2026-10-01 - The original program leaves the repository
-
-**For players:**
-- Internal: the original 1998 program (Ants.exe), its decompilation and the local tools of an installation of the original are no longer in the repository, which keeps only the data archive, the maps and the music. Nothing in the game, the server or the network protocol changed but the version number. Pulling this change into an existing checkout deletes those files from the working tree, so copy them aside first.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/64654b3...2185be0)
-
-## Older versions (v0.0.90 and before)
-
-Every release before v0.0.91, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.93, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
