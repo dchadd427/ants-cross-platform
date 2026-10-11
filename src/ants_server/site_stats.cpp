@@ -16,6 +16,7 @@
 #endif
 
 #include "ants_ctl/json.hpp"
+#include "ants_db/database.hpp"
 #include "ants_server/room_manager.hpp"
 
 namespace fs = std::filesystem;
@@ -319,28 +320,208 @@ bool SiteStats::read_file(std::string& why) {
     return true;
 }
 
-void SiteStats::open(const std::string& path) {
-    path_ = path;
+// Looks at the file `path_`. Missing: there is none. Read: its counters are the ones now. Refused: `why` says what is wrong with it, it is put aside whole as <path>.broken-<seconds> and the counters are new.
+SiteStats::FileState SiteStats::load_file(std::string& why, std::string& fate) {
     std::error_code ec;
     const fs::file_status status = fs::status(path_, ec);
-    if (status.type() == fs::file_type::not_found) {
-        dirty_ = true;                                                     // a new file: it is written at the first save, so that `since` outlives a restart before any game
-        notices_.push_back("site statistics: " + path_ + " is new, counting from " + since_);
-        return;
-    }
-    std::string why;
+    if (status.type() == fs::file_type::not_found) return FileState::Missing;
     if (ec) why = "it cannot be looked at (" + ec.message() + ")";
     else if (status.type() != fs::file_type::regular) why = "it is not a regular file";
-    if (why.empty() && read_file(why)) {
-        notices_.push_back("site statistics: read " + std::to_string(online_.total) + " online and " + std::to_string(local_.total) + " single-player games since " + since_ + " from " + path_);
-        return;
-    }
+    if (why.empty() && read_file(why)) return FileState::Read;
     const std::string aside = path_ + ".broken-" + std::to_string(clock_());
     std::error_code moved;
     fs::rename(path_, aside, moved);
     since_ = date_of(clock_());                                            // (the counters are new already: read_file keeps nothing of a file that it refuses)
     dirty_ = true;
-    notices_.push_back("site statistics: " + path_ + " cannot be used (" + why + "); " + (moved ? "it could not be put aside (" + moved.message() + ")" : "put aside as " + aside) + ", the counters start at 0 from " + since_);
+    fate = moved ? "it could not be put aside (" + moved.message() + ")" : "put aside as " + aside;
+    return FileState::Refused;
+}
+
+void SiteStats::open(const std::string& path) {
+    path_ = path;
+    std::string why;
+    std::string fate;
+    switch (load_file(why, fate)) {
+        case FileState::Missing:
+            dirty_ = true;                                                 // a new file: it is written at the first save, so that `since` outlives a restart before any game
+            notices_.push_back("site statistics: " + path_ + " is new, counting from " + since_);
+            return;
+        case FileState::Read:
+            notices_.push_back("site statistics: read " + std::to_string(online_.total) + " online and " + std::to_string(local_.total) + " single-player games since " + since_ + " from " + path_);
+            return;
+        case FileState::Refused:
+            notices_.push_back("site statistics: " + path_ + " cannot be used (" + why + "); " + fate + ", the counters start at 0 from " + since_);
+            return;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// The database
+
+namespace {
+
+const char* const kSinceKey = "site_stats_since";
+
+}  // namespace
+
+// Reads the counters from the tables: `found` is false when they hold none yet (a database that was just migrated). Both series are read before either is kept.
+bool SiteStats::read_db(bool& found, std::string& why) {
+    found = false;
+    db::Statement st;
+    db::Error e = db_->prepare(st, "SELECT kind, total FROM site_stats");
+    if (!e.ok()) {
+        why = e.message;
+        return false;
+    }
+    Series read[2];
+    bool have[2] = {false, false};
+    const char* names[2] = {"online", "local"};
+    for (;;) {
+        const db::Statement::Step step = st.step();
+        if (step == db::Statement::Step::Failed) {
+            why = st.error().message;
+            return false;
+        }
+        if (step == db::Statement::Step::Done) break;
+        const std::string kind = st.column_text(0);
+        for (int i = 0; i < 2; ++i) {
+            if (kind == names[i]) {
+                have[i] = true;
+                read[i].total = static_cast<uint64_t>(std::max<int64_t>(st.column_int64(1), 0));
+            }
+        }
+    }
+    db::Statement hours;
+    e = db_->prepare(hours, "SELECT kind, hour, games FROM site_stats_hours ORDER BY kind, hour");
+    if (!e.ok()) {
+        why = e.message;
+        return false;
+    }
+    for (;;) {
+        const db::Statement::Step step = hours.step();
+        if (step == db::Statement::Step::Failed) {
+            why = hours.error().message;
+            return false;
+        }
+        if (step == db::Statement::Step::Done) break;
+        const std::string kind = hours.column_text(0);
+        const int64_t hour = hours.column_int64(1);
+        const uint64_t n = static_cast<uint64_t>(std::max<int64_t>(hours.column_int64(2), 0));
+        for (int i = 0; i < 2; ++i) {
+            if (kind != names[i]) continue;
+            const size_t slot = slot_of(hour);
+            if (read[i].hour[slot] == kNoHour || read[i].hour[slot] < hour) {      // (two hours of one slot are a day apart: the later one is the one that counts)
+                read[i].hour[slot] = hour;
+                read[i].count[slot] = n;
+            }
+        }
+    }
+    db::Statement since;
+    e = db_->prepare(since, std::string("SELECT value FROM meta WHERE key = '") + kSinceKey + "'");
+    if (!e.ok()) {
+        why = e.message;
+        return false;
+    }
+    std::string day;
+    const db::Statement::Step step = since.step();
+    if (step == db::Statement::Step::Failed) {
+        why = since.error().message;
+        return false;
+    }
+    if (step == db::Statement::Step::Row) day = since.column_text(0);
+    if (!have[0] || !have[1]) return true;                                 // (no rows: nothing was kept yet)
+    found = true;
+    online_ = read[0];
+    local_ = read[1];
+    if (valid_date(day)) {
+        since_ = day;
+    } else {
+        since_ = date_of(clock_());                                        // (cannot happen with a database that this program wrote)
+        dirty_ = true;
+    }
+    return true;
+}
+
+bool SiteStats::write_db(std::string& why) {
+    const int64_t now_hour = hour_of(clock_());
+    db::Transaction tx(*db_);
+    if (!tx.active()) {
+        why = "cannot begin a transaction (" + tx.error().message + ")";
+        return false;
+    }
+    db::Error e = db_->exec("DELETE FROM site_stats_hours");
+    db::Statement total;
+    db::Statement bucket;
+    if (e.ok()) e = db_->prepare(total, "INSERT INTO site_stats (kind, total) VALUES (?, ?) ON CONFLICT (kind) DO UPDATE SET total = excluded.total");
+    if (e.ok()) e = db_->prepare(bucket, "INSERT INTO site_stats_hours (kind, hour, games) VALUES (?, ?, ?)");
+    const char* names[2] = {"online", "local"};
+    const Series* series[2] = {&online_, &local_};
+    for (int i = 0; i < 2 && e.ok(); ++i) {
+        const Series& s = *series[i];
+        total.reset();
+        total.bind_text(1, names[i]);
+        total.bind_int64(2, static_cast<int64_t>(std::min<uint64_t>(s.total, static_cast<uint64_t>(INT64_MAX))));
+        if (total.step() == db::Statement::Step::Failed) e = total.error();
+        for (size_t h = 0; h < kHours && e.ok(); ++h) {
+            if (s.hour[h] == kNoHour || s.hour[h] > now_hour || s.hour[h] <= now_hour - static_cast<int64_t>(kHours) || s.count[h] == 0) continue;
+            bucket.reset();
+            bucket.bind_text(1, names[i]);
+            bucket.bind_int64(2, s.hour[h]);
+            bucket.bind_int64(3, static_cast<int64_t>(std::min<uint64_t>(s.count[h], static_cast<uint64_t>(INT64_MAX))));
+            if (bucket.step() == db::Statement::Step::Failed) e = bucket.error();
+        }
+    }
+    if (e.ok()) {
+        db::Statement since;
+        e = db_->prepare(since, std::string("INSERT INTO meta (key, value) VALUES ('") + kSinceKey + "', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+        if (e.ok()) {
+            since.bind_text(1, since_);
+            if (since.step() == db::Statement::Step::Failed) e = since.error();
+        }
+    }
+    if (e.ok()) e = tx.commit();
+    if (!e.ok()) {
+        why = "cannot write the database (" + e.message + ")";            // (the transaction is rolled back when it goes out of scope: the old numbers stay whole)
+        return false;
+    }
+    return true;
+}
+
+void SiteStats::open_db(db::Database& database, const std::string& legacy_path) {
+    db_ = &database;
+    path_.clear();
+    bool found = false;
+    std::string why;
+    if (!read_db(found, why)) {
+        since_ = date_of(clock_());
+        dirty_ = true;
+        notices_.push_back("site statistics: the database cannot be read (" + why + "); the counters start at 0 from " + since_);
+        return;
+    }
+    if (found) {
+        notices_.push_back("site statistics: read " + std::to_string(online_.total) + " online and " + std::to_string(local_.total) + " single-player games since " + since_ + " from the database");
+        return;
+    }
+    dirty_ = true;                                                         // (no rows yet: the first save makes them)
+    if (legacy_path.empty()) {
+        notices_.push_back("site statistics: the database has none yet, counting from " + since_);
+        return;
+    }
+    path_ = legacy_path;                                                   // the first start with the tables: the file of an older server counts into them, once, and stays as it was
+    std::string fate;
+    switch (load_file(why, fate)) {
+        case FileState::Missing:
+            notices_.push_back("site statistics: the database has none yet, counting from " + since_);
+            break;
+        case FileState::Read:
+            notices_.push_back("site statistics: imported " + std::to_string(online_.total) + " online and " + std::to_string(local_.total) + " single-player games since " + since_ + " from " + legacy_path + " into the database (the file is left as it was)");
+            break;
+        case FileState::Refused:
+            notices_.push_back("site statistics: " + legacy_path + " cannot be used (" + why + "); " + fate + ", the counters start at 0 from " + since_);
+            break;
+    }
+    path_.clear();
+    save();                                                                // (at once: from here on the numbers are in the database, and the next start does not look at the file)
 }
 
 std::vector<std::string> SiteStats::take_notices() {
@@ -350,7 +531,7 @@ std::vector<std::string> SiteStats::take_notices() {
 }
 
 bool SiteStats::save_if_due() {
-    if (path_.empty() || !dirty_) return false;
+    if (!persistent() || !dirty_) return false;
     if (have_tried_) {
         const int64_t waited = clock_() - tried_at_;
         if (waited >= 0 && waited < kSaveEveryS) return false;
@@ -359,11 +540,11 @@ bool SiteStats::save_if_due() {
 }
 
 bool SiteStats::save() {
-    if (path_.empty() || !dirty_) return true;
+    if (!persistent() || !dirty_) return true;
     have_tried_ = true;
     tried_at_ = clock_();
     std::string why;
-    if (write_file(why)) {
+    if (db_ != nullptr ? write_db(why) : write_file(why)) {
         dirty_ = false;
         if (failing_) {
             failing_ = false;

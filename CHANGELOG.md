@@ -23,13 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.12 - 2026-10-11 - Chat on a phone
+## v0.12.13 - 2026-10-11 - Chat on a phone
 
 **For players:**
 - **Tap the chat box to type on a phone or tablet.** The browser's on-screen keyboard opens; what you type is your chat line, Enter sends it and closes the keyboard (so does Esc, or a tap on the map).
 - Nothing looks different, and a computer with a mouse and keyboard plays as before. The keyboard may cover the chat box while you type; a line above the keyboard needs a picture first.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.11...v0.12.12); how it works: [`docs/TOUCH.md`](docs/TOUCH.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.12...v0.12.13); how it works: [`docs/TOUCH.md`](docs/TOUCH.md)
+
+## v0.12.12 - 2026-10-11 - The site statistics live in the database
+
+**For players:**
+- **The server keeps the front page's game counts in its database**, with the files of older servers read in on the first start, so no count is lost on a redeploy. The numbers shown are the same.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.11...v0.12.12)
 
 ## v0.12.11 - 2026-10-11 - The server counts how often each map is played
 

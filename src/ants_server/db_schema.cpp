@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps.
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -75,6 +75,22 @@ const char* const kMapPlaysSql =
     " PRIMARY KEY (map, hash)"
     ") WITHOUT ROWID;";
 
+// Version 4. site_stats: the two counters of the front page (docs/SERVER.md "The site statistics"), one row each: `kind` is "online" (a match that ran 30 seconds) or "local" (a single-player game that a browser
+// reported) and `total` the games since the counters began. site_stats_hours: the buckets of the last 24 hours (`hour` is the hour number on the server's clock, seconds since 1970 / 3600; `games` at least 1); the
+// server writes both tables whole in one transaction. The UTC day the counters count from (`since`) is the meta row 'site_stats_since'. The file site-stats.json of an older server is read into these
+// tables at the first start with them (SiteStats::open_db) and is left as it was.
+const char* const kSiteStatsSql =
+    "CREATE TABLE site_stats ("
+    " kind TEXT PRIMARY KEY NOT NULL CHECK (kind IN ('online', 'local')),"
+    " total INTEGER NOT NULL CHECK (total >= 0)"
+    ") WITHOUT ROWID;"
+    "CREATE TABLE site_stats_hours ("
+    " kind TEXT NOT NULL REFERENCES site_stats (kind) ON DELETE CASCADE,"
+    " hour INTEGER NOT NULL,"
+    " games INTEGER NOT NULL CHECK (games >= 1),"
+    " PRIMARY KEY (kind, hour)"
+    ") WITHOUT ROWID;";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -84,6 +100,7 @@ const std::vector<db::Migration>& db_migrations() {
          "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));"},
         {2, "history", kHistorySql},
         {3, "map_plays", kMapPlaysSql},
+        {4, "site_stats", kSiteStatsSql},
     };
     return list;
 }

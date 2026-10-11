@@ -269,14 +269,14 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
 }
 db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
 mkdir -p "$WORK/db_default"
-check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 3" "$WORK/db_default.log"; echo $?)"
+check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 4" "$WORK/db_default.log"; echo $?)"
 check "... and the database file is in the results folder by default (ants.db)" "$([ -s "$WORK/db_default/ants.db" ]; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
-    check "... it is a database at schema version 3 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "3 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
+    check "... it is a database at schema version 4 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "4 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
 else
     echo "  SKIP: python3 has no sqlite3 module: the content of the database file was NOT read"
 fi
-check "a second start over the same file finds schema version 3 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 3' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
+check "a second start over the same file finds schema version 4 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 4' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
 check "--db FILE puts the database there (its folder is made) and not in the results folder" "$([ "$(db_start "$WORK/db_named.log" --results-dir "$WORK/db_default2" --db "$WORK/db_dir/sub/named.db")" = "0" ] && [ -s "$WORK/db_dir/sub/named.db" ] && [ ! -e "$WORK/db_default2/ants.db" ]; echo $?)"
 check "--no-db keeps no database file, whatever --results-dir says, and the log says so" "$([ "$(db_start "$WORK/db_off.log" --results-dir "$WORK/db_off" --no-db)" = "0" ] && [ ! -e "$WORK/db_off/ants.db" ] && grep -q 'database is off (--no-db)' "$WORK/db_off.log"; echo $?)"
 check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
@@ -693,21 +693,32 @@ SERVER_PID=""
 check "the server stops cleanly on SIGTERM" "$([ "$SERVER_EXIT" -eq 0 ]; echo $?)"
 check "the room's result file was written" "$([ -s "$WORK/results/$CODE.json" ]; echo $?)"
 check "the log never shows the secret" "$(grep -q "$SECRET" "$WORK/server.log"; [ $? -ne 0 ]; echo $?)"
-# the counters are in the results folder (numbers and one date only), the stop saved them, the next start reads them, and a file that is no statistics is put aside whole
+# the counters are in the database of the results folder (numbers and one date only), the stop saved them, the next start reads them, the site-stats.json of an older server is read into the database once and left as
+# it was, a file that is no statistics is put aside whole, and --no-db keeps the counters in that file as before
+STATS_DB="$WORK/results/ants.db"
 STATS_FILE="$WORK/results/site-stats.json"
-check "the stop saved the counters in the results folder: one line of JSON, the format, the date, and for each counter its total and its hours (numbers only)" "$(python3 -c '
+db_stats() { python3 -c '
+import sqlite3, sys, json
+c = sqlite3.connect(sys.argv[1])
+t = dict(c.execute("select kind, total from site_stats"))
+h = {k: [list(r) for r in c.execute("select hour, games from site_stats_hours where kind = ? order by hour", (k,))] for k in ("online", "local")}
+since = c.execute("select value from meta where key = ?", ("site_stats_since",)).fetchone()[0]
+print(json.dumps({"since": since, "online": {"total": t["online"], "hours": h["online"]}, "local": {"total": t["local"], "hours": h["local"]}}))' "$1" 2> /dev/null; }
+check "the stop saved the counters in the database: the date, and for each counter its total and its hours (numbers only)" "$(db_stats "$STATS_DB" | python3 -c '
 import sys, json, re
-d = json.load(open(sys.argv[1]))
-ok = sorted(d) == ["format", "local", "online", "since"] and d["format"] == 1 and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", d["since"]) is not None
+d = json.load(sys.stdin)
+ok = sorted(d) == ["local", "online", "since"] and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", d["since"]) is not None
 for k in ("online", "local"):
     ok = ok and sorted(d[k]) == ["hours", "total"] and isinstance(d[k]["total"], int) and all(len(h) == 2 and all(isinstance(x, int) for x in h) for h in d[k]["hours"])
 ok = ok and d["local"]["total"] == 120 and d["online"]["total"] == 1 and sum(h[1] for h in d["local"]["hours"]) == 120
-sys.exit(0 if ok else 1)' "$STATS_FILE"; echo $?)"
-check "the log of the first start says that the counters are new, the stop leaves no temporary file" "$(grep -q 'site statistics: .* is new, counting from' "$WORK/server.log" && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
-STATS_BEFORE="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' "$STATS_FILE")"
-start_stats_server() {      # start_stats_server LOG: a server over the same results folder, on a WebSocket port of its own (WS2); waits for it
+sys.exit(0 if ok else 1)'; echo $?)"
+check "the log of the first start says that the counters are new, and the server wrote no site-stats.json" "$(grep -q 'site statistics: the database has none yet, counting from' "$WORK/server.log" && [ ! -e "$STATS_FILE" ] && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
+STATS_BEFORE="$(db_stats "$STATS_DB" | python3 -c 'import sys, json; d = json.load(sys.stdin); print(d["since"], d["online"]["total"], d["local"]["total"])')"
+start_stats_server() {      # start_stats_server LOG [RESULTS-DIR [OPTION...]]: a server over a results folder (the same one by default), on a WebSocket port of its own (WS2); waits for it
+    local log="$1" dir="${2:-$WORK/results}"
+    shift 2> /dev/null; shift 2> /dev/null
     WS2="$(free_port)"
-    "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ws-port "$WS2" --results-dir "$WORK/results" > "$1" 2>&1 &
+    "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ws-port "$WS2" --results-dir "$dir" "$@" > "$log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do
         [ "$(code_of "http://127.0.0.1:$WS2/busy")" = "200" ] && return 0
@@ -721,37 +732,50 @@ check "a second start over the same results folder is up" "$?"
 STATS2="http://127.0.0.1:$WS2/stats"
 STATS_AFTER="$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); print(d["since"], d["online"]["total"], d["local"]["total"])' <(curl -s -m 3 "$STATS2") 2> /dev/null)"
 check "it reads the counters back: the same totals, the same date ($STATS_BEFORE)" "$([ "$STATS_AFTER" = "$STATS_BEFORE" ]; echo $?)"
-check "... the games are still in the last 24 hours, and its log says what it read" "$(stats_check "$(stat_of online total "$STATS2")" "$(stat_of online total "$STATS2")" 120 120 "$STATS2" && grep -q 'site statistics: read .* online and 120 single-player games since' "$WORK/server2.log"; echo $?)"
-file_local_total() { python3 -c 'import sys, json; print(json.load(open(sys.argv[1]))["local"]["total"])' "$STATS_FILE" 2> /dev/null; }
+check "... the games are still in the last 24 hours, and its log says what it read" "$(stats_check "$(stat_of online total "$STATS2")" "$(stat_of online total "$STATS2")" 120 120 "$STATS2" && grep -q 'site statistics: read .* online and 120 single-player games since .* from the database' "$WORK/server2.log"; echo $?)"
+db_local_total() { db_stats "$STATS_DB" | python3 -c 'import sys, json; print(json.load(sys.stdin)["local"]["total"])' 2> /dev/null; }
 check "a report after the restart counts (121)" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "121" ]; echo $?)"
 FILE_SAVED=1
 for _ in $(seq 1 30); do
-    [ "$(file_local_total)" = "121" ] && { FILE_SAVED=0; break; }
+    [ "$(db_local_total)" = "121" ] && { FILE_SAVED=0; break; }
     sleep 0.1
 done
-check "the file has it within three seconds while the server runs (a change is written when it is due: the first write after a start is at once)" "$FILE_SAVED"
-check "a second report right after it (inside the ten seconds that the next write waits) counts (122) and is not in the file yet" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "122" ] && sleep 0.3 && [ "$(file_local_total)" = "121" ]; echo $?)"
+check "the database has it within three seconds while the server runs (a change is written when it is due: the first write after a start is at once)" "$FILE_SAVED"
+check "a second report right after it (inside the ten seconds that the next write waits) counts (122) and is not in the database yet" "$([ "$(code_of -X POST "http://127.0.0.1:$WS2/stats/local")" = "204" ] && [ "$(stat_of local total "$STATS2")" = "122" ] && sleep 0.3 && [ "$(db_local_total)" = "121" ]; echo $?)"
 stop_server
-check "the second server stops cleanly and the stop saved the 122" "$([ "$(file_local_total)" = "122" ]; echo $?)"
-printf 'this is no statistics' > "$STATS_FILE"
-mkdir "$WORK/results/site-stats.json.tmp"      # (a folder where the counters' temporary file goes: the first write of this start cannot be made)
-start_stats_server "$WORK/server3.log"
+check "the second server stops cleanly and the stop saved the 122" "$([ "$(db_local_total)" = "122" ]; echo $?)"
+# the file of an older server, next to a database of this program that has no counters yet: read into it at the start, the file left as it was; a later start reads the database
+mkdir -p "$WORK/results_old"
+printf '{"format":1,"since":"2026-09-01","online":{"total":50,"hours":[]},"local":{"total":120,"hours":[]}}\n' > "$WORK/results_old/site-stats.json"
+cp "$WORK/results_old/site-stats.json" "$WORK/site-stats.old"
+start_stats_server "$WORK/server_old.log" "$WORK/results_old"
+check "a start over a results folder with the site-stats.json of an older server is up, and counts its numbers (50 online, 120 single-player, since 2026-09-01)" "$?"
+check "... the log says that they were imported, the file is byte for byte as it was, and the numbers are in the database" "$(grep -q 'site statistics: imported 50 online and 120 single-player games since 2026-09-01' "$WORK/server_old.log" && cmp -s "$WORK/results_old/site-stats.json" "$WORK/site-stats.old" && [ "$(stat_of online total "http://127.0.0.1:$WS2/stats")" = "50" ] && [ "$(stat_of local total "http://127.0.0.1:$WS2/stats")" = "120" ] && [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select total from site_stats where kind = ?", ("online",)).fetchone()[0])' "$WORK/results_old/ants.db")" = "50" ]; echo $?)"
+code_of -X POST "http://127.0.0.1:$WS2/stats/local" > /dev/null
+stop_server
+printf '{"format":1,"since":"2026-01-01","online":{"total":9,"hours":[]},"local":{"total":9,"hours":[]}}\n' > "$WORK/results_old/site-stats.json"
+start_stats_server "$WORK/server_old2.log" "$WORK/results_old"
+check "a later start reads the database and not the file (121 single-player games, not the 9 of the changed file)" "$([ "$(stat_of local total "http://127.0.0.1:$WS2/stats")" = "121" ] && [ "$(stat_of online total "http://127.0.0.1:$WS2/stats")" = "50" ] && grep -q 'site statistics: read 50 online and 121 single-player games since 2026-09-01 from the database' "$WORK/server_old2.log"; echo $?)"
+stop_server
+# a file that is no statistics: put aside whole (named .broken-<time>), said in the log, the counters start at 0
+mkdir -p "$WORK/results_bad"
+printf 'this is no statistics' > "$WORK/results_bad/site-stats.json"
+start_stats_server "$WORK/server3.log" "$WORK/results_bad"
 check "a start over a file that is no statistics is up" "$?"
 STATS3="http://127.0.0.1:$WS2/stats"
-check "... it puts the file aside whole (named .broken-<time>), says so in its log, and counts again from 0" "$([ "$(ls "$WORK/results" | grep -c '^site-stats.json.broken-')" = "1" ] && [ "$(cat "$WORK"/results/site-stats.json.broken-*)" = "this is no statistics" ] && grep -q 'site statistics: .* cannot be used .* put aside as .*broken-.*counters start at 0' "$WORK/server3.log" && stats_check 0 0 0 0 "$STATS3"; echo $?)"
-# a file that cannot be written is said in the log while the server runs, once (the next try is ten seconds on); the stop writes it when the place is free again
-SAID=1
-for _ in $(seq 1 30); do
-    grep -q 'site statistics could not be saved' "$WORK/server3.log" && { SAID=0; break; }
-    sleep 0.1
-done
-check "a file that cannot be written is said in the log while the server runs" "$SAID"
-sleep 1.5
-check "... once" "$([ "$(grep -c 'site statistics could not be saved' "$WORK/server3.log")" = "1" ]; echo $?)"
-rmdir "$WORK/results/site-stats.json.tmp"
+check "... it puts the file aside whole (named .broken-<time>), says so in its log, and counts again from 0" "$([ "$(ls "$WORK/results_bad" | grep -c '^site-stats.json.broken-')" = "1" ] && [ "$(cat "$WORK"/results_bad/site-stats.json.broken-*)" = "this is no statistics" ] && grep -q 'site statistics: .* cannot be used .* put aside as .*broken-.*counters start at 0' "$WORK/server3.log" && stats_check 0 0 0 0 "$STATS3"; echo $?)"
 stop_server
-check "the stop wrote the file when the place was free again, and said so" "$(grep -q 'site statistics are saved again' "$WORK/server3.log" && [ "$(file_local_total)" = "0" ] && [ ! -e "$STATS_FILE.tmp" ]; echo $?)"
-check "the good file beside the one that was put aside is a statistics file: format 1, no online game" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); sys.exit(0 if d["format"] == 1 and d["online"]["total"] == 0 else 1)' "$STATS_FILE"; echo $?)"
+# --no-db: the counters are in the file as before (written at the stop, read at the next start), and there is no database
+mkdir -p "$WORK/results_nodb"
+start_stats_server "$WORK/server_nodb.log" "$WORK/results_nodb" --no-db
+check "a start with --no-db is up, its log says that the counters are new in site-stats.json" "$([ $? = 0 ] && grep -q 'site statistics: .*site-stats.json is new, counting from' "$WORK/server_nodb.log"; echo $?)"
+code_of -X POST "http://127.0.0.1:$WS2/stats/local" > /dev/null
+code_of -X POST "http://127.0.0.1:$WS2/stats/local" > /dev/null
+stop_server
+check "... the stop wrote the file (format 1, 2 single-player games) and no database was made" "$(python3 -c 'import sys, json; d = json.load(open(sys.argv[1])); sys.exit(0 if d["format"] == 1 and d["local"]["total"] == 2 and d["online"]["total"] == 0 else 1)' "$WORK/results_nodb/site-stats.json" && [ ! -e "$WORK/results_nodb/ants.db" ]; echo $?)"
+start_stats_server "$WORK/server_nodb2.log" "$WORK/results_nodb" --no-db
+check "... the next start with --no-db reads the file back (2)" "$([ "$(stat_of local total "http://127.0.0.1:$WS2/stats")" = "2" ] && grep -q 'site statistics: read 0 online and 2 single-player games' "$WORK/server_nodb2.log"; echo $?)"
+stop_server
 fi
 
 # ---- part secret: the control secret that the server makes, keeps, shows and reads from a file --------------------------------------------------------------------
