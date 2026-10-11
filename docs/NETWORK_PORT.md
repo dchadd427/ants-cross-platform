@@ -690,7 +690,7 @@ A game that starts straight into its match, and the match time that the dialog n
 
 * **The client** (`Application`): `net_begin_match` calls `enter_match`, which opens the dialog with `start_match_modal(true)` (it never closes by itself); `update_simulation` steps the HUD in real time while the dialog is up so that the worker's portrait moves; `post_tick`, which every executed turn calls, dismisses the dialog before anything else. A page that is hidden in the browser (background steps) closes it from the wake-up that runs the first turn. The clock behind the dialog shows the match's full time, and a click on an ant selects nothing until the dialog is gone.
 
-* **The bots** act on simulation ticks only (`BotController::on_tick`), so none looks or orders before the first tick; they look on tick 1 + seat and open with one token (`docs/BOTS.md`, "The opening"). On a server the referee that runs them is ahead of a person's screen by the link's delay and the runner's buffer, so a bot's first order can be applied a few ticks before a person's first click can be; the head start that remains is that delay, not seconds.
+* The bots' opening and the head start of the machine that runs them are described in [BOTS.md](BOTS.md#fairness-in-detail).
 
 *History of this chapter (tests, measurements, review notes): [Protocol 12: the match clock waits for the "Get ready to play!" dialog (v0.2.0)](history/NETWORK_PORT_history.md#protocol-12-the-match-clock-waits-for-the-get-ready-to-play-dialog-v020).*
 

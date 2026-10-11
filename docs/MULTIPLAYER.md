@@ -124,7 +124,7 @@ The prediction is **off by default**. Switch it on with `--prediction on`, the s
 
 ## Bots (computer players)
 
-A bot is a **virtual client**: a seat whose commands are produced by a program (the `ants_ai` library) instead of a person. It reads the world through a read-only copy of what a player of its seat can see and sends the same `Command`s that a mouse click makes, through the same door: the simulation of a local game, the sequencer of a room. The simulation validates every command, so a bot has a person's powers and cannot bend a rule. A game without bots runs no bot code, and no state hash changes.
+What a bot is, what it reads and how it sends its commands is described in [BOTS.md](BOTS.md#what-a-bot-is).
 
 The 1:1 core has no computer players: bots live in `ants_ai` only (project rule 5 in [`AGENTS.md`](../AGENTS.md)). The only computer behaviour inside the simulation is the original's own auto-engage reflex of the Combat Ant ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.36).
 
@@ -140,14 +140,10 @@ The 1:1 core has no computer players: bots live in `ants_ai` only (project rule 
 
 - **Local games**, with `--bot SEAT[:KIND][:LEVEL][:STYLE]` (repeatable):
 
-  ```bash
-  ants --map Original-Ants/Maps/TINY.LVL --bot 1:medium                           # you at seat 0 against one bot
-  ants --player 2 --bot 0:hard --bot 1:easy --bot 3:easy                           # you at seat 2 against three bots
-  ants --map Original-Ants/Maps/TREASURE.LVL --bot 1 --bot 2 --bot 3 --teams 0+1   # you and the red bot against the other two
-  ```
+  The command lines that seat bots are listed in [BOTS.md](BOTS.md#running-bots).
 
   SEAT is 0 to 3 (green, red, blue, black), not your own. KIND is `idle`, `worker` or `standard` (the default), LEVEL is `easy`, `medium` (the default) or `hard`, and STYLE is `aggressive`, `economic`, `raider`, `defensive` or `random` (only the standard bot has a style, and a Hard bot plays only `aggressive` or `raider`: `--bot 2:hard:economic` is refused). A game with bots has the seats that are taken, you and the bots: an empty seat has no hill and no ants.
-- **The start menu**: Single player offers Empty, Easy bot, Medium bot or Hard bot for each of the three other seats and starts the match with exactly the bots that `--bot SEAT:LEVEL` would give. The panel says "Bots play without fog of war." and remembers the choice in the settings file ([`CONTROLS.md`](CONTROLS.md) "Single player").
+- Bots from the start menu are described in [CONTROLS.md](CONTROLS.md#single-player).
 - **Teams before the game**: `--teams 0+1` makes seats 0 and 1 a team, and the two other seats too when both play (`--teams ffa`, free for all, is the default). The start menu (Single player and the Host panel) has a Teams row, and each colour of the web front page's lobby a Team 1 and a Team 2 button. A room's teams are chosen before the start too (network protocol 13): the leader's choice, or the room's own teams (set when the room was made, in the create block of its first Hello: network protocol 15), which hold for every start, the automatic start of a full room included. The players of a room with no teams can still team up in the match.
 - **A bot that declines your invitation to team up says why.** The original's "%s rejected teaming up" stays (string 80, [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.42) and one line of the chat log follows it: "Bots team up only while three or more teams play.", "You already have a teammate.", "<name> already has a teammate." or "This bot never teams up." (the worker bot).
 - **Your room on the local network**: `ants --host --bot 2` seats a bot at seat 2. Guests take the first free seat, the room shows "Bot (Medium)" with the good thumb, and START never waits for it. The host's machine runs the bot and a guest never does. Its commands enter the host's sequencer with the bot's seat, so every machine sees the same turns and the same state hash. If the host leaves, its bot leaves with it (the new host drops the seat in its first turn, like any seat that did not follow). `ants --host --fill-bots hard` fills the empty seats at the host's START.
