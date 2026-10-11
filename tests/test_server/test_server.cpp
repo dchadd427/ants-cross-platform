@@ -10976,11 +10976,14 @@ void run_lobby_room_tests() {
             ASSERT_EQ(c->lobby->room().map_name, std::string("SMALL.LVL"));
             ASSERT_TRUE(c->lobby->room().plan[2] == K::Medium && c->lobby->room().plan[3] == K::Nobody && c->lobby->room().team_a == 0 && c->lobby->room().team_b == 1);
         }
-        ASSERT_TRUE(pia.lobby->request_plan(plan_msg(all_open, net::kNoTeam, net::kNoTeam, "MEDIUM.LVL")));      // a real map that the server does not list: the map stays, the rest of the plan is taken
+        ASSERT_TRUE(pia.lobby->request_plan(plan_msg(all_open, net::kNoTeam, net::kNoTeam, "NOWHERE.LVL")));      // a map that the server does not have: the map stays, the rest of the plan is taken
         w.run(300);
         s = w.status("plan0001");
         ASSERT_EQ(s.map, std::string("SMALL.LVL"));
         ASSERT_EQ(s.plan, std::string("oooo -"));
+        ASSERT_TRUE(pia.lobby->request_plan(plan_msg(all_open, net::kNoTeam, net::kNoTeam, "MEDIUM.LVL")));      // a map of the store that --demo-maps does not list: taken too (the lobby may choose any map the server has; tests/test_server/test_map_list.cpp)
+        w.run(300);
+        ASSERT_EQ(w.status("plan0001").map, std::string("MEDIUM.LVL"));
         ASSERT_TRUE(pia.lobby->request_plan(plan_msg(all_open, net::kNoTeam, net::kNoTeam, "gauntlet.lvl")));
         w.run(300);
         ASSERT_EQ(w.status("plan0001").map, std::string("GAUNTLET.LVL"));

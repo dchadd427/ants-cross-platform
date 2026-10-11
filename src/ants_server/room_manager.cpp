@@ -299,7 +299,11 @@ LobbyServices RoomManager::lobby_services() {
         for (const std::string& file : limits_.demo_maps) {
             if (iequals(name, file)) return file;
         }
-        return !limits_.demo_map.empty() && iequals(name, limits_.demo_map) ? limits_.demo_map : std::string();       // (the server's one map when it offers no list)
+        if (!limits_.demo_map.empty() && iequals(name, limits_.demo_map)) return limits_.demo_map;       // (the server's one map when it offers no list)
+        // Any other map the store has (the maps folder and the community folder: GET /maps lists them): the lobby offers every map of the list, not only the --demo-maps. A name that cannot travel is refused by find().
+        const std::string listed = store_.listed_name(name);
+        MapEntry entry;
+        return store_.find(listed.empty() ? name : listed, entry) ? entry.name : std::string();
     };
     s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) { return store_.find(file, entry) && level.load_from_file(entry.path); };
     s.match_place = [this](uint32_t now_ms) { return take_match_place(now_ms); };

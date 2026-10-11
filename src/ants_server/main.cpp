@@ -18,6 +18,8 @@
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
 //   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in site-stats.json (without it they live in memory)
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
+//   --community-maps DIR  a second folder of maps, the players' maps (Community-Maps/ of the repository: the .lvl files with maps.json and previews.json; the image has it in /community-maps). The lobby
+//                      may choose every map of --maps and of this folder, and GET /maps on the replay port lists them. Left out: only the --maps folder (the default)
 //   --max-rooms N      the most rooms at a time (default 256)
 //   --demo-rooms N     for a public test page: a Hello that carries a create block (network protocol 15: the map, the seats 2 - 4, the teams and whether a full room waits for its leader's
 //                      START) for a room that does not exist makes it, at most N public rooms at a time. The code is only a name (the game makes 6 random letters and numbers). N is 1 to
@@ -125,6 +127,7 @@ constexpr size_t kDefaultDemoLobbies = 200;           // lobby rooms that may wa
 
 struct Options {
     std::string maps_dir;
+    std::string community_maps_dir;
     uint16_t port{4001};
     uint16_t ws_port{0};
     uint16_t ctl_port{0};
@@ -166,7 +169,7 @@ struct Options {
 void usage(FILE* to) {
     std::fprintf(to,
                  "usage: ants_server --maps DIR [--port 4001] [--ws-port N] [--ctl-port N] [--public] [--ws-any-interface] [--ctl-any-interface]\n"
-                 "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N]\n"
+                 "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N] [--community-maps DIR]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
@@ -220,6 +223,8 @@ int main(int argc, char** argv) {
             return 0;
         } else if (a == "--maps") {
             o.maps_dir = value("--maps");
+        } else if (a == "--community-maps") {
+            o.community_maps_dir = value("--community-maps");
         } else if (a == "--port" || a == "--ws-port" || a == "--ctl-port") {
             uint16_t p = 0;
             if (!parse_port(value(a.c_str()), p)) {
@@ -380,6 +385,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "the maps folder '%s' does not exist\n", o.maps_dir.c_str());
         return 2;
     }
+    if (!o.community_maps_dir.empty() && !std::filesystem::is_directory(o.community_maps_dir, ec)) {
+        std::fprintf(stderr, "the community maps folder '%s' does not exist\n", o.community_maps_dir.c_str());
+        return 2;
+    }
     if (!o.results_dir.empty()) std::filesystem::create_directories(o.results_dir, ec);
 
     std::string secret;
@@ -475,7 +484,13 @@ int main(int argc, char** argv) {
     limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
-    ants::server::MapStore store{o.maps_dir};
+    ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
+    {
+        std::vector<std::string> map_notes;
+        const size_t listed = store.scan(&map_notes);                 // (every map is listed and hashed once, now; GET /maps lists them, the lobby may choose any of them)
+        log(std::to_string(listed) + " maps listed" + (o.community_maps_dir.empty() ? std::string() : " (maps folder and community folder " + o.community_maps_dir + ")"));
+        for (const std::string& line : map_notes) log("maps: " + line);
+    }
     if (o.demo_maps_given && o.demo_rooms == 0) {
         std::fprintf(stderr, "--demo-maps needs --demo-rooms (and --demo-map)\n");
         return 2;
@@ -639,7 +654,7 @@ int main(int argc, char** argv) {
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));
     if (replay_http) {
         log("public replays on port " + std::to_string(replay_http->port()) + (o.replay_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") +
-            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live and GET /live/<id>, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
+            ": GET /replays, GET /replays/<file>, GET /history, GET /history/<id>, GET /live, GET /live/<id> and GET /maps, read only, no secret" + (rooms.replay_store() != nullptr ? std::string() : std::string("; the server keeps no replays, so it answers 404")));
     }
     if (http) {
         using ants::server::SecretSource;

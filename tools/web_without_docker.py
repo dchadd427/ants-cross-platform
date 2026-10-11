@@ -48,7 +48,7 @@ DEFAULT_PORT = 19980
 START_SECONDS = 10                      # how long nginx gets to answer after it was started
 EMSDK_URL = "https://github.com/emscripten-core/emsdk.git"
 PORT_MIRROR = "https://storage.googleapis.com/webassembly/emscripten-ports/"
-VIRTUAL_ROOTS = ("/src", "/usr/share/nginx/html", "/etc/nginx")      # what the Dockerfile writes to: moved under WORK/fs
+VIRTUAL_ROOTS = ("/src", "/usr/share/nginx/html", "/etc/nginx", "/srv/community-maps")      # what the Dockerfile writes to: moved under WORK/fs
 BASE_FOLDERS = ("/src", "/usr/share/nginx/html", "/etc/nginx/conf.d")  # what the base images already have (the emsdk image's /src, the nginx image's two)
 HARMLESS_PATHS = ("/dev/null", "/bin/sh", "/usr/bin/env")
 IGNORED = ("EXPOSE", "HEALTHCHECK", "CMD", "ENTRYPOINT", "LABEL", "MAINTAINER", "STOPSIGNAL", "USER")
@@ -563,7 +563,8 @@ def prepare_ports(context, emsdk, env):
 def site_config(conf, fs, cache, port):
     """docker/nginx.conf for a machine without the image's folders: its paths under fs, the cache folder, and `listen` on 127.0.0.1:PORT."""
     html, stats = os.path.join(fs, "usr", "share", "nginx", "html"), os.path.join(cache, "ants_stats")
-    text = conf.replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
+    maps = os.path.join(fs, "srv", "community-maps")                                       # (the players' maps and pictures, served by /maps/previews/ and /maps/files/: outside the web root)
+    text = conf.replace("/srv/community-maps", maps).replace("/usr/share/nginx/html", html).replace("/var/cache/nginx/ants_stats", stats).replace("/var/cache/nginx/ants_history", os.path.join(cache, "ants_history"))
     text, moved = re.subn(r"^([ \t]*)listen[ \t]+80;[ \t]*$", r"\1listen 127.0.0.1:%d;" % port, text, flags=re.M)
     text = re.sub(r"^[ \t]*listen[ \t]+\[::\]:80;[ \t]*\n", "", text, flags=re.M)
     if moved != 1:

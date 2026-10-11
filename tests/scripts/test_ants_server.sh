@@ -294,6 +294,31 @@ else
 fi
 check "... and --no-db starts the server in spite of it" "$([ "$(exit_of --results-dir "$WORK/db_off2" --no-db)" = "142" ]; echo $?)"
 check "--db that names a folder stops the server (status 1)" "$([ "$(exit_of --db "$WORK")" = "1" ]; echo $?)"
+# the players' maps (docs/SERVER.md "The list of maps"): --community-maps names a second folder, a folder that is not there stops the server, and GET /maps on the public door lists the originals first and then the
+# folder as its maps.json says (the real binary and the real Community-Maps/; the unit test is tests/test_server/test_map_list.cpp)
+check "--community-maps that is no folder stops the server (status 2)" "$([ "$(exit_of --community-maps "$WORK/no_such_folder")" = "2" ]; echo $?)"
+check "--help names --community-maps" "$("$SERVER" --help 2>&1 | grep -q -- '--community-maps DIR'; echo $?)"
+CM_PORT="$(free_port)"
+ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --community-maps "$ROOT/Community-Maps" --port "$(free_port)" --replay-port "$CM_PORT" --no-db > "$WORK/cm.log" 2>&1 &
+CM_PID=$!
+for _ in $(seq 1 50); do grep -q 'public replays on port' "$WORK/cm.log" 2> /dev/null && break; kill -0 "$CM_PID" 2> /dev/null || break; sleep 0.1; done
+check "a server with --community-maps lists them: GET /maps on the public door is maps.json after the six originals, with no play counts (no database), and a query or a path below it is a 404" "$(curl -s -m 5 "http://127.0.0.1:$CM_PORT/maps" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+want = json.load(open(sys.argv[1] + "/Community-Maps/maps.json"))["maps"]
+previews = json.load(open(sys.argv[1] + "/Community-Maps/previews.json"))
+m = d["maps"]
+ok = d["format"] == 1 and len(m) == 6 + len(want)
+ok = ok and [x["file"] for x in m[:6]] == ["TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"] and all(x.get("original") is True for x in m[:6])
+rest = {x["file"]: x for x in m[6:]}
+ok = ok and len(rest) == len(want) and all(x["plays"] == 0 and ("original" in x) == (x["file"] in ("TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL")) for x in m)
+for w in want:
+    g = rest.get(w["file"])
+    ok = ok and g is not None and all(g[k] == w[k] for k in ("width", "height", "minutes", "players", "description")) and g["thumb"].startswith("/maps/previews/") and "picture" in previews[w["file"]]
+sys.exit(0 if ok else 1)' "$ROOT"; echo $?)"
+check "... and the same door refuses what is not the plain list (a query and a name below /maps: 404, a POST: 405)" "$([ "$(code_of "http://127.0.0.1:$CM_PORT/maps?x=1")" = "404" ] && [ "$(code_of -X POST "http://127.0.0.1:$CM_PORT/maps")" = "405" ] && [ "$(code_of "http://127.0.0.1:$CM_PORT/maps/TINY.LVL")" = "404" ]; echo $?)"
+check "... and the log says how many maps are listed" "$(grep -q '^\[ants_server [0-9]*\] 564 maps listed (maps folder and community folder' "$WORK/cm.log"; echo $?)"
+kill -TERM "$CM_PID" 2> /dev/null; wait "$CM_PID" 2> /dev/null
 # the match history lives in the database (docs/REPLAYS.md "The match history"): no folder of its own, --no-history turns it off, --no-db leaves it nothing to live in
 check "--help names --no-history, and there is no --history-dir (the history is in the database: a leftover option is refused, status 2)" "$("$SERVER" --help 2>&1 | grep -q -- '--no-history'; [ "$(exit_of --history-dir "$WORK/hi_none")" = "2" ]; echo $?)"
 check "with a database the server keeps the match history, and the log says where it counts from" "$([ "$(db_start "$WORK/hist_on.log" --results-dir "$WORK/hist_on")" = "0" ] && grep -q 'match history kept for good in the database; the matches of the replay store are counted while no match runs' "$WORK/hist_on.log"; echo $?)"

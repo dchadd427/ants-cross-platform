@@ -199,6 +199,9 @@ public:
     std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
+    /// What a lobby room asks of this server (room.hpp: LobbyServices): choosing a map by name (every map of the store: the maps folder and the community folder; the --demo-maps and --demo-map keep their
+    /// spelling), loading a map, a place for a match. Public for the tests (tests/test_server/test_map_list.cpp).
+    LobbyServices lobby_services();
     const ServerLimits& limits() const noexcept { return limits_; }
     /// A room's specification with the server's defaults in it (reconnect, the vote, the cap, the limit of the log): what the control interface starts from
     RoomSpec default_spec() const;
@@ -286,8 +289,6 @@ private:
     size_t public_places() const;
     /// A place for one more public match, for the START of a lobby room: free, or made free by ending the public match that has been abandoned the longest (evict_abandoned_public)
     bool take_match_place(uint32_t now_ms);
-    /// What a lobby room asks of this server (room.hpp: LobbyServices): the maps of --demo-maps by name, loading a map, a place for a match
-    LobbyServices lobby_services();
     /// Ends the public room that has been abandoned the longest (at least kDemoAbandonedMs: every seat of a person held absent, nobody back): its clients are dropped, its record is deleted, its log is
     /// freed, its end is reported, and it is forgotten at once so that its place can be taken. False when no public room qualifies (a room with a person present never does).
     bool evict_abandoned_public(uint32_t now_ms);
