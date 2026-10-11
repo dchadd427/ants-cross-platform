@@ -594,7 +594,7 @@ bool Application::room_mouse_up(int32_t x, int32_t y, uint8_t button);          
 
 ### The screens and the application's hooks
 
-* **`--fill-bots none|easy|medium|hard`** (any case; anything else, or no value, refuses to start; off by default) sets the level of this player's START when it can start a room: the **leader's** START in a server's room (the request carries it: START with one person is then no can't-go cue) and the **host's** START of a room on the local network. A game that is not a room ignores it. `--say TEXT` is a test hook for headless clients: it says the line once in the waiting room, as soon as two players are in it.
+* The options `--fill-bots` and `--say` are described in [`COMMAND_LINE.md`](COMMAND_LINE.md#--fill-bots---start-when-and---say-in-detail).
 
 * **The desktop start menu's Host panel** has a fourth choice, **Empty seats at START: Leave empty / Easy bots / Medium bots / Hard bots** (`MenuId::HostFill`, remembered under the settings key `host_fill`: `none`, `easy`, `medium`, `hard`; anything else is none). Host sends it with the request (`MenuRequest::fill`) and the application calls `set_fill_bots` before the connection is made, so the leader's START carries it; the room's panel says what START will do ("Empty seats will be Medium bots." / "Empty seats stay empty."). A **Join** sets the fill to none: only the leader's START seats bots, and the choice is its host's. `--start-menu --fill-bots hard` starts the Host panel at Hard bots (nothing is written until the player changes it).
 
@@ -634,7 +634,7 @@ The mouse-wheel zoom (`VIEW_AND_HUD.md`, "Mouse-wheel zoom"; `view_zoom.hpp`, `A
 
 * **The setup screens take no wheel and no middle button**, the 16:9 screens of a room with their chat box included, over the box, the preview or anywhere else, with the chat input closed or open: nothing zooms, nothing opens or closes the input, the typed line stays (N5.68; the window's event loop does not route a wheel to a setup screen at all, `view_zoom_allowed` is false outside a running match). The camera of a setup screen is at the remembered level from the start (`--zoom 2 --join ...`), so **the map preview of a room's screen is drawn at the zoom 1 whatever the camera is at** (`Renderer::render_world_image` sets the zoom for the picture and restores it; N5.72 for the leader's and the guest's screens).
 
-* **Typing in the match's chat goes on through the zoom**: the characters of a line (`+`, `-`, `=`) are text and never a zoom key; the wheel and the middle button change the zoom in the middle of a line and leave it as typed, and Enter sends it whole to the room (N5.70).
+* Typing in the match's chat while the zoom changes is described in [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#the-wheel-the-middle-button-and-where-they-act).
 
 * **The web page** (`web/shell.html`): the wheel, a ctrl + wheel and Safari's pinch are cancelled over the canvas only, and so are the press (`mousedown`) and the click (`auxclick`) of the MIDDLE button (SDL cancels the `mouseup` only; an unprevented middle press over a page that scrolls starts the browser's autoscroll on Windows in Chrome, Edge and Firefox and would defeat "back to zoom 1"; the rest of the page keeps its middle button), on the page with `?join=...&fill=...` as on every other (`tests/scripts/web_fill_check.js` checks that every listener is on the canvas and that `web/lobby.html`, whose frames are `embed=1` pages, has none of its own; `web_aspect_check.py --wheel` checks it in a real browser, with a join address). The chat input of the setup screen is drawn by the game on the canvas, so the page adds nothing for it.
 
@@ -654,7 +654,7 @@ The mouse-wheel zoom (`VIEW_AND_HUD.md`, "Mouse-wheel zoom"; `view_zoom.hpp`, `A
 
 ## Protocol 12: the match clock waits for the "Get ready to play!" dialog (v0.2.0)
 
-A request after play: the match clock should wait until the "Get ready to play!" dialog is closed and the ants are able to move (a clock that runs behind the dialog wastes five or six seconds). The original runs the match clock and the ants behind the dialog (`docs/GAME_REVERSE_ENGINEERING.md` section 21: the GO handler that releases the dialog also starts the clock), so a person loses the 5 s of its task KWFO; the remake **deviates on purpose** (`docs/history/AUDIT_ONE_TO_ONE.md` section 3b): every match still opens with the dialog (its picture, its texts, 5 s, every click and key taken), but **the simulation does not run while it is up**: tick 0 runs when it closes and the clock shows the match's full time.
+What the original does while the "Get ready to play!" dialog is up is recorded in section 6.2, item 21 of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), and the remake's deviation in [`GAMEPLAY.md`](GAMEPLAY.md#the-get-ready-to-play-dialog-does-not-cost-match-time-a-deliberate-deviation).
 
 ### The change in the network, and why the number moves
 
@@ -782,7 +782,7 @@ A request (2026-10-05): the host should be able to change a player's colour by f
 
 * **The plan's bots follow what the room shows**: the plan of the leader's fill (`FillPlan`, protocol 13) is by colour, so when the room shows a person in a free colour (a person's colour is empty now, an empty colour is a person's, nothing else changed: `NetGame::follow_moved_player`) the levels of the two seats trade places, and the match that START makes has the same people and the same bots as the leader saw (the Hard bot that was for Blue is for Red when the friend takes Blue). The plan follows the room, not the request: a request that the room did not do changes nothing, and one that was sent twice moves the plan once. Each Room message is compared with the one before it, however many arrive in one update, so a person who comes or goes in another message is no move and a move is not lost among them. A START waits for the answer of a request that is out (above); one that went out first and crosses a request on the wire (a row pressed after START, before the screen locks) is put right by the room (see above).
 
-* **A hint**: when the second person is in the room the leader's status line says "Tap a player to change their colour." for five seconds.
+* The hint that the leader's status line shows when a second person is in the room is described in [`CONTROLS.md`](CONTROLS.md#in-a-network-room).
 
 ### Limits
 
