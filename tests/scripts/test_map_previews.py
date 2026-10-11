@@ -8,6 +8,7 @@
 import json
 import os
 import shutil
+import struct
 import sys
 import tempfile
 import unittest
@@ -15,7 +16,10 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import map_previews  # noqa: E402
-from PIL import Image  # noqa: E402
+try:
+    from PIL import Image  # noqa: E402  (the runners of CI have no Pillow: the tests that draw or decode a picture are skipped there, the folder checks read the PNG header themselves)
+except ImportError:
+    Image = None
 
 FOLDER = os.path.join(REPO, "Community-Maps")
 
@@ -35,6 +39,7 @@ class FakeRenderer:
         return Image.new("RGB", (map_previews.SOURCE, map_previews.SOURCE), (seed, 255 - seed, 7))
 
 
+@unittest.skipUnless(Image, "Pillow is needed")
 class Logic(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="map_previews.")
@@ -166,8 +171,10 @@ class TheFolder(unittest.TestCase):
         folder = os.path.join(FOLDER, "previews")
         self.assertEqual(sorted(os.listdir(folder)), sorted(e["picture"] for e in self.index.values()))
         for entry in self.index.values():
-            with Image.open(os.path.join(folder, entry["picture"])) as picture:
-                self.assertEqual((picture.format, picture.size), ("PNG", (map_previews.SIZE, map_previews.SIZE)), entry["picture"])
+            with open(os.path.join(folder, entry["picture"]), "rb") as f:
+                head = f.read(24)
+            self.assertEqual(head[:8], b"\x89PNG\r\n\x1a\n", entry["picture"])
+            self.assertEqual(struct.unpack(">II", head[16:24]), (map_previews.SIZE, map_previews.SIZE), entry["picture"])
 
     def test_the_pictures_are_small(self):
         folder = os.path.join(FOLDER, "previews")
