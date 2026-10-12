@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
+
+**For players:**
+- **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
+
 ## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
 
 **For players:**
@@ -33,7 +40,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
 
 **For players:**
-- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant: a click, and a faint sound that suddenly got loud was heard as played again. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
+- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant. That click is measured. A faint sound that suddenly got loud may have been heard as played again ("repeat"), but that is only a hypothesis about what the owner heard, not confirmed. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
@@ -459,15 +466,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
 
-## v0.0.96 - 2026-10-02 - The web game starts at once and keeps playing in a hidden tab
+## Older versions (v0.0.96 and before)
 
-**For players:**
-- The web page no longer hides the game behind a "Click anywhere to play!" card. The game starts as soon as its data has downloaded, with the original's loading screen and quick help, and sound and music begin at the first click, tap or key press on the page.
-- A network match keeps playing when its tab is hidden or its window is minimised. Before, a hidden seat was called lagging after 3 seconds and dropped after 30. Now it keeps up and the other players are not told it lags.
-- A hidden page plays no sound or music, and a local game stands still while its page is hidden. A sleeping computer or a phone with a locked screen still stops the page.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
-
-## Older versions (v0.0.95 and before)
-
-Every release before v0.0.96, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.97, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
