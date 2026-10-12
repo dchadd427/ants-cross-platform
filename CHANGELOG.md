@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b20156...map-picker)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b20156...1663b242)
 
 ## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 
