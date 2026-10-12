@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: the simulation and the protocol are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...map-fetch)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...9e408a1b)
 
 ## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
 
