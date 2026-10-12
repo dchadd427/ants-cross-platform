@@ -1,5 +1,5 @@
 // Runs the lobby page's codec of network protocol 16 (web/front/lobby_net.js) without a browser, against the bytes that the C++ encoders wrote (tests/data/lobby_messages.txt, which
-// tests/test_net/test_lockstep.cpp N2.111 keeps true): every message a page sends is made from its fields and must be those bytes, every message a page hears is decoded to the fields
+// tests/test_net/test_lockstep_protocols.cpp N2.111 keeps true): every message a page sends is made from its fields and must be those bytes, every message a page hears is decoded to the fields
 // that the C++ decoder reads from them, the guard of a colour move is the C++ seating_hash of the Room message, and what the C++ decoders refuse (every truncation, every extra byte, every
 // value out of its range) is refused here too. usage: node web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt     (exit 0: every check holds; failures are printed)
 'use strict';

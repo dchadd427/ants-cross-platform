@@ -31,10 +31,7 @@ TEST_LINES = 2500
 PROD_LINES = 1500
 LINE_SLACK = 0.10  # a file more than 10% below its ceiling: lower the ceiling
 LINE_CEILINGS = {
-    "tests/test_server/test_server.cpp": 12276,
-    "tests/test_net/test_lockstep.cpp": 11857,
     "tests/test_app/test_app_integration.cpp": 11827,
-    "tests/test_app/test_network_app.cpp": 7123,
     "tests/test_net/test_lobby.cpp": 5508,
     "tests/test_app/test_view_fingerprint.cpp": 4347,
     "tests/test_app/test_hud_layout.cpp": 3457,
@@ -42,9 +39,6 @@ LINE_CEILINGS = {
     "tests/test_app/test_zoom_view.cpp": 3157,
     "tests/test_app/test_start_menu.cpp": 2943,
     "tests/test_app/test_wide_hud.cpp": 2710,
-    "tests/test_ctl/test_ctl.cpp": 2625,
-    "tests/test_server/test_rejoin.cpp": 2560,
-    "tests/test_net/test_netgame.cpp": 2521,
     "src/ants_ai/standard_tasks.cpp": 3911,
     "web/shell.html": 3970,
     "src/ants_app/application.cpp": 3443,

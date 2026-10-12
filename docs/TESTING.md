@@ -43,6 +43,8 @@ On Windows, `run_tests.bat` runs only a part of the suites (1, 1.2 - 1.5, 2, 2.1
 
 A test program that reads `ANTS_TEST_FILTER` runs only the cases whose title contains its text, for work on one case (`ANTS_TEST_FILTER="N3.1 Room" ./build/tests/test_net/test_netgame`); `test_ai_worker` also reads `W_ONLY` and `W_SKIP`, comma-separated case numbers (`W_ONLY=AI3.4,AI3.7`). `./run_tests.sh` removes these variables for its suites, so a filter left in the shell never reaches a master run.
 
+A big suite is one binary of several sources, so that no file passes the line limit of the hygiene check (below): the `main()` and the order of the groups of cases are in the file of the binary's name (`test_server.cpp`), the cases in the files beside it (`test_server_core.cpp`, `test_server_bots.cpp`, ...), and what the parts share (the harness, the worlds and clients, the helpers) in a header of the folder (`server_fixtures.hpp`), all inline or in an anonymous namespace. The same layout holds for `test_lockstep`, `test_netgame`, `test_rejoin`, `test_ctl` and `test_network_app`. A case moves between the parts of its suite freely, but a group keeps its place in `main()`: the order of the cases is the order of the output.
+
 ## What the Suites Cover
 
 The numbers are the ones `./run_tests.sh` prints; `./run_tests.sh --list` names every suite with its tier. A suite marked "full tier" is not in `--fast`. Section numbers (for example "section 5.32") are those of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md), where the original program's rule that a suite checks is written down.

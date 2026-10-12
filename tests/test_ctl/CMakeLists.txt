@@ -1,5 +1,7 @@
 add_executable(test_ctl
     test_ctl.cpp
+    test_ctl_json.cpp
+    test_ctl_http.cpp
 )
 
 target_link_libraries(test_ctl PRIVATE

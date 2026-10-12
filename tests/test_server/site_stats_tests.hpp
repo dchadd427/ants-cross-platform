@@ -1,6 +1,6 @@
 // The tests of the site statistics (ants_server/site_stats.hpp): the counting rules, the window of 24 hours with a clock that the test moves, the cap on single-player reports, the file
 // (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing) and the
-// door over real sockets. Included by test_server.cpp, which holds the harness (TEST_CASE, ASSERT_*, World, Client) and calls run_site_stats_tests().
+// door over real sockets. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
 #pragma once
 
 namespace {
