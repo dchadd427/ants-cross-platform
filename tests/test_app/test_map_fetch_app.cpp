@@ -113,7 +113,7 @@ public:
     std::vector<Ask> asks;
     int polls = 0;
     std::string fail;                                   // not empty: every map fails with this text
-    bool wrong_file = false;                            // Ready, but the file in the folder is another one
+    bool hold = false;                                  // true: Pending however long it is asked (the file is on its way)
 
     void request(const std::string& folder, const std::string& name, uint64_t hash) override {
         asks.push_back(Ask{folder, name, hash});
@@ -122,6 +122,7 @@ public:
     Status status(const std::string& name) override {
         ++polls;
         Status s;
+        if (hold) return s;
         if (left_ > 0) {
             --left_;
             return s;
@@ -157,6 +158,7 @@ struct Peer {
     fs::path folder;
     int starts = 0;
     int cancels = 0;
+    bool fail_load = false;                 // true: this machine reports that it cannot load (the room cancels the start for everybody)
     Peer() { net.set_discovery(0); }
     void update() {
         net.update(now);
@@ -168,7 +170,7 @@ struct Peer {
             assets::LevelData level;
             uint64_t hash = 0;
             const std::string path = (folder / s.map_name).string();
-            const bool ok = level.load_lvl(path) && net::hash_file(path, hash) && hash == s.map_hash;
+            const bool ok = !fail_load && level.load_lvl(path) && net::hash_file(path, hash) && hash == s.map_hash;
             if (ok) {
                 sim.set_fog_of_war_enabled(s.fog);
                 sim.set_game_mode(s.game_mode());
@@ -337,20 +339,30 @@ int main(int argc, char* argv[]) {
         app.shutdown();
     } TEST_END();
 
-    TEST_CASE("MF1.5 A start that the host cancels while the file is on its way is dropped: the machine goes back to the room and the late file loads nothing") {
+    TEST_CASE("MF1.5 A start that is cancelled while the file is on its way is dropped: the machine is back in the room, and the file that arrives afterwards is not polled, loaded or recorded") {
         Folders dirs;
         ASSERT_TRUE(dirs.ok());
         Application app;
         Peer host;
         std::unique_ptr<Duo> owner;
         Duo* duo = nullptr;
-        auto fake = std::make_unique<FakeFetcher>(dirs.host() / kCommunity, 100000);      // (never arrives)
+        auto fake = std::make_unique<FakeFetcher>(dirs.host() / kCommunity, 0);
+        FakeFetcher* fetcher = fake.get();
         ASSERT_TRUE(join_room(app, host, duo, owner, dirs, std::move(fake), kCommunity));
+        fetcher->hold = true;
+        host.fail_load = true;                                                            // the other machine cannot load: a real Cancel
         ASSERT_TRUE(start(host, kCommunity));
-        ASSERT_TRUE(duo->until([&]() { return app.net()->phase() == net::NetGame::Phase::Loading; }, 4000));
-        host.net.leave();                                                                 // the host goes: the start is over for this machine
-        ASSERT_TRUE(duo->until([&]() { return app.net()->phase() != net::NetGame::Phase::Loading; }, 8000));
+        ASSERT_TRUE(duo->until([&]() { return host.cancels > 0 || host.starts > 0; }, 4000));
+        ASSERT_TRUE(duo->until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && fetcher->polls > 0; }, 8000));
+        duo->step(200);
+        const int polls = fetcher->polls;
+        fetcher->hold = false;                                                            // the file is here now, too late
+        duo->step(500);
+        ASSERT_EQ(fetcher->polls, polls);                                                 // (the wait was dropped: nobody asks any more)
         ASSERT_TRUE(app.state() != AppState::Playing);
+        ASSERT_TRUE(app.recorder() == nullptr);
+        ASSERT_EQ(app.sim().current_tick(), 0u);
+        ASSERT_TRUE(app.net()->phase() == net::NetGame::Phase::Room);
         app.shutdown();
     } TEST_END();
 

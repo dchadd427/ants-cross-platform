@@ -93,8 +93,8 @@ const BYTES = Uint8Array.from(fs.readFileSync(realMap));
 const HASH = realHash;
 const OTHER = Uint8Array.from(Buffer.from('another file'));
 
-function response(status, body, type) {
-    return { ok: status >= 200 && status < 300, status, headers: { get: (k) => (k.toLowerCase() === 'content-type' ? type || 'application/octet-stream' : null) }, arrayBuffer: () => Promise.resolve(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)) };
+function response(status, body, type, length) {
+    return { ok: status >= 200 && status < 300, status, headers: { get: (k) => (k.toLowerCase() === 'content-type' ? type || 'application/octet-stream' : k.toLowerCase() === 'content-length' && length !== undefined ? String(length) : null) }, arrayBuffer: () => Promise.resolve(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)) };
 }
 
 // A page: a fetch that answers from a script (one answer for each call; the last one repeats), timers that the test fires, a file system that records its writes
@@ -191,6 +191,16 @@ const rejects = () => Promise.reject(new Error('offline'));
         same('the Start names another hash and the site has no better: failed', r.maps.status(NAME), M.FAILED);
         same('and the wrong file is gone from the game', Object.keys(r.written), []);
     }
+    // 3c. a prefetch after a Start forgets the Start's hash (a later room must not be judged by an earlier one)
+    {
+        const r = rig([Promise.resolve(response(200, OTHER)), Promise.resolve(response(200, OTHER))]);
+        r.maps.request('f', NAME, HASH);
+        await settle();
+        same('the Start named another hash: failed', r.maps.status(NAME), M.FAILED);
+        r.maps.request('f', NAME, '');
+        await settle();
+        same('a prefetch of the same name afterwards is ready, not a false "not the host\'s copy"', [r.maps.status(NAME), r.maps.message(NAME)], [M.READY, '']);
+    }
     // 4. the ways a download fails, and that a failure is never kept
     const ways = [
         ['404', [Promise.resolve(response(404, new Uint8Array(0)))], /not on the server/, 1],
@@ -199,6 +209,7 @@ const rejects = () => Promise.reject(new Error('offline'));
         ['no connection', [() => rejects()], /Check your connection/, 2],
         ['a web page instead of the map', [Promise.resolve(response(200, Buffer.from('<html>'), 'text/html; charset=utf-8'))], /web page/, 1],
         ['an empty body', [Promise.resolve(response(200, new Uint8Array(0)))], /not a map/, 1],
+        ['a Content-Length over a megabyte (the body is never read)', [Promise.resolve(Object.assign(response(200, BYTES, undefined, M.MAX_BYTES + 1), { arrayBuffer: () => { throw new Error('read'); } }))], /not a map/, 1],
         ['a body over a megabyte', [Promise.resolve(response(200, new Uint8Array(M.MAX_BYTES + 1)))], /not a map/, 1]
     ];
     for (const [label, answers, words, tries] of ways) {

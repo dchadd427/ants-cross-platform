@@ -103,6 +103,8 @@
                     if (!response.ok) { finish({ ok: false, retry: response.status >= 500, text: 'The server answered ' + response.status + ' for the map ' + name + '. Try again in a moment.' }); return; }
                     var type = response.headers && response.headers.get ? response.headers.get('content-type') || '' : '';
                     if (/^\s*text\/html/i.test(type)) { finish({ ok: false, retry: false, text: 'The map ' + name + ' came back as a web page, not a map. Check your connection and try again.' }); return; }
+                    var announced = response.headers && response.headers.get ? parseInt(response.headers.get('content-length') || '', 10) : NaN;
+                    if (announced > MAX_BYTES) { finish({ ok: false, retry: false, text: 'The map file ' + name + ' from the server is not a map (' + announced + ' bytes).' }); return; }
                     return response.arrayBuffer().then(function (buffer) {
                         if (!buffer.byteLength || buffer.byteLength > MAX_BYTES) { finish({ ok: false, retry: false, text: 'The map file ' + name + ' from the server is not a map (' + buffer.byteLength + ' bytes).' }); return; }
                         finish({ ok: true, bytes: new Uint8Array(buffer) });
@@ -167,7 +169,7 @@
             if (!validName(name)) { var bad = entryOf(name); bad.state = FAILED; bad.text = 'The map name ' + name + ' is not one that the game takes.'; return; }
             var e = entryOf(name);
             e.folder = folder;
-            if (hash) e.expect = hash;
+            e.expect = hash || '';                                           // (a prefetch names no hash: one that an earlier Start named does not judge this file)
             if (e.state === PENDING && e.run > 0) return;                    // on its way (the hash is checked when it comes)
             if (e.state === READY) {
                 if (!e.expect || e.hash === e.expect) {                      // kept and right: the file system must still hold it (a new game page, a cleared folder)

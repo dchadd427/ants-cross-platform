@@ -21,6 +21,7 @@ EM_JS(int, ants_map_status, (const char* name, char* text, int capacity), {
     } catch (e) { stringToUTF8("The page cannot fetch maps.", text, capacity); return 2; }
 });
 }
+EM_JS_DEPS(map_fetch, "$UTF8ToString,$stringToUTF8");      // (the runtime functions that the two calls above use: without the line the linker may leave them out)
 #endif
 
 namespace ants::app {
