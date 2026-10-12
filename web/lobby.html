@@ -203,6 +203,25 @@
     .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
     .name-step-back { margin-top: 14px; }
 
+    /* ---- the map list (front/map_picker.js): a dialog opened from the map selector; a bottom sheet on a phone ---- */
+    .pickhow .panel > * { flex: none; } .pickhow .panel > .pk-out { flex: 1 1 auto; }
+    .pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+    .pk-bar, .pk-sorts, .pk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; } .pk-seg { display: flex; gap: 6px; }
+    .pk-q { flex: 1 1 200px; min-width: 0; min-height: 44px; padding: 6px 12px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; }
+    .pk-chip { min-height: 38px; padding: 3px 12px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
+    .pk-chip:hover { border-color: var(--frame-hi); color: var(--cream); } .pk-chip[aria-pressed="true"] { color: var(--gold); background: #1c1b0e; border-color: var(--gold); }
+    .pk-sorts { font-size: 14px; color: var(--muted); } .pk-foot { justify-content: space-between; margin: 10px 0 0; } .pk-count { font-size: 14px; color: var(--muted); }
+    .pk-out { flex: 1 1 auto; min-height: 140px; overflow: auto; background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; }
+    .pk-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #17382f; cursor: pointer; }
+    .pk-row img, .pk-nopic { display: block; width: 64px; height: 64px; background: var(--edge); border: 2px solid var(--edge); } .pk-nopic { border: 2px dashed #28493e; }
+    .pk-nm { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; } .pk-meta { font-size: 14px; color: var(--muted); } .pk-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pk-badge { margin-left: 8px; padding: 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+    .pk-pl { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; } .pk-pl b { display: block; font-weight: 500; font-size: 18px; color: var(--cream); }
+    .pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
+    .pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
+    .pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
+    .pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
+
     /* ---- narrower windows ---- */
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
     @media (max-width: 1040px) {
@@ -246,6 +265,10 @@
         .bar { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
         .share { display: inline-flex; }
         .toast { bottom: 150px; }
+        .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; max-height: calc(100dvh - 24px); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+        .pk-sorts { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; } .pk-sorts > * { flex: none; white-space: nowrap; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { scrollbar-width: thin; } .pk-bar { margin-bottom: 8px; }       /* the sorts are one row that scrolls sideways: the controls leave the list most of the sheet */       /* the map list is a sheet at the bottom of the screen */
+        .pk-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; } .pk-row img, .pk-nopic { width: 56px; height: 56px; } .pk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+        .pk-q { flex-basis: 100%; } .maprow .browse { grid-column: 2; justify-self: start; }
     }
     @media (max-width: 374px) {
         .mode { font-size: 15px; padding: 6px 28px 6px 6px; background-position: right 4px center; } .pname, .pname input { font-size: 19px; } .teamset button { padding: 3px 4px; font-size: 14px; }
@@ -316,8 +339,9 @@
         <aside class="side" aria-label="The match">
             <div class="maprow">
                 <figure class="tv"><img id="preview" src="front/preview_treasure.png" alt="The map: Treasure" width="300" height="300"></figure>
-                <div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"></select><button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>
+                <div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"><option id="map-other" value="*" hidden></option></select><button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>
                 <p class="info" id="info" aria-live="polite"></p>
+                <button class="btn sm browse" type="button" id="browse" aria-haspopup="dialog" hidden>Browse all maps</button>
             </div>
             <div class="shape" id="shape-row"><span class="shape-label" id="shape-label">Picture</span> <span class="seg" role="radiogroup" aria-labelledby="shape-label"><span class="opt"><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</label><span class="fit-tag" id="fit-4-3" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-10" value="16:10"><label for="aspect-16-10" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</label><span class="fit-tag" id="fit-16-10" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label><span class="fit-tag" id="fit-16-9" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-21-9" value="21:9"><label for="aspect-21-9" title="21:9: ultrawide monitors (1260 x 540)">21:9</label><span class="fit-tag" id="fit-21-9" hidden>fills your screen</span></span></span></div>
             <div class="go">
@@ -336,6 +360,7 @@
 </div></footer>
 </div>
 
+<div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
     <h3>The room</h3><p>Open the page and your room is ready, with the first colour yours. The four colours lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free colour and show up here at once. The host drags a player onto another colour to move them; a colour that is taken swaps places. On a phone, tap a player's dots and then the colour.</p>
@@ -364,6 +389,8 @@
 
 <script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script>
+<script src="front/map_picker.js"></script>
+<script src="map_files.js"></script>
 <script>
     (function () {
         'use strict';
@@ -685,7 +712,7 @@
             for (var i = 0; i < 4; i++) slots.push({ state: 0, name: '', rtt: 0, platform: 0 });
             return Rules.modelOf({ slots: slots, plan: [0, 0, 0, 0], map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false });
         }
-        function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal }; }
+        function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal, community: communityOf }; }
         function setText(node, text) { if (node.textContent !== text) node.textContent = text; }      // (a live region says its text again whenever it is written: only a line that changed is)
         var painted = {};
         function render() {
@@ -805,14 +832,19 @@
             li.appendChild(txt);
         }
         function paintSide(side) {
-            if ($('preview').getAttribute('data-map') !== side.mapKey) {
-                $('preview').src = 'front/preview_' + side.mapKey + '.png';
+            var shownMap = side.mapKey || side.mapFile + '|' + side.mapThumb;
+            if ($('preview').getAttribute('data-map') !== shownMap) {
+                var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;      // (a map of the players: its picture comes with the list; none until then)
+                if (src) $('preview').src = src; else $('preview').removeAttribute('src');
+                $('preview').style.visibility = src ? '' : 'hidden';
                 $('preview').alt = 'The map: ' + side.mapName;
-                $('preview').setAttribute('data-map', side.mapKey);
+                $('preview').setAttribute('data-map', shownMap);
             }
-            if ($('map').value !== side.mapKey) $('map').value = side.mapKey;
+            paintSelect(side);
+            if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() !== 'ready')) ensurePicker().load(); }
             setText($('info'), side.mapInfo);
-            $('map').disabled = side.mapDisabled; $('prev').disabled = side.mapDisabled; $('next').disabled = side.mapDisabled;
+            if (side.mapDisabled && picker && picker.isOpen()) picker.close();       // (the room changed hands, or START was pressed, while the list was open)
+            $('browse').disabled = side.mapDisabled; $('map').disabled = side.mapDisabled; $('prev').disabled = side.mapDisabled; $('next').disabled = side.mapDisabled;
             var start = $('start');
             start.disabled = side.startDisabled;
             start.setAttribute('aria-busy', String(side.startBusy));
@@ -1006,24 +1038,51 @@
             if (!client || !client.room) return false;
             return client.setPlan(Rules.planWith(client.room, Rules.modelOf(client.room), change));
         }
-        function setMap(index) {
-            var list = Rules.MAPS;
-            var key = list[(index + list.length) % list.length].key;
+        function setMap(step) {                          // the next or the previous original; from a map of the players the first or the last
+            var list = Rules.MAPS, at = mapIndex();
+            var key = list[at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length].key;
             if (!sendPlan({ map: key })) render();
         }
-        $('prev').addEventListener('click', function () { if (model) setMap(mapIndex() - 1); });
-        $('next').addEventListener('click', function () { if (model) setMap(mapIndex() + 1); });
-        $('map').addEventListener('change', function () { if (!sendPlan({ map: $('map').value })) render(); });
+        $('prev').addEventListener('click', function () { if (model) setMap(-1); });
+        $('next').addEventListener('click', function () { if (model) setMap(1); });
+        $('map').addEventListener('change', function () { if ($('map').value === '*' || !sendPlan({ map: $('map').value })) render(); });
         function mapIndex() {
             var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;
+            if (model && !model.map && model.mapFile) return -1;          // a map of the players is none of the six
             for (var i = 0; i < list.length; i++) if (list[i].key === key) return i;
             return 0;
         }
         Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });
 
+        // ---- the map list (front/map_picker.js): the selector's prev, next and drop-down stay; "Browse all maps" opens the list of the server's maps, the players' ones too ----
+        var picker = null, warmed = {};
+        function ensurePicker() {
+            if (!picker) picker = AntsMapPicker.create({ host: $('picker-panel'), doc: document, fetch: function (u, i) { return window.fetch(u, i); }, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(),
+                AbortController: window.AbortController, matchMedia: function (q) { return window.matchMedia(q); }, canOpen: isHost, canChoose: isHost, onChoose: chooseMap, onList: render,
+                onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); } });
+            return picker;
+        }
+        function isHost() { return !!(model && !model.guest && !model.starting); }
+        function inert(on) { ['lobby', 'footer-bar'].forEach(function (id) { if (on) $(id).setAttribute('inert', ''); else $(id).removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
+        function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : null; }
+        function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
+        function chooseMap(entry) {
+            var known = Rules.mapOfFile(entry.file);
+            if (known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })) render();
+            else if (!known) warmMap(entry.file);
+        }
+        function paintSelect(side) {                     // a map of the players is the drop-down's own extra line (hidden for an original)
+            var other = $('map-other');
+            other.hidden = !!side.mapKey;
+            if (side.mapKey) { if ($('map').value !== side.mapKey) $('map').value = side.mapKey; return; }
+            setText(other, side.mapName); $('map').value = '*';
+        }
+        if (window.fetch && window.AntsMapPicker) $('browse').hidden = false;
+        $('browse').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });
+
         $('start').addEventListener('click', function () {
             if (!client || !model || model.guest || model.starting || offline) return;
-            if (Rules.startsAlone(model)) { startAlone(); return; }
+            if (Rules.startsAlone(model)) { if (model.mapFile && !model.map) showBanner('notice', { server: 'A map of the players needs a second player or a computer player. Set an open colour to Easy, Medium or Hard, then press START.' }); else startAlone(); return; }
             client.start();
         });
         // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds a room again.

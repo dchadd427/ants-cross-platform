@@ -329,6 +329,19 @@ const rejects = () => Promise.reject(new Error('offline'));
         same('a folder that is there is no error', wrote, 'Original-Ants/Maps/' + NAME);
     }
 
+    // 11. the front page only warms the cache: one request for a good name, none for a bad one or a browser without fetch, never a throw
+    {
+        const asked = [];
+        const win = { fetch: (url, init) => { asked.push([url, init.credentials]); return Promise.resolve(response(200, BYTES)); } };
+        M.warm(win, NAME);
+        M.warm(win, '../x.lvl');
+        M.warm({}, NAME);
+        M.warm({ fetch: () => { throw new Error('no'); } }, NAME);
+        M.warm({ fetch: () => Promise.reject(new Error('offline')) }, NAME);
+        await settle();
+        same('warm asks for the map once, from the site, through the browser\'s cache', asked, [['/maps/files/Test%20Players%20Map%20%281%29.lvl', 'same-origin']]);
+    }
+
     console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');
     process.exit(failures ? 1 : 0);
 })().catch((e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); });

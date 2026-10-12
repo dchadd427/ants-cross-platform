@@ -58,6 +58,7 @@ class Front:
         self.ready = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.requests = []                                                   # the paths that went to the site
+        self.maps_down = False                                               # True: the list of maps (GET /maps) is not offered (502), as when the game server is away
         self.thread.start()
         self.ready.wait(10)
 
@@ -83,6 +84,10 @@ class Front:
         path = first[1] if len(first) > 1 else b"/"
         bare = path.split(b"?")[0]
         upgrade = b"upgrade: websocket" in head.lower()
+        if self.maps_down and bare == b"/maps":
+            writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            writer.close()
+            return
         if bare == b"/ws" or bare.startswith(b"/ws/"):
             port = self.ws
         elif any(bare == p or bare.startswith(p + b"/") for p in SERVER_DOOR) and not bare.startswith((b"/maps/files", b"/maps/previews")):

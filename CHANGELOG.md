@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.22 - 2026-10-12 - A map list on the front page
+
+**For players:**
+- **A map list on the front page:** "Browse all maps" under the picture opens every map of the game and of the players with its picture, how big it is and how often it was played. Search by name or description, sort by plays, name or size, and switch between a Detail list and Thumbnails (your choice is remembered). The six originals come first, then the most played. Arrows, Enter and Esc work; on a phone the list is a sheet at the bottom.
+- The arrows and the drop-down still pick the six originals; if the list cannot be loaded they say so and go on working.
+- A game for one cannot use a map of the players yet: add a computer player first.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...11ee3bf6)
+
 ## v0.12.21 - 2026-10-12 - Fullscreen replays hold the mouse like the game
 
 **For players:**

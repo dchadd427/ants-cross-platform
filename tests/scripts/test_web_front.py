@@ -44,7 +44,7 @@ PICTURES = {
 }
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
-SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js")    # what the lobby page loads, in this order: its rules (pure, no browser) and its client of network protocol 16 (tests/scripts/test_web_lobby_net.py): scripts, not pictures
+SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser) and its client of network protocol 16 (tests/scripts/test_web_lobby_net.py): scripts, not pictures
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1000 * 1000        # bytes: the whole folder (about 0.66 MB: the pictures, the font and the scripts); a picture that grows past this is a decision, not an accident
 
@@ -642,7 +642,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES])               # (the page's own two scripts, the folder's, in this order and no other)
+        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["map_files.js"])      # (the folder's scripts, in this order, then the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:

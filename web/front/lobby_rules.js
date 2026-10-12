@@ -37,6 +37,12 @@
         for (var i = 0; i < MAPS.length; i++) if (MAPS[i].key === k) return MAPS[i];
         return null;
     }
+    // What the game and the server call a map's file name (valid_map_name): printable ASCII, 5 - 64 characters, no path or Windows-forbidden character, no leading dot, ends in .lvl or .LVL
+    function validMapFile(name) {
+        return typeof name === 'string' && name.length >= 5 && name.length <= 64 && /^[\x20-\x7e]*$/.test(name) && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.lvl$/i.test(name) && /\.(lvl|LVL)$/.test(name);
+    }
+    // The name a map of the players is shown under when nothing else is known of it: its file name without the ending
+    function communityName(file) { return String(file).replace(/\.lvl$/i, ''); }
     // The map of a Room message's file name ("TREASURE.LVL", any case), or null for one that the page does not list (the room's own: shown as it is said)
     function mapOfFile(file) {
         var f = typeof file === 'string' ? file.toUpperCase() : '';
@@ -201,6 +207,7 @@
     function planWith(room, model, change) {
         var kinds = room.plan.slice(), teamA = room.teamA, teamB = room.teamB, map = '';
         if (change && change.map && mapByKey(change.map)) map = mapByKey(change.map).file;
+        else if (change && validMapFile(change.file)) map = change.file;           // a map of the players, by its file name (the picker's)
         if (change && typeof change.seat === 'number' && KINDS.indexOf(change.kind) !== -1) kinds[change.seat] = KINDS.indexOf(change.kind);
         if (change && change.sides) {
             var t = teamBytes(change.sides, playingAfter(model, kinds));
@@ -295,7 +302,10 @@
     // The map's side: the map, START and the line under it (who plays, and what an open colour does)
     function sideView(model, ctx, play) {
         var g = model.guest, busy = model.starting, away = ctx.offline || false;
-        var m = mapByKey(model.map) || mapByKey(DEFAULT_MAP_KEY);
+        var o = mapByKey(model.map), file = !o && model.mapFile ? model.mapFile : '';
+        if (!o && !file) o = mapByKey(DEFAULT_MAP_KEY);
+        var c = file && ctx.community ? ctx.community(file) : null;      // a map of the players: what the picker's list knows of it (name, Map Info line, picture), else only its file name
+        var m = o ? { key: o.key, name: o.name, info: o.info } : { key: '', name: c && c.name || communityName(file), info: c && c.info || 'A map of the players' };
         var names = [], open = [], short = [];
         model.slots.forEach(function (s, i) {
             if (s.kind === 'person') {
@@ -305,16 +315,19 @@
             else if (s.kind === 'open') open.push(COLOURS[i].name);
         });
         var list = listOf(names); list = list.charAt(0).toUpperCase() + list.slice(1);
-        var text = names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
-        if (open.length) text += ' ' + listOf(open) + (open.length > 1 ? ' are open and stay empty' : ' is open and stays empty') + ' unless a player joins first.';
+        var alone = names.length === 1 && !!file;       // a map of the players with nobody else: the game page's own single player knows the six originals only, so START needs a computer player
+        var text = alone ? 'This map needs a computer player: set an open colour to Easy, Medium or Hard.' : names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
+        if (open.length && !alone) text += ' ' + listOf(open) + (open.length > 1 ? ' are open and stay empty' : ' is open and stays empty') + ' unless a player joins first.';
         var host = hostName(model);
         var label = busy ? 'Getting ready…' : away === 'lost' ? 'Reconnecting…' : away ? 'START!' : g ? 'Waiting for ' + host : 'START!';
         var plan = busy ? (g ? host + ' pressed START. ' : '') + 'Opening the game for everybody. The match begins as soon as all of you are in.'
             : away === 'lost' ? 'START comes back as soon as you are in.' : away === 'join' ? '' : away ? 'There is no room yet.'
             : g ? host + ' starts the match when everybody is in. ' + (names.length > 1 ? list + ' play on ' + m.name + '.' : '') : text;
         var shortText = busy ? (g ? host + ' pressed START' : 'Opening the game for everybody') : away === 'lost' ? 'Getting you back in' : away === 'join' ? '' : away ? 'No room yet'
-            : g ? host + ' starts the match' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
-        return { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away, startBusy: busy, startLabel: label, plan: plan, planShort: shortText };
+            : g ? host + ' starts the match' : alone ? 'Needs a computer player' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
+        var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away, startBusy: busy, startLabel: label, plan: plan, planShort: shortText };
+        if (file) { out.mapFile = file; out.mapThumb = c && c.thumb || ''; }       // (a map of the players: the page paints its picture and name from these)
+        return out;
     }
 
     // ---- the strip at the top of the page: every message --------------------------------------------------------------------------------------------------------------------------------------
@@ -376,7 +389,7 @@
 
     return {
         COLOURS: COLOURS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, NAMES: NAMES, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
-        mapByKey: mapByKey, mapOfFile: mapOfFile, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
+        mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
         planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner

@@ -370,7 +370,7 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.index
 const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 {
-    same('the page loads its two scripts from front/ (the rules, then the network client) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'inline']);
+    same('the page loads its scripts (the rules, the network client, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/map_picker.js', 'map_files.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
