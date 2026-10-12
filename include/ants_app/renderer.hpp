@@ -391,13 +391,13 @@ public:
     /// THE ZOOM (view_zoom.hpp). The camera's `zoom` is 1 (the original's picture: the world is drawn straight into the view, exactly as it always was) or another level, from 2 down to the
     /// map's limit. At another zoom the world is drawn at ONE TEXEL PER WORLD PIXEL into an offscreen target that covers the world that the view shows (and a texel more on each side for the
     /// filter), halved as often as the zoom needs (a zoom below 0.5: every halving is the exact average of 2 x 2 texels), and the last level is scaled into the lattice of whole screen pixels
-    /// at the zoom (view_zoom.hpp Pass): exactly at 2 (nearest: every world pixel a crisp 2 x 2 square), 1 and 0.5 (the 2 x 2 average) and at every power of two, with the linear filter and
+    /// at the zoom (view_zoom.hpp Pass): exactly at 2 (nearest: every world pixel a crisp 2 x 2 square), 1 and 0.5 (the 2 x 2 average) and at every power of two; nearest at every level from 1 up, the linear filter below 1, with
     /// the fractional position of the lattice in between (a renderer that places a rectangle at a fraction of a pixel; SDL's software renderer truncates it). Everything that is in screen space is
     /// drawn afterwards, on the canvas, at its own size: the hit point digits (Ctrl+L), the tile grid overlay, and (by the HUD and the application) the frame, the cursor and the rubber band.
     bool zoomed() const noexcept { return camera_.zoom != zoom::kNormal; }
     /// A test hook: draw the world through the offscreen target at the zoom 1 too (the result must be the picture that the direct path draws, pixel for pixel)
     void set_force_world_target(bool force) noexcept { force_world_target_ = force; }
-    /// Do the levels between 1 and 2 use the linear filter (the default, zoom::kSmoothUpscale) or the nearest? 2 is always nearest, 1 always the exact copy; the zoom-out is always linear.
+    /// Do the levels between 1 and 2 use the linear filter or the nearest (the default, zoom::kSmoothUpscale = false)? 1 and 2 are always nearest, 1 the exact copy; the zoom-out is always linear.
     void set_smooth_upscale(bool smooth) noexcept { smooth_upscale_ = smooth; }
     /// The most world pixels on one axis that the offscreen target can hold (the device's texture size less the margins of the pass), 0 when the renderer does not say: the limit of the zoom-out
     /// of a map that is bigger than a texture (view_zoom.hpp Fit::max_world)

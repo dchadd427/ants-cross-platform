@@ -40,8 +40,8 @@ inline constexpr int kStepsPerDoubling = 4;
 inline constexpr float kSmallest = 0.05f;
 /// A level of the series that lies closer than this ratio above the map's limit is left out (the step to the limit would be smaller than a quarter of a step)
 inline constexpr double kMinStepRatio = 1.044;
-/// The levels that a screen shows between 1 and 2 are drawn smoothed (the linear filter) unless a test says otherwise; 2 itself is always the crisp 2 x 2 square
-inline constexpr bool kSmoothUpscale = true;
+/// The levels that a screen shows between 1 and 2 are drawn with the nearest pixel (no linear smoothing), like 1 and 2 themselves; a test may ask for the linear filter there
+inline constexpr bool kSmoothUpscale = false;
 
 /// The k-th level of the series 2^(k/4): k = 4 is 2, 0 is 1, -4 is 0.5. Every power of two is exact in a float and a double (a power of two times a root is one rounding).
 inline float series(int k) noexcept {
@@ -244,10 +244,10 @@ struct Pass {
     double scale{1.0};              // screen pixels per texel of the last level
     double left{0.0};               // where the last level's first texel lands, in screen pixels from the view's corner (fractional, usually negative)
     double top{0.0};
-    bool smooth{false};             // the linear filter for the last copy; false: nearest (the zoom 2, and the copy of the zoom 1)
+    bool smooth{false};             // the linear filter for the last copy; false: nearest (every zoom from 1 up by default, and the copy of the zoom 1)
 };
 
-/// Does a zoom between 1 and 2 use the linear filter? 1 and 2 never do (they are exact)
+/// Does a zoom between 1 and 2 use the linear filter? Not by default (kSmoothUpscale is false: nearest from 1 up); 1 and 2 never do (they are exact)
 inline bool smooth_at(float z, bool smooth_upscale) noexcept { return z != kNormal && z != kIn && (z < kNormal || smooth_upscale); }
 
 /// The plan for the camera origin (ox, oy) (world pixels, on the grid of the zoom) at the zoom z, over a view of view_w x view_h screen pixels and a map of map_w x map_h world pixels

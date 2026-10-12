@@ -28,7 +28,14 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Fullscreen holds the mouse in a replay and in a live match you watch, as it does in a game.** The cursor stays on the picture and the edges and corners scroll the map; leaving fullscreen gives the mouse back (in Chrome and Edge hold Esc: a short press goes to the game, as in a match). The bar stays clickable: move the cursor onto it (a small arrow shows there) and click, or drag the timeline. "Fullscreen mouse: Free" in a game keeps the plain browser fullscreen here too.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.19...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.20...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+
+## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
+
+**For players:**
+- **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
 
 ## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
 
@@ -40,7 +47,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
 
 **For players:**
-- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant: a click, and a faint sound that suddenly got loud was heard as played again. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
+- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant. That click is measured. A faint sound that suddenly got loud may have been heard as played again ("repeat"), but that is only a hypothesis about what the owner heard, not confirmed. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
@@ -455,17 +462,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
 
-## v0.0.97 - 2026-10-02 - The desktop start menu: Single player with bots, Join with a code, Host an online match
+## Older versions (v0.0.97 and before)
 
-**For players:**
-- A desktop game started with no mode on its command line now opens with a start menu after the loading screen: Single player, Join with a code, Host an online match, Quit. The menu never shows in the web build.
-- Single player: pick Empty, Easy, Medium or Hard bot for each of the other three colours. All Empty is the original's single-player game exactly. The choice is remembered.
-- Join with a code: type your name and the room code (paste with Ctrl+V or Cmd+V) and Join. Every failure (server not reachable, no such room, room full, match started, another version, and so on) comes back to the panel with a clear line, and Esc cancels at once.
-- Host an online match: pick the map, 2 to 4 players and your name. The menu makes the room, shows its code in large letters with a Copy button, and puts you in as the leader. After an online game the program goes back to the menu.
-- The original's own screens are unchanged. `--map`, `--host`, `--join` and similar options skip the menu, `--start-menu` forces it, and `--server HOST[:PORT]` names the game server.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
-
-## Older versions (v0.0.96 and before)
-
-Every release before v0.0.97, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.98, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

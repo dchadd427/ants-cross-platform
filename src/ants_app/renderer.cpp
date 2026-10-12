@@ -818,7 +818,7 @@ bool Renderer::begin_world_target(int64_t map_w_px, int64_t map_h_px) {
 }
 
 // The pass ends. The world is in the first texture: it is halved as often as the plan says (a copy to half the size with the linear filter is the exact average of 2 x 2 texels), the last level is
-// scaled by the plan's scale into the lattice of whole screen pixels at the fractional place that the plan gives (nearest at the zoom 2 and the zoom 1, else the linear filter), and the view is
+// scaled by the plan's scale into the lattice of whole screen pixels at the fractional place that the plan gives (nearest from the zoom 1 up, the linear filter below 1), and the view is
 // cut out of that, one screen pixel for one pixel: whatever the camera's origin is, the picture is the lattice's, so a scroll by whole screen pixels moves it and never changes it. A scaled copy
 // that a clip cuts is cut by SDL's software renderer with a rounding of its source (and it truncates a fractional rectangle), which is why the view is cut out of a texture that holds the
 // whole scaled picture, by an unscaled copy; a renderer that places a rectangle at a fraction of a pixel (every one but the software renderer) puts the last level at its exact place.
