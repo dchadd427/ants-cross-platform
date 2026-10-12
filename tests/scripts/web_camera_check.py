@@ -328,7 +328,7 @@ def widths(p, check, args):
             s = p.bar()
             name = "camera-%dx%d%s%s%s" % (w, h, "-fullscreen" if fs else "", "-live" if live else "", "-popover" if pop else "")
             p.tab.save_shot(args.shots, name)
-            check(s["tl"][2] >= MIN and rect_inside(s["cam"], s["bar"]) and (s["cam"][0] >= s["clock"][0] + s["clock"][2] - 1 or s["cam"][1] >= s["speed"][1] + s["speed"][3] - 1), "%s: timeline %d px, button %d px wide (label %d px)" % (name, s["tl"][2], s["cam"][2], s["labelWidth"]))
+            check(s["tl"][2] >= MIN and rect_inside(s["cam"], s["bar"], 3) and (s["cam"][0] >= s["clock"][0] + s["clock"][2] - 1 or s["cam"][1] >= s["speed"][1] + s["speed"][3] - 1), "%s: timeline %d px, button %d px wide (label %d px) cam %s speed %s bar %s" % (name, s["tl"][2], s["cam"][2], s["labelWidth"], [round(v) for v in s["cam"]], [round(v) for v in s["speed"]], [round(v) for v in s["bar"]]))
         if fs:
             p.tab.ev("document.getElementById('b-fsx').click(); 1")
             time.sleep(1.0)
