@@ -86,6 +86,51 @@ class TheGameSide(unittest.TestCase):
         self.assertNotIn("(window.AbortController", self.script)
 
 
+def shell_wiring_problems(text):
+    """What the game page (web/shell.html) must say for a game for one on a map of the players: the file that ANTS_PAGE.localArguments found is kept, the start waits for THAT file, and a failure reaches the card"""
+    problems = []
+    if "ANTS_LOCAL_FILE = local.file;" not in text:
+        problems.append("the page does not keep the file that localArguments found (ANTS_LOCAL_FILE = local.file;)")
+    if not re.search(r"window\.AntsMapFiles\.beforeLocalGame\(window\.antsMapFiles, ANTS_LOCAL_FILE, function \(\) \{ return Module; \}", text):
+        problems.append("the start does not wait for ANTS_LOCAL_FILE (beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, ...))")
+    if "function (text, gone) { showDownloadError(new Error(text), 'map', gone); }" not in text:
+        problems.append("a map that cannot be had does not reach the card as a 'map' failure with the gone flag")
+    if "function showDownloadError(error, what, gone)" not in text:
+        problems.append("the card takes no gone flag")
+    if "map = what === 'map'" not in text or "title.textContent = program ? 'The game could not be started' : map ? 'The map could not be downloaded'" not in text:
+        problems.append("the card has no 'map' wording")
+    if "(gone ? ' Choose another map.' : ' Loading the page again usually helps.')" not in text:
+        problems.append("a map that is gone is told to load the page again")
+    if "button.textContent = gone ? 'Menu' : 'Reload';" not in text or "if (gone) window.location.assign('/'); else window.location.reload();" not in text:
+        problems.append("a map that is gone has the Reload button")
+    return problems
+
+
+class TheGamePagesWiring(unittest.TestCase):
+    """The default tier reads web/shell.html's wiring of the game for one (the node checks run the whitelist and the card, but not the lines that connect them); each line is shown able to fail"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = read("web", "shell.html")
+
+    def test_the_page_is_wired(self):
+        self.assertEqual(shell_wiring_problems(self.page), [])
+
+    def test_the_wiring_check_can_fail(self):
+        broken = {
+            "ANTS_LOCAL_FILE is never set": ("ANTS_LOCAL_FILE = local.file;", ""),
+            "the start waits for no file": ("beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE,", "beforeLocalGame(window.antsMapFiles, '',"),
+            "a failure of the map is lost": ("function (text, gone) { showDownloadError(new Error(text), 'map', gone); }", "function (text, gone) { }"),
+            "a failure of the map is not marked gone": ("showDownloadError(new Error(text), 'map', gone);", "showDownloadError(new Error(text), 'map');"),
+            "the card has no map wording": ("map = what === 'map'", "map = false"),
+            "a map that is gone is told to reload": ("(gone ? ' Choose another map.' : ' Loading the page again usually helps.')", "' Loading the page again usually helps.'"),
+            "a map that is gone has Reload": ("button.textContent = gone ? 'Menu' : 'Reload';", "button.textContent = 'Reload';"),
+        }
+        for why, (old, new) in broken.items():
+            self.assertEqual(self.page.count(old), 1, why)
+            self.assertNotEqual(shell_wiring_problems(self.page.replace(old, new)), [], "the wiring check accepted a page where " + why)
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's own code for the players' maps was NOT run (tests/scripts/web_map_files_check.js)")
 class ThePagesOwnCode(unittest.TestCase):
     def test_the_hash_the_address_and_every_way_a_download_ends(self):
@@ -112,7 +157,7 @@ class ThePagesOwnCode(unittest.TestCase):
             "the cache is skipped for nothing": ("if (fresh) init.cache = 'reload';", "init.cache = 'reload';"),
             "a web page is taken for a map": ("if (/^\\s*text\\/html/i.test(type))", "if (false)"),
             "a map of any size is taken": ("buffer.byteLength > MAX_BYTES", "false"),
-            "a 404 is tried again": ("finish({ ok: false, retry: false, text: 'The map ' + name + ' is not on the server", "finish({ ok: false, retry: true, text: 'The map ' + name + ' is not on the server"),
+            "a 404 is tried again": ("finish({ ok: false, retry: false, gone: true, text: 'The map ' + name + ' is not on the server", "finish({ ok: false, retry: true, gone: true, text: 'The map ' + name + ' is not on the server"),
             "the address is not encoded": ("out += /[A-Za-z0-9\\-._~]/.test(c) ?", "out += /[A-Za-z0-9\\-._~ ()!']/.test(c) ?"),
             "warm asks for a bad name": ("if (!win.fetch || !validName(name)) return;", "if (!win.fetch) return;"),
             "warm has no time limit": ("if (win.setTimeout) timer = win.setTimeout(abort, TIMEOUT_MS);", ""),
@@ -124,6 +169,15 @@ class ThePagesOwnCode(unittest.TestCase):
             "warm leaves its timer running after a failure": ("}).then(stop, function () { stop(); /* the game page asks again */ });", "}).then(stop, function () { /* the game page asks again */ });"),
             "a failure is not said in the toast": ("if (state !== FAILED || !toast) return;", "return;"),
             "an original is fetched": ("&& !ORIGINALS.test(name) ? { name: name", "? { name: name"),
+            "an original's file is a map of the players": ("return validName(name) && !ORIGINALS.test(name) ? name : '';", "return validName(name) ? name : '';"),
+            "a game for one starts without its map": ("if (!file) { go(); return; }", "if (!file) { return; }"),
+            "a game on an original fetches a map too": ("if (!file) { go(); return; }", "if (false) { go(); return; }"),
+            "a game for one starts when its map failed": ("if (!map.ok) { fail(map.text, !!map.gone); return; }", "if (!map.ok) { fail(map.text, !!map.gone); }"),
+            "a game for one does not write its map": ("getModule().preRun.push(writer(function () { return getModule().FS; }, file, map.bytes));", ""),
+            "a game for one asks for a hash": ("files.fetchOnly(file, '')", "files.fetchOnly(file, 'abcdabcdabcdabcd')"),
+            "a map that is gone is not marked": ("gone: true, text: 'The map ' + name + ' is not on the server", "text: 'The map ' + name + ' is not on the server"),
+            "a 404 of a game for one is not told as gone": ("fail(map.text, !!map.gone)", "fail(map.text, false)"),
+            "a fetch that rejects is not told": ("}, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });", "});"),
             "a path is a map name": ("if (/[\\/\\\\:*?\"<>|]/.test(name) || name.charAt(0) === '.') return false;", ""),
         }
         with tempfile.TemporaryDirectory() as folder:

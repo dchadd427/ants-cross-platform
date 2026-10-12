@@ -940,6 +940,27 @@ void run_suite_7_input_controls() {
             ASSERT_EQ(others_of(app, 0), size_t{0});
             app.shutdown();
         }
+        {   // a map of the players (the web page's START for one on any map of the community fetches the file and plays it like this): Green's colony alone, and the match goes on with nobody else on the map (it
+            // ends with the clock or when this colony has nothing left, never because no other team is left), also on a map for two (a 1 v 1 map) and on one of the shortest
+            for (const char* name : {"Grid.LVL", "ShowDown.lvl", "ANTS SOCCER.lvl", "Bombz Away.lvl"}) {
+                Application app;
+                ApplicationConfig cfg = config(true);
+                cfg.start_in_map_select = false;
+                cfg.play_at_once = false;
+                cfg.default_map_path = std::string("Community-Maps/") + name;
+                ASSERT_TRUE(app.init(cfg));
+                ASSERT_EQ(app.state(), AppState::Playing);
+                ASSERT_EQ(app.sim().roster_mask(), 0x01);
+                ASSERT_EQ(app.sim().get_world_state().anthills.size(), size_t{1});
+                ASSERT_TRUE(ants_of(app, 0) > 0 && app.sim().get_player_eggs(0) > 0);
+                ASSERT_EQ(others_of(app, 0), size_t{0});
+                app.hud().dismiss_match_start_modal();
+                for (int t = 0; t < 1200; ++t) app.update_simulation(0.05f);
+                ASSERT_FALSE(app.sim().is_match_over());
+                ASSERT_TRUE(ants_of(app, 0) > 0);
+                app.shutdown();
+            }
+        }
         {   // --teams cannot be made with one seat: the game starts without teams and says why (the setup screen's status line)
             Application app;
             ApplicationConfig cfg = config(true);

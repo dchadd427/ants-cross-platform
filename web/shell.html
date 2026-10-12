@@ -1458,7 +1458,7 @@
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
         //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
         //   badDownload whether a download is not the game data
-        //   localArguments the arguments of a game on THIS computer (?map= &bots= &teams= &name=: the front page's Play), through a whitelist
+        //   localArguments the arguments of a game on THIS computer (?map= or ?mapfile= &bots= &teams= &name=: the front page's Play and START for one), through a whitelist
         var ANTS_PAGE = (function () {
             // Each shape in the smallest whole numbers: the game's canvas is a whole number of steps of it (640 x 480 is 160 steps of 4 x 3, 960 x 600 is 120 of 8 x 5, 960 x 540 is 60 of 16 x 9,
             // 1260 x 540 is 180 of 7 x 3). SHAPE_ORDER is the selector's, left to right, and the game's (kAllAspects in include/ants_app/canvas_layout.hpp)
@@ -1749,7 +1749,7 @@
             }
 
             // A game on THIS computer (the front page's Play: play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
-            // by key; bots: one level word (all of seats 1-3) or three words for seats 1, 2, 3 (none|easy|medium|hard), any case, all or nothing; teams: ffa or 0+N (the + may come as a blank) with a bot at seat N; name: printable ASCII, 32 characters.
+            // by key, or mapfile (when no map): the file of a map of the players (AntsMapFiles.communityFile; the data block fetches it before the game starts); bots: one level word (all of seats 1-3) or three words for seats 1, 2, 3 (none|easy|medium|hard), any case, all or nothing; teams: ffa or 0+N (the + may come as a blank) with a bot at seat N; name: printable ASCII, 32 characters.
             // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
             var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
             // The levels of seats 1, 2, 3 ('' for none) that a ?bots= text says, or null when it says none: only the tested lower case words come back, never the text of the address
@@ -1770,26 +1770,26 @@
                 return levels;
             }
             function localArguments(search, remembered) {
-                var out = { args: [], map: '', bots: '', teams: '', name: '' };
-                var q;
+                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '' }, q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
                 if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
                     out.map = map;
                     out.args.push('--map', 'Original-Ants/Maps/' + LOCAL_MAPS[map], '--play');
                 }
+                if (!out.map && window.AntsMapFiles && (out.file = window.AntsMapFiles.communityFile(q.get('mapfile')))) out.args.push('--map', 'Original-Ants/Maps/' + out.file, '--play');
                 var levels = localBots(q.get('bots'));
                 if (levels) {
                     if (levels[0] || levels[1] || levels[2]) out.bots = levels[0] === levels[1] && levels[1] === levels[2] ? levels[0] : levels.map(function (l) { return l || 'none'; }).join(',');
                     for (var seat = 1; seat <= 3; seat++) if (levels[seat - 1]) out.args.push('--bot', seat + ':' + levels[seat - 1]);
                 }
-                if (out.map && !out.bots) out.args.push('--alone');       // no bot: a game for one, and only your colony is on the map (the seats of Red, Blue and Black are Nobody's: no hill, no ants)
+                if ((out.map || out.file) && !out.bots) out.args.push('--alone');       // no bot: a game for one, and only your colony is on the map (the seats of Red, Blue and Black are Nobody's: no hill, no ants)
                 var teams = levels ? /^0[+ ]([1-3])$/.exec(q.get('teams') || '') : null;
                 if (teams && levels[Number(teams[1]) - 1]) {
                     out.teams = '0+' + teams[1];
                     out.args.push('--teams', out.teams);
                 }
-                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('bots')) ? remembered : '');
+                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('mapfile') || q.has('bots')) ? remembered : '');
                 name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
                 if (name) {
                     out.name = name;
@@ -1906,7 +1906,7 @@
         //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
-        var ANTS_ARGS = [];
+        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '';       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
         // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else 16:9) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
@@ -1921,7 +1921,7 @@
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
                 var remembered = '';
                 try { remembered = window.localStorage.getItem('ants.name') || ''; } catch (e) { /* private window: not remembered */ }
-                ANTS_PAGE.localArguments(window.location.search, remembered).args.forEach(function (a) { ANTS_ARGS.push(a); });
+                var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file;
             }
         })();
 
@@ -2240,7 +2240,7 @@
         // The loading failed for good: the card says so and has a button that loads the page again (v0.0.96 answered a failure of the file packager's own download with a card
         // that said "Downloading data (0%)" for ever, and v0.0.98's page the same for a program file, index.js or index.wasm, that could not be loaded). `what` is 'data' (index.data
         // could not be downloaded) or 'program' (the game could not be loaded or started); a card that is up goes away by itself if the game does start after all (hideLoadingScreen)
-        function showDownloadError(error, what) {
+        function showDownloadError(error, what, gone) {            // (gone: the server says the map is not there, 404 or 410: the card says so and has a way out instead of Reload)
             if (isReadyToPlay) return;                                     // (the game runs: a late failure of something else must not cover it)
             if (progressContainer) progressContainer.style.display = 'none';
             if (splashOverlay) {
@@ -2250,22 +2250,22 @@
             }
             if (!statusElement) return;
             while (statusElement.firstChild) statusElement.removeChild(statusElement.firstChild);
-            var program = what === 'program';
+            var program = what === 'program', map = what === 'map';
             var box = document.createElement('div');
             box.id = 'load-failure';
             box.className = 'load-failure';
             var title = document.createElement('div');
             title.className = 'load-failure-title';
-            title.textContent = program ? 'The game could not be started' : "The game's data could not be downloaded";
+            title.textContent = program ? 'The game could not be started' : map ? 'The map could not be downloaded' : "The game's data could not be downloaded";
             var detail = document.createElement('div');
             detail.className = 'load-failure-detail';
-            detail.textContent = (program ? 'A file of the game could not be loaded or it did not start' : 'The connection failed or the browser could not keep the file') +
+            detail.textContent = map ? String(error && error.message || '').substring(0, 200) + (gone ? ' Choose another map.' : ' Loading the page again usually helps.') : (program ? 'A file of the game could not be loaded or it did not start' : 'The connection failed or the browser could not keep the file') +
                 (error && error.message ? ' (' + String(error.message).substring(0, 120) + ')' : '') + '. Loading the page again usually helps.';
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'btn sm';
-            button.textContent = 'Reload';
-            button.addEventListener('click', function() { window.location.reload(); });
+            button.textContent = gone ? 'Menu' : 'Reload';
+            button.addEventListener('click', function() { if (gone) window.location.assign('/'); else window.location.reload(); });
             box.appendChild(title);
             box.appendChild(detail);
             box.appendChild(button);
@@ -3883,7 +3883,7 @@
             // (a recording starts the game once the file is here too: the replay block above)
             function begin() {
                 if (ANTS_REPLAY_MODE) window.antsAfterReplay(function () { ANTS_NAME_GATE.when(startGame); });
-                else ANTS_NAME_GATE.when(startGame);
+                else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
             }
             if (!window.fetch || !window.Promise || !window.Uint8Array) { begin(); return; }
 
