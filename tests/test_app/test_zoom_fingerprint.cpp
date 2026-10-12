@@ -256,7 +256,7 @@ const MaskRect kMaskPlate{470, 466, 640, 480};
 const std::vector<MaskRect> kMaskMatch = {{479, 252, 622, 268}, {480, 297, 622, 402}, {479, 422, 622, 438}, {310, 2, 402, 20}, {3, 462, 103, 480}, {161, 462, 253, 480}, {310, 462, 401, 480}};
 const MaskRect kWMaskPlate{790, 526, 960, 540};
 // (the bottom score labels right aligned in [113, 209), [377, 465) and [632, 719) x 524 of the 960 x 540 picture: the masks of the two left ones lay at 323 .. 423 and 481 .. 573 in the first version of this
-// table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint.cpp's kWMaskMatch, corrected by the CI)
+// table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint_wide.cpp's kWMaskMatch, corrected by the CI)
 const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {111, 522, 211, 540}, {375, 522, 467, 540}, {630, 522, 722, 540}};
 
 /// A level that the map does not offer on this screen (the 16:9 view over TINY has 0.768 as its smallest: 0.5 is below it) cannot be a picture of the game: the match starts at the nearest level

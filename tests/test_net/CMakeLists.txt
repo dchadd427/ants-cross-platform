@@ -57,6 +57,9 @@ add_test(NAME test_lan COMMAND test_lan)
 
 add_executable(test_lobby
     test_lobby.cpp
+    test_lobby_basics.cpp
+    test_lobby_rejoin.cpp
+    test_lobby_rooms.cpp
 )
 
 target_link_libraries(test_lobby PRIVATE

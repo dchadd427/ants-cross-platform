@@ -1,5 +1,11 @@
 add_executable(test_app_integration
     test_app_integration.cpp
+    test_app_integration_basics.cpp
+    test_app_integration_input.cpp
+    test_app_integration_units.cpp
+    test_app_integration_units_2.cpp
+    test_app_integration_units_3.cpp
+    test_app_integration_units_4.cpp
 )
 
 target_include_directories(test_app_integration PRIVATE
@@ -146,6 +152,9 @@ set_tests_properties(test_loader_fidelity_render PROPERTIES WORKING_DIRECTORY "$
 # HUD layout: the real HUD drives a recording IRenderer; draw calls are checked against the original's coordinates
 add_executable(test_hud_layout
     test_hud_layout.cpp
+    test_hud_layout_panel.cpp
+    test_hud_layout_screens.cpp
+    test_hud_layout_overlays.cpp
 )
 
 target_include_directories(test_hud_layout PRIVATE
@@ -379,6 +388,10 @@ set_tests_properties(test_prediction_app PROPERTIES WORKING_DIRECTORY "${CMAKE_S
 # View fingerprint (M0 of the widescreen / zoom / touch work): what the game draws (draw-call and pixel hashes) and what the pointer does (every pixel of the 640 x 480 screen), pinned at the classic picture
 add_executable(test_view_fingerprint
     test_view_fingerprint.cpp
+    test_view_fingerprint_hud.cpp
+    test_view_fingerprint_pointer.cpp
+    test_view_fingerprint_pixels.cpp
+    test_view_fingerprint_wide.cpp
 )
 
 target_include_directories(test_view_fingerprint PRIVATE
@@ -414,6 +427,8 @@ set_tests_properties(test_view_fingerprint PROPERTIES WORKING_DIRECTORY "${CMAKE
 # a real RoomManager behind a real TCP listener on the loopback interface (ants_server_core), the screenshots of the panels (--shots DIR) and the gate's real-server mode (--real-server H:P)
 add_executable(test_start_menu_app
     test_start_menu_app.cpp
+    test_start_menu_app_play.cpp
+    test_start_menu_app_options.cpp
 )
 
 target_include_directories(test_start_menu_app PRIVATE
@@ -447,6 +462,8 @@ set_tests_properties(test_start_menu_app PROPERTIES WORKING_DIRECTORY "${CMAKE_S
 # names, the remembered settings, the layout of every panel, what is drawn and how long texts are cut, and which command-line options show or skip the menu (no window, no sockets)
 add_executable(test_start_menu
     test_start_menu.cpp
+    test_start_menu_panels.cpp
+    test_start_menu_hosting.cpp
 )
 
 target_include_directories(test_start_menu PRIVATE
@@ -583,6 +600,9 @@ set_tests_properties(test_aspect_switch PROPERTIES WORKING_DIRECTORY "${CMAKE_SO
 # Wide match screen (M3 of the widescreen work): the anchoring model of the frame's 14 pieces, the cuts in the art, the composed picture, the HUD at 960 x 540, the view, the pages and dialogs, the picture per screen, the 16:9 default
 add_executable(test_wide_hud
     test_wide_hud.cpp
+    test_wide_hud_frame.cpp
+    test_wide_hud_hud.cpp
+    test_wide_hud_view.cpp
 )
 
 target_include_directories(test_wide_hud PRIVATE
@@ -758,6 +778,9 @@ set_tests_properties(test_zoom_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURC
 # button, anchoring, fairness per kind of match, settings key, start view, listener and a network match with two different zooms
 add_executable(test_zoom_view
     test_zoom_view.cpp
+    test_zoom_view_renderer.cpp
+    test_zoom_view_hud.cpp
+    test_zoom_view_app.cpp
 )
 
 target_include_directories(test_zoom_view PRIVATE
