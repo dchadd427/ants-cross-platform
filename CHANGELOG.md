@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.28 - 2026-10-12 - Food piles that the map file does not hold are drawn
+## v0.12.29 - 2026-10-12 - Food piles that the map file does not hold are drawn
 
 **For players:**
 - A food pile that the map's file does not hold in its picture layer is now drawn where it lies. Before, the view showed nothing there although the pile was in the game (bots and ants could see it and carry it, and the minimap showed it): the heap in the middle of `Bombz Away` and its relatives (the BombzAway maps, `WaTcHoUt BOMBZ!!!`, `Bombzzzzz away!!!`, `AGGRIVATION`), and the piles of about 400 maps of the players whose file leaves the pile's cell empty (`Trouble`, `TowerPlaza`, `candyland` ...).
@@ -31,7 +31,16 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Only the picture changed; the simulation, the replay rules and the network protocol are the same.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/353282ed...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...cdd857a0)
+
+## v0.12.28 - 2026-10-12 - Back 30 seconds on the replay bar
+
+**For players:**
+- **Back 30 seconds:** a new button right of Play / Pause on the replay bar (a double triangle with a small 30) jumps the replay 30 seconds back, never before the start. A match that plays keeps playing, a paused one stays paused, and the speed stays. It works with a mouse, a finger, the keys (Enter and Space on the focused button) and the fullscreen bar under a locked mouse. On a phone 420 px wide or narrower (in fullscreen, up to 520 px) the Picture button moves to the camera's row so that the time stays whole. It is not on a match that is being played (live).
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/353282ed...28d51043)
 
 ## v0.12.27 - 2026-10-12 - Broken maps of the players taken out
 
@@ -488,4 +497,4 @@ Work that is not released yet is written in the same template under a heading th
 
 ## Older versions (v0.1.0 and before)
 
-Every release before v0.1.1, and the long notes of v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.1, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
