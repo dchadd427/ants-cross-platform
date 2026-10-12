@@ -269,6 +269,7 @@
         var down = null;                                                    // the element that the press began on (the timeline's drag goes on beyond the bar)
         var control = null;                                                 // ... and its button or link, found at the press (the bar draws its icons again as the match plays)
         var swallow = false;                                                // the click that follows a release that the bar took is the bar's too
+        var taken = false;                                                  // the press that is going on was the bar's (a button other than the left one, which the game never saw)
         var mark = null;
         function arrow(at) {                                                // (made when first wanted: nothing of it is in the page's markup)
             if (!mark) {
@@ -304,7 +305,7 @@
             // the lock was let go (or fullscreen ended): a drag in progress is cancelled, the arrow goes
             reset: function () {
                 if (down) { var at = env.cursorAt() || { x: 0, y: 0 }; fire(down, 'pointercancel', at, 0); }
-                inBar = false; down = null; control = null; swallow = false;
+                inBar = false; down = null; control = null; swallow = false; taken = false;
                 if (mark) arrow(null);
             },
             hideMark: function () { if (mark) arrow(null); },
@@ -326,14 +327,14 @@
                 if (type === 'click') { var due = swallow || !!hit(at); swallow = false; return due; }
                 var over = hit(at);
                 if (type === 'mousedown') {
-                    swallow = false;
+                    swallow = false; taken = !!over;
                     if (!over) return false;
                     if (button === 0) { down = over; control = interactive(over); fire(over, 'pointerdown', at, 1); }
                     return true;
                 }
-                if (!down) return !!over;                                   // (a release over the bar of a press that began on the picture is not for the game either)
+                if (!down) { var mine = taken; taken = false; return mine; }   // (a release of a press that the game saw, on the picture, is the game's even where the bar lies: it must see the button go up)
                 var from = down, pressed = control;
-                down = null; control = null; swallow = true;
+                down = null; control = null; swallow = true; taken = false;
                 fire(from, 'pointerup', at, 0);
                 if (pressed) { if (!pressed.disabled && over && interactive(over) === pressed) pressed.click(); }
                 else if (over) over.dispatchEvent(new env.MouseEvent('click', { bubbles: true, cancelable: true, view: env.win, clientX: at.x, clientY: at.y }));       // (a click on the bar's own ground: the Picture window closes, as it does for a free pointer)

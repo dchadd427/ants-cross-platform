@@ -138,6 +138,29 @@ class TheReplayIsLockedLikeTheGame(PageCase):
         self.assertIn("window.antsReplayPlaceBar();", self.page.split("['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach")[1][:600])
         self.assertIn("barPointer: barPointer", read(os.path.join(REPO, "web", "replay_page.js")))
 
+    def edge_rule(self, page):
+        """The page's own expression for 'the locked cursor is at the picture's outermost pixels', made a function of (x, y, width, height)."""
+        found = re.search(r"edge: ([^}]*?) \}; \} \}\);", page)
+        self.assertIsNotNone(found)
+        code = re.sub(r"lockCursor\.(x|y)", r"\1", found.group(1)).replace("r.width", "w").replace("r.height", "h").replace("||", " or ")
+        return lambda x, y, w, h: eval(code, {"x": x, "y": y, "w": w, "h": h})
+
+    def test_the_outermost_pixel_on_every_side_is_the_games_even_where_the_bar_lies(self):
+        w, h = 960, 540
+        for rule in (self.edge_rule(self.page),):
+            self.assertFalse(rule(480, 270, w, h))
+            for x, y, edge in ((0.5, 270, True), (1, 270, False), (w - 1.5, 270, False), (w - 1, 270, True), (w - 0.25, 270, True),       # left and right
+                               (480, 0.5, True), (480, 1, False), (480, h - 1.5, False), (480, h - 1, True), (480, h - 0.25, True)):         # top and bottom
+                self.assertEqual(rule(x, y, w, h), edge, (x, y))
+        # the same checks refuse a rule that lost a side or moved a bound
+        for old, new in (("lockCursor.x >= r.width - 1", "lockCursor.x > r.width"), ("lockCursor.y >= r.height - 1", "lockCursor.y > r.height"), ("lockCursor.x < 1 ||", "lockCursor.x < 0 ||"),
+                         ("lockCursor.y < 1 ||", "lockCursor.y < 0 ||"), ("lockCursor.x >= r.width - 1", "lockCursor.x >= r.width - 2"), ("lockCursor.y >= r.height - 1", "lockCursor.y >= r.height - 2")):
+            self.assertEqual(self.page.count(old), 1, old)
+            rule = self.edge_rule(self.page.replace(old, new))
+            wrong = [(x, y) for x, y, edge in ((0.5, 270, True), (1, 270, False), (w - 1.5, 270, False), (w - 1, 270, True), (480, 0.5, True), (480, 1, False), (480, h - 1.5, False), (480, h - 1, True))
+                     if rule(x, y, w, h) != edge]
+            self.assertTrue(wrong, "the check accepted a rule where " + old + " became " + new)
+
     def test_the_guides_say_so(self):
         self.assertNotIn("pointer lock is off in a replay", read(os.path.join(REPO, "docs", "REPLAYS.md")))
         self.assertIn("locked", read(os.path.join(REPO, "docs", "REPLAYS.md")).split("**The same game in the same browser as ever:**")[1].split("\n")[0])
