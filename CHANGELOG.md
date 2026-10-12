@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.23 - 2026-10-11 - The map list and the fullscreen replay mouse: follow-ups
+## v0.12.23 - 2026-10-12 - The map list and the fullscreen replay mouse: follow-ups
 
 **For players:**
 - The map list on the front page: after a search that hides the map you had picked, "Choose map" is off instead of choosing a map you cannot see; the page behind the open list (the header and the notices too) no longer takes a key or a tap.
