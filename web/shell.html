@@ -1139,7 +1139,7 @@
             .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl tl" "play rew clock pic" "speed speed speed speed" "cam cam cam cam"; gap: 4px 8px; }
             .rbar:not(.over) .camb { justify-self: stretch; min-height: 44px; font-size: 18px; } .rbar:not(.over) .camb .lbl { display: inline; }
             .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play rew clock cam pic fsx" "speed speed speed speed speed speed"; }
-            .rbar .clock { text-align: left; font-size: 19px; }
+            .rbar .clock { text-align: left; font-size: 19px; } @media (max-width: 420px) { .rbar .clock { min-width: 0; font-size: clamp(14px, 4.4vw, 19px); } .rbar:not(.over) { grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam cam cam pic"; } .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam pic pic fsx"; } .rbar.over .camb { justify-self: start; } .rbar.over .picwrap { justify-self: end; } }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
         }
         /* a phone on its side, or any short window: the title keeps one row, and in fullscreen the bar is one thin row */

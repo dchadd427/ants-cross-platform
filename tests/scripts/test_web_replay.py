@@ -533,6 +533,29 @@ class TheRewindButton(unittest.TestCase):
                 rows = re.findall(r'"([^"]*)"', line)
                 self.assertTrue(all(len(r.split(" ")) == len(cols) for r in rows), line)         # (a row of areas for every column)
 
+    def test_the_narrow_phone_rows_keep_the_clock_whole_and_the_looks_of_the_button(self):
+        self.assertIn("gap: 4px 8px; }", self.page)                                                        # (the phone row's gap, pinned: 12 px did not leave room)
+        phone = block(self.page, "@media (max-width: 700px) {\n            body.replay header { flex-wrap: wrap; }")
+        narrow = phone[phone.index("@media (max-width: 420px)"):]
+        self.assertIn(".rbar .clock { min-width: 0; font-size: clamp(14px, 4.4vw, 19px); }", narrow)      # (the clock may shrink: its base min-width of 118 px pushed it under Picture)
+        self.assertIn('"play rew clock clock" "speed speed speed speed" "cam cam cam pic"', narrow)       # (Picture goes to the camera's row, the clock gets the rest of its row)
+        self.assertIn('"play rew clock clock" "speed speed speed speed" "cam pic pic fsx"', narrow)       # (fullscreen: the same, and the way out of fullscreen beside Picture)
+        rule = lambda sel: re.search(re.escape(sel) + r" \{([^}]*)\}", self.page).group(1)
+        number = rule(".rbar .rew .n")
+        for bad in ("background", "border", "box-shadow", "outline", "padding", "text-shadow"):
+            self.assertNotIn(bad, number, bad)                                                             # (the 30 is bare: it sits on the button's face)
+        self.assertIn("grid-area: rew; flex-direction: column;", rule(".rbar .rew"))
+        self.assertNotIn("background", rule(".rbar .rew"))                                                 # (the button's face, bevel and edge are Play's: .btn .rplay)
+        self.assertNotIn("border", rule(".rbar .rew"))
+        self.assertIn("min-width: 64px; min-height: 50px; padding: 6px 14px;", rule(".rbar .rplay"))        # (the size that the copy shares)
+        self.assertIn(".rbar .rplay svg { width: 24px; height: 24px; fill: currentColor;", self.page)
+
+    def test_the_icon_is_two_whole_triangles(self):
+        d = re.search(r"path\.setAttribute\('d', '(M11\.5[^']*)'\)", self.script).group(1)
+        self.assertEqual(d, "M11.5 4.5v15L2 12zM22 4.5v15L12.5 12z")                                      # (the whole path: a left triangle and a right one, each closed)
+        self.assertEqual(len(re.findall(r"[Mm]", d)), 2)
+        self.assertEqual(d.count("z"), 2)
+
     def test_the_docs_name_it(self):
         self.assertIn("Back 30 seconds", read("docs", "REPLAYS.md"))
         self.assertIn("Back 30 seconds", read("docs", "PLAY_IN_BROWSER.md"))

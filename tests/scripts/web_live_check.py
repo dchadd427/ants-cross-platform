@@ -458,9 +458,6 @@ def main():
             time.sleep(1.0)
             g = tab.ev(geo)
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and g["bar"][0] >= 0 and g["bar"][2] <= g["vw"] and g["rew"][2] <= g["bar"][2] + 0.5, "390 px: the bar fits and so does the button (bar %r, button %r)" % (g["bar"], g["rew"]))
-            row = tab.ev("(function () { var ids = ['b-play', 'b-rew', 'clock', 'picbtn', 'b-fsx'], out = []; ids.forEach(function (id) { var e = document.getElementById(id); if (e.id === 'b-fsx' && getComputedStyle(e).display === 'none') return; var r = (e.parentNode.id === 'picwrap' ? e.parentNode : e).getBoundingClientRect(); out.push([r.left, r.right, r.top]); });"
-                         " return out; })()")
-            check(all(row[i][1] <= row[i + 1][0] + 0.5 for i in range(len(row) - 1)) and row[-1][1] <= g["vw"], "390 px: the buttons of the row lie apart and inside the screen %r" % row)
             tab.ev("__stub.turn = 1000; __stub.state = 3; __stub.speed = 100; __stub.seeks.length = 0")
             rx, ry = centre(tab, "b-rew")
             tab.tap(rx, ry)
@@ -489,6 +486,33 @@ def main():
             check(g["rew"][0] >= 0 and g["rew"][2] <= g["vw"] and g["bar"][2] <= g["vw"] + 0.5 and g["rew"][0] >= g["play"][2] - 0.5, "on its side: the button is right of Pause and inside the screen (%r)" % g["rew"])
             shot(tab, "rewind-landscape-fullscreen")
             tab.close()
+            # the phone bar at 320, 360, 375 and 390 px upright with the longest clock (62:03 / 62:03), on the page and in fullscreen: nothing lies on anything else and nothing is cut off
+            rows = ("(function () { var out = [], bad = [];"
+                    " ['b-play', 'b-rew', 'clock', 'picwrap', 'b-cam', 'b-fsx', 'speed'].forEach(function (id) { var e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return;"
+                    " var r = e.getBoundingClientRect(); out.push([id, r.left, r.top, r.right, r.bottom]); });"
+                    " var c = document.getElementById('clock'); return { boxes: out, clip: c.scrollWidth - c.clientWidth, vw: window.innerWidth, doc: document.documentElement.scrollWidth }; })()")
+            for width in (320, 360, 375, 390):
+                for full in (False, True):
+                    fresh(kept_at=1.0)
+                    tab = new_tab(width, 844, 2, True)
+                    open_page(tab, "/play.html?replay=" + KEPT)
+                    until(tab, READY)
+                    tab.ev("__stub.total = 74460; __stub.turn = 74460; __stub.state = 3")
+                    time.sleep(0.8)
+                    if full:
+                        fx, fy = centre(tab, "fullscreen-btn-r")
+                        tab.tap(fx, fy)
+                        until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                        time.sleep(0.6)
+                    g = tab.ev(rows)
+                    boxes = g["boxes"]
+                    apart = all(a[3] <= b[1] + 0.5 or b[3] <= a[1] + 0.5 or a[4] <= b[2] + 0.5 or b[4] <= a[2] + 0.5 for i, a in enumerate(boxes) for b in boxes[i + 1:] if a[0] != "speed" and b[0] != "speed")
+                    inside = all(b[1] >= -0.5 and b[3] <= g["vw"] + 0.5 for b in boxes)
+                    label = "%d px upright, %s, clock 62:03 / 62:03" % (width, "fullscreen" if full else "in the page")
+                    check(apart and inside and g["clip"] <= 0 and g["doc"] <= g["vw"], "%s: nothing lies on anything else, the clock is whole (clipped %s px), no sideways scroll" % (label, g["clip"]))
+                    if width in (360, 390) and args.shots:
+                        shot(tab, "rewind-phone-%d%s-longclock" % (width, "-fullscreen" if full else ""))
+                    tab.close()
             fresh()
             tab = new_tab()                                                    # a match that is being played: no button
             open_page(tab, "/play.html?live=" + ID)
