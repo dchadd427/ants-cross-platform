@@ -364,7 +364,7 @@ public:
     /// The map, seed, roster and names of the match (valid from Loading on)
     const StartMsg& start_info() const noexcept { return start_; }
     /// The application loaded the map of start_info() (true) or could not (a missing file, a different file)
-    void report_loaded(bool ok);
+    void report_loaded(bool ok, const std::string& why = std::string());   // `why` (a failure): the sentence the status line shows instead of "the map file was not found on your computer" (a map that could not be fetched)
 
     // ---- the match ---------------------------------------------------------------------------------------------------------------------------------
     /// The HUD's sink: the command is stamped with this machine's seat and queued for the next turn; the answer carries the predicted acknowledgement

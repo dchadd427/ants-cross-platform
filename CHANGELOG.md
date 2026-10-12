@@ -23,13 +23,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.15 - 2026-10-11 - Auto camera for replays and live matches
+## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 
 **For players:**
 - **Auto camera for replays and live matches.** The picture goes to the busiest place (fights, thefts, fires, bombs) and stays there at least 3 seconds; rings on the minimap show where things happen. **Manual camera** leaves the picture where you put it. Moving the picture by hand (the edge of the screen, the minimap, two fingers) switches to Manual; zooming does not. The button is in the bar (a row of its own on a phone, an icon in fullscreen) and what you chose is remembered on the device.
 - **Nothing can be picked in a replay:** no click, drag box, corner marks, Move and Stop buttons, order markers, voices or inspect panel. Matches you play are the same.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.14...v0.12.15); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.15...v0.12.16); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+
+## v0.12.15 - 2026-10-11 - Community maps load in the browser
+
+**For players:**
+- **A room can play any community map in the browser:** when the leader picks a map of the community, every browser downloads that one file before the match loads (it is checked to be the host's copy) and the match waits for everybody. The same goes for watching a recording of such a match.
+- A map that cannot be had (taken off the site, no connection, too slow) stops that start for the room, with the reason on screen; the leader's next START tries again.
+
+**Rules / network:** none: the simulation and the protocol are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...9e408a1b)
 
 ## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
 
