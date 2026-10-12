@@ -28,7 +28,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
 
-**Details:** comment-only change (`web/front/lobby_net.js`, `include/ants_app/shell_layout.hpp`, `include/ants_app/screen_layout.hpp` and documents).
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.18...v0.12.19); comment-only change.
 
 ## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
 
