@@ -1407,6 +1407,7 @@
     <div class="toast" id="toast" role="status" hidden></div>
 
     <script src="replay_page.js"></script>
+    <script src="map_files.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -2106,6 +2107,8 @@
         }
         // ANTS_REPORT_END
 
+        // The players' maps (map_files.js, tests/scripts/web_map_files_check.js): the game asks for the room's map through window.antsMapFiles (src/ants_app/map_fetch.cpp); one it cannot have is said in the toast
+        window.antsMapFiles = window.AntsMapFiles ? window.AntsMapFiles.forPage(window, function () { return typeof Module !== 'undefined' ? Module : null; }, document.getElementById('toast')) : null;
         var Module = {
             arguments: ANTS_ARGS,
             preRun: [],
@@ -3785,14 +3788,19 @@
             window.antsAfterReplay = function (start) {
                 fetched.then(function (got) {
                     if (got.error) return;                    // (its card is up already)
-                    if (ANTS_LIVE_MODE) {
-                        Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; });          // (the newest file: the feed went on while the data came)
-                        ANTS_ARGS.push('--replay', '/replay.antsrep', '--replay-live');
-                    } else {
-                        Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', got.bytes); });
-                        ANTS_ARGS.push('--replay', '/replay.antsrep');
-                    }
-                    start();
+                    var need = window.antsMapFiles ? window.AntsMapFiles.mapOfReplay(ANTS_LIVE_MODE ? latest : got.bytes) : null;       // (a match on a map of the players: fetched now, written when the game's file system is there)
+                    (need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
+                        if (!map.ok) { card('cant', map.text); return; }
+                        if (map.bytes) Module.preRun.push(window.AntsMapFiles.writer(function () { return Module.FS; }, need.name, map.bytes));
+                        if (ANTS_LIVE_MODE) {
+                            Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; });          // (the newest file: the feed went on while the data came)
+                            ANTS_ARGS.push('--replay', '/replay.antsrep', '--replay-live');
+                        } else {
+                            Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', got.bytes); });
+                            ANTS_ARGS.push('--replay', '/replay.antsrep');
+                        }
+                        start();
+                    });
                 });
             };
             // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen); a live match is looked at again every few seconds from the first answer on

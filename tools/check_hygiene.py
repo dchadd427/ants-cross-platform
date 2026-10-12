@@ -40,7 +40,7 @@ LINE_CEILINGS = {
     "tests/test_app/test_start_menu.cpp": 2943,
     "tests/test_app/test_wide_hud.cpp": 2710,
     "src/ants_ai/standard_tasks.cpp": 3911,
-    "web/shell.html": 3954,
+    "web/shell.html": 3962,
     "src/ants_app/application.cpp": 3580,
     "tools/bot_arena.cpp": 2773,
     "tools/map_sweep.cpp": 2626,

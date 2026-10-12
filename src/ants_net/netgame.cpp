@@ -1446,7 +1446,7 @@ bool NetGame::start_match(uint32_t seed, uint64_t map_hash) {
     return true;
 }
 
-void NetGame::report_loaded(bool ok) {
+void NetGame::report_loaded(bool ok, const std::string& why) {
     if (phase_ != Phase::Loading) return;
     loaded_reported_ = ok;
     if (role_ == Role::Host && host_lobby_) {
@@ -1457,7 +1457,7 @@ void NetGame::report_loaded(bool ok) {
             phase_ = Phase::Room;
             phase_since_ms_ = now_;
             close_peer_links();
-            set_notice(str::format(str::kMapFileMissing, start_.map_name));
+            set_notice(why.empty() ? str::format(str::kMapFileMissing, start_.map_name) : why);
             events_.push_back(Event{Event::Type::Cancelled, seat_});
             refresh_status();
             unannounce_start_key();                               // the lobby takes no Cancel of the server's after this: the key that the Start gave goes now (last: the function that is told may end the session)

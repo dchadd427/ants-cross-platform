@@ -114,6 +114,9 @@ COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY --from=builder /src/watch.html /usr/share/nginx/html/watch.html
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 
+# The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
+COPY web/map_files.js /usr/share/nginx/html/map_files.js
+
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
