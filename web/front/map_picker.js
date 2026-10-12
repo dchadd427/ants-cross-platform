@@ -35,6 +35,40 @@
     var NAME_PART = "(?:[A-Za-z0-9_~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})(?:[A-Za-z0-9._~-]|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})*";
     var PICTURE = new RegExp('^(?:/maps/previews/' + NAME_PART + '\\.webp|/front/preview_[a-z]+\\.png)$');
     function ownPath(url) { return typeof url === 'string' && PICTURE.test(url) ? url : ''; }
+    // A character string as an address part, as the server writes it (map_store.cpp percent_encode): everything but the unreserved characters is %XX (encodeURIComponent leaves ! ' ( ) * as they are, which the server never does)
+    function percentEncode(s) {
+        var out = '';
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charAt(i);
+            out += /[A-Za-z0-9\-._~]/.test(c) ? c : '%' + ('0' + s.charCodeAt(i).toString(16).toUpperCase()).slice(-2);
+        }
+        return out;
+    }
+    var ORIGINALS = /^(?:tiny|small|medium|gauntlet|treasure|islands)\.lvl$/i;       // the six that the front page has its own pictures of (/front/preview_<word>.png)
+    // The picture address of a map of the players from its name alone, as a match record has it ("POPcOrN.lvl", or "POPcOrN"): /maps/previews/<file name without .lvl>.webp, or '' for a name that is not a map's file name (the game's
+    // rule above), one of the six originals, or anything outside the two shapes the page loads
+    function previewPath(map) {
+        if (typeof map !== 'string') return '';
+        var base = map.replace(/\.lvl$/i, ''), file = base + '.lvl';
+        if (!validMapFile(file) || ORIGINALS.test(file)) return '';
+        return ownPath('/maps/previews/' + percentEncode(base) + '.webp');
+    }
+    // The picture of the map that a match record names, from the list that parseList made (null while it is not known): the list's own entry says what the server serves (the record may spell the name in another
+    // case, and the server may have no picture for it: then none); a map the list does not hold has the address that its name makes
+    function thumbFor(map, list) {
+        if (typeof map !== 'string') return '';
+        var base = map.replace(/\.lvl$/i, ''), file = base + '.lvl';
+        if (!validMapFile(file) || ORIGINALS.test(file)) return '';
+        if (list) {
+            var low = null;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].file.replace(/\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;
+                if (!low && list[i].file.toLowerCase() === file.toLowerCase()) low = list[i];
+            }
+            if (low) return low.original ? '' : low.thumb;
+        }
+        return previewPath(map);
+    }
 
     // The list as the server sends it ({"format":1,"maps":[...]}) as entries the picker uses, in the server's order; an entry that is no map (a bad name, no number) is left out. null when it is no list.
     function parseList(data) {
@@ -335,5 +369,5 @@
         };
     }
 
-    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, create: create };
+    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, create: create };
 });

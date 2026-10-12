@@ -132,6 +132,17 @@ class TheListPage(unittest.TestCase):
         for words in ("Earlier matches", "Nothing to watch yet", "The list can\u2019t be loaded right now", "This server doesn\u2019t keep replays", "Earlier versions", "Show them", "Hide them", "Show more", "Cut short"):
             self.assertIn(words, self.page, words)
 
+    def test_a_map_of_the_players_has_its_picture_in_both_lists_and_a_missing_one_leaves_the_dark_square(self):
+        self.assertIn('<script src="front/map_picker.js"></script>', self.page)                              # (the picker's own address rules: tests/scripts/web_map_picker_check.js)
+        self.assertEqual(self.page.count("pictureNode(e.map)"), 2)                                          # (Live now and Earlier matches share it)
+        self.assertIn("window.AntsMapPicker.thumbFor(map, maps)", self.page)
+        self.assertIn("window.AntsMapPicker.parseList(data)", self.page)
+        self.assertIn("fetch('/maps'", self.page)
+        for token in ("img.loading = 'lazy'", "img.decoding = 'async'", "img.addEventListener('error'", "el('div', 'blank')"):
+            self.assertIn(token, self.page, token)
+        self.assertIn("img.src = 'front/preview_' + key + '.png'", self.page)                                # (the six keep their art)
+        self.assertNotIn("innerHTML", self.page)
+
     def test_the_live_box_looks_at_the_door_every_ten_seconds_and_says_what_the_picture_shows(self):
         self.assertIn("fetch('/live'", self.page)
         self.assertIn("LIVE_EVERY = 10000", self.page)

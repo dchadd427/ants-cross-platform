@@ -174,6 +174,7 @@
 </div>
 
 <script src="replay_page.js"></script>
+<script src="front/map_picker.js"></script>
 <script>
 (function () {
     'use strict';
@@ -198,19 +199,48 @@
     function pluralMatches(n) { return n + (n === 1 ? ' match' : ' matches'); }
 
     // ---- one match of the list ----
-    function pictureNode(map) {                                  // the map's picture (a blank square for a map that is not one of the six)
-        var tv = el('figure', 'tv');
+    // The picture of a match's map: one of the six has its own (front/preview_<word>.png); a map of the players has the picture that the map picker shows (AntsMapPicker.thumbFor: the server's list GET /maps when it
+    // has come, else the address that the name makes). A picture that is not there leaves the dark square. `pictures` holds the squares on the page so that the list, when it comes, can correct an address.
+    var maps = null;                                             // the server's map list (AntsMapPicker.parseList), null until it has come
+    var pictures = [];                                           // { tv, map, tried }: the squares of maps of the players, and the address each one tried
+    function fillPicture(tv, map, item) {
+        tv.textContent = '';
         var key = R.mapKey(map);
+        var url = key || !window.AntsMapPicker ? '' : window.AntsMapPicker.thumbFor(map, maps);
+        if (item) item.tried = url;
+        if (!key && !url) { tv.appendChild(el('div', 'blank')); return; }
+        var img = el('img');
+        img.alt = '';
+        img.width = 300; img.height = 300;
         if (key) {
-            var img = el('img');
             img.src = 'front/preview_' + key + '.png';
-            img.alt = '';
-            img.width = 300; img.height = 300;
-            tv.appendChild(img);
         } else {
-            tv.appendChild(el('div', 'blank'));
+            img.loading = 'lazy'; img.decoding = 'async';
+            img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });
+            img.src = url;
         }
+        tv.appendChild(img);
+    }
+    function pictureNode(map) {
+        var tv = el('figure', 'tv');
+        var item = R.mapKey(map) ? null : { tv: tv, map: map, tried: '' };
+        fillPicture(tv, map, item);
+        if (item) pictures.push(item);
         return tv;
+    }
+    function lookMaps() {                                        // the list of the maps: asked once; a failure leaves the addresses that the names make
+        var request;
+        try { request = fetch('/maps', { credentials: 'same-origin' }); } catch (e) { return; }
+        request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
+            var list = data && window.AntsMapPicker ? window.AntsMapPicker.parseList(data) : null;
+            if (!list) return;
+            maps = list;
+            pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });
+            pictures.forEach(function (item) {
+                var url = window.AntsMapPicker.thumbFor(item.map, maps);
+                if (url !== item.tried) fillPicture(item.tv, item.map, item);
+            });
+        }).catch(function () { /* the pictures stay as they are */ });
     }
     function entryNode(e, old) {
         var now = new Date();
@@ -446,6 +476,7 @@
     if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
     else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
     load();
+    if (typeof fetch === 'function') lookMaps();
     // the matches that are being played: looked at now, then every 10 seconds while the page is in front (a hidden page asks nothing, and asks again as soon as it is shown)
     document.addEventListener('visibilitychange', function () { if (document.hidden) { liveRound++; clearTimeout(liveTimer); liveTimer = 0; } else if (!liveStop) lookLive(); });
     if (typeof fetch === 'function' && !document.hidden) lookLive();
