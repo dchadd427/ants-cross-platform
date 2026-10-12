@@ -9,7 +9,9 @@ and drives the front page like a person: opens the list, switches the view, sear
              chosen with the keyboard becomes the room's map (the server says so, the page shows its name and picture, and the file is fetched into the browser's cache at once), the list opens on it;
   * phone    the list is a sheet at the bottom of a 390 px screen, with no sideways scroll, in both views and when empty;
   * error    the list of maps is down: the dialog says so, the old selector with the six originals still works;
-  * match    a map of the players chosen in the lobby with a computer player at Red: START opens the game, the game has the file and the match runs.
+  * match    a map of the players chosen in the lobby with a computer player at Red: START opens the game, the game has the file and the match runs;
+  * solo     alone in the room on a map of the players, desktop and phone: the line under START is "A game for one" (no computer player asked for), START opens the game page's own game for one, which fetches
+             the file and runs (and is still going after a few seconds).
 
 Exit status 0: every check passed; 1: a check failed or something broke; 3: the environment is not there; 2: a bad command line.
 """
@@ -31,7 +33,7 @@ from web_hidden_check import find_browser, free_port                          # 
 from web_rejoin_check import Player, Server, wait_for, REPO                    # noqa: E402
 from web_map_fetch_check import Front                                           # noqa: E402
 
-PARTS = ("desktop", "phone", "error", "match")
+PARTS = ("desktop", "phone", "error", "match", "solo")
 KEYS = {"ArrowDown": 40, "ArrowUp": 38, "ArrowLeft": 37, "ArrowRight": 39, "Enter": 13, "Escape": 27, "Home": 36, "End": 35, "Tab": 9}
 
 
@@ -238,18 +240,21 @@ def main():
             check(room.get("map") == "ISLANDS.LVL", "previous from a map of the players goes to the last original (%s)" % room.get("map"))
             pick_top()
             plan = v.ev("document.getElementById('plan').textContent") or ""
-            check(plan.startswith("This map needs a computer player"), "alone on a map of the players the line under START says what it needs (%s)" % plan)
-            v.ev("document.getElementById('start').click()")
-            time.sleep(0.5)
-            check("needs a second player or a computer player" in (v.ev("document.getElementById('banner-text').textContent") or ""), "and START says so too, in the strip")
+            check(plan.startswith("A game for one"), "alone on a map of the players the line under START is the same as for an original (%s)" % plan)
+            check("computer player" not in plan, "and it asks for no computer player")
             v.shot(args.shots, "lobby-community-alone")
-            check(v.ev("window.location.pathname") == "/", "START stayed on the front page")
-            v.ev("document.getElementById('banner-x').click()")
+            check(v.ev("document.getElementById('start').disabled") is False, "START is on")
             v.open_list()
             check(v.ev("[document.querySelector('header.mast')].concat(['banner', 'rejoin', 'lobby', 'footer-bar'].map(function (id) { return document.getElementById(id); })).every(function (n) { return n.hasAttribute('inert'); })"), "the page behind the open list is inert")
             v.ev("document.body.focus(); document.activeElement.blur()")
             v.press("Escape")
             check(not v.visible() and not v.ev("[document.querySelector('header.mast')].concat(['banner', 'rejoin', 'lobby', 'footer-bar'].map(function (id) { return document.getElementById(id); })).some(function (n) { return n.hasAttribute('inert'); })"), "Escape closes the list and the page is live again")
+
+            # START alone on a map of the players hands the page over to the game page's own game for one, with the map's file in its address (it fetches the file from the site)
+            v.ev("document.getElementById('start').click()")
+            check(bool(wait_for(lambda: (v.ev("window.location.pathname") or "").endswith("/play.html"), 20)), "START alone leaves for the game page")
+            query = urllib.parse.parse_qs((v.ev("window.location.search") or "").lstrip("?"))
+            check(query.get("mapfile") == [top[0]["file"]] and "map" not in query and "bots" not in query, "the game page is asked for a game for one on that map's file (%s)" % query)
 
         if wanted("phone"):
             print("part phone", flush=True)
@@ -317,6 +322,45 @@ def main():
             check(bool(ready), "START opens the game page and its game is ready")
             check(bool(wait_for(lambda: v.in_match(), 90, 0.5)), "the match on the map of the players runs")
             check(bool(v.ev("(function () { try { return Module.FS.analyzePath(%s).exists; } catch (e) { return false; } })()" % json.dumps("Original-Ants/Maps/" + file))), "the game has the map file")
+
+        if wanted("solo"):
+            print("part solo", flush=True)
+            def alone_on_a_map_of_the_players(v):
+                check(v.open_front(web), "the front page is up with its room")
+                check(v.open_list(), "the list opens")
+                v.ev("document.querySelector('#picker-panel .pk-q').focus()")
+                v.type("jungal")
+                time.sleep(0.3)
+                v.ev("document.querySelector('#picker-panel [data-file]').click()")
+                chosen = v.selected()
+                v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel button')).filter(function (b) { return b.textContent === 'Choose map'; })[0].click()")
+                time.sleep(0.8)
+                check((server.room(v.room_code()) or {}).get("map") == chosen, "the room is on %s" % chosen)
+                plan = v.ev("document.getElementById('plan').textContent") or ""
+                check(plan.startswith("A game for one") and "computer player" not in plan, "alone on %s: the line under START is a game for one (%s)" % (chosen, plan))
+                check(v.ev("document.getElementById('start').disabled") is False, "START is on")
+                return chosen
+            v = visitor("Sol")
+            v.phone()
+            alone_on_a_map_of_the_players(v)
+            v.shot(args.shots, "solo-lobby-phone")
+            v = visitor("Sol")
+            v.desktop()
+            file = alone_on_a_map_of_the_players(v)
+            v.shot(args.shots, "solo-lobby-desktop")
+            v.ev("document.getElementById('start').click()")
+            time.sleep(1.5)
+            v.shot(args.shots, "solo-start-pressed")
+            check(bool(wait_for(lambda: v.ev("!!window.isReadyToPlay"), args.ready_timeout, 0.5)), "START opens the game page and its game is ready")
+            deadline = time.time() + 90                                      # (the quick help closes with Enter, and with --play the match starts at once; an Enter that comes while the loading screen is up is pressed again)
+            while time.time() < deadline and not (v.state() or [0, 0])[1]:
+                v.press("Enter")
+                time.sleep(2)
+            check(bool(wait_for(lambda: v.in_match(), 30, 0.5)), "the game for one on the map of the players runs (the quick help closed with Enter)")
+            check(bool(v.ev("(function () { try { return Module.FS.analyzePath(%s).exists; } catch (e) { return false; } })()" % json.dumps("Original-Ants/Maps/" + file))), "the game has the map file")
+            time.sleep(8)
+            check(v.in_match(), "and it is still going after a few seconds: a game for one does not end by itself")
+            v.shot(args.shots, "solo-game-desktop")
 
         bad = [(p.name, t) for p in visitors for _, level, t in p.console if level == "exception"]
         check(not bad, "no page threw an exception (%s)" % bad[:3])

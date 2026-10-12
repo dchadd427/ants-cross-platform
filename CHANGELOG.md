@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.26 - 2026-10-12 - A game for one on a map of the players
+
+**For players:**
+- You can start a game completely alone on any map of the players, as on the six originals: the line under START now reads "A game for one" instead of asking for a computer player, and START opens the game with only your colony on the map. The map's file is fetched from the site while the game loads.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/343a692f...HEAD)
+
 ## v0.12.24 - 2026-10-12 - Pictures of the players' maps in the match lists
 
 **For players:**

@@ -240,5 +240,20 @@
         return function () { var FS = FSOf(); try { FS.mkdirTree('Original-Ants/Maps'); } catch (e) { /* it is there */ } FS.writeFile('Original-Ants/Maps/' + name, bytes); };
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
+    // A game for one on a map of the players (the game page's ?mapfile=): the file name when the game takes it and it is none of the six originals' files, else ''
+    function communityFile(name) { return validName(name) && !ORIGINALS.test(name) ? name : ''; }
+
+    // The game page's start of a game on this computer: with no map of the players (file '') the game starts at once (`go`); else the file is fetched from the site (`files`: window.antsMapFiles; no hash to check,
+    // nobody else plays it), written into the game's maps folder when its file system is there (the game's Module.preRun) and then the game starts. What cannot be had is `fail`'s text.
+    function beforeLocalGame(files, file, getModule, fail, go) {
+        if (!file) { go(); return; }
+        if (!files || typeof Promise === 'undefined') { fail('This browser cannot download the map ' + file + '.'); return; }
+        files.fetchOnly(file, '').then(function (map) {
+            if (!map.ok) { fail(map.text); return; }
+            getModule().preRun.push(writer(function () { return getModule().FS; }, file, map.bytes));
+            go();
+        });
+    }
+
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
 });

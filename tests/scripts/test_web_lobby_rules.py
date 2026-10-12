@@ -175,6 +175,16 @@ class TheCheckIsNotVacuous(unittest.TestCase):
     def test_the_map_info_line_of_a_map(self):
         self.must_fail("web/front/lobby_rules.js", "Race for your life! (10 min)", "Race for your life! (9 min)")
 
+    # ---- a person alone on a map of the players starts like one alone on an original (a game for one: no computer player asked for)
+    def test_alone_on_a_map_of_the_players_asks_for_a_computer_player_again(self):
+        self.must_fail("web/front/lobby_rules.js", "var text = names.length === 1 ? 'A game for one'", "var text = names.length === 1 && !file ? 'A game for one'")
+
+    def test_the_short_line_alone_on_a_map_of_the_players_says_what_it_needs_again(self):
+        self.must_fail("web/front/lobby_rules.js", ": g ? host + ' starts the match' : listOf(short)", ": g ? host + ' starts the match' : names.length === 1 && file ? 'Needs a computer player' : listOf(short)")
+
+    def test_start_does_not_play_a_map_of_the_players_alone_again(self):
+        self.must_fail("web/front/lobby_rules.js", "function startsAlone(model) { return playing(model).length === 1; }", "function startsAlone(model) { return playing(model).length === 1 && !model.mapFile; }")
+
     # ---- the name block that the pages carry (byte for byte the same in both) ----------------------------------------------------------------------------------------------------------------
     def test_the_name_block_of_the_lobby_page_changed(self):
         self.must_fail("web/lobby.html", "'A name has at most '", "'A name can have at most '")

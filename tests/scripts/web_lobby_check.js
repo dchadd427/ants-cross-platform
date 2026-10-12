@@ -110,7 +110,7 @@ function element(attributes) {
 }
 function loadShell() {
     const block = between(shellText, 'ANTS_PAGE_BEGIN', 'ANTS_PAGE_END', shellPath);
-    const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: makeStorage({}), confirm() { return true; } };
+    const win = { location: { search: '', protocol: 'https:', host: 'example.test', href: 'https://example.test/', assign() {} }, localStorage: makeStorage({}), confirm() { return true; }, AntsMapFiles: require(path.join(repo, 'web', 'map_files.js')) };
     const stage = element({ 'data-aspect': '16:9' });
     const doc = {
         body: element(),
@@ -141,6 +141,10 @@ try {
     same('localGameQuery: a level in capitals is the lower case word that was tested', L.localGameQuery('small', 'HARD', 'Bob', '16:9'), '?map=small&bots=hard&name=Bob&aspect=16:9');
     same('localGameQuery: a key that is no map is Treasure (the default of everything)', [L.localGameQuery('nowhere', '', 'Bob', '16:9'), L.localGameQuery('', '', 'Bob', '16:9'), L.localGameQuery(undefined, '', 'Bob', '16:9'), L.localGameQuery('TREASURE', '', 'Bob', '16:9')],
          ['?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9']);
+    same('localGameQuery: a map of the players is named by its file (URL-encoded), and the game page reads it back as the same file', [L.localGameQuery('Thief craker.lvl', '', 'Bob', '16:9'), L.localGameQuery('!!!BLOCKADES!!!.lvl', 'easy', 'Bob', '16:9')],
+         ['?mapfile=Thief%20craker.lvl&name=Bob&aspect=16:9', '?mapfile=!!!BLOCKADES!!!.lvl&bots=easy&name=Bob&aspect=16:9']);
+    same('localGameQuery: a key wins over a file name, a text that is no valid file name is no map (Treasure), an original\'s file is its key', [L.localGameQuery('tiny', '', 'Bob', '16:9'), L.localGameQuery('../x.lvl', '', 'Bob', '16:9'), L.localGameQuery('TINY.LVL', '', 'Bob', '16:9')],
+         ['?map=tiny&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=tiny&name=Bob&aspect=16:9']);
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
     same('localGameQuery: the shape is one of the four (4:3, 16:10, 16:9, 21:9) and nothing else', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
          ['4:3', '16:10', '16:9', '21:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9'].map((shape) => '?map=tiny&name=B&aspect=' + shape));
@@ -180,6 +184,17 @@ try {
     for (const level of ['easy', 'medium', 'hard']) same('the level ' + level + ' seats that bot in the three other bases (seats 1, 2, 3; the player is seat 0)', local('?map=small&bots=' + level).slice(3), bots(level));
     same('the level is read in any case and comes out as the lower case word', local('?map=small&bots=HARD').slice(3), bots('hard'));
     same('bots with no map: the setup screen with those bots (the player chooses the map there)', local('?bots=easy'), bots('easy'));
+
+    // a map of the players (?mapfile=): its file in the game's maps folder (the page fetches it first), played as a game for one like an original
+    const COMMUNITY = 'Thief craker.lvl';
+    same('a map of the players alone: its file in the maps folder, the start, --alone (a game for one) and the name', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&name=Bob'), ['--map', 'Original-Ants/Maps/' + COMMUNITY, '--play', '--alone', '--name', 'Bob']);
+    same('... and the page keeps the file for its fetch, none for an original or no map', [P.localArguments('?mapfile=' + encodeURIComponent(COMMUNITY), '').file, P.localArguments('?map=tiny', '').file, P.localArguments('', '').file], [COMMUNITY, '', '']);
+    same('a map of the players with a bot: the bot is seated as for an original', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&bots=easy').slice(3), bots('easy'));
+    same('a game on a map of the players with no name in the address plays under the name that the browser remembers', local('?mapfile=' + encodeURIComponent(COMMUNITY), 'Zed').slice(-2), ['--name', 'Zed']);
+    same('a map by its key wins over a file', local('?map=tiny&mapfile=' + encodeURIComponent(COMMUNITY)), ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']);
+    for (const bad of ['', 'a.lv', '.lvl', 'x'.repeat(61) + '.lvl', '../evil.lvl', 'a/b.lvl', 'a\\b.lvl', '.hidden.lvl', 'noending', 'map.txt', 'caf\u00e9 map.lvl', 'tiny.lvl', 'TREASURE.LVL', 'Islands.lvl', 'a:b.lvl', 'a\nb.lvl', 'x --bot 1:easy.lvl']) {
+        same('mapfile=' + JSON.stringify(bad) + ' is no map for the game: no arguments at all (an original\'s file is chosen by its key)', local('?mapfile=' + encodeURIComponent(bad)), []);
+    }
 
     // one bot per seat: three words for seats 1, 2, 3 (none is a base with no bot), any case; the arguments name only the seats that have a bot
     const botArgs = (levels) => levels.flatMap((l, i) => (l ? ['--bot', (i + 1) + ':' + l] : []));

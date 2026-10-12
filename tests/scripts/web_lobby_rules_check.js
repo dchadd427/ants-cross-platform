@@ -715,7 +715,9 @@ R.MAPS.forEach((m) => {
     same('a map of the players has no key in the model but keeps its file', [model(room).map, model(room).mapFile], ['', 'Thief craker.lvl']);
     const bare = view(room).side;
     same('the side of a map of the players shows its file name without the ending while nothing else is known', [bare.mapKey, bare.mapName, bare.mapInfo, bare.mapFile, bare.mapThumb], ['', 'Thief craker', 'A map of the players', 'Thief craker.lvl', '']);
-    same('alone on a map of the players, the line under START says what START needs, not "A game for one"', [bare.plan, bare.planShort], ['This map needs a computer player: set an open colour to Easy, Medium or Hard.', 'Needs a computer player']);
+    same('alone on a map of the players, the line under START is the same as for an original: a game for one (nobody has to add a computer player)', [bare.plan, bare.planShort], ['A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Thief craker · 3 open']);
+    same('and it is the line of an original alone, word for word, apart from the map\'s name', [bare.plan, bare.planShort], [view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan, view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.planShort.replace('Treasure', 'Thief craker')]);
+    check('START is on for a person alone on a map of the players, and the page plays it as a game for one', !bare.startDisabled && R.startsAlone(model(room)));
     const withBot = view(mk([P('Juniper'), O, O, O], { map: 'Thief craker.lvl', plan: [0, 2, 0, 0] })).side;
     check('with a computer player it names the map as ever', /play on Thief craker\./.test(withBot.plan) && /Thief craker/.test(withBot.planShort), withBot.plan);
     check('an original alone is still a game for one', /^A game for one/.test(view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan));

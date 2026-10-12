@@ -115,8 +115,8 @@ class PlayOnlinePage(unittest.TestCase):
 
     def test_every_fallback_to_a_map_is_the_default(self):
         self.assertNotIn("MAPS[0]", self.page)                                # (the first of the list is Tiny)
-        self.assertIn("var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);", self.page)                                # (the address of a game on this computer)
-        self.assertIn("var key = model.map || Rules.DEFAULT_MAP_KEY, name = myName();", self.page)                           # (START with nobody else)
+        self.assertIn("var map = file ? null : known || mapByKey(DEFAULT_MAP_KEY);", self.page)                                # (the address of a game on this computer)
+        self.assertIn("var key = model.map || model.mapFile || Rules.DEFAULT_MAP_KEY, name = myName();", self.page)                           # (START with nobody else)
         self.assertIn("var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)    # (the arrows before the room has said its map)
 
 

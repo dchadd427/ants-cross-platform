@@ -124,6 +124,12 @@ class ThePagesOwnCode(unittest.TestCase):
             "warm leaves its timer running after a failure": ("}).then(stop, function () { stop(); /* the game page asks again */ });", "}).then(stop, function () { /* the game page asks again */ });"),
             "a failure is not said in the toast": ("if (state !== FAILED || !toast) return;", "return;"),
             "an original is fetched": ("&& !ORIGINALS.test(name) ? { name: name", "? { name: name"),
+            "an original's file is a map of the players": ("return validName(name) && !ORIGINALS.test(name) ? name : '';", "return validName(name) ? name : '';"),
+            "a game for one starts without its map": ("if (!file) { go(); return; }", "if (!file) { return; }"),
+            "a game on an original fetches a map too": ("if (!file) { go(); return; }", "if (false) { go(); return; }"),
+            "a game for one starts when its map failed": ("if (!map.ok) { fail(map.text); return; }\n            getModule()", "if (!map.ok) { fail(map.text); }\n            getModule()"),
+            "a game for one does not write its map": ("getModule().preRun.push(writer(function () { return getModule().FS; }, file, map.bytes));", ""),
+            "a game for one asks for a hash": ("files.fetchOnly(file, '')", "files.fetchOnly(file, 'abcdabcdabcdabcd')"),
             "a path is a map name": ("if (/[\\/\\\\:*?\"<>|]/.test(name) || name.charAt(0) === '.') return false;", ""),
         }
         with tempfile.TemporaryDirectory() as folder:

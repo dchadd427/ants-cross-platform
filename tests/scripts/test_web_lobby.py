@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -383,8 +384,8 @@ class TheFrontPageMarkup(PageCase):
         # the Rejoin button of the strip at the top does the same for a match that still runs
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", script)
         # START with nobody else in the match: the game page's own single player, on this computer, in this tab (a room of the game server needs two); the room is let go of first
-        self.assertIn("if (Rules.startsAlone(model)) { if (model.mapFile && !model.map) showBanner('notice', {", script)       # (a map of the players needs a second player or a bot: the game page's own single player knows the six only)
-        self.assertIn("else startAlone(); return; }", script)
+        self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)       # (a map of the players too: the game page fetches its file; no banner, no computer player needed)
+        self.assertNotIn("needs a second player or a computer player", script)
         alone = script[script.index("function startAlone() {"):script.index("function pressTeam(seat, side) {")]
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);", alone)
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
@@ -507,7 +508,7 @@ class TheGamePage(PageCase):
 
     def test_the_local_parameters_are_read_only_for_a_game_that_joins_no_server(self):
         self.assertIn("if (joined.args.indexOf('--join-url') === -1) {", self.page)
-        self.assertIn("ANTS_PAGE.localArguments(window.location.search, remembered).args.forEach", self.page)
+        self.assertIn("var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach", self.page)
         self.assertIn("localStorage.getItem('ants.name')", self.page)
         self.assertEqual(len(re.findall(r"LOCAL_MAPS\s*=\s*\{", self.page)), 1)
         self.assertIn("localArguments: localArguments", self.page)
@@ -614,6 +615,54 @@ class ThePagesOwnCode(unittest.TestCase):
         done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, LOBBY], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failures", done.stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the front page's rules were NOT run (tests/scripts/web_lobby_check.js)")
+class TheCheckIsNotVacuous(unittest.TestCase):
+    """START alone on a map of the players hands the game page a ?mapfile= that it reads back as the same file: a copy of the pages with ONE thing changed must fail web_lobby_check.js"""
+
+    def changed(self, relative, old, new):
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ("lobby.html", "shell.html", "map_files.js"):
+                os.makedirs(os.path.join(folder, "web"), exist_ok=True)
+                shutil.copy(os.path.join(REPO, "web", name), os.path.join(folder, "web", name))
+            shutil.copytree(os.path.join(REPO, "web", "front"), os.path.join(folder, "web", "front"))
+            shutil.copytree(os.path.join(REPO, "Original-Ants", "Maps"), os.path.join(folder, "Original-Ants", "Maps"))
+            path = os.path.join(folder, *relative.split("/"))
+            with open(path, encoding="utf-8", newline="") as f:
+                text = f.read()
+            self.assertEqual(text.count(old), 1, "%s has %d of %r" % (relative, text.count(old), old[:60]))
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(text.replace(old, new))
+            return subprocess.run([shutil.which("node"), CHECK_JS, os.path.join(folder, "web", "shell.html"), os.path.join(folder, "web", "lobby.html")], capture_output=True, text=True, timeout=120)
+
+    def must_fail(self, relative, old, new):
+        done = self.changed(relative, old, new)
+        self.assertNotEqual(done.returncode, 0, "the check did not see %r changed to %r in %s" % (old[:50], new[:50], relative))
+
+    def test_the_lobby_names_the_file_in_the_address(self):
+        self.must_fail("web/lobby.html", "(file ? 'mapfile=' + encodeURIComponent(file) : 'map=' + map.key)", "('map=' + (map ? map.key : 'treasure'))")
+
+    def test_the_file_is_not_url_encoded(self):
+        self.must_fail("web/lobby.html", "'mapfile=' + encodeURIComponent(file)", "'mapfile=' + file")
+
+    def test_the_lobby_takes_any_text_for_a_file(self):
+        self.must_fail("web/lobby.html", "var file = !known && Rules.validMapFile(mapKey) ? mapKey : '';", "var file = !known && mapKey ? mapKey : '';")
+
+    def test_an_original_s_file_is_taken_for_a_map_of_the_players(self):
+        self.must_fail("web/lobby.html", "var known = mapByKey(mapKey) || Rules.mapOfFile(mapKey);", "var known = mapByKey(mapKey);")
+
+    def test_the_game_page_does_not_read_the_file(self):
+        self.must_fail("web/shell.html", "if (!out.map && window.AntsMapFiles && (out.file = window.AntsMapFiles.communityFile(q.get('mapfile'))))", "if (false)")
+
+    def test_the_game_page_plays_the_file_with_the_other_colonies(self):
+        self.must_fail("web/shell.html", "if ((out.map || out.file) && !out.bots) out.args.push('--alone');", "if (out.map && !out.bots) out.args.push('--alone');")
+
+    def test_the_game_page_forgets_the_name_of_a_game_on_a_file(self):
+        self.must_fail("web/shell.html", "(q.has('map') || q.has('mapfile') || q.has('bots'))", "(q.has('map') || q.has('bots'))")
+
+    def test_the_game_page_lets_a_file_win_over_a_key(self):
+        self.must_fail("web/shell.html", "if (!out.map && window.AntsMapFiles && (out.file =", "if (window.AntsMapFiles && (out.file =")
 
 
 if __name__ == "__main__":
