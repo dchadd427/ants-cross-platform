@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.31 - 2026-10-12 - Map pictures show the food piles
+
+**For players:**
+- The map pictures in the map picker and the lobby now show the food piles. The 534 pictures of the players' maps were drawn before the game's world picture showed every food pile of a map file (v0.12.29), so they still looked like the old, pile-less map; all of them are drawn again by the game itself.
+- Nothing else in a picture changes: same size and quality, and a map without piles has exactly the same picture as before.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c104ac8...HEAD)
+
 ## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
 
 **For players:**
