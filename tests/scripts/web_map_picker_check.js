@@ -59,6 +59,36 @@ const RAW = {
     same('the Map Info line of a map of the players', P.infoText(list[5]), 'sand (10 min)');
 }
 
+// ---- the picture of a map that a match record names (watch.html: Live now, Earlier matches) -------------------------------------------------------------------------------------------------------------
+{
+    same('a plain name', P.previewPath('POPcOrN.lvl'), '/maps/previews/POPcOrN.webp');
+    same('the ending may be missing or in capitals', [P.previewPath('POPcOrN'), P.previewPath('POPcOrN.LVL')], ['/maps/previews/POPcOrN.webp', '/maps/previews/POPcOrN.webp']);
+    same('a space and "!" are escaped as the server does (encodeURIComponent leaves "!")', P.previewPath('Pop Water!!!.lvl'), '/maps/previews/Pop%20Water%21%21%21.webp');
+    same('every sign the server escapes', P.previewPath("a'b(c)d#e$f&g+h,i;j=k@l[m]n^o`p{q}r~s.lvl"), '/maps/previews/a%27b%28c%29d%23e%24f%26g%2Bh%2Ci%3Bj%3Dk%40l%5Bm%5Dn%5Eo%60p%7Bq%7Dr~s.webp');
+    same('"(" and ")" too', P.previewPath('(a)!.lvl'), '/maps/previews/%28a%29%21.webp');
+    same('a dot inside stays, the case stays', P.previewPath('Mr.Big_Map-2.lvl'), '/maps/previews/Mr.Big_Map-2.webp');
+    same('a percent sign is escaped, never read as an escape', P.previewPath('100%25 sure.lvl'), '/maps/previews/100%2525%20sure.webp');
+    same('only the ending is cut, once', P.previewPath('x.lvl.lvl'), '/maps/previews/x.lvl.webp');
+    same('a name that is not ASCII has no picture', [P.previewPath('Käse.lvl'), P.previewPath('地図.lvl'), P.previewPath('a\u0000b.lvl')], ['', '', '']);
+    same('a name that fails the game\'s rule has no picture', [P.previewPath('.hidden.lvl'), P.previewPath('a/b.lvl'), P.previewPath('a\\b.lvl'), P.previewPath('a:b.lvl'), P.previewPath('a?b.lvl'), P.previewPath('a"b.lvl'), P.previewPath('a|b.lvl'),
+        P.previewPath('a*b.lvl'), P.previewPath('.lvl'), P.previewPath(''), P.previewPath('x'.repeat(61) + '.lvl'), P.previewPath('../x.lvl'), P.previewPath(null), P.previewPath(5), P.previewPath(undefined)], ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    same('the longest name', P.previewPath('x'.repeat(60) + '.lvl'), '/maps/previews/' + 'x'.repeat(60) + '.webp');
+    same('the six originals keep their own art (no community address for them)', ['MEDIUM.LVL', 'Small.lvl', 'tiny', 'GAUNTLET', 'treasure.LVL', 'Islands.lvl'].map((n) => P.previewPath(n)), ['', '', '', '', '', '']);
+    same('percentEncode', [P.percentEncode('a b'), P.percentEncode('!'), P.percentEncode('~._-'), P.percentEncode('%')], ['a%20b', '%21', '~._-', '%25']);
+    // with the server's list
+    const list = P.parseList({ format: 1, maps: [
+        M('MEDIUM.LVL', { original: true, thumb: '/front/preview_medium.png' }), M('POPcOrN.lvl'), M('Pop Water!!!.lvl', { thumb: '/maps/previews/Pop%20Water%21%21%21.webp' }), M('NoPic.lvl', { thumb: undefined })
+    ] });
+    same('a map of the list has the list\'s picture', P.thumbFor('POPcOrN.lvl', list), '/maps/previews/POPcOrN.webp');
+    same('... with or without the ending, in any case', [P.thumbFor('POPcOrN', list), P.thumbFor('popcorn.lvl', list), P.thumbFor('POPCORN.LVL', list)], ['/maps/previews/POPcOrN.webp', '/maps/previews/POPcOrN.webp', '/maps/previews/POPcOrN.webp']);
+    same('a map the list holds without a picture has none (the server has none)', P.thumbFor('NoPic.lvl', list), '');
+    same('a map the list does not hold has the address its name makes', P.thumbFor('Other Map!.lvl', list), '/maps/previews/Other%20Map%21.webp');
+    same('no list yet: the name makes it', P.thumbFor('Pop Water!!!.lvl', null), '/maps/previews/Pop%20Water%21%21%21.webp');
+    same('an original is none, with the list or without', [P.thumbFor('MEDIUM.lvl', list), P.thumbFor('medium', null), P.thumbFor('Small.LVL', list)], ['', '', '']);
+    same('a name that fails the rule is none even when a list is there', [P.thumbFor('a/b.lvl', list), P.thumbFor('Käse.lvl', list), P.thumbFor('', list), P.thumbFor(null, list)], ['', '', '', '']);
+    same('an exact name wins over one that differs in case', P.thumbFor('Aa.lvl', P.parseList({ format: 1, maps: [M('aa.lvl', { thumb: '/maps/previews/aa.webp' }), M('Aa.lvl', { thumb: '/maps/previews/Aa.webp' })] })), '/maps/previews/Aa.webp');
+}
+
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------
 class Node {
     constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }

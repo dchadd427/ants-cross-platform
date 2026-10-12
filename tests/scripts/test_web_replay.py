@@ -132,6 +132,16 @@ class TheListPage(unittest.TestCase):
         for words in ("Earlier matches", "Nothing to watch yet", "The list can\u2019t be loaded right now", "This server doesn\u2019t keep replays", "Earlier versions", "Show them", "Hide them", "Show more", "Cut short"):
             self.assertIn(words, self.page, words)
 
+    def test_a_map_of_the_players_has_its_picture_in_both_lists_and_a_missing_one_leaves_the_dark_square(self):
+        self.assertIn('<script src="front/map_picker.js"></script>', self.page)                              # (the picker's own address rules: tests/scripts/web_map_picker_check.js)
+        self.assertIn("window.AntsMapPicker.thumbFor(map, maps)", self.page)
+        self.assertIn("window.AntsMapPicker.parseList(data)", self.page)
+        self.assertIn("fetch('/maps'", self.page)
+        for token in ("img.loading = 'lazy'", "img.decoding = 'async'", "img.addEventListener('error'", "el('div', 'blank')"):
+            self.assertIn(token, self.page, token)
+        self.assertIn("img.src = 'front/preview_' + key + '.png'", self.page)                                # (the six keep their art)
+        self.assertNotIn("innerHTML", self.page)
+
     def test_the_live_box_looks_at_the_door_every_ten_seconds_and_says_what_the_picture_shows(self):
         self.assertIn("fetch('/live'", self.page)
         self.assertIn("LIVE_EVERY = 10000", self.page)
@@ -526,6 +536,57 @@ class TheSharedCode(unittest.TestCase):
                     f.write(text.replace(old, new))
                 done = subprocess.run([shutil.which("node"), CHECK_JS, path], capture_output=True, text=True, timeout=120)
                 self.assertNotEqual(done.returncode, 0, "the check accepted a script where " + why)
+
+
+PICTURES_JS = os.path.join(REPO, "tests", "scripts", "web_watch_pictures_check.js")
+
+
+def run_pictures(page):
+    return subprocess.run([shutil.which("node"), PICTURES_JS, page, os.path.join(REPO, "web", "front", "map_picker.js"), os.path.join(REPO, "web", "replay_page.js")],
+                          capture_output=True, text=True, timeout=120)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the list page's pictures were NOT run (tests/scripts/web_watch_pictures_check.js)")
+class TheListPagesPictures(unittest.TestCase):
+    page = read("web", "watch.html")
+
+    def test_the_pictures_of_the_maps_of_the_players_on_a_fake_page(self):
+        done = run_pictures(os.path.join(REPO, "web", "watch.html"))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("ok: ", done.stdout)
+
+    def test_every_box_that_is_built_again_forgets_its_old_squares(self):
+        live = self.page[self.page.index("function renderLive()"):self.page.index("function intro(")]
+        self.assertIn("forgetPictures('live');", live)
+        self.assertEqual(self.page.count("forgetPictures('list');"), 3)                                      # (render, fail, nothingKept)
+        self.assertIn("pictureNode(e.map, 'live')", self.page)
+        self.assertEqual(self.page.count("pictureNode(e.map, 'list')"), 1)
+        self.assertNotIn("lookMaps();\n    // the matches", self.page)
+
+    def test_the_check_can_fail(self):
+        text = self.page
+        broken = {
+            "the list never corrects an address": ("if (url !== item.tried) fillPicture(", "if (false) fillPicture("),
+            "every square is redone when the list comes": ("if (url !== item.tried) fillPicture(", "if (true) fillPicture("),
+            "the picture is the map's name": ("            img.src = url;\n", "            img.src = map;\n"),
+            "a failed picture stays": ("img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });", "img.addEventListener('error', function () {});"),
+            "a failed picture leaves an empty square": ("if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); }", "if (img.parentNode === tv) { tv.textContent = ''; }"),
+            "a map with no address gets an image": ("if (!key && !url) {", "if (false) {"),
+            "the list of the maps is never asked for": ("if (!mapsAsked) { mapsAsked = true; lookMaps(); }", ""),
+            "the list is asked for with every square": ("if (!mapsAsked) { mapsAsked = true; lookMaps(); }", "lookMaps();"),
+            "a box forgets nothing": ("function forgetPictures(group) { pictures = pictures.filter(function (item) { return item.group !== group; }); }", "function forgetPictures(group) {}"),
+            "a box forgets the other box": ("return item.group !== group; }); }", "return item.group === group; }); }"),
+            "the squares that left the page are kept": ("pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });", ""),
+            "the image is not lazy": ("img.loading = 'lazy'; ", ""),
+            "the image decodes on the main thread": ("img.decoding = 'async';", ""),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            for why, (old, new) in broken.items():
+                self.assertEqual(text.count(old), 1, why)
+                path = os.path.join(folder, "watch.html")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text.replace(old, new))
+                self.assertNotEqual(run_pictures(path).returncode, 0, "the check accepted a page where " + why)
 
 
 if __name__ == "__main__":

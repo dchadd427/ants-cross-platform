@@ -354,9 +354,10 @@ class RealFile(unittest.TestCase):
 
     def test_the_oldest_release_that_the_file_holds_is_the_one_the_readme_the_workflow_and_the_footer_name(self):
         oldest = re.findall(r"^## v(\d+\.\d+\.\d+)", self.md, re.M)[-1]
-        number = int(oldest.split(".")[2])
-        first = "v0.0.%d" % number
-        self.assertIn("## Older versions (v0.0.%d and before)" % (number - 1), self.md)
+        major, minor, number = (int(n) for n in oldest.split("."))
+        first = "v" + oldest
+        before = "v0.0.99" if (major, minor, number) == (0, 1, 0) else "v%d.%d.%d" % (major, minor, number - 1)         # (v0.1.0 followed v0.0.99)
+        self.assertIn("## Older versions (%s and before)" % before, self.md)
         self.assertIn("Every release before " + first + ",", self.md)
         for path in ("README.md", os.path.join("docs", "WORKFLOW.md")):
             text = read_text(os.path.join(os.path.dirname(__file__), "..", "..", path))
