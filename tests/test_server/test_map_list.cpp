@@ -89,7 +89,7 @@ int main() {
         const size_t n = store.scan(&notes);
         const ctl::JsonValue json = parse_text(slurp(fs::path(community_dir()) / "maps.json"));
         const ctl::JsonValue pictures = parse_text(slurp(fs::path(community_dir()) / "previews.json"));
-        ASSERT_EQ(json.get("maps").size(), size_t{547});
+        ASSERT_EQ(json.get("maps").size(), size_t{534});
         ASSERT_EQ(n, size_t{6} + json.get("maps").size());
         ASSERT_TRUE(notes.empty());                                                                // (nothing is wrong with the repository's own lists)
         const ctl::JsonValue list = list_of(store);
@@ -141,13 +141,13 @@ int main() {
             ASSERT_TRUE(fs::exists(fs::path(community_dir()) / "previews" / decoded));
             ++checked;
         }
-        ASSERT_EQ(checked, size_t{547});
+        ASSERT_EQ(checked, size_t{534});
     } TEST_END();
 
-    TEST_CASE("ML1.4 Every map of the community folder can be played by each team it claims: no Fatal finding for its rosters, a start marker (so a starting ant) for as many teams as its players field says, and no world that kills a lone team's ants within a minute") {
-        // The owner's rule (Oct 12): a broken map is removed from the repository completely. A map is broken when the loader refuses it for a roster that plays (any Fatal finding),
-        // or when a team that it claims (`players` of maps.json: the teams with a start marker or a hill, 4 for a map with neither) would start with no ant at all, as `Home Bound`,
-        // `K-P` or `QuItErS` did. This case keeps such a map from being added again.
+    TEST_CASE("ML1.4 Every map of the community folder has the full setup of four seats, a hill and a start marker (so starting ants) for each, and can be played by each of them: no Fatal finding for its rosters, and no world that kills a lone team's ants within a minute") {
+        // The owner's rules (Oct 12): a broken map is removed from the repository completely, and so is every map that lacks a hill or starting ants for any of the four seats (the nine 1 v 1 maps,
+        // `Fighter Dream 2`, `junk yard` and the two arenas without hills went for that). A map is broken when the loader refuses it for a roster that plays (any Fatal finding), or when a team
+        // would start with no ant at all, as `Home Bound`, `K-P` or `QuItErS` did. This case keeps such a map from being added again.
         namespace as = ants::assets;
         const ctl::JsonValue json = parse_text(slurp(fs::path(community_dir()) / "maps.json"));
         ASSERT_TRUE(json.get("maps").size() > 400);
@@ -162,20 +162,25 @@ int main() {
             ASSERT_TRUE(loads);
             if (!loads) continue;
             std::array<size_t, 4> markers{};
+            std::array<size_t, 4> hills{};
             for (const as::AnthillSpawn& sp : level.anthill_spawns) {
                 if (sp.team_id < 4) ++markers[sp.team_id];
             }
-            uint8_t with_marker = 0;                                                                // (the roster of the teams that have a starting ant)
-            size_t teams = 0;
-            for (uint8_t t = 0; t < 4; ++t) {
-                if (markers[t] == 0) continue;
-                with_marker = static_cast<uint8_t>(with_marker | (1u << t));
-                ++teams;
+            for (const as::MapCell& cell : level.layer2_interactive) {
+                const int team = as::hill_team_of_id(cell.tile_index);                                // (a hill cell of the file itself: the start markers that stand in for hills on a map without any do not count)
+                if (team >= 0) ++hills[static_cast<size_t>(team)];
             }
-            const int64_t claimed = row.get("players").as_int_or(0);
-            const bool all_have = static_cast<int64_t>(teams) >= claimed && claimed >= 2;
-            if (!all_have) std::cout << "\n    " << file << ": players " << claimed << " but a start marker for " << teams << " team(s) only";
-            ASSERT_TRUE(all_have);
+            uint8_t with_marker = 0;                                                                // (the roster of the teams that have a starting ant)
+            bool four_seats = true;
+            for (uint8_t t = 0; t < 4; ++t) {
+                if (markers[t] > 0) with_marker = static_cast<uint8_t>(with_marker | (1u << t));
+                if (markers[t] == 0 || hills[t] == 0) {
+                    four_seats = false;
+                    std::cout << "\n    " << file << ": seat " << int{t} << " has " << markers[t] << " start marker(s) and " << hills[t] << " hill cell(s)";
+                }
+            }
+            ASSERT_TRUE(four_seats);
+            ASSERT_EQ(row.get("players").as_int_or(0), int64_t{4});
             // Class C, a world that kills its own ants (hell2: a lake, every ant drowns by tick 48): each team that has ants, played alone and idle for 1,200 ticks (a minute),
             // must still have an ant and the match must not be over (a lone team never ends it by itself).
             for (uint8_t t = 0; t < 4; ++t) {
@@ -332,7 +337,7 @@ int main() {
         db::Database database;
         ASSERT_TRUE(open_server_db(database, (t.path / "ants.db").string()));
         MapStore scanned(maps_dir(), community_dir());
-        ASSERT_EQ(scanned.scan(), size_t{553});
+        ASSERT_EQ(scanned.scan(), size_t{540});
         RoomManager mgr{std::move(scanned)};
         const auto get = [&](const char* method, const std::string& path, const std::string& query = std::string()) {
             ctl::HttpRequest rq;
@@ -382,7 +387,7 @@ int main() {
         const ctl::JsonValue list = parse_text(r.body);
         ASSERT_EQ(entry_of(list, "TREASURE.LVL")->get("plays").as_int_or(-1), int64_t{2});
         ASSERT_EQ(entry_of(list, "TINY.LVL")->get("plays").as_int_or(-1), int64_t{0});
-        ASSERT_EQ(list.get("maps").size(), size_t{553});
+        ASSERT_EQ(list.get("maps").size(), size_t{540});
         mgr.disable_history();
     } TEST_END();
 
