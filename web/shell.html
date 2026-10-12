@@ -3224,7 +3224,7 @@
             var headPending = false;         // the header of a match that became a replay waits for the game to hold the whole file (its length)
             var startSeek = ANTS_LIVE_MODE;  // a live match opens at the present: the first moment that the game is there the page takes the playhead to the Limit when the game has not put it there
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
-            var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout, clearTimeout: clearTimeout });   // (the Auto / Manual button, web/replay_page.js)
+            var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout });   // (the Auto / Manual button, web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',

@@ -202,9 +202,9 @@
     function camNoteDue(taken, seen, shown) { return !shown && typeof taken === 'number' && taken > seen; }
 
     // The camera button and its note, for the game page in replay mode. `env` has what the page has: `doc`, `storage` (or null), `get(what)` and `command(what, value)` (the game: Module._ants_replay_get and _do),
-    // `VALUE` (camera, taken) and `DO` (camera) as the page numbers them, and the timers. The game moves the view and says how it stands; this is the page's half: the button, what the device chose, the note.
+    // `VALUE` (camera, taken) and `DO` (camera) as the page numbers them, and `setTimeout`. The game moves the view and says how it stands; this is the page's half: the button, what the device chose, the note.
     function cameraControl(env) {
-        var pref = camLoad(env.storage), sent = false, seen = 0, shown = false, timer = 0, painted = null;
+        var pref = camLoad(env.storage), sent = false, seen = 0, shown = false, painted = null;
         function el(id) { return env.doc.getElementById(id); }
         function paint(auto) {
             if (painted === auto) return;
@@ -216,9 +216,8 @@
             el('cam-lbl').textContent = camLabel(auto);
         }
         function note(show) {
-            env.clearTimeout.call(undefined, timer);                                     // (called with no `this`: a browser's own setTimeout refuses another)
             el('camnote').hidden = !show;
-            if (show) timer = env.setTimeout.call(undefined, function () { el('camnote').hidden = true; }, CAM_NOTE_MS);
+            if (show) env.setTimeout.call(undefined, function () { el('camnote').hidden = true; }, CAM_NOTE_MS);          // (called with no `this`: a browser's own setTimeout refuses another)
         }
         paint(pref !== 'manual');
         var api = {

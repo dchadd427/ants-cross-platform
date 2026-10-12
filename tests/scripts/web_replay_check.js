@@ -242,8 +242,7 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const env = { doc: { getElementById: el }, storage: store, VALUE: { camera: 10, taken: 11 }, DO: { camera: 7 },
             get: what => (what === 10 ? game.camera : what === 11 ? game.taken : -1),
             command: (what, value) => { game.sent.push([what, value]); if (what === 7) game.camera = value; },
-            setTimeout: function (fn, ms) { if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation'); timers.push({ fn, ms, live: true }); return timers.length; },     // (like a browser's: not with another `this`)
-            clearTimeout: function (id) { if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation'); if (timers[id - 1]) timers[id - 1].live = false; } };
+            setTimeout: function (fn, ms) { if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation'); timers.push({ fn, ms }); return timers.length; } };     // (like a browser's: not with another `this`)
         return { els, game, timers, env, cam: R.cameraControl(env) };
     };
     {   // Auto is the default: the button says so, and the game is told once that it can hear
@@ -258,7 +257,7 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         t.game.camera = 0; t.game.taken = 1;
         t.cam.look(true);
         same('the note is up and the button says Manual', [t.els.camnote.hidden, t.els['b-cam'].attrs['data-mode'], t.els['cam-lbl'].textContent], [false, 'manual', 'Manual camera']);
-        same('the note stays up for seven seconds', t.timers.filter(x => x.live).map(x => x.ms), [7000]);
+        same('the note stays up for seven seconds', t.timers.map(x => x.ms), [7000]);
         same('taking the camera is not a choice: nothing is saved', t.env.storage.m, {});
         t.timers[0].fn();
         check('the note goes by itself', t.els.camnote.hidden === true);
