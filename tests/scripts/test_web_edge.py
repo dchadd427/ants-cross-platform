@@ -108,6 +108,41 @@ class TheListeners(PageCase):
         self.assertIn("isFullscreen()", wheel.group(1))
 
 
+class TheReplayIsLockedLikeTheGame(PageCase):
+    """A replay (and a live match watched, the same page) takes the pointer lock in fullscreen as the game does, and its bar is reached through the game's cursor (the browser check says whether
+    it works; here the pieces cannot silently disappear)."""
+
+    def setUp(self):
+        self.page = read(SHELL)
+
+    def test_replay_mode_no_longer_switches_the_lock_off(self):
+        request = re.search(r"function requestLock\(startAt\) \{[^\n]*\n(.*?)\n        \}", self.page, re.S)
+        self.assertIsNotNone(request)
+        self.assertNotIn("ANTS_REPLAY_MODE", request.group(1))
+        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", request.group(1))
+        change = re.search(r"document\.addEventListener\(name, function \(\) \{\n\s*if \(!isRealFullscreen\(\)\) \{ fullscreenEnded\(\); return; \}\n(.*?)\n            \}\);", self.page, re.S)
+        self.assertIsNotNone(change)
+        self.assertNotIn("ANTS_REPLAY_MODE", change.group(1))
+        self.assertIn("lockKeys(true);", change.group(1))
+        self.assertIn("requestLock(null);", change.group(1))
+
+    def test_the_bar_is_reached_through_the_locked_cursor(self):
+        """The logic is web/replay_page.js (barPointer, run on fakes by tests/scripts/web_replay_check.js); here the page's glue cannot silently disappear."""
+        self.assertIn("var barLock = window.AntsReplay.barPointer({", self.page)
+        self.assertIn("lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;", self.page)
+        self.assertIn("if (!barLock.mode()) handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);", self.page)       # (a resize does not hand the game a cursor that is on the bar)
+        self.assertIn("lockCursor = null; lockSize = null; barLock.reset();", self.page)                                                          # the lock let go clears it (and cancels a drag)
+        self.assertIn("barLock.hideMark();", self.page)                                                                                        # the bar going away takes the arrow with it
+        self.assertIn("ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()", self.page)                       # a locked browser's repeated places are not a touch: the bar still goes away
+        self.assertIn("home = over ? (isLocked() ? boxElement : stageElement) : null", self.page)                                              # a locked pointer reaches the bar inside the picture, on any screen shape
+        self.assertIn("window.antsReplayPlaceBar();", self.page.split("['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach")[1][:600])
+        self.assertIn("barPointer: barPointer", read(os.path.join(REPO, "web", "replay_page.js")))
+
+    def test_the_guides_say_so(self):
+        self.assertNotIn("pointer lock is off in a replay", read(os.path.join(REPO, "docs", "REPLAYS.md")))
+        self.assertIn("locked", read(os.path.join(REPO, "docs", "REPLAYS.md")).split("**The same game in the same browser as ever:**")[1].split("\n")[0])
+
+
 class TheWindowedMargin(PageCase):
     """The margin of a windowed page: a pointer outside the game's box but within 96 CSS pixels of it still counts as at the picture's edge (a browser check says whether it works; here the
     pieces that it stands on cannot silently disappear)."""

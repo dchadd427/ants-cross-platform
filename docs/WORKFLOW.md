@@ -65,7 +65,7 @@ The version is the single line of the file [`VERSION`](../VERSION) (`MAJOR.MINOR
 
 [`CHANGELOG.md`](../CHANGELOG.md) is short, one entry per release, newest first, in a fixed template that is at the top of that file (copy it from there).
 
-An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that goes live writes its entry (the same template, for players) under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry with the pull request's version ("Version policy", above); a pull request that goes nowhere has no entry. The site builds the file into `changelog.html` with `tools/changelog_to_html.py`, linked from the game page. The releases before v0.0.97 are only in git history.
+An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that goes live writes its entry (the same template, for players) under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry with the pull request's version ("Version policy", above); a pull request that goes nowhere has no entry. The site builds the file into `changelog.html` with `tools/changelog_to_html.py`, linked from the game page. The releases before v0.0.98 are only in git history.
 
 ## Speed: compiler caches
 
@@ -73,7 +73,7 @@ When [ccache](https://ccache.dev) is installed, CMake uses it for every compile 
 
 ## Browser checks without Docker
 
-The opt-in browser checks that need only the page (`test_web_aspect.sh`, `test_web_edge.sh`, `test_web_touch.sh`, `test_web_home.sh` and `test_web_camera.sh`, which also needs a recording: its header says how to make one) need a running copy of the web image, and a session that has no Docker daemon (a cloud session) cannot build one. `tools/web_without_docker.py` makes the same pages without it and runs a command against them:
+The opt-in browser checks that need only the page (`test_web_aspect.sh`, `test_web_edge.sh`, `test_web_touch.sh`, `test_web_home.sh`, `test_web_camera.sh` and `test_web_replay_lock.sh`, which also need a recording: its header says how to make one) need a running copy of the web image, and a session that has no Docker daemon (a cloud session) cannot build one. `tools/web_without_docker.py` makes the same pages without it and runs a command against them:
 
 ```text
 sudo apt-get update && sudo apt-get install -y nginx                    # once

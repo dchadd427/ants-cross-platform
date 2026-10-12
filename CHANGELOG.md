@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.21 - 2026-10-12 - Fullscreen replays hold the mouse like the game
+
+**For players:**
+- **Fullscreen holds the mouse in a replay and in a live match you watch, as it does in a game.** The cursor stays on the picture and the edges and corners scroll the map; leaving fullscreen gives the mouse back (in Chrome and Edge hold Esc: a short press goes to the game, as in a match). The bar stays clickable: move the cursor onto it (a small arrow shows there) and click, or drag the timeline. "Fullscreen mouse: Free" in a game keeps the plain browser fullscreen here too.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.20...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+
 ## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
 
 **For players:**
@@ -455,17 +462,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
 
-## v0.0.97 - 2026-10-02 - The desktop start menu: Single player with bots, Join with a code, Host an online match
+## Older versions (v0.0.97 and before)
 
-**For players:**
-- A desktop game started with no mode on its command line now opens with a start menu after the loading screen: Single player, Join with a code, Host an online match, Quit. The menu never shows in the web build.
-- Single player: pick Empty, Easy, Medium or Hard bot for each of the other three colours. All Empty is the original's single-player game exactly. The choice is remembered.
-- Join with a code: type your name and the room code (paste with Ctrl+V or Cmd+V) and Join. Every failure (server not reachable, no such room, room full, match started, another version, and so on) comes back to the panel with a clear line, and Esc cancels at once.
-- Host an online match: pick the map, 2 to 4 players and your name. The menu makes the room, shows its code in large letters with a Copy button, and puts you in as the leader. After an online game the program goes back to the menu.
-- The original's own screens are unchanged. `--map`, `--host`, `--join` and similar options skip the menu, `--start-menu` forces it, and `--server HOST[:PORT]` names the game server.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
-
-## Older versions (v0.0.96 and before)
-
-Every release before v0.0.97, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.98, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
