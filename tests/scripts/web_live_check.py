@@ -40,6 +40,88 @@ PLAYERS = ["Green (Mika)", "Red (Bot (Medium))", "Blue (Bot (Medium))", "Black (
 TURNS_END = 20060
 
 
+BAR_WINDOWS = [(320, 844, True), (360, 844, True), (390, 844, True), (412, 844, True), (420, 844, True), (430, 844, True), (470, 844, True), (520, 844, True), (640, 900, False), (667, 375, True), (700, 900, False),
+               (710, 1024, True), (740, 1024, True), (768, 1024, True), (800, 1024, True), (844, 390, True), (850, 1024, True), (1024, 768, False), (1440, 900, False)]
+MAIN_BAR = {                                                       # what the bar of v0.12.24 (no Back 30 seconds) measured at each size: the timeline's width and its faults (a window below about 770 px was narrow for it already)
+    "320x844 page a": (280, ('lap',)),
+    "320x844 page c": (280, ('lap',)),
+    "320x844 full a": (271, ('lap',)),
+    "320x844 full c": (271, ('lap',)),
+    "360x844 page a": (320, ()),
+    "360x844 page c": (320, ()),
+    "360x844 full a": (300, ('lap',)),
+    "360x844 full c": (300, ('lap',)),
+    "390x844 page a": (350, ()),
+    "390x844 page c": (350, ()),
+    "390x844 full a": (323, ('lap',)),
+    "390x844 full c": (323, ('lap',)),
+    "412x844 page a": (372, ()),
+    "412x844 page c": (372, ()),
+    "412x844 full a": (346, ('lap',)),
+    "412x844 full c": (346, ('lap',)),
+    "420x844 page a": (380, ()),
+    "420x844 page c": (380, ()),
+    "420x844 full a": (353, ('lap',)),
+    "420x844 full c": (353, ('lap',)),
+    "430x844 page a": (390, ()),
+    "430x844 page c": (390, ()),
+    "430x844 full a": (361, ('lap',)),
+    "430x844 full c": (361, ('lap',)),
+    "470x844 page a": (430, ()),
+    "470x844 page c": (430, ()),
+    "470x844 full a": (398, ()),
+    "470x844 full c": (398, ()),
+    "520x844 page a": (480, ()),
+    "520x844 page c": (480, ()),
+    "520x844 full a": (451, ()),
+    "520x844 full c": (451, ()),
+    "640x900 page a": (585, ()),
+    "640x900 page c": (585, ()),
+    "640x900 full a": (564, ()),
+    "640x900 full c": (564, ()),
+    "667x375 page a": (627, ()),
+    "667x375 page c": (627, ()),
+    "667x375 full a": (611, ()),
+    "667x375 full c": (611, ()),
+    "700x900 page a": (645, ()),
+    "700x900 page c": (645, ()),
+    "700x900 full a": (609, ()),
+    "700x900 full c": (609, ()),
+    "710x1024 page a": (0, ()),
+    "710x1024 page c": (0, ('clip',)),
+    "710x1024 full a": (0, ('off',)),
+    "710x1024 full c": (0, ('clip', 'off')),
+    "740x1024 page a": (0, ()),
+    "740x1024 page c": (0, ('clip',)),
+    "740x1024 full a": (0, ('off',)),
+    "740x1024 full c": (0, ('clip', 'off')),
+    "768x1024 page a": (8, ()),
+    "768x1024 page c": (7, ()),
+    "768x1024 full a": (0, ()),
+    "768x1024 full c": (0, ('clip',)),
+    "800x1024 page a": (40, ()),
+    "800x1024 page c": (39, ()),
+    "800x1024 full a": (0, ()),
+    "800x1024 full c": (0, ('clip',)),
+    "844x390 page a": (131, ()),
+    "844x390 page c": (130, ()),
+    "844x390 full a": (634, ()),
+    "844x390 full c": (634, ()),
+    "850x1024 page a": (90, ()),
+    "850x1024 page c": (89, ()),
+    "850x1024 full a": (29, ()),
+    "850x1024 full c": (28, ()),
+    "1024x768 page a": (132, ()),
+    "1024x768 page c": (131, ()),
+    "1024x768 full a": (194, ()),
+    "1024x768 full c": (193, ()),
+    "1440x900 page a": (420, ()),
+    "1440x900 page c": (419, ()),
+    "1440x900 full a": (412, ()),
+    "1440x900 full c": (411, ()),
+}
+
+
 def fake_file(turns, complete, ident=ID):
     head = ("ANTSFAKE %d %d %s\n" % (turns, complete, ident)).encode()
     return head + b"\0" * (4000 - len(head))
@@ -486,33 +568,45 @@ def main():
             check(g["rew"][0] >= 0 and g["rew"][2] <= g["vw"] and g["bar"][2] <= g["vw"] + 0.5 and g["rew"][0] >= g["play"][2] - 0.5, "on its side: the button is right of Pause and inside the screen (%r)" % g["rew"])
             shot(tab, "rewind-landscape-fullscreen")
             tab.close()
-            # the phone bar at 320, 360, 375 and 390 px upright with the longest clock (62:03 / 62:03), on the page and in fullscreen: nothing lies on anything else and nothing is cut off
-            rows = ("(function () { var out = [], bad = [];"
-                    " ['b-play', 'b-rew', 'clock', 'picwrap', 'b-cam', 'b-fsx', 'speed'].forEach(function (id) { var e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return;"
-                    " var r = e.getBoundingClientRect(); out.push([id, r.left, r.top, r.right, r.bottom]); });"
-                    " var c = document.getElementById('clock'); return { boxes: out, clip: c.scrollWidth - c.clientWidth, vw: window.innerWidth, doc: document.documentElement.scrollWidth }; })()")
-            for width in (320, 360, 375, 390):
+            # the bar at many window sizes, in the page and in fullscreen, with a short and the longest clock: nothing is worse than it was before the button (MAIN_BAR: the timeline's width in px and the
+            # faults that the bar of v0.12.24 had at that size), the timeline is at most 20 px narrower, and nothing lies on anything, leaves the screen, is cut off or scrolls sideways that did not before
+            probe = ("(function () { var o = { boxes: [], vw: window.innerWidth, doc: document.documentElement.scrollWidth };"
+                     " ['b-play', 'b-rew', 'clock', 'b-cam', 'picwrap', 'b-fsx'].forEach(function (id) { var e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none' || e.hidden || !e.getClientRects().length) return;"
+                     " var r = e.getBoundingClientRect(); o.boxes.push([id, r.left, r.top, r.right, r.bottom]); });"
+                     " o.tl = document.getElementById('tl').getBoundingClientRect().width; var c = document.getElementById('clock'); o.clip = c.scrollWidth - c.clientWidth; return o; })()")
+            for (width, height, mobile) in BAR_WINDOWS:
                 for full in (False, True):
-                    fresh(kept_at=1.0)
-                    tab = new_tab(width, 844, 2, True)
-                    open_page(tab, "/play.html?replay=" + KEPT)
-                    until(tab, READY)
-                    tab.ev("__stub.total = 74460; __stub.turn = 74460; __stub.state = 3")
-                    time.sleep(0.8)
-                    if full:
-                        fx, fy = centre(tab, "fullscreen-btn-r")
-                        tab.tap(fx, fy)
-                        until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                    for key, (total, turn) in (("a", (20000, 1000)), ("c", (74460, 74460))):               # 0:50 / 16:40 and 62:03 / 62:03
+                        fresh(kept_at=1.0)
+                        tab = new_tab(width, height, 2 if mobile else 1, mobile)
+                        open_page(tab, "/play.html?replay=" + KEPT)
+                        until(tab, READY)
+                        tab.ev("__stub.total = %d; __stub.turn = %d; __stub.state = 3" % (total, turn))
                         time.sleep(0.6)
-                    g = tab.ev(rows)
-                    boxes = g["boxes"]
-                    apart = all(a[3] <= b[1] + 0.5 or b[3] <= a[1] + 0.5 or a[4] <= b[2] + 0.5 or b[4] <= a[2] + 0.5 for i, a in enumerate(boxes) for b in boxes[i + 1:] if a[0] != "speed" and b[0] != "speed")
-                    inside = all(b[1] >= -0.5 and b[3] <= g["vw"] + 0.5 for b in boxes)
-                    label = "%d px upright, %s, clock 62:03 / 62:03" % (width, "fullscreen" if full else "in the page")
-                    check(apart and inside and g["clip"] <= 0 and g["doc"] <= g["vw"], "%s: nothing lies on anything else, the clock is whole (clipped %s px), no sideways scroll" % (label, g["clip"]))
-                    if width in (360, 390) and args.shots:
-                        shot(tab, "rewind-phone-%d%s-longclock" % (width, "-fullscreen" if full else ""))
-                    tab.close()
+                        if full:
+                            fx, fy = centre(tab, "fullscreen-btn-r")
+                            (tab.tap if mobile else tab.click)(fx, fy)
+                            until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                            time.sleep(0.6)
+                        g = tab.ev(probe)
+                        boxes = g["boxes"]
+                        faults = set()
+                        for n, a in enumerate(boxes):
+                            if a[1] < -0.5 or a[3] > g["vw"] + 0.5:
+                                faults.add("off")
+                            for b in boxes[n + 1:]:
+                                if not (a[3] <= b[1] + 0.5 or b[3] <= a[1] + 0.5 or a[4] <= b[2] + 0.5 or b[4] <= a[2] + 0.5):
+                                    faults.add("lap")
+                        if g["clip"] > 0:
+                            faults.add("clip")
+                        if g["doc"] > g["vw"]:
+                            faults.add("hscroll")
+                        label = "%dx%d %s %s" % (width, height, "full" if full else "page", key)
+                        was_tl, was = MAIN_BAR[label]
+                        check(faults <= set(was) and g["tl"] >= was_tl - 20, "%s: no new fault (%s, before: %s) and the timeline is %d px (before: %d)" % (label, sorted(faults) or "none", list(was) or "none", g["tl"], was_tl))
+                        if args.shots and (width, height) in ((360, 844), (390, 844), (768, 1024), (844, 390), (1024, 768)) and key == "c":
+                            shot(tab, "rewind-bar-%dx%d-%s" % (width, height, "fullscreen" if full else "page"))
+                        tab.close()
             fresh()
             tab = new_tab()                                                    # a match that is being played: no button
             open_page(tab, "/play.html?live=" + ID)
