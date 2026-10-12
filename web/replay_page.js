@@ -257,7 +257,102 @@
         return api;
     }
 
-    var api = { CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    // THE BAR UNDER A LOCKED POINTER (docs/REPLAYS.md, "Watching a replay"). A locked pointer is not over anything: the browser sends every mouse event to the canvas and nobody else, so the bar of a
+    // fullscreen replay (page elements over the picture) could not be reached. The game's cursor (the one that scrolls the map at the picture's edge) is the pointer here: while it is over the visible
+    // bar the motion is NOT handed to the game (the game is told that its pointer left), a small arrow is drawn over the bar, and the page makes the pointer events of a mouse at that place for what is
+    // under it (the timeline's drag, the wake of the bar); a press and a release on the same button are its click, and the wheel over the bar does not zoom the map. The outermost pixels of the picture
+    // are the game's even where the bar lies (the edge scrolls with the bar up), and a bar that has gone away (idle) is not there to be hit. The page gives `env`: doc, win, stage (the arrow's
+    // parent), canvas, PointerEvent, MouseEvent, replayMode(), handing() (the page is handing the game an event of its own), cursorAt() ({ x, y, edge } of the locked cursor on the page, or null) and
+    // leave() (tell the game that its pointer left). tests/scripts/web_replay_check.js runs it with a page of fakes.
+    function barPointer(env) {
+        var inBar = false;                                                  // the game's cursor is over the bar (or a press that began there goes on)
+        var down = null;                                                    // the element that the press began on (the timeline's drag goes on beyond the bar)
+        var control = null;                                                 // ... and its button or link, found at the press (the bar draws its icons again as the match plays)
+        var swallow = false;                                                // the click that follows a release that the bar took is the bar's too
+        var mark = null;
+        function arrow(at) {                                                // (made when first wanted: nothing of it is in the page's markup)
+            if (!mark) {
+                mark = env.doc.createElement('div');
+                mark.id = 'rcursor';
+                mark.setAttribute('aria-hidden', 'true');
+                mark.style.cssText = 'position:fixed;left:0;top:0;width:20px;height:26px;z-index:90;pointer-events:none';
+                var ns = 'http://www.w3.org/2000/svg', svg = env.doc.createElementNS(ns, 'svg'), path = env.doc.createElementNS(ns, 'path');
+                svg.setAttribute('viewBox', '0 0 20 26'); svg.setAttribute('width', '20'); svg.setAttribute('height', '26'); svg.style.display = 'block';
+                path.setAttribute('d', 'M2 1.5v19l5-4.4 3.3 7.4 3.4-1.5-3.3-7.2H17z'); path.setAttribute('fill', '#fff'); path.setAttribute('stroke', '#000'); path.setAttribute('stroke-width', '1.6'); path.setAttribute('stroke-linejoin', 'round');
+                svg.appendChild(path); mark.appendChild(svg);
+                env.stage.appendChild(mark);
+            }
+            mark.hidden = !at;
+            mark.style.display = at ? 'block' : 'none';
+            if (at) mark.style.transform = 'translate(' + (at.x - 2) + 'px, ' + (at.y - 1.5) + 'px)';       // (the arrow's tip is at 2, 1.5 of its picture)
+        }
+        function under(cx, cy) {
+            if (!env.replayMode()) return null;
+            var bar = env.doc.getElementById('rbar');
+            if (!bar || !bar.classList.contains('over') || bar.classList.contains('idle')) return null;
+            var el = env.doc.elementFromPoint(cx, cy);
+            return el && bar.contains(el) ? el : null;
+        }
+        function interactive(el) { return el && el.closest ? el.closest('button, a[href], summary, input, select') : null; }
+        function fire(target, type, at, buttons) {
+            target.dispatchEvent(new env.PointerEvent(type, { bubbles: true, cancelable: true, view: env.win, clientX: at.x, clientY: at.y, pointerId: 1000, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: buttons }));
+        }
+        function hit(at) { return at.edge ? null : under(at.x, at.y); }
+        var api = {
+            mode: function () { return inBar; },
+            under: under,
+            // the lock was let go (or fullscreen ended): a drag in progress is cancelled, the arrow goes
+            reset: function () {
+                if (down) { var at = env.cursorAt() || { x: 0, y: 0 }; fire(down, 'pointercancel', at, 0); }
+                inBar = false; down = null; control = null; swallow = false;
+                if (mark) arrow(null);
+            },
+            hideMark: function () { if (mark) arrow(null); },
+            // the locked cursor moved; true: the bar has it
+            move: function (buttons) {
+                var at = env.cursorAt();
+                if (!at) return false;
+                var target = down || hit(at);
+                if (!target) { if (inBar) { inBar = false; arrow(null); } return false; }
+                if (!inBar) { inBar = true; env.leave(); }
+                arrow(at);
+                fire(target, 'pointermove', at, buttons);
+                return true;
+            },
+            // a press, a release or a click of the locked mouse; true: it is the bar's (and the game must not get it)
+            button: function (type, button) {
+                var at = env.cursorAt();
+                if (!at) return false;
+                if (type === 'click') { var due = swallow || !!hit(at); swallow = false; return due; }
+                var over = hit(at);
+                if (type === 'mousedown') {
+                    swallow = false;
+                    if (!over) return false;
+                    if (button === 0) { down = over; control = interactive(over); fire(over, 'pointerdown', at, 1); }
+                    return true;
+                }
+                if (!down) return !!over;                                   // (a release over the bar of a press that began on the picture is not for the game either)
+                var from = down, pressed = control;
+                down = null; control = null; swallow = true;
+                fire(from, 'pointerup', at, 0);
+                if (pressed) { if (!pressed.disabled && over && interactive(over) === pressed) pressed.click(); }
+                else if (over) over.dispatchEvent(new env.MouseEvent('click', { bubbles: true, cancelable: true, view: env.win, clientX: at.x, clientY: at.y }));       // (a click on the bar's own ground: the Picture window closes, as it does for a free pointer)
+                return true;
+            }
+        };
+        function onButton(e) {
+            if (!env.replayMode() || env.handing() || !e.isTrusted || e.target !== env.canvas || !env.cursorAt()) return;
+            if (api.button(e.type, e.button)) { e.stopPropagation(); e.preventDefault(); }
+        }
+        ['mousedown', 'mouseup', 'click'].forEach(function (name) { env.win.addEventListener(name, onButton, true); });      // (window capture: before SDL's and the page's own)
+        env.win.addEventListener('wheel', function (e) {
+            var at = env.replayMode() && env.cursorAt();
+            if (at && e.target === env.canvas && hit(at)) { e.stopPropagation(); e.preventDefault(); }
+        }, { capture: true, passive: false });
+        return api;
+    }
+
+    var api = { barPointer: barPointer, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;

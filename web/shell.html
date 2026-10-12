@@ -2701,7 +2701,7 @@
         // leaves fullscreen, as the browser says; elsewhere Esc gives the pointer back first (and Safari leaves fullscreen with it).
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
-            if (ANTS_REPLAY_MODE || !ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a recording is watched with a free mouse: its bar is under the pointer)
+            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER")
             lockStartAt = startAt || null;
             try {
                 var result = request.call(canvas);
@@ -2726,6 +2726,7 @@
                 else keyboard.unlock();
             } catch (e) { /* the same */ }
         }
+        var barLock = window.AntsReplay.barPointer({ doc: document, win: window, stage: stageElement, canvas: canvas, PointerEvent: window.PointerEvent, MouseEvent: window.MouseEvent, replayMode: function () { return ANTS_REPLAY_MODE; }, handing: function () { return handingOver; }, leave: function () { handToGame('mouseleave', edgeLast, 0); }, cursorAt: function () { if (!isLocked() || !lockCursor) return null; var r = canvas.getBoundingClientRect(); return { x: r.left + lockCursor.x, y: r.top + lockCursor.y, edge: lockCursor.x < 1 || lockCursor.y < 1 || lockCursor.x >= r.width - 1 || lockCursor.y >= r.height - 1 }; } });      // (the replay bar under a locked pointer: web/replay_page.js)
         function startLockedCursor() {
             var rect = canvas.getBoundingClientRect();
             lockCursor = ANTS_PAGE.moveLocked(lockStartAt || ANTS_PAGE.lockStart(rect.width, rect.height), 0, 0, rect.width, rect.height);
@@ -2742,11 +2743,11 @@
                 lockCursor = ANTS_PAGE.moveLocked({ x: lockCursor.x * rect.width / lockSize.w, y: lockCursor.y * rect.height / lockSize.h }, 0, 0, rect.width, rect.height);
             }
             lockSize = { w: rect.width, h: rect.height };
-            handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);
+            if (!barLock.mode()) handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);
         }
         ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) {
             window.addEventListener(name, function (e) {
-                e.stopPropagation();                                        // (window capture: before SDL's listener of the document, whenever that was added)
+                e.stopPropagation(); if (window.antsReplayPlaceBar) window.antsReplayPlaceBar();      // (window capture: before SDL's listener of the document, whenever that was added; a replay's bar moves into the picture while the pointer is locked)
                 if (isLocked()) {
                     lockHeldOnce = true;
                     lockRefused = false;
@@ -2755,8 +2756,7 @@
                     keepLockedCursor();
                 } else {
                     if (lockCursor && isFullscreen()) quietAfterRelease = {};     // (the browser let go: the free pointer is quiet until it has moved)
-                    lockCursor = null;
-                    lockSize = null;
+                    lockCursor = null; lockSize = null; barLock.reset();
                 }
             }, true);
         });
@@ -2768,7 +2768,7 @@
             e.stopPropagation();                                            // the game gets the page's cursor, not the lock's relative motion
             var rect = canvas.getBoundingClientRect();
             if (!lockCursor) startLockedCursor();
-            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height);
+            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
             handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
         }, true);
         canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock again where the browser let it go
@@ -2780,7 +2780,7 @@
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
             document.addEventListener(name, function () {
                 if (!isRealFullscreen()) { fullscreenEnded(); return; }
-                if (!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE) return;
+                if (!ANTS_POINTER_LOCK) return;
                 lockKeys(true);
                 requestLock(null);                                          // (the request of the click may have come too early for this browser: once more, the click's gesture is still valid)
             });
@@ -3523,10 +3523,10 @@
             var touchSeen = false, noteShown = false, noteTimer = 0, swiped = -1;      // swiped: the pointer that has just swiped the bar away (-1: none)
             window.antsReplayPlaceBar = function () {
                 var bar = $('rbar');
-                var over = isFullscreen();
+                var over = isFullscreen(), home = over ? (isLocked() ? boxElement : stageElement) : null;        // (a locked pointer is held to the picture: the bar lies inside the picture's box then, so that all of it can be reached)
                 cam.fullscreen(over);
-                if (over && bar.parentNode !== stageElement) { stageElement.appendChild(bar); bar.classList.add('over'); wake(); }
-                else if (!over && bar.parentNode === stageElement) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
+                if (over && bar.parentNode !== home) { home.appendChild(bar); bar.classList.add('over'); wake(); }
+                else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
             };
             function syncEdge() {
                 var bar = $('rbar');
@@ -3547,7 +3547,7 @@
                 if (!bar.classList.contains('over')) return;
                 clearTimeout(idleTimer);
                 if (dragging || !$('picpop').hidden) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline, or the Picture window open, is a touch of the bar: it looks again)
-                bar.classList.add('idle');
+                bar.classList.add('idle'); barLock.hideMark();                     // (the arrow of a locked mouse goes with the bar: it is not there to be hit)
                 syncEdge();
                 if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
                     noteShown = true;
@@ -3661,7 +3661,7 @@
             }, true);
             ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
                 document.addEventListener(name, function (ev) {
-                    var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';
+                    var touch = ev.type === 'touchstart' || ev.pointerType === 'touch'; if (ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()) return;       // (a locked browser repeats the mouse's place without a motion: that is not a touch of the bar)
                     if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
                     if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
                     if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)

@@ -314,5 +314,132 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
     }
 }
 
+
+// ---- the bar under a locked pointer (barPointer): the game's cursor is the pointer; over the visible bar it is the bar's
+{
+    function make(replayMode) {
+        const log = [], handlers = {}, classes = { over: true, idle: false };
+        const node = (name, parent, extra) => Object.assign({ name, parent: parent || null, tag: 'div', disabled: false, clicks: 0,
+            contains(other) { for (let n = other; n; n = n.parent) if (n === this) return true; return false; },
+            closest(sel) { const tags = sel.split(',').map((x) => x.trim().replace(/\[.*\]/, '')); for (let n = this; n; n = n.parent) if (tags.includes(n.tag)) return n; return null; },
+            click() { this.clicks++; log.push('click ' + this.name); },
+            dispatchEvent(ev) { log.push(ev.type + ' ' + this.name + (ev.pointerType ? ' ' + ev.pointerType + '#' + ev.pointerId : '') + ' @' + ev.clientX + ',' + ev.clientY + (ev.buttons === undefined ? '' : ' b' + ev.buttons)); } }, extra);
+        const bar = node('bar', null, { classList: { contains: (c) => !!classes[c] } });
+        const play = node('play', bar, { tag: 'button' });
+        const icon = node('icon', play, { tag: 'svg' });
+        const rail = node('rail', bar, { tag: 'div' });
+        const ground = node('ground', bar, { tag: 'div' });
+        const picture = node('picture', null, { tag: 'canvas' });
+        const made = [];
+        const place = { x: 0, y: 0, edge: false, el: picture, locked: true };
+        const doc = { getElementById: (id) => (id === 'rbar' ? bar : null), elementFromPoint: () => place.el,
+                      createElement: () => { const m = { style: {}, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = v; }, appendChild(x) { this.kids.push(x); } }; made.push(m); return m; },
+                      createElementNS: () => ({ style: {}, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = v; }, appendChild(x) { this.kids.push(x); } }) };
+        const stage = { appended: [], appendChild(x) { this.appended.push(x); } };
+        const left = [];
+        const win = { addEventListener(type, fn, opts) { (handlers[type] = handlers[type] || []).push([fn, opts]); } };
+        function PointerEvent(type, init) { Object.assign(this, init); this.type = type; }
+        function MouseEvent(type, init) { Object.assign(this, init); this.type = type; }
+        const state = { handing: false };
+        const api = R.barPointer({ doc, win, stage, canvas: picture, PointerEvent, MouseEvent, replayMode: () => replayMode, handing: () => state.handing,
+                                   cursorAt: () => (place.locked ? { x: place.x, y: place.y, edge: place.edge } : null), leave: () => left.push('leave') });
+        return { api, log, classes, bar, play, icon, rail, ground, picture, place, made, stage, left, handlers, state };
+    }
+    const ev = (type, extra) => { const e = Object.assign({ type, button: 0, isTrusted: true, target: null, stopped: 0, prevented: 0, stopPropagation() { this.stopped++; }, preventDefault() { this.prevented++; } }, extra); return e; };
+    const last = (t) => t.log[t.log.length - 1];
+    {
+        const t = make(true);
+        same('bar: the listeners are on the window, in capture, the wheel not passive', [Object.keys(t.handlers).sort(), t.handlers.wheel[0][1]], [['click', 'mousedown', 'mouseup', 'wheel'], { capture: true, passive: false }]);
+        same('bar: over the picture the cursor is the game\'s: no bar, no arrow, nothing made', [t.api.move(0), t.api.mode(), t.made.length, t.log.length, t.left.length], [false, false, 0, 0, 0]);
+        t.place.x = 310; t.place.y = 700; t.place.el = t.icon;
+        same('bar: over the bar it is the bar\'s: a mouse pointer move (id 1000) for the element under it', [t.api.move(0), t.api.mode(), last(t)], [true, true, 'pointermove icon mouse#1000 @310,700 b0']);
+        same('bar: the arrow is made once, in the stage, hidden:false, its tip at the cursor, the game told once', [t.made.length, t.stage.appended.length, t.made[0].style.transform, t.made[0].style.display, t.made[0].attrs['aria-hidden'], t.left.length], [1, 1, 'translate(308px, 698.5px)', 'block', 'true', 1]);
+        t.api.move(0);
+        same('bar: and not again while the cursor stays on the bar', [t.left.length, t.made.length], [1, 1]);
+        t.place.el = t.picture;
+        same('bar: back on the picture the arrow goes and the game has the cursor', [t.api.move(0), t.api.mode(), t.made[0].style.display, t.made[0].hidden], [false, false, 'none', true]);
+        t.log.length = 0; t.place.el = t.icon;
+        same('bar: press and release on a button click it once (pointer events of a mouse, then the click)', [t.api.button('mousedown', 0), t.api.button('mouseup', 0), t.play.clicks, t.log.join('|')],
+             [true, true, 1, 'pointerdown icon mouse#1000 @310,700 b1|pointerup icon mouse#1000 @310,700 b0|click play']);
+        same('bar: the click that follows is the bar\'s, once', [t.api.button('click', 0), t.picture === t.place.el], [true, false]);
+        t.place.el = t.picture;
+        same('bar: and a click on the picture is the game\'s', t.api.button('click', 0), false);
+        // a release that the bar took, no click, then the picture: the next click is the game's (the flag does not outlive the press)
+        t.place.el = t.icon;
+        t.api.button('mousedown', 0); t.api.button('mouseup', 0);
+        t.place.el = t.picture;
+        same('bar: a press on the picture clears the flag: its click is the game\'s', [t.api.button('mousedown', 0), t.api.button('mouseup', 0), t.api.button('click', 0)], [false, false, false]);
+        // a disabled control is not clicked
+        t.play.clicks = 0; t.play.disabled = true; t.place.el = t.icon;
+        t.api.button('mousedown', 0);
+        same('bar: a disabled button is pressed but not clicked', [t.api.button('mouseup', 0), t.play.clicks], [true, 0]);
+        t.api.button('click', 0); t.play.disabled = false;
+        // a press that ends on another part of the bar is not a click
+        t.play.clicks = 0; t.place.el = t.icon; t.api.button('mousedown', 0); t.place.el = t.rail;
+        same('bar: a press on a button that ends elsewhere is not a click', [t.api.button('mouseup', 0), t.play.clicks], [true, 0]);
+        t.api.button('click', 0);
+        // the bar's own ground: a plain click goes to it (the Picture window closes on it)
+        t.log.length = 0; t.place.el = t.ground; t.api.button('mousedown', 0); t.api.button('mouseup', 0);
+        same('bar: a release on the bar\'s own ground is a click on it (no control)', last(t), 'click ground @310,700');
+        t.api.button('click', 0);
+        // the icon redrawn between the press and the release
+        t.log.length = 0; t.play.clicks = 0; t.place.el = t.icon; t.api.button('mousedown', 0); t.icon.parent = null; t.place.el = t.play;
+        same('bar: an icon drawn again while the button is held: the button is still clicked once', [t.api.button('mouseup', 0), t.play.clicks], [true, 1]);
+        t.api.button('click', 0); t.icon.parent = t.play;
+        // a drag that began on the timeline goes on beyond the bar, and ends there
+        t.log.length = 0; t.place.el = t.rail; t.api.button('mousedown', 0); t.place.el = t.picture; t.place.y = 300;
+        same('bar: a drag that began on the timeline goes on over the picture', [t.api.move(1), last(t)], [true, 'pointermove rail mouse#1000 @310,300 b1']);
+        same('bar: and ends there', [t.api.button('mouseup', 0), last(t)], [true, 'pointerup rail mouse#1000 @310,300 b0']);
+        t.api.button('click', 0);
+        // a lock let go in the middle of a drag cancels it
+        t.place.y = 700; t.place.el = t.rail; t.api.button('mousedown', 0); t.log.length = 0; t.place.locked = false;
+        t.api.reset();
+        same('bar: a lock let go while the timeline is held sends pointercancel to it and clears the state', [last(t), t.api.mode(), t.made[0].style.display], ['pointercancel rail mouse#1000 @0,0 b0', false, 'none']);
+        t.place.locked = true; t.place.el = t.picture;
+        same('bar: after that a move is the game\'s', t.api.move(0), false);
+        // other buttons: swallowed over the bar, no pointer press
+        t.log.length = 0; t.place.el = t.rail;
+        same('bar: a right button over the bar is the bar\'s and makes no press', [t.api.button('mousedown', 2), t.api.button('mouseup', 2), t.log.length], [true, true, 0]);
+        // the picture's outermost pixels are the game's even where the bar lies
+        t.place.edge = true;
+        same('bar: at the picture\'s edge a move, a press, a release and a click are the game\'s', [t.api.move(0), t.api.button('mousedown', 0), t.api.button('mouseup', 0), t.api.button('click', 0)], [false, false, false, false]);
+        t.place.edge = false;
+        // a bar that has gone away, and one that is not over the picture
+        t.classes.idle = true;
+        same('bar: a bar that has gone away is not hit', [t.api.under(1, 1), t.api.move(0), t.api.button('mousedown', 0)], [null, false, false]);
+        t.classes.idle = false; t.classes.over = false;
+        same('bar: nor the bar of a page that is not fullscreen', t.api.under(1, 1), null);
+        t.classes.over = true;
+        t.api.hideMark();
+    }
+    {   // the window's listeners: trusted, not the page's own, on the canvas, locked; the wheel over the bar does not zoom
+        const t = make(true);
+        const run = (type, extra) => { const e = ev(type, Object.assign({ target: t.picture }, extra)); (t.handlers[type] || []).forEach(([fn]) => fn(e)); return e; };
+        t.place.el = t.icon;
+        let e = run('mousedown');
+        same('bar: a trusted press on the canvas over the bar is taken (stopped, default prevented)', [e.stopped, e.prevented], [1, 1]);
+        e = run('mouseup'); const e2 = run('click');
+        same('bar: and its release and click', [e.stopped, e2.stopped, t.play.clicks], [1, 1, 1]);
+        e = run('mousedown', { isTrusted: false });
+        same('bar: an event that the page made itself is left alone', [e.stopped, t.api.mode()], [0, false]);
+        t.state.handing = true; e = run('mousedown'); t.state.handing = false;
+        same('bar: and so is one that the page is handing the game', e.stopped, 0);
+        e = run('mousedown', { target: t.rail });
+        same('bar: and one that is not on the canvas', e.stopped, 0);
+        t.place.locked = false; e = run('mousedown'); t.place.locked = true;
+        same('bar: and one while the pointer is not locked', e.stopped, 0);
+        t.place.el = t.picture; e = run('mousedown'); run('mouseup'); run('click');
+        same('bar: a press over the picture is the game\'s', e.stopped, 0);
+        t.place.el = t.icon; e = run('wheel');
+        same('bar: the wheel over the bar does not zoom the map', [e.stopped, e.prevented], [1, 1]);
+        t.place.el = t.picture; e = run('wheel');
+        same('bar: the wheel over the picture is the game\'s', [e.stopped, e.prevented], [0, 0]);
+        const off = make(false); off.place.el = off.icon;
+        const w = ev('wheel', { target: off.picture }); (off.handlers.wheel || []).forEach(([fn]) => fn(w));
+        const d = ev('mousedown', { target: off.picture }); (off.handlers.mousedown || []).forEach(([fn]) => fn(d));
+        same('bar: a game page (not a replay) has no bar: nothing is taken', [w.stopped, d.stopped, off.api.move(0)], [0, 0, false]);
+    }
+}
+
 console.log(checks + ' checks, ' + failures + ' failures');
 process.exit(failures ? 1 : 0);

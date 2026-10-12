@@ -215,9 +215,10 @@ class ThePlayerPage(unittest.TestCase):
         self.assertIn("window.AntsReplay.liveIdOf(window.location.search)", self.page)
         self.assertLess(self.page.index('<script src="replay_page.js"></script>'), self.page.index("var ANTS_REPLAY_MODE"))
 
-    def test_a_replay_has_no_pointer_lock_and_no_leave_the_game_question(self):
-        self.assertIn("(!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE)", self.page)
-        self.assertIn("if (ANTS_REPLAY_MODE || !ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", self.page)
+    def test_a_replay_has_the_pointer_lock_of_the_game_and_no_leave_the_game_question(self):
+        # (it was off while the bar was a page element under a free pointer; now the bar is reached through the locked cursor: tests/scripts/test_web_edge.py, TheReplayIsLockedLikeTheGame)
+        self.assertNotIn("(!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE)", self.page)
+        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", self.page)
         app = read("src", "ants_app", "application.cpp")
         self.assertRegex(app, r"ants_match_running\(\)\s*\{\s*return \(g_web_app != nullptr && !g_web_app->replay_mode\(\)")
 
