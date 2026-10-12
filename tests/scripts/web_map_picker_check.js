@@ -206,6 +206,13 @@ function rig(options) {
         q.value = 'zzz'; q.dispatch('input'); r.fire(120);
         same('a search with no result says so, as the mock-up does', [r.out().textContent, r.rows().length], ['No map is called "zzz".Try fewer letters.', 0]);
         check('and the Choose button is off', r.btn('Choose map').disabled === true);
+        r.picker.close(); r.picker.open('Zebra.lvl'); await settle();
+        check('Choose map is on for the picked map that is on the screen', r.btn('Choose map').disabled === false);
+        q.value = 'dune'; q.dispatch('input'); r.fire(120);
+        same('a search that leaves matches without the picked map', [r.names(), r.sel()], [['Dune'], []]);
+        check('turns Choose map off (it would choose a map that is not on screen)', r.btn('Choose map').disabled === true);
+        q.value = 'zebra'; q.dispatch('input'); r.fire(120);
+        check('and it is on again when the picked map is shown', r.btn('Choose map').disabled === false);
         q.value = ''; q.dispatch('input'); r.fire(120);
         r.btn('Name').dispatch('click');
         same('sort by name', [r.names().slice(0, 3), r.btn('Name').attrs['aria-pressed'], r.btn('Originals, then plays').attrs['aria-pressed']], [['Alpha', 'apple', 'Dune'], 'true', 'false']);

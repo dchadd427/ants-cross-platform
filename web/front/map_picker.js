@@ -232,7 +232,7 @@
                 nodes[i].setAttribute('aria-selected', on ? 'true' : 'false'); nodes[i].setAttribute('tabindex', on ? '0' : '-1');
                 nodes[i].className = nodes[i].className.replace(/ sel\b/, '') + (on ? ' sel' : '');
             }
-            parts.go.disabled = !byFile[picked];
+            parts.go.disabled = pickedIndex() < 0;   // (a pick that a search hides is not chosen)
         }
 
         // where the list stands afterwards: 'top' a search (a new list), 'picked' a sort or a view (the chosen row is brought into view, else the list stays where it was), '' nothing is moved
@@ -262,7 +262,7 @@
             var firstStop = pickedIndex() < 0;
             shown.forEach(function (m, i) { var n = item(m); if (firstStop && i === 0) n.setAttribute('tabindex', '0'); frag.appendChild(n); });
             if (frag !== parts.out) parts.out.appendChild(frag);
-            parts.go.disabled = !byFile[picked];
+            parts.go.disabled = pickedIndex() < 0;   // (a pick that a search hides is not chosen)
             if (where === 'top') parts.out.scrollTop = 0;
             else if (where === 'picked') {
                 var cur = parts.out.querySelector ? parts.out.querySelector('[data-file].sel') : null;

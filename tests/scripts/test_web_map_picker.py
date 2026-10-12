@@ -104,6 +104,7 @@ class ThePickersOwnCode(unittest.TestCase):
             "the description is printed in a row": ("body.appendChild(el('div', 'pk-meta', metaText(m)));", "body.appendChild(el('div', 'pk-meta', metaText(m) + ' ' + m.description));"),
             "Escape does not close": ("if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }", ""),
             "Enter does not choose": ("else if (k === 'Enter') { e.preventDefault(); if (i >= 0) choose(); return; }", "else if (k === 'Enter') { return; }"),
+            "a pick that a search hides can still be chosen": ("if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = pickedIndex() < 0;", "if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = !byFile[picked];"),
             "a name is markup": ("var nm = el('div', 'pk-nm', m.name);", "var nm = el('div', 'pk-nm'); nm.innerHTML = m.name;"),
         }
         with tempfile.TemporaryDirectory() as folder:
