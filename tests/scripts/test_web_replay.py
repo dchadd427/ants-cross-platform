@@ -387,10 +387,10 @@ class TheSpectatorsPicture(unittest.TestCase):
                 self.assertNotIn("--bar-max", bar, shape)
 
     def test_every_layout_of_the_bar_has_a_place_for_the_button(self):
-        for areas in ('"play tl clock cam speed pic fsx"', '"tl tl tl tl" "play clock pic fsx" "speed speed speed speed" "cam cam cam cam"', '"play tl clock live cam speed pic fsx"',
+        for areas in ('"play rew tl clock cam speed pic fsx"', '"tl tl tl tl" "play rew clock pic" "speed speed speed speed" "cam cam cam cam"', '"play tl clock live cam speed pic fsx"',
                       '"tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed" "cam cam cam cam cam"'):
             self.assertIn("grid-template-areas: " + areas, self.page, areas)
-        self.assertEqual(self.page.count('"play tl clock cam speed pic fsx"'), 2)                              # (the bar, and the fullscreen bar of a short window)
+        self.assertEqual(self.page.count('"play rew tl clock cam speed pic fsx"'), 2)                              # (the bar, and the fullscreen bar of a short window)
         self.assertEqual(self.page.count('"play tl clock live cam speed pic fsx"'), 2)
         self.assertIn(".rbar .picwrap { grid-area: pic; position: relative; }", self.page)
 
@@ -479,6 +479,55 @@ class TheCameraButton(unittest.TestCase):
             self.assertNotIn(bad, control, bad)
 
 
+class TheRewindButton(unittest.TestCase):
+    """Back 30 seconds (docs/REPLAYS.md "Watching a replay"): a second button right of Play / Pause, made by web/replay_page.js (rewindControl, run on fakes by web_replay_check.js), not there for a match
+    that is being played. The seek is the page's own (the timeline's), so the play / pause state and the speed stay."""
+    page = read("web", "shell.html")
+    glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
+    script = read("web", "replay_page.js")
+
+    def test_the_page_has_no_markup_for_it_and_the_script_makes_it_a_button_of_the_bar_next_to_play(self):
+        self.assertNotIn('id="b-rew"', self.page)                                                          # (made by the script: web/shell.html is at its line ceiling)
+        control = self.script[self.script.index("function rewindControl"):self.script.index("// THE BAR UNDER A LOCKED POINTER")]
+        for bad in ("innerHTML", "insertAdjacentHTML", "outerHTML", "document.write"):
+            self.assertNotIn(bad, control, bad)
+        self.assertIn("b.className = 'btn rplay rew';", control)                                           # (Play's classes: its size, bevel and look)
+        self.assertIn("play.parentNode.insertBefore(b, play.nextSibling);", control)                       # (a child of #rbar, so barPointer finds it under the locked cursor: it hits what lies inside the bar)
+        self.assertIn("b.title = 'Back ' + REWIND_SECONDS + ' seconds';", control)
+        self.assertIn("b.setAttribute('aria-label', b.title);", control)
+        self.assertIn("rewindTurn: rewindTurn", self.script)
+
+    def test_the_glue_seeks_with_the_pages_seek_shows_it_for_a_replay_only_and_wires_it(self):
+        self.assertIn("R.rewindControl(", self.glue)
+        self.assertIn("seek: function (seconds) { seek(seconds); }", self.glue)                            # (the timeline's seek: re-simulation from the first turn in the game, pause and speed kept)
+        self.assertIn("get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn)", self.glue)  # (a press while a jump is on counts from where the jump goes)
+        self.assertIn("rew.show(!liveOn);", self.glue)                                                     # (not on ?live=)
+        self.assertIn("rew.wire(function () { lastKey = ''; tick(); });", self.glue)
+        self.assertNotIn("DO.toggle", self.script[self.script.index("function rewindControl"):self.script.index("// THE BAR UNDER A LOCKED POINTER")])   # (no pause, no speed)
+        self.assertEqual(self.page.count("rew.show("), 1)
+
+    def test_the_bar_has_a_place_for_it_and_a_live_bar_does_not(self):
+        self.assertIn(".rew[hidden],", self.page)                                                          # (hidden wins over the button's display)
+        self.assertRegex(self.page, r"\.rbar \.rew \{ grid-area: rew; flex-direction: column;")
+        self.assertIn(".rbar .rew .n {", self.page)
+        for tpl in ('"play rew tl clock cam speed pic fsx"', '"play rew clock pic fsx"', '"play rew clock cam pic fsx"', '"play rew clock cam speed pic fsx"'):
+            self.assertIn(tpl, self.page, tpl)
+        for line in self.page.splitlines():
+            if "grid-template-areas" in line and ".islive" in line:
+                self.assertNotIn("rew", line, line)                                                          # (a live bar has no area for it: it is not there)
+            if "grid-template-areas" in line and ".islive" not in line and "play" in line:
+                self.assertIn("play rew", line, line)
+        for line in self.page.splitlines():                                                                # (the columns match the areas)
+            if "grid-template-areas" in line and "play rew" in line:
+                cols = re.findall(r"minmax\([^)]*\)|\S+", re.search(r"grid-template-columns: ([^;]*);", line).group(1))
+                rows = re.findall(r'"([^"]*)"', line)
+                self.assertTrue(all(len(r.split(" ")) == len(cols) for r in rows), line)         # (a row of areas for every column)
+
+    def test_the_docs_name_it(self):
+        self.assertIn("Back 30 seconds", read("docs", "REPLAYS.md"))
+        self.assertIn("Back 30 seconds", read("docs", "PLAY_IN_BROWSER.md"))
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Picture button's code was NOT run (tests/scripts/web_picture_popover_check.js)")
 class ThePictureButtonsOwnCode(unittest.TestCase):
     def test_open_close_click_elsewhere_esc_and_the_focus(self):
@@ -510,6 +559,17 @@ class TheSharedCode(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failures", done.stdout)
 
+    REWIND_MUTANTS = {
+        "Back 30 seconds goes 20 seconds": ("var REWIND_SECONDS = 30,", "var REWIND_SECONDS = 20,"),
+        "Back 30 seconds goes below the first turn": ("return Math.max(0, Math.floor(", "return (Math.floor("),
+        "Back 30 seconds counts 10 turns a second": ("TURNS_PER_SECOND = 20;", "TURNS_PER_SECOND = 10;"),
+        "Back 30 seconds is not in the bar": ("play.parentNode.insertBefore(b, play.nextSibling);", "play.parentNode.parentNode.insertBefore(b, play.nextSibling);"),
+        "Back 30 seconds is always shown": ("show: function (on) { b.hidden = !on; }", "show: function (on) { b.hidden = false; }"),
+        "Back 30 seconds has no name": ("b.setAttribute('aria-label', b.title);", "b.setAttribute('aria-label', '');"),
+        "Back 30 seconds is not a copy of Play": ("b.className = 'btn rplay rew';", "b.className = 'btn rew';"),
+        "Back 30 seconds does not press with Enter": ("if (ev.key !== 'Enter' && ev.key !== ' ') return;\n                    ev.preventDefault();\n                    if (!ev.repeat) b.click();\n                });\n                b.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });\n            }\n        };\n        return api;\n    }\n\n    // THE BAR", "if (ev.key !== ' ') return;\n                    ev.preventDefault();\n                    if (!ev.repeat) b.click();\n                });\n                b.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });\n            }\n        };\n        return api;\n    }\n\n    // THE BAR"),
+    }
+
     def test_the_bar_under_a_locked_pointer_check_can_fail(self):
         text = read("web", "replay_page.js")
         broken = {
@@ -518,6 +578,7 @@ class TheSharedCode(unittest.TestCase):
             "a release of a press on the picture is swallowed over the bar": ("if (!down) { var mine = taken; taken = false; return mine; }", "if (!down) return !!over;"),
             "a release of a press the game never saw is the game's": ("if (!down) { var mine = taken; taken = false; return mine; }", "if (!down) return false;"),
         }
+        broken.update(self.REWIND_MUTANTS)
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():
                 self.assertEqual(text.count(old), 1, why)

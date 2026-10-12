@@ -1033,7 +1033,7 @@
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1057,15 +1057,15 @@
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
 
         /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
-        .rbar { position: relative; --ar-w: 16; --ar-h: 9; --bar-max: 1280px; width: min(100%, var(--bar-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--bar-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play tl clock cam speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; container: rbar / inline-size; }
+        .rbar { position: relative; --ar-w: 16; --ar-h: 9; --bar-max: 1280px; width: min(100%, var(--bar-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--bar-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play rew tl clock cam speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; container: rbar / inline-size; }
         /* the bar is as wide as the picture, whatever its shape (the same numbers as #game-stage above; the bar follows the stage in the page, and floats over it in fullscreen, where .over has its own width) */
         #game-stage[data-aspect="4:3"] ~ .rbar { --ar-w: 4; --ar-h: 3; --bar-max: 960px; }
         #game-stage[data-aspect="16:10"] ~ .rbar { --ar-w: 8; --ar-h: 5; }
         #game-stage[data-aspect="21:9"] ~ .rbar { --ar-w: 7; --ar-h: 3; }
         body:not(.replay) .rbar { display: none; }
-        .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; }
+        .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; } .rbar .rew { grid-area: rew; flex-direction: column; gap: 1px; }
         .rbar .rplay svg { width: 24px; height: 24px; fill: currentColor; display: block; }
-        .rbar .rplay .lbl { font-size: 16px; }
+        .rbar .rplay .lbl { font-size: 16px; } .rbar .rew .n { font-size: 12px; line-height: 1; font-weight: 700; letter-spacing: .02em; }
         .tl { grid-area: tl; position: relative; height: 52px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
         .tl .rail { position: absolute; left: 11px; right: 11px; top: 0; bottom: 0; }
         .tl .track { position: absolute; left: 0; right: 0; top: 9px; height: 20px; background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); overflow: hidden; }
@@ -1136,9 +1136,9 @@
             .rhead h2 { font-size: 22px; } .rhead h2 small { font-size: 14px; }
             .rtag { font-size: 12px; bottom: calc(100% + 5px); }
             .rbar.over .rtab { left: auto; right: 14px; transform: none; }          /* (the tag at the left can be long, and a phone upright has no room for the tab in the middle) */
-            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "tl tl tl tl" "play clock pic fsx" "speed speed speed speed" "cam cam cam cam"; gap: 4px 12px; }
+            .rbar { margin: 45px 0 8px; padding: 0; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl tl" "play rew clock pic" "speed speed speed speed" "cam cam cam cam"; gap: 4px 8px; }
             .rbar:not(.over) .camb { justify-self: stretch; min-height: 44px; font-size: 18px; } .rbar:not(.over) .camb .lbl { display: inline; }
-            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl" "play clock cam pic fsx" "speed speed speed speed speed"; }
+            .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play rew clock cam pic fsx" "speed speed speed speed speed speed"; }
             .rbar .clock { text-align: left; font-size: 19px; }
             .rbar .speed { justify-self: stretch; display: flex; } .rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }
         }
@@ -1149,7 +1149,7 @@
             .rtag { font-size: 11px; bottom: calc(100% + 5px); }
             .rbar.over .rtag { font-size: 13px; }
             .rhead h2 { font-size: 20px; } .rhead h2 small { font-size: 13px; }
-            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play tl clock cam speed pic fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
+            .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play rew tl clock cam speed pic fsx"; bottom: 8px; gap: 0 10px; padding: 4px 10px; width: 96%; }
             .rbar.over .clock { text-align: right; font-size: 16px; min-width: 0; }
             .rbar.over .speed { justify-self: auto; display: inline-flex; } .rbar.over .speed button { flex: none; min-width: 34px; min-height: 32px; font-size: 14px; padding: 3px 6px; }
             .rbar.over .rplay { min-width: 48px; min-height: 40px; padding: 4px 10px; } .rbar.over .rplay svg { width: 20px; height: 20px; }
@@ -1191,7 +1191,7 @@
             .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play clock live cam pic fsx" "speed speed speed speed speed speed"; }
         }
         @media (max-height: 520px) and (max-width: 1000px) {
-            .rbar.over { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play clock cam speed pic fsx"; gap: 2px 8px; }
+            .rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl tl" "play rew clock cam speed pic fsx"; gap: 2px 8px; }
             .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play clock live cam pic fsx" "speed speed speed speed speed speed"; }
             .rbar.over .clock { text-align: left; }
         }
@@ -3238,7 +3238,7 @@
             var headPending = false;         // the header of a match that became a replay waits for the game to hold the whole file (its length)
             var startSeek = ANTS_LIVE_MODE;  // a live match opens at the present: the first moment that the game is there the page takes the playhead to the Limit when the game has not put it there
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
-            var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout });   // (the Auto / Manual button, web/replay_page.js)
+            var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
@@ -3468,7 +3468,7 @@
                 $('endnote').hidden = !note;
                 if (note) $('endnote').textContent = note;
                 $('livenow').hidden = !(liveOn && atNow);
-                $('b-live').hidden = !(liveOn && !atNow);
+                $('b-live').hidden = !(liveOn && !atNow); rew.show(!liveOn);
                 [].forEach.call($('speed').querySelectorAll('button'), function (b) { b.setAttribute('aria-checked', String(Math.round(parseFloat(b.dataset.s) * 100) === speed)); });
                 $('rbar').style.opacity = ready ? '' : '.55';
                 $('rbar').style.pointerEvents = ready ? '' : 'none';
@@ -3570,7 +3570,7 @@
 
             // ---- the wiring ----
             $('b-play').addEventListener('click', toggle);
-            $('b-live').addEventListener('click', jumpToLive);
+            $('b-live').addEventListener('click', jumpToLive); rew.wire(function () { lastKey = ''; tick(); });
             cam.wire(function () { lastKey = ''; tick(); });
             $('speed').addEventListener('click', function (ev) {
                 var b = ev.target.closest('button');

@@ -7,7 +7,7 @@ page's own part: the glue that fetches the growing file again and again and tell
 C++ tests do). The DevTools protocol is spoken with the client of web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
 Parts (--only): list (the "Live now" box: the matches, hostile names as text, a match that comes later, no box when the door is not there), watch (a match at its present: the tag, Pause and
 "Jump to live", the file that grows, the feed that stops and comes back), ends (a match that ends and was kept, one that ends and was not kept, a kept replay that is slow to appear), cards
-(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
+(a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), rewind (Back 30 seconds: where a press seeks, play / pause and speed kept, not on a live match, the bar at 390 px), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
 in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
 note says how to bring it back; a mouse works as ever).
 
@@ -187,10 +187,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay, picture or bar (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay, rewind, picture or bar (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "watch", "ends", "cards", "replay", "picture", "bar")
+    parts = ("list", "watch", "ends", "cards", "replay", "rewind", "picture", "bar")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -398,6 +398,105 @@ def main():
             tab = new_tab()
             open_page(tab, "/play.html?replay=ants-NOPE-20260101-000000Z.antsrep")
             check(until(tab, "document.getElementById('rm-title').textContent === 'That replay is gone'") is True, "a file that is gone: 'That replay is gone'")
+            tab.close()
+
+        if args.only in ("", "rewind"):
+            print("[web live] part rewind: Back 30 seconds")
+            fresh(kept_at=1.0)
+            seeks = "__stub.seeks.slice()"
+            geo = ("(function () { var q = function (id) { var r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };"
+                   " return { play: q('b-play'), rew: q('b-rew'), bar: q('rbar'), vw: window.innerWidth }; })()")
+            tab = new_tab()
+            open_page(tab, "/play.html?replay=" + KEPT)
+            check(until(tab, READY) is True, "a replay starts")
+            check(tab.ev("(" + SHOWN + ")('b-rew')") is True and tab.ev("document.getElementById('b-rew').parentNode === document.getElementById('rbar')"), "Back 30 seconds is in the bar")
+            check(tab.ev("document.getElementById('b-play').nextElementSibling === document.getElementById('b-rew')") is True, "it is right of Pause")
+            check(tab.ev("[document.getElementById('b-rew').getAttribute('aria-label'), document.getElementById('b-rew').title, document.querySelector('#b-rew .n').textContent]") == ["Back 30 seconds", "Back 30 seconds", "30"], "its name, its tip and the 30")
+            same = ("(function () { var a = getComputedStyle(document.getElementById('b-play')), b = getComputedStyle(document.getElementById('b-rew'));"
+                    " return ['color', 'backgroundColor', 'borderTopColor', 'borderTopWidth', 'boxShadow', 'borderRadius'].every(function (k) { return a[k] === b[k]; }); })()")
+            check(tab.ev(same) is True, "the same colour, ground, edge, bevel and corners as Pause")
+            size = tab.ev("(function () { var r = document.getElementById('b-rew').getBoundingClientRect(); return [r.width, r.height]; })()")
+            check(size[0] >= 64 and size[1] >= 50, "at least 64 x 50 px (%d x %d)" % (size[0], size[1]))
+            bare = ("(function () { var s = getComputedStyle(document.querySelector('#b-rew .n')); return s.backgroundColor === 'rgba(0, 0, 0, 0)' && s.borderTopWidth === '0px' && s.boxShadow === 'none'"
+                    " && s.color === getComputedStyle(document.querySelector('#b-rew svg')).fill; })()")
+            check(tab.ev(bare) is True, "the 30 has no box, edge or shadow of its own and the colour of the triangles")
+            tab.ev("__stub.turn = 1000; __stub.state = 2; __stub.speed = 200")
+            cx, cy = centre(tab, "b-rew")
+            tab.click(cx, cy)
+            check(until(tab, "__stub.seeks.length === 1") is True and 400 <= tab.ev(seeks)[0] <= 440, "a click seeks 30 s back (the match plays at 2x: turn about 1000 -> 400, got %r)" % tab.ev(seeks))
+            check(until(tab, "__stub.state === 2", 4) is True and tab.ev("__stub.speed") == 200, "a match that plays plays on, at the same speed")
+            tab.ev("__stub.seeks.length = 0; __stub.turn = 1000; __stub.state = 3")
+            time.sleep(0.6)
+            tab.click(cx, cy)
+            check(until(tab, "__stub.seeks.length === 1") is True and tab.ev(seeks) == [400], "paused: the same jump")
+            check(until(tab, "__stub.state === 3", 4) is True and tab.ev("__stub.speed") == 200, "and it stays paused, at the same speed")
+            for turn, want in ((300, 0), (599, 0), (600, 0), (601, 1), (0, 0)):
+                tab.ev("__stub.seeks.length = 0; __stub.turn = %d; __stub.state = 3" % turn)
+                time.sleep(0.6)
+                tab.click(cx, cy)
+                check(until(tab, "__stub.seeks.length === 1") is True and tab.ev(seeks) == [want], "from turn %d it goes to turn %d, never below 0" % (turn, want))
+            tab.ev("__stub.seeks.length = 0; __stub.turn = 2000; __stub.state = 3")
+            time.sleep(0.6)
+            tab.focus_js = tab.ev("document.getElementById('b-rew').focus(); document.activeElement.id")
+            tab.call("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            tab.call("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            check(until(tab, "__stub.seeks.length === 1", 3) is True and tab.ev(seeks) == [1400], "Enter on the focused button presses it")
+            tab.ev("document.activeElement.blur(); __stub.turn = 1000; __stub.state = 3; __stub.speed = 100")
+            time.sleep(0.6)
+            shot(tab, "rewind-desktop")
+            r = tab.ev("(function () { var a = document.getElementById('b-play').getBoundingClientRect(), b = document.getElementById('rbar').getBoundingClientRect(); return [a.left - 8, a.top - 8, b.width, a.height + 16]; })()")
+            if args.shots:
+                import base64
+                os.makedirs(args.shots, exist_ok=True)
+                png = tab.call("Page.captureScreenshot", {"format": "png", "clip": {"x": r[0], "y": r[1], "width": 330, "height": r[3], "scale": 3}})["data"]
+                with open(os.path.join(args.shots, "rewind-close.png"), "wb") as f:
+                    f.write(base64.b64decode(png))
+            tab.close()
+            tab = new_tab(390, 844, 2, True)                                   # a phone upright
+            open_page(tab, "/play.html?replay=" + KEPT)
+            until(tab, READY)
+            time.sleep(1.0)
+            g = tab.ev(geo)
+            check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and g["bar"][0] >= 0 and g["bar"][2] <= g["vw"] and g["rew"][2] <= g["bar"][2] + 0.5, "390 px: the bar fits and so does the button (bar %r, button %r)" % (g["bar"], g["rew"]))
+            row = tab.ev("(function () { var ids = ['b-play', 'b-rew', 'clock', 'picbtn', 'b-fsx'], out = []; ids.forEach(function (id) { var e = document.getElementById(id); if (e.id === 'b-fsx' && getComputedStyle(e).display === 'none') return; var r = (e.parentNode.id === 'picwrap' ? e.parentNode : e).getBoundingClientRect(); out.push([r.left, r.right, r.top]); });"
+                         " return out; })()")
+            check(all(row[i][1] <= row[i + 1][0] + 0.5 for i in range(len(row) - 1)) and row[-1][1] <= g["vw"], "390 px: the buttons of the row lie apart and inside the screen %r" % row)
+            tab.ev("__stub.turn = 1000; __stub.state = 3; __stub.speed = 100; __stub.seeks.length = 0")
+            rx, ry = centre(tab, "b-rew")
+            tab.tap(rx, ry)
+            check(until(tab, "__stub.seeks.length === 1") is True and tab.ev(seeks) == [400], "a finger's tap seeks 30 s back")
+            until(tab, "__stub.state === 2")
+            tab.ev("__stub.turn = 1000; __stub.state = 3")
+            time.sleep(0.6)
+            shot(tab, "rewind-phone")
+            fx, fy = centre(tab, "fullscreen-btn-r")
+            tab.tap(fx, fy)
+            check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "the phone goes fullscreen")
+            time.sleep(0.6)
+            g = tab.ev(geo)
+            check(g["rew"][0] >= 0 and g["rew"][2] <= g["vw"] and g["bar"][2] <= g["vw"] + 0.5, "fullscreen on a phone: the button is inside the screen (%r)" % g["rew"])
+            shot(tab, "rewind-phone-fullscreen")
+            tab.close()
+            tab = new_tab(844, 390, 2, True)                                   # a phone on its side, fullscreen
+            open_page(tab, "/play.html?replay=" + KEPT)
+            until(tab, READY)
+            time.sleep(1.0)
+            fx, fy = centre(tab, "fullscreen-btn-r")
+            tab.tap(fx, fy)
+            check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "a phone on its side goes fullscreen")
+            time.sleep(0.6)
+            g = tab.ev(geo)
+            check(g["rew"][0] >= 0 and g["rew"][2] <= g["vw"] and g["bar"][2] <= g["vw"] + 0.5 and g["rew"][0] >= g["play"][2] - 0.5, "on its side: the button is right of Pause and inside the screen (%r)" % g["rew"])
+            shot(tab, "rewind-landscape-fullscreen")
+            tab.close()
+            fresh()
+            tab = new_tab()                                                    # a match that is being played: no button
+            open_page(tab, "/play.html?live=" + ID)
+            check(until(tab, READY) is True, "a live match starts")
+            time.sleep(0.5)
+            check(tab.ev("(" + SHOWN + ")('b-rew')") is False and tab.ev("document.getElementById('b-rew').hidden") is True, "a live match has no Back 30 seconds")
+            check(tab.ev("document.getElementById('rbar').classList.contains('islive')") is True, "(the bar is the live one)")
+            shot(tab, "rewind-live-none")
             tab.close()
 
         if args.only in ("", "picture"):
