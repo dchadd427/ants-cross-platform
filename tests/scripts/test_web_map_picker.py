@@ -38,7 +38,7 @@ class ThePage(unittest.TestCase):
         for ident in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'id="picker-panel"'):
             self.assertTrue(ident in self.page, ident)
         self.assertTrue('aria-haspopup="dialog"' in self.page)
-        self.assertTrue('role="dialog" aria-modal="true" aria-label="Choose a map"' in self.page)
+        self.assertTrue('role="dialog" aria-modal="true"></div></div>' in self.page)                        # (the picker names it by its heading: aria-labelledby)
         self.assertTrue("$('browse').disabled = side.mapDisabled;" in self.page)                           # the joiner's list is read-only as the selector is
 
     def test_the_scripts_come_before_the_pages_own_in_this_order(self):
@@ -46,8 +46,9 @@ class ThePage(unittest.TestCase):
 
     def test_a_choice_sets_the_rooms_map_like_the_selector_and_warms_the_cache(self):
         self.assertTrue("known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })" in self.page)
+        self.assertTrue("canOpen: isHost, canChoose: isHost" in self.page)
         self.assertTrue("AntsMapFiles.warm(window, file)" in self.page)
-        self.assertTrue("if (model && !model.guest && !model.starting) ensurePicker().open(model.mapFile);" in self.page)
+        self.assertTrue("if (isHost()) ensurePicker().open(model.mapFile);" in self.page)
 
     def test_the_list_is_fetched_once_and_a_failure_leaves_the_old_selector(self):
         self.assertEqual(len(re.findall(r"opts\.fetch\('/maps'", self.script)), 1)
@@ -82,12 +83,27 @@ class ThePickersOwnCode(unittest.TestCase):
             "ties are not by name": ("return a.original ? a.order - b.order : (b.plays - a.plays) || byName(a, b);", "return a.original ? a.order - b.order : (b.plays - a.plays);"),
             "the search leaves out the description": ("var hay = (m.name + ' ' + m.description).toLowerCase();", "var hay = m.name.toLowerCase();"),
             "the search needs one word only": ("return words.every(function (w) { return hay.indexOf(w) !== -1; });", "return words.some(function (w) { return hay.indexOf(w) !== -1; });"),
-            "a picture anywhere": ("[^\\s\"'<>\\\\\\/]+$/.test(url) ? url : ''", "[^\\s\"'<>\\\\]+$/.test(url) ? url : ''"),
+            "a picture may have a query or a slash": ("|/front/preview_[a-z]+\\\\.png)$');", "|/front/preview_[a-z]+\\\\.png)');"),
+            "an escaped slash is a name": ("|%(?!2[fF]|5[cC]|00)[0-9A-Fa-f]{2})*\";", "|%[0-9A-Fa-f]{2})*\";"),
+            "a name may start with a dot": ("name.charAt(0) !== '.' && /\\.(lvl|LVL)$/.test(name);", "/\\.(lvl|LVL)$/.test(name);"),
+            "any case of the ending": ("/\\.(lvl|LVL)$/.test(name);", "/\\.lvl$/i.test(name);"),
             "the view is not remembered": ("function remember(storage, v) { try { if (storage) storage.setItem(VIEW_KEY, v); }", "function remember(storage, v) { try { if (false) storage.setItem(VIEW_KEY, v); }"),
-            "the list is asked for every time": ("if (status === 'loading' || (status === 'ready' && !again)) return;", "if (status === 'loading') return;"),
+            "the list is asked for every time": ("if (status === 'ready' && !again) return;", ""),
+            "the list has no time limit": ("timer = later(failed, 12000);", ""),
+            "a failure is retried at once by the page": ("if (!again && status === 'error' && clock() - failedAt < 15000) return;", ""),
+            "reopening after an error does not retry": ("if (status === 'error' || status === 'idle') load(true); else", "if (status === 'idle') load(true); else"),
+            "a search is not waited for": ("typing = later(function () { typing = 0; query = parts.q.value; paint('top'); }, 120);", "query = parts.q.value; paint('top');"),
+            "a choice ignores whether the room is still the host's": ("var allowed = !opts.canChoose || opts.canChoose();", "var allowed = true;"),
+            "the list opens for a joiner": ("if (opts.canOpen && !opts.canOpen()) return;", ""),
+            "Escape on the body does not close": ("function onDocKey(e) { if (opened && e.key === 'Escape') { e.preventDefault(); close(); } }", "function onDocKey(e) {}"),
+            "the search box takes the focus on a phone": ("(coarse ? host : parts.q).focus();", "parts.q.focus();"),
+            "the room's map in another case is not found": ("function canon(file) { return byFile[file] ? file : byLower[String(file || '').toLowerCase()] ? byLower[String(file).toLowerCase()].file : file; }", "function canon(file) { return file; }"),
+            "a sort does not bring the chosen row into view": ("if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'center' }); else parts.out.scrollTop = was;", "parts.out.scrollTop = was;"),
+            "a new search keeps the old place": ("if (where === 'top') parts.out.scrollTop = 0;", "if (where === 'top') parts.out.scrollTop = was;"),
+            "no empty state": ("e.appendChild(el('b', '', 'No map is called \"' + query.trim() + '\".'));", "e.appendChild(el('b', '', ''));"),
+            "the description is printed in a row": ("body.appendChild(el('div', 'pk-meta', metaText(m)));", "body.appendChild(el('div', 'pk-meta', metaText(m) + ' ' + m.description));"),
             "Escape does not close": ("if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }", ""),
             "Enter does not choose": ("else if (k === 'Enter') { e.preventDefault(); if (i >= 0) choose(); return; }", "else if (k === 'Enter') { return; }"),
-            "no empty state": ("e.appendChild(el('b', '', 'No maps found'));", "e.appendChild(el('b', '', ''));"),
             "a name is markup": ("var nm = el('div', 'pk-nm', m.name);", "var nm = el('div', 'pk-nm'); nm.innerHTML = m.name;"),
         }
         with tempfile.TemporaryDirectory() as folder:

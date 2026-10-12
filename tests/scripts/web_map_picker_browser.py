@@ -51,7 +51,7 @@ class Visitor(Player):
         self.call("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True, "screenWidth": 390, "screenHeight": 844})
 
     def desktop(self):
-        self.resize(1280, 900)
+        self.resize(1280, 1050)
 
     def open_front(self, web):
         self.call("Page.navigate", {"url": web})
@@ -182,7 +182,7 @@ def main():
             v.ev("document.querySelector('#picker-panel .pk-q').focus()")
             v.type("zzqq")
             time.sleep(0.3)
-            check(v.ev("document.querySelector('#picker-panel .pk-empty') !== null && document.querySelector('#picker-panel .pk-empty').textContent.indexOf('No maps found') === 0"), "a search with no result says \"No maps found\"")
+            check(v.ev("document.querySelector('#picker-panel .pk-empty') !== null && document.querySelector('#picker-panel .pk-empty').textContent.indexOf('No map is called') === 0"), "a search with no result says that no map is called so")
             v.shot(args.shots, "picker-desktop-empty")
             v.ev("(function () { var q = document.querySelector('#picker-panel .pk-q'); q.value = ''; q.dispatchEvent(new Event('input', { bubbles: true })); })()")
             v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel .pk-chip')).filter(function (b) { return b.textContent === 'Detail'; })[0].click()")
@@ -208,6 +208,7 @@ def main():
             room = server.room(v.room_code()) or {}
             check(room.get("map") == chosen, "the server's room is on the chosen map (%s)" % room.get("map"))
             check(v.ev("document.getElementById('map-other').textContent") == chosen[:-4], "the drop-down shows its name")
+            check(v.ev("document.getElementById('picker-panel').getAttribute('aria-labelledby')") == "picker-h", "the dialog is named by its heading")
             check(bool(wait_for(lambda: v.ev("document.getElementById('preview').naturalWidth") == 300, 10)), "the picture beside the selector is the map's own (300 px)")
             check(len(v.ev("document.getElementById('info').textContent")) > 0, "the Map Info line under the picture says something of it (%s)" % v.ev("document.getElementById('info').textContent"))
             check(("/maps/files/" + chosen) in front.requests, "the file was fetched at once (the browser's cache is warm)")
@@ -217,21 +218,54 @@ def main():
             v.shot(args.shots, "picker-desktop-selected")
             v.press("Escape")
             check(not v.visible(), "Escape closes the list")
+            check(v.ev("document.getElementById('browse').getAttribute('aria-haspopup')") == "dialog", "the button says it opens a dialog")
+            check(v.ev("document.querySelector('#picker-panel .pk-q').getAttribute('placeholder')") == "Search %d maps" % len(listing), "the search box says how many maps there are")
+            check("30 seconds" in (v.ev("document.querySelector('#picker-panel .pk-fine').textContent") or ""), "the fine print about the plays is under the list")
             v.ev("document.getElementById('next').click()")
             time.sleep(0.5)
             room = server.room(v.room_code()) or {}
-            check(room.get("map", "").endswith(".LVL") and room.get("map") != chosen, "previous and next still work (the room is on %s)" % room.get("map"))
+            check(room.get("map") == "TINY.LVL", "next from a map of the players goes to the first original (%s)" % room.get("map"))
+
+            def pick_top():
+                v.open_list()
+                v.ev("document.querySelector('#picker-panel [data-file=\"%s\"]').click()" % top[0]["file"].replace('"', ''))
+                v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel button')).filter(function (b) { return b.textContent === 'Choose map'; })[0].click()")
+                time.sleep(0.6)
+            pick_top()
+            v.ev("document.getElementById('prev').click()")
+            time.sleep(0.5)
+            room = server.room(v.room_code()) or {}
+            check(room.get("map") == "ISLANDS.LVL", "previous from a map of the players goes to the last original (%s)" % room.get("map"))
+            pick_top()
+            plan = v.ev("document.getElementById('plan').textContent") or ""
+            check(plan.startswith("This map needs a computer player"), "alone on a map of the players the line under START says what it needs (%s)" % plan)
+            v.ev("document.getElementById('start').click()")
+            time.sleep(0.5)
+            check("needs a second player or a computer player" in (v.ev("document.getElementById('banner-text').textContent") or ""), "and START says so too, in the strip")
+            v.shot(args.shots, "lobby-community-alone")
+            check(v.ev("window.location.pathname") == "/", "START stayed on the front page")
+            v.ev("document.getElementById('banner-x').click()")
+            v.open_list()
+            check(v.ev("document.getElementById('lobby').hasAttribute('inert') && document.getElementById('footer-bar').hasAttribute('inert')"), "the page behind the open list is inert")
+            v.ev("document.body.focus(); document.activeElement.blur()")
+            v.press("Escape")
+            check(not v.visible() and not v.ev("document.getElementById('lobby').hasAttribute('inert')"), "Escape closes the list and the page is live again")
 
         if wanted("phone"):
             print("part phone", flush=True)
             v = visitor("Bea")
             v.phone()
             check(v.open_front(web), "the front page is up on a phone")
+            v.ev("(function () { var real = window.matchMedia.bind(window); window.matchMedia = function (q) { return /pointer:\\s*coarse/.test(q) ? { matches: true } : real(q); }; })()")      # (the check's browser has a mouse: it is told that this screen is a touch screen)
             check(v.open_list(), "the list opens on a phone")
             check(v.ev("document.documentElement.scrollWidth <= window.innerWidth"), "no sideways scroll with the list open")
             panel = v.ev("(function () { var r = document.getElementById('picker-panel').getBoundingClientRect(); return [r.left, r.right, r.bottom, window.innerWidth, window.innerHeight]; })()")
             check(panel[0] == 0 and panel[1] == panel[3] and abs(panel[2] - panel[4]) <= 1, "the list is a sheet over the whole width, at the bottom (%s)" % panel)
             check(v.ev("Math.round(document.querySelector('#picker-panel [data-file] img').getBoundingClientRect().width)") == 56, "the pictures are smaller on a phone")
+            share = v.ev("(function () { var o = document.querySelector('#picker-panel .pk-out').getBoundingClientRect().height, p = document.getElementById('picker-panel').getBoundingClientRect().height; return o / p; })()")
+            check(share > 0.45, "the list has at least 45%% of the sheet, the controls the rest (%.0f%%)" % (share * 100))
+            check(v.ev("document.activeElement.className") != "pk-q", "no keyboard is called up: the search box has not taken the focus")
+            check(v.ev("(function () { var s = document.querySelector('#picker-panel .pk-sorts'); return s.scrollWidth >= s.clientWidth && getComputedStyle(s).flexWrap === 'nowrap'; })()"), "the sort buttons are one row")
             v.shot(args.shots, "picker-phone-detail")
             v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel .pk-chip')).filter(function (b) { return b.textContent === 'Thumbnails'; })[0].click()")
             check(v.ev("document.documentElement.scrollWidth <= window.innerWidth"), "no sideways scroll in Thumbnails")

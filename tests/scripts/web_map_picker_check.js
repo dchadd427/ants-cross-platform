@@ -61,7 +61,7 @@ const RAW = {
 
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------
 class Node {
-    constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.isText = false; }
+    constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }
     get textContent() { return this.isText ? this._text : this.children.map((c) => c.textContent).join(''); }
     set textContent(v) { this.children = []; if (String(v) !== '') { const t = this.doc.createTextNode(String(v)); t.parentNode = this; this.children.push(t); } }
     appendChild(c) { if (c.isFragment) { c.children.slice().forEach((k) => this.appendChild(k)); c.children = []; return c; } c.parentNode = this; this.children.push(c); return c; }
@@ -73,7 +73,7 @@ class Node {
     addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }
     contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }
     focus() { this.doc.activeElement = this; }
-    scrollIntoView() {}
+    scrollIntoView() { this.doc.scrolledTo = this; }
     closest(sel) { for (let x = this; x; x = x.parentNode) if (x.matches && x.matches(sel)) return x; return null; }
     matches(sel) { return sel.split(',').some((one) => matchOne(this, one.trim())); }
     querySelectorAll(sel) { const out = []; const walk = (n) => { n.children.forEach((c) => { if (!c.isText && c.matches(sel)) out.push(c); walk(c); }); }; walk(this); return out; }
@@ -101,7 +101,10 @@ function matchOne(node, sel) {
     return any;
 }
 function makeDoc() {
-    const doc = { activeElement: null };
+    const doc = { activeElement: null, listeners: {} };
+    doc.addEventListener = (t, f) => { (doc.listeners[t] = doc.listeners[t] || []).push(f); };
+    doc.removeEventListener = (t, f) => { doc.listeners[t] = (doc.listeners[t] || []).filter((g) => g !== f); };
+    doc.dispatch = (type, init) => { const ev = Object.assign({ type, key: '', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, init || {}); (doc.listeners[type] || []).slice().forEach((f) => f(ev)); return ev; };
     doc.createElement = (tag) => new Node(doc, tag);
     doc.createTextNode = (t) => { const n = new Node(doc, '#text'); n.isText = true; n._text = t; return n; };
     doc.createDocumentFragment = () => { const n = new Node(doc, '#frag'); n.isFragment = true; return n; };
@@ -116,13 +119,18 @@ function rig(options) {
     const host = new Node(doc, 'div'); overlay.appendChild(host);
     const store = {};
     const storage = options.storage === undefined ? { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } } : options.storage;
-    const log = { fetches: [], chosen: [], lists: 0, closed: 0 };
+    const log = { fetches: [], chosen: [], lists: 0, closed: 0, opened: 0 };
     let answer = options.answer || (() => Promise.resolve(response(RAW)));
+    const timers = [], allow = { open: true, choose: true }, clock = { now: 1000000 };
     const picker = P.create({
-        host, doc, storage, fetch: (url, init) => { log.fetches.push({ url, init }); return answer(); },
-        onChoose: (e) => log.chosen.push(e.file), onList: () => { log.lists++; }, onClose: () => { log.closed++; }
+        host, doc, storage, fetch: (url, init) => { log.fetches.push({ url, init }); return answer(init); },
+        setTimeout: (f, ms) => { timers.push({ f, ms, live: true }); return timers.length; }, clearTimeout: (t) => { if (timers[t - 1]) timers[t - 1].live = false; },
+        AbortController: function () { this.signal = { aborted: false }; this.abort = () => { this.signal.aborted = true; }; }, now: () => clock.now,
+        matchMedia: () => ({ matches: !!options.coarse }), canOpen: () => allow.open, canChoose: () => allow.choose,
+        onChoose: (e) => log.chosen.push(e.file), onList: () => { log.lists++; }, onClose: () => { log.closed++; }, onOpen: () => { log.opened++; }
     });
-    return { picker, host, overlay, doc, store, log, setAnswer: (f) => { answer = f; },
+    const fire = (ms) => { timers.filter((t) => t.live && (ms === undefined || t.ms === ms)).forEach((t) => { t.live = false; t.f(); }); };
+    return { picker, host, overlay, doc, store, log, timers, allow, clock, fire, setAnswer: (f) => { answer = f; },
         rows: () => host.querySelectorAll('[data-file]'), names: () => host.querySelectorAll('[data-file]').map((n) => n.querySelector('.pk-nm').children[0].textContent),
         sel: () => host.querySelectorAll('[data-file]').filter((n) => n.attrs['aria-selected'] === 'true').map((n) => n.attrs['data-file']),
         btn: (label) => host.querySelectorAll('button').find((b) => b.textContent === label), out: () => host.querySelector('.pk-out') };
@@ -147,7 +155,8 @@ function rig(options) {
         same('one stop for the Tab key in the list: the picked one', r.rows().filter((n) => n.attrs.tabindex === '0').map((n) => n.attrs['data-file']), ['Zebra.lvl']);
         r.picker.close(); r.picker.open('');
         await settle();
-        same('opened again: no second fetch for the visit', r.log.fetches.length, 1);
+        r.picker.load(); r.picker.load();
+        same('opened again, and the page asking for the list: no second fetch for the visit', r.log.fetches.length, 1);
         same('nothing is picked when the room names no map', r.sel(), []);
         same('then the first row is the one stop', r.rows().filter((n) => n.attrs.tabindex === '0').length, 1);
         // the pictures
@@ -189,15 +198,15 @@ function rig(options) {
         r.picker.open('');
         await settle();
         const q = r.host.querySelector('.pk-q');
-        q.value = 'MANGO'; q.dispatch('input');
+        q.value = 'MANGO'; q.dispatch('input'); r.fire(120);
         same('typing searches', [r.names(), r.host.querySelector('.pk-count').textContent], [['Mango tree'], '1 of 7 maps shown']);
-        q.value = 'fight'; q.dispatch('input');
+        q.value = 'fight'; q.dispatch('input'); r.fire(120);
         same('the description is searched', r.names(), ['apple']);
-        check('and shown as text, not as markup', r.rows()[0].textContent.indexOf('<b>fight</b>') !== -1 && r.rows()[0].querySelectorAll('b').length === 1);
-        q.value = 'zzz'; q.dispatch('input');
-        check('a search with no result says so', /No maps found/.test(r.out().textContent) && r.rows().length === 0);
+        check('and the row does not print it (the Map Info line has it)', r.rows()[0].textContent.indexOf('fight') === -1 && r.rows()[0].textContent.indexOf('by someone') === -1);
+        q.value = 'zzz'; q.dispatch('input'); r.fire(120);
+        same('a search with no result says so, as the mock-up does', [r.out().textContent, r.rows().length], ['No map is called "zzz".Try fewer letters.', 0]);
         check('and the Choose button is off', r.btn('Choose map').disabled === true);
-        q.value = ''; q.dispatch('input');
+        q.value = ''; q.dispatch('input'); r.fire(120);
         r.btn('Name').dispatch('click');
         same('sort by name', [r.names().slice(0, 3), r.btn('Name').attrs['aria-pressed'], r.btn('Originals, then plays').attrs['aria-pressed']], [['Alpha', 'apple', 'Dune'], 'true', 'false']);
         r.btn('Most played').dispatch('click');
@@ -292,8 +301,145 @@ function rig(options) {
         await settle();
         same('a name that no file can have (markup) is left out of the list', r.names().length, 2);
         check('a name with & and a quote is shown as it is', r.names().includes("a&amp;b 'x'"), JSON.stringify(r.names()));
-        check('the description is text', r.host.querySelectorAll('script').length === 0 && r.rows().some((n) => n.textContent.indexOf('"><script>alert(1)</script>') !== -1));
+        check('the description is never markup', r.host.querySelectorAll('script').length === 0);
         check('a picture address that is not the site\'s own makes no picture', r.rows().filter((n) => n.children[0].tagName === 'SPAN').length === 1 && r.host.querySelectorAll('img').every((i) => /^\/maps\/previews\//.test(i.attrs.src)));
+    }
+    // 8. the rules for a name and a picture are the game's and the server's
+    {
+        const keep = (maps) => P.parseList({ format: 1, maps }).map((m) => m.file);
+        same('a map name follows net::valid_map_name: five characters at least, no leading dot, exactly .lvl or .LVL, no forbidden character, printable',
+            keep(['.lvl', 'a.lvl', '.hid.lvl', 'abcde.Lvl', 'abcde.lVL', 'ab.LVL', 'x'.repeat(61) + '.lvl', 'x'.repeat(60) + '.lvl', 'a b.LVL', 'a*b.lvl', 'a?b.lvl', 'a:b.lvl', 'a|b.lvl', 'aébc.lvl', 'a\tbc.lvl', '', 'tiny.LVL'].map((f) => ({ file: f }))),
+            ['a.lvl', 'ab.LVL', 'x'.repeat(60) + '.lvl', 'a b.LVL', 'tiny.LVL']);
+        const pic = (t) => P.parseList({ format: 1, maps: [{ file: 'abcde.lvl', thumb: t }] })[0].thumb;
+        const good = ['/maps/previews/Thief%20craker.webp', '/maps/previews/dots..webp', '/maps/previews/%C3%A9.webp', '/front/preview_tiny.png', '/maps/previews/!a.webp'.replace('!', '%21')];
+        same('the two shapes of picture the server writes are kept', good.map(pic), good);
+        const bad = ['/maps/previews/a%2Fb.webp', '/maps/previews/a%2fb.webp', '/maps/previews/a%5Cb.webp', '/maps/previews/a%5cb.webp', '/maps/previews/a%00b.webp', '/maps/previews/a%2.webp', '/maps/previews/a.webp?x=1', '/maps/previews/a.webp#x',
+            '/maps/previews/../a.webp', '/maps/previews/a/b.webp', '/maps/previews/.webp', '/maps/previews/.hidden.webp', '/maps/previews/a b.webp', '/maps/previews/a.png', '/front/preview_TINY.png', '/front/preview_tiny.png?v=1', '/front/preview_.png',
+            '/front/logo.png', '/maps/files/a.webp', 'https://x.example/maps/previews/a.webp', '//x.example/maps/previews/a.webp', 'maps/previews/a.webp', 'javascript:alert(1)', '/maps/previews/a\\b.webp', '/maps/previews/a"b.webp', 5, null];
+        same('everything else is no picture', bad.map(pic), bad.map(() => ''));
+    }
+    // 9. the mock-up's words, the room's map in another case, the labels
+    {
+        const r = rig();
+        r.picker.open('treasure.lvl'); await settle();
+        same('the search box says how many maps there are', r.host.querySelector('.pk-q').attrs.placeholder, 'Search 7 maps');
+        same('the fine print of the plays is under the list', r.host.querySelector('.pk-fine').textContent, 'Plays count only matches with people in them that lasted at least 30 seconds.');
+        same('the room\'s map in another case is the highlighted one', r.sel(), ['TREASURE.LVL']);
+        same('and find() knows it', [r.picker.find('treasure.lvl').name, r.picker.find('nothing.lvl')], ['Treasure', null]);
+        same('the dialog is named by its heading', [r.host.attrs['aria-labelledby'], r.host.querySelector('h2').id], ['picker-h', 'picker-h']);
+        same('a Detail row says players, minutes and size for a map of the players and not its description', [r.rows()[2].textContent.indexOf('4 players · 10 min · 100×90') !== -1, r.rows()[3].textContent.indexOf('Fruit') === -1], [true, true]);
+        const q2 = r.host.querySelector('.pk-q'); q2.value = 'Mango tree'; q2.dispatch('input'); r.fire(120);
+        same('the empty state quotes the text', (function () { q2.value = 'qqq  '; q2.dispatch('input'); r.fire(120); return r.out().textContent; })(), 'No map is called "qqq".Try fewer letters.');
+    }
+    // 10. the search waits for the typing to pause
+    {
+        const r = rig();
+        r.picker.open(''); await settle();
+        const q = r.host.querySelector('.pk-q');
+        q.value = 'm'; q.dispatch('input'); q.value = 'ma'; q.dispatch('input'); q.value = 'mango'; q.dispatch('input');
+        same('while typing the list is not made again', r.rows().length, 7);
+        same('one wait is live, 120 ms (the earlier ones were cancelled)', r.timers.filter((t) => t.live).map((t) => t.ms), [120]);
+        r.fire(120);
+        same('when it pauses the last text is searched', r.names(), ['Mango tree']);
+        q.value = 'ze'; q.dispatch('input');
+        r.picker.close();
+        check('closing cancels a wait', r.timers.filter((t) => t.live && t.ms === 120).length === 0);
+        r.picker.open(''); await settle();
+        q.value = 'ze'; q.dispatch('input');
+        const b = r.btn('Name'); b.dispatch('click');
+        same('a sort made while a search waits makes the search first', [r.names(), r.timers.filter((t) => t.live && t.ms === 120).length], [['Zebra'], 0]);
+        q.value = 'ap'; q.dispatch('input');
+        r.rows()[0].dispatch('click'); r.btn('Choose map').dispatch('click');
+        same('choosing while a search waits chooses the row that was clicked', r.log.chosen, ['Zebra.lvl']);
+    }
+    // 11. where the list stands
+    {
+        const r = rig();
+        r.picker.open('Zebra.lvl'); await settle();
+        r.doc.scrolledTo = null;
+        r.btn('Name').dispatch('click');
+        check('after a sort the chosen row is brought into view', r.doc.scrolledTo && r.doc.scrolledTo.attrs['data-file'] === 'Zebra.lvl');
+        r.doc.scrolledTo = null;
+        r.btn('Thumbnails').dispatch('click');
+        check('after a view change too', r.doc.scrolledTo && r.doc.scrolledTo.attrs['data-file'] === 'Zebra.lvl');
+        r.out().scrollTop = 77;
+        const q = r.host.querySelector('.pk-q'); q.value = 'a'; q.dispatch('input'); r.fire(120);
+        same('a new search starts at the top', r.out().scrollTop, 0);
+        const n = rig();
+        n.picker.open(''); await settle();
+        n.out().scrollTop = 41;
+        n.btn('Size').dispatch('click');
+        same('with no chosen row a sort leaves the list where it was', n.out().scrollTop, 41);
+    }
+    // 12. the list that does not come, comes late, or fails
+    {
+        let signal = null, late = null;
+        const r = rig({ answer: (init) => { signal = init.signal; return new Promise((resolve) => { late = () => resolve(response(RAW)); }); } });
+        r.picker.open('');
+        same('a list that does not come: loading', [r.picker.status(), /Loading/.test(r.out().textContent)], ['loading', true]);
+        same('a try is given 12 s', r.timers.filter((t) => t.live).map((t) => t.ms), [12000]);
+        r.fire(12000);
+        await settle();
+        same('then it is an error with Try again and the request was aborted', [r.picker.status(), !!r.host.querySelector('[data-retry]'), signal.aborted], ['error', true, true]);
+        late(); await settle();
+        same('an answer of the aborted try that comes anyway is ignored', [r.picker.status(), r.log.lists], ['error', 0]);
+        r.setAnswer(() => Promise.resolve(response(RAW)));
+        r.host.querySelector('[data-retry]').dispatch('click'); await settle();
+        same('Try again fetches again and the list shows', [r.picker.status(), r.rows().length, r.log.fetches.length], ['ready', 7, 2]);
+        check('the timer of a good try is gone', r.timers.filter((t) => t.live).length === 0);
+        // reopening after an error retries by itself; the page's soft asks wait 15 s after a failure
+        const q = rig({ answer: () => Promise.reject(new Error('offline')) });
+        q.picker.open(''); await settle();
+        same('an error', q.picker.status(), 'error');
+        q.picker.load();
+        same('the page asking for the list at once after a failure does not fetch again', q.log.fetches.length, 1);
+        q.clock.now += 16000;
+        q.picker.load();
+        same('16 s later it does', q.log.fetches.length, 2);
+        await settle();
+        q.setAnswer(() => Promise.resolve(response(RAW)));
+        q.picker.close(); q.picker.open('');
+        await settle();
+        same('opening the list after an error tries again by itself', [q.picker.status(), q.log.fetches.length, q.rows().length], ['ready', 3, 7]);
+        // a list that is stuck in loading is not a lock: closing and opening again after the time ran out tries again
+        const w = rig({ answer: () => new Promise(() => {}) });
+        w.picker.open(''); w.fire(12000); await settle(); w.picker.close();
+        w.setAnswer(() => Promise.resolve(response(RAW)));
+        w.picker.open(''); await settle();
+        same('a stuck list does not lock the page', [w.picker.status(), w.rows().length], ['ready', 7]);
+    }
+    // 13. only the host: the list does not open for anybody else and a choice made after the room changed hands is not sent
+    {
+        const r = rig();
+        r.allow.open = false;
+        r.picker.open('');
+        same('a joiner\'s page opens nothing (no dialog, no fetch, no hook)', [r.overlay.hidden, r.picker.isOpen(), r.log.fetches.length, r.log.opened], [true, false, 0, 0]);
+        r.allow.open = true;
+        r.picker.open('TINY.LVL'); await settle();
+        same('the host opens it, the page is told', [r.overlay.hidden, r.log.opened], [false, 1]);
+        r.rows()[3].dispatch('click');
+        r.allow.choose = false;                                                   // the leader left while the list was open
+        r.btn('Choose map').dispatch('click');
+        same('a choice made after the room changed hands closes the list and sends nothing', [r.overlay.hidden, r.log.chosen, r.log.closed], [true, [], 1]);
+        r.allow.choose = true;
+        r.picker.open('TINY.LVL'); await settle();
+        r.rows()[3].dispatch('click'); r.btn('Choose map').dispatch('click');
+        same('while the host the choice is sent', r.log.chosen, ['apple.lvl']);
+    }
+    // 14. Escape anywhere, the focus on a phone
+    {
+        const r = rig();
+        r.picker.open(''); await settle();
+        same('the list listens for Escape on the document while it is open', r.doc.listeners.keydown.length, 1);
+        r.doc.activeElement = null;
+        const ev = r.doc.dispatch('keydown', { key: 'Escape' });
+        same('Escape with the focus on the body closes it', [r.overlay.hidden, ev.defaultPrevented, r.doc.listeners.keydown.length, r.log.closed], [true, true, 0, 1]);
+        r.doc.dispatch('keydown', { key: 'Escape' });
+        same('a closed list does not close again', r.log.closed, 1);
+        const fine = rig(); fine.picker.open(''); await settle();
+        check('on a screen with a mouse the search box has the focus', fine.doc.activeElement === fine.host.querySelector('.pk-q'));
+        const coarse = rig({ coarse: true }); coarse.picker.open(''); await settle();
+        check('on a touch screen the dialog has the focus and no keyboard comes up', coarse.doc.activeElement === coarse.host && coarse.doc.activeElement !== coarse.host.querySelector('.pk-q'));
     }
     console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');
     process.exit(failures ? 1 : 0);

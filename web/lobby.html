@@ -204,7 +204,8 @@
     .name-step-back { margin-top: 14px; }
 
     /* ---- the map list (front/map_picker.js): a dialog opened from the map selector; a bottom sheet on a phone ---- */
-    .pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+    .pickhow .panel > * { flex: none; } .pickhow .panel > .pk-out { flex: 1 1 auto; }
+    .pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
     .pk-bar, .pk-sorts, .pk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; } .pk-seg { display: flex; gap: 6px; }
     .pk-q { flex: 1 1 200px; min-width: 0; min-height: 44px; padding: 6px 12px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; }
     .pk-chip { min-height: 38px; padding: 3px 12px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
@@ -219,7 +220,7 @@
     .pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
     .pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
     .pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
-    .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
+    .pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
 
     /* ---- narrower windows ---- */
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
@@ -264,7 +265,8 @@
         .bar { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
         .share { display: inline-flex; }
         .toast { bottom: 150px; }
-        .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; }       /* the map list is a sheet at the bottom of the screen */
+        .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; max-height: calc(100dvh - 24px); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+        .pk-sorts { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; } .pk-sorts > * { flex: none; white-space: nowrap; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { scrollbar-width: thin; } .pk-bar { margin-bottom: 8px; }       /* the sorts are one row that scrolls sideways: the controls leave the list most of the sheet */       /* the map list is a sheet at the bottom of the screen */
         .pk-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; } .pk-row img, .pk-nopic { width: 56px; height: 56px; } .pk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
         .pk-q { flex-basis: 100%; } .maprow .browse { grid-column: 2; justify-self: start; }
     }
@@ -358,7 +360,7 @@
 </div></footer>
 </div>
 
-<div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true" aria-label="Choose a map"></div></div>
+<div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
     <h3>The room</h3><p>Open the page and your room is ready, with the first colour yours. The four colours lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free colour and show up here at once. The host drags a player onto another colour to move them; a colour that is taken swaps places. On a phone, tap a player's dots and then the colour.</p>
@@ -839,8 +841,9 @@
                 $('preview').setAttribute('data-map', shownMap);
             }
             paintSelect(side);
-            if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() === 'idle')) ensurePicker().load(); }
+            if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() !== 'ready')) ensurePicker().load(); }
             setText($('info'), side.mapInfo);
+            if (side.mapDisabled && picker && picker.isOpen()) picker.close();       // (the room changed hands, or START was pressed, while the list was open)
             $('browse').disabled = side.mapDisabled; $('map').disabled = side.mapDisabled; $('prev').disabled = side.mapDisabled; $('next').disabled = side.mapDisabled;
             var start = $('start');
             start.disabled = side.startDisabled;
@@ -1035,16 +1038,17 @@
             if (!client || !client.room) return false;
             return client.setPlan(Rules.planWith(client.room, Rules.modelOf(client.room), change));
         }
-        function setMap(index) {
-            var list = Rules.MAPS;
-            var key = list[(index + list.length) % list.length].key;
+        function setMap(step) {                          // the next or the previous original; from a map of the players the first or the last
+            var list = Rules.MAPS, at = mapIndex();
+            var key = list[at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length].key;
             if (!sendPlan({ map: key })) render();
         }
-        $('prev').addEventListener('click', function () { if (model) setMap(mapIndex() - 1); });
-        $('next').addEventListener('click', function () { if (model) setMap(mapIndex() + 1); });
+        $('prev').addEventListener('click', function () { if (model) setMap(-1); });
+        $('next').addEventListener('click', function () { if (model) setMap(1); });
         $('map').addEventListener('change', function () { if ($('map').value === '*' || !sendPlan({ map: $('map').value })) render(); });
         function mapIndex() {
             var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;
+            if (model && !model.map && model.mapFile) return -1;          // a map of the players is none of the six
             for (var i = 0; i < list.length; i++) if (list[i].key === key) return i;
             return 0;
         }
@@ -1053,9 +1057,13 @@
         // ---- the map list (front/map_picker.js): the selector's prev, next and drop-down stay; "Browse all maps" opens the list of the server's maps, the players' ones too ----
         var picker = null, warmed = {};
         function ensurePicker() {
-            if (!picker) picker = AntsMapPicker.create({ host: $('picker-panel'), doc: document, fetch: function (u, i) { return window.fetch(u, i); }, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), onChoose: chooseMap, onList: render, onClose: function () { $('browse').focus(); } });
+            if (!picker) picker = AntsMapPicker.create({ host: $('picker-panel'), doc: document, fetch: function (u, i) { return window.fetch(u, i); }, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(),
+                AbortController: window.AbortController, matchMedia: function (q) { return window.matchMedia(q); }, canOpen: isHost, canChoose: isHost, onChoose: chooseMap, onList: render,
+                onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); } });
             return picker;
         }
+        function isHost() { return !!(model && !model.guest && !model.starting); }
+        function inert(on) { ['lobby', 'footer-bar'].forEach(function (id) { if (on) $(id).setAttribute('inert', ''); else $(id).removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
         function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : null; }
         function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
         function chooseMap(entry) {
@@ -1070,7 +1078,7 @@
             setText(other, side.mapName); $('map').value = '*';
         }
         if (window.fetch && window.AntsMapPicker) $('browse').hidden = false;
-        $('browse').addEventListener('click', function () { if (model && !model.guest && !model.starting) ensurePicker().open(model.mapFile); });
+        $('browse').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });
 
         $('start').addEventListener('click', function () {
             if (!client || !model || model.guest || model.starting || offline) return;

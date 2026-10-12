@@ -315,15 +315,16 @@
             else if (s.kind === 'open') open.push(COLOURS[i].name);
         });
         var list = listOf(names); list = list.charAt(0).toUpperCase() + list.slice(1);
-        var text = names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
-        if (open.length) text += ' ' + listOf(open) + (open.length > 1 ? ' are open and stay empty' : ' is open and stays empty') + ' unless a player joins first.';
+        var alone = names.length === 1 && !!file;       // a map of the players with nobody else: the game page's own single player knows the six originals only, so START needs a computer player
+        var text = alone ? 'This map needs a computer player: set an open colour to Easy, Medium or Hard.' : names.length === 1 ? 'A game for one' + (open.length ? '.' : ': only your colony is on the map.') : list + ' play on ' + m.name + '.';
+        if (open.length && !alone) text += ' ' + listOf(open) + (open.length > 1 ? ' are open and stay empty' : ' is open and stays empty') + ' unless a player joins first.';
         var host = hostName(model);
         var label = busy ? 'Getting ready…' : away === 'lost' ? 'Reconnecting…' : away ? 'START!' : g ? 'Waiting for ' + host : 'START!';
         var plan = busy ? (g ? host + ' pressed START. ' : '') + 'Opening the game for everybody. The match begins as soon as all of you are in.'
             : away === 'lost' ? 'START comes back as soon as you are in.' : away === 'join' ? '' : away ? 'There is no room yet.'
             : g ? host + ' starts the match when everybody is in. ' + (names.length > 1 ? list + ' play on ' + m.name + '.' : '') : text;
         var shortText = busy ? (g ? host + ' pressed START' : 'Opening the game for everybody') : away === 'lost' ? 'Getting you back in' : away === 'join' ? '' : away ? 'No room yet'
-            : g ? host + ' starts the match' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
+            : g ? host + ' starts the match' : alone ? 'Needs a computer player' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
         var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away, startBusy: busy, startLabel: label, plan: plan, planShort: shortText };
         if (file) { out.mapFile = file; out.mapThumb = c && c.thumb || ''; }       // (a map of the players: the page paints its picture and name from these)
         return out;
