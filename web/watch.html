@@ -174,6 +174,7 @@
 </div>
 
 <script src="replay_page.js"></script>
+<script src="front/map_picker.js"></script>
 <script>
 (function () {
     'use strict';
@@ -198,24 +199,58 @@
     function pluralMatches(n) { return n + (n === 1 ? ' match' : ' matches'); }
 
     // ---- one match of the list ----
-    function pictureNode(map) {                                  // the map's picture (a blank square for a map that is not one of the six)
-        var tv = el('figure', 'tv');
+    // The picture of a match's map: one of the six has its own (front/preview_<word>.png); a map of the players has the picture that the map picker shows (AntsMapPicker.thumbFor: the server's list GET /maps when it
+    // has come, else the address that the name makes). A picture that is not there leaves the dark square. `pictures` holds the squares on the page so that the list, when it comes, can correct an address.
+    var maps = null;                                             // the server's map list (AntsMapPicker.parseList), null until it has come
+    var pictures = [];                                           // { tv, map, tried, group }: the squares of maps of the players, and the address each one tried
+    function fillPicture(tv, map, item) {
+        tv.textContent = '';
         var key = R.mapKey(map);
+        var url = key || !window.AntsMapPicker ? '' : window.AntsMapPicker.thumbFor(map, maps);
+        if (item) item.tried = url;
+        if (!key && !url) { tv.appendChild(el('div', 'blank')); return; }
+        var img = el('img');
+        img.alt = '';
+        img.width = 300; img.height = 300;
         if (key) {
-            var img = el('img');
             img.src = 'front/preview_' + key + '.png';
-            img.alt = '';
-            img.width = 300; img.height = 300;
-            tv.appendChild(img);
         } else {
-            tv.appendChild(el('div', 'blank'));
+            img.loading = 'lazy'; img.decoding = 'async';
+            img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });
+            img.src = url;
+        }
+        tv.appendChild(img);
+    }
+    function forgetPictures(group) { pictures = pictures.filter(function (item) { return item.group !== group; }); }      // (a list that is built again forgets its old squares: they are gone from the page)
+    var mapsAsked = false;
+    function pictureNode(map, group) {                           // group: 'live' or 'list' (the box the square is in)
+        var tv = el('figure', 'tv');
+        var item = R.mapKey(map) ? null : { tv: tv, map: map, tried: '', group: group };
+        fillPicture(tv, map, item);
+        if (item) {
+            pictures.push(item);
+            if (!mapsAsked) { mapsAsked = true; lookMaps(); }     // (the list of the maps is asked for with the first map of the players that the page shows)
         }
         return tv;
+    }
+    function lookMaps() {                                        // the list of the maps: asked once; a failure leaves the addresses that the names make
+        var request;
+        try { request = fetch('/maps', { credentials: 'same-origin' }); } catch (e) { return; }
+        request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
+            var list = data && window.AntsMapPicker ? window.AntsMapPicker.parseList(data) : null;
+            if (!list) return;
+            maps = list;
+            pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });      // (squares that left the page)
+            pictures.forEach(function (item) {
+                var url = window.AntsMapPicker.thumbFor(item.map, maps);
+                if (url !== item.tried) fillPicture(item.tv, item.map, item);
+            });
+        }).catch(function () { /* the pictures stay as they are */ });
     }
     function entryNode(e, old) {
         var now = new Date();
         var li = el('li', old ? 'entry old' : 'entry');
-        li.appendChild(pictureNode(e.map));
+        li.appendChild(pictureNode(e.map, 'list'));
         var length = R.lengthText(e.seconds);
         var info = el('div', 'info');
         info.appendChild(el('h3', '', R.mapTitle(e.map)));
@@ -259,7 +294,7 @@
     function liveEntryNode(e) {
         var length = R.lengthText(e.seconds);
         var li = el('li', 'entry liveentry');
-        li.appendChild(pictureNode(e.map));
+        li.appendChild(pictureNode(e.map, 'live'));
         var info = el('div', 'info');
         info.appendChild(el('h3', '', R.mapTitle(e.map)));
         var when = el('p', 'when');
@@ -282,6 +317,7 @@
     function renderLive() {
         var panel = $('live-panel'), body = $('live-body'), count = $('live-count');
         body.textContent = '';
+        forgetPictures('live');
         if (state.live === null) { panel.hidden = true; count.textContent = ''; return; }
         panel.hidden = false;
         var n = state.live.length;
@@ -371,6 +407,7 @@
     function render() {
         var body = $('list-body'), count = $('list-count');
         body.textContent = '';
+        forgetPictures('list');
         var n = state.current.length;
         if (n === 0) {
             count.textContent = '';
@@ -398,6 +435,7 @@
         $('list-count').textContent = '';
         var body = $('list-body');
         body.textContent = '';
+        forgetPictures('list');
         body.appendChild(notice(['The list can’t be loaded right now.', 'Try again in a moment.'], 'Try again'));
     }
     function nothingKept() {
@@ -409,6 +447,7 @@
         $('sub').textContent = '';
         var body = $('list-body');
         body.textContent = '';
+        forgetPictures('list');
         body.appendChild(notice(['This server doesn’t keep replays.', 'Matches played here are not saved.'], 'Play a match', '/'));
     }
 

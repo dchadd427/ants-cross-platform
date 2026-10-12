@@ -121,6 +121,14 @@ class ThePickersOwnCode(unittest.TestCase):
             "a preview word may hold a slash": ("/front/preview_[a-z]+\\\\.png)$');", "/front/preview_[a-z/]+\\\\.png)$');"),
             "a name may start with an escaped backslash": ("NAME_PART = \"(?:[A-Za-z0-9_~-]|%(?!2[fF]|5[cC]|00)", "NAME_PART = \"(?:[A-Za-z0-9_~-]|%(?!2[fF]|00)"),
             "a name is markup": ("var nm = el('div', 'pk-nm', m.name);", "var nm = el('div', 'pk-nm'); nm.innerHTML = m.name;"),
+            "the preview address leaves '!' and friends as they are": ("out += /[A-Za-z0-9\\-._~]/.test(c) ? c : '%' + ('0' + s.charCodeAt(i).toString(16).toUpperCase()).slice(-2);", "out += encodeURIComponent(c);"),
+            "the preview address of a bad name is made": ("if (!validMapFile(file) || ORIGINALS.test(file)) return '';\n        return ownPath(", "if (ORIGINALS.test(file)) return '';\n        return ownPath("),
+            "an original gets a community preview address": ("if (!validMapFile(file) || ORIGINALS.test(file)) return '';\n        return ownPath(", "if (!validMapFile(file)) return '';\n        return ownPath("),
+            "the record's ending is cut in capitals only": ("var base = map.replace(/\\.lvl$/i, ''), file = base + '.lvl';\n        if (!validMapFile(file) || ORIGINALS.test(file)) return '';\n        return ownPath(", "var base = map.replace(/\\.lvl$/, ''), file = base + '.lvl';\n        if (!validMapFile(file) || ORIGINALS.test(file)) return '';\n        return ownPath("),
+            "a record in another case finds no picture": ("if (low) return low.original ? '' : low.thumb;", ""),
+            "the server's list is not asked": ("        if (list) {\n            var low = null;", "        if (false) {\n            var low = null;"),
+            "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
+            "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

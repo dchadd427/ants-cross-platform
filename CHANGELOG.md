@@ -23,14 +23,23 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.24 - 2026-10-12 - Back 30 seconds on the replay bar
+## v0.12.25 - 2026-10-12 - Back 30 seconds on the replay bar
 
 **For players:**
 - **Back 30 seconds:** a new button right of Play / Pause on the replay bar (a double triangle with a small 30) jumps the replay 30 seconds back, never before the start. A match that plays keeps playing, a paused one stays paused, and the speed stays. It works with a mouse, a finger, the keys (Enter and Space on the focused button) and the fullscreen bar under a locked mouse, and fits the phone's bar. It is not on a match that is being played (live).
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...6201e693)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/343a692...HEADSHA)
+
+## v0.12.24 - 2026-10-12 - Pictures of the players' maps in the match lists
+
+**For players:**
+- Watch matches: a match on a map of the players now shows that map's picture in "Live now" and "Earlier matches", as the map list does, instead of an empty dark square. The six original maps keep their pictures.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...69f88ec3)
 
 ## v0.12.23 - 2026-10-12 - The map list and the fullscreen replay mouse: follow-ups
 
@@ -470,20 +479,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5)
 
-## v0.0.99 - 2026-10-02 - The game is 16:9 by default: more map, a frame grown from the original's art, the web page in 16:9, a new setup screen with a map preview
+## Older versions (v0.0.99 and before)
 
-**For players:**
-- The desktop game opens in a 16:9 picture with a map view about twice as large (762 x 500 pixels instead of 442 x 440). The frame is the original's own art, made wider by repeating single plain lines, and the score boxes are spread along the bottom strip. `--aspect 4:3` (or `aspect=4:3` in the settings file) gives the original's picture exactly as before.
-- The window opens at the largest 0.5 step of 960 x 540 that fits your display. Alt+Enter toggles fullscreen. A map smaller than the view is centred with black around it.
-- The web game is 16:9 by default, in a box that fits the window, with a fullscreen button. The selector "16:9 / Classic 4:3" under the game, or `?aspect=4:3`, gives the classic picture. A phone held upright gets the classic picture in this release. The four games of the Play online page are 16:9 too.
-- The setup screen of the 16:9 picture is new, with a map preview that is the game's own picture of the selected map. The classic 4:3 screens are unchanged.
-
-**Fixes:**
-- The web page downloads the game's data again when a download fails (with several games on one page it could stay at "Downloading data (0%)" for ever), and shows a card with a Reload button when the game's files cannot be loaded.
-- The web guide and footer lost some spaces ("Goal:get the most points"); fixed.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb)
-
-## Older versions (v0.0.98 and before)
-
-Every release before v0.0.99, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.0, and the long notes of v0.0.99 - v0.0.90, are only in the git history.
