@@ -5,7 +5,7 @@
 //     exactly what is anchored to the right edge by dx = W - 640 and what is anchored to the bottom edge by dy = H - 480, and the map view takes the rest;
 //   * the consumers: the HUD's rectangles and drawing, the edge scroll, the minimap, the start view, the pointer's limits, the corner of the frame-rate plate, the camera, the
 //     renderer's view and the application (listener, pointer gate, the plate, the network overlay's box) all follow a layout that is not the classic one, consistently; and with
-//     the classic one they give what they always gave (tests/test_app/test_view_fingerprint.cpp pins the picture and the pointer, this program pins the model and the wiring).
+//     the classic one they give what they always gave (tests/test_app/test_view_fingerprint*.cpp pins the picture and the pointer, this program pins the model and the wiring).
 // Usage: test_screen_layout. Exit code 0 when every check passes.
 #include <SDL.h>
 

@@ -2,7 +2,7 @@
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
-//     which both sides read (tests/test_net/test_lockstep.cpp N2.111, tests/scripts/web_lobby_net_check.js).
+//     which both sides read (tests/test_net/test_lockstep_protocols.cpp N2.111, tests/scripts/web_lobby_net_check.js).
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;

@@ -221,6 +221,7 @@ int AudioMixer::play_sfx(uint32_t sound_id, float volume, uint8_t priority, bool
     ch.owner = owner;
     ch.priority = priority;
     ch.loop = loop;
+    if (start_log_) start_log_->push_back({sound_id, owner, 0, 0, false, priority});
     ch.spatial = false;                                // a cue or a UI sound: plain volume 100 %, pan 0 (FUN_0102e883), only the Sound Volume option applies
     apply_law(ch);
 
@@ -247,6 +248,7 @@ int AudioMixer::play_spatial(uint32_t sound_id, int32_t world_x, int32_t world_y
     ch.owner = owner;
     ch.priority = priority;
     ch.loop = loop;
+    if (start_log_) start_log_->push_back({sound_id, owner, world_x, world_y, true, priority});
     ch.spatial = true;
     ch.world_x = world_x;
     ch.world_y = world_y;
@@ -293,7 +295,7 @@ void AudioMixer::set_listener_position(int32_t world_x, int32_t world_y) {
 
     // The playing positional sounds follow the moving view (FUN_0102f777 re-attenuates every playing sound)
     for (auto& ch : channels_) {
-        if (ch.active && ch.spatial) apply_law(ch);
+        if (ch.active && ch.spatial) apply_law(ch, false);       // (the sound goes on from where it is: its gains ramp to the new law)
     }
 }
 
@@ -328,7 +330,7 @@ float AudioMixer::gain_from_centibels(int32_t centibels) noexcept {
 }
 
 // The gains of a channel: DirectSound SetVolume(att) on both channels, SetPan(pan): a positive pan attenuates the left channel by `pan`, a negative one the right channel.
-void AudioMixer::apply_law(MixerChannel& ch) const {
+void AudioMixer::apply_law(MixerChannel& ch, bool snap) const {
     int32_t pct = 100;
     int32_t pan = 0;
     if (ch.spatial) {
@@ -342,6 +344,10 @@ void AudioMixer::apply_law(MixerChannel& ch) const {
     const float right = pan < 0 ? gain_from_centibels(pan) : 1.0f;
     ch.vol_left = volume * left;
     ch.vol_right = volume * right;
+    if (snap) {
+        ch.mix_left = ch.vol_left;
+        ch.mix_right = ch.vol_right;
+    }
 }
 
 void AudioMixer::calculate_spatial_pan(int32_t world_x, int32_t world_y, float base_vol, float& out_vol_l, float& out_vol_r) const {
@@ -588,6 +594,7 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
     }
 
     if (master_volume_ <= 0.0001f) return;
+    const float ramp_step = 1000.0f / (AUDIO_GAIN_RAMP_MS * static_cast<float>(output_sample_rate_));      // the change of one output frame
     const float sfx_gain = master_volume_;                 // the Sound Volume option is inside every channel's gain (apply_law)
 
     for (size_t f = 0; f < num_frames; ++f) {
@@ -611,8 +618,10 @@ void AudioMixer::mix_samples_i16(int16_t* out_stereo, size_t num_frames) {
                     float s1 = (static_cast<float>(b1) - 128.0f) / 128.0f;
                     float sample = static_cast<float>((1.0 - frac) * static_cast<double>(s0) + frac * static_cast<double>(s1));
 
-                    mix_l += sample * ch.vol_left;
-                    mix_r += sample * ch.vol_right;
+                    ch.mix_left += std::clamp(ch.vol_left - ch.mix_left, -ramp_step, ramp_step);
+                    ch.mix_right += std::clamp(ch.vol_right - ch.mix_right, -ramp_step, ramp_step);
+                    mix_l += sample * ch.mix_left;
+                    mix_r += sample * ch.mix_right;
 
                     ch.cursor += ch.rate_step;
                     if (ch.cursor >= static_cast<double>(data.size())) {

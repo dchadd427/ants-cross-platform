@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.17 - 2026-10-12 - A map list on the front page
+## v0.12.22 - 2026-10-12 - A map list on the front page
 
 **For players:**
 - **A map list on the front page:** "Browse all maps" under the picture opens every map of the game and of the players with its picture, how big it is and how often it was played. Search by name or description, sort by plays, name or size, and switch between a Detail list and Thumbnails (your choice is remembered). The six originals come first, then the most played. Arrows, Enter and Esc work; on a phone the list is a sheet at the bottom.
@@ -32,7 +32,28 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30b20156...1663b242)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...map-picker)
+
+## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
+
+**For players:**
+- **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
+
+## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
+
+**For players:**
+- Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.18...v0.12.19); comment-only change.
+
+## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
+
+**For players:**
+- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant. That click is measured. A faint sound that suddenly got loud may have been heard as played again ("repeat"), but that is only a hypothesis about what the owner heard, not confirmed. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
 ## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 
@@ -445,26 +466,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
 
-## v0.0.97 - 2026-10-02 - The desktop start menu: Single player with bots, Join with a code, Host an online match
+## Older versions (v0.0.97 and before)
 
-**For players:**
-- A desktop game started with no mode on its command line now opens with a start menu after the loading screen: Single player, Join with a code, Host an online match, Quit. The menu never shows in the web build.
-- Single player: pick Empty, Easy, Medium or Hard bot for each of the other three colours. All Empty is the original's single-player game exactly. The choice is remembered.
-- Join with a code: type your name and the room code (paste with Ctrl+V or Cmd+V) and Join. Every failure (server not reachable, no such room, room full, match started, another version, and so on) comes back to the panel with a clear line, and Esc cancels at once.
-- Host an online match: pick the map, 2 to 4 players and your name. The menu makes the room, shows its code in large letters with a Copy button, and puts you in as the leader. After an online game the program goes back to the menu.
-- The original's own screens are unchanged. `--map`, `--host`, `--join` and similar options skip the menu, `--start-menu` forces it, and `--server HOST[:PORT]` names the game server.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
-
-## v0.0.96 - 2026-10-02 - The web game starts at once and keeps playing in a hidden tab
-
-**For players:**
-- The web page no longer hides the game behind a "Click anywhere to play!" card. The game starts as soon as its data has downloaded, with the original's loading screen and quick help, and sound and music begin at the first click, tap or key press on the page.
-- A network match keeps playing when its tab is hidden or its window is minimised. Before, a hidden seat was called lagging after 3 seconds and dropped after 30. Now it keeps up and the other players are not told it lags.
-- A hidden page plays no sound or music, and a local game stands still while its page is hidden. A sleeping computer or a phone with a locked screen still stops the page.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
-
-## Older versions (v0.0.95 and before)
-
-Every release before v0.0.96, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.98, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

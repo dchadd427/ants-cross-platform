@@ -14,7 +14,7 @@
 //
 // The idea (2026-10-01): slice out one pixel and then just repeat that one pixel, and the art allows it: the green texture has only a vertical gradient, so the pieces hold long
 // runs of identical rows and columns. The cuts are inside those runs and never inside a decoration, a score box or a clock box (measured on the art of ants.chd, and checked again by
-// tests/test_app/test_wide_hud.cpp, group "cuts"):
+// tests/test_app/test_wide_hud_frame.cpp, group "cuts"):
 //
 //   x0y0 (top bar)         column 140: the plain green between the clock box and the name; columns 138 .. 143 are identical (the black clock box and the score box are never stretched)
 //   x17y461 (bottom strip) three cuts, so that the score boxes are spread over the strip (requested: expand between the scores so they are not all offset to the right):

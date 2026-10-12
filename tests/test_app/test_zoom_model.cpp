@@ -1351,8 +1351,8 @@ void test_plan() {
                         const double ly = p.top;
                         check(lx == std::floor(lx) && ly == std::floor(ly), at + "at a power of two the last level lands on whole screen pixels: (" + num(lx) + ", " + num(ly) + ")");
                     }
-                    // the filter: nearest at 1 and 2 (exact), linear elsewhere
-                    check(p.smooth == (z != 1.0f && z != 2.0f), at + "the filter: linear except at 1 and 2");
+                    // the filter: nearest from 1 up (the default), linear below 1
+                    check(p.smooth == (z < 1.0f), at + "the filter: nearest at 1 and above, linear below 1");
                     if (z > 1.0f && z < 2.0f) check(!zoom::plan(ox, oy, z, v.w, v.h, m.w, m.h, false).smooth && zoom::plan(ox, oy, z, v.w, v.h, m.w, m.h, true).smooth, at + "between 1 and 2 the filter is the choice that is given");
                     if (z < 1.0f) check(zoom::plan(ox, oy, z, v.w, v.h, m.w, m.h, false).smooth, at + "below 1 it is linear whatever the choice for the zoom-in says");
                     // the lattice: moving the origin by whole screen pixels (1 / z world pixels) moves the picture by those whole pixels and nothing else: the world pixel X lands at (X - ox) * z

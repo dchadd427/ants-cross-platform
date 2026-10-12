@@ -17,6 +17,10 @@ constexpr size_t AUDIO_MIXER_MAX_CHANNELS = 32;
 constexpr uint32_t AUDIO_DEFAULT_SAMPLE_RATE = 44100;
 constexpr int32_t AUDIO_LISTENER_RADIUS = 2500;     // world pixels: the radius of the map view's sound container (0x102f5cb), the span of the law below
 
+/// A gain that the law changes while its sound plays (the view moves or zooms: the listener is the middle of the view) goes there in a ramp of this length for a change of the full range 0 .. 1
+/// A step in the gain of a playing sound is a click, and a faint sound that gets loud in one sample is heard as played again.
+constexpr float AUDIO_GAIN_RAMP_MS = 12.0f;
+
 /**
  * @brief Represents an active playback channel in the software mixer.
  */
@@ -25,8 +29,10 @@ struct MixerChannel {
     const ants::assets::SoundClip* clip{nullptr};
     double cursor{0.0};       // Fractional sample index in clip
     double rate_step{1.0};    // clip_rate / mixer_rate
-    float vol_left{1.0f};     // 0.0 .. 1.0, the dB law of the original applied (see AudioMixer::apply_law)
+    float vol_left{1.0f};     // 0.0 .. 1.0, the dB law of the original applied (see AudioMixer::apply_law): where the gain is going
     float vol_right{1.0f};    // 0.0 .. 1.0
+    float mix_left{1.0f};     // the gains that are mixed now: the sound's start is at its law at once; a move of the listener takes AUDIO_GAIN_RAMP_MS to get there (no step in the wave)
+    float mix_right{1.0f};
     float event_gain{1.0f};   // the `volume` argument of play_sfx / play_spatial (1.0 for everything the game plays)
     uint32_t owner{0};        // the sprite that started the sound (tracked sounds): stop_owner() cuts it; 0 = nobody
     uint8_t priority{0};      // 0..255 (255 = critical/uninterruptible)
@@ -119,14 +125,26 @@ public:
     // Headless / Mock Mode
     void set_headless_mode(bool headless) noexcept { headless_mode_ = headless; }
 
+    /// Inspection (tests): every sound that is given a channel is appended to `log` (null: none). A sound that is dropped (no channel, volume 0) is not a start.
+    struct SoundStart {
+        uint32_t sound_id{0};
+        uint32_t owner{0};
+        int32_t world_x{0};
+        int32_t world_y{0};
+        bool spatial{false};
+        uint8_t priority{0};
+    };
+    void set_start_log(std::vector<SoundStart>* log) noexcept { start_log_ = log; }
+
 private:
     int allocate_channel(uint8_t priority);
-    void apply_law(MixerChannel& ch) const;       // the caller holds the mutex
+    void apply_law(MixerChannel& ch, bool snap = true) const;       // the caller holds the mutex; `snap`: the mixed gains take the law's at once (a sound's start, the option), else they ramp there
 
     const ants::assets::AssetArchive* archive_{nullptr};
     uint32_t output_sample_rate_{AUDIO_DEFAULT_SAMPLE_RATE};
     std::array<MixerChannel, AUDIO_MIXER_MAX_CHANNELS> channels_{};
 
+    std::vector<SoundStart>* start_log_{nullptr};  // (inspection; the caller holds the mutex when it is written)
     int32_t listener_x_{0};
     int32_t listener_y_{0};
 

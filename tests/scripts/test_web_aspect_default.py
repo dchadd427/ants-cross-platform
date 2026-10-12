@@ -175,7 +175,7 @@ class TheQuickHelpStartThatTheBrowserCheckTaps(unittest.TestCase):
         sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
         import web_aspect_check
         self.assertEqual(web_aspect_check.quick_help_start((960, 540)), self.pinned("test_wide_pages.cpp"))        # the wide page: (849, 497, 98, 27)
-        self.assertEqual(web_aspect_check.quick_help_start((640, 480)), self.pinned("test_app_integration.cpp"))   # the original's own page: (529, 437, 98, 27)
+        self.assertEqual(web_aspect_check.quick_help_start((640, 480)), self.pinned("test_app_integration_basics.cpp"))   # the original's own page: (529, 437, 98, 27)
 
     def test_the_browser_checks_do_not_tap_the_places_of_the_original_s_page_on_the_wide_canvas(self):
         for name in ("web_aspect_check.py", "web_edge_check.py"):
