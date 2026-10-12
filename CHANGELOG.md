@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...HEAD0000)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...d1b887f1)
 
 ## v0.12.28 - 2026-10-12 - Back 30 seconds on the replay bar
 
