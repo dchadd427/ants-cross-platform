@@ -311,6 +311,10 @@ set_tests_properties(test_options PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_D
 
 add_executable(test_network_app
     test_network_app.cpp
+    test_network_app_basics.cpp
+    test_network_app_leader.cpp
+    test_network_app_rooms.cpp
+    test_network_app_chat_box.cpp
 )
 
 target_include_directories(test_network_app PRIVATE
