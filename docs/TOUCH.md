@@ -20,7 +20,7 @@ one with no selection and no order). Elsewhere a second finger does nothing and 
 lift, and a finger that lands meanwhile starts nothing: BY DESIGN, so that taking a pinch up again with one finger is not a tap, a hold or a drag. A first finger whose press held nothing (the
 frame, a blank part of the panel, where no control took it) is not one of these: the next finger takes its place at once (that press ends with no act, and the finger is ignored until it lifts),
 so a thumb that rests on the panel never blocks the taps on the map. The pair is judged once per frame (a pinch's two moves arrive as two events, and between them the distance is wrong by a whole
-step).
+step). **In a replay** a tap, a hold and a drag on the picture pick nothing (the picture is for looking: [`REPLAYS.md`](REPLAYS.md#watching-a-replay)); two fingers still pan and zoom, and a pan of more than 10 pixels within 300 ms takes the Auto camera (the pixel or two that a pinch drifts does not, and a pinch only zooms: Auto stays).
 
 **A stall cannot make a touch longer by more than 100 ms.** SDL stamps an event when it sees it (the browser's dispatch, the game's read of the queue), so a stall makes the stamp late. An event is
 believed up to 100 ms (`touch::kStallMs`) after the last frame (or the first finger's arrival), and no later: a stalled 100 ms tap is still a click and a stalled first move still a drag, but a slow tap

@@ -5,6 +5,8 @@
 //   - the chips of a match are built from text only: a name with < > & " is never markup;
 //   - a match that is being played (?live=<id>): the id's shape (the page asks the server for nothing else), when it began, the door's answers, whether the playhead is at the present, the words of the tag
 //     over the picture, and the list of live matches as the page takes it (an entry that is not of the shape, a name that is not text, a number that is not one).
+//   - the camera button of the game page (Auto camera / Manual camera): what the device chose and keeps (a storage that throws changes nothing), the button's words, the note that comes once in a visit when the
+//     viewer takes the camera, and that taking it is not a choice that is remembered.
 // tests/scripts/test_web_replay.py runs this with node (the quick tier). usage: node web_replay_check.js web/replay_page.js    (exit 0: every check holds; every failure is printed)
 'use strict';
 process.env.TZ = 'America/Los_Angeles';                      // (the table below is in the visitor's own zone: the code takes whatever zone it runs in, and a fixed one makes the day boundaries a fact)
@@ -205,6 +207,112 @@ same('a player that is not text is dropped, a nasty one is kept as the text it i
 same('at most four players', R.liveEntriesOf({ live: [{ id: liveGood, players: ['a', 'b', 'c', 'd', 'e'] }] })[0].players.length, 4);
 same('at most 50 matches', R.liveEntriesOf({ live: Array.from({ length: 80 }, () => ({ id: liveGood })) }).length, 50);
 same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ live: 'x' }), R.liveEntriesOf(7)], [[], [], [], []]);
+
+
+// ---- the camera button of the game page in replay mode: the choice of the device, the button, the note
+{
+    const mem = () => { const m = {}; return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m }; };
+    const boom = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+    same('nothing kept: Auto', R.camLoad(mem()), 'auto');
+    same('Manual kept', R.camLoad({ getItem: () => 'manual' }), 'manual');
+    same('Auto kept', R.camLoad({ getItem: () => 'auto' }), 'auto');
+    same('anything else kept is Auto', [R.camLoad({ getItem: () => 'MANUAL' }), R.camLoad({ getItem: () => '' }), R.camLoad({ getItem: () => '<b>x</b>' })], ['auto', 'auto', 'auto']);
+    same('no storage: Auto', [R.camLoad(null), R.camLoad(undefined)], ['auto', 'auto']);
+    same('a storage that throws: Auto, and no throw', R.camLoad(boom), 'auto');
+    const kept = mem();
+    check('saving writes the key `ants.cam`', R.camSave(kept, 'manual') === true && kept.m['ants.cam'] === 'manual' && R.CAM_KEY === 'ants.cam');
+    R.camSave(kept, 'whatever');
+    same('anything but Manual is saved as Auto', kept.m['ants.cam'], 'auto');
+    same('saving where the storage throws or is missing is false, and no throw', [R.camSave(boom, 'manual'), R.camSave(null, 'manual')], [false, false]);
+    same('the words of the button', [R.camLabel(true), R.camLabel(false)], ['Auto camera', 'Manual camera']);
+    check('the title says what the button does', /Press for Manual camera/.test(R.camTitle(true)) && /Press for Auto camera/.test(R.camTitle(false)));
+    same('the note is due the first time the game says the camera was taken', [R.camNoteDue(1, 0, false), R.camNoteDue(0, 0, false), R.camNoteDue(2, 1, true), R.camNoteDue(1, 0, true), R.camNoteDue('1', 0, false)], [true, false, false, false, false]);
+
+    // a page of fakes: the elements the control finds by id, the game's two numbers, the timers
+    const page = (store) => {
+        const els = {};
+        const el = (id) => els[id] = els[id] || { id, attrs: {}, hidden: id === 'camnote', textContent: '', title: '', handlers: {}, classes: {},
+            setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
+            classList: { toggle: (c, on) => { els[id].classes[c] = !!on; } },
+            addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); },
+            click() { (this.handlers.click || []).forEach(fn => fn({})); } };
+        ['b-cam', 'cam-lbl', 'camnote'].forEach(el);
+        const game = { camera: 1, taken: 0, sent: [] };
+        const timers = [];
+        const env = { doc: { getElementById: el }, storage: store, VALUE: { camera: 10, taken: 11 }, DO: { camera: 7 },
+            get: what => (what === 10 ? game.camera : what === 11 ? game.taken : -1),
+            command: (what, value) => { game.sent.push([what, value]); if (what === 7) game.camera = value; },
+            setTimeout: function (fn, ms) { if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation'); timers.push({ fn, ms }); return timers.length; } };     // (like a browser's: not with another `this`)
+        return { els, game, timers, env, cam: R.cameraControl(env) };
+    };
+    {   // Auto is the default: the button says so, and the game is told once that it can hear
+        const t = page(mem());
+        check('the name of the button is not touched by the script', t.els['b-cam'].attrs['aria-label'] === undefined);
+        same('the button before the game answers', [t.els['b-cam'].attrs['data-mode'], t.els['cam-lbl'].textContent, t.els['b-cam'].attrs['aria-pressed']], ['auto', 'Auto camera', 'true']);
+        t.cam.look(false);
+        same('nothing is sent before the game can hear', t.game.sent, []);
+        t.cam.look(true);
+        t.cam.look(true);
+        same('told once, Auto', t.game.sent, [[7, 1]]);
+        // the viewer takes the camera: the game says so, the note comes once, the button says Manual, nothing is remembered
+        t.game.camera = 0; t.game.taken = 1;
+        t.cam.look(true);
+        same('the note is up and the button says Manual', [t.els.camnote.hidden, t.els['b-cam'].attrs['data-mode'], t.els['cam-lbl'].textContent], [false, 'manual', 'Manual camera']);
+        same('the note stays up for seven seconds', t.timers.map(x => x.ms), [7000]);
+        same('taking the camera is not a choice: nothing is saved', t.env.storage.m, {});
+        t.timers[0].fn();
+        check('the note goes by itself', t.els.camnote.hidden === true);
+        // the button returns to Auto and remembers it; taking it again does not bring the note back in this visit
+        same('pressed means Auto: Manual is not pressed', t.els['b-cam'].attrs['aria-pressed'], 'false');
+        t.cam.press();
+        same('pressed again with Auto on', t.els['b-cam'].attrs['aria-pressed'], 'true');
+        same('the button sent Auto', t.game.sent[t.game.sent.length - 1], [7, 1]);
+        same('Auto is remembered, and the button says Auto', [t.env.storage.m['ants.cam'], t.els['b-cam'].attrs['data-mode']], ['auto', 'auto']);
+        t.game.camera = 0; t.game.taken = 2;
+        t.cam.look(true);
+        check('the second time in a visit there is no note', t.els.camnote.hidden === true);
+        // the button in Auto is Manual, remembered
+        t.game.camera = 1;
+        t.cam.press();
+        same('Manual is chosen and remembered', [t.game.sent[t.game.sent.length - 1], t.env.storage.m['ants.cam'], t.els['b-cam'].attrs['data-mode']], [[7, 0], 'manual', 'manual']);
+    }
+    {   // a device that chose Manual: the game is told Manual, and the button says so from the start
+        const t = page({ getItem: () => 'manual', setItem() {} });
+        same('the button says Manual before the game answers', t.els['b-cam'].attrs['data-mode'], 'manual');
+        t.cam.look(true);
+        same('the game is told Manual', t.game.sent, [[7, 0]]);
+    }
+    {   // the note is put away by a press, and a browser that will not keep anything still works
+        const t = page(boom);
+        t.cam.look(true);
+        t.game.camera = 0; t.game.taken = 1;
+        t.cam.look(true);
+        check('the note is up', t.els.camnote.hidden === false);
+        t.cam.press();
+        check('a press puts the note away', t.els.camnote.hidden === true && t.game.camera === 1);
+    }
+    {   // the events: a click presses; Enter and Space press and the page does the rest; fullscreen lifts the note
+        const t = page(mem());
+        let after = 0;
+        t.cam.wire(() => { after++; });
+        t.cam.look(true);
+        t.els['b-cam'].click();
+        same('a click presses once, and the page repaints', [t.game.camera, after], [0, 1]);
+        let prevented = 0;
+        const key = (type, k) => (t.els['b-cam'].handlers[type] || []).forEach(fn => fn({ key: k, repeat: false, preventDefault: () => { prevented++; } }));
+        key('keydown', 'Enter');
+        same('Enter presses', [t.game.camera, after], [1, 2]);
+        key('keydown', ' ');
+        key('keyup', ' ');
+        same('Space presses, and its release is the page\'s too', [t.game.camera, after, prevented], [0, 3, 3]);
+        key('keydown', 'a');
+        same('another key does nothing', [t.game.camera, after], [0, 3]);
+        t.cam.fullscreen(true);
+        check('fullscreen lifts the note', t.els.camnote.classes.up === true);
+        t.cam.fullscreen(false);
+        check('and the page lowers it again', t.els.camnote.classes.up === false);
+    }
+}
 
 console.log(checks + ' checks, ' + failures + ' failures');
 process.exit(failures ? 1 : 0);

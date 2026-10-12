@@ -177,7 +177,87 @@
         return ul;
     }
 
-    var api = { FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    // ---- the camera of a replay (docs/REPLAYS.md "Camera"): Auto follows the action, Manual leaves the picture where it is put ----
+    // The choice is the button's and is remembered on this device (localStorage, `ants.cam`: "auto" or "manual"; Auto when nothing is kept or the browser will not say). Taking the camera by hand does not
+    // write it: the viewer did not choose Manual for the next visit. Every access to the storage may throw (a private window, blocked site data): nothing then is remembered and the page works as ever.
+    var CAM_KEY = 'ants.cam';
+    var CAM_NOTE_MS = 7000;     // how long the note stays over the picture
+    function camLoad(storage) {
+        try { return storage && storage.getItem(CAM_KEY) === 'manual' ? 'manual' : 'auto'; } catch (e) { return 'auto'; }
+    }
+    function camSave(storage, mode) {
+        try {
+            if (!storage) return false;
+            storage.setItem(CAM_KEY, mode === 'manual' ? 'manual' : 'auto');
+            return true;
+        } catch (e) { return false; }
+    }
+    // The words of the button for the mode that is on (the button names what the camera is doing now), and what pressing it does
+    function camLabel(auto) { return auto ? 'Auto camera' : 'Manual camera'; }
+    function camTitle(auto) {
+        return auto ? 'Auto camera: the picture follows the action. Press for Manual camera: the picture stays where you put it.'
+                    : 'Manual camera: the picture stays where you put it. Press for Auto camera: the picture follows the action again.';
+    }
+    // Is the note due? `taken` is how many times the game says the viewer took the camera, `seen` how many the page has looked at, `shown` that the note has been up in this visit
+    function camNoteDue(taken, seen, shown) { return !shown && typeof taken === 'number' && taken > seen; }
+
+    // The camera button and its note, for the game page in replay mode. `env` has what the page has: `doc`, `storage` (or null), `get(what)` and `command(what, value)` (the game: Module._ants_replay_get and _do),
+    // `VALUE` (camera, taken) and `DO` (camera) as the page numbers them, and `setTimeout`. The game moves the view and says how it stands; this is the page's half: the button, what the device chose, the note.
+    function cameraControl(env) {
+        var pref = camLoad(env.storage), sent = false, seen = 0, shown = false, painted = null;
+        function el(id) { return env.doc.getElementById(id); }
+        function paint(auto) {
+            if (painted === auto) return;
+            painted = auto;
+            var b = el('b-cam');
+            b.setAttribute('data-mode', auto ? 'auto' : 'manual');
+            b.setAttribute('aria-pressed', auto ? 'true' : 'false');                  // (the name stays "Auto camera", a toggle that is pressed while Auto is on; the title says what a press does)
+            b.title = camTitle(auto);
+            el('cam-lbl').textContent = camLabel(auto);
+        }
+        function note(show) {
+            el('camnote').hidden = !show;
+            if (show) env.setTimeout.call(undefined, function () { el('camnote').hidden = true; }, CAM_NOTE_MS);          // (called with no `this`: a browser's own setTimeout refuses another)
+        }
+        paint(pref !== 'manual');
+        var api = {
+            // every look at the game: the first time that it can hear, it is told what this device chose (it starts on Auto); then the note when the viewer has taken the camera (once in a visit), and the button as the game says
+            look: function (ready) {
+                if (!ready) return;
+                if (!sent) { sent = true; env.command(env.DO.camera, pref === 'manual' ? 0 : 1); }
+                var taken = env.get(env.VALUE.taken);
+                if (camNoteDue(taken, seen, shown)) { shown = true; note(true); }
+                seen = Math.max(seen, taken);
+                paint(env.get(env.VALUE.camera) === 1);
+            },
+            // the button: the other camera, remembered; Auto glides back to the last action (the game does it)
+            press: function () {
+                var auto = env.get(env.VALUE.camera) === 1;
+                env.command(env.DO.camera, auto ? 0 : 1);
+                pref = auto ? 'manual' : 'auto';
+                camSave(env.storage, pref);
+                note(false);
+                paint(!auto);
+            },
+            // the button's events: a press, and Enter and Space (pressed here, as the Picture button's: the game's own key handling takes the browser's press of a focused button away); `after` repaints the bar
+            wire: function (after) {
+                var b = el('b-cam');
+                b.addEventListener('click', function () { api.press(); after(); });
+                b.addEventListener('keydown', function (ev) {
+                    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                    ev.preventDefault();
+                    if (!ev.repeat) b.click();
+                });
+                b.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });
+            },
+            // fullscreen: the bar lies over the picture's bottom, the note goes above it
+            fullscreen: function (over) { el('camnote').classList.toggle('up', !!over); },
+            pref: function () { return pref; }
+        };
+        return api;
+    }
+
+    var api = { CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;

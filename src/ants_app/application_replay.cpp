@@ -54,6 +54,15 @@ public:
     sim::CommandResult submit(const sim::Command&) override { return sim::CommandResult{}; }     // (status Ignored: nothing to do, no ant to answer)
 };
 
+/// The centre of each seat's hill, by seat: where a base alarm is
+std::vector<AutoCamera::Point> hills_of(const sim::WorldState& world) {
+    std::vector<AutoCamera::Point> out(sim::MAX_PLAYERS);
+    for (const assets::AnthillSpawn& hill : world.anthills) {
+        if (hill.team_id < out.size()) out[hill.team_id] = AutoCamera::Point{(static_cast<double>(hill.x) + 2.0) * 32.0, (static_cast<double>(hill.y) + 2.0) * 32.0};
+    }
+    return out;
+}
+
 /// How many turns a jump plays in one frame (a turn takes a few microseconds; the page shows the progress between frames)
 constexpr uint32_t kJumpTurnsPerFrame = 1500;
 /// The speeds that the page may ask for, times 100 (a quarter of the normal speed to sixteen times it)
@@ -266,6 +275,8 @@ int Application::replay_value(ReplayValue what) const noexcept {
         }
         case ReplayValue::Failure: return static_cast<int>(replay_failure_);
         case ReplayValue::JumpTarget: return static_cast<int>(replay_jump_target_);
+        case ReplayValue::Camera: return auto_camera_.mode() == CameraMode::Auto ? 1 : 0;
+        case ReplayValue::CameraTaken: return camera_taken_;
     }
     return 0;
 }
@@ -303,6 +314,9 @@ void Application::start_replay() {
     hud_.set_player_name(head.names[seat]);                                // (an empty name is the colour word: apply_team_names leaves the old name when the new one is empty)
     scorecard_.set_local_player_name(head.names[seat]);
     replay_next_ = 0;
+    hud_.set_view_only(true);                                              // (a recording is for looking: nothing can be picked, hud.hpp)
+    auto_camera_.reset();                                                  // (the camera's mode stays: it is the viewer's choice)
+    auto_camera_.set_hills(hills_of(sim_.get_world_state()));
     replay_cut_ = false;
     replay_jumping_ = false;
     replay_jump_from_ = 0;
@@ -352,6 +366,7 @@ void Application::replay_control(ReplayControl what, int value) {
             break;
         case ReplayControl::Extend: replay_extend(); break;
         case ReplayControl::LiveOver: replay_live_ = false; break;
+        case ReplayControl::SetCamera: auto_camera_.set_mode(value != 0 ? CameraMode::Auto : CameraMode::Manual); break;
     }
 }
 
@@ -432,6 +447,7 @@ void Application::run_replay(float dt) {
         if (replay_failure_ != ReplayFailure::None) return;
         if (turn_of(sim_) >= replay_jump_target_) {
             replay_jumping_ = false;
+            auto_camera_.reset();                                          // (nobody saw the turns of the jump: the camera starts from what the picture shows now)
             catch_up_backlog_ = true;                                      // (what the turns of the jump made is not told: the sounds are dropped, the news stay in the chat log)
             post_tick();
             tick_accumulator_ = 0.0f;
