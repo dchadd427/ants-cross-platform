@@ -202,7 +202,7 @@
     // The picture of a match's map: one of the six has its own (front/preview_<word>.png); a map of the players has the picture that the map picker shows (AntsMapPicker.thumbFor: the server's list GET /maps when it
     // has come, else the address that the name makes). A picture that is not there leaves the dark square. `pictures` holds the squares on the page so that the list, when it comes, can correct an address.
     var maps = null;                                             // the server's map list (AntsMapPicker.parseList), null until it has come
-    var pictures = [];                                           // { tv, map, tried }: the squares of maps of the players, and the address each one tried
+    var pictures = [];                                           // { tv, map, tried, group }: the squares of maps of the players, and the address each one tried
     function fillPicture(tv, map, item) {
         tv.textContent = '';
         var key = R.mapKey(map);
@@ -221,11 +221,16 @@
         }
         tv.appendChild(img);
     }
-    function pictureNode(map) {
+    function forgetPictures(group) { pictures = pictures.filter(function (item) { return item.group !== group; }); }      // (a list that is built again forgets its old squares: they are gone from the page)
+    var mapsAsked = false;
+    function pictureNode(map, group) {                           // group: 'live' or 'list' (the box the square is in)
         var tv = el('figure', 'tv');
-        var item = R.mapKey(map) ? null : { tv: tv, map: map, tried: '' };
+        var item = R.mapKey(map) ? null : { tv: tv, map: map, tried: '', group: group };
         fillPicture(tv, map, item);
-        if (item) pictures.push(item);
+        if (item) {
+            pictures.push(item);
+            if (!mapsAsked) { mapsAsked = true; lookMaps(); }     // (the list of the maps is asked for with the first map of the players that the page shows)
+        }
         return tv;
     }
     function lookMaps() {                                        // the list of the maps: asked once; a failure leaves the addresses that the names make
@@ -235,7 +240,7 @@
             var list = data && window.AntsMapPicker ? window.AntsMapPicker.parseList(data) : null;
             if (!list) return;
             maps = list;
-            pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });
+            pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });      // (squares that left the page)
             pictures.forEach(function (item) {
                 var url = window.AntsMapPicker.thumbFor(item.map, maps);
                 if (url !== item.tried) fillPicture(item.tv, item.map, item);
@@ -245,7 +250,7 @@
     function entryNode(e, old) {
         var now = new Date();
         var li = el('li', old ? 'entry old' : 'entry');
-        li.appendChild(pictureNode(e.map));
+        li.appendChild(pictureNode(e.map, 'list'));
         var length = R.lengthText(e.seconds);
         var info = el('div', 'info');
         info.appendChild(el('h3', '', R.mapTitle(e.map)));
@@ -289,7 +294,7 @@
     function liveEntryNode(e) {
         var length = R.lengthText(e.seconds);
         var li = el('li', 'entry liveentry');
-        li.appendChild(pictureNode(e.map));
+        li.appendChild(pictureNode(e.map, 'live'));
         var info = el('div', 'info');
         info.appendChild(el('h3', '', R.mapTitle(e.map)));
         var when = el('p', 'when');
@@ -312,6 +317,7 @@
     function renderLive() {
         var panel = $('live-panel'), body = $('live-body'), count = $('live-count');
         body.textContent = '';
+        forgetPictures('live');
         if (state.live === null) { panel.hidden = true; count.textContent = ''; return; }
         panel.hidden = false;
         var n = state.live.length;
@@ -401,6 +407,7 @@
     function render() {
         var body = $('list-body'), count = $('list-count');
         body.textContent = '';
+        forgetPictures('list');
         var n = state.current.length;
         if (n === 0) {
             count.textContent = '';
@@ -428,6 +435,7 @@
         $('list-count').textContent = '';
         var body = $('list-body');
         body.textContent = '';
+        forgetPictures('list');
         body.appendChild(notice(['The list can’t be loaded right now.', 'Try again in a moment.'], 'Try again'));
     }
     function nothingKept() {
@@ -439,6 +447,7 @@
         $('sub').textContent = '';
         var body = $('list-body');
         body.textContent = '';
+        forgetPictures('list');
         body.appendChild(notice(['This server doesn’t keep replays.', 'Matches played here are not saved.'], 'Play a match', '/'));
     }
 
@@ -476,7 +485,6 @@
     if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
     else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
     load();
-    if (typeof fetch === 'function') lookMaps();
     // the matches that are being played: looked at now, then every 10 seconds while the page is in front (a hidden page asks nothing, and asks again as soon as it is shown)
     document.addEventListener('visibilitychange', function () { if (document.hidden) { liveRound++; clearTimeout(liveTimer); liveTimer = 0; } else if (!liveStop) lookLive(); });
     if (typeof fetch === 'function' && !document.hidden) lookLive();

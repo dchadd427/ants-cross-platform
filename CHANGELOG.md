@@ -472,4 +472,4 @@ Work that is not released yet is written in the same template under a heading th
 
 ## Older versions (v0.0.99 and before)
 
-Every release before v0.1.0, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.0, and the long notes of v0.0.99 - v0.0.90, are only in the git history.
