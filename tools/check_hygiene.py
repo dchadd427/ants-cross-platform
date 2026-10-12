@@ -32,7 +32,7 @@ PROD_LINES = 1500
 LINE_SLACK = 0.10  # a file more than 10% below its ceiling: lower the ceiling
 LINE_CEILINGS = {
     "src/ants_ai/standard_tasks.cpp": 3911,
-    "web/shell.html": 4064,
+    "web/shell.html": 3989,
     "src/ants_app/application.cpp": 3420,
     "tools/bot_arena.cpp": 2773,
     "tools/map_sweep.cpp": 2626,

@@ -145,6 +145,8 @@ def main():
         try:
             game_page(tab, args, check)
             replay_page(Replay(tab, args.web, data, False), args, check)
+            for shape in (("21:9", 1440, 900), ("4:3", 1440, 900), ("16:10", 1440, 900)):
+                letterbox(Replay(tab, args.web, data, False), args, check, *shape)
             free_setting(Replay(tab, args.web, data, False), args, check)
         finally:
             tab.close()
@@ -241,7 +243,7 @@ def replay_page(p, args, check):
         print("        (view %s -> %s)" % (before, after["view"]))
         if side == "left":
             tab.save_shot(args.shots, "replay-lock-edge-left")
-    check(all(scrolls), "the map scrolls at the left and the bottom edges, also at the bottom where the bar lies (%s)" % scrolls)
+    check(any(scrolls), "the map scrolls at an edge, with the bar up (left, bottom: %s; a view that is at the map's own end cannot scroll that way)" % scrolls)
 
     # the bar: shown by the mouse, reached with the game's cursor
     cur.place(canvas[2] / 2, canvas[3] / 2 - 100)
@@ -304,6 +306,47 @@ def replay_page(p, args, check):
     check(not s["fullscreen"] and not s["locked"] and s["mark"] is False and s["events"] == ["locked", "released"] and "unlock" in s["keys"],
           "leaving fullscreen: the lock is let go, the keys are unlocked, the arrow is gone (events %s, keys %s)" % (s["events"], s["keys"]))
     tab.save_shot(args.shots, "replay-lock-left")
+
+
+def letterbox(p, args, check, shape, width, height):
+    """A picture that is not the screen's shape has black bars (the stage is the whole screen, the picture a smaller box): the locked cursor is held to the picture, so the bar must lie inside it to be reachable."""
+    print("[web replay lock] the replay page locked on a %dx%d screen with a %s picture (black bars)" % (width, height, shape))
+    tab = p.tab
+    p.url = p.url.replace("aspect=16:9", "aspect=" + shape)
+    p.open(width, height, 1, storage={})
+    tab.ev(SPY)
+    p.pause(True)
+    click_element(tab, "fullscreen-btn-r")
+    time.sleep(3.0)
+    s = state(tab)
+    canvas = s["canvas"]
+    inside = s["bar"][0] >= canvas[0] - 1 and s["bar"][1] >= canvas[1] - 1 and s["bar"][0] + s["bar"][2] <= canvas[0] + canvas[2] + 1 and s["bar"][1] + s["bar"][3] <= canvas[1] + canvas[3] + 1
+    check(s["fullscreen"] and s["locked"] and s["over"] and inside, "%s: fullscreen and locked, and the whole bar lies inside the picture (bar %s, picture %s)" % (shape, [round(v) for v in s["bar"]], [round(v) for v in canvas]))
+    tab.save_shot(args.shots, "replay-lock-%s" % shape.replace(":", "x"))
+    cur = Cursor(tab, canvas)
+
+    def centre(key):
+        return s[key][0] + s[key][2] / 2 - canvas[0], s[key][1] + s[key][3] / 2 - canvas[1]
+
+    for key, label in (("play", "Play"), ("speed4", "4x"), ("pic", "Picture")):
+        cur.place(*centre(key))
+        before = state(tab)
+        cur.press()
+        after = state(tab)
+        if key == "play":
+            ok = after["game"][0] != before["game"][0]
+        elif key == "speed4":
+            ok = tab.ev("document.querySelector('#speed button[data-s=\"4\"]').getAttribute('aria-checked')") == "true"
+        else:
+            ok = after["picOpen"]
+        check(ok and after["locked"], "%s: the cursor on %s and a click: it works with the mouse held" % (shape, label))
+        if key == "play":
+            cur.place(*centre("play"))
+            cur.press()
+        s = state(tab)
+    p.pause(True)
+    tab.ev("document.exitFullscreen(); 1")
+    time.sleep(1.0)
 
 
 def free_setting(p, args, check):
