@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.31 - 2026-10-12 - Names of the computer players: the list, the picker and the label (code only)
+
+**For players:**
+- Nothing you can see changes. The game now holds the code for the computer players' coming names (a list of 252 short names, a picker that gives a room different ones, and the label `Pip (bot, Hard)`), but no screen or message uses it yet: bots are still called `Bot (Level)` everywhere.
+
+**Rules / network:** none. Names are display only: the rules, the replay format and network protocol 19 are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d1b887f1...HEAD)
+
 ## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
 
 **For players:**
