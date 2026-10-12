@@ -221,3 +221,4 @@ void run_cantgo_tests();
 void run_flower_tests();
 void run_war_tests();
 void run_stand_tests();
+void run_name_tests();
