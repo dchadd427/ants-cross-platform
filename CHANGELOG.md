@@ -23,12 +23,26 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.18 - 2026-10-12 - Fullscreen replays hold the mouse like the game
+## v0.12.21 - 2026-10-12 - Fullscreen replays hold the mouse like the game
 
 **For players:**
 - **Fullscreen holds the mouse in a replay and in a live match you watch, as it does in a game.** The cursor stays on the picture and the edges and corners scroll the map; Esc and leaving fullscreen give the mouse back. The bar stays clickable: move the cursor onto it (a small arrow shows there) and click, or drag the timeline. "Fullscreen mouse: Free" in a game keeps the plain browser fullscreen here too.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.16...v0.12.18); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.19...v0.12.21); how it works: [`docs/REPLAYS.md`](docs/REPLAYS.md#watching-a-replay)
+
+## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
+
+**For players:**
+- Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.18...v0.12.19); comment-only change.
+
+## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
+
+**For players:**
+- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant: a click, and a faint sound that suddenly got loud was heard as played again. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
 ## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 
@@ -452,15 +466,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d048ef...621f579)
 
-## v0.0.96 - 2026-10-02 - The web game starts at once and keeps playing in a hidden tab
+## Older versions (v0.0.96 and before)
 
-**For players:**
-- The web page no longer hides the game behind a "Click anywhere to play!" card. The game starts as soon as its data has downloaded, with the original's loading screen and quick help, and sound and music begin at the first click, tap or key press on the page.
-- A network match keeps playing when its tab is hidden or its window is minimised. Before, a hidden seat was called lagging after 3 seconds and dropped after 30. Now it keeps up and the other players are not told it lags.
-- A hidden page plays no sound or music, and a local game stands still while its page is hidden. A sleeping computer or a phone with a locked screen still stops the page.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
-
-## Older versions (v0.0.95 and before)
-
-Every release before v0.0.96, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.97, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

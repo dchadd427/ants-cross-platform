@@ -9,7 +9,7 @@
 // buttons of the top bar) moves right by dx = W - 640, what is anchored to the bottom edge (the bottom strip with its score boxes, the chat box) moves down by
 // dy = H - 480, and the map view takes the rest (it grows by dx and dy). Nothing else moves. Everything that used to hard-code the classic picture reads the layout
 // (renderer.cpp, hud.cpp, hud_input.cpp, edge_scroll.hpp, pointer_clamp.hpp, fps_overlay.hpp, application.cpp); with `classic()` they give what they always gave
-// (tests/test_app/test_view_fingerprint.cpp pins that). No SDL here: the header is pure, so that the model can be tested without a window.
+// (tests/test_app/test_view_fingerprint*.cpp pins that). No SDL here: the header is pure, so that the model can be tested without a window.
 //
 // All rectangles are half-open: the pixels x <= px < x + w and y <= py < y + h.
 

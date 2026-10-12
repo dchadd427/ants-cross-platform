@@ -1097,7 +1097,7 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer.cpp` (font loading,
 `Renderer::ttf_point_size`, `draw_text`, `draw_fixed_text`), `include/ants_app/text_layout.hpp` / `src/ants_app/text_layout.cpp` (`wrap_label_text`, `draw_label`, `fit_text`) and the text sites of
-`hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
+`hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout_screens.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
 `test_fixed_digits`). (The first version of this section listed three heights, 12 / 14 / 18, and the renderer did not even honour those: its three tiers were 9 / 11 / 13 px em, cell heights 11 / 13 / 15,
 for every text of the game, which is why the start dialog's text was a third of the original's size.)
 
@@ -2065,7 +2065,7 @@ returns them; `tests/test_assets/test_movement_tables.cpp` checks every entry ag
 
 ### 5.34 HUD and Screen Ground Truth (Capstone-Verified; Supersedes Earlier HUD Notes)
 
-Coordinates are absolute 640x480 screen pixels. Checked by `tests/test_app/test_hud_layout.cpp` (a recording renderer
+Coordinates are absolute 640x480 screen pixels. Checked by `tests/test_app/test_hud_layout*.cpp` (a recording renderer
 receives the HUD's draw calls).
 
 * **Digits** *(implemented)*. Clock (`FUN_01021e36`): `dig0..dig9` / colon `digc` at y = 6, x = 70 (tens of minutes, skipped
@@ -2139,7 +2139,7 @@ receives the HUD's draw calls).
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or
 in `ants.chd` (the original was never run, so timings come from the clip tables). Checked by
-`tests/test_sim/test_hill_actions.cpp` (golden tests) and the hill cases of `tests/test_app/test_app_integration.cpp`.
+`tests/test_sim/test_hill_actions.cpp` (golden tests) and the hill cases of `tests/test_app/test_app_integration*.cpp`.
 
 * **Geometry** *(implemented)*. With `(bx, by)` the footprint origin of the 4x4 hill (the layer-2 hill cell with flags & 1 is
   origin + (1, 1)): entrance `(bx+1, by+1)`, raid tile `(bx+3, by+2)`, tile42 `(bx+4, by+4)`, alternative waiting tile
@@ -2238,7 +2238,7 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
 Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or in
 `ants.chd` (the original was never run, so timings come from the clip tables). Implemented in `src/ants_sim/combat_system.cpp`
 (with `movement_system.cpp` / `action_system.cpp`); checked by `tests/test_sim/test_combat_actions.cpp` (golden timelines) and the
-combat cases of `tests/test_app/test_app_integration.cpp`. The original is a distributed simulation (only the owner's machine decides for
+combat cases of `tests/test_app/test_app_integration*.cpp`. The original is a distributed simulation (only the owner's machine decides for
 its own ants, `IsLocal`); the remake has one authoritative simulation, so every ant follows the owner code path and the messages
 (8 melee, 0xF bomb, 0x11 drop power-up, 0x14 blast, 0x15 drown, 0x16 death, 0x25 drop food) are handled synchronously, as the local
 handler of `FUN_0100d791` does before it broadcasts.
@@ -2323,7 +2323,7 @@ handler of `FUN_0100d791` does before it broadcasts.
 Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or in
 `ants.chd`. Implemented in `src/ants_sim/ability_system.cpp` (starts, ends, bridge passes) with the order side in
 `movement_system.cpp` (`classify_order`, `go_to`, `path_complete`, validators, approach tile); checked by
-`tests/test_sim/test_ability_actions.cpp` (golden cases) and the ability cases of `tests/test_app/test_app_integration.cpp`.
+`tests/test_sim/test_ability_actions.cpp` (golden cases) and the ability cases of `tests/test_app/test_app_integration*.cpp`.
 
 * **The order** *(implemented; `FUN_010287b5` with the special flag -> `FUN_0101fc50` -> `FUN_01020655`)*. The ant's type turns the
   special click into an ability order: bomber 8 (plant), or 9 (defuse) when the tile cannot take a bomb but holds one; fire ant
@@ -2396,7 +2396,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000). Implemented in `ability_system.cpp` (`powerup_pickup`),
 `movement_system.cpp` (`path_complete` cases 1 / 4, `set_action`, `loco_on_step`), checked by `tests/test_sim/test_powerup_actions.cpp`
-(golden cases) and the power-up cases of `tests/test_sim/test_sim_rules.cpp`, `test_combat_actions.cpp` and `tests/test_app/test_app_integration.cpp`.
+(golden cases) and the power-up cases of `tests/test_sim/test_sim_rules.cpp`, `test_combat_actions.cpp` and `tests/test_app/test_app_integration*.cpp`.
 
 * **There is no dwell and no timer.** The pick-up is the arrival of a move or power-up order (`FUN_0101ccaf` cases 1 and 4, 0x101cd1d): when
   the order tile (`+0xac`, saved before the path completes) still holds a power-up (`FUN_01007202`, tile flag 4), message 9 is built
@@ -2458,7 +2458,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
 ### 5.39 Attack Orders, Pick Rectangles and the Knock-Back Presentation (Capstone-Verified; Audit of Bouncing, Knock-Back Look and Attack Pathing)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. The simulation side of contact, knock-back and pile-ups (5.36) was found
-faithful; the differences were in the input, drawing and sound layers around it. Checked by `tests/test_app/test_app_integration.cpp` (12.142 -
+faithful; the differences were in the input, drawing and sound layers around it. Checked by `tests/test_app/test_app_integration*.cpp` (12.142 -
 12.145, 12.74, 12.103), `tests/test_app/test_render_parity.cpp` (frozen ants, edge culling, sub-tick prediction), `tests/test_sim/test_combat_actions.cpp`
 (6.5) and `tests/test_sim/test_movement_golden.cpp` (3.1, 3.1b).
 
@@ -2519,7 +2519,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
 `set_food_tile`, `drop_lunchbox`), `src/ants_sim/movement_tables.cpp` with the generated `src/ants_sim/food_footprints_data.inc` (`tools/gen_food_footprints.cpp`,
 `include/ants_assets/object_footprint.hpp`), `movement_system.cpp` (`classify_order`, `path_complete` case 5, `set_action`, `loco_on_step`) and `action_system.cpp`
 (`set_holding`, `start_harvest`, `end_harvest`, `harvest_clip_end`). Checked by `tests/test_sim/test_food_actions.cpp` (22 golden cases), `tests/test_assets/test_movement_tables.cpp`
-(7.1, 7.2) and the food cases of `tests/test_app/test_app_integration.cpp` (9.1, 12.5, 12.47, 12.61, 12.63, 12.107, 12.120, 12.121), `test_sim_rules.cpp` (10.6) and
+(7.1, 7.2) and the food cases of `tests/test_app/test_app_integration*.cpp` (9.1, 12.5, 12.47, 12.61, 12.63, 12.107, 12.120, 12.121), `test_sim_rules.cpp` (10.6) and
 `test_challenger_m2_2.cpp` (3.4, 3.5).
 
 * **Food is an object table and nothing respawns.** LVL Block 2 (read at 0x1006d19, one call of `FUN_01008ca0` AddFoodObject per entry) holds, per entry, the
@@ -2634,7 +2634,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/status_line.hpp` (`StatusLine`), `src/ants_app/hud.cpp` (status posting, selection
 texts, voices), `include/ants_sim/game_strings.hpp` with `src/ants_sim/game_strings.cpp` (the string table), `src/ants_sim/sim_engine.cpp` (`checkgo_poll`, the match clock) and
-`include/ants_sim/sim_engine.hpp` (voice tables). Checked by `tests/test_app/test_status_messages.cpp` (214 checks), the CHECKGO grid test 12.67 of `test_app_integration.cpp` and
+`include/ants_sim/sim_engine.hpp` (voice tables). Checked by `tests/test_app/test_status_messages.cpp` (214 checks), the CHECKGO grid test 12.67 of `test_app_integration*.cpp` and
 the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_challenger_m2_2.cpp` (5.1 - 5.3, 6.4).
 
 * **One slot, no queue.** `PostStatus` (`FUN_0100e944`, 21 call sites; `PostStatusId` `FUN_0100e8f5` loads the string first) sets the text of the status label (`[W+0x4ac4]`, rect (481, 254) -
@@ -2685,7 +2685,7 @@ the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_chall
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_sim/sim_engine.cpp` (`propose_alliance`, `accept_alliance`, `deny_alliance`, `withdraw_alliance_offer`,
 `break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
 Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat rendering, gate and filter) and the alliance / drop-out cases of `test_challenger_m2_2.cpp` (4.2 - 4.5) and
-`test_app_integration.cpp` (9.7, 12.9, 12.54, 12.68).
+`test_app_integration*.cpp` (9.7, 12.9, 12.54, 12.68).
 
 * **Where a message goes.** The status line (5.41) and the chat log are two channels: `PostStatus` for the short texts and `AddNewsFlash` (`FUN_0100e9bb`, 4 call sites) for a "News Flash" line of the chat log. The
   simulation posts every message with its channel (`NewsEvent::channel`: status, chat log, or a dialog for the invitation question), so the HUD needs no text of its own.
@@ -2745,7 +2745,7 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud.cpp` (`HUD::input_tick`, the cursor
 strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
-samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration.cpp`.
+samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration*.cpp`.
 
 * **Everything runs at 20 Hz.** The INPUT task (`AddTask(delay 0, period 0x32)` at 0x100ae26, `FUN_010242c5`) runs `ProcessInput` (`FUN_0102603f`) every 50 ms; hover, cursor mode, edge scroll, minimap drag,
   the rubber band and the button hover all run in it (`FUN_0102653f`), and a click uses the pointer where the task finds it. The pointer is `GetCursorPos` stored as it is into `world+0x118/0x11c` (next point: the game
@@ -2798,7 +2798,7 @@ samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulati
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud.cpp` (event dispatch, drawing), with the group orders in
 `src/ants_sim/sim_engine.cpp` (`issue_group_special_order`, `is_special_target_valid`). Checked by `tests/test_app/test_pointer_model.cpp` (236 checks), the rubber band drawing in
-`tests/test_app/test_hud_layout.cpp`, and the click tests of `test_app_integration.cpp` (7.x, 8.7, 9.6, 10.4, 10.5, 12.15, 12.17, 12.20, 12.62, 12.68, 12.75, 12.125, 12.126, 12.144).
+`tests/test_app/test_hud_layout*.cpp`, and the click tests of `test_app_integration*.cpp` (7.x, 8.7, 9.6, 10.4, 10.5, 12.15, 12.17, 12.20, 12.62, 12.68, 12.75, 12.125, 12.126, 12.144).
 
 * **Event gates** (`FUN_0102737e`, called for input ids 0xC left / 0xD right, value 0xFFFF press / 0 release): `FUN_0102653f` (hover, cursor, band) runs first with the pointer as it is; then a dialog takes the event, else
   it is ignored unless `[4b18] == 2` (playing), the cursor mode is not 6 (a scroll arrow) and the input lock `[5518]` is 0. A press saves its point (`0x5524`, shared by both buttons) and captures the view under it

@@ -1,7 +1,7 @@
 #pragma once
 
 // The scenes that the zoom's test programs share (milestone M4 of the widescreen work): a real renderer over a hidden window with a map and a world of ants, a HUD over an engine world, an
-// application that starts in its match, and the little oracles that tell what a pixel of the view should show at a zoom. test_zoom_view.cpp checks behaviour against independent
+// application that starts in its match, and the little oracles that tell what a pixel of the view should show at a zoom. test_zoom_view*.cpp checks behaviour against independent
 // computations; test_zoom_fingerprint.cpp pins the pictures and the pointer as golden numbers; test_prestart_view.cpp draws the match's first frames. A bare host of a match of the network (Peer) and
 // the application that joins it (Duo, join_and_start) are here too.
 #include <SDL.h>
