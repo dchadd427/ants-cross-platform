@@ -40,6 +40,7 @@
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
+#include "ants_app/map_fetch.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
 #include "ants_app/rejoin_store.hpp"
@@ -436,6 +437,8 @@ public:
     /// `dt` did not count (a hidden page that was not woken for a while, see background_run): once the connection has been read, a host that said nothing has been silent
     /// for that time as well (NetGame::note_gap).
     void pump_network(float dt, double gap_seconds = 0.0);
+    /// Where a map that the folder does not hold comes from (the web build's is made at init; null: the folder is all there is). Public for the tests, which put a fake in its place.
+    void set_map_fetcher(std::unique_ptr<MapFetcher> fetcher) { map_fetcher_ = std::move(fetcher); }
     /// What the player feels of an order while the prediction is on, from the frame that took it to the end of the frame that shows it (net::FeltDelayMeter); public for the tests
     const net::FeltDelayMeter& felt_delay() const noexcept { return felt_delay_; }
     /// Whether the matches of the network that this application makes predict the player's own orders (--prediction, the settings key `prediction`)
@@ -715,6 +718,9 @@ private:
     uint8_t vote_press_{0};                               // a left press went down on a button of the vote block: 1 keep waiting, 2 go on without the seat (its release is the choice)
     bool catch_up_backlog_{false};                        // this machine has caught up: the sounds that the engine queued meanwhile are dropped with the first live tick (post_tick)
     std::string net_notice_;
+    std::unique_ptr<MapFetcher> map_fetcher_;             // see set_map_fetcher
+    std::string map_wait_;                                // the Start's map that is being fetched (the match loads when it is here), else empty
+    std::string map_asked_;                               // the room's map that was asked for ahead of the Start
     std::string player_name_;
     std::string local_player_name_;                       // the name of a local game (the system user, --name): what a single-player game after a network game shows again
     std::string window_title_;                            // what the window's title says now
@@ -784,7 +790,9 @@ private:
 
     // Network play
     void handle_net_events();
-    void net_load_match();                                // the host said Start: load the map, initialise the simulation, report
+    void net_load_match();                                // the host said Start: load the map (a map that is not in the maps folder is fetched first: map_fetcher_), initialise the simulation, report
+    void net_finish_load();                               // the map file is here: check its hash, load it, report (net_load_match, poll_map_fetch)
+    void poll_map_fetch();                                // once a frame of a room: the room's map is asked for ahead of the Start, and a Start that waits for its map is carried on or failed
     void net_begin_match(bool rejoin = false);            // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin)
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);

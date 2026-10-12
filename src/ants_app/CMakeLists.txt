@@ -62,6 +62,8 @@ add_library(ants_app STATIC
     application.cpp
     application_menu.cpp
     application_replay.cpp
+    application_maps.cpp
+    map_fetch.cpp
     application_touch.cpp
 )
 

@@ -579,6 +579,7 @@ bool Application::init(const ApplicationConfig& config) {
     // 3. Load Map Level: the list is what the Maps folder holds; a game that starts without the setup screen plays --map, else the map that the setup screen highlights (TREASURE.LVL when the folder
     // holds it, else the first map of the list: MapSelectScreen::init)
     map_select_.init(config_.maps_dir);
+    if (!map_fetcher_) map_fetcher_ = make_web_map_fetcher();            // (the browser: the players' maps come from the site, application_maps.cpp)
     if (config_.default_map_path.empty()) config_.default_map_path = map_select_.get_selected_map_path();
     if (config_.default_map_path.empty()) {
         std::cerr << "[Application] There is no map (*.lvl) in " << config_.maps_dir << std::endl;
@@ -2733,6 +2734,7 @@ void Application::pump_network(float dt, double gap_seconds) {
     net_->update(static_cast<uint32_t>(net_time_ms_));        // (the connection is read here: whatever waited counts as heard)
     if (gap_seconds > 0.0) net_->note_gap(static_cast<uint32_t>(std::min(gap_seconds * 1000.0, 4.0e9)));   // a host that said nothing has been silent for the gap too
     handle_net_events();
+    poll_map_fetch();                                            // (application_maps.cpp)
     if (!net_) return;                                           // (a lost game brought the player back to the start menu, which let go of the net)
     track_net_state();
     note_seat();
@@ -3011,31 +3013,6 @@ void Application::handle_net_events() {
                 break;                                        // the rest of the room is shown by sync_room_view, the match by the overlay and the chat log
         }
     }
-}
-
-// Start was received: load the map exactly as named, check it is the same file as the host's, initialise the simulation with the shared seed,
-// roster and fog option, and report. Every machine does this on the setup screen; the match begins when everybody has reported.
-void Application::net_load_match() {
-    const net::StartMsg& start = net_->start_info();
-    std::string path;
-    for (const auto& entry : map_select_.get_maps()) {
-        if (entry.filename == start.map_name) path = entry.full_path;
-    }
-    if (path.empty()) path = config_.maps_dir + "/" + start.map_name;
-    uint64_t hash = 0;
-    local_player_id_ = net_->my_seat();
-    bool ok = net::hash_file(path, hash) && hash == start.map_hash;
-    if (!ok) std::cerr << "[Application] The map " << start.map_name << " here is not the host's file" << std::endl;
-    ok = ok && load_match(path, start.seed, start.roster, start.fog, start.mode);
-    if (ok) {
-        if (renderer_) renderer_->set_hud_team(local_player_id_);
-        apply_team_names(start.names, start.roster);
-        sim::apply_start_teams(sim_, start.teams());                         // (protocol 13: the teams of the Start, with the original's own commands, after init and the names and before the first tick: every machine, the referee and a machine that comes back from nothing do the same)
-        begin_net_recording();                                               // (the runner's tap, attach_net, tells it every turn from the first, a catch-up's too)
-    } else {
-        recorder_.reset();
-    }
-    net_->report_loaded(ok);
 }
 
 // Everybody has loaded: the match runs here from now on.

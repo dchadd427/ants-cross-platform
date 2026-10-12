@@ -1060,3 +1060,33 @@ target_link_libraries(test_replay_app PRIVATE ants_test_paths)
 
 add_test(NAME test_replay_app COMMAND test_replay_app)
 set_tests_properties(test_replay_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The players' maps in a match of the network (the web build fetches the room's map before it loads): a headless Application with a fake fetcher joins a bare machine's room over loopback
+add_executable(test_map_fetch_app
+    test_map_fetch_app.cpp
+)
+
+target_include_directories(test_map_fetch_app PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_map_fetch_app PRIVATE
+    ants_app
+)
+
+target_link_libraries(test_map_fetch_app PRIVATE ants_test_paths)
+
+if(APPLE)
+    target_link_libraries(test_map_fetch_app PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_map_fetch_app PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_map_fetch_app COMMAND test_map_fetch_app)
+set_tests_properties(test_map_fetch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.15 - 2026-10-11 - Community maps load in the browser
+
+**For players:**
+- **A room can play any community map in the browser:** when the leader picks a map of the community, every browser downloads that one file before the match loads (it is checked to be the host's copy) and the match waits for everybody. The same goes for watching a recording of such a match.
+- A map that cannot be had (taken off the site, no connection, too slow) stops that start for the room, with the reason on screen; the leader's next START tries again.
+
+**Rules / network:** none: the simulation and the protocol are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9f65f043...map-fetch)
+
 ## v0.12.14 - 2026-10-11 - The server knows the community maps and lists them
 
 **For players:**
@@ -448,22 +458,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38)
 
-## v0.0.94 - 2026-10-02 - Less lag: ping and delay next to the FPS counter, 50 ms turns, an adaptive buffer, and a lagging player no longer freezes the others
+## Older versions (v0.0.94 and before)
 
-**For players:**
-- "ping NN ms" and "delay NN ms" now show next to the frame rate in a room and in a network match, on the web too (never in a game of one machine).
-- Commands reach the game about 100 ms sooner on a steady link: turns are 50 ms instead of 100 ms, and the buffer adapts from one to four turns to the link's jitter.
-- A server's room no longer waits for a lagging player. The others see "Bob is lagging (12 s behind)" from 3 seconds, and the laggard sees "You are lagging" and "Catching up..." while its game runs the backlog at up to 4x. A player 60 seconds behind, or silent for 30, is dropped and told "You were away too long and were dropped from the match." A LAN host with a seat still waits up to 3 seconds for a friend.
-
-**Rules / network:** Network protocol 8 (a new Lag message): a v0.0.93 game cannot join. The simulation rules did not change.
-
-**Fixes:**
-- "Waiting for the other players..." no longer stays on screen after a stall, and turns that piled up (a hidden window, a frozen link) are run down instead of leaving a game half a second behind for good.
-- A burst of orders after a stuck connection is queued, not counted as violations that could throw the player out.
-- The frame-rate counter shows the real rate below 10 frames a second (it read "10 FPS").
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ce61aaa...f3c3d47)
-
-## Older versions (v0.0.93 and before)
-
-Every release before v0.0.94, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.95, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
