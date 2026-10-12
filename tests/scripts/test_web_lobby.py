@@ -75,7 +75,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colours"></ul>', self.markup)
         self.assertIn('<p class="slots-note" id="slots-note" role="status"></p>\n            <p class="slots-note teams-note" id="teams-note" role="status"></p>', self.markup)
         self.assertIn('<aside class="side" aria-label="The match">', self.markup)
-        self.assertIn('<div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"></select>'
+        self.assertIn('<div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"><option id="map-other" value="*" hidden></option></select>'
                       '<button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>', self.markup)
         self.assertIn('<p class="info" id="info" aria-live="polite"></p>', self.markup)
         self.assertIn('<button class="btn big" type="button" id="start">START!</button>', self.markup)
@@ -86,7 +86,7 @@ class TheFrontPageMarkup(PageCase):
         default = re.search(r"var DEFAULT_MAP_KEY = '(\w+)';", self.rules).group(1)
         self.assertEqual(len(keys), 6)
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s" width="300" height="300">' % (default, default.capitalize()), self.markup)
-        self.assertIn("$('preview').src = 'front/preview_' + side.mapKey + '.png';", self.script)
+        self.assertIn("var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;", self.script)
         for key in keys:
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
         self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.script)       # (the list of the drop-down is the rules' list, in its order)
@@ -383,7 +383,8 @@ class TheFrontPageMarkup(PageCase):
         # the Rejoin button of the strip at the top does the same for a match that still runs
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', aspect), window.location.href).href);", script)
         # START with nobody else in the match: the game page's own single player, on this computer, in this tab (a room of the game server needs two); the room is let go of first
-        self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)
+        self.assertIn("if (Rules.startsAlone(model)) { if (model.mapFile && !model.map) showBanner('notice', {", script)       # (a map of the players needs a second player or a bot: the game page's own single player knows the six only)
+        self.assertIn("else startAlone(); return; }", script)
         alone = script[script.index("function startAlone() {"):script.index("function pressTeam(seat, side) {")]
         self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);", alone)
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
@@ -439,8 +440,8 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
-        for name in ("lobby_rules.js", "lobby_net.js"):
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))

@@ -54,8 +54,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLOURS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
-    'article', 'banner', 'codeText', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'noticeKind', 'pairOf', 'pickName',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'viewOf'
+    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'noticeKind', 'pairOf', 'pickName',
+    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
 ]);
 
 // The colours: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -709,6 +709,24 @@ R.MAPS.forEach((m) => {
     const s = view(mk([P('Juniper'), O, O, O], { map: m.file })).side;
     same('the map\'s side shows ' + m.key + ': its name and its Map Info line', [s.mapKey, s.mapName, s.mapInfo], [m.key, m.name, m.info]);
 });
+// a map of the players (the picker's): the model keeps its file, the side shows its name, line and picture from what the page's list knows, or its file name alone while the list is not here
+{
+    const room = mk([P('Juniper'), O, O, O], { map: 'Thief craker.lvl' });
+    same('a map of the players has no key in the model but keeps its file', [model(room).map, model(room).mapFile], ['', 'Thief craker.lvl']);
+    const bare = view(room).side;
+    same('the side of a map of the players shows its file name without the ending while nothing else is known', [bare.mapKey, bare.mapName, bare.mapInfo, bare.mapFile, bare.mapThumb], ['', 'Thief craker', 'A map of the players', 'Thief craker.lvl', '']);
+    check('and the line under START names it', /play on Thief craker\./.test(R.sideView(model(room), ctx(), R.playing(model(room))).plan) || /A game for one/.test(bare.plan));
+    const known = R.sideView(model(room), Object.assign(ctx(), { community: (f) => (f === 'Thief craker.lvl' ? { name: 'Thief craker', info: 'by perfect_chaos (10 min)', thumb: '/maps/previews/Thief%20craker.webp' } : null) }), R.playing(model(room)));
+    same('the side of a map of the players with the list known', [known.mapName, known.mapInfo, known.mapThumb], ['Thief craker', 'by perfect_chaos (10 min)', '/maps/previews/Thief%20craker.webp']);
+    check('an original has no mapFile in its side', view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.mapFile === undefined);
+    same('a room with no map yet shows Treasure', view(mk([P('Juniper'), O, O, O], { map: '' })).side.mapKey, 'treasure');
+    const r2 = mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' });
+    same('planWith sets a map of the players by its file name', R.planWith(r2, model(r2), { file: 'Thief craker.lvl' }).map, 'Thief craker.lvl');
+    same('planWith sets an original by its key', R.planWith(r2, model(r2), { map: 'tiny' }).map, 'TINY.LVL');
+    same('planWith keeps the room\'s map for a file that is no map name', ['../x.lvl', 'x.txt', '.lvl', '', null, 7].map((f) => R.planWith(r2, model(r2), { file: f }).map), ['', '', '', '', '', '']);
+    same('validMapFile is the game\'s name rule', ['Thief craker.lvl', 'A.LVL', 'abcd.lvl', 'x'.repeat(61) + '.lvl', '.hid.lvl', 'a/b.lvl', 'a\\b.lvl', 'a:b.lvl', 'a|b.lvl', 'abcde.Lvl', 'abc\u00e9de.lvl'].map(R.validMapFile), [true, true, true, false, false, false, false, false, false, false, false]);
+    same('communityName cuts the ending in any case', [R.communityName('Thief craker.lvl'), R.communityName('X Y.LVL')], ['Thief craker', 'X Y']);
+}
 same('the map\'s side asked directly is the same as inside viewOf', R.sideView(model(S2), ctx(), R.playing(model(S2))), view(S2).side);
 same('START waits for the host: "Waiting for" and the name of the host', [view(S4).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1 })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);
 same('START of a page that has no room is off (like the map)', [view(S1, { offline: 'none' }).side.startDisabled, view(S1, { offline: 'none' }).side.mapDisabled, view(S1, { offline: 'none' }).side.startBusy], [true, true, false]);

@@ -216,10 +216,16 @@
         });
     }
 
+    // The page that is not a game (the front page) only warms the browser's HTTP cache with a map it is about to need: the game page, a moment later, finds the file there
+    function warm(win, name) {
+        if (!win.fetch || !validName(name)) return;
+        try { win.fetch(fileUrl(name), { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.arrayBuffer() : null; }).then(undefined, function () { /* the game page asks again */ }); } catch (e) { /* nothing is lost */ }
+    }
+
     // A game that has not started has no file system yet: its preRun function writes the checked bytes where the game looks (the maps folder; its parents are made when the data package has not yet)
     function writer(FSOf, name, bytes) {
         return function () { var FS = FSOf(); try { FS.mkdirTree('Original-Ants/Maps'); } catch (e) { /* it is there */ } FS.writeFile('Original-Ants/Maps/' + name, bytes); };
     }
 
-    return { forPage: forPage, writer: writer, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
+    return { warm: warm, forPage: forPage, writer: writer, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
 });

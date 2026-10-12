@@ -114,6 +114,7 @@ class ThePagesOwnCode(unittest.TestCase):
             "a map of any size is taken": ("buffer.byteLength > MAX_BYTES", "false"),
             "a 404 is tried again": ("finish({ ok: false, retry: false, text: 'The map ' + name + ' is not on the server", "finish({ ok: false, retry: true, text: 'The map ' + name + ' is not on the server"),
             "the address is not encoded": ("out += /[A-Za-z0-9\\-._~]/.test(c) ?", "out += /[A-Za-z0-9\\-._~ ()!']/.test(c) ?"),
+            "warm asks for a bad name": ("if (!win.fetch || !validName(name)) return;", "if (!win.fetch) return;"),
             "a failure is not said in the toast": ("if (state !== FAILED || !toast) return;", "return;"),
             "an original is fetched": ("&& !ORIGINALS.test(name) ? { name: name", "? { name: name"),
             "a path is a map name": ("if (/[\\/\\\\:*?\"<>|]/.test(name) || name.charAt(0) === '.') return false;", ""),
