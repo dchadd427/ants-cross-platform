@@ -2,6 +2,7 @@
 // NetGame over loopback sockets), and the file that it keeps of each is played again by the replay player on the engine alone. A recording stands for the match exactly when that replay reaches the
 // state in which the match ended: the same state hash, every order at its turn.
 #include "ants_app/application.hpp"
+#include "ants_ai/bot_controller.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
@@ -22,6 +23,9 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <cmath>
+#include <map>
+#include <set>
 #include <memory>
 #include <random>
 #include <string>
@@ -326,6 +330,68 @@ Handmade make_handmade(uint32_t turns, bool quit_at_end, uint32_t seed = 21, uin
         quit.issuer = 1;
         rec.on_command(quit);
         engine.apply_command(quit);
+    }
+    std::string error;
+    out.bytes = rec.finish(engine, error);
+    if (!out.bytes.empty() && !replay::decode(out.bytes.data(), out.bytes.size(), out.file, error)) out.bytes.clear();
+    return out;
+}
+
+// A match of four computer players on TREASURE (they fight, steal and light fires), made as the application records one: the bots' orders go to the engine and the recorder. `cues` gets every cue that
+// the engine made, as the replay's camera sees them (the queue of the engine holds every seat's cues, whoever they are for).
+struct BotMatch {
+    std::vector<uint8_t> bytes;
+    replay::Replay file;
+    std::vector<sim::AudioEvent> cues;
+};
+
+class RecordingSink final : public sim::CommandSink {
+public:
+    RecordingSink(sim::SimulationEngine& sim, replay::Recorder& rec) : sim_(sim), rec_(rec) {}
+    sim::CommandResult submit(const Command& c) override {
+        rec_.on_command(c);
+        return sim_.apply_command(c);
+    }
+
+private:
+    sim::SimulationEngine& sim_;
+    replay::Recorder& rec_;
+};
+
+BotMatch make_bot_match(uint32_t turns, const char* map = "TREASURE.LVL", uint32_t seed = 5) {
+    BotMatch out;
+    assets::LevelData level;
+    const std::string path = maps_dir() + "/" + map;
+    uint64_t map_hash = 0;
+    if (!level.load_from_file(path) || !net::hash_file(path, map_hash)) return out;
+    replay::Header head;
+    head.game_version = "v0.0.0";
+    head.build_id = "test";
+    head.venue = "local game";
+    head.map_name = map;
+    head.map_hash = map_hash;
+    head.seed = seed;
+    head.roster = 0x0F;
+    head.fog = false;
+    for (uint8_t seat = 0; seat < 4; ++seat) head.names[seat] = "Bot (Hard)";
+    sim::SimulationEngine engine;
+    engine.init(level, seed, head.roster);
+    replay::Recorder rec(head);
+    RecordingSink sink(engine, rec);
+    ai::BotController controller(engine, seed);
+    for (uint8_t seat = 0; seat < 4; ++seat) {
+        ai::BotSpec spec;
+        spec.seat = seat;
+        spec.level = ai::Level::Hard;
+        std::string why;
+        if (!controller.add(spec, sink, why)) return out;
+    }
+    for (uint32_t turn = 0; turn < turns && !engine.is_match_over(); ++turn) {
+        engine.tick();
+        rec.on_tick(engine);
+        controller.on_tick(engine);
+        for (const sim::AudioEvent& cue : engine.poll_audio_events()) out.cues.push_back(cue);
+        engine.clear_news_events();
     }
     std::string error;
     out.bytes = rec.finish(engine, error);
@@ -1351,6 +1417,637 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(x.value(ReplayValue::Live), 0);
         ASSERT_EQ(x.value(ReplayValue::Limit), x.value(ReplayValue::Total));
         x.app.shutdown();
+    } TEST_END();
+
+    // ---- the camera of a replay (auto_camera.hpp, docs/REPLAYS.md "Camera") --------------------------------------------------------------------------------------------------------------------
+
+    {
+        using Pt = AutoCamera::Point;
+        namespace S = sim::SoundID;
+        const auto cue_at = [](uint32_t sound, int32_t x, int32_t y, uint8_t target = 255) {
+            sim::AudioEvent e;
+            e.sound_id = sound;
+            e.world_x = x;
+            e.world_y = y;
+            e.priority = 1;
+            e.target_player = target;
+            return e;
+        };
+        // A model and the view that it moves: `run` plays the viewer's time in 50 ms frames, the view where the model last put it
+        struct Run {
+            AutoCamera cam;
+            Pt at{100.0, 100.0};
+            Pt view{900.0, 500.0};
+            bool moved{false};
+            void run(double ms, bool zoomed = false) {
+                for (double t = 0.0; t < ms; t += 50.0) {
+                    Pt out;
+                    moved = cam.step(50.0, at, view, zoomed && t == 0.0, out);
+                    if (moved) at = out;
+                }
+            }
+        };
+        const auto near = [](const Pt& a, double x, double y, double tol = 1.0) { return std::fabs(a.x - x) <= tol && std::fabs(a.y - y) <= tol; };
+
+        TEST_CASE("RA8.1 The camera goes to the busiest place: a bomb beats three hits, two hits beat one, the place is where the moments are, the move takes 0.8 s, and it stays where it is when nothing happens") {
+            Run r;
+            for (int i = 0; i < 3; ++i) r.cam.observe_cue(cue_at(S::MeleeAttack, 3000, 3000));
+            r.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
+            r.run(100.0);
+            ASSERT_TRUE(r.moved);                                                   // (it glides)
+            Pt target;
+            ASSERT_TRUE(r.cam.target(target) && near(target, 1000.0, 2000.0));
+            ASSERT_FALSE(near(r.at, 1000.0, 2000.0, 20.0));                         // (not there yet)
+            r.run(800.0);
+            ASSERT_TRUE(near(r.at, 1000.0, 2000.0));                                // (arrived: the middle of the view is the place)
+            r.run(50.0);
+            ASSERT_FALSE(r.moved);                                                  // (and it holds: the camera is left alone)
+            Run two;                                                                // two hits close together are a fight, one hit far off is not as busy
+            two.cam.observe_cue(cue_at(S::AttackAlt, 5000, 5000));
+            two.cam.observe_cue(cue_at(S::HeavyPunch, 5100, 5050));
+            two.cam.observe_cue(cue_at(S::AttackAlt, 500, 500));
+            two.run(1000.0);
+            ASSERT_TRUE(two.cam.target(target) && near(target, 5050.0, 5025.0, 80.0));
+            Run quiet;                                                              // nothing happens: it stays put, and has no place
+            quiet.run(6000.0);
+            ASSERT_FALSE(quiet.moved);
+            ASSERT_TRUE(near(quiet.at, 100.0, 100.0, 0.0));
+            ASSERT_FALSE(quiet.cam.target(target));
+            Run alone;                                                              // a single hit is the least that counts, and only while it is fresh
+            alone.cam.observe_cue(cue_at(S::MeleeAttack, 2000, 2000));
+            alone.run(100.0);
+            ASSERT_TRUE(alone.cam.target(target));
+            alone.run(1200.0);
+            ASSERT_FALSE(alone.cam.hot_spot(target));                               // (a moment fades: a hit that is more than a second old is nothing to go to)
+        } TEST_END();
+
+        TEST_CASE("RA8.2 The camera holds at least 3 seconds at a place, moves on only when another place is clearly busier, and does not go back and forth") {
+            Run r;
+            r.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
+            r.run(850.0);                                                           // (it has arrived: the hold begins)
+            ASSERT_TRUE(near(r.at, 1000.0, 2000.0));
+            r.run(1150.0);                                                          // (2 s in)
+            for (int i = 0; i < 3; ++i) r.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));           // (far busier, and right now)
+            Pt target;
+            for (int i = 0; i < 28; ++i) {                                          // (up to about 3.4 s: still holding)
+                r.run(50.0);
+                ASSERT_FALSE(r.moved);
+                ASSERT_TRUE(r.cam.target(target) && near(target, 1000.0, 2000.0));
+            }
+            r.run(500.0);                                                           // (the hold is over: it goes)
+            ASSERT_TRUE(r.cam.target(target) && near(target, 5000.0, 5000.0));
+            r.run(900.0);
+            ASSERT_TRUE(near(r.at, 5000.0, 5000.0));
+            // a place that stays busy keeps the view: a fight at A that goes on, and B that is busier but not clearly (two bombs against the fight), then clearly (three)
+            Run busy;
+            busy.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
+            for (int i = 0; i < 16; ++i) {                                          // (a hit every 250 ms for 4 s: the hold is over)
+                busy.cam.observe_cue(cue_at(S::MeleeAttack, 1000, 2000));
+                busy.run(250.0);
+            }
+            ASSERT_TRUE(busy.cam.target(target) && near(target, 1000.0, 2000.0));
+            for (int i = 0; i < 2; ++i) busy.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));
+            busy.run(100.0);
+            ASSERT_FALSE(busy.moved);                                               // (busier, but not by half as much again: the view stays)
+            ASSERT_TRUE(busy.cam.target(target) && near(target, 1000.0, 2000.0));
+            busy.cam.observe_cue(cue_at(S::BombDetonate, 5000, 5000));
+            busy.run(100.0);
+            ASSERT_TRUE(busy.moved && busy.cam.target(target) && near(target, 5000.0, 5000.0));        // (three bombs: clearly busier)
+        } TEST_END();
+
+        TEST_CASE("RA8.3 Taking the camera makes it Manual (the view stays where it is put, whatever happens), and the button's Auto glides to the last action and holds there") {
+            Run r;
+            r.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
+            r.run(1000.0);
+            ASSERT_TRUE(r.cam.mode() == CameraMode::Auto);
+            ASSERT_TRUE(r.cam.take());
+            ASSERT_FALSE(r.cam.take());                                             // (it is Manual already: nothing to tell)
+            ASSERT_TRUE(r.cam.mode() == CameraMode::Manual);
+            r.at = Pt{4000.0, 4000.0};                                              // (the viewer put the view there)
+            r.cam.observe_cue(cue_at(S::BombDetonate, 2500, 3000));
+            r.cam.observe_cue(cue_at(S::MeleeAttack, 3000, 500));                   // (the last thing that happened)
+            Pt hot;
+            ASSERT_TRUE(r.cam.hot_spot(hot) && near(hot, 2500.0, 3000.0));          // (the hints go on in Manual: the busiest place is known)
+            for (int i = 0; i < 100; ++i) {                                         // (five seconds, and the moments have faded)
+                r.run(50.0);
+                ASSERT_FALSE(r.moved);
+            }
+            ASSERT_TRUE(near(r.at, 4000.0, 4000.0, 0.0));
+            r.cam.set_mode(CameraMode::Auto);
+            r.run(100.0);
+            ASSERT_TRUE(r.moved);
+            Pt target;
+            ASSERT_TRUE(r.cam.target(target) && near(target, 3000.0, 500.0));          // (the last action, not the busiest place)
+            r.run(900.0);
+            ASSERT_TRUE(near(r.at, 3000.0, 500.0));
+            ASSERT_TRUE(r.cam.holding());
+            // the last action wins over the busiest place when both are still fresh: a bomb, then a hit elsewhere, then the button
+            Run both;
+            both.cam.take();
+            both.cam.observe_cue(cue_at(S::BombDetonate, 2500, 3000));
+            both.cam.observe_cue(cue_at(S::MeleeAttack, 3000, 500));
+            both.cam.set_mode(CameraMode::Auto);
+            both.run(100.0);
+            ASSERT_TRUE(both.cam.target(target) && near(target, 3000.0, 500.0));
+            // with nothing ever to go to, Auto stays where it is
+            Run none;
+            none.cam.take();
+            none.cam.set_mode(CameraMode::Auto);
+            none.run(2000.0);
+            ASSERT_FALSE(none.moved);
+            // a new match or a jump forgets the moments and keeps the mode
+            Run fresh;
+            fresh.cam.observe_cue(cue_at(S::BombDetonate, 1000, 2000));
+            fresh.cam.take();
+            fresh.cam.reset();
+            ASSERT_EQ(fresh.cam.moments(), 0u);
+            ASSERT_TRUE(fresh.cam.mode() == CameraMode::Manual);
+        } TEST_END();
+
+        TEST_CASE("RA8.4 Zooming keeps Auto: the view is put back at the place at the viewer's zoom; in Manual nothing is moved") {
+            Run r;
+            r.cam.observe_cue(cue_at(S::FireBeam, 1500, 1800));
+            r.run(1000.0);
+            r.at = Pt{1500.0 + 40.0, 1800.0 + 30.0};                                // (a zoom around the pointer moved the middle of the view a little)
+            r.run(50.0, true);
+            ASSERT_TRUE(r.moved && near(r.at, 1500.0, 1800.0));
+            r.run(50.0, false);
+            ASSERT_FALSE(r.moved);
+            ASSERT_TRUE(r.cam.mode() == CameraMode::Auto);
+            r.cam.take();
+            r.at = Pt{900.0, 900.0};
+            r.run(50.0, true);
+            ASSERT_FALSE(r.moved);
+            Run early;                                                              // a zoom before anything has happened has no place to go back to
+            early.run(50.0, true);
+            ASSERT_FALSE(early.moved);
+        } TEST_END();
+
+        TEST_CASE("RA8.5 At 4x and 8x only the big moments count (a death, a theft, a fire, a bomb): a hit is ignored there, and counts again at 1x") {
+            AutoCamera cam;
+            cam.set_speed(4.0f);
+            cam.observe_cue(cue_at(S::MeleeAttack, 1000, 1000));
+            cam.observe_cue(cue_at(S::PowerUpDrop, 1000, 1000));
+            cam.observe_cue(cue_at(S::ShovelWater, 1000, 1000));
+            ASSERT_EQ(cam.moments(), 0u);
+            for (const uint32_t big : {S::ThiefDive, S::FireBeam, S::FireErupt, S::BombDetonate, S::BombDefuseGrab, S::BaseScoreDn}) cam.observe_cue(cue_at(big, 1000, 1000));
+            ASSERT_EQ(cam.moments(), 6u);
+            cam.set_speed(8.0f);
+            cam.observe_cue(cue_at(S::MeleeAttack, 1000, 1000));
+            ASSERT_EQ(cam.moments(), 6u);
+            cam.set_speed(2.0f);
+            cam.observe_cue(cue_at(S::MeleeAttack, 1000, 1000));
+            ASSERT_EQ(cam.moments(), 7u);
+        } TEST_END();
+
+        TEST_CASE("RA8.5b The ranks: a theft, a fire, a bomb and a death each take the camera from the low ones (a power-up, a bridge, a base alarm, an ant in the water), and each is enough alone") {
+            const std::vector<std::pair<uint32_t, uint8_t>> high = {{S::ThiefDive, 255}, {S::FireBeam, 255}, {S::FireErupt, 255}, {S::BombDetonate, 255}, {S::BombDefuseGrab, 255}, {S::BaseScoreDn, 255}};
+            const std::vector<std::pair<uint32_t, uint8_t>> low = {{S::PowerUpDrop, 255}, {S::ShovelGravel, 255}, {S::ShovelWater, 255}, {S::AntDrown, 255}, {S::BaseAlarmSiren, 0}, {S::Anthill, 0}};
+            for (const auto& [sound, who] : high) {
+                for (const auto& [lesser, whose] : low) {
+                    AutoCamera cam;
+                    cam.set_hills({Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}});
+                    cam.observe_cue(cue_at(lesser, whose == 255 ? 4000 : 0, whose == 255 ? 4000 : 0, whose));       // (the same moment, elsewhere: a cue for a seat is at its hill)
+                    cam.observe_cue(cue_at(sound, 2000, 2000, who));
+                    Pt hot;
+                    ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 2000.0, 2000.0, 1.0));
+                }
+                AutoCamera alone;
+                alone.observe_cue(cue_at(sound, 2000, 2000, who));
+                Pt hot;
+                ASSERT_TRUE(alone.hot_spot(hot));
+            }
+            sim::WorldState before;
+            sim::AntSnapshot a;
+            a.id = 1;
+            a.px = 500;
+            a.py = 600;
+            before.ants = {a};
+            for (const auto& [lesser, whose] : low) {                                // a death, too, is high
+                AutoCamera cam;
+                cam.set_hills({Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}, Pt{100.0, 100.0}});
+                cam.observe_world(before);
+                cam.observe_cue(cue_at(lesser, whose == 255 ? 4000 : 0, whose == 255 ? 4000 : 0, whose));
+                cam.observe_world(sim::WorldState{});
+                Pt hot;
+                ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 500.0, 600.0, 1.0));
+            }
+        } TEST_END();
+
+        TEST_CASE("RA8.6 What the camera reads: a cue with a place is where it happens, a cue for a player is that player's hill (a base alarm, a raid), a stop, a cue of no meaning and a seat that has no hill are ignored") {
+            AutoCamera cam;
+            cam.set_hills({Pt{300.0, 300.0}, Pt{1700.0, 300.0}, Pt{300.0, 1700.0}, Pt{1700.0, 1700.0}});
+            cam.observe_cue(cue_at(S::BaseAlarmSiren, 0, 0, 2));
+            cam.observe_cue(cue_at(S::BaseAlarmSiren, 0, 0, 3));
+            cam.observe_cue(cue_at(S::Anthill, 0, 0, 3));
+            Pt hot;
+            ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 1700.0, 1700.0, 1.0));       // (seat 3's hill: an alarm and a raid there weigh more than seat 2's alarm)
+            AutoCamera other;
+            other.set_hills({Pt{300.0, 300.0}});
+            other.observe_cue(cue_at(S::BaseAlarmSiren, 0, 0, 5));                  // (no such seat)
+            other.observe_cue(cue_at(S::BaseAlarmSiren, 0, 0, 255));                // (a cue for everyone has no hill)
+            sim::AudioEvent stop = cue_at(S::BombDetonate, 1000, 1000);
+            stop.stop = true;
+            other.observe_cue(stop);
+            other.observe_cue(cue_at(S::ButtonClick, 1000, 1000));
+            other.observe_cue(cue_at(S::FoodHarvest, 1000, 1000));
+            ASSERT_EQ(other.moments(), 0u);
+            for (const uint32_t sound : {S::MeleeAttack, S::AttackAlt, S::HeavyPunch, S::WaterAttack, S::ThiefWhip}) {          // (the blows of every kind of ant)
+                AutoCamera one;
+                one.observe_cue(cue_at(sound, 1000, 1000));
+                ASSERT_EQ(one.moments(), 1u);
+            }
+        } TEST_END();
+
+        TEST_CASE("RA8.7 An ant that is gone died, at the place it was (a drowning ant has its own cue); the first look at the world makes no moment") {
+            const auto ant = [](uint32_t id, int32_t x, int32_t y, bool drowning = false) {
+                sim::AntSnapshot a;
+                a.id = id;
+                a.hp = 10;
+                a.px = x;
+                a.py = y;
+                a.is_drowning = drowning;
+                return a;
+            };
+            sim::WorldState before;
+            before.ants = {ant(1, 500, 600), ant(2, 900, 100), ant(3, 700, 700, true)};
+            sim::WorldState after;
+            after.ants = {ant(2, 910, 100)};
+            AutoCamera cam;
+            cam.observe_world(before);
+            ASSERT_EQ(cam.moments(), 0u);
+            cam.observe_world(after);
+            ASSERT_EQ(cam.moments(), 1u);                                           // (ant 1 died; ant 3 was drowning)
+            Pt hot;
+            ASSERT_TRUE(cam.hot_spot(hot) && near(hot, 500.0, 600.0));
+            cam.reset();
+            cam.observe_world(before);                                              // (after a jump the ants of the world before it are not compared with)
+            cam.observe_world(before);
+            ASSERT_EQ(cam.moments(), 0u);
+        } TEST_END();
+    }
+
+    // The match of four computer players on TREASURE that the next cases watch (made once)
+    const auto bot_match = []() -> const BotMatch& {                                // (made when the first case that needs it runs; ANTS_BOT_MATCH_TURNS makes a longer one for the browser check)
+        static const BotMatch m = make_bot_match(std::getenv("ANTS_BOT_MATCH_TURNS") != nullptr ? static_cast<uint32_t>(std::atoi(std::getenv("ANTS_BOT_MATCH_TURNS"))) : 4000u);
+        return m;
+    };
+
+    TEST_CASE("RA8.8 The engine's cues carry what the camera needs in a real match: the blows of the ants (broadcast, with a place), the thieves, fires, bombs and base alarms, for every seat, not one player's") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        namespace S = sim::SoundID;
+        size_t blows = 0;
+        size_t placed_blows = 0;
+        size_t thieves = 0;
+        size_t fires = 0;
+        std::set<uint8_t> alarmed;
+        for (const sim::AudioEvent& e : bot_match().cues) {
+            if (e.stop) continue;
+            if (e.sound_id == S::MeleeAttack || e.sound_id == S::AttackAlt || e.sound_id == S::HeavyPunch || e.sound_id == S::WaterAttack || e.sound_id == S::ThiefWhip) {
+                ++blows;
+                if (e.target_player == 255 && (e.world_x != 0 || e.world_y != 0)) ++placed_blows;
+            }
+            if (e.sound_id == S::ThiefDive) ++thieves;
+            if (e.sound_id == S::FireBeam || e.sound_id == S::FireErupt) ++fires;
+            if (e.sound_id == S::BaseAlarmSiren || e.sound_id == S::Anthill) alarmed.insert(e.target_player);
+        }
+        ASSERT_GT(blows, 10u);
+        ASSERT_EQ(blows, placed_blows);                                             // (every blow is a cue for everybody, at the ant that struck)
+        ASSERT_GT(thieves, 0u);
+        ASSERT_GT(fires, 0u);
+        ASSERT_TRUE(alarmed.count(0) && alarmed.count(1) && alarmed.count(2) && alarmed.count(3));      // (the engine makes the cue of each seat: the replay's engine holds them all, none is filtered by whose screen it is)
+        if (const char* out = std::getenv("ANTS_BOT_MATCH_OUT")) {                  // (the file of this match, for the browser check of the camera: tests/scripts/web_camera_check.py)
+            std::ofstream file(out, std::ios::binary | std::ios::trunc);
+            file.write(reinterpret_cast<const char*>(bot_match().bytes.data()), static_cast<std::streamsize>(bot_match().bytes.size()));
+        }
+    } TEST_END();
+
+    TEST_CASE("RA8.9 A recording is watched with the Auto camera by default: the view moves to the places where things happen, the minimap's ring is whole, and the match is the same one (every hash of the file and the end)") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 0);
+        ASSERT_EQ(v.app.auto_camera().hills().size(), 4u);                           // (the hills of the match: where a base alarm is)
+        for (const assets::AnthillSpawn& hill : v.app.sim().get_world_state().anthills) {
+            ASSERT_TRUE(hill.team_id < 4);
+            ASSERT_TRUE(v.app.auto_camera().hills()[hill.team_id].x == (hill.x + 2.0) * 32.0 && v.app.auto_camera().hills()[hill.team_id].y == (hill.y + 2.0) * 32.0);
+        }
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        const ViewportCamera& cam = v.app.renderer().camera();
+        const float start_x = cam.x;
+        const float start_y = cam.y;
+        std::set<std::pair<int, int>> places;
+        bool ring = false;
+        bool inside = true;
+        int arrived = 0;
+        for (int i = 0; i < 2100 && v.state() == ReplayState::Playing; ++i) {
+            v.frames(1);
+            if (v.app.hud().camera_ring_shown() && v.app.hud().camera_ring_solid()) ring = true;
+            AutoCamera::Point target;
+            if (v.app.auto_camera().target(target) && !v.app.auto_camera().gliding()) {                   // (arrived: the place is in the picture)
+                const double vw = zoom::visible_exact(cam.viewport_w, cam.zoom);
+                const double vh = zoom::visible_exact(cam.viewport_h, cam.zoom);
+                if (target.x >= cam.x && target.x <= cam.x + vw && target.y >= cam.y && target.y <= cam.y + vh) ++arrived;
+                else inside = false;
+                places.insert({static_cast<int>(target.x) / 200, static_cast<int>(target.y) / 200});
+            }
+        }
+        ASSERT_TRUE(v.app.replay_failure() == ReplayFailure::None);                  // (no hash of the file differed: the camera touches nothing of the match)
+        ASSERT_TRUE(cam.x != start_x || cam.y != start_y);
+        ASSERT_GE(places.size(), 2u);                                                // (it went to more than one place)
+        ASSERT_TRUE(ring);
+        ASSERT_GT(arrived, 20);
+        ASSERT_TRUE(inside);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 0);
+        v.frames(3000);
+        ASSERT_TRUE(v.state() == ReplayState::CutShort);
+        ASSERT_GT(v.app.auto_camera().deaths(), 0u);                                 // (the camera reads the ants that are gone: a match of four Hard bots has deaths)
+        ASSERT_EQ(v.app.sim().state_hash().total, bot_match().file.final_hash);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.10 Manual camera: the view stays where it is for the whole match, the ring is only a hint (dashed), and the match is the same one") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetCamera, 0);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 0);
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        const ViewportCamera& cam = v.app.renderer().camera();
+        const float start_x = cam.x;
+        const float start_y = cam.y;
+        bool hint = false;
+        bool whole = false;
+        for (int i = 0; i < 2100 && v.state() == ReplayState::Playing; ++i) {
+            v.frames(1);
+            ASSERT_TRUE(cam.x == start_x && cam.y == start_y);
+            if (v.app.hud().camera_ring_shown()) (v.app.hud().camera_ring_solid() ? whole : hint) = true;
+        }
+        ASSERT_TRUE(hint);
+        ASSERT_FALSE(whole);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 0);
+        v.frames(3000);
+        ASSERT_EQ(v.app.sim().state_hash().total, bot_match().file.final_hash);
+        v.app.shutdown();
+    } TEST_END();
+
+    // The pointer at one edge of the picture (the edge strips scroll the view, as in the original), then back in the middle. True when the view moved.
+    const auto scroll_by_edge = [](Application& app) {
+        const int32_t width = app.layout().width;                                   // (the strips run along the edges of the picture)
+        const int32_t height = app.layout().height;
+        const int32_t mid_x = width / 2;
+        const int32_t mid_y = height / 2;
+        const int32_t spots[4][2] = {{1, mid_y}, {width - 2, mid_y}, {mid_x, 1}, {mid_x, height - 2}};
+        for (const auto& spot : spots) {
+            const float x = app.renderer().camera().x;
+            const float y = app.renderer().camera().y;
+            SDL_MouseMotionEvent m{};
+            m.type = SDL_MOUSEMOTION;
+            m.x = spot[0];
+            m.y = spot[1];
+            app.handle_mouse_motion(m);
+            for (int i = 0; i < 4; ++i) app.handle_camera_panning(0.060f);
+            m.x = mid_x;
+            m.y = mid_y;
+            app.handle_mouse_motion(m);
+            if (app.renderer().camera().x != x || app.renderer().camera().y != y) return true;
+        }
+        return false;
+    };
+
+    TEST_CASE("RA8.11 Taking the camera: the pointer at the screen edge moves the view and makes it Manual (told once to the page), an edge that cannot scroll takes nothing, and the button's Auto glides back to the last action") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        v.frames(500);                                                              // (the view has been to a place or two)
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        {   // an edge that cannot scroll takes nothing: a Viewer of its own, its view put at the map's top left corner (a test's own doing, not the viewer's), the pointer at the left edge
+            Viewer w(bot_match().bytes);
+            ASSERT_TRUE(w.ok);
+            ViewportCamera& c = w.app.renderer().camera();
+            c.set_origin(0.0, 0.0, w.app.sim().get_world_state().width, w.app.sim().get_world_state().height);
+            ASSERT_TRUE(c.world_x == 0 && c.world_y == 0);
+            const int32_t width = w.app.layout().width;
+            const int32_t height = w.app.layout().height;
+            SDL_MouseMotionEvent m{};
+            m.type = SDL_MOUSEMOTION;
+            m.x = 1;
+            m.y = height / 2;
+            w.app.handle_mouse_motion(m);
+            for (int i = 0; i < 10; ++i) w.app.handle_camera_panning(0.060f);
+            ASSERT_TRUE(c.world_x == 0 && c.world_y == 0);
+            ASSERT_EQ(w.value(ReplayValue::Camera), 1);
+            ASSERT_EQ(w.value(ReplayValue::CameraTaken), 0);
+            m.y = height - 2;                                                       // (the bottom edge can scroll: that one takes it)
+            m.x = width / 2;
+            w.app.handle_mouse_motion(m);
+            for (int i = 0; i < 10; ++i) w.app.handle_camera_panning(0.060f);
+            ASSERT_TRUE(c.world_y > 0);
+            ASSERT_EQ(w.value(ReplayValue::Camera), 0);
+            w.app.shutdown();
+        }
+        ASSERT_TRUE(scroll_by_edge(v.app));
+        ASSERT_EQ(v.value(ReplayValue::Camera), 0);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 1);
+        const ViewportCamera& cam = v.app.renderer().camera();
+        const float held_x = cam.x;
+        const float held_y = cam.y;
+        v.frames(400);                                                              // (more happens, and the view stays where the viewer put it)
+        ASSERT_TRUE(cam.x == held_x && cam.y == held_y);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 1);
+        v.app.replay_control(ReplayControl::SetCamera, 1);                          // the button
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        v.frames(40);
+        ASSERT_TRUE(cam.x != held_x || cam.y != held_y);                            // (it glides back ...)
+        v.frames(60);
+        AutoCamera::Point target;
+        ASSERT_TRUE(v.app.auto_camera().target(target));
+        const double vw = zoom::visible_exact(cam.viewport_w, cam.zoom);
+        const double vh = zoom::visible_exact(cam.viewport_h, cam.zoom);
+        ASSERT_TRUE(target.x >= cam.x && target.x <= cam.x + vw && target.y >= cam.y && target.y <= cam.y + vh);        // (... to the place it was, and it is in the picture)
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.12 The wheel's zoom keeps the Auto camera, at the viewer's zoom (the place stays in the picture); two fingers that pan take it, the pixel or two that a pinch drifts does not, and a minimap drag takes it") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        v.frames(500);
+        v.app.replay_control(ReplayControl::SetPaused, 1);                          // (nothing more happens: the moments fade, the view arrives and stays)
+        AutoCamera::Point target;
+        for (int i = 0; i < 400 && (v.app.auto_camera().gliding() || v.app.auto_camera().moments() != 0); ++i) v.frames(1);
+        ASSERT_TRUE(v.app.auto_camera().target(target) && !v.app.auto_camera().gliding());
+        const LayoutRect view = v.app.layout().view();
+        SDL_MouseMotionEvent m{};
+        m.type = SDL_MOUSEMOTION;
+        m.x = view.x + view.w / 2;
+        m.y = view.y + view.h / 2;
+        v.app.handle_mouse_motion(m);
+        const float zoom_before = v.app.renderer().camera().zoom;
+        SDL_MouseWheelEvent wheel{};
+        wheel.type = SDL_MOUSEWHEEL;
+        wheel.y = 1;
+        wheel.preciseY = 1.0f;
+        wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+        wheel.timestamp = 1000;
+        v.app.handle_mouse_wheel(wheel);
+        v.frames(2);
+        const ViewportCamera& cam = v.app.renderer().camera();
+        ASSERT_TRUE(cam.zoom != zoom_before);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);                                 // (zoom keeps Auto)
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 0);
+        {
+            const double vw = zoom::visible_exact(cam.viewport_w, cam.zoom);
+            const double vh = zoom::visible_exact(cam.viewport_h, cam.zoom);
+            ASSERT_TRUE(v.app.auto_camera().target(target));
+            ASSERT_TRUE(target.x >= cam.x && target.x <= cam.x + vw && target.y >= cam.y && target.y <= cam.y + vh);
+        }
+        v.app.pan_view(2, 1);                                                       // (a pinch's drift)
+        v.app.pan_view(-1, 2);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        v.frames(10);                                                               // (a while later: the sum starts again)
+        v.app.pan_view(1, 1);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        v.app.pan_view(30, 0);                                                      // two fingers that really pan
+        ASSERT_EQ(v.value(ReplayValue::Camera), 0);
+        ASSERT_EQ(v.value(ReplayValue::CameraTaken), 1);
+        v.app.replay_control(ReplayControl::SetCamera, 1);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        // the minimap: a press and the pointer held off the middle of the minimap steer the view
+        const LayoutRect mini = v.app.layout().minimap();
+        SDL_MouseButtonEvent press{};
+        press.type = SDL_MOUSEBUTTONDOWN;
+        press.button = SDL_BUTTON_LEFT;
+        press.x = mini.x + mini.w / 2;
+        press.y = mini.y + mini.h / 2;
+        v.app.handle_mouse_motion(m);
+        m.x = mini.x + 1;
+        m.y = mini.y + mini.h / 2;
+        v.app.handle_mouse_motion(m);
+        press.x = m.x;
+        press.y = m.y;
+        v.app.handle_mouse_button(press);
+        const float x = cam.x;
+        const float y = cam.y;
+        for (int i = 0; i < 6; ++i) v.app.handle_camera_panning(0.060f);
+        ASSERT_TRUE(cam.x != x || cam.y != y);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 0);
+        SDL_MouseButtonEvent release = press;
+        release.type = SDL_MOUSEBUTTONUP;
+        v.app.handle_mouse_button(release);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.13 A jump forgets what happened before it: the camera has no moment and no place after it, and does not rush to a place of the past; the mode stays") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        v.frames(400);
+        AutoCamera::Point place;
+        ASSERT_TRUE(v.app.auto_camera().target(place));
+        ASSERT_GT(v.app.auto_camera().moments(), 0u);
+        v.app.replay_control(ReplayControl::SetCamera, 0);                           // (Manual, to see that the mode stays)
+        v.app.replay_control(ReplayControl::SetPaused, 1);
+        v.app.replay_control(ReplayControl::Seek, static_cast<int>(v.turn()) + 300);        // (forward: the jump plays turns that nobody sees)
+        for (int i = 0; i < 40 && v.state() == ReplayState::Jumping; ++i) v.frames(1);
+        ASSERT_TRUE(v.state() == ReplayState::Paused);
+        ASSERT_EQ(v.app.auto_camera().moments(), 0u);
+        ASSERT_FALSE(v.app.auto_camera().target(place));
+        ASSERT_FALSE(v.app.hud().camera_ring_shown());
+        ASSERT_EQ(v.value(ReplayValue::Camera), 0);
+        v.app.replay_control(ReplayControl::SetCamera, 1);                           // (the button after a jump: no last action to glide to)
+        const float x = v.app.renderer().camera().x;
+        const float y = v.app.renderer().camera().y;
+        v.frames(40);
+        ASSERT_TRUE(v.app.renderer().camera().x == x && v.app.renderer().camera().y == y);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.14 Nothing can be picked in a replay: no click, no drag box, no corner marks, no Move and Stop buttons, no order marker, no Ctrl+A / H / N / P, no inspect panel; the same keys and drag pick in a match that is played") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetCamera, 0);
+        v.frames(160);
+        HUD& hud = v.app.hud();
+        ASSERT_TRUE(hud.view_only());
+        int markers = 0;
+        hud.set_on_spawn_click_marker([&](int32_t, int32_t) { ++markers; });
+        const ViewportCamera& cam = v.app.renderer().camera();
+        const LayoutRect view = v.app.layout().view();
+        // the first player's ants that the picture shows, and where on the screen they are
+        std::vector<std::pair<int32_t, int32_t>> mine;
+        std::vector<std::pair<int32_t, int32_t>> theirs;
+        for (const auto& a : v.app.sim().get_world_state().ants) {
+            int32_t sx = 0;
+            int32_t sy = 0;
+            if (!cam.world_to_screen(a.px, a.py - 8, sx, sy) || sx < view.x + 4 || sx > view.right() - 4 || sy < view.y + 4 || sy > view.bottom() - 4) continue;
+            (a.player_id == 0 ? mine : theirs).push_back({sx, sy});
+        }
+        ASSERT_FALSE(mine.empty());
+        const auto press_at = [&](int32_t x, int32_t y, uint8_t button, bool down) {
+            SDL_MouseMotionEvent m{};
+            m.type = SDL_MOUSEMOTION;
+            m.x = x;
+            m.y = y;
+            v.app.handle_mouse_motion(m);
+            SDL_MouseButtonEvent b{};
+            b.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+            b.button = button;
+            b.x = x;
+            b.y = y;
+            v.app.handle_mouse_button(b);
+        };
+        const auto drag_box = [&]() {                                               // a drag box round the ant that is there, the corner of the picture the near one
+            press_at(view.x + 10, view.y + 30, SDL_BUTTON_LEFT, true);
+            press_at(mine[0].first + 24, mine[0].second + 24, SDL_BUTTON_LEFT, false);
+        };
+        const auto picked = [&]() { return !hud.get_selected_ant_ids().empty() || hud.get_selected_ant_id() != 0 || hud.get_selected_base_team_id() >= 0; };
+        // (the control: with the switch off, the same hands pick the ants and the HUD shows its Move and Stop panel)
+        hud.set_view_only(false);
+        drag_box();
+        ASSERT_TRUE(picked());
+        hud.clear_selection();
+        press(v.app, SDLK_a, KMOD_LCTRL);
+        ASSERT_FALSE(hud.get_selected_ant_ids().empty());
+        hud.clear_selection();
+        hud.set_view_only(true);
+        // a click on an ant (the first player's, and another's: the inspect panel), a drag box, the right button on the map and on the minimap
+        press_at(mine[0].first, mine[0].second, SDL_BUTTON_LEFT, true);
+        ASSERT_FALSE(hud.is_dragging());
+        press_at(mine[0].first, mine[0].second, SDL_BUTTON_LEFT, false);
+        ASSERT_FALSE(picked());
+        if (!theirs.empty()) {
+            press_at(theirs[0].first, theirs[0].second, SDL_BUTTON_LEFT, true);
+            press_at(theirs[0].first, theirs[0].second, SDL_BUTTON_LEFT, false);
+            ASSERT_FALSE(picked());
+        }
+        drag_box();
+        ASSERT_FALSE(picked());
+        press_at(view.x + view.w / 2, view.y + view.h / 2, SDL_BUTTON_RIGHT, true);
+        press_at(view.x + view.w / 2, view.y + view.h / 2, SDL_BUTTON_RIGHT, false);
+        const LayoutRect mini = v.app.layout().minimap();
+        press_at(mini.x + mini.w / 2, mini.y + mini.h / 2, SDL_BUTTON_RIGHT, true);
+        press_at(mini.x + mini.w / 2, mini.y + mini.h / 2, SDL_BUTTON_RIGHT, false);
+        ASSERT_EQ(markers, 0);                                                      // (no order marker, white on the ground or red on an ant)
+        ASSERT_FALSE(picked());
+        // the keys
+        for (const SDL_Keycode key : {SDLK_a, SDLK_h, SDLK_n, SDLK_p, SDLK_s}) {
+            press(v.app, key, KMOD_LCTRL);
+            ASSERT_FALSE(picked());
+        }
+        // the pointer over an ant is the plain arrow, not the pick cursor
+        press_at(mine[0].first, mine[0].second, SDL_BUTTON_LEFT, false);
+        ASSERT_TRUE(hud.evaluate_cursor(mine[0].first, mine[0].second, v.app.sim().get_world_state(), v.app.sim().grid(), v.app.renderer().camera()) == CursorType::Normal);
+        // what a replay keeps: the minimap steers the view, the Picture and the bar are the page's; the match is untouched
+        v.frames(10);
+        ASSERT_TRUE(v.app.replay_failure() == ReplayFailure::None);
+        v.app.shutdown();
     } TEST_END();
 
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

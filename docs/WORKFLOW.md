@@ -73,7 +73,7 @@ When [ccache](https://ccache.dev) is installed, CMake uses it for every compile 
 
 ## Browser checks without Docker
 
-The opt-in browser checks that need only the page (`test_web_aspect.sh`, `test_web_edge.sh`, `test_web_touch.sh` and `test_web_home.sh`) need a running copy of the web image, and a session that has no Docker daemon (a cloud session) cannot build one. `tools/web_without_docker.py` makes the same pages without it and runs a command against them:
+The opt-in browser checks that need only the page (`test_web_aspect.sh`, `test_web_edge.sh`, `test_web_touch.sh`, `test_web_home.sh` and `test_web_camera.sh`, which also needs a recording: its header says how to make one) need a running copy of the web image, and a session that has no Docker daemon (a cloud session) cannot build one. `tools/web_without_docker.py` makes the same pages without it and runs a command against them:
 
 ```text
 sudo apt-get update && sudo apt-get install -y nginx                    # once

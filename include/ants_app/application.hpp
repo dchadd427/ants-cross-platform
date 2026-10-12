@@ -34,6 +34,7 @@
 #include "ants_app/scorecard.hpp"
 #include "ants_app/screen_button.hpp"
 #include "ants_app/audio_mixer.hpp"
+#include "ants_app/auto_camera.hpp"
 #include "ants_app/canvas_layout.hpp"
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
@@ -278,6 +279,8 @@ public:
     ants::sim::SimulationEngine& sim() noexcept { return sim_; }
     /// The replay of the match that ended (or was left) last (docs/REPLAYS.md): the bytes of a .antsrep file, empty until a match has ended that could be recorded. Every match is recorded as it is played; the
     /// desktop game writes the file into the `replays` folder beside its settings file and keeps it here too. The web build records nothing (the game server records the matches of its rooms).
+    /// The camera of a replay (auto_camera.hpp): its model, for the tests
+    const AutoCamera& auto_camera() const noexcept { return auto_camera_; }
     const std::vector<uint8_t>& last_replay() const noexcept { return last_replay_; }
     /// What that file is called when it is saved or downloaded ("ants-TREASURE-20261006-143209.antsrep")
     const std::string& last_replay_name() const noexcept { return last_replay_name_; }
@@ -667,6 +670,11 @@ private:
     std::string replay_failure_text_;
     size_t replay_next_{0};                               // the next order of the file to give
     float replay_speed_{1.0f};
+    AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto follows the busiest place, Manual leaves the view where the viewer put it
+    int camera_taken_{0};                                 // how many times the viewer has taken the camera from Auto (ReplayValue::CameraTaken)
+    float camera_zoom_seen_{0.0f};                        // the zoom of the last frame: a change keeps Auto, at the viewer's zoom
+    double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
+    double camera_pan_at_ms_{0.0};
     bool replay_paused_{false};
     bool replay_cut_{false};                              // the end of a recording that stops before its match did is reached
     bool replay_jumping_{false};
@@ -865,6 +873,8 @@ private:
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
+    void update_auto_camera(float dt);                    // a replay's frame: the camera model moves the view (Auto) and the minimap's ring shows the busiest place (application_view.cpp)
+    void take_camera();                                   // the viewer moved the view by hand (the edge of the screen, the minimap, two fingers): Manual
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile
     void enter_map_select();                              // the setup screen is created (again): its labels stay empty until its refresh
 

@@ -36,7 +36,8 @@ enum class ReplayControl : int {
     Seek = 3,        // value: the turn to be at (a turn is 50 ms); past the end is the end
     Restart = 4,     // from the start, playing (the bar's "Watch again")
     Extend = 5,      // a recording that is still being made (--replay-live): the page has put a newer copy of the same match in the file; the game reads it again (a copy that is not the same match, or shorter, is ignored)
-    LiveOver = 6     // no newer copy will come: the game stops waiting for more and plays to the end of what it holds
+    LiveOver = 6,    // no newer copy will come: the game stops waiting for more and plays to the end of what it holds
+    SetCamera = 7    // value 1 is the Auto camera (the view follows the busiest place), 0 the Manual camera (the view stays where the viewer put it)
 };
 
 /// What the page reads (Application::replay_value)
@@ -50,7 +51,9 @@ enum class ReplayValue : int {
     JumpTarget = 6,  // while Jumping: the turn that it goes to
     Live = 7,        // 1 while the game follows a recording that is still being made (--replay-live, not over, not complete), else 0
     Limit = 8,       // the last turn that can be played now: Total, and while following Total less the turns held back (kLiveHoldTurns) so that the picture does not stall between two copies
-    Complete = 9     // 1 when the file holds its end (the match is over and the file is whole)
+    Complete = 9,    // 1 when the file holds its end (the match is over and the file is whole)
+    Camera = 10,     // 1 while the camera is Auto, 0 while it is Manual
+    CameraTaken = 11 // how many times the viewer has taken the camera from Auto (the pointer at the edge, the minimap, two fingers): the page tells the viewer once
 };
 
 /// A following game keeps this many turns (2 seconds) of the recording unplayed: the copies of a match that is going on come every few seconds, and a picture that ran up to the newest turn would stand still

@@ -146,6 +146,11 @@ CursorType HUD::evaluate_cursor(int32_t screen_x, int32_t screen_y, const sim::W
         }
     }
 
+    if (view_only_) {                                                                         // a replay: the picture is not a place to click, the pointer over it is the plain arrow
+        current_cursor_ = CursorType::Normal;
+        return current_cursor_;
+    }
+
     // 3. Outside the map rectangle (16, 21) - (458, 461) of the original: the plain pointer. So it is over the black around a map that is smaller than the view (a 16 x 16 map in the
     //    16:9 view is centred in it): there is no ground under the pointer there
     if (!over_ground(screen_x, screen_y, camera, grid)) {
