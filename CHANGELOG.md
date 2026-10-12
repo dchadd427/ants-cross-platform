@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
+
+**For players:**
+- Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.18...v0.12.19); comment-only change.
+
 ## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
 
 **For players:**

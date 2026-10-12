@@ -256,16 +256,16 @@ private:
     std::vector<TextCall> texts_;
 };
 
-inline // =====================================================================================================================================================
+// =====================================================================================================================================================
 // The scenes: a hand-built world, the HUD, the camera
 // =====================================================================================================================================================
 
 
 // The HUD's millisecond clock is injected: pedestals, the caret of the chat box, the options screen and the dialogs read it
-uint32_t g_now_ms = 0;
+inline uint32_t g_now_ms = 0;
 
-inline /// The metrics of the text that the HUD measures its chat and labels with (the interface's 6 px per character; the recorder is never hashed here)
-FrameRecorder g_metrics;
+/// The metrics of the text that the HUD measures its chat and labels with (the interface's 6 px per character; the recorder is never hashed here)
+inline FrameRecorder g_metrics;
 
 namespace {
 

@@ -1,5 +1,5 @@
 // Zoom fingerprint (milestone M4 of the widescreen work): what the game DRAWS and what the pointer DOES at the zoom levels 0.5 and 2, pinned as 64-bit numbers in the way that
-// test_view_fingerprint.cpp pins the picture at the zoom 1 (that program, whose 551 numbers did not move when the zoom came, is the oracle of the zoom 1: at the zoom 1 the game draws
+// test_view_fingerprint*.cpp pins the picture at the zoom 1 (that program, whose 551 numbers did not move when the zoom came, is the oracle of the zoom 1: at the zoom 1 the game draws
 // exactly what it always drew). The classic 640 x 480 picture and the 16:9 picture of 960 x 540 each have their own numbers.
 //   * "zoom.world.*": the pixels of the real software renderer's world pass (Renderer::render_world) on GAUNTLET and TINY at the corners and the middle of the map, from a half-pixel origin
 //     (the zoom 2), with ants of every type and colour, effects, score bubbles, selection markers, the click marker, hit point digits and the fog of war;
