@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...map-picker)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a7d610d...289f4f98)
 
 ## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
 
