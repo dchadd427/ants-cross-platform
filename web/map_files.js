@@ -216,10 +216,23 @@
         });
     }
 
-    // The page that is not a game (the front page) only warms the browser's HTTP cache with a map it is about to need: the game page, a moment later, finds the file there
+    // The page that is not a game (the front page) only warms the browser's HTTP cache with a map it is about to need: the game page, a moment later, finds the file there. It is held to the real fetch's
+    // limits: a try ends in TIMEOUT_MS at the latest, and a body that announces more than MAX_BYTES (or an answer that is no file) is cancelled unread.
     function warm(win, name) {
         if (!win.fetch || !validName(name)) return;
-        try { win.fetch(fileUrl(name), { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.arrayBuffer() : null; }).then(undefined, function () { /* the game page asks again */ }); } catch (e) { /* nothing is lost */ }
+        var ctl = null, timer = null;
+        function stop() { if (timer !== null && win.clearTimeout) win.clearTimeout(timer); timer = null; }
+        function abort() { if (ctl) { try { ctl.abort(); } catch (e) { /* nothing to stop */ } } }
+        try {
+            var init = { credentials: 'same-origin' };
+            if (win.AbortController) { ctl = new win.AbortController(); init.signal = ctl.signal; }
+            if (win.setTimeout) timer = win.setTimeout(abort, TIMEOUT_MS);
+            win.fetch(fileUrl(name), init).then(function (r) {
+                var announced = r.ok && r.headers && r.headers.get ? parseInt(r.headers.get('content-length') || '', 10) : NaN;
+                if (!r.ok || announced > MAX_BYTES) { abort(); return null; }
+                return r.arrayBuffer();
+            }).then(stop, function () { stop(); /* the game page asks again */ });
+        } catch (e) { stop(); /* nothing is lost */ }
     }
 
     // A game that has not started has no file system yet: its preRun function writes the checked bytes where the game looks (the maps folder; its parents are made when the data package has not yet)
