@@ -487,12 +487,12 @@ void test_level_pictures(const assets::AssetArchive& arc) {
                         const double tolerance = z >= 1.0f ? 0.0 : (z == 0.5f ? 1.0 : 2.0);
                         const double worst = picture_max_error(p, view, spec, cx, cy, z, z >= 1.0f);
                         check(worst <= tolerance, here + "the exact level: no pixel is more than " + num(tolerance) + " levels from the specified picture, worst " + num(worst));
-                    } else {
-                        const BestFit smooth = best_fit(p, view, spec, cx, cy, z, false, 2.0);
-                        const BestFit thin = best_fit(p, view, spec, cx, cy, z, true, 2.0);
-                        check(std::fabs(smooth.sx) <= 1.0 && std::fabs(smooth.sy) <= 1.0, here + "it is in its place, to a pixel: the specified picture fits best moved by (" + num(smooth.sx) + ", " + num(smooth.sy) + ") screen pixels");
-                        check(smooth.error <= 10.0, here + "the picture is the specified one: mean error " + num(smooth.error) + " of 255 at its best fit");
-                        check(smooth.error + 1.0 <= thin.error, here + "it is smooth: closer to the specified picture than to the nearest pixel's (" + num(smooth.error) + " against " + num(thin.error) + ")");
+                    } else {      // between 1 and 2 the filter is the nearest pixel (no linear smoothing), below 1 it is linear
+                        const bool crisp = z > 1.0f;  const BestFit want = best_fit(p, view, spec, cx, cy, z, crisp, 2.0);
+                        const BestFit other = best_fit(p, view, spec, cx, cy, z, !crisp, 2.0);
+                        check(std::fabs(want.sx) <= 1.0 && std::fabs(want.sy) <= 1.0, here + "it is in its place, to a pixel: the specified picture fits best moved by (" + num(want.sx) + ", " + num(want.sy) + ") screen pixels");
+                        check(want.error <= 10.0, here + "the picture is the specified one: mean error " + num(want.error) + " of 255 at its best fit");
+                        check(want.error + (crisp ? 0.5 : 1.0) <= other.error, here + (crisp ? "it is crisp: closer to the nearest pixel's picture than to the smoothed one (" : "it is smooth: closer to the specified picture than to the nearest pixel's (") + num(want.error) + " against " + num(other.error) + ")");
                     }
                 }
             }

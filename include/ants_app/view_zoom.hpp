@@ -40,8 +40,8 @@ inline constexpr int kStepsPerDoubling = 4;
 inline constexpr float kSmallest = 0.05f;
 /// A level of the series that lies closer than this ratio above the map's limit is left out (the step to the limit would be smaller than a quarter of a step)
 inline constexpr double kMinStepRatio = 1.044;
-/// The levels that a screen shows between 1 and 2 are drawn smoothed (the linear filter) unless a test says otherwise; 2 itself is always the crisp 2 x 2 square
-inline constexpr bool kSmoothUpscale = true;
+/// The levels that a screen shows between 1 and 2 are drawn with the nearest pixel (no linear smoothing), like 1 and 2 themselves; a test may ask for the linear filter there
+inline constexpr bool kSmoothUpscale = false;
 
 /// The k-th level of the series 2^(k/4): k = 4 is 2, 0 is 1, -4 is 0.5. Every power of two is exact in a float and a double (a power of two times a root is one rounding).
 inline float series(int k) noexcept {
