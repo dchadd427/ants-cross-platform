@@ -1863,7 +1863,7 @@ constexpr Golden kGolden[] = {
     {"screen.wide.pages.menu_main", 0x0af18420436d3565, 160ull},
     {"screen.wide.pages.menu_single", 0x29fe2740618363c0, 232ull},
     {"screen.wide.pages.menu_join", 0xc2108141358be108, 162ull},
-    // menu_host moved deliberately in bot games part B (network protocol 13): the panel has a row for each seat after the leader's and the Teams row (see test_view_fingerprint.cpp, screen.menu.host.*),
+    // menu_host moved deliberately in bot games part B (network protocol 13): the panel has a row for each seat after the leader's and the Teams row (see test_view_fingerprint_hud.cpp, screen.menu.host.*),
     // so its draw calls (224 -> 296), its pixels outside the text (the mock-up's digest above is the panel as it is now), its notice state and the control under every pixel changed.
     {"screen.wide.pages.menu_host", 0xa96cf288b285f6c6, 296ull},
     {"screen.wide.pages.menu_connecting", 0x9baf3e53f92d4060, 128ull},

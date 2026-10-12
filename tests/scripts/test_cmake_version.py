@@ -79,12 +79,23 @@ def norm(path):
     return os.path.normcase(os.path.normpath(path))
 
 
-def includes_version_header(path):
+def includes_version_header(path, seen=None):
+    """Does the source include ants_app/version.hpp, itself or through a header of its own folder (the fixtures header of a split test program)?"""
+    seen = set() if seen is None else seen
+    if path in seen:
+        return False
+    seen.add(path)
     try:
         text = read(path)
     except (OSError, UnicodeDecodeError):
         return False
-    return re.search(r'#\s*include\s*[<"]ants_app/version\.hpp[>"]', text) is not None
+    if re.search(r'#\s*include\s*[<"]ants_app/version\.hpp[>"]', text) is not None:
+        return True
+    for local in re.findall(r'#\s*include\s*"([\w.]+\.hpp)"', text):
+        sibling = os.path.join(os.path.dirname(path), local)
+        if os.path.isfile(sibling) and includes_version_header(sibling, seen):
+            return True
+    return False
 
 
 @unittest.skipUnless(CMAKE, "cmake is needed")

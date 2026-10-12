@@ -23,12 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.20 - 2026-10-12 - Comments name the test files where the checks now live
+## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
 
 **For players:**
-- Nothing changes in the game: only comments and a document were corrected, so that they name the test files where the checks now live.
+- Nothing changes in the game: comments and documents were corrected so that they name the test files where the checks now live.
 
-**Details:** comment-only change (`web/front/lobby_net.js`, `include/ants_app/shell_layout.hpp`, `docs/GAME_REVERSE_ENGINEERING.md`).
+**Details:** comment-only change (`web/front/lobby_net.js`, `include/ants_app/shell_layout.hpp`, `include/ants_app/screen_layout.hpp` and documents).
+
+## v0.12.18 - 2026-10-12 - Zooming no longer clicks the sound
+
+**For players:**
+- **Zooming no longer makes the sound click.** The sounds are placed by distance from the middle of the picture, so every zoom step with the wheel moves the listener, and the sounds that were playing changed their volume and side in one instant: a click, and a faint sound that suddenly got loud was heard as played again. The volume and side now glide to the new place in 12 ms. Which sounds start, when and where is unchanged, in a replay and in a game.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2472b39...zoom-audio-glitch)
 
 ## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 

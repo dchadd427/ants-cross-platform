@@ -1,5 +1,5 @@
 // Zoom fingerprint (milestone M4 of the widescreen work): what the game DRAWS and what the pointer DOES at the zoom levels 0.5 and 2, pinned as 64-bit numbers in the way that
-// test_view_fingerprint.cpp pins the picture at the zoom 1 (that program, whose 551 numbers did not move when the zoom came, is the oracle of the zoom 1: at the zoom 1 the game draws
+// test_view_fingerprint*.cpp pins the picture at the zoom 1 (that program, whose 551 numbers did not move when the zoom came, is the oracle of the zoom 1: at the zoom 1 the game draws
 // exactly what it always drew). The classic 640 x 480 picture and the 16:9 picture of 960 x 540 each have their own numbers.
 //   * "zoom.world.*": the pixels of the real software renderer's world pass (Renderer::render_world) on GAUNTLET and TINY at the corners and the middle of the map, from a half-pixel origin
 //     (the zoom 2), with ants of every type and colour, effects, score bubbles, selection markers, the click marker, hit point digits and the fog of war;
@@ -256,7 +256,7 @@ const MaskRect kMaskPlate{470, 466, 640, 480};
 const std::vector<MaskRect> kMaskMatch = {{479, 252, 622, 268}, {480, 297, 622, 402}, {479, 422, 622, 438}, {310, 2, 402, 20}, {3, 462, 103, 480}, {161, 462, 253, 480}, {310, 462, 401, 480}};
 const MaskRect kWMaskPlate{790, 526, 960, 540};
 // (the bottom score labels right aligned in [113, 209), [377, 465) and [632, 719) x 524 of the 960 x 540 picture: the masks of the two left ones lay at 323 .. 423 and 481 .. 573 in the first version of this
-// table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint.cpp's kWMaskMatch, corrected by the CI)
+// table, beside their labels, so "Red:" and "Blue:" were hashed, and SDL's alpha blit rounds differently on x86-64 and on ARM: the masks of tests/test_app/test_view_fingerprint_wide.cpp's kWMaskMatch, corrected by the CI)
 const std::vector<MaskRect> kWMaskMatch = {{799, 252, 942, 268}, {800, 297, 942, 462}, {799, 482, 942, 498}, {630, 2, 722, 20}, {111, 522, 211, 540}, {375, 522, 467, 540}, {630, 522, 722, 540}};
 
 /// A level that the map does not offer on this screen (the 16:9 view over TINY has 0.768 as its smallest: 0.5 is below it) cannot be a picture of the game: the match starts at the nearest level

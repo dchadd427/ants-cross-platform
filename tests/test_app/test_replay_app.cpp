@@ -1722,6 +1722,128 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("RA9.1 Zooming does not touch the sounds: a recording watched while the wheel zooms in and out starts the same sounds, in the same order, at the same places, as one watched at a constant zoom (the Auto camera on and off, at 1x and 4x)") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        for (const bool auto_camera : {true, false}) {
+            for (const int speed : {100, 400}) {
+                std::vector<AudioMixer::SoundStart> plain;
+                std::vector<AudioMixer::SoundStart> zoomed;
+                for (const bool zooming : {false, true}) {
+                    Viewer v(bot_match().bytes);
+                    ASSERT_TRUE(v.ok);
+                    std::vector<AudioMixer::SoundStart>& log = zooming ? zoomed : plain;
+                    v.app.audio_mixer().set_start_log(&log);
+                    v.app.replay_control(ReplayControl::SetCamera, auto_camera ? 1 : 0);
+                    v.app.replay_control(ReplayControl::SetSpeed, speed);
+                    const LayoutRect view = v.app.layout().view();
+                    size_t steps = 0;
+                    for (int i = 0; i < 2400; ++i) {
+                        if (zooming && i % 5 == 0) {                                                   // a notch of the wheel every 5 frames, in and out, now at the pointer, now at a corner
+                            const int32_t ax = view.x + (i % 3 == 0 ? 3 : view.w / 2);
+                            const int32_t ay = view.y + (i % 3 == 0 ? view.h - 4 : view.h / 3);
+                            if (v.app.step_zoom(((i / 5) / 4) % 2 == 0 ? -1 : +1, ax, ay)) ++steps;
+                            if (i % 60 == 0) v.app.set_zoom(i % 120 == 0 ? 2.0f : 0.5f, ax, ay);
+                        }
+                        v.app.update_simulation(0.016f);
+                        v.app.audio_mixer().render_frames(704);                                        // (the audio device's share of the frame: channels end, so the voice limit acts alike in both runs)
+                    }
+                    if (zooming) ASSERT_GT(steps, 100u);                                               // (it did zoom)
+                }
+                ASSERT_GT(plain.size(), 80u);
+                ASSERT_EQ(zoomed.size(), plain.size());
+                bool alike = true;
+                for (size_t n = 0; n < plain.size() && alike; ++n) {
+                    alike = plain[n].sound_id == zoomed[n].sound_id && plain[n].owner == zoomed[n].owner && plain[n].world_x == zoomed[n].world_x && plain[n].world_y == zoomed[n].world_y &&
+                            plain[n].spatial == zoomed[n].spatial && plain[n].priority == zoomed[n].priority;
+                }
+                ASSERT_TRUE(alike);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("RA9.2 A move of the view changes the gain of a playing sound in a ramp, not in a step: no click, and the law at the end is the original's") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        AudioMixer& mixer = v.app.audio_mixer();
+        const assets::AssetArchive& archive = v.app.assets();
+        uint32_t longest = 0;
+        for (uint32_t id = 0; id < archive.sound_count(); ++id) {
+            if (archive.get_sound(id).pcm_data.size() > archive.get_sound(longest).pcm_data.size()) longest = id;
+        }
+        constexpr size_t kFrames = 4096;
+        ASSERT_GT(archive.get_sound(longest).pcm_data.size(), 2 * kFrames);
+        // The sound at (1000, 0) is heard from (0, 0) and from (900, 0), and from the first place until the view has moved to the second after `moved` frames (a zoom at the pointer moves the middle of the view)
+        const auto render = [&](int32_t from_x, int32_t to_x, size_t moved) {
+            mixer.stop_all();
+            mixer.set_listener_position(from_x, 0);
+            mixer.play_spatial(longest, 1000, 0, 128);
+            std::vector<int16_t> out = mixer.render_frames(moved);
+            mixer.set_listener_position(to_x, 0);
+            const std::vector<int16_t> rest = mixer.render_frames(kFrames - moved);
+            out.insert(out.end(), rest.begin(), rest.end());
+            return out;
+        };
+        const std::vector<int16_t> before = render(0, 0, kFrames);
+        const std::vector<int16_t> after = render(900, 900, kFrames);
+        size_t moved = 0;                                                                              // the frame where the two gains differ the most: the move is heard there
+        for (size_t n = 500; n + 1500 < kFrames; ++n) {
+            if (std::abs(after[2 * n] - before[2 * n]) > std::abs(after[2 * moved] - before[2 * moved])) moved = n;
+        }
+        ASSERT_GT(std::abs(after[2 * moved] - before[2 * moved]), 1000);                               // (a loud moment of a sound whose gain changes by more than a factor of 2)
+        const std::vector<int16_t> run = render(0, 900, moved);
+        for (size_t n = 0; n < moved * 2; ++n) ASSERT_EQ(run[n], before[n]);                           // the sound goes on as it was until the move
+        const int step_in_wave = std::abs(run[2 * moved] - run[2 * moved - 2]);
+        const int step_of_step = std::abs(after[2 * moved] - before[2 * moved]);
+        ASSERT_LT(step_in_wave * 10, step_of_step);                                                    // not a step of the whole change in one sample (without the ramp: 2895 of 2844; with it: the wave's own 59)
+        size_t between = 0;
+        for (size_t n = moved; n < kFrames; ++n) {
+            if (std::abs(run[2 * n] - after[2 * n]) > 4) between = n;                                  // the last frame that has not yet got there
+        }
+        const size_t ramp = static_cast<size_t>(AUDIO_GAIN_RAMP_MS * 44.1f);
+        ASSERT_GT(between, moved + 20);                                                                // it takes more than a few samples ...
+        ASSERT_LT(between, moved + ramp + 8);                                                          // ... and no more than the ramp of the longest change
+        for (size_t n = moved + ramp + 8; n < kFrames; ++n) ASSERT_TRUE(std::abs(run[2 * n] - after[2 * n]) <= 4 && std::abs(run[2 * n + 1] - after[2 * n + 1]) <= 4);       // then it is the original's law
+        float left = 0.0f;
+        float right = 0.0f;
+        mixer.stop_all();
+        mixer.set_listener_position(0, 0);
+        const int channel = mixer.play_spatial(longest, 1000, 0, 128);
+        mixer.set_listener_position(900, 0);
+        ASSERT_TRUE(mixer.channel_volumes(channel, left, right));
+        float want_left = 0.0f;
+        float want_right = 0.0f;
+        mixer.calculate_spatial_pan(1000, 0, 1.0f, want_left, want_right);
+        ASSERT_TRUE(left == want_left && right == want_right);                                         // (the target of the ramp is the law, as ever)
+        mixer.stop_all();
+    } TEST_END();
+
+    TEST_CASE("RA9.3 The same in a game on this computer: the sounds a match makes are the same ones with the wheel zooming as without") {
+        std::vector<AudioMixer::SoundStart> plain;
+        std::vector<AudioMixer::SoundStart> zoomed;
+        for (const bool zooming : {false, true}) {
+            Application app;
+            const ApplicationConfig cfg = local_config(0x0E);
+            ASSERT_TRUE(app.init(cfg));
+            std::vector<AudioMixer::SoundStart>& log = zooming ? zoomed : plain;
+            app.audio_mixer().set_start_log(&log);
+            app.hud().dismiss_match_start_modal();
+            const LayoutRect view = app.layout().view();
+            for (int i = 0; i < 2400; ++i) {
+                if (zooming && i % 4 == 0) app.step_zoom(((i / 4) / 5) % 2 == 0 ? -1 : +1, view.x + (i % 3) * view.w / 3, view.y + view.h / 2);
+                app.update_simulation(0.05f);
+                app.audio_mixer().render_frames(2205);
+            }
+        }
+        ASSERT_GT(plain.size(), 50u);
+        ASSERT_EQ(zoomed.size(), plain.size());
+        bool alike = true;
+        for (size_t n = 0; n < plain.size() && alike; ++n) {
+            alike = plain[n].sound_id == zoomed[n].sound_id && plain[n].owner == zoomed[n].owner && plain[n].world_x == zoomed[n].world_x && plain[n].world_y == zoomed[n].world_y && plain[n].spatial == zoomed[n].spatial;
+        }
+        ASSERT_TRUE(alike);
+    } TEST_END();
+
     TEST_CASE("RA8.9 A recording is watched with the Auto camera by default: the view moves to the places where things happen, the minimap's ring is whole, and the match is the same one (every hash of the file and the end)") {
         ASSERT_FALSE(bot_match().bytes.empty());
         Viewer v(bot_match().bytes);
