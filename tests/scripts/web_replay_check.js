@@ -354,6 +354,7 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         t.place.x = 310; t.place.y = 700; t.place.el = t.icon;
         same('bar: over the bar it is the bar\'s: a mouse pointer move (id 1000) for the element under it', [t.api.move(0), t.api.mode(), last(t)], [true, true, 'pointermove icon mouse#1000 @310,700 b0']);
         same('bar: the arrow is made once, in the stage, hidden:false, its tip at the cursor, the game told once', [t.made.length, t.stage.appended.length, t.made[0].style.transform, t.made[0].style.display, t.made[0].attrs['aria-hidden'], t.left.length], [1, 1, 'translate(308px, 698.5px)', 'block', 'true', 1]);
+        check('bar: the arrow takes no pointer events itself (it would be under the cursor it marks)', /(^|;)pointer-events:none(;|$)/.test(t.made[0].style.cssText), t.made[0].style.cssText);
         t.api.move(0);
         same('bar: and not again while the cursor stays on the bar', [t.left.length, t.made.length], [1, 1]);
         t.place.el = t.picture;
@@ -390,7 +391,17 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         t.log.length = 0; t.place.el = t.rail; t.api.button('mousedown', 0); t.place.el = t.picture; t.place.y = 300;
         same('bar: a drag that began on the timeline goes on over the picture', [t.api.move(1), last(t)], [true, 'pointermove rail mouse#1000 @310,300 b1']);
         same('bar: and ends there', [t.api.button('mouseup', 0), last(t)], [true, 'pointerup rail mouse#1000 @310,300 b0']);
+        same('bar: the click that follows a drag released over the picture is the bar\'s (swallowed), once', [t.api.button('click', 0), t.api.button('click', 0)], [true, false]);
+        // a press that began on the picture and is released over the bar: the game saw the press, so the release is its own (it must see the button go up), and no pointer event is made for the bar
+        t.log.length = 0; t.play.clicks = 0; t.place.y = 300; t.place.el = t.picture;
+        const pressed = t.api.button('mousedown', 0); t.place.y = 700; t.place.el = t.icon;
+        same('bar: a press on the picture released over the bar goes through to the game (not swallowed)', [pressed, t.api.button('mouseup', 0), t.log.length, t.play.clicks], [false, false, 0, 0]);
         t.api.button('click', 0);
+        // ... but a button that the game never saw (the right one pressed over the bar) is the bar's wherever it is released
+        t.place.el = t.icon; t.api.button('mousedown', 2); t.place.el = t.picture;
+        same('bar: a right button pressed over the bar and released over the picture is still the bar\'s', t.api.button('mouseup', 2), true);
+        same('bar: and a stray release afterwards is the game\'s', t.api.button('mouseup', 2), false);
+        t.place.y = 300; t.place.el = t.picture;
         // a lock let go in the middle of a drag cancels it
         t.place.y = 700; t.place.el = t.rail; t.api.button('mousedown', 0); t.log.length = 0; t.place.locked = false;
         t.api.reset();

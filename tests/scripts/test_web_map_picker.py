@@ -41,6 +41,17 @@ class ThePage(unittest.TestCase):
         self.assertTrue('role="dialog" aria-modal="true"></div></div>' in self.page)                        # (the picker names it by its heading: aria-labelledby)
         self.assertTrue("$('browse').disabled = side.mapDisabled;" in self.page)                           # the joiner's list is read-only as the selector is
 
+    def test_only_the_host_opens_the_list_and_a_room_that_changes_hands_closes_it(self):
+        self.assertTrue("function isHost() { return !!(model && !model.guest && !model.starting); }" in self.page)           # (not a constant true)
+        self.assertTrue("if (side.mapDisabled && picker && picker.isOpen()) picker.close();" in self.page)
+
+    def test_the_page_behind_the_open_list_is_inert(self):
+        self.assertTrue("[document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });" in self.page)
+        self.assertTrue("onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); }" in self.page)
+        for ident in ('<header class="mast">', 'id="banner"', 'id="rejoin"', 'id="lobby"', 'id="footer-bar"'):
+            self.assertTrue(ident in self.page, ident)
+        self.assertLessEqual(self.page.count("\n"), 1500)
+
     def test_the_scripts_come_before_the_pages_own_in_this_order(self):
         self.assertTrue('<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>' in self.page)
 
@@ -104,6 +115,11 @@ class ThePickersOwnCode(unittest.TestCase):
             "the description is printed in a row": ("body.appendChild(el('div', 'pk-meta', metaText(m)));", "body.appendChild(el('div', 'pk-meta', metaText(m) + ' ' + m.description));"),
             "Escape does not close": ("if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }", ""),
             "Enter does not choose": ("else if (k === 'Enter') { e.preventDefault(); if (i >= 0) choose(); return; }", "else if (k === 'Enter') { return; }"),
+            "a pick that a search hides can still be chosen": ("if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = pickedIndex() < 0;", "if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = !byFile[picked];"),
+            "a name may hold a slash": ("!/[\\/\\\\:*?\"<>|]/.test(name)", "!/[\\\\:*?\"<>|]/.test(name)"),
+            "a picture may be an svg": ("'\\\\.webp|/front/preview_[a-z]+\\\\.png)$');", "'\\\\.(?:webp|svg)|/front/preview_[a-z]+\\\\.png)$');"),
+            "a preview word may hold a slash": ("/front/preview_[a-z]+\\\\.png)$');", "/front/preview_[a-z/]+\\\\.png)$');"),
+            "a name may start with an escaped backslash": ("NAME_PART = \"(?:[A-Za-z0-9_~-]|%(?!2[fF]|5[cC]|00)", "NAME_PART = \"(?:[A-Za-z0-9_~-]|%(?!2[fF]|00)"),
             "a name is markup": ("var nm = el('div', 'pk-nm', m.name);", "var nm = el('div', 'pk-nm'); nm.innerHTML = m.name;"),
         }
         with tempfile.TemporaryDirectory() as folder:

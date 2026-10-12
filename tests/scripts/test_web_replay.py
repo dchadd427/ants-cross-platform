@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -508,6 +509,23 @@ class TheSharedCode(unittest.TestCase):
         done = subprocess.run([shutil.which("node"), CHECK_JS, os.path.join(REPO, "web", "replay_page.js")], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failures", done.stdout)
+
+    def test_the_bar_under_a_locked_pointer_check_can_fail(self):
+        text = read("web", "replay_page.js")
+        broken = {
+            "the arrow takes pointer events": ("z-index:90;pointer-events:none'", "z-index:90'"),
+            "the click after a drag is the game's": ("down = null; control = null; swallow = true; taken = false;", "down = null; control = null; swallow = false; taken = false;"),
+            "a release of a press on the picture is swallowed over the bar": ("if (!down) { var mine = taken; taken = false; return mine; }", "if (!down) return !!over;"),
+            "a release of a press the game never saw is the game's": ("if (!down) { var mine = taken; taken = false; return mine; }", "if (!down) return false;"),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            for why, (old, new) in broken.items():
+                self.assertEqual(text.count(old), 1, why)
+                path = os.path.join(folder, "replay_page.js")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text.replace(old, new))
+                done = subprocess.run([shutil.which("node"), CHECK_JS, path], capture_output=True, text=True, timeout=120)
+                self.assertNotEqual(done.returncode, 0, "the check accepted a script where " + why)
 
 
 if __name__ == "__main__":

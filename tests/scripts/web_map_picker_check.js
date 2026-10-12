@@ -34,7 +34,7 @@ const RAW = {
     same('a map of the players is named by its file name without the ending', list[4].name, 'Mango tree');
     same('displayName', [P.displayName('Mango tree.LVL', false), P.displayName('GAUNTLET.LVL', true)], ['Mango tree', 'Gauntlet']);
     check('no list when it is not format 1, not an object or has no maps', P.parseList(null) === null && P.parseList({ format: 2, maps: [] }) === null && P.parseList({ format: 1 }) === null && P.parseList('x') === null);
-    const dirty = P.parseList({ format: 1, maps: [null, 5, { file: '../x.lvl' }, { file: 'a\\b.lvl' }, { file: 'ok.lvl', width: -1, minutes: 'x', plays: 1.5, players: 4, thumb: 'https://evil.example/x.png', description: 'a\u0007b' },
+    const dirty = P.parseList({ format: 1, maps: [null, 5, { file: '../x.lvl' }, { file: 'a\\b.lvl' }, { file: 'a/b.lvl' }, { file: 'ok.lvl', width: -1, minutes: 'x', plays: 1.5, players: 4, thumb: 'https://evil.example/x.png', description: 'a\u0007b' },
         { file: 'ok2.lvl', thumb: '/maps/previews/../../etc.webp' }, { file: 'ok3.lvl', thumb: '/maps/previews/a b.webp' }, { file: 'ok4.lvl', thumb: '//evil.example/x.png' }, { file: 'ok5.lvl', thumb: '/front/preview_tiny.png' }, { file: 'dots..lvl', thumb: '/maps/previews/dots..webp' }, { file: 'no ending' }] });
     same('entries that are no map are left out', dirty.map((m) => m.file), ['ok.lvl', 'ok2.lvl', 'ok3.lvl', 'ok4.lvl', 'ok5.lvl', 'dots..lvl']);
     same('numbers that are not whole counts become 0, a control character becomes a blank', [dirty[0].width, dirty[0].minutes, dirty[0].plays, dirty[0].description], [0, 0, 0, 'a b']);
@@ -206,6 +206,13 @@ function rig(options) {
         q.value = 'zzz'; q.dispatch('input'); r.fire(120);
         same('a search with no result says so, as the mock-up does', [r.out().textContent, r.rows().length], ['No map is called "zzz".Try fewer letters.', 0]);
         check('and the Choose button is off', r.btn('Choose map').disabled === true);
+        r.picker.close(); r.picker.open('Zebra.lvl'); await settle();
+        check('Choose map is on for the picked map that is on the screen', r.btn('Choose map').disabled === false);
+        q.value = 'dune'; q.dispatch('input'); r.fire(120);
+        same('a search that leaves matches without the picked map', [r.names(), r.sel()], [['Dune'], []]);
+        check('turns Choose map off (it would choose a map that is not on screen)', r.btn('Choose map').disabled === true);
+        q.value = 'zebra'; q.dispatch('input'); r.fire(120);
+        check('and it is on again when the picked map is shown', r.btn('Choose map').disabled === false);
         q.value = ''; q.dispatch('input'); r.fire(120);
         r.btn('Name').dispatch('click');
         same('sort by name', [r.names().slice(0, 3), r.btn('Name').attrs['aria-pressed'], r.btn('Originals, then plays').attrs['aria-pressed']], [['Alpha', 'apple', 'Dune'], 'true', 'false']);
@@ -315,7 +322,7 @@ function rig(options) {
         same('the two shapes of picture the server writes are kept', good.map(pic), good);
         const bad = ['/maps/previews/a%2Fb.webp', '/maps/previews/a%2fb.webp', '/maps/previews/a%5Cb.webp', '/maps/previews/a%5cb.webp', '/maps/previews/a%00b.webp', '/maps/previews/a%2.webp', '/maps/previews/a.webp?x=1', '/maps/previews/a.webp#x',
             '/maps/previews/../a.webp', '/maps/previews/a/b.webp', '/maps/previews/.webp', '/maps/previews/.hidden.webp', '/maps/previews/a b.webp', '/maps/previews/a.png', '/front/preview_TINY.png', '/front/preview_tiny.png?v=1', '/front/preview_.png',
-            '/front/logo.png', '/maps/files/a.webp', 'https://x.example/maps/previews/a.webp', '//x.example/maps/previews/a.webp', 'maps/previews/a.webp', 'javascript:alert(1)', '/maps/previews/a\\b.webp', '/maps/previews/a"b.webp', 5, null];
+            '/front/logo.png', '/maps/files/a.webp', 'https://x.example/maps/previews/a.webp', '//x.example/maps/previews/a.webp', 'maps/previews/a.webp', '/front/preview_a.svg', '/maps/previews/a.svg', '/front/preview_a/b.png', '/maps/previews/%5Ca.webp', '/maps/previews/%5ca.webp', '/maps/previews/%2Fa.webp', '/maps/previews/%00a.webp', 'javascript:alert(1)', '/maps/previews/a\\b.webp', '/maps/previews/a"b.webp', 5, null];
         same('everything else is no picture', bad.map(pic), bad.map(() => ''));
     }
     // 9. the mock-up's words, the room's map in another case, the labels

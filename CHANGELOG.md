@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.23 - 2026-10-12 - The map list and the fullscreen replay mouse: follow-ups
+
+**For players:**
+- The map list on the front page: after a search that hides the map you had picked, "Choose map" is off instead of choosing a map you cannot see; the page behind the open list (the header and the notices too) no longer takes a key or a tap.
+- Fullscreen replays: letting go of a mouse button over the bar, after pressing it on the picture, now reaches the game, so a drag on the map ends.
+
+**Rules / network:** none.
+
+**Fixes:**
+- The front page's early download of a map for the game page gives up after 25 seconds and skips a file that announces more than a megabyte, as the game page's own download does.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/593598fb...01e0fa28)
+
 ## v0.12.22 - 2026-10-12 - A map list on the front page
 
 **For players:**
@@ -462,17 +475,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/11b8561...b3b0adb)
 
-## v0.0.98 - 2026-10-02 - Reconnect, part A: the server can hold a lost player's seat (off by default)
+## Older versions (v0.0.98 and before)
 
-**For players:**
-- Nothing changes for a player until a server operator switches it on, and the games do not come back by themselves yet (that is part B, next).
-- A server started with `--reconnect` (or a room made with `"reconnect": true`) keeps the seat of a player whose connection is lost and pauses the match for everybody. After 30 seconds away the others can vote to go on without that seat. A player who comes back with its key is given the match again and plays on once the server has checked its game.
-- After a pause of 3 seconds or more the match is held for a 10 second countdown before it goes on. New server options: `--hold-vote-seconds`, `--max-pause-seconds` (cap on the total pause, default 30 minutes), `--max-catch-up-seconds`, `--resume-countdown-seconds` and `--log-mb`. The room's status shows who is absent, the vote and the paused time, never a key.
-
-**Rules / network:** Network protocol 10 (the Hello and the Welcome carry a key, and five messages are new): a v0.0.97 game cannot join a v0.0.98 server's room or LAN game, and the other way round. The simulation rules did not change.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/621f579...11b8561)
-
-## Older versions (v0.0.97 and before)
-
-Every release before v0.0.98, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.99, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -340,6 +340,37 @@ const rejects = () => Promise.reject(new Error('offline'));
         M.warm({ fetch: () => Promise.reject(new Error('offline')) }, NAME);
         await settle();
         same('warm asks for the map once, from the site, through the browser\'s cache', asked, [['/maps/files/Test%20Players%20Map%20%281%29.lvl', 'same-origin']]);
+
+        // the same limits as the real fetch: a time limit, and a body that announces too much is cancelled unread
+        const make = (answer) => {
+            const w = { timers: [], cleared: [], reads: 0, signal: null };
+            w.AbortController = function () { this.signal = { aborted: false }; this.abort = () => { this.signal.aborted = true; }; w.ctl = this; };
+            w.setTimeout = (f, ms) => { w.timers.push({ f, ms }); return w.timers.length; };
+            w.clearTimeout = (t) => { w.cleared.push(t); };
+            w.fetch = (url, init) => { w.signal = init.signal; return answer(w); };
+            return w;
+        };
+        const stuck = make(() => new Promise(() => {}));
+        M.warm(stuck, NAME);
+        check('warm gives the request a signal and a time limit of 25 s', !!stuck.signal && stuck.signal.aborted === false && stuck.timers.length === 1 && stuck.timers[0].ms === 25000, JSON.stringify(stuck.timers.map((t) => t.ms)));
+        stuck.timers[0].f();
+        check('a request that does not answer in time is aborted', stuck.signal.aborted === true);
+        const big = make((w) => Promise.resolve(Object.assign(response(200, BYTES, 'application/octet-stream', M.MAX_BYTES + 1), { arrayBuffer: () => { w.reads++; return Promise.resolve(new ArrayBuffer(1)); } })));
+        M.warm(big, NAME);
+        await settle();
+        check('a body that announces more than MAX_BYTES is cancelled and not read', big.signal.aborted === true && big.reads === 0 && big.cleared.length === 1);
+        const edge = make((w) => Promise.resolve(Object.assign(response(200, BYTES, 'application/octet-stream', M.MAX_BYTES), { arrayBuffer: () => { w.reads++; return Promise.resolve(new ArrayBuffer(1)); } })));
+        M.warm(edge, NAME);
+        await settle();
+        check('a body of exactly MAX_BYTES is read, and the timer is cleared', edge.signal.aborted === false && edge.reads === 1 && edge.cleared.length === 1);
+        const gone = make(() => Promise.resolve(response(404, new Uint8Array(0))));
+        M.warm(gone, NAME);
+        await settle();
+        check('an answer that is no file is cancelled and the timer cleared', gone.signal.aborted === true && gone.cleared.length === 1);
+        const down = make(() => Promise.reject(new Error('offline')));
+        M.warm(down, NAME);
+        await settle();
+        check('a connection that fails clears the timer', down.cleared.length === 1);
     }
 
     console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');

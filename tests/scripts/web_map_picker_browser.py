@@ -246,10 +246,10 @@ def main():
             check(v.ev("window.location.pathname") == "/", "START stayed on the front page")
             v.ev("document.getElementById('banner-x').click()")
             v.open_list()
-            check(v.ev("document.getElementById('lobby').hasAttribute('inert') && document.getElementById('footer-bar').hasAttribute('inert')"), "the page behind the open list is inert")
+            check(v.ev("[document.querySelector('header.mast')].concat(['banner', 'rejoin', 'lobby', 'footer-bar'].map(function (id) { return document.getElementById(id); })).every(function (n) { return n.hasAttribute('inert'); })"), "the page behind the open list is inert")
             v.ev("document.body.focus(); document.activeElement.blur()")
             v.press("Escape")
-            check(not v.visible() and not v.ev("document.getElementById('lobby').hasAttribute('inert')"), "Escape closes the list and the page is live again")
+            check(not v.visible() and not v.ev("[document.querySelector('header.mast')].concat(['banner', 'rejoin', 'lobby', 'footer-bar'].map(function (id) { return document.getElementById(id); })).some(function (n) { return n.hasAttribute('inert'); })"), "Escape closes the list and the page is live again")
 
         if wanted("phone"):
             print("part phone", flush=True)
