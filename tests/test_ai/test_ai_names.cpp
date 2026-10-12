@@ -156,7 +156,7 @@ void run_name_tests() {
         ASSERT_TRUE(block.size() >= 100);
         for (size_t i = 0; i < n; ++i) {
             const std::string name = bot_name_at(i);
-            ASSERT_TRUE(name.size() >= 3 && name.size() <= 9);
+            ASSERT_TRUE(name.size() >= 3 && name.size() <= 8);
             ASSERT_TRUE(std::isupper(static_cast<unsigned char>(name[0])) != 0);
             for (size_t k = 0; k < name.size(); ++k) {
                 if (k > 0) ASSERT_TRUE(name[k] >= 'a' && name[k] <= 'z');

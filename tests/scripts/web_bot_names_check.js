@@ -69,7 +69,7 @@ check('the golden file has ten vectors', golden.filter((l) => l.indexOf('pick ')
 // ---- the list ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const N = B.NAMES;
 check('240 to 260 names', N.length >= 240 && N.length <= 260 && B.count() === N.length, N.length);
-check('every name is a capital letter and 2 to 8 small ASCII letters (3 to 9 letters)', N.every((n) => /^[A-Z][a-z]{2,8}$/.test(n)));
+check('every name is a capital letter and 2 to 7 small ASCII letters (3 to 8 letters)', N.every((n) => /^[A-Z][a-z]{2,7}$/.test(n)));
 check('no two names are the same in any case', new Set(N.map((n) => n.toLowerCase())).size === N.length);
 const placeholders = /var NAMES = \[([^\]]*)\]/.exec(read('web', 'front', 'lobby_rules.js'));
 const web = placeholders ? placeholders[1].split(',').map((s) => s.trim().replace(/'/g, '')) : [];
@@ -103,7 +103,33 @@ check('every name makes a label that fits a player name (32 characters) and the 
     same('count 0, a negative count and a count that is no number give nothing', [B.pickBotNames('1', 0), B.pickBotNames('1', -3), B.pickBotNames('1', NaN), B.pickBotNames('1', 'x')], [[], [], [], []]);
     same('a key can be given as a string, with 0x, in capitals, as a number or as [high, low]', [B.pickBotNames('0xDEADBEEFCAFEF00D', 2), B.pickBotNames([0xDEADBEEF, 0xCAFEF00D], 2), B.pickBotNames(255, 2)],
         [B.pickBotNames('deadbeefcafef00d', 2), B.pickBotNames('deadbeefcafef00d', 2), B.pickBotNames('00000000000000ff', 2)]);
-    same('a key that is none of these counts as 0', [B.pickBotNames('xyz', 3), B.pickBotNames(null, 3), B.pickBotNames(-1, 3), B.pickBotNames(1.5, 3), B.pickBotNames('12345678901234567', 3)], [0, 0, 0, 0, 0].map(() => B.pickBotNames('0', 3)));
+    {   // a wrong key throws and never quietly becomes key 0
+        const throwsFor = (name, k, kind) => { let got = null; try { B.pickBotNames(k, 3); } catch (e) { got = e.constructor.name; } check('a key that is ' + name + ' throws ' + kind, got === kind, got); };
+        throwsFor('a malformed string', 'xyz', 'TypeError');
+        throwsFor('an empty string', '', 'TypeError');
+        throwsFor('a string of 17 digits', '12345678901234567', 'TypeError');
+        throwsFor('null', null, 'TypeError');
+        throwsFor('undefined', undefined, 'TypeError');
+        throwsFor('an object', {}, 'TypeError');
+        throwsFor('a boolean', true, 'TypeError');
+        throwsFor('NaN', NaN, 'TypeError');
+        throwsFor('Infinity', Infinity, 'TypeError');
+        throwsFor('a fractional number', 1.5, 'TypeError');
+        throwsFor('a negative number', -1, 'RangeError');
+        throwsFor('a number above 2^53 - 1', 9007199254740992, 'RangeError');
+        throwsFor('an array of three', [1, 2, 3], 'TypeError');
+        throwsFor('an array of one', [1], 'TypeError');
+        throwsFor('a pair with a negative half', [-1, 0], 'RangeError');
+        throwsFor('a pair with a half above 2^32 - 1', [0, 4294967296], 'RangeError');
+        throwsFor('a pair with a string', ['1', 2], 'RangeError');
+        if (typeof BigInt === 'function') throwsFor('a BigInt', BigInt(5), 'TypeError');
+        let ok = true;
+        try { B.pickBotNames(0, 1); B.pickBotNames(9007199254740991, 1); B.pickBotNames([4294967295, 4294967295], 1); B.pickBotNames('ffffffffffffffff', 1); B.pickBotNames('0', 1); } catch (e) { ok = false; }
+        check('the edges of the accepted keys are accepted: 0, 2^53 - 1, the largest pair, 16 digits, one digit', ok);
+        let mixThrows = false;
+        try { B.mix64Hex('zz'); } catch (e) { mixThrows = true; }
+        check('mix64Hex reads keys the same way (a malformed key throws)', mixThrows);
+    }
     same('mix64 of 0 is 0 and of 1 is the finalizer of splitmix64', [B.mix64Hex('0'), B.mix64Hex('1')], ['0000000000000000', '5692161d100b05e5']);
 }
 
@@ -133,6 +159,8 @@ check('every name makes a label that fits a player name (32 characters) and the 
     check('every name with every tag: botLabel is read back by parseBotLabel', roundtrip);
     check('every name with every tag: the label and its short form are reserved names', reserved);
     check('no name of the list is a reserved name by itself', N.every((n) => !B.isReservedBotName(n)));
+    same('the Kelvin sign is no k: it does not make "worker" of a tag, and does not lower a name', [B.botLabel('Pip', 'wor\u212Aer'), B.botLabel('Pip', '\u212Aid'), B.isReservedBotName('Pip (bot, x)\u212A'), B.parseBotLabel('Pip (bot, wor\u212Aer)')], ['', '', false, null]);
+    same('the Turkish capital dotted i is not lowered into an i either', [B.botLabel('Pip', 'IDLE'), B.botLabel('Pip', '\u0130dle')], ['Pip (bot, idle)', '']);
     check('the five legacy labels are reserved', ['Bot (Easy)', 'Bot (Medium)', 'Bot (Hard)', 'Bot (Idle)', 'Bot (Worker)'].every((l) => B.isReservedBotName(l)));
 }
 

@@ -130,3 +130,10 @@ genocide
 =anonymous
 =null
 =undefined
+
+# names taken out of the list (a name that could be read as an offence or a role): they may not come back
+=atta
+=paco
+=mara
+=warden
+=bumble

@@ -2,8 +2,11 @@
 // calls it yet (PR 1 of the series); tests/scripts/test_bot_names.py runs it and the C++ over the same 10,000 keys and compares what they say.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsBotNames, node gets module.exports.
 //   * The list below is GENERATED from tools/bot_names.txt by tools/gen_bot_names.py (a test fails when it is not what the generator makes); the rest of the file is written by hand.
-//   * A key is a 64-bit number. JavaScript's numbers hold 53 bits, so a key is given as a string of 1 to 16 hexadecimal digits ("0x" allowed), as an array [high, low] of two 32-bit
-//     whole numbers, or as a whole number up to 2^53 - 1; anything else counts as 0. The arithmetic is done on pairs of 32-bit halves, with no BigInt.
+//   * A key is a 64-bit number. JavaScript's numbers hold 53 bits, so a key is given as ONE of: a string of 1 to 16 hexadecimal digits ("0x" allowed); an array [high, low] of two whole
+//     numbers from 0 to 2^32 - 1; or a whole number from 0 to 2^53 - 1. Anything else (a BigInt, a negative or fractional number, a number above 2^53 - 1, a malformed string, null,
+//     undefined, an object, an array of another length) THROWS a TypeError or RangeError: a wrong key must never quietly become key 0 (every client would then show the same names).
+//     The arithmetic is done on pairs of 32-bit halves, with no BigInt.
+//   * Letters are lowered by asciiLower (A-Z only): String.toLowerCase would turn the Kelvin sign (U+212A) into "k" and make it match "worker".
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -17,13 +20,13 @@
         "Bruno", "Cleo", "Cyrus", "Dara", "Dana", "Edie", "Elio", "Emil",
         "Enzo", "Esme", "Etta", "Finn", "Gus", "Hana", "Hugo", "Ines",
         "Iris", "Ivo", "Jade", "Jonah", "Juno", "Kai", "Kira", "Lars",
-        "Leif", "Lena", "Lila", "Liv", "Lola", "Luca", "Mara", "Milo",
+        "Leif", "Lena", "Lila", "Liv", "Lola", "Luca", "Elin", "Milo",
         "Mina", "Nico", "Nina", "Noor", "Nova", "Olga", "Omar", "Otis",
         "Pia", "Remy", "Rhea", "Rosa", "Ruth", "Sana", "Seth", "Soren",
         "Tess", "Theo", "Tomas", "Uma", "Vera", "Wren", "Yuki", "Zara",
         "Zoe", "Abel", "Aiko", "Alba", "Anton", "Bram", "Cato", "Dario",
         "Elsa", "Fenna", "Greta", "Hedda", "Ilsa", "Jaro", "Kofi", "Mei",
-        "Nell", "Odin", "Paco", "Quin", "Rafa", "Sven", "Tavi", "Una",
+        "Nell", "Odin", "Dorin", "Quin", "Rafa", "Sven", "Tavi", "Una",
         "Vik", "Wim", "Xavi", "Yara", "Zeke", "Aron", "Bela", "Cora",
         "Eero", "Farah", "Gita", "Hiro", "Isla", "Jory", "Kenji", "Lior",
         "Maia", "Naomi", "Orla", "Pavel", "Rumi", "Saga", "Tariq", "Ulla",
@@ -35,7 +38,7 @@
         "Oskar", "Priya", "Ravi", "Selma", "Tobias", "Vivian", "Walter", "Yasmin",
         "Zane", "Pip", "Atom", "Dot", "Speck", "Mandible", "Antenna", "Formic",
         "Formica", "Queenie", "Drone", "Forager", "Scout", "Nectar", "Crumb", "Sugar",
-        "Honey", "Mound", "Tunnel", "Burrow", "Thorax", "Gaster", "Atta", "Myrmex",
+        "Honey", "Mound", "Tunnel", "Burrow", "Thorax", "Gaster", "Tilda", "Myrmex",
         "Lasius", "Pogo", "Aphid", "Dewdrop", "Twig", "Grub", "Trail", "Ember",
         "Soot", "Cricket", "Beetle", "Ladybug", "Pollen", "Acorn", "Sprout", "Tendril",
         "Petal", "Daisy", "Poppy", "Marigold", "Violet", "Basil", "Sage", "Thyme",
@@ -43,8 +46,8 @@
         "Pretzel", "Toffee", "Fudge", "Nugget", "Button", "Pickle", "Noodle", "Walnut",
         "Chestnut", "Peach", "Apricot", "Olive", "Lemon", "Mango", "Berry", "Tiny",
         "Nimble", "Dusty", "Rusty", "Sandy", "Pixel", "Comet", "Rocket", "Orbit",
-        "Zigzag", "Wobble", "Bumble", "Scamper", "Skitter", "Scurry", "Digger", "Tracker",
-        "Ranger", "Pioneer", "Nomad", "Warden"
+        "Zigzag", "Wobble", "Wiggle", "Scamper", "Skitter", "Scurry", "Digger", "Tracker",
+        "Ranger", "Pioneer", "Nomad", "Harbor"
     ];
     // END GENERATED
 
@@ -78,22 +81,31 @@
     }
     function mod64(a, n) { return ((a[0] % n) * (4294967296 % n) + (a[1] % n)) % n; }                  // (n below 2^21: every product is exact)
 
+    function fail(Kind, why, key) { throw new Kind('bot_names: ' + why + ' (' + (typeof key === 'bigint' ? 'a BigInt' : typeof key === 'string' ? JSON.stringify(key) : String(key)) + ')'); }
     function keyOf(key) {
         if (typeof key === 'string') {
             var m = /^(?:0[xX])?([0-9a-fA-F]{1,16})$/.exec(key);
-            if (!m) return [0, 0];
+            if (!m) fail(TypeError, 'a key string must be 1 to 16 hexadecimal digits', key);
             var h = ('0000000000000000' + m[1]).slice(-16);
             return [parseInt(h.slice(0, 8), 16) >>> 0, parseInt(h.slice(8), 16) >>> 0];
         }
         if (typeof key === 'number') {
-            if (!(key >= 0 && key <= 9007199254740991 && Math.floor(key) === key)) return [0, 0];
+            if (key !== key || key === Infinity || key === -Infinity || Math.floor(key) !== key) fail(TypeError, 'a key number must be a whole number', key);
+            if (key < 0 || key > 9007199254740991) fail(RangeError, 'a key number must be from 0 to 2^53 - 1 (give a larger key as a string of hexadecimal digits)', key);
             return [Math.floor(key / 4294967296) >>> 0, key % 4294967296 >>> 0];
         }
         if (Object.prototype.toString.call(key) === '[object Array]' && key.length === 2) {
-            return [Number(key[0]) >>> 0, Number(key[1]) >>> 0];
+            var i, v;
+            for (i = 0; i < 2; i++) {
+                v = key[i];
+                if (typeof v !== 'number' || Math.floor(v) !== v || v < 0 || v > 4294967295) fail(RangeError, 'a key pair holds two whole numbers from 0 to 2^32 - 1', key);
+            }
+            return [key[0] >>> 0, key[1] >>> 0];
         }
-        return [0, 0];
+        return fail(TypeError, 'a key is a hexadecimal string, a whole number or a pair [high, low]', key);
     }
+    // the lower case of A-Z only (String.toLowerCase also maps the Kelvin sign to "k", the Turkish capital i and others)
+    function asciiLower(text) { return text.replace(/[A-Z]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) + 32); }); }
 
     // ---- the picker ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     var PICK_SEED = [0xB07A11E5, 0xB07A11E5], PICK_STEP = [0x9E3779B9, 0x7F4A7C15];
@@ -118,7 +130,7 @@
     // "Pip (bot, Hard)"; "Pip (bot, idle)" and "Pip (bot, worker)" for the two test kinds. `tag` is easy, medium, hard, idle or worker in any case. A name that is not valid gives the legacy
     // label ("Bot (Hard)"), so a bot is never shown without a name; a tag that is none of the five gives ''.
     function botLabel(name, tag) {
-        var k = typeof tag === 'string' ? tag.toLowerCase() : '';
+        var k = typeof tag === 'string' ? asciiLower(tag) : '';
         if (!Object.prototype.hasOwnProperty.call(TAGS, k)) return '';
         var word = TAGS[k];
         if (!validLabelName(name)) return 'Bot (' + (word === 'idle' ? 'Idle' : word === 'worker' ? 'Worker' : word) + ')';
@@ -145,9 +157,9 @@
         var p = parseBotLabel(text);
         return p && !p.legacy ? p.name + ' (bot)' : text;
     }
-    // Whether a PERSON may not be called `text`: a name that starts with "Bot (" (legacy) or ends with "(bot)" or "(bot, ...)" (any words between the comma and the parenthesis). Blanks and case are ignored.
+    // Whether a PERSON may not be called `text`: a name that starts with "Bot (" (legacy) or ends with "(bot)" or "(bot, ...)" (any words between the comma and the parenthesis). Blanks (also tabs and line ends) and case are ignored.
     function isReservedBotName(text) {
-        var s = typeof text === 'string' ? text.replace(/ /g, '').toLowerCase() : '';
+        var s = typeof text === 'string' ? asciiLower(text.replace(/[ \t\r\n]/g, '')) : '';
         if (s.indexOf('bot(') === 0) return true;
         if (s.charAt(s.length - 1) !== ')') return false;
         var open = s.lastIndexOf('(');

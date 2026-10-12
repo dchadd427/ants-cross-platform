@@ -3,7 +3,7 @@
 
 The list is ONE file; tools/gen_bot_names.py makes the C++ table (src/ants_ai/bot_names_data.inc) and the JavaScript table (the generated block of web/front/bot_names.js) from it.
   - TheGenerator: the committed outputs are what the generator makes (`--check`), the generator refuses a list that breaks a rule, and `--check` fails on an output that was edited by hand.
-  - TheList: all printable ASCII letters, 3 to 9 of them, unique in any case, none of the blocklist (tests/data/bot_names_blocklist.txt, and the matcher itself is tested on made-up words),
+  - TheList: all printable ASCII letters, 3 to 8 of them, unique in any case, none of the blocklist (tests/data/bot_names_blocklist.txt, and the matcher itself is tested on made-up words),
     none of the page's twelve placeholder names, 240 to 260 names.
   - TheScript: web/front/bot_names.js is a plain ES5 script that node and a page can load.
   - TheJavaScript: tests/scripts/web_bot_names_check.js runs it against the tables that the C++ test (tests/test_ai/test_ai_names.cpp) is held to as well (golden vectors, the digests of
@@ -107,6 +107,7 @@ class TheGenerator(unittest.TestCase):
             "the same name twice": good + [good[0]],
             "a name with a digit": good[:-1] + ["Ant1"],
             "a name of two letters": good[:-1] + ["Ab"],
+            "a name of nine letters": good[:-1] + ["Abcdefghi"],
             "a name of ten letters": good[:-1] + ["Abcdefghij"],
             "a name that starts small": good[:-1] + ["pip"],
             "a name with a blank": good[:-1] + ["Ant Hill"],
@@ -149,7 +150,7 @@ class TheList(unittest.TestCase):
         names = names_of_list()
         self.assertTrue(240 <= len(names) <= 260, len(names))
         for n in names:
-            self.assertRegex(n, r"^[A-Z][a-z]{2,8}$", n)                         # printable ASCII letters only, 3 to 9 of them
+            self.assertRegex(n, r"^[A-Z][a-z]{2,7}$", n)                         # printable ASCII letters only, 3 to 8 of them
             self.assertTrue(n.isascii() and n.isprintable())
         self.assertEqual(len({n.lower() for n in names}), len(names), "unique in any case")
 
@@ -274,8 +275,8 @@ class TheMutants(unittest.TestCase):
         self.mutant_fails("return inside.indexOf('bot,') === 0 && inside.length > 4 && inside.indexOf(')') < 0;", "return false;", "the (bot, level) suffix is not reserved")
         self.mutant_fails("return inside.indexOf('bot,') === 0 && inside.length > 4 && inside.indexOf(')') < 0;", "return inside.indexOf('bot,') === 0;", "an empty tail counts")
         self.mutant_fails("if (s.indexOf('bot(') === 0) return true;", "if (s.indexOf('bot(') === 1) return true;", "the legacy prefix")
-        self.mutant_fails("text.replace(/ /g, '')", "text.replace(/^ +/, '')", "blanks inside a name are not ignored")
-        self.mutant_fails("text.replace(/ /g, '').toLowerCase()", "text.replace(/ /g, '')", "case is not ignored")
+        self.mutant_fails("asciiLower(text.replace(/[ \\t\\r\\n]/g, ''))", "text.replace(/[ \\t\\r\\n]/g, '')", "case is not ignored")
+        self.mutant_fails("asciiLower(text.replace(/[ \\t\\r\\n]/g, ''))", "asciiLower(text.replace(/^ +/, ''))", "blanks inside a name are not ignored")
         self.mutant_fails("var open = s.lastIndexOf('(');", "var open = s.indexOf('(');", "the LAST parenthesis opens the suffix")
 
     def test_the_check_notices_a_wrong_parser_or_label(self):
@@ -288,6 +289,19 @@ class TheMutants(unittest.TestCase):
         self.mutant_fails("return p && !p.legacy ? p.name + ' (bot)' : text;", "return p ? p.name + ' (bot)' : text;", "a legacy label is shortened")
         self.mutant_fails("name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' ' &&", "name.charAt(0) !== ' ' &&", "a blank at the end of a name")
         self.mutant_fails("\\x2a-\\x7e", "\\x28-\\x7e", "a parenthesis in a name")
+
+    def test_the_check_notices_a_key_that_is_taken_too_easily(self):
+        self.mutant_fails("if (key < 0 || key > 9007199254740991)", "if (key < -5 || key > 9007199254740991)", "a negative number is a key")
+        self.mutant_fails("if (key < 0 || key > 9007199254740991)", "if (key < 0 || key > 9007199254740992)", "2^53 is a key")
+        self.mutant_fails("Math.floor(key) !== key) fail(TypeError, 'a key number", "false) fail(TypeError, 'a key number", "a fractional number is a key")
+        self.mutant_fails("if (!m) fail(TypeError, 'a key string must be 1 to 16 hexadecimal digits', key);", "if (!m) return [0, 0];", "a malformed string is key 0")
+        self.mutant_fails("return fail(TypeError, 'a key is a hexadecimal string, a whole number or a pair [high, low]', key);", "return [0, 0];", "anything else is key 0")
+        self.mutant_fails("v < 0 || v > 4294967295", "v < 0 || v > 4294967296", "a pair half above 2^32 - 1")
+        self.mutant_fails("key.length === 2) {\n            var i, v;", "key.length >= 2) {\n            var i, v;", "a longer array is a pair")
+
+    def test_the_check_notices_a_lower_case_that_is_not_ascii(self):
+        self.mutant_fails("asciiLower(tag) : '';", "tag.toLowerCase() : '';", "toLowerCase on a tag (the Kelvin sign)")
+        self.mutant_fails("replace(/[ \\t\\r\\n]/g, '')", "replace(/ /g, '')", "tabs and line ends are not ignored")
 
     def test_the_check_notices_a_list_that_breaks_a_rule(self):
         names = names_of_list()
@@ -304,7 +318,7 @@ class TheMutants(unittest.TestCase):
 
         self.assertEqual(with_names(names)[0], 0)
         for what, new in (("a name on the blocklist", names[:-1] + ["Nazi"]), ("a name inside which a blocked word stands", names[:-1] + ["Dickens"]), ("a whole-name word", names[:-1] + ["Admin"]),
-                          ("a placeholder of the page", names[:-1] + ["Maple"]), ("the same name in another case", names[:-1] + [names[0].lower()]), ("a name of ten letters", names[:-1] + ["Abcdefghij"]),
+                          ("a placeholder of the page", names[:-1] + ["Maple"]), ("the same name in another case", names[:-1] + [names[0].lower()]), ("a name of nine letters", names[:-1] + ["Abcdefghi"]), ("a name that was taken out", names[:-1] + ["Warden"]), ("a name that was taken out", names[:-1] + ["Atta"]),
                           ("too few names", names[:239]), ("a name with a blank", names[:-1] + ["Ant Hill"]), ("a digit", names[:-1] + ["Ant7"])):
             code, out = with_names(new)
             self.assertNotEqual(code, 0, "the check did not notice " + what)

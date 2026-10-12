@@ -121,10 +121,10 @@ std::string bot_short_label(std::string_view text) {
     return std::string(text);
 }
 
-bool is_reserved_bot_name(std::string_view text) noexcept {
+bool is_reserved_bot_name(std::string_view text) {
     std::string s;
     for (const char c : text) {
-        if (c != ' ') s.push_back(lower(c));
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') s.push_back(lower(c));
     }
     if (starts_with(s, "bot(")) return true;                       // the legacy form: "Bot (Hard)" and anything that starts that way
     if (!ends_with(s, ")")) return false;

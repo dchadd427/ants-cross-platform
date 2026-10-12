@@ -16,7 +16,7 @@
 
 namespace ants::ai {
 
-/// The list (tools/bot_names.txt, made into src/ants_ai/bot_names_data.inc by tools/gen_bot_names.py): 3 to 9 ASCII letters each, no two the same in any case.
+/// The list (tools/bot_names.txt, made into src/ants_ai/bot_names_data.inc by tools/gen_bot_names.py): 3 to 8 ASCII letters each, no two the same in any case.
 size_t bot_name_count() noexcept;
 /// The name at `index` (below bot_name_count()); "" beyond it
 const char* bot_name_at(size_t index) noexcept;
@@ -54,7 +54,7 @@ bool parse_bot_label(std::string_view text, BotLabel& out);
 std::string bot_short_label(std::string_view text);
 
 /// Whether a PERSON may not be called `text`: a name that starts with "Bot (" (the legacy form) or ends with "(bot)" or "(bot, ...)" (the new form, any words between the comma
-/// and the parenthesis). Blanks and case are ignored. Nothing calls it yet; the six places that guard the names today (docs/BOTS.md) take it over in a later change.
-bool is_reserved_bot_name(std::string_view text) noexcept;
+/// and the parenthesis). Blanks (also tabs and line ends) and case are ignored. It builds a string, so it is not noexcept. Nothing calls it yet; the six places that guard the names today (docs/BOTS.md) take it over in a later change.
+bool is_reserved_bot_name(std::string_view text);
 
 }  // namespace ants::ai

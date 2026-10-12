@@ -1,7 +1,7 @@
 # The names of the computer players (docs/BOTS.md, "Names"). The ONE source of the list: tools/gen_bot_names.py writes the C++ table (src/ants_ai/bot_names_data.inc) and the
 # JavaScript table (the generated block of web/front/bot_names.js) from it, and a test fails when either file differs from what the generator makes.
 #
-# One name per line; blank lines and lines that start with # are ignored. A name is a capital letter and 2 to 8 small letters (3 to 9 letters, ASCII), so that
+# One name per line; blank lines and lines that start with # are ignored. A name is a capital letter and 2 to 7 small letters (3 to 8 letters, ASCII), so that
 # the HUD label "Name (bot)" is 15 characters at most. No two names are the same in any case, none is a word of tests/data/bot_names_blocklist.txt, and none is one of the
 # twelve names that the web page offers a visitor (web/front/lobby_rules.js NAMES), so that a bot is not mistaken for a person who took the page's suggestion.
 #
@@ -47,7 +47,7 @@ Lila
 Liv
 Lola
 Luca
-Mara
+Elin
 Milo
 Mina
 Nico
@@ -91,7 +91,7 @@ Kofi
 Mei
 Nell
 Odin
-Paco
+Dorin
 Quin
 Rafa
 Sven
@@ -192,7 +192,7 @@ Tunnel
 Burrow
 Thorax
 Gaster
-Atta
+Tilda
 Myrmex
 Lasius
 Pogo
@@ -252,7 +252,7 @@ Rocket
 Orbit
 Zigzag
 Wobble
-Bumble
+Wiggle
 Scamper
 Skitter
 Scurry
@@ -261,4 +261,4 @@ Tracker
 Ranger
 Pioneer
 Nomad
-Warden
+Harbor

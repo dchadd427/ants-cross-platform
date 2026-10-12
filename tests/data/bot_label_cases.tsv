@@ -144,3 +144,10 @@ reserved	(	0
 reserved	)	0
 reserved	()	0
 reserved	Maya (she/her)	0
+reserved	Pip (bot, Hard)\x09	1
+reserved	\x09Bot (	1
+reserved	Pip (bot, Hard)\x0d\x0a	1
+reserved	Pip\x09(bot)	1
+reserved	Pip (bot, Hard)\x0b	0
+parse	Pip (bot, Hard)\x09	FAIL
+label	Pi\x09p	hard	Bot (Hard)
