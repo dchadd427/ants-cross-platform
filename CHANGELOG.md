@@ -23,12 +23,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.20 - 2026-10-11 - Crisp zoom levels between 1 and 2
+## v0.12.20 - 2026-10-12 - Crisp zoom levels between 1 and 2
 
 **For players:**
 - **The zoom levels between 1 and 2 are drawn with the nearest pixel, like 1 and 2.** Before, those levels were smoothed with a linear filter, which blurred the pixel art; now every level from 1 up stays crisp. Below 1 the picture is averaged as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/v0.12.19...zoom-nearest)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b54ec65...zoom-nearest)
 
 ## v0.12.19 - 2026-10-12 - Comments name the test files where the checks now live
 

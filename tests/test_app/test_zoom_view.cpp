@@ -3,7 +3,7 @@
 //   * RENDERER: the world pass at a zoom is checked against the direct pass, which draws what it always drew. At the zoom 1 the offscreen target (forced through a test hook) gives the
 //     direct picture pixel for pixel; at 2 the view is the nearest-neighbour 2 x 2 enlargement of the direct picture of the same origin (and, from a half-pixel origin, the same shifted by
 //     one screen pixel); at 0.5 it is the 2 x 2 average of the direct picture of a view twice as large (0.25: the 4 x 4 average). Group "levels": EVERY level of a map (the series 2^(k/4)
-//     from 2 to the map's limit) against the picture that the design specifies, built from the zoom 1 picture of the whole map: the exact levels pixel for pixel, the others as the smooth
+//     from 2 to the map's limit) against the picture that the design specifies, built from the zoom 1 picture of the whole map: the exact levels pixel for pixel, the others (between 1 and 2 nearest, below 1 as the smooth
 //     picture (the software renderer is a pixel off at most), never a gap in the view, a scroll that only moves the picture, frames of the levels in any order. Group "place": where the
 //     software renderer puts the picture of a level (the smallest whole-pixel rectangle that holds the exact one), and that the pass paints the margins around a small map itself. Group "fog":
 //     with Fog of War on every level draws what the zoom 1 draws (the fog over every unexplored tile, nothing that it hides), at every level of GAUNTLET and TINY. Ants of

@@ -206,7 +206,7 @@ namespace {
 // The pictures of the levels are checked against the picture that the design specifies, built here from the zoom 1 picture of the same world with plain arithmetic and none of the renderer's:
 // the direct picture is halved as often as the level needs (every halving the exact average of 2 x 2 pixels, from a corner that is a multiple of the block) and sampled bilinearly at the world
 // point under the centre of every screen pixel. The software renderer (the one of these tests) puts the last copy on whole pixels, so a level between the exact ones is checked as a picture: its
-// error against the specified one is small, a whole pixel off or the nearest pixel instead of the smooth one is worse; the levels 2, 1, 0.5 and 0.25 are exact (to SDL's rounding of an average).
+// error against the specified one is small, a whole pixel off or the wrong filter (the smooth one between 1 and 2, the nearest pixel below 1) is worse; the levels 2, 1, 0.5 and 0.25 are exact (to SDL's rounding of an average).
 struct Img {
     int32_t w{0};
     int32_t h{0};
@@ -358,7 +358,7 @@ bool is_power_of_two_level(float z) {
 }  // namespace
 
 void test_level_pictures(const assets::AssetArchive& arc) {
-    group("levels", "the picture at every level of a map: the exact levels (2, 1, 0.5, 0.25) pixel for pixel, the others as the smooth picture of the zoom 1 world; never a gap; a scroll only moves it");
+    group("levels", "the picture at every level of a map: the exact levels (2, 1, 0.5, 0.25) pixel for pixel, the others as the nearest (between 1 and 2) or smooth (below 1) picture of the zoom 1 world; never a gap; a scroll only moves it");
     for (const Shape& s : kShapes) {
         const LayoutRect view = ScreenLayout::with_size(s.cw, s.ch).view();
         for (const char* map : {"GAUNTLET", "TINY"}) {
@@ -413,7 +413,7 @@ void test_level_pictures(const assets::AssetArchive& arc) {
                         const double tolerance = z >= 1.0f ? 0.0 : (z == 0.5f ? 1.0 : 2.0);
                         const double worst = picture_max_error(p, view, spec, cx, cy, z, z >= 1.0f);
                         check(worst <= tolerance, here + "the exact level: no pixel is more than " + num(tolerance) + " levels from the specified picture, worst " + num(worst));
-                    } else {      // between 1 and 2 the filter is the nearest pixel (no linear smoothing), below 1 it is linear
+                    } else {      // between 1 and 2 the filter is the nearest pixel, below 1 it is linear; the crisp margin is 0.5 not 1.0: at 1.19 the two pictures differ by only 0.97 of 255
                         const bool crisp = z > 1.0f;  const BestFit want = best_fit(p, view, spec, cx, cy, z, crisp, 2.0);
                         const BestFit other = best_fit(p, view, spec, cx, cy, z, !crisp, 2.0);
                         check(std::fabs(want.sx) <= 1.0 && std::fabs(want.sy) <= 1.0, here + "it is in its place, to a pixel: the specified picture fits best moved by (" + num(want.sx) + ", " + num(want.sy) + ") screen pixels");
