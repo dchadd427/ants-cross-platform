@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.20 - 2026-10-12 - Comments name the test files where the checks now live
+
+**For players:**
+- Nothing changes in the game: only comments and a document were corrected, so that they name the test files where the checks now live.
+
+**Details:** comment-only change (`web/front/lobby_net.js`, `include/ants_app/shell_layout.hpp`, `docs/GAME_REVERSE_ENGINEERING.md`).
+
 ## v0.12.16 - 2026-10-12 - Auto camera for replays and live matches
 
 **For players:**
@@ -454,18 +461,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/be5cc38...2d048ef)
 
-## v0.0.95 - 2026-10-02 - Community maps play as in the original: their default ant types and power-ups by tile
+## Older versions (v0.0.95 and before)
 
-**For players:**
-- A map that names a default ant type has every ant of every team of that type, the starting ants and every hatch. For example, `popcorn.lvl` hatches combat ants.
-- Power-ups and flower droppers are recognised by their tile and look the same on every map, whatever the map file calls them. A power-up named "." is no longer turned into a rock.
-- A Bomber, Fire ant or Swimmer that is busy (planting, lighting, bridging, picking up a power-up and so on) gets the plain move cursor, and a right click is a plain move, as in the original.
-- A pick-up rebuilds the panel of a selected ant every time: the text of its type and both command pedestals pop up, also when the ant takes the power-up of its own type again.
-
-**Rules / network:** The end of every attack now resumes the saved auto-engage of any ant that still has it, as in the original. An ant that took another power-up during a Combat Ant's auto-engage walks back to where the engage began. This changes some plays of the shipped maps. Network protocol 9: a v0.0.94 game cannot join.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f3c3d47...be5cc38)
-
-## Older versions (v0.0.94 and before)
-
-Every release before v0.0.95, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.0.96, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

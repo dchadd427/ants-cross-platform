@@ -1097,7 +1097,7 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer.cpp` (font loading,
 `Renderer::ttf_point_size`, `draw_text`, `draw_fixed_text`), `include/ants_app/text_layout.hpp` / `src/ants_app/text_layout.cpp` (`wrap_label_text`, `draw_label`, `fit_text`) and the text sites of
-`hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
+`hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout_screens.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
 `test_fixed_digits`). (The first version of this section listed three heights, 12 / 14 / 18, and the renderer did not even honour those: its three tiers were 9 / 11 / 13 px em, cell heights 11 / 13 / 15,
 for every text of the game, which is why the start dialog's text was a third of the original's size.)
 
