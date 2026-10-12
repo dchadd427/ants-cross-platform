@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...5a0ac68d)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...bab5fd95)
 
 ## v0.12.23 - 2026-10-12 - The map list and the fullscreen replay mouse: follow-ups
 
