@@ -247,7 +247,8 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
     };
     {   // Auto is the default: the button says so, and the game is told once that it can hear
         const t = page(mem());
-        same('the button before the game answers', [t.els['b-cam'].attrs['data-mode'], t.els['cam-lbl'].textContent, t.els['b-cam'].attrs['aria-label']], ['auto', 'Auto camera', 'Auto camera']);
+        check('the name of the button is not touched by the script', t.els['b-cam'].attrs['aria-label'] === undefined);
+        same('the button before the game answers', [t.els['b-cam'].attrs['data-mode'], t.els['cam-lbl'].textContent, t.els['b-cam'].attrs['aria-pressed']], ['auto', 'Auto camera', 'true']);
         t.cam.look(false);
         same('nothing is sent before the game can hear', t.game.sent, []);
         t.cam.look(true);
@@ -262,7 +263,9 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         t.timers[0].fn();
         check('the note goes by itself', t.els.camnote.hidden === true);
         // the button returns to Auto and remembers it; taking it again does not bring the note back in this visit
+        same('pressed means Auto: Manual is not pressed', t.els['b-cam'].attrs['aria-pressed'], 'false');
         t.cam.press();
+        same('pressed again with Auto on', t.els['b-cam'].attrs['aria-pressed'], 'true');
         same('the button sent Auto', t.game.sent[t.game.sent.length - 1], [7, 1]);
         same('Auto is remembered, and the button says Auto', [t.env.storage.m['ants.cam'], t.els['b-cam'].attrs['data-mode']], ['auto', 'auto']);
         t.game.camera = 0; t.game.taken = 2;

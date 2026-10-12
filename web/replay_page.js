@@ -211,7 +211,7 @@
             painted = auto;
             var b = el('b-cam');
             b.setAttribute('data-mode', auto ? 'auto' : 'manual');
-            b.setAttribute('aria-label', camLabel(auto));
+            b.setAttribute('aria-pressed', auto ? 'true' : 'false');                  // (the name stays "Auto camera", a toggle that is pressed while Auto is on; the title says what a press does)
             b.title = camTitle(auto);
             el('cam-lbl').textContent = camLabel(auto);
         }

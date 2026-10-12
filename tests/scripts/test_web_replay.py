@@ -420,7 +420,7 @@ class TheSpectatorsPicture(unittest.TestCase):
 
 class TheCameraButton(unittest.TestCase):
     """The Auto camera / Manual camera button (docs/REPLAYS.md "Camera"): in the bar between the clock and the speeds, on a phone a row of its own under the speeds, in fullscreen an icon; its code is
-    web/replay_page.js (run by web_replay_check.js), the game moves the view (tests/test_app/test_replay_app.cpp RA8). tests/scripts/web_live_check.py (part camera) shows it in a real browser."""
+    web/replay_page.js (run by web_replay_check.js), the game moves the view (tests/test_app/test_replay_app.cpp RA8). tests/scripts/web_camera_check.py shows it in a real browser."""
     page = read("web", "shell.html")
     glue = page[page.index("<!-- BEGIN replay glue"):page.index("<!-- END replay glue")]
     script = read("web", "replay_page.js")
@@ -444,7 +444,8 @@ class TheCameraButton(unittest.TestCase):
         self.assertIn(".rbar.over .camb .lbl { display: none; }", self.page)                               # (fullscreen: an icon)
         self.assertIn("@container rbar (max-width: 899px) { .rbar .camb .lbl { display: none; } }", self.page)   # (a bar too narrow for the word keeps the icon and the name for a screen reader)
         self.assertIn("container: rbar / inline-size;", self.page)
-        self.assertIn('aria-label="Auto camera"', self.page)
+        self.assertIn('aria-label="Auto camera" aria-pressed="true"', self.page)                          # (a stable name, pressed while Auto is on)
+        self.assertIn("setAttribute('aria-pressed', auto ? 'true' : 'false')", self.script)
         self.assertIn('.rbar .camb[data-mode="auto"]', self.page)                                          # (Auto is lit)
 
     def test_the_game_is_told_and_asked_by_the_numbers_of_its_enums(self):

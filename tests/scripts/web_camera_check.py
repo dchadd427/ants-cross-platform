@@ -55,7 +55,7 @@ JSON.stringify((function () {
   var $ = function (id) { return document.getElementById(id); };
   var r = function (e) { var b = e.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; };
   var b = $('b-cam');
-  return { mode: b.getAttribute('data-mode'), label: $('cam-lbl').textContent, aria: b.getAttribute('aria-label'), labelWidth: $('cam-lbl').getBoundingClientRect().width, cam: r(b), clock: r($('clock')), speed: r($('speed')),
+  return { mode: b.getAttribute('data-mode'), label: $('cam-lbl').textContent, aria: b.getAttribute('aria-pressed'), name: b.getAttribute('aria-label'), labelWidth: $('cam-lbl').getBoundingClientRect().width, cam: r(b), clock: r($('clock')), speed: r($('speed')),
            tl: r($('tl')), bar: r($('rbar')), over: $('rbar').classList.contains('over'), noteHidden: $('camnote').hidden, noteText: $('camnote').textContent, note: r($('camnote')),
            pref: (function () { try { return localStorage.getItem('ants.cam'); } catch (e) { return 'throws'; } })(), inner: [window.innerWidth, window.innerHeight],
            game: [Module._ants_replay_get(10), Module._ants_replay_get(11), Module._ants_replay_get(0), Module._ants_replay_get(1)],
@@ -124,7 +124,7 @@ def main():
     ap.add_argument("--follow-seconds", type=float, default=150.0, help="how long the Auto camera may take to visit three places at 8x (default 150)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
-    if args.profile not in ("all", "desktop", "phone"):
+    if args.profile not in ("all", "desktop", "phone", "widths"):
         print("unknown profile %r (desktop, phone or all)" % args.profile)
         return 2
     if not args.replay or not os.path.isfile(args.replay):
@@ -149,13 +149,13 @@ def main():
     browser = None
     try:
         browser = Browser(path)
-        for name in ("desktop", "phone"):
+        for name in ("desktop", "phone", "widths"):
             if args.profile not in ("all", name):
                 continue
             print("[web camera] %s" % name)
             tab = Tab(browser)
             try:
-                (desktop if name == "desktop" else phone)(Replay(tab, args.web, data, name == "phone"), check, args)
+                {"desktop": desktop, "phone": phone, "widths": widths}[name](Replay(tab, args.web, data, name == "phone"), check, args)
             finally:
                 tab.close()
     except NotReachable as e:
@@ -219,7 +219,7 @@ def desktop(p, check, args):
     p.open(1440, 900, 1)
     s = p.bar()
     check(s["game"][2] == 2 and s["game"][0] == 1, "the replay plays with the camera on Auto (the game says so)")
-    check(s["mode"] == "auto" and s["label"] == "Auto camera" and s["aria"] == "Auto camera" and s["pref"] is None, "the button says Auto camera, and nothing is remembered yet")
+    check(s["mode"] == "auto" and s["label"] == "Auto camera" and s["aria"] == "true" and s["name"] == "Auto camera" and s["pref"] is None, "the button says Auto camera, and nothing is remembered yet")
     check(s["clock"][0] + s["clock"][2] <= s["cam"][0] + 1 and s["cam"][0] + s["cam"][2] <= s["speed"][0] + 1, "the button sits between the clock and the speeds (%s)" % [round(v) for v in (s["clock"][0] + s["clock"][2], s["cam"][0], s["cam"][0] + s["cam"][2], s["speed"][0])])
     check(s["labelWidth"] > 40 and s["tl"][2] > 200, "in a bar of 1280 px the word is there and the timeline has room (%d px)" % s["tl"][2])
     p.tab.save_shot(args.shots, "camera-desktop-auto")
@@ -306,6 +306,32 @@ def desktop(p, check, args):
     g = p.geometry()
     first, second = drag_everything(p, g)
     check(first == 0 and second == 0, "nothing can be picked: a drag box over the picture, a click, a right click and Ctrl+A leave nothing picked (probe 50: %s, %s)" % (first, second))
+
+
+def widths(p, check, args):
+    """The bar at middle widths: a tablet's window (live too, with the Live box) and a short landscape phone in fullscreen, the Picture window shut and open: the timeline keeps a usable width"""
+    MIN = 120
+    cases = [(768, 1024, False, True), (768, 1024, True, True), (820, 1180, False, True), (820, 1180, True, True), (568, 320, True, False), (667, 375, True, False), (568, 320, True, True)]
+    # (width, height, fullscreen, live)
+    for w, h, fs, live in [(c[0], c[1], c[2], c[3]) for c in cases]:
+        p.open(w, h, 1)
+        p.pause(True)
+        if live:
+            p.tab.ev("var b = document.getElementById('rbar'); b.classList.add('islive'); document.getElementById('livenow').hidden = false; 1")
+        if fs:
+            p.tab.ev("document.getElementById('fullscreen-btn-r').click(); 1")
+            time.sleep(2.0)
+        for pop in (False, True):
+            if pop:
+                p.tab.ev("document.getElementById('picbtn').click(); 1")
+                time.sleep(0.4)
+            s = p.bar()
+            name = "camera-%dx%d%s%s%s" % (w, h, "-fullscreen" if fs else "", "-live" if live else "", "-popover" if pop else "")
+            p.tab.save_shot(args.shots, name)
+            check(s["tl"][2] >= MIN and rect_inside(s["cam"], s["bar"]) and (s["cam"][0] >= s["clock"][0] + s["clock"][2] - 1 or s["cam"][1] >= s["speed"][1] + s["speed"][3] - 1), "%s: timeline %d px, button %d px wide (label %d px)" % (name, s["tl"][2], s["cam"][2], s["labelWidth"]))
+        if fs:
+            p.tab.ev("document.getElementById('b-fsx').click(); 1")
+            time.sleep(1.0)
 
 
 def phone(p, check, args):
