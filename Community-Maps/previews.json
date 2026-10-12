@@ -1354,11 +1354,6 @@
   "picture": "Holiday.webp",
   "encoding": "webp-300-q85"
  },
- "Home Bound.lvl": {
-  "hash": "b50485f020f9c112",
-  "picture": "Home Bound.webp",
-  "encoding": "webp-300-q85"
- },
  "HuH2.lvl": {
   "hash": "6ed921ae1ab7d1fe",
   "picture": "HuH2.webp",
@@ -1414,11 +1409,6 @@
   "picture": "IcoN.webp",
   "encoding": "webp-300-q85"
  },
- "IsLaNd FiRe BoOm.lvl": {
-  "hash": "99857d497f2f944c",
-  "picture": "IsLaNd FiRe BoOm.webp",
-  "encoding": "webp-300-q85"
- },
  "IsLaNdS2.lvl": {
   "hash": "be4013bea5ed455c",
   "picture": "IsLaNdS2.webp",
@@ -1467,11 +1457,6 @@
  "Jungle3.lvl": {
   "hash": "3afac697d6fd7771",
   "picture": "Jungle3.webp",
-  "encoding": "webp-300-q85"
- },
- "K-P.lvl": {
-  "hash": "22ec5990c46ff261",
-  "picture": "K-P.webp",
   "encoding": "webp-300-q85"
  },
  "KA_'s ReVeNgE.lvl": {
@@ -1929,21 +1914,6 @@
   "picture": "Pulse.webp",
   "encoding": "webp-300-q85"
  },
- "Pulse2.lvl": {
-  "hash": "4dd46d6151db2cb4",
-  "picture": "Pulse2.webp",
-  "encoding": "webp-300-q85"
- },
- "Pulse3.lvl": {
-  "hash": "72508a68fec36d53",
-  "picture": "Pulse3.webp",
-  "encoding": "webp-300-q85"
- },
- "QuItErS.lvl": {
-  "hash": "e454fa1f560c3278",
-  "picture": "QuItErS.webp",
-  "encoding": "webp-300-q85"
- },
  "Quik And Easy.lvl": {
   "hash": "8473f52d5f296353",
   "picture": "Quik And Easy.webp",
@@ -2309,11 +2279,6 @@
   "picture": "Theducksonfire!.webp",
   "encoding": "webp-300-q85"
  },
- "Thief craker.lvl": {
-  "hash": "e8b213250d7d0488",
-  "picture": "Thief craker.webp",
-  "encoding": "webp-300-q85"
- },
  "ThiefFrenzy.lvl": {
   "hash": "00548af9dd79f632",
   "picture": "ThiefFrenzy.webp",
@@ -2407,11 +2372,6 @@
  "WAR OF ALL ants.lvl": {
   "hash": "7705aeef6415ab9e",
   "picture": "WAR OF ALL ants.webp",
-  "encoding": "webp-300-q85"
- },
- "WAR TIME.lvl": {
-  "hash": "64c2d25067e32cb1",
-  "picture": "WAR TIME.webp",
   "encoding": "webp-300-q85"
  },
  "WARP ZONE.lvl": {
@@ -2629,11 +2589,6 @@
   "picture": "fire away.webp",
   "encoding": "webp-300-q85"
  },
- "firewar.lvl": {
-  "hash": "cd95afad4ebee717",
-  "picture": "firewar.webp",
-  "encoding": "webp-300-q85"
- },
  "gant 2.lvl": {
   "hash": "d5e7a4bed6e8bc4c",
   "picture": "gant 2.webp",
@@ -2652,16 +2607,6 @@
  "green! u noob!.lvl": {
   "hash": "1523f44d5af19ea5",
   "picture": "green! u noob!.webp",
-  "encoding": "webp-300-q85"
- },
- "hell2.lvl": {
-  "hash": "50677709a2ce2662",
-  "picture": "hell2.webp",
-  "encoding": "webp-300-q85"
- },
- "hellzone.lvl": {
-  "hash": "d8abb6148f1fed15",
-  "picture": "hellzone.webp",
   "encoding": "webp-300-q85"
  },
  "island2.lvl": {

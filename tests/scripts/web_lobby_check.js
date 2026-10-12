@@ -141,8 +141,8 @@ try {
     same('localGameQuery: a level in capitals is the lower case word that was tested', L.localGameQuery('small', 'HARD', 'Bob', '16:9'), '?map=small&bots=hard&name=Bob&aspect=16:9');
     same('localGameQuery: a key that is no map is Treasure (the default of everything)', [L.localGameQuery('nowhere', '', 'Bob', '16:9'), L.localGameQuery('', '', 'Bob', '16:9'), L.localGameQuery(undefined, '', 'Bob', '16:9'), L.localGameQuery('TREASURE', '', 'Bob', '16:9')],
          ['?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9']);
-    same('localGameQuery: a map of the players is named by its file (URL-encoded), and the game page reads it back as the same file', [L.localGameQuery('Thief craker.lvl', '', 'Bob', '16:9'), L.localGameQuery('!!!BLOCKADES!!!.lvl', 'easy', 'Bob', '16:9')],
-         ['?mapfile=Thief%20craker.lvl&name=Bob&aspect=16:9', '?mapfile=!!!BLOCKADES!!!.lvl&bots=easy&name=Bob&aspect=16:9']);
+    same('localGameQuery: a map of the players is named by its file (URL-encoded), and the game page reads it back as the same file', [L.localGameQuery('Bomb Island.lvl', '', 'Bob', '16:9'), L.localGameQuery('!!!BLOCKADES!!!.lvl', 'easy', 'Bob', '16:9')],
+         ['?mapfile=Bomb%20Island.lvl&name=Bob&aspect=16:9', '?mapfile=!!!BLOCKADES!!!.lvl&bots=easy&name=Bob&aspect=16:9']);
     same('localGameQuery: a key wins over a file name, a text that is no valid file name is no map (Treasure), an original\'s file is its key', [L.localGameQuery('tiny', '', 'Bob', '16:9'), L.localGameQuery('../x.lvl', '', 'Bob', '16:9'), L.localGameQuery('TINY.LVL', '', 'Bob', '16:9')],
          ['?map=tiny&name=Bob&aspect=16:9', '?map=treasure&name=Bob&aspect=16:9', '?map=tiny&name=Bob&aspect=16:9']);
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
@@ -151,8 +151,8 @@ try {
     // START of a room with nobody else: the address that startAlone() hands to window.location (the function behind it, with a model as the lobby's rules script makes it)
     {
         const go = (model) => L.soloAddress(model, 'Bob', '16:9');
-        same('soloAddress: a community map is played from its file (?mapfile=, URL-encoded), a key from the key', [go({ mapFile: 'Thief craker.lvl' }), go({ map: 'tiny' }), go({ map: 'tiny', mapFile: 'Grid.lvl' })],
-             ['./play.html?mapfile=Thief%20craker.lvl&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
+        same('soloAddress: a community map is played from its file (?mapfile=, URL-encoded), a key from the key', [go({ mapFile: 'Bomb Island.lvl' }), go({ map: 'tiny' }), go({ map: 'tiny', mapFile: 'Grid.lvl' })],
+             ['./play.html?mapfile=Bomb%20Island.lvl&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
         same('soloAddress: a room with no map plays the default map, an original by its file is its key', [go({}), go({ mapFile: 'TINY.LVL' })], ['./play.html?map=treasure&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
         same('soloAddress: a room whose map is a text the game does not take gives none (the lobby says so; it never plays Treasure under another map\'s name)', [go({ mapFile: '../x.lvl' }), go({ mapFile: 'a/b.lvl' }), go({ mapFile: 'noext' }), go({ mapFile: '.hidden.lvl' })], ['', '', '', '']);
         same('soloAddress: a key wins, whatever the room also holds as a file (nothing is refused)', go({ map: 'tiny', mapFile: '../x.lvl' }), './play.html?map=tiny&name=Bob&aspect=16:9');
@@ -220,7 +220,7 @@ try {
     same('bots with no map: the setup screen with those bots (the player chooses the map there)', local('?bots=easy'), bots('easy'));
 
     // a map of the players (?mapfile=): its file in the game's maps folder (the page fetches it first), played as a game for one like an original
-    const COMMUNITY = 'Thief craker.lvl';
+    const COMMUNITY = 'Bomb Island.lvl';
     same('a map of the players alone: its file in the maps folder, the start, --alone (a game for one) and the name', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&name=Bob'), ['--map', 'Original-Ants/Maps/' + COMMUNITY, '--play', '--alone', '--name', 'Bob']);
     same('... and the page keeps the file for its fetch, none for an original or no map', [P.localArguments('?mapfile=' + encodeURIComponent(COMMUNITY), '').file, P.localArguments('?map=tiny', '').file, P.localArguments('', '').file], [COMMUNITY, '', '']);
     same('a map of the players with a bot: the bot is seated as for an original', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&bots=easy').slice(3), bots('easy'));

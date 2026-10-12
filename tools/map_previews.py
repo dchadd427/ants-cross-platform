@@ -27,7 +27,7 @@ sys.path.insert(0, str(HERE / "front_page_art"))
 from community_maps import fnv1a64                                         # noqa: E402  (the hash of maps.json and of the network protocol)
 
 SIZE = 300                                                                 # the picture's side: the game's preview as it is (make_art.PREVIEW_BOX); smaller or fewer colours wiped out the small sprites
-QUALITY = 85                                                               # lossy WebP: the sprites and the hill art stay clear; the 558 pictures are about 9 MB (q80: 7.4 MB, a PNG of Iceworld alone is 164 KB)
+QUALITY = 85                                                               # lossy WebP: the sprites and the hill art stay clear; the 547 pictures are about 9 MB (q80: 7.4 MB, a PNG of Iceworld alone is 164 KB)
 ENCODING = "webp-%d-q%d" % (SIZE, QUALITY)                                 # recorded with every picture: a changed encoding draws the picture again without --force
 EXTENSION = ".webp"
 INDEX = "previews.json"

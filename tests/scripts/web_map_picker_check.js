@@ -348,7 +348,7 @@ function rig(options) {
             keep(['.lvl', 'a.lvl', '.hid.lvl', 'abcde.Lvl', 'abcde.lVL', 'ab.LVL', 'x'.repeat(61) + '.lvl', 'x'.repeat(60) + '.lvl', 'a b.LVL', 'a*b.lvl', 'a?b.lvl', 'a:b.lvl', 'a|b.lvl', 'aébc.lvl', 'a\tbc.lvl', '', 'tiny.LVL'].map((f) => ({ file: f }))),
             ['a.lvl', 'ab.LVL', 'x'.repeat(60) + '.lvl', 'a b.LVL', 'tiny.LVL']);
         const pic = (t) => P.parseList({ format: 1, maps: [{ file: 'abcde.lvl', thumb: t }] })[0].thumb;
-        const good = ['/maps/previews/Thief%20craker.webp', '/maps/previews/dots..webp', '/maps/previews/%C3%A9.webp', '/front/preview_tiny.png', '/maps/previews/!a.webp'.replace('!', '%21')];
+        const good = ['/maps/previews/Bomb%20Island.webp', '/maps/previews/dots..webp', '/maps/previews/%C3%A9.webp', '/front/preview_tiny.png', '/maps/previews/!a.webp'.replace('!', '%21')];
         same('the two shapes of picture the server writes are kept', good.map(pic), good);
         const bad = ['/maps/previews/a%2Fb.webp', '/maps/previews/a%2fb.webp', '/maps/previews/a%5Cb.webp', '/maps/previews/a%5cb.webp', '/maps/previews/a%00b.webp', '/maps/previews/a%2.webp', '/maps/previews/a.webp?x=1', '/maps/previews/a.webp#x',
             '/maps/previews/../a.webp', '/maps/previews/a/b.webp', '/maps/previews/.webp', '/maps/previews/.hidden.webp', '/maps/previews/a b.webp', '/maps/previews/a.png', '/front/preview_TINY.png', '/front/preview_tiny.png?v=1', '/front/preview_.png',

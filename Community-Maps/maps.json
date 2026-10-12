@@ -2735,16 +2735,6 @@
    "description": "The Food is not Enough!"
   },
   {
-   "file": "Home Bound.lvl",
-   "size": 59963,
-   "hash": "b50485f020f9c112",
-   "width": 60,
-   "height": 60,
-   "minutes": 13,
-   "players": 4,
-   "description": "Home On The Range ~Drag"
-  },
-  {
    "file": "HuH2.lvl",
    "size": 19642,
    "hash": "6ed921ae1ab7d1fe",
@@ -2855,16 +2845,6 @@
    "description": "The Ultimate Power Map!<^^>"
   },
   {
-   "file": "IsLaNd FiRe BoOm.lvl",
-   "size": 19420,
-   "hash": "99857d497f2f944c",
-   "width": 31,
-   "height": 31,
-   "minutes": 30,
-   "players": 4,
-   "description": "*Water with fire!?!?!?!?"
-  },
-  {
    "file": "IsLaNdS2.lvl",
    "size": 58776,
    "hash": "be4013bea5ed455c",
@@ -2969,16 +2949,6 @@
    "players": 4,
    "description": "Swim across the Water !",
    "repaired": "Tiles outside the dictionary: the default ant tile of block 3 set to the empty tile."
-  },
-  {
-   "file": "K-P.lvl",
-   "size": 19312,
-   "hash": "22ec5990c46ff261",
-   "width": 31,
-   "height": 31,
-   "minutes": 12,
-   "players": 4,
-   "description": "My map my rules! Survive!"
   },
   {
    "file": "KA_'s ReVeNgE.lvl",
@@ -3900,36 +3870,6 @@
    "description": "I wasnt gone I was maing map"
   },
   {
-   "file": "Pulse2.lvl",
-   "size": 19312,
-   "hash": "4dd46d6151db2cb4",
-   "width": 31,
-   "height": 31,
-   "minutes": 10,
-   "players": 4,
-   "description": "Obey me now"
-  },
-  {
-   "file": "Pulse3.lvl",
-   "size": 19312,
-   "hash": "72508a68fec36d53",
-   "width": 31,
-   "height": 31,
-   "minutes": 10,
-   "players": 4,
-   "description": "MaDE By: Karate_Pulse"
-  },
-  {
-   "file": "QuItErS.lvl",
-   "size": 18811,
-   "hash": "e454fa1f560c3278",
-   "width": 31,
-   "height": 31,
-   "minutes": 56,
-   "players": 4,
-   "description": "We\"ll call it quits     r:\u00f3)"
-  },
-  {
    "file": "Quik And Easy.lvl",
    "size": 19270,
    "hash": "8473f52d5f296353",
@@ -4664,17 +4604,6 @@
    "description": "water fire!!"
   },
   {
-   "file": "Thief craker.lvl",
-   "size": 12262,
-   "hash": "e8b213250d7d0488",
-   "width": 20,
-   "height": 20,
-   "minutes": 10,
-   "players": 4,
-   "description": "by perfect_chaos",
-   "repaired": "Text-transfer damage undone: 1 0x0D byte put back in front of a 0x0A byte."
-  },
-  {
    "file": "ThiefFrenzy.lvl",
    "size": 58853,
    "hash": "00548af9dd79f632",
@@ -4863,16 +4792,6 @@
    "minutes": 12,
    "players": 4,
    "description": "*                       ..."
-  },
-  {
-   "file": "WAR TIME.lvl",
-   "size": 19102,
-   "hash": "64c2d25067e32cb1",
-   "width": 31,
-   "height": 31,
-   "minutes": 10,
-   "players": 4,
-   "description": "MaDE By: __RiP_ChUcKy_"
   },
   {
    "file": "WARP ZONE.lvl",
@@ -5306,16 +5225,6 @@
    "description": "*BURNS Coaster_cdogs_1  ..."
   },
   {
-   "file": "firewar.lvl",
-   "size": 18811,
-   "hash": "cd95afad4ebee717",
-   "width": 31,
-   "height": 31,
-   "minutes": 9,
-   "players": 4,
-   "description": "Battle of the fire ants"
-  },
-  {
    "file": "gant 2.lvl",
    "size": 58508,
    "hash": "d5e7a4bed6e8bc4c",
@@ -5354,26 +5263,6 @@
    "minutes": 9,
    "players": 4,
    "description": "Green shal win no matta what"
-  },
-  {
-   "file": "hell2.lvl",
-   "size": 19504,
-   "hash": "50677709a2ce2662",
-   "width": 31,
-   "height": 31,
-   "minutes": 20,
-   "players": 4,
-   "description": "The greatest battle of ants!"
-  },
-  {
-   "file": "hellzone.lvl",
-   "size": 18811,
-   "hash": "d8abb6148f1fed15",
-   "width": 31,
-   "height": 31,
-   "minutes": 9,
-   "players": 4,
-   "description": "hell zone death simulator:\u00f3)"
   },
   {
    "file": "island2.lvl",
