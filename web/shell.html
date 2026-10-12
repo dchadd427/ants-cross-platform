@@ -1102,6 +1102,10 @@
         .rtag span { font-variant-numeric: tabular-nums; }
         /* the tab on the bar's top edge (fullscreen only): a tap hides the bar, like a swipe down on it */
         .rtab { display: none; }
+        /* the mouse of a locked fullscreen replay while it is over the bar (the game draws its own cursor on the picture, under the bar; this one is drawn over it, only then) */
+        .rcursor { position: fixed; left: 0; top: 0; z-index: 90; width: 20px; height: 26px; pointer-events: none; }
+        .rcursor[hidden] { display: none; }
+        .rcursor svg { display: block; width: 100%; height: 100%; }
         .rtab svg { width: 20px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; }
         /* the strip along the bottom edge of a fullscreen page where a finger calls the bar back (a tap, or a swipe up); nothing is drawn on it, and it is there only while the bar is away and the last touch was a finger */
         .redge { position: absolute; left: 0; right: 0; bottom: 0; height: calc(56px + env(safe-area-inset-bottom, 0px)); z-index: 59; touch-action: none; }
@@ -1261,6 +1265,7 @@
             </div>
         </div>
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
+        <div class="rcursor rep-only" id="rcursor" hidden aria-hidden="true"><svg viewBox="0 0 20 26"><path d="M2 1.5v19l5-4.4 3.3 7.4 3.4-1.5-3.3-7.2H17z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
         <div class="redge rep-only" id="redge" hidden></div>
         <div class="rnote rep-only" id="rnote" role="status" hidden>Swipe up from the bottom edge to bring the bar back</div>
         <div class="rnote rep-only camnote" id="camnote" role="status" hidden>You have the camera. Press&#8197;<b>Auto camera</b>&#8197;to follow the action again.</div>
@@ -2701,7 +2706,7 @@
         // leaves fullscreen, as the browser says; elsewhere Esc gives the pointer back first (and Safari leaves fullscreen with it).
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
-            if (ANTS_REPLAY_MODE || !ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a recording is watched with a free mouse: its bar is under the pointer)
+            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER")
             lockStartAt = startAt || null;
             try {
                 var result = request.call(canvas);
@@ -2726,6 +2731,65 @@
                 else keyboard.unlock();
             } catch (e) { /* the same */ }
         }
+        // THE BAR UNDER A LOCKED POINTER. A locked pointer is not over anything: the browser sends every mouse event to the canvas and nobody else, so the replay bar (page elements over the picture
+        // in fullscreen) could not be reached. The game's cursor (lockCursor, the same one that scrolls the map at the picture's edge) is the pointer here: while it is over the visible bar
+        // the motion is NOT handed to the game (the game is told that its pointer left, as it is when the pointer goes over a bar), a mark of a cursor is drawn over the bar, and the page makes
+        // the pointer events of a mouse at that place for what is under it (the timeline's drag, the wake of the bar); a press and a release on the same button are its click. Nothing else changes:
+        // the cursor over the picture is the game's, the edges scroll (the outermost pixels of the picture are the game's even where the bar lies), and a bar that has gone away (idle) is not there to be hit (the next motion calls it back). Only a replay has a bar.
+        // ANTS_BARPOINTER_BEGIN (tests/scripts/web_edge_check.js runs this block with a page of fakes: what is hit, what is made of a press, and that the game is told once)
+        var barMode = false;                                                // the game's cursor is over the bar (or a press that began there goes on)
+        var barDown = null;                                                 // the element that the press began on (the timeline's drag goes on beyond the bar)
+        var barControl = null;                                              // ... and its button or link, found at the press (the bar draws its icons again as the match plays: the element can be gone at the release)
+        var barSwallow = false;                                             // the click that follows a release that the bar took is the bar's too
+        var barCursorElement = document.getElementById('rcursor');
+        function replayBarUnder(cx, cy) {
+            if (!ANTS_REPLAY_MODE) return null;
+            var bar = document.getElementById('rbar');
+            if (!bar || !bar.classList.contains('over') || bar.classList.contains('idle')) return null;
+            var el = document.elementFromPoint(cx, cy);
+            return el && bar.contains(el) ? el : null;
+        }
+        function barInteractive(el) { return el && el.closest ? el.closest('button, a[href], summary, input, select') : null; }
+        function barFire(target, type, cx, cy, buttons) {
+            target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, pointerId: 1000, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: buttons }));
+        }
+        function barReset() {
+            barMode = false;
+            barDown = null;
+            barControl = null;
+            if (barCursorElement) barCursorElement.hidden = true;
+        }
+        // The game's cursor is at (cx, cy) of the page; true: the bar has it. The outermost row of pixels of the picture (atEdge) is the game's, whatever lies there: the edge scrolls the map
+        // with the bar up, as it does in the game; a drag that began on the bar goes on.
+        function barLockedMove(cx, cy, buttons, atEdge) {
+            var target = barDown || (atEdge ? null : replayBarUnder(cx, cy));
+            if (!target) { if (barMode) { barMode = false; if (barCursorElement) barCursorElement.hidden = true; } return false; }
+            if (!barMode) { barMode = true; handToGame('mouseleave', edgeLast, 0); }        // (the game's pointer is gone from its picture while it is on the bar)
+            if (barCursorElement) { barCursorElement.hidden = false; barCursorElement.style.transform = 'translate(' + cx + 'px, ' + cy + 'px)'; }
+            barFire(target, 'pointermove', cx, cy, buttons);
+            return true;
+        }
+        // A press, a release or a click of the locked mouse; true: it is the bar's (and the game must not get it)
+        function barLockedButton(type, button, cx, cy, atEdge) {
+            if (type === 'click') { var due = barSwallow || !!(atEdge ? null : replayBarUnder(cx, cy)); barSwallow = false; return due; }
+            var over = atEdge ? null : replayBarUnder(cx, cy);
+            if (type === 'mousedown') {
+                barSwallow = false;
+                if (!over) return false;
+                if (button === 0) { barDown = over; barControl = barInteractive(over); barFire(over, 'pointerdown', cx, cy, 1); }
+                return true;
+            }
+            if (!barDown) return !!over;                                    // (a release over the bar of a press that began on the picture is not for the game either)
+            var down = barDown, control = barControl;
+            barDown = null;
+            barControl = null;
+            barSwallow = true;
+            barFire(down, 'pointerup', cx, cy, 0);
+            if (control && !control.disabled && over && barInteractive(over) === control) control.click();
+            return true;
+        }
+        // ANTS_BARPOINTER_END
+        function lockAtEdge(rect) { return lockCursor.x < 1 || lockCursor.y < 1 || lockCursor.x >= rect.width - 1 || lockCursor.y >= rect.height - 1; }
         function startLockedCursor() {
             var rect = canvas.getBoundingClientRect();
             lockCursor = ANTS_PAGE.moveLocked(lockStartAt || ANTS_PAGE.lockStart(rect.width, rect.height), 0, 0, rect.width, rect.height);
@@ -2742,7 +2806,7 @@
                 lockCursor = ANTS_PAGE.moveLocked({ x: lockCursor.x * rect.width / lockSize.w, y: lockCursor.y * rect.height / lockSize.h }, 0, 0, rect.width, rect.height);
             }
             lockSize = { w: rect.width, h: rect.height };
-            handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);
+            if (!barMode) handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);
         }
         ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) {
             window.addEventListener(name, function (e) {
@@ -2757,6 +2821,7 @@
                     if (lockCursor && isFullscreen()) quietAfterRelease = {};     // (the browser let go: the free pointer is quiet until it has moved)
                     lockCursor = null;
                     lockSize = null;
+                    barReset();
                 }
             }, true);
         });
@@ -2769,8 +2834,16 @@
             var rect = canvas.getBoundingClientRect();
             if (!lockCursor) startLockedCursor();
             lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height);
+            if (ANTS_REPLAY_MODE && barLockedMove(rect.left + lockCursor.x, rect.top + lockCursor.y, e.buttons, lockAtEdge(rect))) return;      // (the cursor is on the bar: the bar's, not the game's)
             handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
         }, true);
+        ['mousedown', 'mouseup', 'click'].forEach(function (name) {         // a press, a release and a click of the locked mouse over the replay bar are the bar's (window capture: before SDL's and the listeners below)
+            window.addEventListener(name, function (e) {
+                if (!ANTS_REPLAY_MODE || handingOver || !e.isTrusted || !e.target || e.target !== canvas || !isLocked() || !lockCursor) return;
+                var rect = canvas.getBoundingClientRect();
+                if (barLockedButton(name, e.button, rect.left + lockCursor.x, rect.top + lockCursor.y, lockAtEdge(rect))) { e.stopPropagation(); e.preventDefault(); }
+            }, true);
+        });
         canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock again where the browser let it go
             if (!e.isTrusted || handingOver || !isRealFullscreen() || isLocked()) return;
             var rect = canvas.getBoundingClientRect();
@@ -2780,7 +2853,7 @@
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {
             document.addEventListener(name, function () {
                 if (!isRealFullscreen()) { fullscreenEnded(); return; }
-                if (!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE) return;
+                if (!ANTS_POINTER_LOCK) return;
                 lockKeys(true);
                 requestLock(null);                                          // (the request of the click may have come too early for this browser: once more, the click's gesture is still valid)
             });
@@ -3548,6 +3621,7 @@
                 clearTimeout(idleTimer);
                 if (dragging || !$('picpop').hidden) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline, or the Picture window open, is a touch of the bar: it looks again)
                 bar.classList.add('idle');
+                $('rcursor').hidden = true;                                       // (the mark of a locked mouse over the bar goes with it: the bar is not there to be hit)
                 syncEdge();
                 if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
                     noteShown = true;
@@ -3662,6 +3736,7 @@
             ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
                 document.addEventListener(name, function (ev) {
                     var touch = ev.type === 'touchstart' || ev.pointerType === 'touch';
+                    if (ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()) return;       // (a locked browser repeats the mouse's place without a motion: that is not a touch of the bar)
                     if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
                     if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
                     if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)

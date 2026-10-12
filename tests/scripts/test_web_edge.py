@@ -108,6 +108,46 @@ class TheListeners(PageCase):
         self.assertIn("isFullscreen()", wheel.group(1))
 
 
+class TheReplayIsLockedLikeTheGame(PageCase):
+    """A replay (and a live match watched, the same page) takes the pointer lock in fullscreen as the game does, and its bar is reached through the game's cursor (the browser check says whether
+    it works; here the pieces cannot silently disappear)."""
+
+    def setUp(self):
+        self.page = read(SHELL)
+
+    def test_replay_mode_no_longer_switches_the_lock_off(self):
+        request = re.search(r"function requestLock\(startAt\) \{[^\n]*\n(.*?)\n        \}", self.page, re.S)
+        self.assertIsNotNone(request)
+        self.assertNotIn("ANTS_REPLAY_MODE", request.group(1))
+        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", request.group(1))
+        change = re.search(r"document\.addEventListener\(name, function \(\) \{\n\s*if \(!isRealFullscreen\(\)\) \{ fullscreenEnded\(\); return; \}\n(.*?)\n            \}\);", self.page, re.S)
+        self.assertIsNotNone(change)
+        self.assertNotIn("ANTS_REPLAY_MODE", change.group(1))
+        self.assertIn("lockKeys(true);", change.group(1))
+        self.assertIn("requestLock(null);", change.group(1))
+
+    def test_the_bar_is_reached_through_the_locked_cursor(self):
+        self.assertIn("ANTS_BARPOINTER_BEGIN", self.page)
+        self.assertIn("ANTS_BARPOINTER_END", self.page)
+        self.found(self.page, r"if \(ANTS_REPLAY_MODE && barLockedMove\(rect\.left \+ lockCursor\.x, rect\.top \+ lockCursor\.y, e\.buttons, lockAtEdge\(rect\)\)\) return;")
+        self.assertIn("['mousedown', 'mouseup', 'click'].forEach(function (name) {", self.page)
+        self.assertIn("barLockedButton(name, e.button,", self.page)
+        self.assertIn("ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()", self.page)       # (a locked browser's repeated places are not a touch: the bar still goes away)
+        self.assertIn("function lockAtEdge(rect)", self.page)                                         # the outermost pixels of the picture are the game's
+        self.assertIn("barReset();", self.page)                                                       # the lock let go clears it
+        self.assertIn('id="rcursor"', self.page)
+        self.assertIn("$('rcursor').hidden = true;", self.page)                                       # the bar going away takes the mark with it
+
+    def test_the_bar_does_not_change_its_look(self):
+        """The only new style is the mark of the locked mouse; the bar's own rules are what they were."""
+        self.assertEqual(len(re.findall(r"\.rcursor \{", self.page)), 1)
+        self.assertEqual(len(re.findall(r"\.rcursor\b", self.page)), 3)                              # (its three rules)
+
+    def test_the_guides_say_so(self):
+        self.assertNotIn("pointer lock is off in a replay", read(os.path.join(REPO, "docs", "REPLAYS.md")))
+        self.assertIn("locked", read(os.path.join(REPO, "docs", "REPLAYS.md")).split("**The same game in the same browser as ever:**")[1].split("\n")[0])
+
+
 class TheWindowedMargin(PageCase):
     """The margin of a windowed page: a pointer outside the game's box but within 96 CSS pixels of it still counts as at the picture's edge (a browser check says whether it works; here the
     pieces that it stands on cannot silently disappear)."""
