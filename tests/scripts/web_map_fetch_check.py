@@ -192,9 +192,9 @@ def main():
     os.makedirs(maps)
     for f in os.listdir(os.path.join(REPO, "Original-Ants", "Maps")):
         shutil.copy(os.path.join(REPO, "Original-Ants", "Maps", f), maps)
-    MATCH, MISSING, DIFFERS = "Thief craker.lvl", "Only on the server.lvl", "thief craker2.0.lvl"
+    MATCH, MISSING, DIFFERS = "Bomb Island.lvl", "Only on the server.lvl", "thief craker2.0.lvl"
     shutil.copy(community_map(MATCH), maps)                                  # the site has these two (the image copies Community-Maps)
-    shutil.copy(community_map("Thief craker.lvl"), os.path.join(maps, MISSING))      # the site does not have this one: it is put there in the middle of "missing"
+    shutil.copy(community_map("Bomb Island.lvl"), os.path.join(maps, MISSING))      # the site does not have this one: it is put there in the middle of "missing"
     with open(community_map(DIFFERS), "rb") as f:
         data = bytearray(f.read())
     with open(os.path.join(maps, DIFFERS), "wb") as f:                       # the server's copy is not the site's: a text of the file that the game does not use is another

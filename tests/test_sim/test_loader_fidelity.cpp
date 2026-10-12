@@ -295,7 +295,7 @@ int main() {
         CHECK(arrived);
     });
 
-    run_case("LF1.6 The Community Library: 94 Maps Hold Power-Ups With No Solid Bit (3,132 Cells), 36 Hold Food Cells Without It (183 Cells), 2 Hold Fire Wall Cells Without It (439 Cells); None Of Them Is An Obstacle Any More, And A Fire Wall Cell With The Bit Still Is", [] {
+    run_case("LF1.6 The Community Library: 92 Maps Hold Power-Ups With No Solid Bit (2,913 Cells), 35 Hold Food Cells Without It (182 Cells), 2 Hold Fire Wall Cells Without It (439 Cells); None Of Them Is An Obstacle Any More, And A Fire Wall Cell With The Bit Still Is", [] {
         int pu_maps = 0, pu_cells = 0, food_maps = 0, food_cells = 0, fire_maps = 0, fire_cells = 0;
         int still_solid_powerups = 0, fire_with_bit_not_solid = 0;
         for_each_community_map([&](const std::string& name, const LevelData& level) {
@@ -330,9 +330,9 @@ int main() {
             fire_maps += fi > 0; fire_cells += fi;
         });
         std::cout << "\n    power-ups without the bit: " << pu_cells << " cells in " << pu_maps << " maps; food: " << food_cells << " in " << food_maps << "; fire: " << fire_cells << " in " << fire_maps << "\n";
-        CHECK(pu_maps == 94 && pu_cells == 3132);
+        CHECK(pu_maps == 92 && pu_cells == 2913);
         CHECK(fire_maps == 2 && fire_cells == 439);
-        CHECK(food_maps == 36 && food_cells == 183);
+        CHECK(food_maps == 35 && food_cells == 182);
         CHECK(still_solid_powerups == 0);
         CHECK(fire_with_bit_not_solid == 0);
     });
@@ -649,7 +649,7 @@ int main() {
         CHECK(mud_worker_arrives);
     });
 
-    run_case("LF3.5 The Community Library: 16 Maps Had A Layer-1 Class Of Their Own Making (Water 476 In 2: 1,921 Cells; Mud 435 .. 444 In 5 Of The Gant2 Family And eze jungal; Dirt 559 In 5 Of The Turtle World Family; Flag 0x100 In 4; The Ids 1 And 2 In 2) And Are The Original's Now", [] {
+    run_case("LF3.5 The Community Library: 14 Maps Had A Layer-1 Class Of Their Own Making (Water 476 In 1: 960 Cells; Mud 435 .. 444 In 5 Of The Gant2 Family And eze jungal; Dirt 559 In 5 Of The Turtle World Family; Flag 0x100 In 3; The Ids 1 And 2 In 2) And Are The Original's Now", [] {
         std::set<std::string> changed;
         long water476 = 0, mud = 0, dirt559 = 0, flag100 = 0, id1 = 0, id2 = 0;
         for_each_community_map([&](const std::string& name, const LevelData& level) {
@@ -691,10 +691,10 @@ int main() {
             }
         });
         std::cout << "\n    " << changed.size() << " maps: water 476 " << water476 << " cells, mud " << mud << ", dirt 559 " << dirt559 << ", flag 0x100 " << flag100 << ", id 1 " << id1 << ", id 2 " << id2 << "\n";
-        const std::set<std::string> want = {"!TurtleWorld.lvl", "#Turtle World.lvl", "'s 4 Player Royal.lvl", "Bloom.lvl", "Gant2.lvl", "IsLaNd FiRe BoOm.lvl", "Sand Box.lvl", "SandBox.lvl", "Turtle World.lvl", "Turtle.lvl", "Wata fight.LVL",
-                                            "eze jungal.lvl", "gant 2.lvl", "gauntlet2.lvl", "hell2.lvl", "sand-box.lvl"};
+        const std::set<std::string> want = {"!TurtleWorld.lvl", "#Turtle World.lvl", "'s 4 Player Royal.lvl", "Bloom.lvl", "Gant2.lvl", "Sand Box.lvl", "SandBox.lvl", "Turtle World.lvl", "Turtle.lvl", "Wata fight.LVL",
+                                            "eze jungal.lvl", "gant 2.lvl", "gauntlet2.lvl", "sand-box.lvl"};
         CHECK(changed == want);
-        CHECK(water476 == 1921);
+        CHECK(water476 == 960);
     });
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -775,7 +775,7 @@ int main() {
         for (const auto& a : g.anthills()) CHECK(a.team_id < 4);
     });
 
-    run_case("LF4.4 The Community Library: 736 Block-1 Records Of Ids The Original Ignores (0, 63 .. 66, 148, 151, 296) In 20 Maps; No Other Record Is A Start Marker Or A Plant By Name Only", [] {
+    run_case("LF4.4 The Community Library: 721 Block-1 Records Of Ids The Original Ignores (0, 63, 66, 148, 151, 296) In 17 Maps; No Other Record Is A Start Marker Or A Plant By Name Only", [] {
         long ignored = 0;
         std::set<std::string> maps;
         std::set<uint16_t> ids;
@@ -790,8 +790,8 @@ int main() {
         std::cout << "\n    " << ignored << " records in " << maps.size() << " maps, ids:";
         for (const uint16_t id : ids) std::cout << " " << id;
         std::cout << "\n";
-        CHECK(ignored == 736 && maps.size() == 20);
-        CHECK((ids == std::set<uint16_t>{0, 63, 64, 65, 66, 148, 151, 296}));
+        CHECK(ignored == 721 && maps.size() == 17);
+        CHECK((ids == std::set<uint16_t>{0, 63, 66, 148, 151, 296}));
     });
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -845,7 +845,7 @@ int main() {
         }
     });
 
-    run_case("LF5.3 The Community Library: 33 Maps Hold Food Ids That Their Dictionaries Call \".\" Or Leave Unnamed, 2 Hold fd... Entries Of Ids That Are Not Food (!TreasureIsland, Arena101); The Grid's Food Is The Flag In Every Map", [] {
+    run_case("LF5.3 The Community Library: 29 Maps Hold Food Ids That Their Dictionaries Call \".\" Or Leave Unnamed, 2 Hold fd... Entries Of Ids That Are Not Food (!TreasureIsland, Arena101); The Grid's Food Is The Flag In Every Map", [] {
         std::set<std::string> flag_only, name_only;
         long mismatches = 0;
         for_each_community_map([&](const std::string& name, const LevelData& level) {
@@ -869,7 +869,7 @@ int main() {
             }
         });
         std::cout << "\n    flag only: " << flag_only.size() << " maps, name only: " << name_only.size() << " maps, cells where the grid differs from the flag: " << mismatches << "\n";
-        CHECK(flag_only.size() == 33);
+        CHECK(flag_only.size() == 29);
         CHECK((name_only == std::set<std::string>{"!TreasureIsland.lvl", "Arena101.lvl"}));
         CHECK(mismatches == 0);
     });
@@ -984,7 +984,7 @@ int main() {
         CHECK(cell_at(g, at[0]).is_empty_overlay() && !cell_at(g, at[0]).static_solid);
     });
 
-    run_case("LF6.5 The Community Library: The Block-2 Stage Tiles Of 35 Maps Name Entries That Are \".\" And Not Forced (The Original Does Not Place Them)", [] {
+    run_case("LF6.5 The Community Library: The Block-2 Stage Tiles Of 34 Maps Name Entries That Are \".\" And Not Forced (The Original Does Not Place Them)", [] {
         long maps = 0, refused_cells = 0;
         for_each_community_map([&](const std::string&, const LevelData& level) {
             Grid g;
@@ -999,7 +999,7 @@ int main() {
             maps += any;
         });
         std::cout << "\n    " << maps << " maps, " << refused_cells << " stage tiles\n";
-        CHECK(maps == 35);                                                  // (the notes' 40 also count 5 maps whose entry is empty: strcmp(\"\", \".\") != 0, so the original keeps those graphics)
+        CHECK(maps == 34);                                                  // (the notes' 40 also count 5 maps whose entry is empty: strcmp(\"\", \".\") != 0, so the original keeps those graphics)
     });
 
     // ---------------------------------------------------------------------------------------------------------------------------------------------

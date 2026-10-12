@@ -23,14 +23,36 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.25 - 2026-10-12 - Back 30 seconds on the replay bar
+## v0.12.28 - 2026-10-12 - Back 30 seconds on the replay bar
 
 **For players:**
 - **Back 30 seconds:** a new button right of Play / Pause on the replay bar (a double triangle with a small 30) jumps the replay 30 seconds back, never before the start. A match that plays keeps playing, a paused one stays paused, and the speed stays. It works with a mouse, a finger, the keys (Enter and Space on the focused button) and the fullscreen bar under a locked mouse. On a phone 420 px wide or narrower (in fullscreen, up to 520 px) the Picture button moves to the camera's row so that the time stays whole. It is not on a match that is being played (live).
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/343a692f...953c0a51)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/353282ed...28d51043)
+
+## v0.12.27 - 2026-10-12 - Broken maps of the players taken out
+
+**For players:**
+- 11 maps of the players that could not be played are gone from the map list: `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` (no ants for any colour), `K-P`, `Pulse2`, `Pulse3`, `QuItErS`, `firewar`, `hellzone` and `WAR TIME` (a colour with a hill and no ants), and `hell2` (a map of water: every ant drowns in the first three seconds). 547 maps of the players remain.
+- A kept replay of a match on one of these maps can no longer be watched.
+- A map of the players is only taken in when every colour it claims has ants, and a test now fails if one is added that does not.
+
+**Rules / network:** none. The beta lists the new set after its next deploy.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e01e7f0...HEAD)
+
+## v0.12.26 - 2026-10-12 - A game for one on a map of the players
+
+**For players:**
+- You can start a game completely alone on any map of the players, as on the six originals: the line under START now reads "A game for one" instead of asking for a computer player, and START opens the game with only your colony on the map. The map's file is fetched from the site while the game loads.
+- If the site no longer has the map, the game page now says so ("not on the server, it may have been taken off") and offers the menu instead of Reload; a failed download still offers Reload. A room whose map the game cannot take is refused with a short line instead of starting Treasure.
+- Known broken maps, not changed here: Home Bound, Thief craker, IsLaNd FiRe BoOm (no start marker for seat 0: an empty world alone) and hell2.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/343a692f...66edfe93)
 
 ## v0.12.24 - 2026-10-12 - Pictures of the players' maps in the match lists
 
@@ -463,22 +485,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md)
 
-## v0.1.0 - 2026-10-02 - Online rooms: bots fill the empty seats at START, chat in the waiting room, team chat only to allies, and mouse-wheel zoom
+## Older versions (v0.1.0 and before)
 
-**For players:**
-- The leader of an online room (or the host of a LAN game) can press START with empty seats and have bots fill them: "Bot (Easy)", "Bot (Medium)" or "Bot (Hard)". One person alone is enough. Choose the level in the desktop Host panel ("Empty seats at START"), on the Play online page, or with `--fill-bots none|easy|medium|hard`. Bots gather food but do not fight yet, and with Fog of War on no bots are seated.
-- Everybody in the waiting room can chat (press T or click the chat box). The 16:9 setup screen has a chat box with the room's lines, and the leader sees "Empty seats at START: Medium bots". The waiting room's lines start the match's chat log.
-- Team chat now reaches only you and your ally. Chat for all still reaches everybody.
-- The mouse wheel over the map zooms between 0.5, 1 and 2 toward the pointer, and the middle button goes back to 1. The level is remembered, and `--zoom 0.5|1|2` overrides it. In a network match only 1 and 2 are offered, because zooming out would show more map than the other players see. On the web page the wheel and a trackpad pinch over the game zoom it.
-- The web game now starts in 16:9 on every device, phones held upright included. The switch under the game still offers the classic 4:3 picture and remembers it.
-
-**Rules / network:** Network protocol 11: a v0.0.99 game cannot join a v0.1.0 server or LAN game, and the other way round. Update the game, the server and the page together. The simulation rules did not change.
-
-**Fixes:**
-- On Windows, the server retries reading its secret file for up to half a second when another program holds it.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3b0adb...3e5bfb5)
-
-## Older versions (v0.0.99 and before)
-
-Every release before v0.1.0, and the long notes of v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.1, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

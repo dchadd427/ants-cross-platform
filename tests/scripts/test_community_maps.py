@@ -44,6 +44,7 @@ WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "
 COLLECTION = 586
 ORIGINALS = 7
 LEFT_OUT = 21
+REMOVED = 11            # taken out again ("Taken out again" in the README): a team with no start marker, or a world of water
 SIX = ("GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE")
 
 
@@ -103,6 +104,9 @@ class TheRule(unittest.TestCase):
             (entry(), self.PLAIN + b"\0Reading SETVER.EXE file.\0", "program code inside"),
             (entry(), self.PLAIN + b"\0!This program cannot be run in DOS mode.\0", "program code inside"),
             (entry(name_ok=False), self.PLAIN, "name the protocol refuses"),
+            (entry(start_markers=[0, 0, 0, 0]), self.PLAIN, "no start marker for a team"),
+            (entry(start_markers=[4, 4, 0, 0], hill_cells=[16, 16, 16, 16]), self.PLAIN, "no start marker for a team"),
+            (entry(start_markers=[4, 0, 4, 4], hill_cells=[16, 16, 16, 16]), self.PLAIN, "no start marker for a team"),
         ]
         for report, data, why in cases:
             self.assertEqual(community_maps.reason(report, data), why, why)
@@ -124,10 +128,13 @@ class TheRule(unittest.TestCase):
         for markers, hills in (([4, 4, 4, 4], [16, 16, 16, 16]), ([4, 0, 0, 4], [0, 0, 0, 0]), ([0, 0, 0, 0], [16, 0, 0, 16]), ([4, 0, 0, 0], [0, 0, 0, 16])):
             self.assertEqual(community_maps.rosters_swept(entry(start_markers=markers, hill_cells=hills)), (15, 9))
             self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), play_fails, (markers, hills))
-            self.assertIsNone(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15), play(9)]), self.PLAIN), (markers, hills))
+            # (a team with a hill and no marker has no ant: it fails the rule of its own, below)
+            want = community_maps.REASONS[6] if markers in ([0, 0, 0, 0], [4, 0, 0, 0]) else None
+            self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15), play(9)]), self.PLAIN), want, (markers, hills))
         for markers, hills in (([0, 4, 4, 4], [0, 16, 16, 16]), ([4, 4, 4, 0], [16, 16, 16, 0]), ([4, 4, 0, 0], [16, 16, 0, 0]), ([0, 0, 0, 0], [0, 0, 0, 0])):
             self.assertEqual(community_maps.rosters_swept(entry(start_markers=markers, hill_cells=hills)), (15,))
-            self.assertIsNone(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), (markers, hills))
+            want = community_maps.REASONS[6] if markers == [0, 0, 0, 0] else None                   # (no marker at all: an empty world)
+            self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), want, (markers, hills))
 
     def test_an_email_address_does_not_keep_a_map_out(self):
         # (the owner's decision: an address in a map does not matter; only a program does)
@@ -160,7 +167,15 @@ class TheRule(unittest.TestCase):
         self.assertEqual(community_maps.reason(entry(playable=False, runs=[]), self.PLAIN + program), community_maps.REASONS[1])
         self.assertEqual(community_maps.reason(entry(runs=[], problems=[{"kind": "tile_outside_dictionary"}]), self.PLAIN), community_maps.REASONS[2])
         self.assertEqual(community_maps.reason(entry(problems=[{"kind": "tile_outside_dictionary"}]), self.PLAIN + program), community_maps.REASONS[3])
-        self.assertEqual(community_maps.REASONS, ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses"))
+        self.assertEqual(community_maps.REASONS, ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses", "no start marker for a team"))
+
+    def test_a_team_that_is_claimed_needs_a_start_marker_and_a_team_that_is_not_claimed_does_not(self):
+        self.assertIsNone(community_maps.reason(entry(start_markers=[4, 4, 0, 0], hill_cells=[16, 16, 0, 0]), self.PLAIN))          # (a 1 v 1 map: two teams, claimed and with ants)
+        self.assertIsNone(community_maps.reason(entry(start_markers=[4, 4, 4, 0], hill_cells=[0, 0, 0, 0]), self.PLAIN))            # (markers without hills: claimed, with ants)
+        self.assertEqual(community_maps.reason(entry(start_markers=[4, 4, 4, 0], hill_cells=[16, 16, 16, 16]), self.PLAIN), community_maps.REASONS[6])   # (a hill without a marker)
+        self.assertEqual(community_maps.reason(entry(start_markers=[0, 0, 0, 0], hill_cells=[0, 0, 0, 0]), self.PLAIN), community_maps.REASONS[6])       # (nothing: the map counts four teams)
+        self.assertEqual(community_maps.reason(entry(start_markers=[4, 4, 0, 0], hill_cells=[0, 0, 16, 0]), self.PLAIN), community_maps.REASONS[6])       # (a hill for a third team)
+        self.assertEqual(community_maps.reason(entry(name_ok=False, start_markers=[0, 0, 0, 0]), self.PLAIN), community_maps.REASONS[5])               # (the earlier reason wins)
 
     def test_a_program_is_named_before_a_name(self):
         self.assertEqual(community_maps.reason(entry(name_ok=False), self.PLAIN + b"\0Reading SETVER.EXE file.\0"), community_maps.REASONS[4])
@@ -345,8 +360,9 @@ class TheList(unittest.TestCase):
         kinds = (sum(r["repaired"].startswith("Text-transfer damage") for r in repaired), sum("start marker" in r["repaired"] for r in repaired),
                  sum(r["repaired"].startswith("Tiles outside the dictionary") for r in repaired))
         self.assertEqual(sum(kinds), len(repaired))                                            # (three kinds of damage, each map one of them)
-        self.assertEqual(COLLECTION - ORIGINALS - LEFT_OUT, len(self.rows))
+        self.assertEqual(COLLECTION - ORIGINALS - LEFT_OUT - REMOVED, len(self.rows))
         self.assertIn("holds the **%d** of its %d maps" % (len(self.rows), COLLECTION), text)
+        self.assertIn("## Taken out again\n\n%d of the %d maps that were first taken in were removed" % (REMOVED, len(self.rows) + REMOVED), text)
         self.assertIn("%d byte for byte as they were collected, and %d that were damaged and are repaired" % (len(self.rows) - len(repaired), len(repaired)), text)
         self.assertIn("%d of the %d files are different maps; the other %d are the same map" % (different, len(self.rows), len(self.rows) - different), text)
         self.assertIn("## The %d repaired maps" % len(repaired), text)
@@ -625,7 +641,7 @@ class TheCommandLine(Made):
         self.assertEqual(out.splitlines(), ["does not load\tBad.lvl", "program code inside\tProg.lvl", "original map (the bytes of ORIG.LVL)\tCopy.lvl", "original map (its name)\tTINY.LVL",
                                             "name the protocol refuses\tOdd.Lvl", "play fails\tIdle.lvl"])                          # (Mail.lvl, with an email address, is taken in)
         self.assertEqual(err.splitlines(), ["1\tdoes not load", "0\tnot playable", "1\tplay fails", "0\ttile outside the dictionary", "1\tprogram code inside",
-                                            "1\tname the protocol refuses", "2\toriginal map"])
+                                            "1\tname the protocol refuses", "0\tno start marker for a team", "2\toriginal map"])
 
     def test_an_original_is_not_counted_as_a_reason(self):
         report = [self.add("Copy.lvl", self.original), self.add("Small.lvl", loads=False)]
@@ -856,7 +872,7 @@ class TheRepairs(Made):
         self.assertEqual(code, 0)
         self.assertEqual(out.splitlines(), ["does not load\tHopeless.lvl", "original map (its name)\tTINY.LVL"])
         self.assertEqual(err.splitlines(), ["1\tdoes not load", "0\tnot playable", "0\tplay fails", "0\ttile outside the dictionary", "0\tprogram code inside", "0\tname the protocol refuses",
-                                            "1\trepaired", "1\toriginal map"])
+                                            "0\tno start marker for a team", "1\trepaired", "1\toriginal map"])
         final = self.report_file([entry(name="Broken.lvl", hash=community_maps.fnv1a64(self.FIXED + b"OKEN")), self.report[0]], "final.json")
         self.assertEqual(self.run_main("verify", dest, final), (0, "", ""))
 

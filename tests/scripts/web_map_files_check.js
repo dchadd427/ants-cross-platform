@@ -373,6 +373,36 @@ const rejects = () => Promise.reject(new Error('offline'));
         check('a connection that fails clears the timer', down.cleared.length === 1);
     }
 
+    // 12. a game for one on a map of the players (the game page's ?mapfile=): which file names count, and the start that fetches the file first and writes it for the game
+    {
+        same('communityFile: a name the game takes is itself', [M.communityFile(NAME), M.communityFile('Bomb Island.lvl'), M.communityFile('!!!BLOCKADES!!!.lvl')], [NAME, 'Bomb Island.lvl', '!!!BLOCKADES!!!.lvl']);
+        same('communityFile: none for a name that is no map name, or one of the six originals\' files (any case)', ['', 'bad', '../x.lvl', 'a/b.lvl', 'TINY.LVL', 'tiny.lvl', 'Islands.LVL', 'Treasure.lvl', undefined, null, 5].map((n) => M.communityFile(n)), ['', '', '', '', '', '', '', '', '', '', '']);
+        const run = async (files, file) => {
+            const log = [], pre = [];
+            const module = { preRun: pre, FS: { mkdirTree() {}, writeFile: (p) => log.push('write ' + p) } };
+            M.beforeLocalGame(files, file, () => module, (text, gone) => log.push('fail ' + (gone ? '[gone] ' : '') + text), () => log.push('go'));
+            await settle();
+            pre.forEach((f) => f());
+            return log;
+        };
+        same('no map of the players: the game starts at once, nothing is fetched', await run(null, ''), ['go']);
+        const r = rig([Promise.resolve(response(200, BYTES))]);
+        same('a map of the players: fetched without a hash, written into the maps folder by the game\'s preRun, then the game starts', await run(r.maps, NAME), ['go', 'write Original-Ants/Maps/' + NAME]);
+        same('... and the fetch asked for that file', r.calls.map((c) => c.url), [M.fileUrl(NAME)]);
+        const gone = rig([Promise.resolve(response(404, new Uint8Array(0)))]);
+        const lost = await run(gone.maps, NAME);
+        check('a map that is gone: the page is told why (and that the server says it is gone) and the game does not start', lost.length === 1 && /^fail \[gone\] .*not on the server/.test(lost[0]), JSON.stringify(lost));
+        const e403 = rig([Promise.resolve(response(403, new Uint8Array(0)))]);
+        const broken = await run(e403.maps, NAME);
+        check('an answer other than 404/410 is not "gone" (the page offers Reload for it)', broken.length === 1 && /^fail The server answered 403/.test(broken[0]), JSON.stringify(broken));
+        const gone410 = await run(rig([Promise.resolve(response(410, new Uint8Array(0)))]).maps, NAME);
+        check('a 410 is gone too', gone410.length === 1 && /^fail \[gone\] /.test(gone410[0]), JSON.stringify(gone410));
+        const rejecting = await run({ fetchOnly: () => Promise.reject(new Error('boom')) }, NAME);
+        check('a fetch that rejects: the page is told (not gone), the game does not start, nothing is left unhandled', rejecting.length === 1 && /^fail Could not download the map/.test(rejecting[0]), JSON.stringify(rejecting));
+        const none = await run(null, NAME);
+        check('a browser that cannot fetch: the page is told, the game does not start', none.length === 1 && /^fail This browser cannot download the map/.test(none[0]), JSON.stringify(none));
+    }
+
     console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');
     process.exit(failures ? 1 : 0);
 })().catch((e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); });

@@ -14,7 +14,8 @@ two teams alone: green and black) and whether the plays were deterministic, and 
     or an error, with one state hash in three plays;
   - every tile on it is a name of its own dictionary (a tile outside it is what the original draws as heap garbage, so there is nothing to copy);
   - the file holds no program (a map that carries one is not a map);
-  - its name is one that the network protocol accepts (a room could not use it otherwise).
+  - its name is one that the network protocol accepts (a room could not use it otherwise);
+  - every team that it claims (a start marker or a hill; all four when it has neither) has a start marker, so that it starts with ants (a map that fails this is broken, not kept).
 The maps of the original game are not taken: the six in Original-Ants/Maps are known by their names, and a file that has the bytes of one of them under another name is the same
 map (the tool reads Original-Ants/Maps beside it; without that folder only the names tell).
 
@@ -32,7 +33,7 @@ ORIGINAL_NAMES = ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS")
 ORIGINALS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "Original-Ants", "Maps"))
 PROGRAM = re.compile(r"this program (cannot|requires)|\.(exe|dll|sys|bat)\b|kernel32", re.I)
 PRINTABLE_RUN = re.compile(rb"[\x20-\x7e]{4,}")
-REASONS = ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses")
+REASONS = ("does not load", "not playable", "play fails", "tile outside the dictionary", "program code inside", "name the protocol refuses", "no start marker for a team")
 ORIGINAL = "original map"       # (not one of REASONS: an original map belongs in Original-Ants/Maps)
 REPAIRED = "repaired"           # (nor this: a map that was repaired and then passes)
 REPAIRS_FILE = "repairs.json"   # in the folder of repaired files: {"format": 1, "repairs": {file name: the sentence}}
@@ -52,6 +53,15 @@ def fnv1a64(data):
 def teams_of(entry):
     """Which of the four teams have a start marker or a hill (what tools/map_sweep.cpp asks as MapInfo::has_team)."""
     return [bool(marks or hills) for marks, hills in zip(entry["start_markers"], entry["hill_cells"])]
+
+
+def claimed_teams_have_ants(entry):
+    """True when every team that the map claims (`teams_of`, or all four when it has neither marker nor hill: its `players`) has a start marker, so a starting ant: a team with a
+    hill and no marker has no ant, and a map with no marker at all is an empty world (the owner's rule of Oct 12: such a map is broken and not kept)."""
+    claimed = teams_of(entry)
+    if not any(claimed):
+        claimed = [True] * 4
+    return all(marks > 0 for marks, wanted in zip(entry["start_markers"], claimed) if wanted)
 
 
 def rosters_swept(entry):
@@ -74,6 +84,8 @@ def reason(entry, data):
         return REASONS[4]
     if not entry["name_ok"]:
         return REASONS[5]
+    if not claimed_teams_have_ants(entry):
+        return REASONS[6]
     return None
 
 
