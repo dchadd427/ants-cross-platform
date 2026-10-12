@@ -1063,7 +1063,7 @@
             return picker;
         }
         function isHost() { return !!(model && !model.guest && !model.starting); }
-        function inert(on) { ['lobby', 'footer-bar'].forEach(function (id) { if (on) $(id).setAttribute('inert', ''); else $(id).removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
+        function inert(on) { [document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }       // (the page behind the open list takes no key or tap)
         function communityOf(file) { var e = picker && picker.find(file); return e && !e.original ? { name: e.name, info: AntsMapPicker.infoText(e), thumb: e.thumb } : null; }
         function warmMap(file) { if (window.AntsMapFiles && !warmed[file]) { warmed[file] = true; AntsMapFiles.warm(window, file); } }      // the game page, a moment later, finds the file in the browser's cache
         function chooseMap(entry) {
