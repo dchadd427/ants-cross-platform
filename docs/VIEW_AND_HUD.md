@@ -196,7 +196,7 @@ The application library (`ants_app`, `src/ants_app/`) draws the picture and play
 
 ### Sound and music
 
-- A 32-channel software mixer plays the sound clips with the original's sound law ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.24c): Chebyshev distance over 2500 px, a pan that quiets only the far channel, DirectSound hundredths of a dB, and the Sound Volume option inside every sound.
+- A 32-channel software mixer plays the sound clips with the original's sound law ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.24c): Chebyshev distance over 2500 px, a pan that quiets only the far channel, DirectSound hundredths of a dB, and the Sound Volume option inside every sound. The listener is the middle of the picture, so a zoom or a scroll moves it: the gains of the sounds that play then glide to the new law in 12 ms (`AUDIO_GAIN_RAMP_MS`) instead of stepping, which is a click. Which sounds start, and when, never depends on the view (`test_replay_app` RA9).
 - Music is MP3 renders of the original's four MIDI pieces (`INTRO.mp3`, `ANTS2A.mp3`, `ANTS2B.mp3`, `ANTSFUN3.mp3`), played by the same mixer on every platform ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.24e). In the browser (the WebAssembly build) the sound and the music go through SDL's Web Audio context; the web build has no HTML5 audio element. The original's `.MID` files are loaded but never played in a real game, so only the MP3s sound. Playback by the sources' AudioToolbox MIDI player (macOS) runs only in that player's own unit test; in `--headless` runs the player is a silent stand-in.
 
 ### Match Audio Cues
