@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.24 - 2026-10-12 - Back 30 seconds on the replay bar
+
+**For players:**
+- **Back 30 seconds:** a new button right of Play / Pause on the replay bar (a double triangle with a small 30) jumps the replay 30 seconds back, never before the start. A match that plays keeps playing, a paused one stays paused, and the speed stays. It works with a mouse, a finger, the keys (Enter and Space on the focused button) and the fullscreen bar under a locked mouse, and fits the phone's bar. It is not on a match that is being played (live).
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5a0ac68d...6201e693)
+
 ## v0.12.23 - 2026-10-12 - The map list and the fullscreen replay mouse: follow-ups
 
 **For players:**

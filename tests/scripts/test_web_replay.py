@@ -510,7 +510,7 @@ class TheRewindButton(unittest.TestCase):
         self.assertIn(".rew[hidden],", self.page)                                                          # (hidden wins over the button's display)
         self.assertRegex(self.page, r"\.rbar \.rew \{ grid-area: rew; flex-direction: column;")
         self.assertIn(".rbar .rew .n {", self.page)
-        for tpl in ('"play rew tl clock cam speed pic fsx"', '"play rew clock pic fsx"', '"play rew clock cam pic fsx"', '"play rew clock cam speed pic fsx"'):
+        for tpl in ('"play rew tl clock cam speed pic fsx"', '"play rew clock pic"', '"play rew clock cam pic fsx"', '"play rew clock cam speed pic fsx"'):
             self.assertIn(tpl, self.page, tpl)
         for line in self.page.splitlines():
             if "grid-template-areas" in line and ".islive" in line:
