@@ -941,8 +941,8 @@ void run_suite_7_input_controls() {
             app.shutdown();
         }
         {   // a map of the players (the web page's START for one on any map of the community fetches the file and plays it like this): Green's colony alone, and the match goes on with nobody else on the map (it
-            // ends with the clock or when this colony has nothing left, never because no other team is left), also on a map for two (a 1 v 1 map) and on one of the shortest
-            for (const char* name : {"Grid.LVL", "ShowDown.lvl", "ANTS SOCCER.lvl", "Bombz Away.lvl"}) {
+            // ends with the clock or when this colony has nothing left, never because no other team is left), also on one of the shortest (every map of the players has the four seats since the 1 v 1 maps were taken out)
+            for (const char* name : {"Grid.LVL", "Killing Spree.LVL", "SWIMTEAM.LVL", "Bombz Away.lvl"}) {
                 Application app;
                 ApplicationConfig cfg = config(true);
                 cfg.start_in_map_select = false;

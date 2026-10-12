@@ -4,7 +4,7 @@ Where the remake's level loader (`Grid::init_from_level`, the level reader, the 
 
 ## All seven together
 
-Against v0.12.9, over the 558 community maps of that day (11 of them have been taken out since, `Community-Maps/README.md`; the numbers below are those of the day, except where a test pins them) (the same sweep, `map_sweep` with its scripted players for 2,400 ticks, rosters of four teams and of green and black, three runs each; the loaded state compared with a scratch tool): the loaded walkability changes in 115 maps, the terrain in 22, the hills in 7, the start markers in 6, the food flags in 56 and the obstacle overlays in 348; the play changes in 116 maps, and the state hash of 440 more moves only because it now holds the solid bits that were cleared before (the six original maps play exactly as before). No crash, no hang, no run that is not deterministic.
+Against v0.12.9, over the 558 community maps of that day (24 of them have been taken out since, `Community-Maps/README.md`; the numbers below are those of the day, except where a test pins them) (the same sweep, `map_sweep` with its scripted players for 2,400 ticks, rosters of four teams and of green and black, three runs each; the loaded state compared with a scratch tool): the loaded walkability changes in 115 maps, the terrain in 22, the hills in 7, the start markers in 6, the food flags in 56 and the obstacle overlays in 348; the play changes in 116 maps, and the state hash of 440 more moves only because it now holds the solid bits that were cleared before (the six original maps play exactly as before). No crash, no hang, no run that is not deterministic.
 
 ## Numbers
 
@@ -78,4 +78,4 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** The "." branch is gone. (A named object keeps the remake's name-based overlay for rocks, grass clusters and so on; that is not changed here.)
 
-**Maps** (`LF7.3`): 101,806 layer-2 cells in 484 maps have an entry that is "." or empty; 339 maps changed in the overlay flag (and so in the state hash), 6 in play within 2,400 ticks (BattleGround!!, BattleGroundnn, COMBAT MIRAGE, FlowerPatch2, FlowerPatch3, FoReSt). Sweep of the 558: no crash, no hang, every run deterministic, `community_maps.py verify` clean.
+**Maps** (`LF7.3`): 99,904 layer-2 cells in 465 maps have an entry that is "." or empty (the folder today, pinned by the test; 101,806 in 484 maps on the day of the sweep of the 558 below); 339 maps changed in the overlay flag (and so in the state hash), 6 in play within 2,400 ticks (BattleGround!!, BattleGroundnn, COMBAT MIRAGE, FlowerPatch2, FlowerPatch3, FoReSt). Sweep of the 558: no crash, no hang, every run deterministic, `community_maps.py verify` clean.

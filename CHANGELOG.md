@@ -30,7 +30,18 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Names are display only: the rules, the replay format and network protocol 19 are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d1b887f1...HEAD)
+
+## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
+
+**For players:**
+- 13 more maps of the players are gone from the map list, because every map now has to have a hill and starting ants for all four colours: the nine 1 v 1 maps (`!aLkAtRaZ1v1bOmBeR`, `!aLkAtRaZ1v1tHiEf!`, `!aLkAtRaZ_1v1!`, `ANTS SOCCER`, `ANTSSOCCER`, `GRiM-FAiT`, `ShowDown`, `aLkAtRaZ1v1cOmBaNt`, `aLkAtRaZ1v1cOmBaNtn`), `Fighter Dream 2` and `junk yard` (ants for all four colours, but a hill missing for some) and the two arenas without any hill, `DEATH WAR!!!!!!!!!!!!ARENA 3` and `HELLRASIER ARENA`. 534 maps of the players remain; the lobby's list and the map picker are shorter by the same 13.
+- A kept replay (30 days) of a match played on one of these maps can no longer be watched.
+- A map of the players is only taken in when all four colours have a hill and starting ants, and the check and the test of the map list now fail if one is added that does not.
+
+**Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...d1b887f1)
 
 ## v0.12.29 - 2026-10-12 - Food piles that the map file does not hold are drawn
 
