@@ -32,7 +32,17 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...d1b887f1)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...d1b887f1)
+
+## v0.12.29 - 2026-10-12 - Food piles that the map file does not hold are drawn
+
+**For players:**
+- A food pile that the map's file does not hold in its picture layer is now drawn where it lies. Before, the view showed nothing there although the pile was in the game (bots and ants could see it and carry it, and the minimap showed it): the heap in the middle of `Bombz Away` and its relatives (the BombzAway maps, `WaTcHoUt BOMBZ!!!`, `Bombzzzzz away!!!`, `AGGRIVATION`), and the piles of more than 400 maps of the players whose file leaves the pile's cell empty (`Trouble`, `TowerPlaza`, `candyland` ...).
+- A pile that lies on a bomb of the map file replaces that bomb, as in the original; the view now shows the pile and no bomb there.
+
+**Rules / network:** none. Only the picture changed; the simulation, the replay rules and the network protocol are the same.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9a38ef1...cdd857a0)
 
 ## v0.12.28 - 2026-10-12 - Back 30 seconds on the replay bar
 
