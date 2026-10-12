@@ -317,7 +317,7 @@ for w in want:
     ok = ok and g is not None and all(g[k] == w[k] for k in ("width", "height", "minutes", "players", "description")) and g["thumb"].startswith("/maps/previews/") and "picture" in previews[w["file"]]
 sys.exit(0 if ok else 1)' "$ROOT"; echo $?)"
 check "... and the same door refuses what is not the plain list (a query and a name below /maps: 404, a POST: 405)" "$([ "$(code_of "http://127.0.0.1:$CM_PORT/maps?x=1")" = "404" ] && [ "$(code_of -X POST "http://127.0.0.1:$CM_PORT/maps")" = "405" ] && [ "$(code_of "http://127.0.0.1:$CM_PORT/maps/TINY.LVL")" = "404" ]; echo $?)"
-check "... and the log says how many maps are listed" "$(grep -q '^\[ants_server [0-9]*\] 564 maps listed (maps folder and community folder' "$WORK/cm.log"; echo $?)"
+check "... and the log says how many maps are listed" "$(grep -q '^\[ants_server [0-9]*\] 553 maps listed (maps folder and community folder' "$WORK/cm.log"; echo $?)"
 kill -TERM "$CM_PID" 2> /dev/null; wait "$CM_PID" 2> /dev/null
 # the match history lives in the database (docs/REPLAYS.md "The match history"): no folder of its own, --no-history turns it off, --no-db leaves it nothing to live in
 check "--help names --no-history, and there is no --history-dir (the history is in the database: a leftover option is refused, status 2)" "$("$SERVER" --help 2>&1 | grep -q -- '--no-history'; [ "$(exit_of --history-dir "$WORK/hi_none")" = "2" ]; echo $?)"

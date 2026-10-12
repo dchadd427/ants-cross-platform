@@ -4,7 +4,7 @@ Where the remake's level loader (`Grid::init_from_level`, the level reader, the 
 
 ## All seven together
 
-Against v0.12.9, over the 558 community maps (the same sweep, `map_sweep` with its scripted players for 2,400 ticks, rosters of four teams and of green and black, three runs each; the loaded state compared with a scratch tool): the loaded walkability changes in 115 maps, the terrain in 22, the hills in 7, the start markers in 6, the food flags in 56 and the obstacle overlays in 348; the play changes in 116 maps, and the state hash of 440 more moves only because it now holds the solid bits that were cleared before (the six original maps play exactly as before). No crash, no hang, no run that is not deterministic.
+Against v0.12.9, over the 558 community maps of that day (11 of them have been taken out since, `Community-Maps/README.md`; the numbers below are those of the day, except where a test pins them) (the same sweep, `map_sweep` with its scripted players for 2,400 ticks, rosters of four teams and of green and black, three runs each; the loaded state compared with a scratch tool): the loaded walkability changes in 115 maps, the terrain in 22, the hills in 7, the start markers in 6, the food flags in 56 and the obstacle overlays in 348; the play changes in 116 maps, and the state hash of 440 more moves only because it now holds the solid bits that were cleared before (the six original maps play exactly as before). No crash, no hang, no run that is not deterministic.
 
 ## Numbers
 
@@ -18,7 +18,7 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** The file's bit is kept and is the only source for a level read from a file. What the game places sets it and what it removes clears it, as `SetTile` does: `place_powerup`, `place_firewall`, `set_fire_at`, the flower dropper's power-up, `set_food_tile` (the footprint of every stage tile, so also the lunchbox), `set_layer2` (the placeholder 160, bridge stages, empty) and `place_bomb` (replacing the placeholder). A world made by hand (`init_empty`: tests and tools) has no file bits and keeps counting these objects as solid themselves. The cells under a pile's footprint also stop being power-ups (they kept the flag while holding the pile's tile).
 
-**Maps.** Power-ups without the bit: 3,132 cells in 94 maps; food: 183 cells in 36; fire walls: 439 in 2 (`LF1.6`). Sweep of the 558 maps (loaded state, and 2,400 ticks with the sweep's scripted players, rosters 15 and 9): the walkability of the map at load changes in 107 maps; the play changes in 101 (the state hash of 451 others only because it now holds the bit that was cleared before; the six shipped maps play exactly as before, `LF1.7`); no crash, no hang, every run deterministic.
+**Maps.** Power-ups without the bit: 2,913 cells in 92 maps; food: 182 cells in 35; fire walls: 439 in 2 (`LF1.6`). Sweep of the 558 maps (loaded state, and 2,400 ticks with the sweep's scripted players, rosters 15 and 9): the walkability of the map at load changes in 107 maps; the play changes in 101 (the state hash of 451 others only because it now holds the bit that was cleared before; the six shipped maps play exactly as before, `LF1.7`); no crash, no hang, every run deterministic.
 
 ## 2. Hills and start markers are tile ids
 
@@ -38,7 +38,7 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** The class is the table's, by id, for every layer-1 cell (`determine_terrain_type` is gone).
 
-**Maps** (`LF3.5`): 16 maps. Water 476 left unnamed: 1,921 cells in 2 maps (Wata fight, hell2: ants crossed a lake of over 900 cells); mud 435 .. 444 in the Gant2 family (Gant2, gant 2, gauntlet2) and eze jungal; dirt 559 in the Turtle World family (!TurtleWorld, #Turtle World, Turtle World, Turtle); the flag 0x100 on unnamed tiles in IsLaNd FiRe BoOm (701 cells) and in Sand Box, SandBox and sand-box (1 each); and, found by the same rule, the id 1 (a wall in Bloom) and 2 (water in 's 4 Player Royal), one cell each. Sweep: the loaded terrain changes in these 16 maps and the play (2,400 ticks) in 11 of them (the other 5 only in the hash); no other map changes; no crash, no hang, every run deterministic. The pictures of the 16 maps change (the minimap and the map picture colour the cells by class).
+**Maps** (`LF3.5`): 14 maps. Water 476 left unnamed: 960 cells in 1 map (Wata fight: ants crossed a lake of over 900 cells); mud 435 .. 444 in the Gant2 family (Gant2, gant 2, gauntlet2) and eze jungal; dirt 559 in the Turtle World family (!TurtleWorld, #Turtle World, Turtle World, Turtle); the flag 0x100 on unnamed tiles in Sand Box, SandBox and sand-box (1 each); and, found by the same rule, the id 1 (a wall in Bloom) and 2 (water in 's 4 Player Royal), one cell each. Sweep: the loaded terrain changes in these 16 maps and the play (2,400 ticks) in 11 of them (the other 5 only in the hash); `IsLaNd FiRe BoOm` and `hell2`, two of the 16, have since been taken out of the folder (v0.12.27), which leaves 14; no other map changes; no crash, no hang, every run deterministic. The pictures of the 16 maps changed (the minimap and the map picture colour the cells by class).
 
 ## 4. The block-1 records that the original ignores
 
@@ -48,7 +48,7 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** The renderer draws only the records with the tile flag 0x10 or 0x20 (by id), the stem overlay is for those records only, and the fallback hills are the start markers (team below 4) only. The reader keeps the records (the sweep still counts them).
 
-**Maps** (`LF4.4`): 736 records of the ids 0, 63 .. 66, 148, 151 and 296 in 20 maps (the dictionary names of 63 .. 66 are the power-ups'). Sweep: no state hash and no play of the 558 maps changes (the engine never used them); what changes is the picture of the maps whose ignored records name an animation.
+**Maps** (`LF4.4`): 721 records of the ids 0, 63, 66, 148, 151 and 296 in 17 maps (the dictionary names of 63 .. 66 are the power-ups'; ids 64 and 65 were in maps that are gone). Sweep: no state hash and no play of the 558 maps changes (the engine never used them); what changes is the picture of the maps whose ignored records name an animation.
 
 ## 5. Food is the tile flag 0x02
 
@@ -58,7 +58,7 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** `is_food` is the flag of the id: in the loader's layer-2 pass, in the footprint cells that `set_food_tile` writes, and in the renderer's static objects (stage drawing and fog). A food id is never an obstacle overlay.
 
-**Maps** (`LF5.3`): 33 maps hold food ids that their dictionaries leave "." or unnamed; 2 (!TreasureIsland, Arena101) hold `fd...` entries of ids that are not food; 15 more have a block-2 stage tile that is not a food id (grass, rocks, power-ups). 50 maps change in all; none changes in play within 2,400 ticks (the sweep's players harvest the piles that exist by id), they differ in the state hash and in the cells' obstacle overlay (35 maps).
+**Maps** (`LF5.3`): 29 maps hold food ids that their dictionaries leave "." or unnamed; 2 (!TreasureIsland, Arena101) hold `fd...` entries of ids that are not food; 15 more have a block-2 stage tile that is not a food id (grass, rocks, power-ups). 50 maps change in all; none changes in play within 2,400 ticks (the sweep's players harvest the piles that exist by id), they differ in the state hash and in the cells' obstacle overlay (35 maps).
 
 ## 6. SetTile refuses a tile whose graphic is not loaded
 
@@ -68,7 +68,7 @@ Every fix below changes how a level is read, so by the rule next to `kProtocolVe
 
 **Now.** `Grid` knows which templates the level loads (`tile_graphic_loaded`; a world made by hand has all) and `set_food_tile` / `set_layer2` clear the old object and place nothing when the new tile's template is missing. A food object whose first stage is such a tile has no pile on the map (the object keeps its units, nobody can see or harvest it); one whose next stage is such a tile loses its pile at the bite that changes the stage. An entry that is empty (not ".") keeps its graphic, as `strcmp` says; an id past the dictionary is taken as not loaded (the original reads an uninitialised table there).
 
-**Maps** (`LF6.5`): 35 maps have a block-2 stage tile whose entry is "." and not forced (the REA notes count 40 by also counting 5 maps whose entry is empty, which the program keeps). The loaded map differs at the start in 16 of them (the file's tile at the anchor is cleared and the stage tile is not put there) and the 2,400-tick play in 11; the other 19 only lose a later stage. Not a verified observation: the original was read, never run.
+**Maps** (`LF6.5`): 34 maps have a block-2 stage tile whose entry is "." and not forced (the REA notes count 40 by also counting 5 maps whose entry is empty, which the program keeps). The loaded map differs at the start in 16 of them (the file's tile at the anchor is cleared and the stage tile is not put there) and the 2,400-tick play in 11; the other 19 only lose a later stage. Not a verified observation: the original was read, never run.
 
 ## 7. No obstacle overlay from a "." entry
 
