@@ -327,6 +327,8 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const bar = node('bar', null, { classList: { contains: (c) => !!classes[c] } });
         const play = node('play', bar, { tag: 'button' });
         const icon = node('icon', play, { tag: 'svg' });
+        const rew = node('rew', bar, { tag: 'button' });
+        const rewIcon = node('rewicon', rew, { tag: 'svg' });
         const rail = node('rail', bar, { tag: 'div' });
         const ground = node('ground', bar, { tag: 'div' });
         const picture = node('picture', null, { tag: 'canvas' });
@@ -343,7 +345,7 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const state = { handing: false };
         const api = R.barPointer({ doc, win, stage, canvas: picture, PointerEvent, MouseEvent, replayMode: () => replayMode, handing: () => state.handing,
                                    cursorAt: () => (place.locked ? { x: place.x, y: place.y, edge: place.edge } : null), leave: () => left.push('leave') });
-        return { api, log, classes, bar, play, icon, rail, ground, picture, place, made, stage, left, handlers, state };
+        return { api, log, classes, bar, play, icon, rew, rewIcon, rail, ground, picture, place, made, stage, left, handlers, state };
     }
     const ev = (type, extra) => { const e = Object.assign({ type, button: 0, isTrusted: true, target: null, stopped: 0, prevented: 0, stopPropagation() { this.stopped++; }, preventDefault() { this.prevented++; } }, extra); return e; };
     const last = (t) => t.log[t.log.length - 1];
@@ -370,6 +372,9 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         t.api.button('mousedown', 0); t.api.button('mouseup', 0);
         t.place.el = t.picture;
         same('bar: a press on the picture clears the flag: its click is the game\'s', [t.api.button('mousedown', 0), t.api.button('mouseup', 0), t.api.button('click', 0)], [false, false, false]);
+        // the Back 30 seconds button is a button of the bar: a press and a release on its triangles (or its 30) click it once
+        t.log.length = 0; t.play.clicks = 0; t.place.el = t.rewIcon; t.api.button('mousedown', 0); t.api.button('mouseup', 0); t.api.button('click', 0);
+        same('bar: Back 30 seconds is clicked once by the locked mouse', [t.rew.clicks, t.play.clicks, last(t)], [1, 0, 'click rew']);
         // a disabled control is not clicked
         t.play.clicks = 0; t.play.disabled = true; t.place.el = t.icon;
         t.api.button('mousedown', 0);
@@ -449,6 +454,54 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const w = ev('wheel', { target: off.picture }); (off.handlers.wheel || []).forEach(([fn]) => fn(w));
         const d = ev('mousedown', { target: off.picture }); (off.handlers.mousedown || []).forEach(([fn]) => fn(d));
         same('bar: a game page (not a replay) has no bar: nothing is taken', [w.stopped, d.stopped, off.api.move(0)], [0, 0, false]);
+    }
+}
+
+// ---- Back 30 seconds: the turn that a press goes to, and the button the script makes
+{
+    same('rewind: 30 s is 600 turns', [R.REWIND_SECONDS, R.rewindTurn(1000), R.rewindTurn(601), R.rewindTurn(2400)], [30, 400, 1, 1800]);
+    same('rewind: never below the first turn (exactly 600, near 0, at 0)', [R.rewindTurn(600), R.rewindTurn(599), R.rewindTurn(1), R.rewindTurn(0)], [0, 0, 0, 0]);
+    same('rewind: a turn that is not a whole number or not a number', [R.rewindTurn(1000.9), R.rewindTurn(NaN), R.rewindTurn(undefined), R.rewindTurn(-5), R.rewindTurn(Infinity)], [400, 0, 0, 0, 0]);
+    same('rewind: the seconds and the rate can be given', [R.rewindTurn(1000, 10, 20), R.rewindTurn(1000, 30, 10)], [800, 700]);
+    const make = () => {
+        const seeks = [], handlers = {}, turn = { v: 1000 };
+        const mk = (tag) => ({ tag, attrs: {}, kids: [], hidden: false, handlers: {}, className: '', textContent: '', parentNode: null, nextSibling: null, clicks: 0,
+            setAttribute(k, v) { this.attrs[k] = String(v); }, appendChild(x) { this.kids.push(x); return x; },
+            addEventListener(t, fn) { (this.handlers[t] = this.handlers[t] || []).push(fn); },
+            click() { this.clicks++; (this.handlers.click || []).forEach((fn) => fn({})); } });
+        const bar = { kids: [], insertBefore(n, ref) { n.parentNode = this; this.kids.splice(ref ? this.kids.indexOf(ref) : this.kids.length, 0, n); } };
+        const play = mk('button'); play.id = 'b-play'; play.parentNode = bar; bar.kids.push(play);
+        const tl = mk('div'); bar.kids.push(tl);
+        play.nextSibling = tl;
+        const doc = { getElementById: (id) => (id === 'b-play' ? play : null), createElement: mk, createElementNS: (ns, tag) => mk(tag) };
+        const control = R.rewindControl({ doc, turn: () => turn.v, seek: (sec) => seeks.push(sec) });
+        return { control, seeks, turn, bar, play, tl };
+    };
+    {
+        const t = make(), b = t.control.button;
+        check('rewind: the button sits right after Play / Pause, in the bar, before the timeline', t.bar.kids[1] === b && t.bar.kids[0] === t.play && t.bar.kids[2] === t.tl && b.parentNode === t.bar);
+        same('rewind: a button with the classes of Play (rplay) and rew', [b.tag, b.type, b.id, b.className], ['button', 'button', 'b-rew', 'btn rplay rew']);
+        same('rewind: its name and tip', [b.attrs['aria-label'], b.title], ['Back 30 seconds', 'Back 30 seconds']);
+        check('rewind: two triangles in an svg that a screen reader skips, and the 30 under it as text', b.kids.length === 2 && b.kids[0].tag === 'svg' && b.kids[0].attrs['aria-hidden'] === 'true' && /^M11\.5 4\.5v15L2 12z/.test(b.kids[0].kids[0].attrs.d) && b.kids[1].className === 'n' && b.kids[1].textContent === '30');
+        check('rewind: it is shown at first', b.hidden === false);
+        t.control.press();
+        same('rewind: a press seeks to 30 s earlier (in seconds, the page\'s seek)', t.seeks, [20]);
+        t.turn.v = 599; t.control.press(); t.turn.v = 0; t.control.press(); t.turn.v = 601; t.control.press();
+        same('rewind: and not below 0 s (599, 0), 0.05 s at 601', t.seeks, [20, 0, 0, 0.05]);
+        t.control.show(false);
+        check('rewind: not shown for a live match', b.hidden === true);
+        t.control.show(true);
+        check('rewind: shown again', b.hidden === false);
+        let after = 0; t.seeks.length = 0; t.turn.v = 1200;
+        t.control.wire(() => after++);
+        b.click();
+        same('rewind: a click seeks once and the bar is painted again', [t.seeks, after], [[30], 1]);
+        let prevented = 0;
+        (b.handlers.keydown || []).forEach((fn) => fn({ key: 'Enter', repeat: false, preventDefault() { prevented++; } }));
+        (b.handlers.keydown || []).forEach((fn) => fn({ key: ' ', repeat: false, preventDefault() { prevented++; } }));
+        (b.handlers.keydown || []).forEach((fn) => fn({ key: ' ', repeat: true, preventDefault() { prevented++; } }));
+        (b.handlers.keydown || []).forEach((fn) => fn({ key: 'x', repeat: false, preventDefault() { prevented++; } }));
+        same('rewind: Enter and Space press it once each (a held key does not repeat), another key does nothing', [b.clicks, prevented, t.seeks.length], [3, 3, 3]);
     }
 }
 

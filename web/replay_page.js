@@ -257,6 +257,47 @@
         return api;
     }
 
+    // ---- Back 30 seconds (docs/REPLAYS.md "Watching a replay") ----
+    // The button right of Play / Pause: a left-pointing double triangle with "30" under it. It seeks through the page's own seek (the timeline's: the game plays the match again from its first turn up to the
+    // turn, as for a drag), so the play / pause state and the speed stay. It is made here (the page's markup has none) and is not there for a match that is being played (?live=).
+    var REWIND_SECONDS = 30, TURNS_PER_SECOND = 20;
+    // The turn that a press goes to from `turn`: 30 seconds (600 turns) earlier, never before the first turn
+    function rewindTurn(turn, seconds, tps) {
+        var back = (typeof seconds === 'number' ? seconds : REWIND_SECONDS) * (typeof tps === 'number' ? tps : TURNS_PER_SECOND);
+        return Math.max(0, Math.floor(typeof turn === 'number' && isFinite(turn) ? turn : 0) - back);
+    }
+    // `env`: `doc`, `turn()` (the turn that the playhead is at, or on its way to) and `seek(seconds)` (the page's seek). Returns { button, press, show(on), wire(after) }.
+    function rewindControl(env) {
+        var ns = 'http://www.w3.org/2000/svg';
+        var b = env.doc.createElement('button');
+        b.className = 'btn rplay rew'; b.type = 'button'; b.id = 'b-rew';
+        b.title = 'Back ' + REWIND_SECONDS + ' seconds';
+        b.setAttribute('aria-label', b.title);
+        var svg = env.doc.createElementNS(ns, 'svg'), path = env.doc.createElementNS(ns, 'path'), n = env.doc.createElement('span');
+        svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+        path.setAttribute('d', 'M11.5 4.5v15L2 12zM22 4.5v15L12.5 12z');
+        n.className = 'n'; n.textContent = String(REWIND_SECONDS);
+        svg.appendChild(path); b.appendChild(svg); b.appendChild(n);
+        var play = env.doc.getElementById('b-play');
+        play.parentNode.insertBefore(b, play.nextSibling);
+        var api = {
+            button: b,
+            press: function () { env.seek(rewindTurn(env.turn()) / TURNS_PER_SECOND); },
+            show: function (on) { b.hidden = !on; },
+            // a press, and Enter and Space (pressed here, as the camera button's: the game's key handling takes the browser's press of a focused button away); `after` repaints the bar
+            wire: function (after) {
+                b.addEventListener('click', function () { api.press(); after(); });
+                b.addEventListener('keydown', function (ev) {
+                    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                    ev.preventDefault();
+                    if (!ev.repeat) b.click();
+                });
+                b.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });
+            }
+        };
+        return api;
+    }
+
     // THE BAR UNDER A LOCKED POINTER (docs/REPLAYS.md, "Watching a replay"). A locked pointer is not over anything: the browser sends every mouse event to the canvas and nobody else, so the bar of a
     // fullscreen replay (page elements over the picture) could not be reached. The game's cursor (the one that scrolls the map at the picture's edge) is the pointer here: while it is over the visible
     // bar the motion is NOT handed to the game (the game is told that its pointer left), a small arrow is drawn over the bar, and the page makes the pointer events of a mouse at that place for what is
@@ -353,7 +394,7 @@
         return api;
     }
 
-    var api = { barPointer: barPointer, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;
