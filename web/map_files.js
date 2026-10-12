@@ -99,7 +99,7 @@
                 var request;
                 try { request = env.fetch(fileUrl(name), init); } catch (e) { finish({ ok: false, retry: false, text: 'This browser cannot download the map ' + name + '.' }); return; }
                 request.then(function (response) {
-                    if (response.status === 404 || response.status === 410) { finish({ ok: false, retry: false, text: 'The map ' + name + ' is not on the server (it may have been taken off).' }); return; }
+                    if (response.status === 404 || response.status === 410) { finish({ ok: false, retry: false, gone: true, text: 'The map ' + name + ' is not on the server (it may have been taken off).' }); return; }
                     if (!response.ok) { finish({ ok: false, retry: response.status >= 500, text: 'The server answered ' + response.status + ' for the map ' + name + '. Try again in a moment.' }); return; }
                     var type = response.headers && response.headers.get ? response.headers.get('content-type') || '' : '';
                     if (/^\s*text\/html/i.test(type)) { finish({ ok: false, retry: false, text: 'The map ' + name + ' came back as a web page, not a map. Check your connection and try again.' }); return; }
@@ -240,5 +240,20 @@
         return function () { var FS = FSOf(); try { FS.mkdirTree('Original-Ants/Maps'); } catch (e) { /* it is there */ } FS.writeFile('Original-Ants/Maps/' + name, bytes); };
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
+    // A game for one on a map of the players (the game page's ?mapfile=): the file name when the game takes it and it is none of the six originals' files, else ''
+    function communityFile(name) { return validName(name) && !ORIGINALS.test(name) ? name : ''; }
+
+    // The game page's start of a game on this computer: with no map of the players (file '') the game starts at once (`go`); else the file is fetched from the site (`files`: window.antsMapFiles; no hash to check,
+    // nobody else plays it), written into the game's maps folder when its file system is there (the game's Module.preRun) and then the game starts. What cannot be had is `fail`'s text (and whether the server said the map is gone).
+    function beforeLocalGame(files, file, getModule, fail, go) {
+        if (!file) { go(); return; }
+        if (!files || typeof Promise === 'undefined') { fail('This browser cannot download the map ' + file + '.'); return; }
+        files.fetchOnly(file, '').then(function (map) {
+            if (!map.ok) { fail(map.text, !!map.gone); return; }                 // (gone: the server has no such map, 404 or 410: trying again does not help)
+            getModule().preRun.push(writer(function () { return getModule().FS; }, file, map.bytes));
+            go();
+        }, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });
+    }
+
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, create: create };
 });

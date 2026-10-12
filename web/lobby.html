@@ -490,13 +490,19 @@
         var LOCAL_PAGE = 'play.html';
         // What the three levels are called in an address: the three words, none for none
         function soloSeatsText(levels) { return [0, 1, 2].map(function (i) { return validFill(levels[i]) || 'none'; }).join(','); }
-        // The query of a game on this computer: ?map=<key>[&bots=<levels>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
+        // The query of a game on this computer: ?map=<key> (or ?mapfile=<file name> for a map of the players, when `mapKey` is a valid file name)[&bots=<levels>]&name=<name>&aspect=<shape>. A key that is no map's is Treasure, an empty name is Player (the name is URL-encoded, never put into an
         // address any other way), the shape is one of the four (shapeOr169). `levels`: one word (all three bases) or three (seats 1-3), a word that is no level is none.
         function localGameQuery(mapKey, levels, name, shape) {
-            var map = mapByKey(mapKey) || mapByKey(DEFAULT_MAP_KEY);
+            var known = mapByKey(mapKey) || Rules.mapOfFile(mapKey);                          // (an original by its key, or by its file)
+            var file = !known && Rules.validMapFile(mapKey) ? mapKey : '';                    // (a map of the players is named by its file: the game page fetches it from the site)
+            var map = file ? null : known || mapByKey(DEFAULT_MAP_KEY);
             var seats = Array.isArray(levels) ? [validFill(levels[0]), validFill(levels[1]), validFill(levels[2])] : [validFill(levels), validFill(levels), validFill(levels)];
             var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
-            return '?map=' + map.key + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
+            return '?' + (file ? 'mapfile=' + encodeURIComponent(file) : 'map=' + map.key) + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
+        }
+        // START of a room with nobody else: the game page's address with the room's map, or '' when the map is a text the game takes as no file name (localGameQuery would play Treasure under another map's name).
+        function soloAddress(model, name, shape) {
+            return !model.map && model.mapFile && !mapByKey(model.mapFile) && !Rules.mapOfFile(model.mapFile) && !Rules.validMapFile(model.mapFile) ? '' : './' + LOCAL_PAGE + localGameQuery(model.map || model.mapFile || DEFAULT_MAP_KEY, [], name, shape);
         }
         // LOBBY_END
 
@@ -1082,16 +1088,14 @@
 
         $('start').addEventListener('click', function () {
             if (!client || !model || model.guest || model.starting || offline) return;
-            if (Rules.startsAlone(model)) { if (model.mapFile && !model.map) showBanner('notice', { server: 'A map of the players needs a second player or a computer player. Set an open colour to Easy, Medium or Hard, then press START.' }); else startAlone(); return; }
+            if (Rules.startsAlone(model)) { startAlone(); return; }
             client.start();
         });
         // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds a room again.
         function startAlone() {
-            var key = model.map || Rules.DEFAULT_MAP_KEY, name = myName();
-            handing = true;
-            client.leave();
-            forgetSession();
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);
+            var address = soloAddress(model, myName(), aspect); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
+            handing = true; client.leave(); forgetSession();
+            window.location.assign(new URL(address, window.location.href).href);
         }
 
         function pressTeam(seat, side) {
