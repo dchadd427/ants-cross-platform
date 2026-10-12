@@ -119,21 +119,6 @@
   "picture": "!TurtleWorld.webp",
   "encoding": "webp-300-q85"
  },
- "!aLkAtRaZ1v1bOmBeR.lvl": {
-  "hash": "3d1311ca4bcf5d3a",
-  "picture": "!aLkAtRaZ1v1bOmBeR.webp",
-  "encoding": "webp-300-q85"
- },
- "!aLkAtRaZ1v1tHiEf!.lvl": {
-  "hash": "df320cdcb3bc8909",
-  "picture": "!aLkAtRaZ1v1tHiEf!.webp",
-  "encoding": "webp-300-q85"
- },
- "!aLkAtRaZ_1v1!.lvl": {
-  "hash": "717807b91503cfed",
-  "picture": "!aLkAtRaZ_1v1!.webp",
-  "encoding": "webp-300-q85"
- },
  "!aLkAtRaZ_bReAkOuT!.lvl": {
   "hash": "7d98c7aa31ffe4fd",
   "picture": "!aLkAtRaZ_bReAkOuT!.webp",
@@ -219,19 +204,9 @@
   "picture": "ANT ZONE.webp",
   "encoding": "webp-300-q85"
  },
- "ANTS SOCCER.lvl": {
-  "hash": "b5bc71140207c831",
-  "picture": "ANTS SOCCER.webp",
-  "encoding": "webp-300-q85"
- },
  "ANTS WORLD....lvl": {
   "hash": "e1e4557482459fcd",
   "picture": "ANTS WORLD....webp",
-  "encoding": "webp-300-q85"
- },
- "ANTSSOCCER.lvl": {
-  "hash": "b5bc71140207c831",
-  "picture": "ANTSSOCCER.webp",
   "encoding": "webp-300-q85"
  },
  "ANTS_PARTY-V.3.0.5.lvl": {
@@ -864,11 +839,6 @@
   "picture": "DEATH TREZ.webp",
   "encoding": "webp-300-q85"
  },
- "DEATH WAR!!!!!!!!!!!!ARENA 3.lvl": {
-  "hash": "903b507ee2150d2a",
-  "picture": "DEATH WAR!!!!!!!!!!!!ARENA 3.webp",
-  "encoding": "webp-300-q85"
- },
  "DEATH2000.LVL": {
   "hash": "4dc840dd452e519b",
   "picture": "DEATH2000.webp",
@@ -1074,11 +1044,6 @@
   "picture": "Fight Food.webp",
   "encoding": "webp-300-q85"
  },
- "Fighter Dream 2.lvl": {
-  "hash": "743e234f8675212a",
-  "picture": "Fighter Dream 2.webp",
-  "encoding": "webp-300-q85"
- },
  "Fighters Dream.lvl": {
   "hash": "fc9923635c8b4706",
   "picture": "Fighters Dream.webp",
@@ -1219,11 +1184,6 @@
   "picture": "FunOnBomb$.webp",
   "encoding": "webp-300-q85"
  },
- "GRiM-FAiT.lvl": {
-  "hash": "7e565bd15f7d15b9",
-  "picture": "GRiM-FAiT.webp",
-  "encoding": "webp-300-q85"
- },
  "Gant2.lvl": {
   "hash": "d5e7a4bed6e8bc4c",
   "picture": "Gant2.webp",
@@ -1282,11 +1242,6 @@
  "HELLRAISER.lvl": {
   "hash": "6de679b4b02cf5a0",
   "picture": "HELLRAISER.webp",
-  "encoding": "webp-300-q85"
- },
- "HELLRASIER ARENA.lvl": {
-  "hash": "9559586d1309aafc",
-  "picture": "HELLRASIER ARENA.webp",
   "encoding": "webp-300-q85"
  },
  "HaNiBaL.lvl": {
@@ -2009,11 +1964,6 @@
   "picture": "ShOrT hElLrAiSeR.webp",
   "encoding": "webp-300-q85"
  },
- "ShowDown.lvl": {
-  "hash": "2542dbc3fd2600b5",
-  "picture": "ShowDown.webp",
-  "encoding": "webp-300-q85"
- },
  "Sights_Unseen.lvl": {
   "hash": "da1a5039fa97cbd6",
   "picture": "Sights_Unseen.webp",
@@ -2499,16 +2449,6 @@
   "picture": "Zenon Trez.webp",
   "encoding": "webp-300-q85"
  },
- "aLkAtRaZ1v1cOmBaNt.lvl": {
-  "hash": "1e3d6c2911acb6a6",
-  "picture": "aLkAtRaZ1v1cOmBaNt.webp",
-  "encoding": "webp-300-q85"
- },
- "aLkAtRaZ1v1cOmBaNtn.lvl": {
-  "hash": "1e3d6c2911acb6a6",
-  "picture": "aLkAtRaZ1v1cOmBaNtn.webp",
-  "encoding": "webp-300-q85"
- },
  "aLkAtRaZ_tHiEf.lvl": {
   "hash": "f51213f98bb8e139",
   "picture": "aLkAtRaZ_tHiEf.webp",
@@ -2612,11 +2552,6 @@
  "island2.lvl": {
   "hash": "50c16e46d923403b",
   "picture": "island2.webp",
-  "encoding": "webp-300-q85"
- },
- "junk yard.lvl": {
-  "hash": "2f746c5a819f4eaf",
-  "picture": "junk yard.webp",
   "encoding": "webp-300-q85"
  },
  "kingofcombats.lvl": {

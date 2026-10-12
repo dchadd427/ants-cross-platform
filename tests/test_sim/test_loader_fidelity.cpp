@@ -1071,6 +1071,7 @@ int main() {
         std::cout << "\n    cells named \".\" or empty: " << dot_cells << " in " << maps_with_dots << " maps; of them overlays: " << dot_overlays << "\n";
         CHECK(dot_overlays == 0);
         CHECK(dot_cells > 90000);
+        CHECK(dot_cells == 99904 && maps_with_dots == 465);                  // (the 534 maps of the folder; 101,806 in 484 of the 558 that were first taken in)
     });
 
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";

@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
+
+**For players:**
+- 13 more maps of the players are gone from the map list, because every map now has to have a hill and starting ants for all four colours: the nine 1 v 1 maps (`!aLkAtRaZ1v1bOmBeR`, `!aLkAtRaZ1v1tHiEf!`, `!aLkAtRaZ_1v1!`, `ANTS SOCCER`, `ANTSSOCCER`, `GRiM-FAiT`, `ShowDown`, `aLkAtRaZ1v1cOmBaNt`, `aLkAtRaZ1v1cOmBaNtn`), `Fighter Dream 2` and `junk yard` (ants for all four colours, but a hill missing for some) and the two arenas without any hill, `DEATH WAR!!!!!!!!!!!!ARENA 3` and `HELLRASIER ARENA`. 534 maps of the players remain; the lobby's list and the map picker are shorter by the same 13.
+- A kept replay (30 days) of a match played on one of these maps can no longer be watched.
+- A map of the players is only taken in when all four colours have a hill and starting ants, and the check and the test of the map list now fail if one is added that does not.
+
+**Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/973fa3cb...d1b887f1)
+
 ## v0.12.29 - 2026-10-12 - Food piles that the map file does not hold are drawn
 
 **For players:**
@@ -478,23 +489,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/ORIGINAL_PROGRAM.md#differences-made-on-purpose)
 
-## v0.1.1 - 2026-10-03 - Bots wait for the start dialog
+## Older versions (v0.1.1 and before)
 
-**For players:**
-- Computer players no longer move during the "Get ready to play!" dialog at the start of a match. Their first orders come after it closes, when you can give yours, and they come one by one at the speed of their level: about 5.4 s into the match at Hard, 6.2 s at Medium and 8 s at Easy. This holds in a game against `--bot` or the start menu's bots, in a room on the local network and on the online server.
-- The footer of the web page and `ants --version` / `ants_server --version` now name the build (the short git commit) next to the version, for example "Version v0.1.1 - build abc1234". The version in the corner plate is unchanged.
-- This changelog is short: one entry per release in a fixed template.
-- Internal: one version source (the file `VERSION`), a build id at every build, `./run_tests.sh --fast` (about a minute) with the time of every suite, `docs/WORKFLOW.md` (the three test tiers, branches and batch pushes, the version policy) with the rules of `AGENTS.md` that say the same, ccache in CMake when it is installed, and a README without per-suite counts.
-
-**Rules / network:** The rules did not change. Network protocol 11: v0.1.0 and v0.1.1 games play together (the bots run on one machine and their commands travel as data).
-
-**Fixes:**
-- The bots could move before the players could: a bot looked on the first tick and started with a full budget, so a Hard bot could send ten orders in one tick while the dialog still took your clicks. They now wait for the same 100 ticks as the dialog and start with one order's worth of budget.
-- Test 12.108 no longer pins the value of the version. It checks the format; the value lives in the file `VERSION`, and a check run by `./run_tests.sh --fast` and by CI compares the top release heading of this file, "current release" in `STATUS.md` and the version line of the README with it.
-- The reverse-engineering notes said that the dialog lasts 6.0 seconds; the program keeps it up at least 5.0 s, which is what the game does, and the notes now say so.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3e5bfb5...8a29f14), [workflow](docs/WORKFLOW.md)
-
-## Older versions (v0.1.0 and before)
-
-Every release before v0.1.1, and the long notes of v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.2, and the long notes of v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

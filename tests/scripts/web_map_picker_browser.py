@@ -5,7 +5,7 @@ Needs the web image of this tree served by nginx (tools/web_without_docker.py bu
 check starts the server (the six originals and, as the site has them, all the players' maps (Community-Maps/ with its pictures), and a database with made-up play counts), puts the front door of web_map_fetch_check.py before the site
 and drives the front page like a person: opens the list, switches the view, searches, sorts, picks with the keyboard, and shows what it sees as screenshots (--shots DIR). Parts:
 
-  * desktop  the list opens (553 maps, the six originals first with their badge, then the most played), the Thumbnails switch is kept over a reload, a search with no result says "No maps found", a map
+  * desktop  the list opens (540 maps, the six originals first with their badge, then the most played), the Thumbnails switch is kept over a reload, a search with no result says "No maps found", a map
              chosen with the keyboard becomes the room's map (the server says so, the page shows its name and picture, and the file is fetched into the browser's cache at once), the list opens on it;
   * phone    the list is a sheet at the bottom of a 390 px screen, with no sideways scroll, in both views and when empty;
   * error    the list of maps is down: the dialog says so, the old selector with the six originals still works;

@@ -9,7 +9,7 @@ players' maps itself, from a folder of the image outside the web root:
   - /maps/previews/ and /maps/files/ are prefix locations that serve static files: GET and HEAD only, no query, a name of printable ASCII without a slash or a backslash, 1 to 80 characters and the right
     ending, checked before the disk is asked (nginx has decoded %XX by then, so %2F, %5C, %2e%2e, %00 and a double encoding cannot make a path), no directory listing, their own allowances (503 beyond),
     cacheable, and the headers of the server repeated (a location that sets a header does not inherit them); everything else under /maps/ is a plain 404, never the page of the site;
-  - every one of the 547 community maps and their pictures is served under its percent-encoded name (spaces and ! # $ & ' ~ in the names), byte for byte.
+  - every one of the 534 community maps and their pictures is served under its percent-encoded name (spaces and ! # $ & ' ~ in the names), byte for byte.
 
 The text of the file is checked everywhere. Where the program nginx is installed the real file is RUN (a copy of it with the folders and the port of the stand-in server put in, in a temporary folder), so
 that what is served and what is refused, and what reaches the stand-in server, is seen.
@@ -245,7 +245,7 @@ def make_config(workdir, port, stub_port, relaxed=False):
     text = text.replace("/var/cache/nginx/", workdir + "/cache/")
     text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % stub_port)
     text = text.replace("set $ants_replays ants-server:4002;", "set $ants_replays 127.0.0.1:%d;" % stub_port)
-    if relaxed:                                                                                # (the tests that fetch 547 files one after the other are not the flood; the strict rig is)
+    if relaxed:                                                                                # (the tests that fetch 534 files one after the other are not the flood; the strict rig is)
         text = re.sub(r"(zone=ants_map\w*:1m rate=)\d+r/s", r"\g<1>100000r/s", text)
     user = "user root;\n" if hasattr(os, "geteuid") and os.geteuid() == 0 else ""       # (the workers read the rig's 0700 folder)
     return user + "pid %s/nginx.pid;\nerror_log %s/error.log;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path %s/tmp/body;\n proxy_temp_path %s/tmp/proxy;\n fastcgi_temp_path %s/tmp/fcgi;\n uwsgi_temp_path %s/tmp/uwsgi;\n scgi_temp_path %s/tmp/scgi;\n%s\n}\n" % ((workdir,) * 7 + (text,))
