@@ -1,0 +1,153 @@
+# Cases of bot_label / parse_bot_label / bot_short_label / is_reserved_bot_name, read by tests/test_ai/test_ai_names.cpp (C++) and tests/scripts/web_bot_names_check.js (JavaScript):
+# the two implementations answer the same table. Columns are separated by a TAB; the text <empty> stands for an empty column, \xHH for the character with that code, and a result of FAIL means "refused".
+#   label      NAME  TAG       RESULT        (the full label; "" when the tag is none of the five)
+#   parse      TEXT  NAME|TAG|LEGACY   or FAIL   (TAG in small letters, empty for the short form; LEGACY 1 or 0)
+#   short      TEXT  RESULT
+#   reserved   TEXT  1 (a person may not be called so) or 0
+label	Pip	hard	Pip (bot, Hard)
+label	Pip	Hard	Pip (bot, Hard)
+label	Pip	HARD	Pip (bot, Hard)
+label	Pip	easy	Pip (bot, Easy)
+label	Pip	medium	Pip (bot, Medium)
+label	Mandible	medium	Mandible (bot, Medium)
+label	Pip	idle	Pip (bot, idle)
+label	Pip	Idle	Pip (bot, idle)
+label	Pip	worker	Pip (bot, worker)
+label	Pip	WORKER	Pip (bot, worker)
+label	Pip	<empty>	<empty>
+label	Pip	fast	<empty>
+label	Pip	hard 	<empty>
+label	Pip	standard	<empty>
+label	<empty>	hard	Bot (Hard)
+label	<empty>	easy	Bot (Easy)
+label	<empty>	medium	Bot (Medium)
+label	<empty>	idle	Bot (Idle)
+label	<empty>	worker	Bot (Worker)
+label	<empty>	fast	<empty>
+label	 Pip	hard	Bot (Hard)
+label	Pip 	hard	Bot (Hard)
+label	Pi(p	hard	Bot (Hard)
+label	Pip)	medium	Bot (Medium)
+label	Pip\x01	easy	Bot (Easy)
+label	Sixteen letters!	hard	Sixteen letters! (bot, Hard)
+label	Seventeen letters	hard	Bot (Hard)
+label	Ant Jr	easy	Ant Jr (bot, Easy)
+label	P	hard	P (bot, Hard)
+label	Pip, Jr.	worker	Pip, Jr. (bot, worker)
+parse	Pip (bot, Hard)	Pip|hard|0
+parse	Pip (bot, Easy)	Pip|easy|0
+parse	Pip (bot, Medium)	Pip|medium|0
+parse	Pip (bot, idle)	Pip|idle|0
+parse	Pip (bot, worker)	Pip|worker|0
+parse	Pip (bot)	Pip||0
+parse	Ant Jr (bot, Hard)	Ant Jr|hard|0
+parse	Sixteen letters! (bot, Hard)	Sixteen letters!|hard|0
+parse	Bot (Easy)	|easy|1
+parse	Bot (Medium)	|medium|1
+parse	Bot (Hard)	|hard|1
+parse	Bot (Idle)	|idle|1
+parse	Bot (Worker)	|worker|1
+parse	Pip (bot, hard)	FAIL
+parse	Pip (bot, HARD)	FAIL
+parse	Pip (bot, Idle)	FAIL
+parse	Pip (bot, Worker)	FAIL
+parse	Pip (Bot, Hard)	FAIL
+parse	Pip (bot,Hard)	FAIL
+parse	Pip (bot,  Hard)	FAIL
+parse	Pip (bot, Hard) 	FAIL
+parse	 Pip (bot, Hard)	FAIL
+parse	Pip  (bot, Hard)	FAIL
+parse	Pip(bot, Hard)	FAIL
+parse	Pip (bot, Hard	FAIL
+parse	Pip (bot, Hard))	FAIL
+parse	Pip (bot, )	FAIL
+parse	Pip (bot, Legend)	FAIL
+parse	Pip (bot, Hard) (bot, Easy)	FAIL
+parse	Pip (bottle)	FAIL
+parse	Pip (bot )	FAIL
+parse	Pip (bot,)	FAIL
+parse	 (bot, Hard)	FAIL
+parse	(bot, Hard)	FAIL
+parse	(bot)	FAIL
+parse	 (bot)	FAIL
+parse	Seventeen letters (bot, Hard)	FAIL
+parse	Pi(p (bot, Hard)	FAIL
+parse	Pip) (bot, Hard)	FAIL
+parse	bot (Hard)	FAIL
+parse	Bot (hard)	FAIL
+parse	Bot (Legend)	FAIL
+parse	Bot (Hard) 	FAIL
+parse	Bot  (Hard)	FAIL
+parse	Bot (bot, Hard)	Bot|hard|0
+parse	Pip	FAIL
+parse	<empty>	FAIL
+parse	Bot	FAIL
+parse	Pip (bot, Hard)\x7f	FAIL
+parse	Pip (bot, Hard)\xe9	FAIL
+short	Pip (bot, Hard)	Pip (bot)
+short	Pip (bot, idle)	Pip (bot)
+short	Pip (bot)	Pip (bot)
+short	Mandible (bot, Medium)	Mandible (bot)
+short	Bot (Hard)	Bot (Hard)
+short	Bot (Idle)	Bot (Idle)
+short	Maya	Maya
+short	Pip (bot, hard)	Pip (bot, hard)
+short	<empty>	<empty>
+short	Bot	Bot
+reserved	Bot (Hard)	1
+reserved	Bot (Idle)	1
+reserved	Bot (	1
+reserved	bot(	1
+reserved	BOT (x	1
+reserved	B o t ( x	1
+reserved	Bot (whatever) and more	1
+reserved	  bot  (  	1
+reserved	Pip (bot)	1
+reserved	Pip (bot, Hard)	1
+reserved	Pip (bot, Easy)	1
+reserved	Pip (bot, Medium)	1
+reserved	Pip (bot, idle)	1
+reserved	Pip (bot, worker)	1
+reserved	Pip(bot)	1
+reserved	Pip(bot,Hard)	1
+reserved	PIP (BOT, HARD)	1
+reserved	Pip ( bot , Hard )	1
+reserved	Pip (b o t)	1
+reserved	(bot)	1
+reserved	Maya (bot, Legend)	1
+reserved	Maya (bot, a b c)	1
+reserved	(bot, x)	1
+reserved	Maya (bot, Hard)  	1
+reserved	Pip	0
+reserved	Maya	0
+reserved	Bot	0
+reserved	Botany	0
+reserved	Robot (Hard)	0
+reserved	Bot Jones (Hard)	0
+reserved	bo t	0
+reserved	Bot-1	0
+reserved	(bot	0
+reserved	bot)	0
+reserved	Pip (bot, )	0
+reserved	Pip (bot,)	0
+reserved	Pip (bot, Hard	0
+reserved	Pip (bot) x	0
+reserved	Pip (bot, Hard) x	0
+reserved	Pip (bottle)	0
+reserved	Pip (bots)	0
+reserved	Pip (bot Hard)	0
+reserved	Pip (robot)	0
+reserved	Pip (bot, Hard))	0
+reserved	Pip (bot, (x))	0
+reserved	<empty>	0
+reserved	(	0
+reserved	)	0
+reserved	()	0
+reserved	Maya (she/her)	0
+reserved	Pip (bot, Hard)\x09	1
+reserved	\x09Bot (	1
+reserved	Pip (bot, Hard)\x0d\x0a	1
+reserved	Pip\x09(bot)	1
+reserved	Pip (bot, Hard)\x0b	0
+parse	Pip (bot, Hard)\x09	FAIL
+label	Pi\x09p	hard	Bot (Hard)

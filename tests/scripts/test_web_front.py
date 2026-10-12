@@ -45,6 +45,7 @@ PICTURES = {
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser) and its client of network protocol 16 (tests/scripts/test_web_lobby_net.py): scripts, not pictures
+UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1000 * 1000        # bytes: the whole folder (about 0.66 MB: the pictures, the font and the scripts); a picture that grows past this is a decision, not an accident
 
@@ -216,7 +217,7 @@ class Sheet:
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_and_the_two_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(SCRIPT_FILES)))
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -616,7 +617,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(SCRIPT_FILES)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)

@@ -1,0 +1,186 @@
+{
+ "note": "Mutants of src/ants_ai/bot_names.cpp for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_names_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught. The test command has its own timeout (60 s): count_not_clipped makes the picker loop for ever, which only a timeout can end, and the runner reports it as caught because the command exits non-zero (status 124). The JavaScript twin's mutants are in tests/scripts/test_bot_names.py.",
+ "defaults": {
+  "file": "src/ants_ai/bot_names.cpp",
+  "build": "test_ai",
+  "test": "timeout 60 env ANTS_TEST_FILTER=AI2.4 ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "index_modulo",
+   "old": "% kNameCount);",
+   "new": "% (kNameCount - 1));"
+  },
+  {
+   "id": "index_plus_one",
+   "old": "out.emplace_back(kBotNames[index]);",
+   "new": "out.emplace_back(kBotNames[(index + 1) % kNameCount]);"
+  },
+  {
+   "id": "no_skip_of_repeat",
+   "old": "        if (used[index]) continue;\n",
+   "new": ""
+  },
+  {
+   "id": "used_not_remembered",
+   "old": "        used[index] = true;\n",
+   "new": ""
+  },
+  {
+   "id": "seed",
+   "old": "0xB07A11E5B07A11E5ull",
+   "new": "0xB07A11E5B07A11E4ull"
+  },
+  {
+   "id": "step",
+   "old": "0x9E3779B97F4A7C15ull;",
+   "new": "0x9E3779B97F4A7C14ull;"
+  },
+  {
+   "id": "draw_starts_at_0",
+   "old": "for (uint64_t draw = 1;",
+   "new": "for (uint64_t draw = 0;"
+  },
+  {
+   "id": "key_low_byte_only",
+   "old": "mix64(key ^ kPickSeed)",
+   "new": "mix64((key & 0xFF) ^ kPickSeed)"
+  },
+  {
+   "id": "suffix_bot",
+   "old": "if (inside == \"bot\") return true;",
+   "new": "if (inside == \"bots\") return true;"
+  },
+  {
+   "id": "suffix_bot_comma",
+   "old": "starts_with(inside, \"bot,\") && inside.size() > 4",
+   "new": "false && inside.size() > 4"
+  },
+  {
+   "id": "suffix_empty_tail",
+   "old": "inside.size() > 4 &&",
+   "new": "inside.size() > 3 &&"
+  },
+  {
+   "id": "suffix_paren_in_tail",
+   "old": " && inside.find(')') == std::string::npos;",
+   "new": ";"
+  },
+  {
+   "id": "suffix_last_paren",
+   "old": "const size_t open = s.rfind('(');",
+   "new": "const size_t open = s.find('(');"
+  },
+  {
+   "id": "legacy_prefix",
+   "old": "if (starts_with(s, \"bot(\")) return true;",
+   "new": "if (starts_with(s, \"bot\")) return true;"
+  },
+  {
+   "id": "blanks_kept",
+   "old": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(lower(c));",
+   "new": "s.push_back(lower(c));"
+  },
+  {
+   "id": "case_kept",
+   "old": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(lower(c));",
+   "new": "if (c != ' ' && c != '\\t' && c != '\\r' && c != '\\n') s.push_back(c);"
+  },
+  {
+   "id": "parse_comma_blank",
+   "old": "if (!starts_with(inside, \", \")) return false;",
+   "new": "if (!starts_with(inside, \",\")) return false;"
+  },
+  {
+   "id": "parse_tag_case",
+   "old": "for (const char* ok : {\"Easy\", \"Medium\", \"Hard\", \"idle\", \"worker\"}) {",
+   "new": "for (const char* ok : {\"Easy\", \"Medium\", \"Hard\", \"Idle\", \"worker\"}) {"
+  },
+  {
+   "id": "parse_name_unchecked",
+   "old": "    if (!valid_bot_label_name(name)) return false;\n    out = std::move(found);",
+   "new": "    out = std::move(found);"
+  },
+  {
+   "id": "parse_no_legacy",
+   "old": "        if (text == legacy) {",
+   "new": "        if (false && text == legacy) {"
+  },
+  {
+   "id": "parse_legacy_tag",
+   "old": "lowered(std::string_view(legacy).substr(5, std::string_view(legacy).size() - 6))",
+   "new": "std::string(\"easy\")"
+  },
+  {
+   "id": "parse_open",
+   "old": "text.rfind(\" (bot\")",
+   "new": "text.rfind(\"(bot\")"
+  },
+  {
+   "id": "label_kind_case",
+   "old": "if (t == \"idle\") return \"idle\";",
+   "new": "if (t == \"idle\") return \"Idle\";"
+  },
+  {
+   "id": "label_blank",
+   "old": "return std::string(name) + \" (bot, \" + word + \")\";",
+   "new": "return std::string(name) + \" (bot,\" + word + \")\";"
+  },
+  {
+   "id": "label_fallback_blank",
+   "old": "    if (!valid_bot_label_name(name)) {",
+   "new": "    if (false) {"
+  },
+  {
+   "id": "label_fallback_idle",
+   "old": "word == \"idle\" ? \"Idle\"",
+   "new": "word == \"idle\" ? \"idle\""
+  },
+  {
+   "id": "name_max",
+   "old": "name.size() > kBotLabelNameMax",
+   "new": "name.size() > kBotLabelNameMax + 1"
+  },
+  {
+   "id": "name_paren",
+   "old": "c == '(' || c == ')'",
+   "new": "c == '('"
+  },
+  {
+   "id": "name_edge_blank",
+   "old": "name.front() == ' ' || name.back() == ' '",
+   "new": "name.front() == ' '"
+  },
+  {
+   "id": "short_legacy",
+   "old": "!parsed.legacy",
+   "new": "true"
+  },
+  {
+   "id": "spec_kind",
+   "old": "if (spec.kind == \"idle\" || spec.kind == \"worker\") return",
+   "new": "if (spec.kind == \"idle\") return"
+  },
+  {
+   "id": "tag_any_case",
+   "old": "const std::string t = lowered(tag);",
+   "new": "const std::string t(tag);"
+  },
+  {
+   "id": "count_at",
+   "old": "return index < kNameCount ? kBotNames[index] : \"\";",
+   "new": "return kBotNames[index];"
+  },
+  {
+   "id": "tabs_kept",
+   "old": " && c != '\\t' && c != '\\r' && c != '\\n') s.push_back",
+   "new": ") s.push_back"
+  },
+  {
+   "id": "count_not_clipped",
+   "old": "    count = std::min(count, kNameCount);\n",
+   "new": "",
+   "note": "the picker then loops for ever when more names are asked for than the list holds (the test asks for the list's size + 50): caught only by the timeout of the test command"
+  }
+ ]
+}
