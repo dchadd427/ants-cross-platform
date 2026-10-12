@@ -500,6 +500,10 @@
             var bots = !(seats[0] || seats[1] || seats[2]) ? '' : (seats[0] === seats[1] && seats[1] === seats[2] ? seats[0] : soloSeatsText(seats));
             return '?' + (file ? 'mapfile=' + encodeURIComponent(file) : 'map=' + map.key) + (bots ? '&bots=' + bots : '') + '&name=' + encodeURIComponent(name || 'Player') + '&aspect=' + shapeOr169(shape);
         }
+        // START of a room with nobody else: the game page's address with the room's map, or '' when the map is a text the game takes as no file name (localGameQuery would play Treasure under another map's name).
+        function soloAddress(model, name, shape) {
+            return !model.map && model.mapFile && !mapByKey(model.mapFile) && !Rules.mapOfFile(model.mapFile) && !Rules.validMapFile(model.mapFile) ? '' : './' + LOCAL_PAGE + localGameQuery(model.map || model.mapFile || DEFAULT_MAP_KEY, [], name, shape);
+        }
         // LOBBY_END
 
         // The shape of the games' pictures: ?aspect=4:3, 16:10, 16:9 or 21:9 (anything else is ignored), else what the selector of this page or of the game page remembered, else 16:9. Every hand-off to a game
@@ -1089,11 +1093,9 @@
         });
         // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds a room again.
         function startAlone() {
-            var key = model.map || model.mapFile || Rules.DEFAULT_MAP_KEY, name = myName();
-            handing = true;
-            client.leave();
-            forgetSession();
-            window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);
+            var address = soloAddress(model, myName(), aspect); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
+            handing = true; client.leave(); forgetSession();
+            window.location.assign(new URL(address, window.location.href).href);
         }
 
         function pressTeam(seat, side) {

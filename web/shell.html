@@ -1770,15 +1770,15 @@
                 return levels;
             }
             function localArguments(search, remembered) {
-                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '' };
-                var q;
+                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '' }, q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
                 if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
                     out.map = map;
                     out.args.push('--map', 'Original-Ants/Maps/' + LOCAL_MAPS[map], '--play');
                 }
-                if (!out.map && window.AntsMapFiles && (out.file = window.AntsMapFiles.communityFile(q.get('mapfile')))) out.args.push('--map', 'Original-Ants/Maps/' + out.file, '--play'); var levels = localBots(q.get('bots'));
+                if (!out.map && window.AntsMapFiles && (out.file = window.AntsMapFiles.communityFile(q.get('mapfile')))) out.args.push('--map', 'Original-Ants/Maps/' + out.file, '--play');
+                var levels = localBots(q.get('bots'));
                 if (levels) {
                     if (levels[0] || levels[1] || levels[2]) out.bots = levels[0] === levels[1] && levels[1] === levels[2] ? levels[0] : levels.map(function (l) { return l || 'none'; }).join(',');
                     for (var seat = 1; seat <= 3; seat++) if (levels[seat - 1]) out.args.push('--bot', seat + ':' + levels[seat - 1]);
@@ -2240,7 +2240,7 @@
         // The loading failed for good: the card says so and has a button that loads the page again (v0.0.96 answered a failure of the file packager's own download with a card
         // that said "Downloading data (0%)" for ever, and v0.0.98's page the same for a program file, index.js or index.wasm, that could not be loaded). `what` is 'data' (index.data
         // could not be downloaded) or 'program' (the game could not be loaded or started); a card that is up goes away by itself if the game does start after all (hideLoadingScreen)
-        function showDownloadError(error, what) {
+        function showDownloadError(error, what, gone) {            // (gone: the server says the map is not there, 404 or 410: the card says so and has a way out instead of Reload)
             if (isReadyToPlay) return;                                     // (the game runs: a late failure of something else must not cover it)
             if (progressContainer) progressContainer.style.display = 'none';
             if (splashOverlay) {
@@ -2259,13 +2259,13 @@
             title.textContent = program ? 'The game could not be started' : map ? 'The map could not be downloaded' : "The game's data could not be downloaded";
             var detail = document.createElement('div');
             detail.className = 'load-failure-detail';
-            detail.textContent = map ? String(error && error.message || '').substring(0, 200) + ' Loading the page again usually helps.' : (program ? 'A file of the game could not be loaded or it did not start' : 'The connection failed or the browser could not keep the file') +
+            detail.textContent = map ? String(error && error.message || '').substring(0, 200) + (gone ? ' Choose another map.' : ' Loading the page again usually helps.') : (program ? 'A file of the game could not be loaded or it did not start' : 'The connection failed or the browser could not keep the file') +
                 (error && error.message ? ' (' + String(error.message).substring(0, 120) + ')' : '') + '. Loading the page again usually helps.';
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'btn sm';
-            button.textContent = 'Reload';
-            button.addEventListener('click', function() { window.location.reload(); });
+            button.textContent = gone ? 'Menu' : 'Reload';
+            button.addEventListener('click', function() { if (gone) window.location.assign('/'); else window.location.reload(); });
             box.appendChild(title);
             box.appendChild(detail);
             box.appendChild(button);
@@ -3883,7 +3883,7 @@
             // (a recording starts the game once the file is here too: the replay block above)
             function begin() {
                 if (ANTS_REPLAY_MODE) window.antsAfterReplay(function () { ANTS_NAME_GATE.when(startGame); });
-                else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text) { showDownloadError(new Error(text), 'map'); }, function () { ANTS_NAME_GATE.when(startGame); });
+                else window.AntsMapFiles.beforeLocalGame(window.antsMapFiles, ANTS_LOCAL_FILE, function () { return Module; }, function (text, gone) { showDownloadError(new Error(text), 'map', gone); }, function () { ANTS_NAME_GATE.when(startGame); });
             }
             if (!window.fetch || !window.Promise || !window.Uint8Array) { begin(); return; }
 

@@ -380,7 +380,7 @@ const rejects = () => Promise.reject(new Error('offline'));
         const run = async (files, file) => {
             const log = [], pre = [];
             const module = { preRun: pre, FS: { mkdirTree() {}, writeFile: (p) => log.push('write ' + p) } };
-            M.beforeLocalGame(files, file, () => module, (text) => log.push('fail ' + text), () => log.push('go'));
+            M.beforeLocalGame(files, file, () => module, (text, gone) => log.push('fail ' + (gone ? '[gone] ' : '') + text), () => log.push('go'));
             await settle();
             pre.forEach((f) => f());
             return log;
@@ -391,7 +391,14 @@ const rejects = () => Promise.reject(new Error('offline'));
         same('... and the fetch asked for that file', r.calls.map((c) => c.url), [M.fileUrl(NAME)]);
         const gone = rig([Promise.resolve(response(404, new Uint8Array(0)))]);
         const lost = await run(gone.maps, NAME);
-        check('a map that is gone: the page is told why and the game does not start', lost.length === 1 && /^fail .*not on the server/.test(lost[0]), JSON.stringify(lost));
+        check('a map that is gone: the page is told why (and that the server says it is gone) and the game does not start', lost.length === 1 && /^fail \[gone\] .*not on the server/.test(lost[0]), JSON.stringify(lost));
+        const e403 = rig([Promise.resolve(response(403, new Uint8Array(0)))]);
+        const broken = await run(e403.maps, NAME);
+        check('an answer other than 404/410 is not "gone" (the page offers Reload for it)', broken.length === 1 && /^fail The server answered 403/.test(broken[0]), JSON.stringify(broken));
+        const gone410 = await run(rig([Promise.resolve(response(410, new Uint8Array(0)))]).maps, NAME);
+        check('a 410 is gone too', gone410.length === 1 && /^fail \[gone\] /.test(gone410[0]), JSON.stringify(gone410));
+        const rejecting = await run({ fetchOnly: () => Promise.reject(new Error('boom')) }, NAME);
+        check('a fetch that rejects: the page is told (not gone), the game does not start, nothing is left unhandled', rejecting.length === 1 && /^fail Could not download the map/.test(rejecting[0]), JSON.stringify(rejecting));
         const none = await run(null, NAME);
         check('a browser that cannot fetch: the page is told, the game does not start', none.length === 1 && /^fail This browser cannot download the map/.test(none[0]), JSON.stringify(none));
     }

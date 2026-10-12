@@ -59,13 +59,13 @@ const lobbyCode = [
     between(lobbyText, 'SHAPES_BEGIN', 'SHAPES_END', lobbyPath),                 // (the table of the four shapes: localGameQuery names its shape through it)
     between(lobbyText, 'FILL_BEGIN', 'FILL_END', lobbyPath),
     lobbyBlock,
-    'return { DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, validFill: validFill };',
+    'return { DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, LOCAL_PAGE: LOCAL_PAGE, soloSeatsText: soloSeatsText, localGameQuery: localGameQuery, soloAddress: soloAddress, validFill: validFill };',
 ].join('\n');
 const L = new Function('Rules', lobbyCode)(Rules);
 {   // the block holds what is tested below and nothing else: a function that is added to it needs its own checks here
     const declared = Array.from(lobbyBlock.matchAll(/^ {8}(?:function (\w+)\(|var (\w+) =)/gm)).map((m) => m[1] || m[2]).sort();
     same('the block LOBBY holds these functions and constants and no other (each has its checks below)', declared,
-         ['LOCAL_PAGE', 'localGameQuery', 'soloSeatsText']);
+         ['LOCAL_PAGE', 'localGameQuery', 'soloAddress', 'soloSeatsText']);
 }
 
 // ---- the page and the two scripts it loads before its own (front/lobby_rules.js and front/lobby_net.js): everything that the page reads from them is there. The scripts' own rules are held by their own checks
@@ -148,6 +148,40 @@ try {
     same('localGameQuery: an empty name is Player', [L.localGameQuery('tiny', '', '', '16:9'), L.localGameQuery('tiny', '', undefined, '16:9')], ['?map=tiny&name=Player&aspect=16:9', '?map=tiny&name=Player&aspect=16:9']);
     same('localGameQuery: the shape is one of the four (4:3, 16:10, 16:9, 21:9) and nothing else', ['4:3', '16:10', '16:9', '21:9', undefined, null, '4:3&x=1', '16:10 ', 'wide', '3:2', '32:9', 42].map((shape) => L.localGameQuery('tiny', '', 'B', shape)),
          ['4:3', '16:10', '16:9', '21:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9', '16:9'].map((shape) => '?map=tiny&name=B&aspect=' + shape));
+    // START of a room with nobody else: the address that startAlone() hands to window.location (the function behind it, with a model as the lobby's rules script makes it)
+    {
+        const go = (model) => L.soloAddress(model, 'Bob', '16:9');
+        same('soloAddress: a community map is played from its file (?mapfile=, URL-encoded), a key from the key', [go({ mapFile: 'Thief craker.lvl' }), go({ map: 'tiny' }), go({ map: 'tiny', mapFile: 'Grid.lvl' })],
+             ['./play.html?mapfile=Thief%20craker.lvl&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
+        same('soloAddress: a room with no map plays the default map, an original by its file is its key', [go({}), go({ mapFile: 'TINY.LVL' })], ['./play.html?map=treasure&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
+        same('soloAddress: a room whose map is a text the game does not take gives none (the lobby says so; it never plays Treasure under another map\'s name)', [go({ mapFile: '../x.lvl' }), go({ mapFile: 'a/b.lvl' }), go({ mapFile: 'noext' }), go({ mapFile: '.hidden.lvl' })], ['', '', '', '']);
+        same('soloAddress: a key wins, whatever the room also holds as a file (nothing is refused)', go({ map: 'tiny', mapFile: '../x.lvl' }), './play.html?map=tiny&name=Bob&aspect=16:9');
+        const asked = new URLSearchParams(go({ mapFile: '!!!BLOCKADES!!!.lvl' }).split('?')[1]);
+        check('soloAddress: the game page reads the same file back', asked.get('mapfile') === '!!!BLOCKADES!!!.lvl' && !asked.has('map') && !asked.has('bots'), asked.toString());
+    }
+    // the card of the game page when the map of a game for one cannot be had (showDownloadError(error, 'map', gone)), run on a small fake of the page's elements
+    {
+        const body = (/function showDownloadError\(error, what, gone\) \{[\s\S]*?\n        \}\n/.exec(shellText) || [''])[0];
+        check('the game page has showDownloadError(error, what, gone)', body.length > 200);
+        const card = (error, what, gone) => {
+            const log = { assigned: [], reloaded: 0 };
+            const make = () => { const e = { children: [], style: {}, className: '', textContent: '', listeners: {}, classList: { add() {} }, appendChild(c) { e.children.push(c); return c; }, addEventListener(n, f) { e.listeners[n] = f; }, get firstChild() { return e.children[0] || null; }, removeChild(c) { e.children.splice(e.children.indexOf(c), 1); } }; return e; };
+            const status = make(), overlay = make();
+            const doc = { createElement: make };
+            const win = { location: { assign: (u) => log.assigned.push(u), reload: () => log.reloaded++ } };
+            new Function('isReadyToPlay', 'progressContainer', 'splashOverlay', 'statusElement', 'document', 'window', body + '\nshowDownloadError(arguments[6], arguments[7], arguments[8]);')(false, null, overlay, status, doc, win, error, what, gone);
+            const box = status.children[0], button = box.children[2];
+            button.listeners.click();
+            return { title: box.children[0].textContent, detail: box.children[1].textContent, button: button.textContent, log };
+        };
+        const gone = card(new Error('The map X.lvl is not on the server (it may have been taken off).'), 'map', true);
+        check('a map that is gone: it says it is not on the server and may be off it, there is no "loading the page again" and the button leaves for the menu, not Reload',
+              /not on the server/.test(gone.detail) && /taken off/.test(gone.detail) && !/again usually helps/.test(gone.detail) && gone.button === 'Menu' && gone.log.assigned.join() === '/' && gone.log.reloaded === 0, JSON.stringify(gone));
+        const net = card(new Error('Could not download the map X.lvl. Check your connection and try again.'), 'map', false);
+        check('a map that could not be had (network): the old wording and Reload', /again usually helps/.test(net.detail) && net.button === 'Reload' && net.log.reloaded === 1 && net.log.assigned.length === 0, JSON.stringify(net));
+        const data = card(new Error('x'), 'data');
+        check('the other cards are as before (Reload, the data title)', data.button === 'Reload' && /data could not be downloaded/.test(data.title) && data.log.reloaded === 1, JSON.stringify(data));
+    }
     {
         const q = (levels) => L.localGameQuery('small', levels, 'Bob', '16:9');
         const tail = '&name=Bob&aspect=16:9';

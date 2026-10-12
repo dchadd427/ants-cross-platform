@@ -387,7 +387,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)       # (a map of the players too: the game page fetches its file; no banner, no computer player needed)
         self.assertNotIn("needs a second player or a computer player", script)
         alone = script[script.index("function startAlone() {"):script.index("function pressTeam(seat, side) {")]
-        self.assertIn("window.location.assign(new URL('./' + LOCAL_PAGE + localGameQuery(key, [], name, aspect), window.location.href).href);", alone)
+        self.assertIn("window.location.assign(new URL(address, window.location.href).href);", alone)
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
         self.assertIn("var LOCAL_PAGE = 'play.html';", script)
         self.assertIn("client.start();", script)
@@ -663,6 +663,24 @@ class TheCheckIsNotVacuous(unittest.TestCase):
 
     def test_the_game_page_lets_a_file_win_over_a_key(self):
         self.must_fail("web/shell.html", "if (!out.map && window.AntsMapFiles && (out.file =", "if (window.AntsMapFiles && (out.file =")
+
+    def test_a_room_whose_map_is_no_map_is_not_started_as_treasure(self):
+        self.must_fail("web/lobby.html", "!model.map && model.mapFile && !mapByKey(model.mapFile) && !Rules.mapOfFile(model.mapFile) && !Rules.validMapFile(model.mapFile) ? ''", "false ? ''")
+
+    def test_a_room_with_a_key_is_refused_by_mistake(self):
+        self.must_fail("web/lobby.html", "return !model.map && model.mapFile &&", "return model.mapFile &&")
+
+    def test_start_alone_uses_the_address_function(self):
+        text = open(os.path.join(REPO, "web", "lobby.html"), encoding="utf-8").read()
+        self.assertIn("var address = soloAddress(model, myName(), aspect);", text)
+        self.assertRegex(text, r"if \(!address\) \{ say\([^\n]*\); return; \}\n\s+handing = true; client\.leave\(\);")   # refused BEFORE the room is let go of
+        self.assertIn("window.location.assign(new URL(address, window.location.href).href);", text)
+
+    def test_the_card_of_a_map_that_is_gone(self):
+        self.must_fail("web/shell.html", "(gone ? ' Choose another map.' : ' Loading the page again usually helps.')", "' Loading the page again usually helps.'")
+        self.must_fail("web/shell.html", "button.textContent = gone ? 'Menu' : 'Reload';", "button.textContent = 'Reload';")
+        self.must_fail("web/shell.html", "if (gone) window.location.assign('/'); else window.location.reload();", "window.location.reload();")
+        self.must_fail("web/shell.html", "button.textContent = gone ? 'Menu' : 'Reload';", "button.textContent = gone ? 'Menu' : 'Retry';")
 
 
 if __name__ == "__main__":
