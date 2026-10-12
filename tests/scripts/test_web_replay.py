@@ -523,9 +523,9 @@ class TheRewindButton(unittest.TestCase):
         for tpl in ('"play rew tl clock cam speed pic fsx"', '"play rew clock pic"', '"play rew clock cam pic fsx"', '"play rew clock cam speed pic fsx"'):
             self.assertIn(tpl, self.page, tpl)
         for line in self.page.splitlines():
-            if "grid-template-areas" in line and ".islive" in line:
+            if "grid-template-areas" in line and line.lstrip().startswith((".rbar.islive", ".rbar.over.islive")):
                 self.assertNotIn("rew", line, line)                                                          # (a live bar has no area for it: it is not there)
-            if "grid-template-areas" in line and ".islive" not in line and "play" in line:
+            if "grid-template-areas" in line and not line.lstrip().startswith((".rbar.islive", ".rbar.over.islive")) and "play" in line:
                 self.assertIn("play rew", line, line)
         for line in self.page.splitlines():                                                                # (the columns match the areas)
             if "grid-template-areas" in line and "play rew" in line:
@@ -537,16 +537,21 @@ class TheRewindButton(unittest.TestCase):
         self.assertIn("gap: 4px 8px; }", self.page)                                                        # (the phone row's gap, pinned: 12 px did not leave room)
         phone = block(self.page, "@media (max-width: 700px) {\n            body.replay header { flex-wrap: wrap; }")
         narrow = phone[phone.index("@media (max-width: 520px)"):]
-        self.assertIn(".rbar .clock { min-width: 0; font-size: clamp(14px, 4.4vw, 19px); }", narrow)      # (the clock may shrink: its base min-width of 118 px pushed it under Picture)
+        self.assertIn(".rbar:not(.islive) .clock { min-width: 0; font-size: clamp(14px, 4.4vw, 19px); }", narrow)      # (the clock may shrink: its base min-width of 118 px pushed it under Picture)
         self.assertIn('.rbar.over { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam pic pic fsx"; }', narrow)   # (fullscreen up to 520 px: the clock has a row's rest, the way out of fullscreen sits beside Picture)
         self.assertIn(".rbar.over .camb { justify-self: start; } .rbar.over .picwrap { justify-self: end; }", narrow)
         self.assertIn('@media (max-width: 420px) { .rbar:not(.over) { grid-template-areas: "tl tl tl tl" "play rew clock clock" "speed speed speed speed" "cam cam cam pic"; } }', narrow)   # (Picture on the camera's row below 420 px)
         self.assertIn(".rbar .clock { text-align: left; font-size: 19px; }", phone)                        # (above 520 px the phone clock is as before)
         self.assertIn(".rbar .speed button { flex: 1 1 0; min-width: 0; min-height: 40px; }", phone)
-        self.assertIn("min-width: 48px; padding: 6px 8px; }", self.page[self.page.index("@media (min-width: 421px) and (max-width: 1100px)"):][:120])   # (slimmer between 421 and 1100 px: the timeline keeps its width)
-        self.assertIn('"play rew tl clock cam speed pic fsx"; gap: 0 8px;', self.page)                      # (the bar's gap: 18 px left no room for the button)
-        self.assertIn('"play tl clock live cam speed pic fsx"; gap: 0 18px; }', self.page)                # (a live bar is as it was)
-        self.assertIn(".rbar.over .clock { text-align: right; font-size: 14px; min-width: 0; }", self.page)   # (a short fullscreen window: the longest clock fits)
+        self.assertIn("min-width: 44px; padding: 6px 8px; }", self.page[self.page.index("@media (min-width: 421px) and (max-width: 1100px)"):][:120])   # (slimmer between 421 and 1100 px: the timeline keeps its width)
+        self.assertIn('"play rew tl clock cam speed pic fsx"; gap: 0 18px;', self.page)                     # (the page's own gap, as it was: a live bar keeps it)
+        self.assertIn('"play tl clock live cam speed pic fsx"; }', self.page)                              # (a live bar is as it was)
+        self.assertIn(".rbar.over .clock { text-align: right; font-size: 14px; min-width: 0; }", self.page)
+        self.assertIn(".rbar .rew .n { font-size: 12px; line-height: 1; font-weight: 700; letter-spacing: .02em; }", self.page)   # (the 30's size)
+        self.assertIn("grid-template-areas: \"play rew tl clock cam speed pic fsx\"; bottom: 8px;", self.page)           # (the short fullscreen bar sits 8 px from the bottom)
+        self.assertIn(".rbar:where(:not(.islive)) { gap: 0 8px; }", self.page)                              # (only a replay's bar has the tighter gap; the rule has no weight of its own, so the phone rules still win)
+        self.assertIn(".rbar:where(:not(.islive)) { gap: 4px 8px; }", self.page)
+        self.assertNotIn("gap: 0 18px; }", self.page[self.page.index(".rbar.islive {"):][:260])            # (a live bar's gap is the page's, as it was)   # (a short fullscreen window: the longest clock fits)
         rule = lambda sel: re.search(re.escape(sel) + r" \{([^}]*)\}", self.page).group(1)
         number = rule(".rbar .rew .n")
         for bad in ("background", "border", "box-shadow", "outline", "padding", "text-shadow"):

@@ -40,7 +40,7 @@ PLAYERS = ["Green (Mika)", "Red (Bot (Medium))", "Blue (Bot (Medium))", "Black (
 TURNS_END = 20060
 
 
-BAR_WINDOWS = [(320, 844, True), (360, 844, True), (390, 844, True), (412, 844, True), (420, 844, True), (430, 844, True), (470, 844, True), (520, 844, True), (640, 900, False), (667, 375, True), (700, 900, False),
+BAR_WINDOWS = [(320, 844, True), (360, 844, True), (390, 844, True), (412, 844, True), (420, 844, True), (430, 844, True), (470, 844, True), (520, 844, True), (640, 900, False), (667, 375, True), (700, 900, False), (701, 900, False), (703, 900, False),
                (710, 1024, True), (740, 1024, True), (768, 1024, True), (800, 1024, True), (844, 390, True), (850, 1024, True), (1024, 768, False), (1440, 900, False)]
 MAIN_BAR = {                                                       # what the bar of v0.12.24 (no Back 30 seconds) measured at each size: the timeline's width and its faults (a window below about 770 px was narrow for it already)
     "320x844 page a": (280, ('lap',)),
@@ -87,7 +87,15 @@ MAIN_BAR = {                                                       # what the ba
     "700x900 page c": (645, ()),
     "700x900 full a": (609, ()),
     "700x900 full c": (609, ()),
-    "710x1024 page a": (0, ()),
+    "701x900 page a": (0, ()),
+"701x900 page c": (0, ('clip',)),
+"701x900 full a": (0, ('off',)),
+"701x900 full c": (0, ('clip', 'off')),
+"703x900 page a": (0, ()),
+"703x900 page c": (0, ('clip',)),
+"703x900 full a": (0, ('off',)),
+"703x900 full c": (0, ('clip', 'off')),
+"710x1024 page a": (0, ()),
     "710x1024 page c": (0, ('clip',)),
     "710x1024 full a": (0, ('off',)),
     "710x1024 full c": (0, ('clip', 'off')),
@@ -120,6 +128,9 @@ MAIN_BAR = {                                                       # what the ba
     "1440x900 full a": (412, ()),
     "1440x900 full c": (411, ()),
 }
+
+# a match that is being played: its bar was measured before the button and must stay exactly so (every box relative to Play, the gaps, the timeline and the clock, the page's width)
+LIVE_BAR = {"320x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,12,76,39],["livebox",88,1,174,50],["b-live",88,1,174,50],["b-cam",0,98,280,142],["picwrap",186,1,268,50],["speed",0,54,280,94]],"gap":"12px 4px","tl":280,"clockw":0,"doc":320,"vw":320},"320x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-7,163,58],["b-live",88,-7,163,58],["b-cam",175,7,219,43],["picwrap",231,1,303,50],["b-fsx",315,4,359,46],["speed",0,62,359,102]],"gap":"12px 4px","tl":359,"clockw":0,"doc":320,"vw":320},"360x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,12,81,39],["livebox",93,4,214,46],["b-live",93,4,214,46],["b-cam",0,98,320,142],["picwrap",226,7,308,43],["speed",0,54,320,94]],"gap":"12px 4px","tl":320,"clockw":5,"doc":360,"vw":360},"360x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-7,164,58],["b-live",88,-7,164,58],["b-cam",176,7,220,43],["picwrap",232,1,303,50],["b-fsx",315,4,359,46],["speed",0,62,359,102]],"gap":"12px 4px","tl":359,"clockw":0,"doc":360,"vw":360},"390x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,103,39],["livebox",115,4,240,46],["b-live",115,4,240,46],["b-cam",0,98,350,142],["picwrap",252,7,338,43],["speed",0,54,350,94]],"gap":"12px 4px","tl":350,"clockw":27,"doc":390,"vw":390},"390x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-7,168,58],["b-live",88,-7,168,58],["b-cam",180,7,224,43],["picwrap",236,1,311,50],["b-fsx",323,4,367,46],["speed",0,62,367,102]],"gap":"12px 4px","tl":367,"clockw":0,"doc":390,"vw":390},"412x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,125,38],["livebox",137,4,262,46],["b-live",137,4,262,46],["b-cam",0,98,372,142],["picwrap",274,7,360,43],["speed",0,54,372,94]],"gap":"12px 4px","tl":372,"clockw":49,"doc":412,"vw":412},"412x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-7,168,58],["b-live",88,-7,168,58],["b-cam",180,7,224,43],["picwrap",236,1,312,50],["b-fsx",324,4,368,46],["speed",0,62,368,102]],"gap":"12px 4px","tl":367,"clockw":0,"doc":412,"vw":412},"420x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,133,39],["livebox",145,4,270,46],["b-live",145,4,270,46],["b-cam",0,98,380,142],["picwrap",282,7,368,43],["speed",0,54,380,94]],"gap":"12px 4px","tl":380,"clockw":57,"doc":420,"vw":420},"420x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-7,168,58],["b-live",88,-7,168,58],["b-cam",180,7,224,43],["picwrap",236,1,312,50],["b-fsx",324,4,368,46],["speed",0,62,368,102]],"gap":"12px 4px","tl":367,"clockw":0,"doc":420,"vw":420},"430x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,143,38],["livebox",155,4,280,46],["b-live",155,4,280,46],["b-cam",0,98,390,142],["picwrap",292,7,378,43],["speed",0,54,390,94]],"gap":"12px 4px","tl":390,"clockw":67,"doc":430,"vw":430},"430x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,76,39],["livebox",88,-8,168,57],["b-live",88,-8,168,57],["b-cam",180,7,224,43],["picwrap",236,0,311,49],["b-fsx",323,4,367,46],["speed",0,61,367,101]],"gap":"12px 4px","tl":367,"clockw":0,"doc":430,"vw":430},"520x844 page":{"boxes":[["b-play",0,0,64,50],["clock",76,12,225,39],["livebox",237,4,366,46],["b-live",237,4,366,46],["b-cam",0,98,480,142],["picwrap",378,7,468,43],["speed",0,54,480,94]],"gap":"12px 4px","tl":480,"clockw":149,"doc":520,"vw":520},"520x844 full":{"boxes":[["b-play",0,0,64,50],["clock",76,12,93,39],["livebox",105,4,234,46],["b-live",105,4,234,46],["b-cam",246,7,290,43],["picwrap",302,7,392,43],["b-fsx",404,4,450,46],["speed",0,54,450,94]],"gap":"12px 4px","tl":451,"clockw":18,"doc":520,"vw":520},"700x900 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,390,39],["livebox",402,4,531,46],["b-live",402,4,531,46],["b-cam",0,98,645,142],["picwrap",543,7,633,43],["speed",0,54,645,94]],"gap":"12px 4px","tl":645,"clockw":314,"doc":685,"vw":700},"700x900 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,251,39],["livebox",263,4,392,46],["b-live",263,4,392,46],["b-cam",404,7,448,43],["picwrap",460,7,550,43],["b-fsx",562,4,608,46],["speed",0,54,608,94]],"gap":"12px 4px","tl":609,"clockw":176,"doc":700,"vw":700},"701x900 page":{"boxes":[["b-play",0,0,64,50],["clock",76,10,363,39],["livebox",375,6,508,44],["b-live",375,6,508,44],["b-cam",0,94,626,138],["picwrap",520,7,614,43],["speed",0,54,626,90]],"gap":"12px 4px","tl":626,"clockw":287,"doc":686,"vw":701},"701x900 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,275,40],["livebox",287,6,420,44],["b-live",287,6,420,44],["b-cam",432,7,476,43],["picwrap",488,7,582,43],["b-fsx",594,6,640,44],["speed",0,54,640,90]],"gap":"12px 4px","tl":641,"clockw":200,"doc":701,"vw":701},"703x900 page":{"boxes":[["b-play",0,0,64,50],["clock",76,10,365,39],["livebox",377,6,510,44],["b-live",377,6,510,44],["b-cam",0,94,628,138],["picwrap",522,7,616,43],["speed",0,54,628,90]],"gap":"12px 4px","tl":628,"clockw":289,"doc":688,"vw":703},"703x900 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,275,40],["livebox",287,6,420,44],["b-live",287,6,420,44],["b-cam",432,7,476,43],["picwrap",488,7,582,43],["b-fsx",594,6,640,44],["speed",0,54,640,90]],"gap":"12px 4px","tl":641,"clockw":200,"doc":703,"vw":703},"768x1024 page":{"boxes":[["b-play",0,0,64,50],["clock",76,10,445,39],["livebox",457,6,590,44],["b-live",457,6,590,44],["b-cam",0,94,708,138],["picwrap",602,7,696,43],["speed",0,54,708,90]],"gap":"12px 4px","tl":708,"clockw":369,"doc":768,"vw":768},"768x1024 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,351,40],["livebox",363,6,496,44],["b-live",363,6,496,44],["b-cam",508,7,552,43],["picwrap",564,7,658,43],["b-fsx",670,6,716,44],["speed",0,54,716,90]],"gap":"12px 4px","tl":716,"clockw":275,"doc":768,"vw":768},"844x390 page":{"boxes":[["b-play",0,0,64,50],["clock",76,11,560,40],["livebox",572,10,684,40],["b-live",572,10,684,40],["b-cam",0,88,784,132],["picwrap",696,7,772,43],["speed",0,54,784,84]],"gap":"12px 4px","tl":784,"clockw":484,"doc":844,"vw":844},"844x390 full":{"boxes":[["b-play",0,0,48,40],["clock",56,8,335,32],["livebox",343,4,462,36],["b-live",343,4,462,36],["b-cam",470,2,514,38],["picwrap",522,4,600,36],["b-fsx",608,1,654,39],["speed",0,42,654,74]],"gap":"8px 2px","tl":654,"clockw":279,"doc":844,"vw":844},"1000x800 page":{"boxes":[["b-play",0,0,64,50],["clock",76,10,489,39],["livebox",501,6,635,44],["b-live",501,6,635,44],["b-cam",0,94,753,138],["picwrap",647,7,741,43],["speed",0,54,753,90]],"gap":"12px 4px","tl":752,"clockw":413,"doc":985,"vw":1000},"1000x800 full":{"boxes":[["b-play",0,0,64,50],["clock",76,11,561,40],["livebox",573,6,706,44],["b-live",573,6,706,44],["b-cam",718,7,762,43],["picwrap",774,7,868,43],["b-fsx",880,6,926,44],["speed",0,54,926,90]],"gap":"12px 4px","tl":926,"clockw":485,"doc":1000,"vw":1000},"1024x768 page":{"boxes":[["b-play",0,0,64,50],["clock",100,10,198,39],["livebox",216,6,349,44],["b-live",216,6,349,44],["b-cam",367,7,535,43],["picwrap",827,7,921,43],["speed",553,7,809,43]],"gap":"18px 0px","tl":0,"clockw":99,"doc":1009,"vw":1024},"1024x768 full":{"boxes":[["b-play",0,0,64,50],["clock",154,11,261,40],["livebox",279,6,412,44],["b-live",279,6,412,44],["b-cam",430,7,474,43],["picwrap",766,7,860,43],["b-fsx",878,6,924,44],["speed",492,7,748,43]],"gap":"18px 0px","tl":55,"clockw":107,"doc":1024,"vw":1024},"1440x900 page":{"boxes":[["b-play",0,0,64,50],["clock",380,10,486,39],["livebox",504,6,637,44],["b-live",504,6,637,44],["b-cam",655,7,823,43],["picwrap",1115,7,1209,43],["speed",841,7,1097,43]],"gap":"18px 0px","tl":280,"clockw":107,"doc":1425,"vw":1440},"1440x900 full":{"boxes":[["b-play",0,0,64,50],["clock",372,11,479,40],["livebox",497,6,630,44],["b-live",497,6,630,44],["b-cam",648,7,692,43],["picwrap",984,7,1078,43],["b-fsx",1096,6,1142,44],["speed",710,7,966,43]],"gap":"18px 0px","tl":272,"clockw":107,"doc":1440,"vw":1440}}
 
 
 def fake_file(turns, complete, ident=ID):
@@ -607,6 +618,33 @@ def main():
                         if args.shots and (width, height) in ((360, 844), (390, 844), (768, 1024), (844, 390), (1024, 768)) and key == "c":
                             shot(tab, "rewind-bar-%dx%d-%s" % (width, height, "fullscreen" if full else "page"))
                         tab.close()
+            # a live bar is exactly what it was: the same boxes, gaps, timeline, clock and page width at every size, in the page and in fullscreen
+            livebar = ("(function () { var o = { boxes: [], vw: window.innerWidth, doc: document.documentElement.scrollWidth };"
+                       " ['b-play', 'clock', 'livebox', 'b-live', 'b-cam', 'picwrap', 'b-fsx', 'speed'].forEach(function (id) { var e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none' || e.hidden || !e.getClientRects().length) return;"
+                       " var r = e.getBoundingClientRect(); o.boxes.push([id, Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]); });"
+                       " var p0 = o.boxes[0]; o.boxes = o.boxes.map(function (b) { return [b[0], b[1] - p0[1], b[2] - p0[2], b[3] - p0[1], b[4] - p0[2]]; });"
+                       " var cs = getComputedStyle(document.getElementById('rbar')); o.gap = cs.columnGap + ' ' + cs.rowGap; o.tl = Math.round(document.getElementById('tl').getBoundingClientRect().width);"
+                       " o.clockw = Math.round(document.getElementById('clock').getBoundingClientRect().width); return o; })()")
+            for label, was in LIVE_BAR.items():
+                size, mode = label.split(" ")
+                width, height = [int(n) for n in size.split("x")]
+                mobile = (width, height) in ((320, 844), (360, 844), (390, 844), (412, 844), (420, 844), (430, 844), (520, 844), (768, 1024), (844, 390))
+                fresh()
+                tab = new_tab(width, height, 2 if mobile else 1, mobile)
+                open_page(tab, "/play.html?live=" + ID)
+                until(tab, READY)
+                tab.ev("__stub.state = 3; __stub.turn = Math.max(0, Module._ants_replay_get(8) - 50 * 20)")
+                time.sleep(0.7)
+                if mode == "full":
+                    fx, fy = centre(tab, "fullscreen-btn-r")
+                    (tab.tap if mobile else tab.click)(fx, fy)
+                    until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                    time.sleep(0.6)
+                g = tab.ev(livebar)
+                near = lambda a, b: len(a) == len(b) and all(x[0] == y[0] and all(abs(u - v) <= 1 for u, v in zip(x[1:], y[1:])) for x, y in zip(a, b))        # (a pixel for the rounding of a fraction)
+                off = [k for k in ("boxes", "gap", "tl", "clockw", "doc", "vw") if (not near(g[k], was[k]) if k == "boxes" else g[k] != was[k])]
+                check(not off, "live bar %s is as it was (differs in %s)" % (label, ", ".join("%s: %s, was %s" % (k, g[k], was[k]) for k in off) or "nothing"))
+                tab.close()
             fresh()
             tab = new_tab()                                                    # a match that is being played: no button
             open_page(tab, "/play.html?live=" + ID)
