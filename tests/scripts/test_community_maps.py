@@ -44,7 +44,7 @@ WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "
 COLLECTION = 586
 ORIGINALS = 7
 LEFT_OUT = 21
-REMOVED = 11            # taken out again (v0.12.27, "Taken out again" in the README): a team with no start marker, or a world of water
+REMOVED = 11            # taken out again ("Taken out again" in the README): a team with no start marker, or a world of water
 SIX = ("GAUNTLET", "ISLANDS", "MEDIUM", "SMALL", "TINY", "TREASURE")
 
 
@@ -128,10 +128,13 @@ class TheRule(unittest.TestCase):
         for markers, hills in (([4, 4, 4, 4], [16, 16, 16, 16]), ([4, 0, 0, 4], [0, 0, 0, 0]), ([0, 0, 0, 0], [16, 0, 0, 16]), ([4, 0, 0, 0], [0, 0, 0, 16])):
             self.assertEqual(community_maps.rosters_swept(entry(start_markers=markers, hill_cells=hills)), (15, 9))
             self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), play_fails, (markers, hills))
-            self.assertNotEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15), play(9)]), self.PLAIN), play_fails, (markers, hills))       # (a team with a hill and no marker fails another rule: below)
+            # (a team with a hill and no marker has no ant: it fails the rule of its own, below)
+            want = community_maps.REASONS[6] if markers in ([0, 0, 0, 0], [4, 0, 0, 0]) else None
+            self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15), play(9)]), self.PLAIN), want, (markers, hills))
         for markers, hills in (([0, 4, 4, 4], [0, 16, 16, 16]), ([4, 4, 4, 0], [16, 16, 16, 0]), ([4, 4, 0, 0], [16, 16, 0, 0]), ([0, 0, 0, 0], [0, 0, 0, 0])):
             self.assertEqual(community_maps.rosters_swept(entry(start_markers=markers, hill_cells=hills)), (15,))
-            self.assertNotEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), play_fails, (markers, hills))
+            want = community_maps.REASONS[6] if markers == [0, 0, 0, 0] else None                   # (no marker at all: an empty world)
+            self.assertEqual(community_maps.reason(entry(start_markers=markers, hill_cells=hills, runs=[play(15)]), self.PLAIN), want, (markers, hills))
 
     def test_an_email_address_does_not_keep_a_map_out(self):
         # (the owner's decision: an address in a map does not matter; only a program does)

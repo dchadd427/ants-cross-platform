@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "../common/test_assert.hpp"
+#include "ants_sim/sim_engine.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -143,7 +144,7 @@ int main() {
         ASSERT_EQ(checked, size_t{547});
     } TEST_END();
 
-    TEST_CASE("ML1.4 Every map of the community folder can be played by each team it claims: no Fatal finding for its rosters, and a start marker (so a starting ant) for as many teams as its players field says") {
+    TEST_CASE("ML1.4 Every map of the community folder can be played by each team it claims: no Fatal finding for its rosters, a start marker (so a starting ant) for as many teams as its players field says, and no world that kills a lone team's ants within a minute") {
         // The owner's rule (Oct 12): a broken map is removed from the repository completely. A map is broken when the loader refuses it for a roster that plays (any Fatal finding),
         // or when a team that it claims (`players` of maps.json: the teams with a start marker or a hill, 4 for a map with neither) would start with no ant at all, as `Home Bound`,
         // `K-P` or `QuItErS` did. This case keeps such a map from being added again.
@@ -175,6 +176,25 @@ int main() {
             const bool all_have = static_cast<int64_t>(teams) >= claimed && claimed >= 2;
             if (!all_have) std::cout << "\n    " << file << ": players " << claimed << " but a start marker for " << teams << " team(s) only";
             ASSERT_TRUE(all_have);
+            // Class C, a world that kills its own ants (hell2: a lake, every ant drowns by tick 48): each team that has ants, played alone and idle for 1,200 ticks (a minute),
+            // must still have an ant and the match must not be over (a lone team never ends it by itself).
+            for (uint8_t t = 0; t < 4; ++t) {
+                if ((with_marker & (1u << t)) == 0) continue;
+                ants::sim::SimulationEngine sim;
+                sim.init(level, 12345, static_cast<uint8_t>(1u << t));
+                bool over = false;
+                for (int tick = 0; tick < 1200 && !over; ++tick) {
+                    sim.tick();
+                    over = sim.is_match_over();
+                }
+                size_t alive = 0;
+                for (const auto& a : sim.get_world_state().ants) {
+                    if (a.player_id == t && a.hp > 0) ++alive;
+                }
+                if (over || alive == 0) std::cout << "\n    " << file << " team " << int{t} << " alone: match over " << over << ", ants alive after 1,200 ticks " << alive;
+                ASSERT_FALSE(over);
+                ASSERT_TRUE(alive > 0);
+            }
             for (const uint8_t roster : {uint8_t{0x0F}, with_marker}) {
                 const as::LevelValidation v = as::LVLParser::check_file(path, roster);
                 if (!v.playable) std::cout << "\n    " << file << " roster " << int{roster} << " is not playable: " << v.reason();

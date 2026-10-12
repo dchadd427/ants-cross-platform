@@ -375,7 +375,7 @@ const rejects = () => Promise.reject(new Error('offline'));
 
     // 12. a game for one on a map of the players (the game page's ?mapfile=): which file names count, and the start that fetches the file first and writes it for the game
     {
-        same('communityFile: a name the game takes is itself', [M.communityFile(NAME), M.communityFile('Thief craker.lvl'), M.communityFile('!!!BLOCKADES!!!.lvl')], [NAME, 'Thief craker.lvl', '!!!BLOCKADES!!!.lvl']);
+        same('communityFile: a name the game takes is itself', [M.communityFile(NAME), M.communityFile('Bomb Island.lvl'), M.communityFile('!!!BLOCKADES!!!.lvl')], [NAME, 'Bomb Island.lvl', '!!!BLOCKADES!!!.lvl']);
         same('communityFile: none for a name that is no map name, or one of the six originals\' files (any case)', ['', 'bad', '../x.lvl', 'a/b.lvl', 'TINY.LVL', 'tiny.lvl', 'Islands.LVL', 'Treasure.lvl', undefined, null, 5].map((n) => M.communityFile(n)), ['', '', '', '', '', '', '', '', '', '', '']);
         const run = async (files, file) => {
             const log = [], pre = [];

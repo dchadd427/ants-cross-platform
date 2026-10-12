@@ -27,6 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - 11 maps of the players that could not be played are gone from the map list: `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` (no ants for any colour), `K-P`, `Pulse2`, `Pulse3`, `QuItErS`, `firewar`, `hellzone` and `WAR TIME` (a colour with a hill and no ants), and `hell2` (a map of water: every ant drowns in the first three seconds). 547 maps of the players remain.
+- A kept replay of a match on one of these maps can no longer be watched.
 - A map of the players is only taken in when every colour it claims has ants, and a test now fails if one is added that does not.
 
 **Rules / network:** none. The beta lists the new set after its next deploy.

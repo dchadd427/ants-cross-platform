@@ -53,12 +53,12 @@ Odd things that the engine handles as the original does and that were kept: obje
 
 ## Taken out again
 
-11 of the 558 maps that were first taken in were removed (v0.12.25, the owner's rule: a map that is broken does not belong in the repository). Each loaded and was swept without a crash, but no match could be played on it by every team that it claims (`players` in `maps.json` is the number of teams with a start marker or a hill, or 4 when it has neither). The files are in the git history.
+11 of the 558 maps that were first taken in were removed (the owner's rule: a map that is broken does not belong in the repository). Each loaded and was swept without a crash, but no match could be played on it by every team that it claims (`players` in `maps.json` is the number of teams with a start marker or a hill, or 4 when it has neither). The files are in the git history.
 
 - **A team has a hill but no start marker, so it has no ant** (10 maps; eggs alone cannot be hatched without points, and no food is brought in): `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` have no start marker for any team (an empty world), `K-P`, `Pulse2` and `Pulse3` none for the blue and black teams, `QuItErS`, `firewar` and `hellzone` none for red, `WAR TIME` none for blue.
 - **Every ant drowns** (1 map): `hell2` is the lake of `HELL`: all 31 x 31 cells are water but a block of 16 rocks, and the 15 ants of each team start in it (the same file as `HELL` with the land under the start squares and the match time changed); they all drown on tick 48 and the match is over on tick 49 in every roster, even when ordered out on tick 1.
 
-`test_map_list` case ML1.4 (suite 2.19.9) fails when a map in the folder is Fatal for a roster that plays or has a start marker for fewer teams than its `players` claims; `tools/community_maps.py` leaves such a map out of a new folder with the reason "no start marker for a team".
+`test_map_list` case ML1.4 (suite 2.19.9) fails when a map in the folder is Fatal for a roster that plays has a start marker for fewer teams than its `players` claims, or kills all the ants of a team that plays alone (or ends that match) within a minute; `tools/community_maps.py` leaves such a map out of a new folder with the reason "no start marker for a team".
 
 ## The previews
 

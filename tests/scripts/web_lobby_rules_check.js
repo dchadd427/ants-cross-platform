@@ -711,26 +711,26 @@ R.MAPS.forEach((m) => {
 });
 // a map of the players (the picker's): the model keeps its file, the side shows its name, line and picture from what the page's list knows, or its file name alone while the list is not here
 {
-    const room = mk([P('Juniper'), O, O, O], { map: 'Thief craker.lvl' });
-    same('a map of the players has no key in the model but keeps its file', [model(room).map, model(room).mapFile], ['', 'Thief craker.lvl']);
+    const room = mk([P('Juniper'), O, O, O], { map: 'Bomb Island.lvl' });
+    same('a map of the players has no key in the model but keeps its file', [model(room).map, model(room).mapFile], ['', 'Bomb Island.lvl']);
     const bare = view(room).side;
-    same('the side of a map of the players shows its file name without the ending while nothing else is known', [bare.mapKey, bare.mapName, bare.mapInfo, bare.mapFile, bare.mapThumb], ['', 'Thief craker', 'A map of the players', 'Thief craker.lvl', '']);
-    same('alone on a map of the players, the line under START is the same as for an original: a game for one (nobody has to add a computer player)', [bare.plan, bare.planShort], ['A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Thief craker · 3 open']);
-    same('and it is the line of an original alone, word for word, apart from the map\'s name', [bare.plan, bare.planShort], [view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan, view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.planShort.replace('Treasure', 'Thief craker')]);
+    same('the side of a map of the players shows its file name without the ending while nothing else is known', [bare.mapKey, bare.mapName, bare.mapInfo, bare.mapFile, bare.mapThumb], ['', 'Bomb Island', 'A map of the players', 'Bomb Island.lvl', '']);
+    same('alone on a map of the players, the line under START is the same as for an original: a game for one (nobody has to add a computer player)', [bare.plan, bare.planShort], ['A game for one. Red, Blue and Black are open and stay empty unless a player joins first.', 'You · Bomb Island · 3 open']);
+    same('and it is the line of an original alone, word for word, apart from the map\'s name', [bare.plan, bare.planShort], [view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan, view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.planShort.replace('Treasure', 'Bomb Island')]);
     check('START is on for a person alone on a map of the players, and the page plays it as a game for one', !bare.startDisabled && R.startsAlone(model(room)));
-    const withBot = view(mk([P('Juniper'), O, O, O], { map: 'Thief craker.lvl', plan: [0, 2, 0, 0] })).side;
-    check('with a computer player it names the map as ever', /play on Thief craker\./.test(withBot.plan) && /Thief craker/.test(withBot.planShort), withBot.plan);
+    const withBot = view(mk([P('Juniper'), O, O, O], { map: 'Bomb Island.lvl', plan: [0, 2, 0, 0] })).side;
+    check('with a computer player it names the map as ever', /play on Bomb Island\./.test(withBot.plan) && /Bomb Island/.test(withBot.planShort), withBot.plan);
     check('an original alone is still a game for one', /^A game for one/.test(view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.plan));
-    const known = R.sideView(model(room), Object.assign(ctx(), { community: (f) => (f === 'Thief craker.lvl' ? { name: 'Thief craker', info: 'by perfect_chaos (10 min)', thumb: '/maps/previews/Thief%20craker.webp' } : null) }), R.playing(model(room)));
-    same('the side of a map of the players with the list known', [known.mapName, known.mapInfo, known.mapThumb], ['Thief craker', 'by perfect_chaos (10 min)', '/maps/previews/Thief%20craker.webp']);
+    const known = R.sideView(model(room), Object.assign(ctx(), { community: (f) => (f === 'Bomb Island.lvl' ? { name: 'Bomb Island', info: 'by perfect_chaos (10 min)', thumb: '/maps/previews/Bomb%20Island.webp' } : null) }), R.playing(model(room)));
+    same('the side of a map of the players with the list known', [known.mapName, known.mapInfo, known.mapThumb], ['Bomb Island', 'by perfect_chaos (10 min)', '/maps/previews/Bomb%20Island.webp']);
     check('an original has no mapFile in its side', view(mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' })).side.mapFile === undefined);
     same('a room with no map yet shows Treasure', view(mk([P('Juniper'), O, O, O], { map: '' })).side.mapKey, 'treasure');
     const r2 = mk([P('Juniper'), O, O, O], { map: 'TREASURE.LVL' });
-    same('planWith sets a map of the players by its file name', R.planWith(r2, model(r2), { file: 'Thief craker.lvl' }).map, 'Thief craker.lvl');
+    same('planWith sets a map of the players by its file name', R.planWith(r2, model(r2), { file: 'Bomb Island.lvl' }).map, 'Bomb Island.lvl');
     same('planWith sets an original by its key', R.planWith(r2, model(r2), { map: 'tiny' }).map, 'TINY.LVL');
     same('planWith keeps the room\'s map for a file that is no map name', ['../x.lvl', 'x.txt', '.lvl', '', null, 7].map((f) => R.planWith(r2, model(r2), { file: f }).map), ['', '', '', '', '', '']);
-    same('validMapFile is the game\'s name rule', ['Thief craker.lvl', 'A.LVL', 'abcd.lvl', 'x'.repeat(61) + '.lvl', '.hid.lvl', 'a/b.lvl', 'a\\b.lvl', 'a:b.lvl', 'a|b.lvl', 'abcde.Lvl', 'abc\u00e9de.lvl'].map(R.validMapFile), [true, true, true, false, false, false, false, false, false, false, false]);
-    same('communityName cuts the ending in any case', [R.communityName('Thief craker.lvl'), R.communityName('X Y.LVL')], ['Thief craker', 'X Y']);
+    same('validMapFile is the game\'s name rule', ['Bomb Island.lvl', 'A.LVL', 'abcd.lvl', 'x'.repeat(61) + '.lvl', '.hid.lvl', 'a/b.lvl', 'a\\b.lvl', 'a:b.lvl', 'a|b.lvl', 'abcde.Lvl', 'abc\u00e9de.lvl'].map(R.validMapFile), [true, true, true, false, false, false, false, false, false, false, false]);
+    same('communityName cuts the ending in any case', [R.communityName('Bomb Island.lvl'), R.communityName('X Y.LVL')], ['Bomb Island', 'X Y']);
 }
 same('the map\'s side asked directly is the same as inside viewOf', R.sideView(model(S2), ctx(), R.playing(model(S2))), view(S2).side);
 same('START waits for the host: "Waiting for" and the name of the host', [view(S4).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1 })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);
