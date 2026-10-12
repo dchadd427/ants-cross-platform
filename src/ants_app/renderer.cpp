@@ -649,6 +649,15 @@ void Renderer::set_level(const ants::assets::LevelData& level) {
         }
     }
 
+    // Every food object of block 2 (FUN_01008ca0) puts its stage tile on its anchor with SetTile, whatever the file's layer 2 holds there (Grid::init_from_level does the same), and the
+    // original draws what the cells hold: so each has a static object at its anchor, drawn from the live cells (draw_static_object), in place of a file object there (SetTile cleared it).
+    for (const auto& fs : level.food_schedules) {
+        if (fs.x >= level.width || fs.y >= level.height) continue;
+        int32_t& slot = object_index_by_cell_[static_cast<size_t>(fs.y) * level.width + fs.x];
+        if (slot < 0) { slot = static_cast<int32_t>(static_decor_objects_.size()); static_decor_objects_.emplace_back(); }
+        static_decor_objects_[static_cast<size_t>(slot)] = StaticMapObject{-1, fs.x, fs.y, true};   // anim_id -1: the anchor's stage tile names the animation
+    }
+
     // Object-list sprites (Block 1 entries with team 255: clovers, flowers, tree tops ...). The original puts them in
     // the y-sorted sprite list at the cell centre with sort key row*32+16 (Ants.exe 0x100e383..0x100e448).
     object_list_sprites_.clear();
