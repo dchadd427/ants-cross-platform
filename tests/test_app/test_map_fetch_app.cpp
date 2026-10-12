@@ -352,8 +352,8 @@ int main(int argc, char* argv[]) {
         fetcher->hold = true;
         host.fail_load = true;                                                            // the other machine cannot load: a real Cancel
         ASSERT_TRUE(start(host, kCommunity));
-        ASSERT_TRUE(duo->until([&]() { return host.cancels > 0 || host.starts > 0; }, 4000));
-        ASSERT_TRUE(duo->until([&]() { return app.net()->phase() == net::NetGame::Phase::Room && fetcher->polls > 0; }, 8000));
+        ASSERT_TRUE(duo->until([&]() { return fetcher->asks.back().hash != 0; }, 20000));      // this machine has the Start (it asked with the hash) and waits for the file
+        ASSERT_TRUE(duo->until([&]() { return app.net()->phase() == net::NetGame::Phase::Room; }, 30000));       // the other machine's failed load cancelled it: back in the room
         duo->step(200);
         const int polls = fetcher->polls;
         fetcher->hold = false;                                                            // the file is here now, too late
