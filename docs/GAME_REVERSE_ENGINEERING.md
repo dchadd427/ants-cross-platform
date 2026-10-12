@@ -2237,8 +2237,8 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x01000000); every statement was read in the binary or in
 `ants.chd` (the original was never run, so timings come from the clip tables). Implemented in `src/ants_sim/combat_system.cpp`
-(with `movement_system.cpp` / `action_system.cpp`); checked by `tests/test_sim/test_combat_actions.cpp` (golden timelines) and the
-combat cases of `tests/test_app/test_app_integration*.cpp`. The original is a distributed simulation (only the owner's machine decides for
+(with `movement_system.cpp` / `action_system.cpp`); checked by `tests/test_sim/test_combat_actions.cpp` (golden timeline) and the
+combat cases of `tests/test_app/test_app_integration*.cpp` ([facts](reverse_engineering/bomb_gates.md)). The original is a distributed simulation (only the owner's machine decides for
 its own ants, `IsLocal`); the remake has one authoritative simulation, so every ant follows the owner code path and the messages
 (8 melee, 0xF bomb, 0x11 drop power-up, 0x14 blast, 0x15 drown, 0x16 death, 0x25 drop food) are handled synchronously, as the local
 handler of `FUN_0100d791` does before it broadcasts.

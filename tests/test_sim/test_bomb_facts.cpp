@@ -612,6 +612,7 @@ int main() {
             for (const TileCoord& l : h.lands) out += " (" + std::to_string(l.x) + "," + std::to_string(l.y) + ")" + kind(popsim, l);
             return out;
         };
+        uint64_t table_hash = 1469598103934665603ull;   // (FNV-1a of every printed row of both halves: any change of a landing shows)
         for (int half = 0; half < 2; ++half) {
             const std::vector<Hop>& hops = half == 0 ? north : south;
             size_t over = 0, onto = 0, longer = 0, pu_end = 0, pu_two = 0;
@@ -619,6 +620,7 @@ int main() {
                       << "    (. plain, B bomb of the map: sets off again, P power-up, ~ water: a non-swimmer drowns, F fire wall)\n";
             TileCoord last{-1, -1};
             std::string line;
+            const auto mix = [&](const std::string& t) { for (const char c : t) table_hash = (table_hash ^ static_cast<unsigned char>(c)) * 1099511628211ull; };
             for (const Hop& h : hops) {
                 if (!crossing(h, half == 0)) continue;
                 const TileCoord l = h.lands[0];
@@ -639,13 +641,15 @@ int main() {
                     last = h.from;
                 }
                 line += " | " + text(h);
+                mix("T" + std::to_string(h.from.x) + "," + std::to_string(h.from.y) + " " + text(h) + "\n");
             }
             if (!line.empty()) std::cout << line << "\n";
             std::cout << "    " << (half == 0 ? "north" : "south") << " totals: " << over << " hops over the wall, " << onto << " onto the wall, " << longer << " over the wall with a chain of 2 or more hops, "
                       << pu_end << " chains end on a power-up (" << pu_two << " of them after exactly 2 hops)\n";
             CHECK(over > 0 && onto > 0 && longer > 0 && pu_end > 0 && pu_two > 0);
         }
-        std::cout << "    ... " << std::flush;
+        std::cout << "    table hash: " << table_hash << "\n    ... " << std::flush;
+        CHECK(table_hash == 17121071624900940814ull);
         // the facts that the table rests on, pinned: row 5 reaches the wall itself, row 6 and below fly over it; a bomb tile in row 8 can throw a facing-north ant 4 tiles south to row 12
         bool row5_onto = false, row6_over = false;
         for (const Hop& h : north) {

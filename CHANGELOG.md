@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number changed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c104ac8...bot-gates-probes)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c104ac8...1123e8e3)
 
 ## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
 
