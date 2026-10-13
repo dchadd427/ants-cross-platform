@@ -1,5 +1,7 @@
 #include "ants_net/lobby.hpp"
 
+#include "ants_ai/bot_names.hpp"
+
 #include "ants_net/clock.hpp"
 
 #include <algorithm>
@@ -19,19 +21,9 @@ std::string printable(const std::string& s, size_t max) {
     return out;
 }
 
-// Whether a name looks like a bot's ("Bot (Hard)"): its first four characters, leaving out the spaces and the case, are "bot(" (so "bot(x)", " Bot (x)" and
-// "B o t (x)" all count: none of them may pass for a person, and none may be taken by one)
-bool bot_like(const std::string& name) {
-    static const char kMark[] = "bot(";
-    size_t matched = 0;
-    for (const char raw : name) {
-        if (raw == ' ') continue;
-        const char c = raw >= 'A' && raw <= 'Z' ? static_cast<char>(raw - 'A' + 'a') : raw;
-        if (c != kMark[matched]) return false;
-        if (++matched == sizeof(kMark) - 1) return true;
-    }
-    return false;
-}
+// Whether a name looks like a bot's (ai::is_reserved_bot_name, protocol 20): it starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks, tabs and case left out: none of them
+// may pass for a person, and none may be taken by one
+bool bot_like(const std::string& name) { return ai::is_reserved_bot_name(name); }
 
 std::string trimmed(const std::string& s) {
     const size_t a = s.find_first_not_of(' ');
@@ -64,7 +56,7 @@ std::string late_notice(const std::vector<std::string>& names) {
     return std::string(kNoticeGamesLate) + list + ".";
 }
 
-// A bot's name always carries the marker: a name that does not start with "Bot (" is wrapped ("Zed" becomes "Bot (Zed)"), an empty one is "Bot"
+// A bot's name always carries the marker: a name that is not a bot's own ("Pip (bot, Hard)", "Bot (Hard)") is wrapped ("Zed" becomes "Bot (Zed)"), an empty one is "Bot"
 std::string bot_name(const std::string& raw) {
     const std::string name = trimmed(printable(raw, kMaxNameChars));
     if (name.empty()) return "Bot";
@@ -221,9 +213,15 @@ void HostLobby::sync_room_flags() {
 
 void HostLobby::broadcast_room() {
     sync_room_flags();
+    RoomMsg shown = room_;
+    if (cfg_.lobby_room && cfg_.bot_name_key != 0) {             // (protocol 20) the empty colour whose plan is a bot shows that bot's name before START; room_ itself keeps the seat empty
+        for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+            if (shown.slots[s].state == SlotState::Empty) shown.slots[s].name = bot_room_name(cfg_.bot_name_key, s, plan_fill_level(shown.plan[s]));
+        }
+    }
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (guests_[s].conn == nullptr || !guests_[s].conn->is_open()) continue;
-        RoomMsg m = room_;
+        RoomMsg m = shown;
         m.you = s;
         guests_[s].conn->send(encode(m));
     }

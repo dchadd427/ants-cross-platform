@@ -128,6 +128,9 @@ public:
         /// (max_players) and keys (make_key), or no seat could be held: without any of them this is taken for false. `hold_ms`: a guest whose connection ends keeps its seat this long; `start_wait_ms`: the
         /// leader's START waits this long for every person's game.
         bool lobby_room{false};
+        /// Protocol 20 (a lobby room only): the name key of the room (ai::bot_name_key of its code; 0: none). With a key the Room message shows the name of the bot that a colour's plan asks for in that colour's empty seat
+        /// (bot_room_name), so every screen shows the bots' names before START; the owner seats the bot under the same name (bot_room_name) when it starts the match.
+        uint64_t bot_name_key{0};
         uint32_t hold_ms{kLobbyHoldMs};
         uint32_t start_wait_ms{kLobbyStartWaitMs};
         /// A lobby room closes the connection of a guest from which nothing has come for this long while the room is open (its seat is held then, as for any connection that ends): no TCP or proxy tells a server that a

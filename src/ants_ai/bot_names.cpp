@@ -59,6 +59,18 @@ std::vector<std::string> pick_bot_names(uint64_t key, size_t count) {
     return out;
 }
 
+uint64_t bot_name_key(std::string_view text) noexcept {
+    uint64_t h = 0xCBF29CE484222325ull;
+    for (const char c : text) h = (h ^ static_cast<unsigned char>(c)) * 0x100000001B3ull;
+    h = mix64(h ^ 0xB07BA3E5ull);
+    return h == 0 ? 1 : h;
+}
+
+std::string bot_seat_name(uint64_t key, uint8_t seat) {
+    if (key == 0 || seat >= 4) return std::string();
+    return pick_bot_names(key, 4)[seat];
+}
+
 bool valid_bot_label_name(std::string_view name) noexcept {
     if (name.empty() || name.size() > kBotLabelNameMax || name.front() == ' ' || name.back() == ' ') return false;
     for (const char c : name) {
@@ -82,6 +94,11 @@ std::string bot_label(std::string_view name, Level level) { return bot_label(nam
 std::string bot_label(std::string_view name, const BotSpec& spec) {
     if (spec.kind == "idle" || spec.kind == "worker") return bot_label(name, std::string_view(spec.kind));
     return bot_label(name, spec.level);
+}
+
+std::string bot_room_label(uint64_t key, const BotSpec& spec) {
+    if (key == 0) return bot_display_name(spec);
+    return bot_label(bot_seat_name(key, spec.seat), spec);
 }
 
 bool parse_bot_label(std::string_view text, BotLabel& out) {

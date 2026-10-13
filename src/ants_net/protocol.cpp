@@ -1,5 +1,7 @@
 #include "ants_net/protocol.hpp"
 
+#include "ants_ai/bot_names.hpp"
+
 #include <algorithm>
 
 #include "ants_net/wire.hpp"
@@ -499,6 +501,13 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         if (m.seat_in_game(static_cast<uint8_t>(seat)) && (!m.lobby() || m.slots[seat].state != SlotState::Client)) return false;
     }
     if ((m.in_game & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;
+    // protocol 20: an empty seat has no name, except the planned bot's in a lobby room (the colour's plan is a bot level): then the name is that bot's label ("Pip (bot, Hard)")
+    for (size_t seat = 0; seat < m.slots.size(); ++seat) {
+        const RoomMsg::Slot& slot = m.slots[seat];
+        if (slot.state != SlotState::Empty || slot.name.empty()) continue;
+        ai::BotLabel label;
+        if (plan_fill_level(m.plan[seat]) == FillLevel::None || !ai::parse_bot_label(slot.name, label)) return false;
+    }
     m.fog = fog == 1;
     out = std::move(m);
     return true;
@@ -725,7 +734,9 @@ uint32_t seating_hash(const RoomMsg& room) noexcept {
     const auto put = [&h](uint8_t byte) { h = (h ^ static_cast<uint32_t>(byte)) * 16777619u; };
     for (const RoomMsg::Slot& slot : room.slots) {
         put(static_cast<uint8_t>(slot.state));
-        for (const char c : slot.name) put(static_cast<uint8_t>(c));
+        if (slot.state != SlotState::Empty) {                                           // (protocol 20: the name of a planned bot on an empty seat is not who sits there; the room's own copy has none)
+            for (const char c : slot.name) put(static_cast<uint8_t>(c));
+        }
         put(0);
     }
     return h != 0 ? h : 1u;                                                            // (0 never travels: a guard is always a number that was computed)
@@ -798,7 +809,7 @@ bool decode(const uint8_t* data, size_t size, NameMsg& out) {
     if (!open(data, size, MsgType::Name, r, storage)) return false;
     NameMsg m;
     m.name = r->str8();
-    if (!r->done() || m.name.empty() || !printable_name(m.name, kMaxNameChars) || m.name.front() == ' ' || m.name.back() == ' ') return false;       // exactly the type and a name that has one spelling
+    if (!r->done() || m.name.empty() || !printable_name(m.name, kMaxNameChars) || m.name.front() == ' ' || m.name.back() == ' ' || ai::is_reserved_bot_name(m.name)) return false;       // exactly the type and a name that has one spelling, and none that a computer player has (protocol 20)
     out = std::move(m);
     return true;
 }
@@ -927,6 +938,12 @@ std::string fill_bot_name(FillLevel level) {
         case FillLevel::None: break;
     }
     return std::string();
+}
+
+std::string bot_room_name(uint64_t key, uint8_t seat, FillLevel level) {
+    if (level == FillLevel::None) return std::string();
+    if (key == 0) return fill_bot_name(level);
+    return ai::bot_label(ai::bot_seat_name(key, seat), fill_level_name(level));
 }
 
 std::vector<uint8_t> encode(const LagMsg& m) {

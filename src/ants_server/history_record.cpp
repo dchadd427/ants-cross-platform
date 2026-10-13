@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "ants_ai/bot_names.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/start_teams.hpp"
@@ -12,14 +13,22 @@ using ctl::JsonValue;
 
 namespace {
 
-// "Bot (Medium)" gives true and "Medium"; "Bot" gives true and "Bot"; anything else is a person's name
-bool bot_level_of(const std::string& name, std::string& level) {
+// "Bot (Medium)" gives true and "Medium" (and no name); "Pip (bot, Hard)" gives true, "Hard" and the name "Pip" (protocol 20); "Bot" gives true and "Bot"; anything else is a person's name
+bool bot_level_of(const std::string& name, std::string& level, std::string& bot_name) {
     const size_t first = name.find_first_not_of(' ');
     if (first == std::string::npos) return false;
     const size_t last = name.find_last_not_of(' ');
     const std::string text = name.substr(first, last - first + 1);
+    bot_name.clear();
     if (text == "Bot") {
         level = "Bot";
+        return true;
+    }
+    ai::BotLabel label;
+    if (ai::parse_bot_label(text, label) && !label.legacy) {
+        bot_name = label.name;
+        level = label.tag.empty() ? std::string("Bot") : label.tag;
+        if (!label.tag.empty()) level[0] = static_cast<char>(level[0] - 'a' + 'A');           // easy -> Easy, idle -> Idle
         return true;
     }
     if (text.size() > 6 && text.compare(0, 5, "Bot (") == 0 && text.back() == ')') {
@@ -123,8 +132,10 @@ HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const 
         HistorySeat s;
         s.seat = seat;
         std::string level;
-        if (bot_level_of(replay.head.names[seat], level)) {
+        std::string bot_name;
+        if (bot_level_of(replay.head.names[seat], level, bot_name)) {
             s.bot = level;
+            s.name = bot_name;                                   // ("Pip" of "Pip (bot, Hard)"; empty for the legacy "Bot (Hard)", so a stored match keeps what it was)
             ++computers;
         } else {
             s.name = replay.head.names[seat];

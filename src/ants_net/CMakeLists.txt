@@ -36,6 +36,7 @@ target_include_directories(ants_net PUBLIC
 
 target_link_libraries(ants_net PUBLIC
     ants_sim
+    ants_ai          # the names of the bots and the reserved-name rule (ants_ai/bot_names.hpp): pure functions, ants_ai needs only the simulation
 )
 
 set_target_properties(ants_net PROPERTIES

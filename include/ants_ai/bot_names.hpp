@@ -1,8 +1,9 @@
 #pragma once
 
 // The names of the computer players (docs/BOTS.md, "Names"): a list of about 250 short names, the picker that draws distinct ones from a key, and the label that a bot is shown
-// under ("Pip (bot, Hard)"), with the parser and the reserved-name rule that go with it. PR 1 of the series: nothing calls these functions yet; the game still names its bots
-// "Bot (Level)" (bot_display_name in bot.hpp). web/front/bot_names.js is the same code in JavaScript: tests/scripts/test_bot_names.py runs both over 10,000 keys and compares.
+// under ("Pip (bot, Hard)"), with the parser and the reserved-name rule that go with it. A room (a dedicated server's, a LAN host's, a local game) fixes a NAME KEY when it is made and
+// names the bot of seat s with bot_seat_name(key, s); key 0 means "no key": the legacy "Bot (Level)" of bot_display_name. web/front/bot_names.js is the same code in JavaScript:
+// tests/scripts/test_bot_names.py runs both over 10,000 keys and compares.
 //
 // Pure functions of their arguments: no clock, no global state, no std::random_device and no std::*_distribution, so every machine and both languages give the same answer.
 
@@ -38,6 +39,14 @@ std::string bot_label(std::string_view name, std::string_view tag);
 std::string bot_label(std::string_view name, Level level);
 /// The label of a seat's spec: "idle" and "worker" kinds by their kind, every other kind by its level (as bot_display_name does)
 std::string bot_label(std::string_view name, const BotSpec& spec);
+
+/// A name key from a text (a room's code, a match's seed as text): 64-bit FNV-1a, finished with mix64, never 0 (0 is "no key"). The same text always gives the same key, on every machine.
+uint64_t bot_name_key(std::string_view text) noexcept;
+/// The name that the bot of `seat` (0 - 3) has in a room with this key: the seat's own entry of pick_bot_names(key, 4), so the four seats have four different names and a seat keeps its
+/// name whatever the other seats are. "" for a seat above 3 or the key 0.
+std::string bot_seat_name(uint64_t key, uint8_t seat);
+/// The full label of the bot of a seat's spec in a room with this key ("Pip (bot, Hard)"), or the legacy bot_display_name(spec) for the key 0
+std::string bot_room_label(uint64_t key, const BotSpec& spec);
 
 /// What parse_bot_label finds
 struct BotLabel {

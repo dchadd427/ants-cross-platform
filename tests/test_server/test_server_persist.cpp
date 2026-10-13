@@ -817,7 +817,7 @@ void run_persist_server_tests_4() {
             person.record_hashes = true;
             w.run(14000 + kPre);
             RoomStatus s = w.status("B-1");
-            ASSERT_TRUE(s.state == RoomState::Running && s.bot_controller && s.bots.size() == 1 && s.bots[0].seat == 1 && s.bots[0].name == "Bot (Medium)" && !s.bots[0].fill && s.joined == 2 && s.record_kept);
+            ASSERT_TRUE(s.state == RoomState::Running && s.bot_controller && s.bots.size() == 1 && s.bots[0].seat == 1 && s.bots[0].name == bn("B-1", 1, "Medium") && !s.bots[0].fill && s.joined == 2 && s.record_kept);
             const uint8_t seat_person = person.lobby->my_seat();
             ASSERT_EQ(seat_person, 0);
             RestartLoaded before = w.read_record("B-1");
@@ -827,7 +827,7 @@ void run_persist_server_tests_4() {
             w.stop_server(false);
             w.start_server(500);
             s = w.status("B-1");
-            ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.paused && s.bot_controller && s.bots.size() == 1 && s.bots[0].name == "Bot (Medium)" && s.joined == 2);
+            ASSERT_TRUE(s.state == RoomState::Running && s.restored && s.paused && s.bot_controller && s.bots.size() == 1 && s.bots[0].name == bn("B-1", 1, "Medium") && s.joined == 2);
             ASSERT_TRUE(s.absent.size() == 1 && s.absent[0].seat == seat_person);              // only the person is missing: a bot is never absent
             ASSERT_TRUE(w.until([&]() { return !w.status("B-1").paused; }, 60000));
             w.run(14000);
@@ -884,7 +884,7 @@ void run_persist_server_tests_4() {
             w.stop_server(true);
             w.start_server(500);
             s = w.status("B-2");
-            ASSERT_TRUE(s.restored && s.bot_controller && s.bots.size() == 2 && s.bots[0].fill && s.bots[1].fill && s.bots[0].name == "Bot (Medium)" && s.joined == 3);
+            ASSERT_TRUE(s.restored && s.bot_controller && s.bots.size() == 2 && s.bots[0].fill && s.bots[1].fill && s.bots[0].name == bn("B-2", s.bots[0].seat, "Medium") && s.joined == 3);
             ASSERT_TRUE(s.absent.size() == 1 && s.paused);
             ASSERT_TRUE(w.until([&]() { return !w.status("B-2").paused; }, 60000));
             w.run(12000);

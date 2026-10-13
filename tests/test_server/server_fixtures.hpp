@@ -3,6 +3,7 @@
 // The fixtures that the parts of the server test share (test_server.cpp holds main(); the cases are in the test_server_*.cpp files and the headers of the same folder). Everything
 // is inline or in an anonymous namespace, so every part is a self-contained translation unit.
 #pragma once
+#include "ants_ai/bot_names.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_ctl/http.hpp"
 #include "ants_ctl/json.hpp"
@@ -98,6 +99,11 @@ namespace fs = std::filesystem;
 // The first turn of a match is sealed this long after the match began (protocol 12: the "Get ready to play!" dialog of every machine, in which no simulation runs): a test that wants play to
 // be under way waits this much longer than it did before
 constexpr uint32_t kPre = net::kMatchStartDelayMs;
+
+// The name that the room with this code gives the bot of a seat (protocol 20): "Pip (bot, Hard)"; `level` is Easy, Medium, Hard, idle or worker
+inline std::string bn(const std::string& code, unsigned seat, const char* level) {
+    return ai::bot_label(ai::bot_seat_name(ai::bot_name_key(code), static_cast<uint8_t>(seat)), level);
+}
 
 inline int g_test_count = 0;
 inline int g_test_failures = 0;

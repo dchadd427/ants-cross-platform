@@ -239,6 +239,10 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Easy}, 0, 1)));
         w.run(300);
         ASSERT_EQ(w.status("bots0001").plan, std::string("omne 0+1"));
+        // protocol 20: before START the page already reads the names that the plan's bots will have, and START seats them under the same names
+        ASSERT_EQ(pia.lobby->room().slots[1].name, bn("bots0001", 1, "Medium"));
+        ASSERT_EQ(pia.lobby->room().slots[3].name, bn("bots0001", 3, "Easy"));
+        ASSERT_TRUE(pia.lobby->room().slots[0].state == net::SlotState::Client && pia.lobby->room().slots[2].name.empty());
         ASSERT_TRUE(pia.lobby->request_start());                                          // one person is enough, with the plan's bots to make up the match
         w.run(300);
         ASSERT_TRUE(w.status("bots0001").starting);
@@ -248,8 +252,8 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);
         ASSERT_EQ(static_cast<int>(s.joined), 3);
         ASSERT_EQ(s.bots.size(), size_t{2});
-        ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "medium" && s.bots[0].name == "Bot (Medium)" && s.bots[0].fill);
-        ASSERT_TRUE(s.bots[1].seat == 3 && s.bots[1].level == "easy" && s.bots[1].name == "Bot (Easy)" && s.bots[1].fill);
+        ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "medium" && s.bots[0].name == bn("bots0001", 1, "Medium") && s.bots[0].fill);
+        ASSERT_TRUE(s.bots[1].seat == 3 && s.bots[1].level == "easy" && s.bots[1].name == bn("bots0001", 3, "Easy") && s.bots[1].fill);
         ASSERT_EQ(s.teams, std::string("0+1"));
         ASSERT_EQ(game.lobby->start_info().roster, 11);
         ASSERT_TRUE(s.bot_controller);

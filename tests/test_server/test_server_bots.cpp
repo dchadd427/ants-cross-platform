@@ -22,16 +22,16 @@ void run_bot_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);
         ASSERT_EQ(s.joined, 4);                                                           // a bot is a player
         ASSERT_EQ(s.expected, 4);
-        ASSERT_TRUE(s.names[0] == "Bot (Medium)" && s.names[1] == "Bot (Medium)" && s.names[2] == "Ann" && s.names[3] == "Bot (Medium)");
+        ASSERT_TRUE(s.names[0] == bn("FILL-1", 0, "Medium") && s.names[1] == bn("FILL-1", 1, "Medium") && s.names[2] == "Ann" && s.names[3] == bn("FILL-1", 3, "Medium"));
         ASSERT_EQ(s.bots.size(), size_t{3});
         for (size_t i = 0; i < 3; ++i) {
             const uint8_t seat = i < 2 ? static_cast<uint8_t>(i) : uint8_t{3};
-            ASSERT_TRUE(s.bots[i].seat == seat && s.bots[i].kind == "standard" && s.bots[i].level == "medium" && s.bots[i].name == "Bot (Medium)" && s.bots[i].fill);
+            ASSERT_TRUE(s.bots[i].seat == seat && s.bots[i].kind == "standard" && s.bots[i].level == "medium" && s.bots[i].name == bn("FILL-1", seat, "Medium") && s.bots[i].fill);
         }
         ASSERT_TRUE(ann.sim.roster_mask() == 0x0F);                                       // everybody plays: the roster of the Start has the bots' seats
         {
             const net::StartMsg& start = ann.lobby->start_info();                            // what every machine was told: the names of the seats, the bots' among them
-            ASSERT_TRUE(start.names[0] == "Bot (Medium)" && start.names[1] == "Bot (Medium)" && start.names[2] == "Ann" && start.names[3] == "Bot (Medium)" && start.roster == 0x0F);
+            ASSERT_TRUE(start.names[0] == bn("FILL-1", 0, "Medium") && start.names[1] == bn("FILL-1", 1, "Medium") && start.names[2] == "Ann" && start.names[3] == bn("FILL-1", 3, "Medium") && start.roster == 0x0F);
         }
         for (int guard = 0; guard < 4000 && w.status("FILL-1").state == RoomState::Running; ++guard) w.run(250);
         s = w.status("FILL-1");
@@ -41,7 +41,7 @@ void run_bot_tests() {
         ASSERT_EQ(s.rows.size(), size_t{4});
         for (const uint8_t seat : {uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
             const RoomRow* row = row_of(s, seat);
-            ASSERT_TRUE(row != nullptr && row->name == "Bot (Medium)" && row->score > 300);       // the bots harvested: they played
+            ASSERT_TRUE(row != nullptr && row->name == bn("FILL-1", seat, "Medium") && row->score > 300);       // the bots harvested: they played
         }
         ASSERT_TRUE(s.referee_hash != 0 && s.ticks > 1000);
         ASSERT_TRUE(ann.hash_at.count(s.ticks) == 1);
@@ -109,7 +109,7 @@ void run_bot_tests() {
             w.run(2000);
             RoomStatus s = w.status("FR-5");
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.expected == 3 && s.bots.size() == 2);
-            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bot (Easy)" && s.names[2] == "Bot (Easy)" && s.names[3].empty());
+            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == bn("FR-5", 1, "Easy") && s.names[2] == bn("FR-5", 2, "Easy") && s.names[3].empty());
             ASSERT_TRUE(s.bots[0].level == "easy" && s.bots[1].level == "easy" && ann.sim.roster_mask() == 0x07);
         }
         {   // hard
@@ -120,7 +120,7 @@ void run_bot_tests() {
             ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::Hard));
             w.run(2000);
             RoomStatus s = w.status("FR-6");
-            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.bots.size() == 1 && s.bots[0].level == "hard" && s.names[1] == "Bot (Hard)");
+            ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.bots.size() == 1 && s.bots[0].level == "hard" && s.names[1] == bn("FR-6", 1, "Hard"));
         }
         {   // a room without a leader (early_start false) ignores every request, fill or not
             World w;
@@ -196,7 +196,7 @@ void run_bot_tests() {
         w.run(2000);
         s = w.status("CAN-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.bots.size() == 1);
-        ASSERT_TRUE(s.bots[0].seat == 3 && s.bots[0].fill && s.names[3] == "Bot (Medium)" && s.names[2] == "Cat");
+        ASSERT_TRUE(s.bots[0].seat == 3 && s.bots[0].fill && s.names[3] == bn("CAN-1", 3, "Medium") && s.names[2] == "Cat");
         ASSERT_TRUE(ann.sim.roster_mask() == 0x0F);
     } TEST_END();
 
@@ -274,11 +274,11 @@ void run_bot_tests() {
             w.run(2000);
             const RoomStatus s = w.status("PS-1");
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 3 && s.bots.size() == 2);
-            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[0].name == "Bot (Easy)" && s.bots[0].fill);
-            ASSERT_TRUE(s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == "Bot (Hard)" && s.bots[1].fill);
-            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bot (Easy)" && s.names[2].empty() && s.names[3] == "Bot (Hard)");
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[0].name == bn("PS-1", 1, "Easy") && s.bots[0].fill);
+            ASSERT_TRUE(s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == bn("PS-1", 3, "Hard") && s.bots[1].fill);
+            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == bn("PS-1", 1, "Easy") && s.names[2].empty() && s.names[3] == bn("PS-1", 3, "Hard"));
             ASSERT_EQ(ann.sim.roster_mask(), 0x0B);                                            // the roster of the Start: seats 0, 1 and 3
-            ASSERT_TRUE(ann.lobby->start_info().names[1] == "Bot (Easy)" && ann.lobby->start_info().names[3] == "Bot (Hard)");
+            ASSERT_TRUE(ann.lobby->start_info().names[1] == bn("PS-1", 1, "Easy") && ann.lobby->start_info().names[3] == bn("PS-1", 3, "Hard"));
             ASSERT_EQ(s.teams, std::string("ffa"));
         }
         {   // three levels in three seats: Medium, Hard, Easy
@@ -291,7 +291,7 @@ void run_bot_tests() {
             const RoomStatus s = w.status("PS-2");
             ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 3);
             ASSERT_TRUE(s.bots[0].level == "medium" && s.bots[1].level == "hard" && s.bots[2].level == "easy");
-            ASSERT_TRUE(s.names[1] == "Bot (Medium)" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Easy)");
+            ASSERT_TRUE(s.names[1] == bn("PS-2", 1, "Medium") && s.names[2] == bn("PS-2", 2, "Hard") && s.names[3] == bn("PS-2", 3, "Easy"));
         }
         {   // a seat that a person has taken: Bob sits in seat 2, so the level asked for seat 2 is ignored and the others are seated; the room is full with them
             World w;
@@ -305,7 +305,7 @@ void run_bot_tests() {
             const RoomStatus s = w.status("PS-3");
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.bots.size() == 2);
             ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "easy" && s.bots[1].seat == 3 && s.bots[1].level == "medium");      // (no Hard bot anywhere)
-            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == "Bot (Easy)" && s.names[2] == "Bob" && s.names[3] == "Bot (Medium)");
+            ASSERT_TRUE(s.names[0] == "Ann" && s.names[1] == bn("PS-3", 1, "Easy") && s.names[2] == "Bob" && s.names[3] == bn("PS-3", 3, "Medium"));
         }
         {   // the person's own seat holds a level too (the leader's screen does not show it): it is ignored
             World w;
@@ -787,9 +787,9 @@ void run_bot_tests() {
         ASSERT_TRUE(v.get("bots").is_array() && v.get("bots").size() == 1);
         const ctl::JsonValue& b = v.get("bots").at(0);
         ASSERT_TRUE(b.get("seat").as_int_or(9) == 0 && b.get("bot").str() == "medium" && b.get("kind").str() == "standard" && b.get("level").str() == "medium" &&
-                    b.get("name").str() == "Bot (Medium)" && !b.get("fill").as_bool_or(true));
+                    b.get("name").str() == bn("CB-1", 0, "Medium") && !b.get("fill").as_bool_or(true));
         ASSERT_TRUE(v.get("joined").as_int_or(0) == 1 && v.get("expected").as_int_or(0) == 2);
-        ASSERT_TRUE(v.get("players").size() == 1 && v.get("players").at(0).get("name").str() == "Bot (Medium)" && v.get("players").at(0).get("bot").as_bool_or(false));      // (a bot is a player of the room, and the entry says it is a bot)
+        ASSERT_TRUE(v.get("players").size() == 1 && v.get("players").at(0).get("name").str() == bn("CB-1", 0, "Medium") && v.get("players").at(0).get("bot").as_bool_or(false));      // (a bot is a player of the room, and the entry says it is a bot)
         r = call("POST", "/rooms", R"({"map":"TINY.LVL","code":"CB-2"})");                  // no bots: an empty list in the JSON
         ASSERT_TRUE(r.status == 201 && json_of(r).get("bots").is_array() && json_of(r).get("bots").size() == 0);
         // the mistakes: each one a 400 that names the key
@@ -817,8 +817,8 @@ void run_bot_tests() {
         ASSERT_EQ(r.status, 201);
         v = json_of(r);
         ASSERT_TRUE(v.get("bots").size() == 2 && v.get("bots").at(0).get("seat").as_int_or(9) == 1 && v.get("bots").at(0).get("bot").str() == "medium:defensive" && v.get("bots").at(0).get("style").str() == "defensive" &&
-                    v.get("bots").at(0).get("level").str() == "medium" && v.get("bots").at(0).get("name").str() == "Bot (Medium)" && v.get("bots").at(1).get("bot").str() == "hard:raider" &&
-                    v.get("bots").at(1).get("style").str() == "raider" && v.get("bots").at(1).get("name").str() == "Bot (Hard)");
+                    v.get("bots").at(0).get("level").str() == "medium" && v.get("bots").at(0).get("name").str() == bn("CB-3S", 1, "Medium") && v.get("bots").at(1).get("bot").str() == "hard:raider" &&
+                    v.get("bots").at(1).get("style").str() == "raider" && v.get("bots").at(1).get("name").str() == bn("CB-3S", 3, "Hard"));
         for (const char* body : {R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"hard:economic"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"worker:easy:raider"}]})", R"({"map":"TINY.LVL","bots":[{"seat":1,"bot":"medium:wild"}]})"}) {
             r = call("POST", "/rooms", body);
             ASSERT_EQ(r.status, 400);
@@ -830,7 +830,7 @@ void run_bot_tests() {
         w.run(2500);
         RoomStatus s = w.status("CB-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && ann.lobby->my_seat() == 1);
-        ASSERT_TRUE(s.names[0] == "Bot (Medium)" && s.names[1] == "Ann" && s.bots.size() == 1 && !s.bots[0].fill);
+        ASSERT_TRUE(s.names[0] == bn("CB-1", 0, "Medium") && s.names[1] == "Ann" && s.bots.size() == 1 && !s.bots[0].fill);
         ASSERT_TRUE(ann.sim.roster_mask() == 0x03);
         for (int guard = 0; guard < 4000 && w.status("CB-1").state == RoomState::Running; ++guard) w.run(250);
         w.run(Room::kGraceMs + 500);
@@ -863,7 +863,7 @@ void run_bot_tests() {
         ASSERT_TRUE(ann.lobby->request_start(net::FillLevel::None));                      // one person and the room's bot are two players
         w.run(2000);
         s = w.status("CB-4");
-        ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.names[2] == "Bot (Hard)" && s.bots.size() == 1 && !s.bots[0].fill);
+        ASSERT_TRUE(s.state == RoomState::Running && s.joined == 2 && s.names[2] == bn("CB-4", 2, "Hard") && s.bots.size() == 1 && !s.bots[0].fill);
         ASSERT_TRUE(ann.sim.roster_mask() == 0x05);
         {   // a room for four with a bot at seat 1: the fill takes seats 2 and 3 (Ann has 0), not seat 1
             World v;
@@ -876,7 +876,7 @@ void run_bot_tests() {
             v.run(2000);
             s = v.status("CB-5");
             ASSERT_TRUE(s.state == RoomState::Running && s.joined == 4 && s.bots.size() == 3);
-            ASSERT_TRUE(s.names[1] == "Bot (Easy)" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Hard)");
+            ASSERT_TRUE(s.names[1] == bn("CB-5", 1, "Easy") && s.names[2] == bn("CB-5", 2, "Hard") && s.names[3] == bn("CB-5", 3, "Hard"));
             ASSERT_TRUE(!s.bots[0].fill && s.bots[1].fill && s.bots[2].fill);
         }
     } TEST_END();
@@ -1093,7 +1093,7 @@ void run_bot_tests() {
             if (s.state == RoomState::Running && s.ticks > 400) break;
         }
         ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 400 && s.joined == 4 && s.bots.size() == 2);
-        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[1].seat == 3 && s.bots[0].level == "hard" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Hard)");
+        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[1].seat == 3 && s.bots[0].level == "hard" && s.names[2] == bn("SOCK-5", 2, "Hard") && s.names[3] == bn("SOCK-5", 3, "Hard"));
         ASSERT_TRUE(clients[0]->sim.roster_mask() == 0x0F && clients[1]->sim.roster_mask() == 0x0F);
         bool compared = false;
         for (int i = 0; i < 400 && !compared; ++i) {
@@ -1303,8 +1303,8 @@ void run_bot_tests() {
     TEST_CASE("S3.73 The Door Tells A Hello Of Another Protocol Before It Looks For The Room (A Hello Of Protocol 10, 11 (The Release Before The Match Clock Waited For The Start Dialog), 12 (The Release Before The Teams), 13 (The Release Before The Colour Moves), 14 (The Release Before The Create Block) Or 16 For A Room That Does Not Exist Is VersionMismatch, Not NoSuchRoom; The Right Protocol Is NoSuchRoom); A Room Without Bots Builds No Bot Controller (The \"No Bot Code\" Rule), A Room With A Bot Seat Or A Fill Does; The Map Notice Of A Fill Waits For The Pause After A Cancelled Start To End; A Vote That No Person Can Cast (Everybody Who Is Left Is A Bot) Is No Vote In The Status JSON") {
         {   // the door's own check of the protocol, for a code that no room has
             World w;
-            ASSERT_EQ(net::kProtocolVersion, uint16_t{19});                  // (16 was the protocol of v0.12.0: a Start, a Room and a Plan without the mode byte; 15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
-            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, uint16_t{17}, uint16_t{18}, uint16_t{20}, uint16_t{1}, uint16_t{0}}) {      // (16: v0.12.0, whose Hello is the Hello of 17 byte for byte: the number alone refuses it; 18: v0.12.9, the Hello of 19 byte for byte; 20: a client from the future)
+            ASSERT_EQ(net::kProtocolVersion, uint16_t{20});                  // (16 was the protocol of v0.12.0: a Start, a Room and a Plan without the mode byte; 15 was the protocol of v0.11.0: a Hello without a client kind; 14 was the protocol of v0.10.0: a Hello without a platform byte and a create block; 13 was the protocol of v0.8.0 to v0.8.2: its leader cannot move a colour; 11 was the protocol of v0.1.0 and v0.1.1: a client of it counts its dialog in simulation ticks, which a host that seals its first turn 5 s late would block for 100 ticks of the running match; 12 was the protocol of v0.2.0 to v0.4.0: its leader sends the one-level StartRequest and its Start has no team bytes)
+            for (const uint16_t version : {uint16_t{10}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}, uint16_t{17}, uint16_t{18}, uint16_t{19}, uint16_t{21}, uint16_t{1}, uint16_t{0}}) {      // (16: v0.12.0, whose Hello is the Hello of 17 byte for byte: the number alone refuses it; 18: v0.12.9, the Hello of 19 byte for byte; 21: a client from the future)
                 auto ends = w.net.connect({20, 10});
                 w.mgr.add_connection(std::make_unique<Borrowed>(ends.first), "127.0.0.1", w.now);
                 net::HelloMsg hello;

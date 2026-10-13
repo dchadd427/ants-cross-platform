@@ -99,6 +99,7 @@ const NAME_TABLE = [
     ['a\tb', true, 'ab'], ['a\nb', true, 'ab'], ['a\r\nb', true, 'ab'], ['\u0001x', false], ['x\u007f', false], ['x\u0000', false],
     ['<script>alert(1)</script>', true, '<script>alert(1)</script>'], ['a&b', true, 'a&b'], ['"q" \'q\' <b>', true, '"q" \'q\' <b>'], ['100%', true, '100%'], ['..\\/', true, '..\\/'],
     [null, true, ''], [undefined, true, ''], [42, true, ''], [{}, true, ''],
+    ['Pip (bot)', false], ['Pip (Bot, Hard)', false], ['Ann ( bot , x )', false], ['Pip(bot,Easy)', false], ['PIP (BOT)', false], ['Pip (bot, )', true, 'Pip (bot, )'], ['Pip (bot) x', true, 'Pip (bot) x'], ['Robot (Hard)', true, 'Robot (Hard)'], ['Bot', true, 'Bot'], ['(bot', true, '(bot'], ['Pip (bots)', true, 'Pip (bots)'], ['Pip (bot, (x))', true, 'Pip (bot, (x))'],
     ['Bot\t(x)', false], ['\tBot (x)', false], [' ' + 'a'.repeat(33) + ' ', false], ['~ ~', true, '~ ~'], ['a b', false], ['Sam’s', false], ['x'.repeat(31) + ' ', true, 'x'.repeat(31)]
 ];
 // (the table of web_name_check.js has ' Bob' refused: a name that came in with a space in front of it is cut, not refused, by the rule of the block, which the next loop shows on the page's own text)
@@ -115,7 +116,7 @@ NAME_TABLE.forEach(([text, ok, name]) => {
 same('the three refusals say what they are about, in the game page\'s words', [R.nameCheck('Zo\u00eb').why, R.nameCheck('a'.repeat(33)).why, R.nameCheck('Bot (x)').why], [
     'A name can hold printable ASCII characters only: letters, digits and signs without accents.',
     'A name has at most 32 characters.',
-    'A name that starts with "Bot (" is for computer players. Please choose another name.'
+    'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.'
 ]);
 check('a name that is too long and not ASCII is refused for the characters first; too long and "Bot (" for the length', /ASCII/.test(R.nameCheck('é' + 'a'.repeat(40)).why) && /32/.test(R.nameCheck('Bot (' + 'x'.repeat(40)).why));
 check('the blanks that were cut are the only change: a name never comes back longer, changed or in another case', ['  Sam  ', 'sAm', 'Sam Lee'].every((t) => R.nameCheck(t).name === t.trim()));
@@ -521,6 +522,23 @@ const exchanged = (kinds, teamA, teamB) => ({ op: 'plan', plan: { map: '', kinds
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const ctx = (o) => Object.assign({ sides: [0, 0, 0, 0], picked: -1, removing: -1, offline: false, refusal: '' }, o || {});
 const view = (room, o) => R.viewOf(model(room), ctx(o));
+
+// ---- the names of the planned bots (network protocol 20: the empty colour of a bot's plan carries the bot's label) ----
+{
+    const SB = mk([P('Juniper'), [E, 'Pip (bot, Hard)'], [E, 'Wren (bot, Easy)'], O], { you: 0, leader: 0, plan: [0, 3, 1, 0] });
+    const mb = R.modelOf(SB);
+    same('modelOf: a colour whose plan is a bot shows the bot\'s name from the empty seat', [mb.slots[1], mb.slots[2]], [{ kind: 'bot', level: 'hard', name: 'Pip (bot, Hard)' }, { kind: 'bot', level: 'easy', name: 'Wren (bot, Easy)' }]);
+    const SG = mk([P('Juniper'), P('Sam'), [E, 'Pip (bot, Hard)'], O], { you: 1, leader: 0, plan: [0, 0, 3, 0] });
+    const guestCard = R.viewOf(R.modelOf(SG), ctx({})).cards.filter((c) => c.seat === 2)[0];
+    same('a guest\'s card of that colour says the bot\'s name where it said "Hard bot"', guestCard.who.map((w) => w.text), ['Pip (bot, Hard)']);
+    const hostCard = R.viewOf(mb, ctx({})).cards.filter((c) => c.seat === 1)[0];
+    same('the leader\'s card of that colour keeps its level switch and shows the name', [hostCard.mode, hostCard.who.map((w) => w.text), hostCard.label], ['hard', ['Pip (bot, Hard)'], 'Red: Pip (bot, Hard)']);
+    const SL = mk([P('Juniper'), [E, ''], [3, 'Bot (Hard)'], O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
+    same('a room without names (or the legacy "Bot (Hard)") shows the level as before', [R.modelOf(SL).slots[1], R.modelOf(SL).slots[2]], [{ kind: 'bot', level: 'medium' }, { kind: 'bot', level: 'medium' }]);
+    const refused = (seats, o) => { try { mk(seats, o); return false; } catch (e) { return true; } };
+    same('a name on an empty colour is refused by the codec unless the plan asks a bot there and the name is a bot\'s', [refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 0, 0, 0] }), refused([P('J'), [E, 'Pip'], O, O], { plan: [0, 3, 0, 0] }), refused([P('J'), [E, 'Pip (bot, Hard)'], O, O], { plan: [0, 3, 0, 0] })], [true, true, false]);
+}
+
 // a card in a few words: only what is on, so that a field that should be off but is on shows
 function show(c) {
     const o = { seat: c.seat, colour: c.colour.name, kind: c.kind, who: c.who.map((w) => w.text + '/' + w.cls), stat: c.stat };
