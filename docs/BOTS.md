@@ -251,7 +251,7 @@ Every task of the standard bot claims its ants in one ledger (`AntLedger`: an an
 | Rank | Tasks | Takes from |
 |---|---|---|
 | 6 | the gate goal (off in every plan, Hard only: the Fire ant or Bomber it needs, only while the bot banks nothing) | every rank below 6, the fights too |
-| 5 | fights: strike back, hunts, the skirmish | the economy, the guard and the ferry only: a fight never takes an ant whose task has rank 3 or more (its own rule) |
+| 5 | fights: strike back, hunts, the skirmish; the route task (off in every plan, Hard only: the Bombers that defuse the bombs on the way to the food) | the economy, the guard and the ferry only: a fight never takes an ant whose task has rank 3 or more (its own rule) |
 | 4 | fire walls, bombs, the strike, the harassment squad | ranks below 4 |
 | 3 | power-ups, raids, the sabotage, **the island task, the expedition** | ranks below 3, so not from each other |
 | 2 | the guard (off), **the ferry** | the economy |

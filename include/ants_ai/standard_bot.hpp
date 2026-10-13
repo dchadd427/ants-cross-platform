@@ -35,6 +35,7 @@
 
 #include "ants_ai/bot.hpp"
 #include "ants_ai/gate_task.hpp"
+#include "ants_ai/route_task.hpp"
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_tasks.hpp"
@@ -77,7 +78,8 @@ private:
           island_(kIslands, tactics_, island_params(plan)),
           expedition_(kExpedition, tactics_, expedition_params(plan)),
           ferry_(kFerry, ferry_params(plan)),
-          gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)) {
+          gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
+          route_(kRoute) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }
@@ -112,6 +114,7 @@ public:
     AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
+    const RouteTask& route() const noexcept { return route_; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)
     GateGoalTask& gate_goals_for_labs() noexcept { return gate_goals_; }
     const Tactics& tactics() const noexcept { return tactics_; }
@@ -153,6 +156,7 @@ public:
     static constexpr TaskId kMines = 17;
     static constexpr TaskId kRush = 18;
     static constexpr TaskId kGateGoals = 19;
+    static constexpr TaskId kRoute = 20;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -279,6 +283,7 @@ private:
     ExpeditionTask expedition_;
     FerryTask ferry_;
     GateGoalTask gate_goals_;
+    RouteTask route_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);
