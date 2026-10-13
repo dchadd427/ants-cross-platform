@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.39 - 2026-10-13 - Computer players clear the bombs on their way (off)
+
+**For players:**
+- Nothing changes on screen or in play: the new play is off in every level. A Hard computer player (when it is switched on for a test, `--tune ggoal=1`) on a map full of bombs, as on `Bombz Away`, now uses a Bomber to defuse exactly the bombs on its own way to the food and back to its hill, in order, and keeps its workers off the food until the way is clear. It no longer walks into bombs by accident, never touches another team's bomb area, and gives the way up after 90 seconds without progress. In the arena (16 matches, four Hard players) the banked score on Bombz Away rose from 9,950 to 30,950 in all, and 61 of 64 players banked something, against 49 ([the plan](docs/reverse_engineering/bomb_gates.md)).
+
+**Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation, and with the switch off every match plays tick for tick as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/188813e1...eb8d34c1)
+
 ## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
 
 **For players:**
@@ -500,20 +509,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the bots](docs/BOTS.md)
 
-## v0.3.0 - 2026-10-04 - Computer players that fight; the front page is the lobby
+## Older versions (v0.3.0 and before)
 
-**For players:**
-- **Computer players gather food, raid and fight back.** At every level a bot answers a blow on one of its ants (with one, two or three ants at Easy, Medium and Hard), sends a hit carrier home, guards its thief hole with fire walls, puts out your fire walls and defuses your bombs, and keeps its last ants out of fights; Medium and Hard also take their side's power-ups at the start, contest the middle of the map and raid the leader with a Thief.
-- **Hard bots guide their carriers at the hill's gate by hand** and steal an unguarded Thief power-up for a second thief, and every bot draws one of four styles for the match (aggressive, economic, raider, defensive; `--bot 2:hard:raider` pins one), so bots do not all play alike. A bot that gets stuck (a refused click, a hill that its carriers cannot reach) backs off instead of repeating the same order.
-- **The front page is the lobby:** [beta.playants.org](https://beta.playants.org) opens it, with single player in it. Players 1 plays on this computer in this tab, alone or against Easy, Medium or Hard bots; 2 to 4 host a match as before. The game page's "Play online" button is now "Menu", and every old game link still works (`/four.html` goes to `/`).
-- **The map keeps scrolling when the mouse goes a little past the game's edge** in a browser window (about an inch, corners included); farther out, over a button of the page or out of the window, it stops.
-- For whoever runs a server: a match in a room that holds seats survives a restart of the game server (restart records, [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md) "Restart records"); rooms hold seats only when asked, so nothing changes by default.
-
-**Fixes:**
-- Behind the "Get ready to play!" dialog the ants are drawn again, standing, as in the original (since v0.2.0 only their hit-point numbers were).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/BOTS.md)
-
-## Older versions (v0.2.0 and before)
-
-Every release before v0.3.0, and the long notes of v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.4.0, and the long notes of v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
