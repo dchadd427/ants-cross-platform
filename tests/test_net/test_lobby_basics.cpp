@@ -430,7 +430,7 @@ void run_lobby_basics_tests() {
         // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's. Protocol 16 (the first
         // lobby pages) is refused by a host of 17 by the number as well: its Hello is byte for byte a Hello of 17, but its Start, Room and Plan messages lack the game mode, and a match played by
         // a machine that cannot be told its game mode would be played by the original's rules whatever the room chose.
-        ASSERT_EQ(kProtocolVersion, 19);
+        ASSERT_EQ(kProtocolVersion, 20);
         for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});

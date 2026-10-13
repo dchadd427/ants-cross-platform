@@ -1,6 +1,7 @@
 // The match history in front of real rooms (docs/REPLAYS.md "The match history"): rooms of computer players play whole matches on the shipped TINY map, in both game modes ("highest-score" and "187"), on a
 // room manager with a replay store and a database; the history counts each match from its recording when no room runs a match, the record is the match (mode, names, format, rows, the rule that picks the
 // winner), both doors list it. The store's own rules are test_history_store.cpp, the rule of the winner test_history_record.cpp.
+#include "ants_ai/bot_names.hpp"
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
@@ -168,7 +169,8 @@ int main() {
             ASSERT_TRUE(r.mgr.history_store()->find(id, rec));
             ASSERT_TRUE(rec.mode == mode_name && rec.map == "TINY.LVL" && rec.game == "v0.12.0-test" && rec.ended_s == kT0 && rec.format == "ffa3" && rec.computers_only);
             ASSERT_TRUE(rec.seats.size() == 3 && rec.rows.size() == 3 && rec.turns >= 600);
-            ASSERT_TRUE(rec.seats[0].bot == "Medium" && rec.seats[1].bot == "Hard" && rec.seats[2].bot == "Medium" && rec.seats[0].name.empty());
+            ASSERT_TRUE(rec.seats[0].bot == "Medium" && rec.seats[1].bot == "Hard" && rec.seats[2].bot == "Medium");
+            for (const HistorySeat& seat : rec.seats) ASSERT_EQ(seat.name, ai::bot_seat_name(ai::bot_name_key("HIS-A"), seat.seat));      // (protocol 20: the bot's own name, "Pip" of "Pip (bot, Hard)"; the level is the bot field)
             bool rule_holds = false;
             check_rule(rec, rule_holds);
             ASSERT_TRUE(rule_holds);

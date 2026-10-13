@@ -463,8 +463,37 @@ code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/n
 sleep 0.3
 check "the leader's room, whose match ran for seconds only ($LEAD_TICKS ticks, under 600), ended (its players left, then the owner closed it): it counts nothing (a start-and-quit loop cannot pad the number)" "$([ "${LEAD_TICKS:-0}" -gt 0 ] && [ "${LEAD_TICKS:-0}" -lt 600 ] && [ "$(stat_of online total)" = "$ONLINE_BEFORE" ] && [ "$(stat_of online day)" = "$ONLINE_BEFORE" ]; echo $?)"
 
+# The names that a room gives its bots (network protocol 20, docs/BOT_NAMES.md), worked out here by a python version of the picker that is independent of the C++ and the JavaScript: the key of a room is
+# the FNV-1a hash of its code finished with mix64, the name of a seat is the seat's entry of the room's four names. bn(code, seat, level) is "Pip (bot, Medium)".
+BN_PY='
+import sys
+M = (1 << 64) - 1
+def mix(z):
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+    return z ^ (z >> 31)
+NAMES = [l.strip() for l in open(sys.argv[2]) if l.strip() and not l.startswith("#")]
+def key_of(code):
+    h = 0xCBF29CE484222325
+    for c in code.encode():
+        h = ((h ^ c) * 0x100000001B3) & M
+    h = mix(h ^ 0xB07BA3E5)
+    return h or 1
+def bn(code, seat, level):
+    key = key_of(code)
+    base = mix(key ^ 0xB07A11E5B07A11E5)
+    out, used, draw = [], set(), 1
+    while len(out) < 4:
+        i = mix((base + draw * 0x9E3779B97F4A7C15) & M) % len(NAMES)
+        draw += 1
+        if i not in used:
+            used.add(i)
+            out.append(NAMES[i])
+    return "%s (bot, %s)" % (out[seat], level)
+CODE = sys.argv[1]
+'
 # bots fill the empty seats (protocol 11): a room for four whose leader (a headless client with --fill-bots medium, --start-when 1: a test hook that presses START once one player is
-# in) starts it ALONE: the server seats a "Bot (Medium)" in each of the three empty seats and runs them, the status lists them, the match runs and the client reports no error; two
+# in) starts it ALONE: the server seats a bot ("Pip (bot, Medium)") in each of the three empty seats and runs them, the status lists them, the match runs and the client reports no error; two
 # clients that chat in the waiting room (--say: a test hook that says a line once two players are in) hear each other
 FILL="E2E-FILL-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FILL\",\"seed\":13}" "$CTL/rooms"
@@ -477,14 +506,14 @@ for _ in $(seq 1 150); do
     sleep 0.2
 done
 check "alone with --fill-bots medium the leader starts a room for four: the match runs" "$FILL_UP"
-BOTS_OK="$(echo "$STATUS" | python3 -c '
-import sys, json
+BOTS_OK="$(echo "$STATUS" | python3 -c "$BN_PY"'
+import json
 r = json.load(sys.stdin)
 bots = r.get("bots", [])
-ok = len(bots) == 3 and [b["seat"] for b in bots] == [1, 2, 3] and all(b["bot"] == "medium" and b["name"] == "Bot (Medium)" and b["fill"] for b in bots)
-ok = ok and r.get("joined") == 4 and r.get("expected") == 4 and r["players"][0]["name"] == "Solo" and sum(1 for p in r["players"] if p["name"] == "Bot (Medium)") == 3
-print(0 if ok else 1)' 2> /dev/null)"
-check "the status lists three bots on seats 1 - 3 (medium, named Bot (Medium), seated by the fill), four players, the person on seat 0" "${BOTS_OK:-1}"
+ok = len(bots) == 3 and [b["seat"] for b in bots] == [1, 2, 3] and all(b["bot"] == "medium" and b["name"] == bn(CODE, b["seat"], "Medium") and b["fill"] for b in bots)
+ok = ok and r.get("joined") == 4 and r.get("expected") == 4 and r["players"][0]["name"] == "Solo" and sum(1 for p in r["players"] if p["name"] == bn(CODE, p["seat"], "Medium")) == 3
+print(0 if ok else 1)' "$FILL" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
+check "the status lists three bots on seats 1 - 3 (medium, named by the room like Pip (bot, Medium), seated by the fill), four players, the person on seat 0" "${BOTS_OK:-1}"
 FILL_T1="$(wait_ticks "$FILL")"      # (the rate is measured from the first tick: the match's first 5 s are the dialog)
 sleep 3
 FILL_T2="$(ticks_of "$FILL")"
@@ -495,8 +524,8 @@ for p in $FILL_PIDS; do kill "$p" 2> /dev/null; done
 for p in $FILL_PIDS; do wait "$p" 2> /dev/null; done
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" > /dev/null
 
-# a level for each seat and the teams (protocol 13): the leader (--fill-bots none,easy,none,hard --teams 0+1, --start-when 1) starts a room for four ALONE: the server seats a "Bot (Easy)" at seat 1 and a
-# "Bot (Hard)" at seat 3 and leaves seat 2 empty, and the match starts with Green and Red as a team: the referee and the leader's game both make it before the first tick (a disagreement would be a
+# a level for each seat and the teams (protocol 13): the leader (--fill-bots none,easy,none,hard --teams 0+1, --start-when 1) starts a room for four ALONE: the server seats an Easy bot at seat 1 and a
+# Hard bot at seat 3 and leaves seat 2 empty, and the match starts with Green and Red as a team: the referee and the leader's game both make it before the first tick (a disagreement would be a
 # desync, and the room would fail), the match runs at 20 ticks a second and the client reports no error
 PLAN="E2E-PLAN-$RANDOM"
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$PLAN\",\"seed\":13}" "$CTL/rooms"
@@ -509,13 +538,13 @@ for _ in $(seq 1 150); do
     sleep 0.2
 done
 check "alone with --fill-bots none,easy,none,hard --teams 0+1 the leader starts a room for four: the match runs" "$PLAN_UP"
-PLAN_OK="$(echo "$STATUS" | python3 -c '
-import sys, json
+PLAN_OK="$(echo "$STATUS" | python3 -c "$BN_PY"'
+import json
 r = json.load(sys.stdin)
 bots = r.get("bots", [])
-ok = [b["seat"] for b in bots] == [1, 3] and [b["bot"] for b in bots] == ["easy", "hard"] and [b["name"] for b in bots] == ["Bot (Easy)", "Bot (Hard)"] and all(b["fill"] for b in bots)
-ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: "Solo", 1: "Bot (Easy)", 3: "Bot (Hard)"}
-print(0 if ok else 1)' 2> /dev/null)"
+ok = [b["seat"] for b in bots] == [1, 3] and [b["bot"] for b in bots] == ["easy", "hard"] and [b["name"] for b in bots] == [bn(CODE, 1, "Easy"), bn(CODE, 3, "Hard")] and all(b["fill"] for b in bots)
+ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: "Solo", 1: bn(CODE, 1, "Easy"), 3: bn(CODE, 3, "Hard")}
+print(0 if ok else 1)' "$PLAN" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
 check "the status lists the bots of the seats 1 (easy) and 3 (hard) by their own names, three players, and seat 2 stays empty" "${PLAN_OK:-1}"
 PLAN_T1="$(wait_ticks "$PLAN")"
 sleep 3
@@ -540,13 +569,13 @@ for _ in $(seq 1 150); do
     sleep 0.2
 done
 check "alone at Blue with --seat 2 --fill-bots easy,medium,none,none --start-when 1 the leader starts a room for four at once: the match runs" "$CARD_UP"
-CARD_OK="$(echo "$STATUS" | python3 -c '
-import sys, json
+CARD_OK="$(echo "$STATUS" | python3 -c "$BN_PY"'
+import json
 r = json.load(sys.stdin)
 bots = r.get("bots", [])
-ok = [b["seat"] for b in bots] == [0, 1] and [b["bot"] for b in bots] == ["easy", "medium"] and [b["name"] for b in bots] == ["Bot (Easy)", "Bot (Medium)"] and all(b["fill"] for b in bots)
-ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: "Bot (Easy)", 1: "Bot (Medium)", 2: "Blue"}
-print(0 if ok else 1)' 2> /dev/null)"
+ok = [b["seat"] for b in bots] == [0, 1] and [b["bot"] for b in bots] == ["easy", "medium"] and [b["name"] for b in bots] == [bn(CODE, 0, "Easy"), bn(CODE, 1, "Medium")] and all(b["fill"] for b in bots)
+ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: bn(CODE, 0, "Easy"), 1: bn(CODE, 1, "Medium"), 2: "Blue"}
+print(0 if ok else 1)' "$CARD" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
 check "the leader holds the seat that it asked for (Blue), the bots of the plan are at Green (easy) and Red (medium) by their own names, and seat 3 stays empty" "${CARD_OK:-1}"
 check "the room did not fail and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/c1.log"; echo $?)"
 for p in $CARD_PIDS; do kill "$p" 2> /dev/null; done

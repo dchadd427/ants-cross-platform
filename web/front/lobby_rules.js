@@ -52,13 +52,13 @@
 
     // ---- names ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
-    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" (blanks and case ignored). Empty is fine: the page picks one. { ok: true, name } or { ok: false, why }.
+    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored). Empty is fine: the page picks one. { ok: true, name } or { ok: false, why }.
     function nameCheck(text) {
         var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
         if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
         var name = raw.replace(/^ +/, '').replace(/ +$/, '');
         if (name.length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
-        if (name.replace(/ /g, '').toLowerCase().indexOf('bot(') === 0) return { ok: false, why: 'A name that starts with "Bot (" is for computer players. Please choose another name.' };
+        if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
         return { ok: true, name: name };
     }
     // A name for a visitor who typed none: one of the NAMES, `random` being a number from 0 up to (not including) 1
@@ -113,7 +113,9 @@
             if (st === SLOT.Host || st === SLOT.Client) {
                 slots.push({ kind: 'person', name: room.slots[s].name, leader: s === leader, me: s === room.you, ingame: s !== room.you && ((room.inGame >> s) & 1) === 1 });
             } else if (st === SLOT.Bot || (plan >= 1 && plan <= 3)) {
-                slots.push({ kind: 'bot', level: levelOfPlan(plan) || 'medium' });
+                var bot = { kind: 'bot', level: levelOfPlan(plan) || 'medium' };
+                if (/ \(bot, (Easy|Medium|Hard|idle|worker)\)$/.test(room.slots[s].name)) bot.name = room.slots[s].name;      // (protocol 20: the bot's name, "Pip (bot, Hard)"; a room without one, or the legacy "Bot (Hard)", shows the level as before)
+                slots.push(bot);
             } else slots.push({ kind: plan === 4 ? 'nobody' : 'open' });
         }
         var m = mapOfFile(room.map);
@@ -127,7 +129,7 @@
     function hostName(model) { return model.leader >= 0 && model.slots[model.leader].kind === 'person' ? model.slots[model.leader].name : 'The host'; }
     function nameOf(model, i) {
         var s = model.slots[i];
-        return s.kind === 'person' ? s.name : s.kind === 'bot' ? levelWord(s.level) + ' bot' : s.kind === 'open' ? 'the open ' + COLOURS[i].name : 'the unused ' + COLOURS[i].name;
+        return s.kind === 'person' ? s.name : s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'the open ' + COLOURS[i].name : 'the unused ' + COLOURS[i].name;
     }
     // What a card says of a person who sits in it (the toast of a move)
     function nameAt(model, i, you) {
@@ -276,8 +278,9 @@
             } else {
                 card.stat = s.kind === 'bot' ? 'Computer player' : s.kind === 'open' ? 'Takes the next player who joins.' : 'Stays out of the match.';
                 var word = s.kind === 'bot' ? s.level : s.kind;
-                if (ro) card.who.push({ text: s.kind === 'bot' ? levelWord(s.level) + ' bot' : s.kind === 'open' ? 'Open' : 'Nobody', cls: '' });
-                else card.mode = word;
+                if (ro) card.who.push({ text: s.kind === 'bot' ? (s.name || levelWord(s.level) + ' bot') : s.kind === 'open' ? 'Open' : 'Nobody', cls: '' });
+
+                else { card.mode = word; if (s.kind === 'bot' && s.name) card.who.push({ text: s.name, cls: 'nm' }); }
             }
             if (can && play.indexOf(i) !== -1) {
                 if (ro) { if (shown[i]) card.tab = 'Team ' + shown[i]; }

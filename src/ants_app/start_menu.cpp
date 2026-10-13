@@ -1,5 +1,7 @@
 #include "ants_app/start_menu.hpp"
 
+#include "ants_ai/bot_names.hpp"
+
 #include <algorithm>
 #include <cctype>
 
@@ -327,16 +329,7 @@ std::string clean_player_name(const std::string& raw) {
     return name;
 }
 
-bool looks_like_bot_name(const std::string& name) {
-    static const char kMark[] = "bot(";
-    size_t matched = 0;
-    for (const char raw : name) {
-        if (raw == ' ') continue;
-        if (lower_char(raw) != kMark[matched]) return false;
-        if (++matched == sizeof(kMark) - 1) return true;
-    }
-    return false;
-}
+bool looks_like_bot_name(const std::string& name) { return ai::is_reserved_bot_name(name); }
 
 bool check_player_name(const std::string& raw, std::string& clean, std::string& why) {
     clean = clean_player_name(raw);
@@ -345,7 +338,7 @@ bool check_player_name(const std::string& raw, std::string& clean, std::string& 
         return false;
     }
     if (looks_like_bot_name(clean)) {
-        why = "A name that starts with \"Bot (\" is for computer players. Please choose another name.";
+        why = "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name.";
         return false;
     }
     return true;

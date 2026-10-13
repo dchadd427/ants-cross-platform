@@ -177,11 +177,11 @@ void run_room_bot_tests() {
         ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
         const server::RoomStatus s = server.status("FILL-APP");
         ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.expected == 4 && s.bots.size() == 2);
-        ASSERT_TRUE(s.names[0] == "Leader" && s.names[1] == "Bob" && s.names[2] == "Bot (Hard)" && s.names[3] == "Bot (Hard)");
+        ASSERT_TRUE(s.names[0] == "Leader" && s.names[1] == "Bob" && s.names[2] == bn("FILL-APP", 2, "Hard") && s.names[3] == bn("FILL-APP", 3, "Hard"));
         ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "hard" && s.bots[0].fill && s.bots[1].seat == 3);
         ASSERT_EQ(app.sim().roster_mask(), 0x0F);
         ASSERT_EQ(bob.sim.roster_mask(), 0x0F);
-        ASSERT_EQ(app.sim().get_player_name(3), "Bot (Hard)");                                // the screens name the bots as bots
+        ASSERT_EQ(app.sim().get_player_name(3), bn("FILL-APP", 3, "Hard"));                                // the screens name the bots as bots
         ASSERT_TRUE(app.bots() == nullptr);                                                   // a guest runs no bot: the server does
         hall.step(6000);
         ASSERT_TRUE(hall.identical(app.sim(), bob.sim));
@@ -414,7 +414,7 @@ void run_room_bot_tests() {
         ASSERT_TRUE(hall.until([&]() { return leader.state() == AppState::Playing && guest.state() == AppState::Playing; }, 15000));
         server::RoomStatus s = server.status("TEAMS-APP");
         ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.bots.size() == 2);
-        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "easy" && s.bots[0].name == "Bot (Easy)" && s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == "Bot (Hard)");
+        ASSERT_TRUE(s.bots[0].seat == 2 && s.bots[0].level == "easy" && s.bots[0].name == bn("TEAMS-APP", 2, "Easy") && s.bots[1].seat == 3 && s.bots[1].level == "hard" && s.bots[1].name == bn("TEAMS-APP", 3, "Hard"));
         ASSERT_EQ(s.teams, std::string("0+2"));
         ASSERT_TRUE(s.allies[0] == 2 && s.allies[1] == 3 && s.allies[2] == 0 && s.allies[3] == 1);        // the referee's engine, in the dialog: tick 0
         ASSERT_EQ(s.ticks, 0u);
@@ -434,8 +434,8 @@ void run_room_bot_tests() {
         for (Application* a : {&leader, &guest}) {
             const std::string log = a->hud().chat_transcript("t");
             ASSERT_EQ(count_of(log, "are a team now!"), size_t{2});                                       // once for each pair, on each machine
-            ASSERT_TRUE(log.find("Leader (Green) and Bot (Easy) (Blue) are a team now!") != std::string::npos);
-            ASSERT_TRUE(log.find("Guest (Red) and Bot (Hard) (Black) are a team now!") != std::string::npos);
+            ASSERT_TRUE(log.find("Leader (Green) and " + bn("TEAMS-APP", 2, "Easy") + " (Blue) are a team now!") != std::string::npos);
+            ASSERT_TRUE(log.find("Guest (Red) and " + bn("TEAMS-APP", 3, "Hard") + " (Black) are a team now!") != std::string::npos);
             ASSERT_TRUE(a->net()->pregame_chat().empty() || !a->net()->pregame_chat().back().notice());      // nobody was told that teams could not be made
         }
         ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));
@@ -657,7 +657,7 @@ void run_room_bot_tests() {
                 const std::string log = a->hud().chat_transcript("t");
                 ASSERT_EQ(count_of(log, "are a team now!"), size_t{2});
                 ASSERT_TRUE(log.find("Leader (Green) and Guest (Red) are a team now!") != std::string::npos);
-                ASSERT_TRUE(log.find("Bot (Easy) (Blue) and Bot (Hard) (Black) are a team now!") != std::string::npos);
+                ASSERT_TRUE(log.find(bn(code, 2, "Easy") + " (Blue) and " + bn(code, 3, "Hard") + " (Black) are a team now!") != std::string::npos);
                 ASSERT_TRUE(a->net()->pregame_chat().empty() || !a->net()->pregame_chat().back().notice());
             }
             ASSERT_TRUE(hall.identical(leader.sim(), guest.sim()));

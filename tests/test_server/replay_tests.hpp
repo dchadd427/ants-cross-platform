@@ -211,12 +211,12 @@ void run_replay_tests() {
         const ReplayStore& store = *w.mgr.replay_store();
         const StoredReplay f = load_stored(store, s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && !f.rep.match_over && f.rep.head.roster == 0x07 && f.rep.total_turns >= 600);
-        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bob", "Bot (Medium)", ""}}));
-        for (const char* kept : {"Ann", "Bob", "Bot (Medium)"}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bob", bn("REC-BOT", 2, "Medium"), ""}}));
+        for (const std::string& kept : {std::string("Ann"), std::string("Bob"), bn("REC-BOT", 2, "Medium")}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
         ASSERT_FALSE(bytes_contain(f.bytes, "REC-BOT"));
         const std::vector<ReplayEntry> list = store.list();
         ASSERT_TRUE(list.size() == 1 && !list[0].finished);
-        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Ann)", "Red (Bob)", "Blue (Bot (Medium))"}));
+        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Ann)", "Red (Bob)", "Blue (" + bn("REC-BOT", 2, "Medium") + ")"}));
         replay::Outcome played;
         ASSERT_TRUE(plays_out(f.rep, played));
         ASSERT_TRUE(played.complete && !played.match_over && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
@@ -650,7 +650,7 @@ void run_replay_tests() {
             const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
             ASSERT_TRUE(f.ok && f.rep.complete && f.rep.match_over && f.rep.head.roster == 0x0F && !f.rep.head.fog);
             ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));
-            ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+            ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == bn("RT-1", 1, "Medium") && f.rep.head.names[2] == bn("RT-1", 2, "Medium") && f.rep.head.names[3] == bn("RT-1", 3, "Medium"));
             replay::Outcome played;
             ASSERT_TRUE(plays_out(f.rep, played));
             ASSERT_TRUE(played.complete && played.match_over && played.turns == f.rep.total_turns && played.hashes_checked > 5 && played.hash == s.referee_hash);
@@ -739,17 +739,17 @@ void run_replay_tests() {
         w.run(1500 + kPre + 38000);
         RoomStatus s = w.status("NAMES-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600 && s.bot_controller);
-        ASSERT_EQ(ann.lobby->start_info().names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bot (Medium)", "", "Player 4"}}));      // (what the room showed everybody)
+        ASSERT_EQ(ann.lobby->start_info().names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", bn("NAMES-1", 1, "Medium"), "", "Player 4"}}));      // (what the room showed everybody)
         ASSERT_TRUE(w.mgr.close_room("NAMES-1", w.now));
         s = w.status("NAMES-1");
         ASSERT_TRUE(s.replay_kept && s.replay_note.empty());
         const ReplayStore& store = *w.mgr.replay_store();
         const StoredReplay f = load_stored(store, s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x0F);
-        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", "Bot (Medium)", "", ""}}));
-        for (const char* kept : {"Ann", "Bot (Medium)"}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Ann", bn("NAMES-1", 1, "Medium"), "", ""}}));
+        for (const std::string& kept : {std::string("Ann"), bn("NAMES-1", 1, "Medium")}) ASSERT_TRUE(bytes_contain(f.bytes, kept));
         for (const char* never : {"Player", "Bot (Hard)", "NAMES-1", "127.0.0.1"}) ASSERT_FALSE(bytes_contain(f.bytes, never));
-        const std::vector<std::string> shown = {"Green (Ann)", "Red (Bot (Medium))", "Blue", "Black"};
+        const std::vector<std::string> shown = {"Green (Ann)", "Red (" + bn("NAMES-1", 1, "Medium") + ")", "Blue", "Black"};
         ASSERT_EQ(store.list().at(0).players, shown);                                                            // the store's list
         for (const bool owner : {true, false}) {                                                               // the owner's list and the public one
             const ctl::HttpResponse r = owner ? replay_call(w.mgr, "GET", "/replays") : public_call(w.mgr, "GET", "/replays");
@@ -992,7 +992,7 @@ void run_replay_tests() {
         ASSERT_EQ(j.get("live").at(2).get("id").str(), "TINY-20261008-143209Z");
         ASSERT_TRUE(j.get("live").at(0).get("started").as_int_or(0) == kReplayT0 + 7 && j.get("live").at(1).get("started").as_int_or(0) == kReplayT0 && j.get("live").at(2).get("started").as_int_or(0) == kReplayT0);
         const ctl::JsonValue& players = j.get("live").at(0).get("players");
-        ASSERT_TRUE(players.size() == 3 && players.at(0).str() == "Green (Eve)" && players.at(1).str() == "Red" && players.at(2).str() == "Blue (Bot (Medium))");
+        ASSERT_TRUE(players.size() == 3 && players.at(0).str() == "Green (Eve)" && players.at(1).str() == "Red" && players.at(2).str() == "Blue (" + bn("ORD-B", 2, "Medium") + ")");
         // the strings are the ones of the replay list once the matches are kept
         for (const char* code : {"ORD-A", "ORD-B", "ORD-C"}) ASSERT_TRUE(w.mgr.close_room(code, w.now));
         const ReplayStore& store = *w.mgr.replay_store();
@@ -1153,7 +1153,7 @@ void run_replay_tests() {
         ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x0F && !f.rep.head.fog);
         ASSERT_TRUE(f.rep.head.mode == 1 && f.rep.head.sim_rules == replay::kSimRulesMode187 && replay::plays_here(f.rep.head));
         ASSERT_TRUE(f.rep.head.teams == sim::StartTeams({true, 0, 2}));                            // (the teams of the Start are in the head in this mode as in the original's)
-        ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == "Bot (Medium)" && f.rep.head.names[2] == "Bot (Medium)" && f.rep.head.names[3] == "Bot (Medium)");
+        ASSERT_TRUE(f.rep.head.names[0] == "Ann" && f.rep.head.names[1] == bn("RT-187", 1, "Medium") && f.rep.head.names[2] == bn("RT-187", 2, "Medium") && f.rep.head.names[3] == bn("RT-187", 3, "Medium"));
         std::string again;
         ASSERT_TRUE(replay::encode(f.rep, again) == f.bytes);                                      // (the reader gives back what the writer wrote: the mode and the teams with it)
         replay::Outcome played;

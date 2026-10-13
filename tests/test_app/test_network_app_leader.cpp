@@ -701,8 +701,8 @@ void run_leader_tests() {
             {
                 const server::RoomStatus s = server.status(code);
                 ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 1 && s.expected == 4);
-                ASSERT_TRUE(s.bots[0].seat == 3 && s.bots[0].level == "hard" && s.bots[0].name == "Bot (Hard)" && s.bots[0].fill);
-                ASSERT_TRUE(s.names[0].empty() && s.names[1] == "Gus" && s.names[2] == "Ann" && s.names[3] == "Bot (Hard)");
+                ASSERT_TRUE(s.bots[0].seat == 3 && s.bots[0].level == "hard" && s.bots[0].name == bn(code, 3, "Hard") && s.bots[0].fill);
+                ASSERT_TRUE(s.names[0].empty() && s.names[1] == "Gus" && s.names[2] == "Ann" && s.names[3] == bn(code, 3, "Hard"));
             }
             ASSERT_TRUE(leader.local_player_id() == 2 && guest.local_player_id() == 1);
             ASSERT_TRUE(leader.sim().roster_mask() == 0x0E && guest.sim().roster_mask() == 0x0E);
@@ -912,8 +912,8 @@ void run_leader_tests() {
             ASSERT_TRUE(hall.until([&]() { const server::RoomStatus s = server.status(code); return s.state != server::RoomState::Waiting && s.bots.size() == 1; }, 10000));
             {
                 const server::RoomStatus s = server.status(code);
-                ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "hard" && s.bots[0].name == "Bot (Hard)" && s.bots[0].fill);                 // the Hard bot plays Red, Gus Blue
-                ASSERT_TRUE(s.names[0] == "Lea" && s.names[1] == "Bot (Hard)" && s.names[2] == "Gus" && s.names[3].empty() && s.ignored_start_requests == 0);
+                ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].level == "hard" && s.bots[0].name == bn(code, 1, "Hard") && s.bots[0].fill);                 // the Hard bot plays Red, Gus Blue
+                ASSERT_TRUE(s.names[0] == "Lea" && s.names[1] == bn(code, 1, "Hard") && s.names[2] == "Gus" && s.names[3].empty() && s.ignored_start_requests == 0);
             }
         }
         {   // a request that the room does not answer (only this machine's clock runs): START is held for a second, not for ever

@@ -1,5 +1,7 @@
 #include "ants_server/room.hpp"
 
+#include "ants_ai/bot_names.hpp"
+
 #include "ants_net/clock.hpp"
 #include "ants_server/secret.hpp"
 
@@ -39,6 +41,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.room_teams = spec.teams;                                     // (protocol 15: the Room message names the room's own teams and rules to everybody)
     cfg.leader_starts = spec.leader_starts && spec.early_start;      // (the lead is what starts such a room: a room without a leader never would)
     cfg.load_timeout_ms = spec.load_ms;
+    cfg.bot_name_key = ai::bot_name_key(spec.code);                  // (protocol 20: the names of the room's bots come from its code, which a restart keeps; a lobby room shows a planned bot's name before START)
     cfg.lobby_room = spec.lobby;                                     // (protocol 16: the lobby checks that the room can be one, see HostLobby::Config)
     cfg.no_persons = spec.bots_only;                                 // (a match of computer players alone starts with nobody in the room)
     cfg.hold_ms = spec.hold_ms;
@@ -121,10 +124,13 @@ Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, 
     lobby_.set_mode(spec_.mode);
     lobby_.set_before_start([this](const net::StartMsg&, uint32_t now) { record_open(now); });      // the match is fixed (the start message, the keys): its record is made before the Start is sent to anybody
     for (const ai::BotSpec& bot : spec_.bots) {                  // the room's own bots sit down before anybody comes (the lobby refuses what the specification should not have asked: fog, a full room)
-        if (lobby_.add_bot(bot.seat, ai::bot_display_name(bot))) bot_specs_.push_back(bot);
+        if (lobby_.add_bot(bot.seat, bot_name_of(bot))) bot_specs_.push_back(bot);
     }
     std::sort(bot_specs_.begin(), bot_specs_.end(), [](const ai::BotSpec& a, const ai::BotSpec& b) { return a.seat < b.seat; });
 }
+
+// The name of a bot of this room: "Pip (bot, Hard)", the seat's name from the room's name key (a pure function of the room's code, so a restored room names its bots as before)
+std::string Room::bot_name_of(const ai::BotSpec& bot) const { return ai::bot_room_label(ai::bot_name_key(spec_.code), bot); }
 
 Room::~Room() {
     live_end(std::string());                                     // (the live board holds a pointer to the recorder, which goes with the room)
@@ -371,7 +377,7 @@ bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::p
     bool seated = true;
     for (const auto& bot_seat : fill_seats) {
         const ai::BotSpec bot{bot_seat.first, "standard", ai_level_of(bot_seat.second)};
-        if (!lobby_.add_bot(bot.seat, ai::bot_display_name(bot))) {
+        if (!lobby_.add_bot(bot.seat, bot_name_of(bot))) {
             seated = false;
             break;
         }
@@ -814,7 +820,7 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     // the bots: the specification's sat down when the room was made, the leader's fill sits down again now (the lobby refuses what the match could not have had)
     for (const ai::BotSpec& b : h.bots) {
         if ((h.fill_mask & (1u << b.seat)) == 0) continue;
-        if (!lobby_.add_bot(b.seat, ai::bot_display_name(b))) {
+        if (!lobby_.add_bot(b.seat, bot_name_of(b))) {
             why = "a bot of the record cannot sit down again";
             return ReplayBegin::Refused;
         }
@@ -1062,7 +1068,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         row.kind = b.kind;
         row.level = ai::level_name(b.level);
         row.style = b.kind == "standard" ? ai::style_name(b.style) : std::string();                // (only the standard bot has a style)
-        row.name = ai::bot_display_name(b);
+        row.name = bot_name_of(b);
         row.fill = b.seat < sim::MAX_PLAYERS && (fill_seats_ & (1u << b.seat)) != 0;
         s.bots.push_back(std::move(row));
     }

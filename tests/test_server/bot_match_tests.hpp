@@ -87,7 +87,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(w.status("BM-ROOM").state == RoomState::Waiting);
         ASSERT_TRUE(run_until(w, [&] { return w.status("BM-ROOM").state == RoomState::Running; }, 12000));
         RoomStatus s = w.status("BM-ROOM");
-        ASSERT_TRUE(s.bots_only && s.joined == 3 && s.bot_controller && s.bots.size() == 3 && s.names[0] == "Bot (Medium)" && s.names[1] == "Bot (Hard)");
+        ASSERT_TRUE(s.bots_only && s.joined == 3 && s.bot_controller && s.bots.size() == 3 && s.names[0] == bn("BM-ROOM", 0, "Medium") && s.names[1] == bn("BM-ROOM", 1, "Hard"));
         w.run(20000);                                                        // (nobody has ever been in the room: "everybody left" does not end it)
         s = w.status("BM-ROOM");
         ASSERT_TRUE(s.state == RoomState::Running);
@@ -100,7 +100,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(s.replay_kept && s.replay_note.empty() && ReplayStore::valid_file_name(s.replay_file));
         const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && f.rep.total_turns >= 600 && f.rep.head.roster == 0x07);
-        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{"Bot (Medium)", "Bot (Hard)", "Bot (Medium)", ""}}));
+        ASSERT_EQ(f.rep.head.names, (std::array<std::string, sim::MAX_PLAYERS>{{bn("BM-ROOM", 0, "Medium"), bn("BM-ROOM", 1, "Hard"), bn("BM-ROOM", 2, "Medium"), ""}}));
         ASSERT_FALSE(bytes_contain(f.bytes, "BM-ROOM"));
         replay::Outcome played;
         ASSERT_TRUE(plays_out(f.rep, played));

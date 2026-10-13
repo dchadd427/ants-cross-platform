@@ -1,6 +1,7 @@
 // The fixtures of the way-back test (test_rejoin.cpp holds main() and the cases): real NetGames over loopback sockets against a real RoomManager. Inline or in an anonymous namespace.
 #pragma once
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_ai/bot_names.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/tcp.hpp"
@@ -53,6 +54,11 @@ namespace fs = std::filesystem;
 
 // The first turn of a match is sealed this long after the match began (protocol 12: the "Get ready to play!" dialog of every machine)
 constexpr uint32_t kPre = net::kMatchStartDelayMs;
+
+// The name that the room with this code gives the bot of a seat (protocol 20): "Pip (bot, Hard)"
+inline std::string bn(const std::string& code, unsigned seat, const char* level) {
+    return ai::bot_label(ai::bot_seat_name(ai::bot_name_key(code), static_cast<uint8_t>(seat)), level);
+}
 
 inline int g_test_count = 0;
 inline int g_test_failures = 0;

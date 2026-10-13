@@ -117,7 +117,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('A is told of the new name', () => () => A.count('renamed') === 1 && A.of('renamed')[0].to === 'Beatrice' && names(A) === 'Beatrice|-|Ada|-' && B.name === 'Beatrice');
         check('(the event names the colour and both names)', JSON.stringify(A.of('renamed')[0]) === JSON.stringify({ type: 'renamed', seat: 0, from: 'Bea', to: 'Beatrice' }), JSON.stringify(A.of('renamed')));
         const renamed = A.count('renamed');
-        check('B asks for a name that looks like a bot\'s', B.rename('Bot (Hard)') === true);
+        check('the page itself does not ask for a name that looks like a bot\'s (protocol 20)', B.rename('Bot (Hard)') === false && B.rename('Pip (bot)') === false);
+        check('B sends the bytes of such a name by hand all the same (what no honest page does): the server must refuse it', B.send('rename', N.encodeName('Bot (Hard)')) === true && B.send('rename', N.encodeName('Pip (bot, Hard)')) === true);
         await sleep(500);
         check('(the room keeps Beatrice and says nothing)', names(A) === 'Beatrice|-|Ada|-' && A.count('renamed') === renamed && B.room.slots[0].name === 'Beatrice', names(A));
         // the leader takes Beatrice out

@@ -482,8 +482,11 @@ void run_start_menu_panels_tests() {
         // a name that Join would refuse is refused here with the same words, on the field, with the cue, and nothing is asked
         for (const auto& refused : std::vector<std::pair<std::string, std::string>>{{"", "Type your name first."},
                                                                                   {"   ", "Type your name first."},
-                                                                                  {"Bot (Hard)", "A name that starts with \"Bot (\" is for computer players. Please choose another name."},
-                                                                                  {" bot(x", "A name that starts with \"Bot (\" is for computer players. Please choose another name."}}) {
+                                                                                  {"Bot (Hard)", "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name."},
+                                                                                  {" bot(x", "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name."},
+                                                                                  {"Pip (bot)", "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name."},
+                                                                                  {"Pip (Bot, Hard)", "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name."},
+                                                                                  {"Ann ( bot , whatever )", "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players. Please choose another name."}}) {
             Rig b(0, "Player");
             b.to_panel(MenuId::Single);
             b.key(SDLK_UP);

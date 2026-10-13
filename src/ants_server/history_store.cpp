@@ -1,5 +1,7 @@
 #include "ants_server/history_store.hpp"
 
+#include "ants_ai/bot_names.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <ctime>
@@ -183,9 +185,15 @@ db::Error load_one(db::Database& d, const std::string& id, HistoryRecord& out, b
     return e;
 }
 
-// What a seat shows on the pages: "Bot (Level)", the name that was typed, or the colour
+// What a seat shows on the pages: "Pip (bot, Hard)" ("Bot (Level)" for a match stored before the names), the name that was typed, or the colour
 std::string shown_name(const HistorySeat& s) {
-    if (!s.bot.empty()) return "Bot (" + s.bot + ")";
+    if (!s.bot.empty()) {
+        if (s.name.empty()) return "Bot (" + s.bot + ")";                                    // (a match stored before the names, or a plain "Bot")
+        std::string tag = s.bot;
+        for (char& c : tag) c = c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+        const std::string label = ai::bot_label(s.name, tag);
+        return label.empty() ? "Bot (" + s.bot + ")" : label;                               // ("Pip (bot, Hard)")
+    }
     if (!s.name.empty()) return s.name;
     return kColours[s.seat < sim::MAX_PLAYERS ? s.seat : 0];
 }
