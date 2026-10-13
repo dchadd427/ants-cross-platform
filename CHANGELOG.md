@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
+
+**For players:**
+- In the front page's room, the host's card for a computer player now shows the bot's name (for example `Pip (bot, Hard)`) in small text under the level switch, and the line under START tells the players by name: "You, Sam, Pip (bot, Hard) and Wren (bot, Medium) play on Treasure." Other players' cards already showed the names. A room whose bots have no name yet (a game on the local network, a local game) looks as before.
+
+**Rules / network:** none. Only the page's text changed; network protocol 20 is as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f50b7a1b...fe3cd495)
+
 ## v0.12.37 - 2026-10-13 - Computer players can plan around fire walls and bombs (off)
 
 **For players:**
