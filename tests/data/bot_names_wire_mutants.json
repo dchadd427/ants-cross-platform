@@ -1,0 +1,101 @@
+{
+ "note": "Mutants of the wiring of the bots' names (network protocol 20) for tools/mutate.py: python3 tools/mutate.py tests/data/bot_names_wire_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught (the commands have their own timeouts). (The mutant that drops the key-0 line of bot_room_name is equivalent: bot_label of an empty name is the legacy label anyway.)",
+ "mutants": [
+  {
+   "id": "lobby_shows_no_planned_name",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (shown.slots[s].state == SlotState::Empty) shown.slots[s].name",
+   "new": "if (false) shown.slots[s].name",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_names_every_seat",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (shown.slots[s].state == SlotState::Empty) shown.slots[s].name",
+   "new": "shown.slots[s].name",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_ignores_the_key",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "cfg_.lobby_room && cfg_.bot_name_key != 0",
+   "new": "cfg_.lobby_room && cfg_.bot_name_key == 0",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "person_may_be_called_like_a_bot",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "bool bot_like(const std::string& name) { return ai::is_reserved_bot_name(name); }",
+   "new": "bool bot_like(const std::string& name) { return name.rfind(\"Bot (\", 0) == 0; }",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "bot_name_wrapped_again",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (bot_like(name)) return name;\n    return printable(\"Bot (\"",
+   "new": "    return printable(\"Bot (\"",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "decoder_takes_any_empty_name",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if (plan_fill_level(m.plan[seat]) == FillLevel::None || !ai::parse_bot_label(slot.name, label)) return false;",
+   "new": "(void)label;",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "decoder_takes_any_label_on_empty_seat",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if (plan_fill_level(m.plan[seat]) == FillLevel::None || !ai::parse_bot_label(slot.name, label)) return false;",
+   "new": "if (!ai::parse_bot_label(slot.name, label)) return false;",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "name_msg_takes_reserved",
+   "file": "src/ants_net/protocol.cpp",
+   "old": " || ai::is_reserved_bot_name(m.name)) return false;       // exactly",
+   "new": ") return false;       // exactly",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "guard_counts_empty_names",
+   "file": "src/ants_net/protocol.cpp",
+   "old": "if (slot.state != SlotState::Empty) {                                           // (protocol 20",
+   "new": "if (true) {                                           // (protocol 20",
+   "build": "test_lobby",
+   "test": "timeout 120 env ANTS_TEST_FILTER=N4.40 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "room_has_no_key",
+   "file": "src/ants_server/room.cpp",
+   "old": "cfg.bot_name_key = ai::bot_name_key(spec.code);",
+   "new": "cfg.bot_name_key = 0;",
+   "build": "test_server",
+   "test": "timeout 300 env ANTS_TEST_FILTER=S3.135 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "room_seats_legacy_names",
+   "file": "src/ants_server/room.cpp",
+   "old": "return ai::bot_room_label(ai::bot_name_key(spec_.code), bot);",
+   "new": "return ai::bot_display_name(bot);",
+   "build": "test_server",
+   "test": "timeout 300 env ANTS_TEST_FILTER=S3.135 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "history_loses_the_bot_name",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "            s.name = bot_name;",
+   "new": "            s.name.clear();",
+   "build": "test_history_rooms",
+   "test": "timeout 120 ./build/tests/test_server/test_history_rooms"
+  }
+ ]
+}
