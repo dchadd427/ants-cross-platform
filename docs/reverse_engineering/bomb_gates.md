@@ -34,17 +34,28 @@ Only a Bomber does it (the special order on a bomb tile); a Worker, Thief or Com
 
 A power-up is taken only when a move ends on its tile. Walking over a map-file power-up (solid bit clear, as on POPcOrN) does not take it; a flight that lands on it does not take it; a move order to the ant's own tile afterwards does.
 
+## Gate analysis (ants_ai)
+
+`GateInfo` (`include/ants_ai/gate_info.hpp`, `src/ants_ai/gate_info.cpp`) turns the facts above into an analysis of a map for one team. It is built once from `MapInfo` and the grid, like `IslandInfo`, changes no behaviour (no task uses it yet) and reads the map at the start; every special tile of a hill counts as live. Tests: `tests/test_ai/test_ai_gates.cpp` (AI26): the throw rule against the engine tile by tile on POPcOrN, hand-made worlds, POPcOrN, Bombz Away, and every map of the library.
+
+- **Safe components.** The walker components with fire walls AND bombs closed (a bomb tile is walkable for the path finder, but whoever steps on it is thrown). `home()` is the component the hill's ants leave into (-1 on Bombz Away, where a bomb lies on every tile in front of every ramp).
+- **Per target** (every pile and power-up): `gate` is `None` (reached with both closed), `Fire` (only a Fire ant's walk through fire cells reaches it), `Bombs` (only a walk over defused bombs), `Either`, `Mixed` (a walk exists only through fire and bombs together) or `Sealed` (no walk). `fire_cells` and `defuse_bombs` are the fewest fire cells / bombs on such a walk (-1: none). `passes` says which means get past: `kPassFireAnt` (a Fire ant's walk), `kPassDefuse` (a Bomber defuses the bombs of the walk), `kPassHop` (a hop chain lands in reach).
+- **Hops.** `hops()` are the Bomber hops from the home component that end on ground of another component: the bomb tile T is free bomb ground with a cardinal neighbour in the home component (where the Bomber works from), the ant steps onto T from a neighbour P of the home component in the facing P -> T, and `GateInfo::simulate` plays the rule: opposite the facing, 4 tiles, clockwise retry, a landing on a map bomb throws again in the facing the flight left, 2 hp and 20 percent dud per bomb (`fly_percent`, `hp`). A chain that ends in water, on a fire wall or stuck is not a way over and is not listed. The best hop of a target has the fewest bombs, then the best chance.
+- **Numbers.** POPcOrN: 62 fire cells in two walls of 31, 249 bombs; per team 11 power-ups are free (the home half), 11 are `Mixed` (the field, behind fire and bombs), 10 are `Sealed`, and the pile (in the lake) is `Sealed`; 42 hops from each north hill, 44 and 45 from the south hills, 17 of the 32 power-ups are in reach of a hop. Bombz Away: 895 bombs, the pile is `Bombs` (a tunnel of defused bombs, `passes == kPassDefuse`) for every team.
+
+The 2-hop chains from the north half that end ON a power-up (the tables below list every free tile: the test clears the start ants first, since a tile with an ant takes no bomb): T(3,7) f0, T(8,7) f7, T(9,7) f1, T(21,7) f5 / f7, T(22,7) f1, and T(27,7) and T(29,7) in the facings 0, 5, 6, 7.
+
 ## POPcOrN (Community-Maps/POPcOrN.lvl)
 
 Rows 9 and 21 are fire walls across the whole map; rows 10 .. 20 are a field of map bombs (owner 255) with a lake in the middle (row 14 is mostly water: a landing there drowns the ant); the home halves are rows 0 .. 8 (north: teams 0 and 2) and 22 .. 30 (south). A bomb tile in row 5 or lower throws a north-facing ant onto the wall (row 9, 4 rows away), rows 6 .. 8 over it. The real play pinned by the test: the Bomber plants at (3,7) from the lane (3,8), steps north onto it and flies (3,7) to (3,11) (map bomb) to (3,15) (power-up), 4 hp lost; 28 of 40 seeds fly both hops, the rest stop at the first dud.
 
 Reading the tables: `T(x,y)` is the bomb tile, `fN` the facing of the ant on it (`*`: the ant can walk onto T in that facing, the tile behind it is open ground), then the landing of each hop (`.` plain, `B` map bomb, which sets off again, `P` power-up, `~` water, `F` fire wall). Only facings whose first landing reaches the wall (row 9 or beyond; south half: row 21 or beyond) are listed. Each bomb costs 2 hp: a chain of n hops costs 2n (a worker has 10).
 
-The 2-hop chains that end on a power-up (north half): T(3,7) f0, and T(27,7) and T(29,7) in the facings 0, 5, 6, 7 (the last three by the rotation, since the straight landing east or west is outside the map).
+The 2-hop chains that end on a power-up: see the end of the gate analysis above (T(27,7) and T(29,7) in the facings 5, 6, 7 get there by the rotation, since the straight landing east or west is outside the map).
 
 ### North half
 
-north totals: 198 hops over the wall, 56 onto the wall, 174 over the wall with a chain of 2 or more hops, 19 chains end on a power-up (9 of them after exactly 2 hops)
+north totals: 222 hops over the wall, 56 onto the wall, 196 over the wall with a chain of 2 or more hops, 26 chains end on a power-up (16 of them after exactly 2 hops)
 
 ```text
 T(0,5): f0* (0,9)F | f6* (4,9)F | f7* (4,9)F
@@ -85,6 +96,10 @@ T(0,7): f0* (0,11)B (0,15)~ | f5* (4,11)B (8,15)B (12,19)B (16,23)P | f6* (4,11)
 T(1,7): f0* (1,11). | f5* (5,11)B (9,15)B (13,19)B (9,23). | f6* (5,11)B (9,15)B (13,19)B (9,23). | f7* (5,11)B (9,15)B (13,19)B (9,23).
 T(2,7): f0* (2,11)B (2,15)B (2,19)B (2,23). | f5* (6,11)B (10,15)B (14,19)B (14,23)P | f6* (6,11)B (10,15)B (14,19)B (14,23)P | f7* (6,11)B (10,15)B (14,19)B (14,23)P
 T(3,7): f0* (3,11)B (3,15)P | f6 (7,11)B (11,15)B (15,19)B (15,23)P | f7* (7,11)B (11,15)B (15,19)B (15,23)P
+T(8,7): f0* (8,11)B (8,15)B (8,19)B (8,23). | f1* (4,11)B (0,15)~ | f6* (12,11)B (16,15)P | f7* (12,11)B (16,15)P
+T(9,7): f0* (9,11)B (9,15)B (9,19)B (9,23). | f1* (5,11)B (1,15)P | f5 (13,11)B (17,15)~ | f6 (13,11)B (17,15)~ | f7* (13,11)B (17,15)~
+T(21,7): f0* (21,11)B (21,15)B (21,19)B (21,23). | f1* (17,11)B (13,15)~ | f5* (25,11)B (29,15)P | f6* (25,11)B (29,15)P | f7* (25,11)B (29,15)P
+T(22,7): f0* (22,11)B (22,15)B (22,19)B (22,23). | f1* (18,11)B (14,15)P | f6 (26,11)B (30,15)~ | f7* (26,11)B (30,15)~
 T(27,7): f0* (27,11)B (27,15)P | f1* (23,11)B (19,15)B (15,19)B (11,19)B (7,19)B (3,19)B (3,15)P | f5* (27,11)B (27,15)P | f6* (27,11)B (27,15)P | f7* (27,11)B (27,15)P
 T(28,7): f0* (28,11)B (28,15)B (28,19)B (28,23). | f1* (24,11)B (20,15)B (16,19)B (12,19)B (8,19)B (4,19)B (0,19)B (0,15)~ | f5* (28,11)B (28,15)B (28,19)B (28,23). | f6* (28,11)B (28,15)B (28,19)B (28,23). | f7* (28,11)B (28,15)B (28,19)B (28,23).
 T(29,7): f0* (29,11)B (29,15)P | f1* (25,11)B (21,15)B (17,19)B (13,19)B (9,19)B (5,19)B (1,19). | f5* (29,11)B (29,15)P | f6* (29,11)B (29,15)P | f7* (29,11)B (29,15)P
@@ -98,6 +113,7 @@ T(5,8): f0 (5,12)B (5,16)~ | f1 (1,12)B (1,8). | f7 (9,12)B (13,16)~
 T(6,8): f0 (6,12)B (6,16)~ | f1 (2,12)B (2,8). | f7 (10,12)B (14,16)B (18,20)B (22,24).
 T(7,8): f0 (7,12)B (7,16)B (7,20)B (3,24). | f1 (3,12)B (3,8). | f7 (11,12)B (15,16)B (19,20)B (19,24).
 T(8,8): f0 (8,12). | f1 (4,12)B (0,16)~ | f7 (12,12)B (16,16)B (20,20)B (16,24).
+T(9,8): f0 (9,12)B (9,16)~ | f1 (5,12)B (1,16)~ | f7 (13,12)~
 T(10,8): f0 (10,12)B (10,16)~ | f1 (6,12)B (2,16)~ | f7 (14,12)~
 T(11,8): f0 (11,12)B (11,16)~ | f1 (7,12)B (3,16)~ | f7 (15,12)~
 T(12,8): f0 (12,12)B (12,16)~ | f1 (8,12). | f7 (16,12)~
@@ -109,6 +125,7 @@ T(17,8): f0 (17,12)~ | f1 (13,12)~ | f7 (21,12)B (25,16)~
 T(18,8): f0 (18,12)B (18,16)~ | f1 (14,12)~ | f7 (22,12)B (26,16)~
 T(19,8): f0 (19,12)B (19,16)~ | f1 (15,12)~ | f7 (23,12)B (27,16)~
 T(20,8): f0 (20,12)B (20,16)~ | f1 (16,12)~ | f7 (24,12).
+T(21,8): f0 (21,12)B (21,16)~ | f1 (17,12)~ | f7 (25,12)B (29,16)~
 T(22,8): f0 (22,12)B (22,16)~ | f1 (18,12)B (14,16)B (10,20)B (6,20)B (2,20)B (2,16)~ | f7 (26,12)B (30,16)~
 T(23,8): f0 (23,12)B (23,16)B (23,20)B (19,24). | f1 (19,12)B (15,16)B (11,20)B (7,20)B (3,20)B (3,16)~ | f7 (27,12)B (27,16)~
 T(24,8): f0 (24,12). | f1 (20,12)B (16,16)B (12,20)B (8,24). | f7 (28,12)B (28,16)~
@@ -122,7 +139,7 @@ T(30,8): f0 (30,12)B (30,16)~ | f1 (26,12)B (22,16)~ | f5 (30,12)B (30,16)~ | f6
 
 ### South half
 
-south totals: 196 hops over the wall, 56 onto the wall, 165 over the wall with a chain of 2 or more hops, 16 chains end on a power-up (7 of them after exactly 2 hops)
+south totals: 216 hops over the wall, 56 onto the wall, 183 over the wall with a chain of 2 or more hops, 21 chains end on a power-up (12 of them after exactly 2 hops)
 
 ```text
 T(0,22): f1 (0,18)B (0,14)~ | f2 (0,18)B (0,14)~ | f3 (0,18)B (0,14)~ | f4 (0,18)B (0,14)~ | f5 (4,18)B (8,14)~
@@ -131,6 +148,7 @@ T(2,22): f1* (2,18)B (2,14)~ | f2* (2,18)B (2,14)~ | f3 (2,18)B (2,14)~ | f4 (2,
 T(3,22): f1* (3,18)B (3,14)~ | f2* (3,18)B (3,14)~ | f3 (3,18)B (3,14)~ | f4 (3,18)B (3,14)~ | f5 (7,18)B (11,14)~
 T(7,22): f3 (3,18)B (3,14)~ | f4 (7,18)B (7,14)~ | f5 (11,18)B (15,14)B (19,10)B (23,10)B (27,10)B (27,14)~
 T(8,22): f1 (4,18)B (0,14)~ | f2* (4,18)B (0,14)~ | f3 (4,18)B (0,14)~ | f4 (8,18). | f5 (12,18)B (16,14)B (20,10)B (24,10)B (28,10)B (28,14)~
+T(9,22): f1* (5,18)B (1,14)~ | f2* (5,18)B (1,14)~ | f3 (5,18)B (1,14)~ | f4 (9,18)B (9,14)~ | f5 (13,18)~
 T(10,22): f0 (6,18). | f1* (6,18). | f2* (6,18). | f3 (6,18). | f4 (10,18)B (10,14)~ | f5 (14,18)~
 T(11,22): f3 (7,18)B (3,14)~ | f4 (11,18)B (11,14)~ | f5 (15,18)~
 T(12,22): f3 (8,18). | f4 (12,18)B (12,14)B (12,10)B (12,6). | f5 (16,18)~
@@ -142,6 +160,7 @@ T(17,22): f3 (13,18)~ | f4 (17,18)~ | f5 (21,18)B (25,14)~
 T(18,22): f3 (14,18)~ | f4 (18,18)B (18,14)B (18,10)B (18,6). | f5 (22,18)B (26,14)~
 T(19,22): f3 (15,18)~ | f4 (19,18)B (19,14)~ | f5 (23,18)B (27,14)~
 T(20,22): f3 (16,18)~ | f4 (20,18)B (20,14)~ | f5 (24,18).
+T(21,22): f3 (17,18)~ | f4 (21,18)B (21,14)~ | f5 (25,18)B (29,14)~
 T(22,22): f3 (18,18)B (14,14)B (10,10)B (14,6). | f4 (22,18)B (22,14)~ | f5 (26,18)B (30,14)~
 T(26,22): f3 (22,18)B (18,14)B (14,10)B (14,6). | f4 (26,18)B (26,14)~ | f5 (30,18)B (30,22).
 T(27,22): f1 (23,18)B (19,14)~ | f2* (23,18)B (19,14)~ | f3 (23,18)B (19,14)~ | f4 (27,18)B (27,14)~
@@ -152,7 +171,10 @@ T(0,23): f1 (0,19)B (0,15)~ | f2 (0,19)B (0,15)~ | f3 (0,19)B (0,15)~ | f4* (0,1
 T(1,23): f1* (1,19). | f2* (1,19). | f3* (1,19). | f4* (1,19). | f5* (5,19)B (9,15)B (13,11)B (17,11)B (21,11)B (25,11)B (29,11)B (29,15)P
 T(2,23): f1* (2,19)B (2,15)B (2,11)B (2,7). | f2* (2,19)B (2,15)B (2,11)B (2,7). | f3* (2,19)B (2,15)B (2,11)B (2,7). | f4* (2,19)B (2,15)B (2,11)B (2,7). | f5* (6,19)B (10,15)B (14,11)B (18,11)B (22,11)B (26,11)B (30,11)B (30,15)~
 T(3,23): f1* (3,19)B (3,15)P | f2* (3,19)B (3,15)P | f3* (3,19)B (3,15)P | f4* (3,19)B (3,15)P | f5* (7,19)B (11,15)B (15,11)B (19,11)B (23,11)B (27,11)B (27,15)P
+T(8,23): f2 (4,19)B (0,15)~ | f3* (4,19)B (0,15)~ | f4* (8,19)B (8,15)B (8,11)B (8,7). | f5* (12,19)B (16,15)P
+T(9,23): f2* (5,19)B (1,15)P | f3* (5,19)B (1,15)P | f4* (9,19)B (9,15)B (9,11)B (9,7). | f5* (13,19)B (17,15)~
 T(21,23): f1 (17,19)B (13,15)~ | f2 (17,19)B (13,15)~ | f3* (17,19)B (13,15)~ | f4* (21,19)B (21,15)B (21,11)B (21,7). | f5* (25,19)B (29,15)P
+T(22,23): f2* (18,19)B (14,15)P | f3* (18,19)B (14,15)P | f4* (22,19)B (22,15)B (22,11)B (22,7). | f5* (26,19)B (30,15)~
 T(27,23): f2 (23,19)B (19,15)B (15,11)B (15,7)P | f3* (23,19)B (19,15)B (15,11)B (15,7)P | f4* (27,19)B (27,15)P
 T(28,23): f2* (24,19)B (20,15)B (16,11)B (16,7)P | f3* (24,19)B (20,15)B (16,11)B (16,7)P | f4* (28,19)B (28,15)B (28,11)B (28,7).
 T(29,23): f2* (25,19)B (21,15)B (17,11)B (21,7). | f3* (25,19)B (21,15)B (17,11)B (21,7). | f4* (29,19)B (29,15)P

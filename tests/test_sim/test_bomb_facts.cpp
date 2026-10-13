@@ -600,6 +600,11 @@ int main() {
 
     run_case("BG6.1 POPcOrN: Every Hop From A Bomb Tile Of A Home Half Over (Or Onto) Its Fire Wall, Per Facing Of The Ant, With The Chain After It (The Table Is Printed Below); The 2-Hop Chains That End On A Power-Up", [&] {
         popsim.init(pop, 7, 0x0F);
+        {   // (the start ants stand on tiles near the hills, and a tile with an ant takes no bomb: the table is the empty map's)
+            std::vector<uint32_t> ids;
+            for (const AntSnapshot& a : popsim.get_world_state().ants) ids.push_back(a.id);
+            for (const uint32_t id : ids) popsim.kill_unit(id);
+        }
         CHECK(popsim.grid().width() == 31 && popsim.grid().height() == 31);
         for (int x = 0; x < 31; ++x) {
             CHECK(popsim.grid().get_cell(static_cast<uint32_t>(x), 9).has_fire());      // the two fire walls: the full rows 9 and 21
@@ -649,7 +654,7 @@ int main() {
             CHECK(over > 0 && onto > 0 && longer > 0 && pu_end > 0 && pu_two > 0);
         }
         std::cout << "    table hash: " << table_hash << "\n    ... " << std::flush;
-        CHECK(table_hash == 17121071624900940814ull);
+        CHECK(table_hash == 9950865441434428839ull);
         // the facts that the table rests on, pinned: row 5 reaches the wall itself, row 6 and below fly over it; a bomb tile in row 8 can throw a facing-north ant 4 tiles south to row 12
         bool row5_onto = false, row6_over = false;
         for (const Hop& h : north) {
@@ -658,8 +663,8 @@ int main() {
         }
         CHECK(row5_onto && row6_over);
         const std::vector<std::string> want = {
-            "T(3,7) f0* (3,11)B (3,15)P",
-            "T(27,7) f0* (27,11)B (27,15)P", "T(27,7) f5* (27,11)B (27,15)P", "T(27,7) f6* (27,11)B (27,15)P", "T(27,7) f7* (27,11)B (27,15)P",
+            "T(3,7) f0* (3,11)B (3,15)P",   "T(8,7) f6* (12,11)B (16,15)P",  "T(8,7) f7* (12,11)B (16,15)P", "T(9,7) f1* (5,11)B (1,15)P",   "T(21,7) f5* (25,11)B (29,15)P", "T(21,7) f6* (25,11)B (29,15)P",
+            "T(21,7) f7* (25,11)B (29,15)P", "T(22,7) f1* (18,11)B (14,15)P", "T(27,7) f0* (27,11)B (27,15)P", "T(27,7) f5* (27,11)B (27,15)P", "T(27,7) f6* (27,11)B (27,15)P", "T(27,7) f7* (27,11)B (27,15)P",
             "T(29,7) f0* (29,11)B (29,15)P", "T(29,7) f5* (29,11)B (29,15)P", "T(29,7) f6* (29,11)B (29,15)P", "T(29,7) f7* (29,11)B (29,15)P",
         };
         CHECK(two_hop_power_ups == want);
