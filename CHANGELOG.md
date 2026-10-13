@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
+
+**For players:**
+- Nothing changes on screen or in play. The computer players' map analysis now also finds what stands between a hill and its food and power-ups when fire walls or bombs are in the way (`POPcOrN`, `Bombz Away`), and which ants get past: a Fire ant, a Bomber that defuses, or a Bomber that bombs itself over a wall. No computer player uses it yet ([the tables](docs/reverse_engineering/bomb_gates.md)).
+
+**Rules / network:** none. No rule, no hash and no protocol number changed.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e9d659d...6a085827)
+
 ## v0.12.33 - 2026-10-13 - Tests for the bomb throw, knockback, fire walls and defuse
 
 **For players:**
@@ -494,19 +503,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md)
 
-## v0.1.3 - 2026-10-03 - Deploys wait for an idle server; faster checks
+## Older versions (v0.1.3 and before)
 
-**For players:**
-- No change in the game itself. For whoever runs a server: the game server answers `GET /busy` with the number of matches that are loading or running and the people in rooms (two counts, no names, no codes), and the site's proxy routes `/busy` to it, so that an update can wait for a moment when nobody plays.
-- Behind the scenes: GitHub can now deploy the site itself after every test has passed, and it waits for an idle server first (up to three hours); the site owner switches this on with one secret (docs/WORKFLOW.md). A staging copy of the site can run next to it (`docker-compose.staging.yml`, its pages say "staging"). The tests run in parallel (the full run in about 2.5 minutes instead of 6 to 8), the Windows builds use a compiler cache, and a release is one command (`tools/release.py`).
-
-**Rules / network:** None: the rules and network protocol 11 are unchanged.
-
-**Fixes:**
-- CI's script and python steps report every failure instead of stopping at the first.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b8d2603...e40591f), [workflow](docs/WORKFLOW.md)
-
-## Older versions (v0.1.2 and before)
-
-Every release before v0.1.3, and the long notes of v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.2.0, and the long notes of v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

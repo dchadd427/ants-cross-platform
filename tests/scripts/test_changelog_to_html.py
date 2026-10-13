@@ -356,7 +356,8 @@ class RealFile(unittest.TestCase):
         oldest = re.findall(r"^## v(\d+\.\d+\.\d+)", self.md, re.M)[-1]
         major, minor, number = (int(n) for n in oldest.split("."))
         first = "v" + oldest
-        before = "v0.0.99" if (major, minor, number) == (0, 1, 0) else "v%d.%d.%d" % (major, minor, number - 1)         # (v0.1.0 followed v0.0.99)
+        last_of_the_line = {(0, 1, 0): "v0.0.99", (0, 2, 0): "v0.1.3"}                                                  # (v0.1.0 followed v0.0.99, v0.2.0 followed v0.1.3)
+        before = last_of_the_line.get((major, minor, number), "v%d.%d.%d" % (major, minor, number - 1))
         self.assertIn("## Older versions (%s and before)" % before, self.md)
         self.assertIn("Every release before " + first + ",", self.md)
         for path in ("README.md", os.path.join("docs", "WORKFLOW.md")):
