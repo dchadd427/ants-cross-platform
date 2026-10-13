@@ -34,6 +34,7 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/gate_task.hpp"
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_tasks.hpp"
@@ -75,7 +76,8 @@ private:
           sabotage_(kSabotage, tactics_),
           island_(kIslands, tactics_, island_params(plan)),
           expedition_(kExpedition, tactics_, expedition_params(plan)),
-          ferry_(kFerry, ferry_params(plan)) {
+          ferry_(kFerry, ferry_params(plan)),
+          gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }
@@ -109,6 +111,9 @@ public:
     /// The ledger for a lab that puts an ant in the hands of another task (AI23.31)
     AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
+    const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
+    /// The gate goal for a lab that changes its parameters or cancels it (AI27)
+    GateGoalTask& gate_goals_for_labs() noexcept { return gate_goals_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }
@@ -147,6 +152,7 @@ public:
     static constexpr TaskId kFerry = 16;
     static constexpr TaskId kMines = 17;
     static constexpr TaskId kRush = 18;
+    static constexpr TaskId kGateGoals = 19;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -189,6 +195,15 @@ private:
                 p.max_bridges = 4;
                 break;
         }
+        return p;
+    }
+    static GateGoalTask::Params gate_goal_params(const LevelPlan& plan) {
+        GateGoalTask::Params p;
+        p.step_ticks = plan.gate_step_ticks;
+        p.attempt_ticks = plan.gate_attempt_ticks;
+        p.retries = plan.gate_retries;
+        p.hop_bombs = plan.gate_hop_bombs;
+        p.min_ticks_left = plan.gate_min_ticks_left;
         return p;
     }
     static ExpeditionTask::Params expedition_params(const LevelPlan& plan) {
@@ -263,6 +278,7 @@ private:
     IslandTask island_;
     ExpeditionTask expedition_;
     FerryTask ferry_;
+    GateGoalTask gate_goals_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

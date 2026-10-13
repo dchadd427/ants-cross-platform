@@ -241,6 +241,14 @@ struct LevelPlan {
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
+    // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where fire walls or bombs wall the food off (POPcOrN, Bombz Away) the bot gets the right ant first (a Fire ant to put a wall out, a Bomber
+    // to bomb itself over it) and does it. Hard only, and OFF in every plan (`--tune ggoal=1` switches it on at Hard); the times are the owner's numbers (ticks of 50 ms)
+    bool gate_goals{false};
+    uint32_t gate_step_ticks{1800};      // a step (fetching the ant, working the gate) that has made no progress for 90 s is given up, and with it the attempt
+    uint32_t gate_attempt_ticks{4800};   // an attempt (one goal from the first look to the end) that is not done after 4 minutes is given up
+    uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates
+    uint32_t gate_hop_bombs{3};          // the most bombs of a hop chain that the bot plans (each costs 2 hit points)
+    uint32_t gate_min_ticks_left{2400};  // no attempt starts with less than this left on the clock
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
     bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
     bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes

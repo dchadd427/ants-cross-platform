@@ -40,6 +40,7 @@ void run_merge_tests() {
             ASSERT_EQ(rank(B::kStrike), 4u);
             ASSERT_EQ(rank(B::kHarass), 4u);
             ASSERT_EQ(rank(B::kFight), 5u);
+            ASSERT_EQ(rank(B::kGateGoals), 6u);                                  // the gate goal (off in every plan): above the fights, since it exists only while the bot banks nothing
         }
     } TEST_END();
 

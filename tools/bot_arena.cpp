@@ -778,12 +778,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (v == 0) return true;
         p.race = false;
         p.health_aware = false;
-        p.hunt = false;
-        p.skirmish = false;
-        p.sabotage_safe = false;
-        p.fire_defence = false;
-        p.catchup = false;
-        p.endgame = false;
+        p.hunt = p.skirmish = p.sabotage_safe = p.fire_defence = p.catchup = p.endgame = false;
         return true;
     }
     if (key == "old") {                                                               // the conflict tactics as they were shipped before the win-rate measurements: all off, one Thief
@@ -799,11 +794,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     }
     if (key == "allon") {                                                             // ALL the conflict tactics on (the mirror of the conflict-rich tournaments): the strict contest order, strikes, hatching for fights, wipe-out focus, the help of the ally, two Thieves
         if (v == 0) return true;
-        p.contest_aware = true;
-        p.strikes = true;
-        p.hatches = true;
-        p.wipe_focus = true;
-        p.ally_help = true;
+        p.contest_aware = p.strikes = p.hatches = p.wipe_focus = p.ally_help = true;
         if (p.takes_thief && p.max_thief < 2) p.max_thief = 2;
         return true;
     }
@@ -816,6 +807,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
+    if (key == "ggoal") return flag(p.gate_goals);                                    // the gate goals (fire walls and bombs that wall the food off; Hard plays them only: docs/reverse_engineering/bomb_gates.md); off in every plan
+    if (key == "gstep") { p.gate_step_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "gattempt") { p.gate_attempt_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "gretries") { p.gate_retries = static_cast<uint32_t>(v); return true; }
+    if (key == "ghop") { p.gate_hop_bombs = static_cast<uint32_t>(v); return true; }
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
     err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena.cpp)";
     return false;
@@ -2504,6 +2500,9 @@ int selftest() {
         t.check(cg.island_timed_row && !ai::plan_for(ai::Level::Medium).island_timed_row && !ai::plan_for(ai::Level::Easy).island_timed_row && apply_tune(cg, "itimed", 0, tune_err) && !cg.island_timed_row &&
                     apply_tune(cg, "itimed", 1, tune_err) && cg.island_timed_row,
                 "the key itimed switches the timed clicks through the hats of the rows of ISLANDS (on at Hard only)");
+        t.check(!cg.gate_goals && !ai::plan_for(ai::Level::Hard).gate_goals && !ai::plan_for(ai::Level::Medium).gate_goals && apply_tune(cg, "ggoal", 1, tune_err) && cg.gate_goals && apply_tune(cg, "ggoal", 0, tune_err) && !cg.gate_goals &&
+                    cg.gate_step_ticks == 1800u && cg.gate_attempt_ticks == 4800u && cg.gate_retries == 2u && apply_tune(cg, "gstep", 900, tune_err) && cg.gate_step_ticks == 900u && apply_tune(cg, "gretries", 1, tune_err) && cg.gate_retries == 1u,
+                "the keys ggoal, gstep, gattempt, gretries and ghop tune the gate goals (off in every plan, 90 s a step, 4 minutes an attempt, 2 retries)");
         ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
         const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
             const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};
