@@ -101,7 +101,7 @@
     .slot .txt { min-width: 0; display: grid; gap: 1px; align-content: start; }
     .cname { font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
     .pname { font-size: 24px; line-height: 1.15; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; min-height: 52px; overflow-wrap: anywhere; }       /* as tall as a drop-down, so that the rows of the colours line up */
-    .slot.k-open .pname, .slot.k-nobody .pname, .slot.k-bot .pname { color: #a8c2b8; }
+    .slot.k-open .pname, .slot.k-nobody .pname, .slot.k-bot .pname { color: #a8c2b8; } .botname { display: block; font-size: 15px; line-height: 1.2; color: #a8c2b8; overflow-wrap: anywhere; }
     .you { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; padding: 0 6px; line-height: 1.5; }
     .pstat { font-size: 14px; color: var(--muted); min-height: 20px; }
     /* START has been pressed: each player's line says whether their game is open yet */
@@ -781,7 +781,7 @@
                     option.selected = o[0] === card.mode;
                     select.appendChild(option);
                 });
-                txt.appendChild(select);
+                txt.appendChild(select); if (card.who.length) txt.appendChild(el('span', 'botname', card.who[0].text));      // (the bot's name, small, under the level switch)
             } else {
                 var who = el('span', 'pname');
                 card.who.forEach(function (w) { who.appendChild(el('span', w.cls, w.text)); });
