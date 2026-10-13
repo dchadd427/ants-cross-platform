@@ -4,7 +4,8 @@
 //   AI28.1   a band of neutral bombs across the way to the food: the flag on defuses a path through it, loses no ant and banks; every bomb off the path is still there
 //   AI28.2   Bombz Away itself: a bomb on every tile and every start ant on one; after the opening no Bomber steps on a bomb, and another team's corner is never touched
 //   AI28.3   the flag off, the routing switched off, a Medium bot and a map without bombs: no Bomber held, no pile closed, no order
-//   AI28.4   a Bomber that cannot get at the bombs gives up after 90 s and the pile is open again
+//   AI28.4   a Bomber that cannot get at the bombs gives up after 90 s and the pile is open again, the Bomber given back
+//   AI28.5   Bombz Away, each team alone: the way in is cleared (the tunnel of 13, 8, 12 and 9 bombs at least, the base leg and the pile's neighbours too), the Bombers are given back, and few bombs are gone
 #include <map>
 #include <string>
 
@@ -67,6 +68,7 @@ void run_route_tests() {
         rig.run(6000);
         ASSERT_TRUE(bot.route().defuses() >= 3u);
         ASSERT_TRUE(bot.route().closed_piles().empty());
+        ASSERT_EQ(bot.route().bombers(), 0u);                                            // the way is clear: the Bomber is the economy's again
         ASSERT_TRUE(f.sim.get_player_score(0) > 0);
         ASSERT_TRUE(f.bombs() > f.placed / 2);                                           // a path, not the band
         ASSERT_EQ(f.bombs(), f.placed - static_cast<int>(bot.route().defuses()));              // no bomb went off under an ant
@@ -102,7 +104,7 @@ void run_route_tests() {
         ASSERT_EQ(corner(), corner_before);                                                // another team's area
         const BotView v = BotView::build(sim, 0, nullptr);
         for (const AntView& a : v.mine()) {
-            if (hp.count(a.id) != 0) ASSERT_EQ(static_cast<int>(a.hp), hp[a.id]);          // nobody stepped on a bomb after the opening
+            if (hp.count(a.id) != 0) ASSERT_TRUE(static_cast<int>(a.hp) >= hp[a.id]);       // nobody stepped on a bomb after the opening (the hill heals)
         }
     } TEST_END();
     TEST_CASE("AI28.3 The Flag Off, The Routing Off, A Medium Bot And A Map Without Bombs: No Bomber Held, No Pile Closed, No Order") {
@@ -138,5 +140,33 @@ void run_route_tests() {
         ASSERT_TRUE(bot.route().gave_up());
         ASSERT_EQ(bot.route().defuses(), 0u);
         ASSERT_TRUE(bot.route().closed_piles().empty());
+        ASSERT_EQ(bot.route().bombers(), 0u);                                           // the ledger is free again
+    } TEST_END();
+    TEST_CASE("AI28.5 Bombz Away, Each Team Alone: The Way Is Cleared (At Least The Tunnel Of 13, 8, 12 And 9 Bombs), The Bombers Are Given Back, And Few Bombs Are Gone") {
+        const int32_t tunnel[4] = {13, 8, 12, 9};
+        for (uint8_t seat = 0; seat < 4; ++seat) {
+            sim::SimulationEngine sim;
+            sim.init(load_level(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Bombz Away.lvl"), 7, 0x0F);
+            auto bombs = [&] {
+                int n = 0;
+                for (int y = 0; y < 32; ++y) {
+                    for (int x = 0; x < 32; ++x) n += sim.grid().has_bomb_at(TileCoord{x, y}) ? 1 : 0;
+                }
+                return n;
+            };
+            const int before = bombs();
+            Rig rig(sim, seat, Level::Hard, std::make_unique<StandardBot>(route_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(9000);
+            ASSERT_EQ(bot.route().route_bombs(), 0u);
+            ASSERT_FALSE(bot.route().gave_up());
+            ASSERT_EQ(bot.route().bombers(), 0u);
+            ASSERT_TRUE(bot.route().closed_piles().empty());
+            ASSERT_TRUE(static_cast<int32_t>(bot.route().defuses()) >= tunnel[seat]);
+            ASSERT_TRUE(before - bombs() >= tunnel[seat]);
+            const MapInfo map(sim);
+            for (const sim::TileCoord& start : map.hill(seat).starts) ASSERT_FALSE(sim.grid().has_bomb_at(start));      // the base leg: the walk ends on the hill's start tiles
+            ASSERT_TRUE(before - bombs() < 200);                                         // a way and its edges, not the field
+        }
     } TEST_END();
 }

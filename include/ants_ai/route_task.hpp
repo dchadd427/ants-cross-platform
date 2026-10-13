@@ -52,8 +52,8 @@ private:
     struct Bomber {
         uint64_t last_order{0};
         sim::TileCoord target{-1, -1};       // the bomb it was last ordered to defuse (no other Bomber is sent to it)
-        std::vector<sim::TileCoord> own;     // the engine's walk from where it stood at the last look to the pile
     };
+    void cancel_workers(AntLedger& ledger);
     void predict(TaskContext& context);
     void work(TaskContext& context, const AntView& ant, Bomber& bomber);
 
@@ -61,12 +61,14 @@ private:
     std::set<uint32_t> closed_;
     std::vector<sim::TileCoord> route_;      // tiles of the predicted walks, in order, without repeats
     std::map<uint32_t, Bomber> workers_;
+    std::map<uint32_t, std::vector<sim::TileCoord>> walks_;   // each Bomber's walk to the pile at the last look
     std::vector<sim::TileCoord> shared_;     // the walks of the hill's ants and the workers, to the pile and back
     uint64_t next_look_{0};
     uint64_t progress_{0};
     size_t route_bombs_{0};
     uint64_t seen_sig_{0};
     uint32_t pile_{0};
+    std::vector<sim::TileCoord> pile_cells_; // the cells where a walk ends: the pile's footprint, its click tile and the eight tiles round each
     bool have_pile_{false};
     uint32_t defuses_{0};
     uint32_t steps_{0};

@@ -1567,7 +1567,7 @@ void BombTask::step(TaskContext& c) {
     bool defuse = false;
     int32_t actor_d = 0;
     for (const AntView& a : v.mine()) {
-        if (a.type != sim::AntType::Bomber || a.hp < 3 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
+        if (a.type != sim::AntType::Bomber || a.hp < 3 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned || (plan.gate_goals && plan.gate_route && (a.tile.chebyshev_dist(pick->tile) != 1 || (a.tile.x != pick->tile.x && a.tile.y != pick->tile.y)))) continue;     // (bomb routing: a Bomber defuses from a tile next to the bomb only; an order from afar walks it over whatever lies between, bombs too)
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
         const int32_t d = a.tile.chebyshev_dist(pick->tile);

@@ -23,9 +23,15 @@ bool foreign_bomb_at(const BotView& view, sim::TileCoord t, uint8_t seat) {
 
 }  // namespace
 
+void RouteTask::cancel_workers(AntLedger& ledger) {
+    ledger.release_all(id());
+    workers_.clear();
+}
+
 void RouteTask::cancel(AntLedger& ledger) {
     ledger.release_all(id());
     workers_.clear();
+    walks_.clear();
     closed_.clear();
     route_.clear();
     shared_.clear();
@@ -71,11 +77,9 @@ void RouteTask::predict(TaskContext& context) {
             if (std::find(into.begin(), into.end(), t) == into.end()) into.push_back(t);
         }
     };
-    for (auto& w : workers_) {
-        w.second.own.clear();
-        for (const AntView& a : view.mine()) {
-            if (a.id == w.first) add(a.tile, click, w.second.own);
-        }
+    walks_.clear();
+    for (const AntView& a : view.mine()) {                                                  // the walk of every Bomber (held or not: a lone Bomber is the economy)
+        if (a.type == sim::AntType::Bomber && a.takes_orders()) add(a.tile, click, walks_[a.id]);
     }
     uint32_t others = 0;
     for (const AntView& a : view.mine()) {                                                  // the walks of the workers that will go to the food (the first sixteen: a walk costs a search)
@@ -86,8 +90,21 @@ void RouteTask::predict(TaskContext& context) {
         add(click, s, shared_);
     }
     for (const sim::TileCoord& t : shared_) route_.push_back(t);
-    for (const auto& w : workers_) {
-        for (const sim::TileCoord& t : w.second.own) {
+    pile_cells_.clear();
+    if (pile_ < context.map.piles().size()) pile_cells_ = context.map.piles()[pile_].cells;
+    pile_cells_.push_back(click);
+    const size_t pile_n = pile_cells_.size();
+    for (size_t i = 0; i < pile_n; ++i) {                                                   // the workers stand on the tiles round the pile when they harvest (the engine stops a walk next to a pile)
+        for (int d = 0; d < 8; ++d) {
+            const sim::TileCoord n{pile_cells_[i].x + kDcol[d], pile_cells_[i].y + kDrow[d]};
+            if (n.x >= 0 && n.y >= 0 && n.x < static_cast<int>(grid.width()) && n.y < static_cast<int>(grid.height())) pile_cells_.push_back(n);
+        }
+    }
+    for (const sim::TileCoord& t : pile_cells_) {                                          // (a walk ends ON its goal and the path does not list it: the pile's cells and the tiles round them, where the workers spread)
+        if (std::find(route_.begin(), route_.end(), t) == route_.end()) route_.push_back(t);
+    }
+    for (const auto& w : walks_) {
+        for (const sim::TileCoord& t : w.second) {
             if (std::find(route_.begin(), route_.end(), t) == route_.end()) route_.push_back(t);
         }
     }
@@ -119,6 +136,17 @@ void RouteTask::step(TaskContext& context) {
     }
     if (now >= next_look_) {
         next_look_ = now + params_.look_every;
+        predict(context);
+        size_t n = 0;
+        for (const sim::TileCoord& t : route_) n += foreign_bomb_at(view, t, context.seat) ? 1u : 0u;
+        route_bombs_ = n;
+        cleared_ = n == 0 && have_pile_;
+        closed_.clear();
+        if (n > 0 && have_pile_) closed_.insert(pile_);                                    // the economy keeps off the pile while the way has bombs
+        if (n == 0) {                                                                      // the way is clear: the Bombers are given back to the economy
+            if (!workers_.empty()) cancel_workers(context.ledger);
+            return;
+        }
         for (const AntView& a : view.mine()) {                                             // the Bombers of the economy, the healthiest first
             if (workers_.size() >= params_.max_bombers) break;
             if (a.type != sim::AntType::Bomber || a.hp < params_.min_hp || !a.takes_orders() || workers_.count(a.id) != 0) continue;
@@ -127,13 +155,6 @@ void RouteTask::step(TaskContext& context) {
                 progress_ = now;
             }
         }
-        predict(context);
-        size_t n = 0;
-        for (const sim::TileCoord& t : route_) n += foreign_bomb_at(view, t, context.seat) ? 1u : 0u;
-        route_bombs_ = n;
-        cleared_ = n == 0 && have_pile_;
-        closed_.clear();
-        if (n > 0 && have_pile_) closed_.insert(pile_);                                    // the economy keeps off the pile while the way has bombs
     }
     if (workers_.empty() || route_bombs_ == 0) return;
     uint64_t sig = foreign * 1000003u;
@@ -175,8 +196,7 @@ void RouteTask::work(TaskContext& context, const AntView& ant, Bomber& me) {
     for (const FireWallView& f : view.fire_walls()) {
         if (inside(f.tile.x, f.tile.y)) fire[static_cast<size_t>(idx(f.tile))] = 1;
     }
-    for (const sim::TileCoord& t : shared_) onroute[static_cast<size_t>(idx(t))] = 1;
-    for (const sim::TileCoord& t : me.own) onroute[static_cast<size_t>(idx(t))] = 1;
+    for (const sim::TileCoord& t : route_) onroute[static_cast<size_t>(idx(t))] = 1;
     for (const auto& other : workers_) {                                                    // a bomb that another Bomber is at work on is left to it
         const sim::TileCoord t = other.second.target;
         if (&other.second != &me && t.x >= 0 && now < other.second.last_order + params_.defuse_gap) bomb[static_cast<size_t>(idx(t))] = 2;
@@ -242,7 +262,7 @@ void RouteTask::work(TaskContext& context, const AntView& ant, Bomber& me) {
         for (const sim::TileCoord& c : reach) {
             for (int d = 0; d < 8; d += 2) {
                 const sim::TileCoord t{c.x + kDcol[d], c.y + kDrow[d]};
-                if (!inside(t.x, t.y) || bomb[static_cast<size_t>(idx(t))] != 1 || !standable(t)) continue;
+                if (!inside(t.x, t.y) || bomb[static_cast<size_t>(idx(t))] != 1 || (!standable(t) && std::find(pile_cells_.begin(), pile_cells_.end(), t) == pile_cells_.end())) continue;
                 size_t order = 0;
                 if (pass == 0) {
                     if (!onroute[static_cast<size_t>(idx(t))]) continue;
