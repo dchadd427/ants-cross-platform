@@ -533,6 +533,11 @@ const view = (room, o) => R.viewOf(model(room), ctx(o));
     same('a guest\'s card of that colour says the bot\'s name where it said "Hard bot"', guestCard.who.map((w) => w.text), ['Pip (bot, Hard)']);
     const hostCard = R.viewOf(mb, ctx({})).cards.filter((c) => c.seat === 1)[0];
     same('the leader\'s card of that colour keeps its level switch and shows the name', [hostCard.mode, hostCard.who.map((w) => w.text), hostCard.label], ['hard', ['Pip (bot, Hard)'], 'Red: Pip (bot, Hard)']);
+    const SL0 = mk([P('Juniper'), [E, ''], O, O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
+    same('the START line tells the named bots by their names, the leader\'s and the guest\'s alike', [view(SB, {}).side.plan, view(SG, {}).side.plan], [
+        'You, Pip (bot, Hard) and Wren (bot, Easy) play on Treasure. Black is open and stays empty unless a player joins first.',
+        'Juniper starts the match when everybody is in. Juniper, you and Pip (bot, Hard) play on Treasure.']);
+    same('... and a room without names keeps "a Medium bot"', view(SL0, {}).side.plan, 'You and a Medium bot play on Treasure. Blue and Black are open and stay empty unless a player joins first.');
     const SL = mk([P('Juniper'), [E, ''], [3, 'Bot (Hard)'], O], { you: 0, leader: 0, plan: [0, 2, 0, 0] });
     same('a room without names (or the legacy "Bot (Hard)") shows the level as before', [R.modelOf(SL).slots[1], R.modelOf(SL).slots[2]], [{ kind: 'bot', level: 'medium' }, { kind: 'bot', level: 'medium' }]);
     const refused = (seats, o) => { try { mk(seats, o); return false; } catch (e) { return true; } };

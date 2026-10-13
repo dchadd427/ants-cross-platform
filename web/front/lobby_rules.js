@@ -314,7 +314,7 @@
             if (s.kind === 'person') {
                 var me = s.me;
                 names.push(me ? 'you' : s.name); short.push(me ? 'You' : s.name);
-            } else if (s.kind === 'bot') { names.push(article(s.level) + levelWord(s.level) + ' bot'); short.push(levelWord(s.level) + ' bot'); }
+            } else if (s.kind === 'bot') { names.push(s.name || article(s.level) + levelWord(s.level) + ' bot'); short.push(s.name || levelWord(s.level) + ' bot'); }      // (protocol 20: a bot the room has named is told by its name)
             else if (s.kind === 'open') open.push(COLOURS[i].name);
         });
         var list = listOf(names); list = list.charAt(0).toUpperCase() + list.slice(1);
