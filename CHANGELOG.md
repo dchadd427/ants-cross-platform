@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.33 - 2026-10-12 - Tests for the bomb throw, knockback, fire walls and defuse
+## v0.12.33 - 2026-10-13 - Tests for the bomb throw, knockback, fire walls and defuse
 
 **For players:**
 - Nothing changes on screen or in play. New tests pin down exactly how bombs, hits, fire walls, defuse and power-up pick-up behave, including every hop over the fire wall on `POPcOrN` ([the table](docs/reverse_engineering/bomb_gates.md)), so that the computer players can later use them.
