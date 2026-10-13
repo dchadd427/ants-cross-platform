@@ -26,11 +26,11 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.39 - 2026-10-13 - Computer players clear the bombs on their way (off)
 
 **For players:**
-- Nothing changes on screen or in play: the new play is off in every level. A Hard computer player (when it is switched on for a test, `--tune ggoal=1`) on a map full of bombs, as on `Bombz Away`, now uses a Bomber to defuse exactly the bombs on its own way to the food and back to its hill, in order, and keeps its workers off the food until the way is clear. It no longer walks into bombs by accident, never touches another team's bomb area, and gives the way up after 90 seconds without progress. In the arena (16 matches, four Hard players) the banked score on Bombz Away rose from 9,950 to 30,950 in all, and 61 of 64 players banked something, against 49 ([the plan](docs/reverse_engineering/bomb_gates.md)).
+- Nothing changes on screen or in play: the new play is off in every level. A Hard computer player (when it is switched on for a test, `--tune ggoal=1`) on a map full of bombs, as on `Bombz Away`, now uses a Bomber to defuse the bombs that are not its own on its own way to the food and back to its hill, in order, and keeps its workers off the food while the Bomber is at it. It no longer walks into bombs by accident, never touches another team's bomb area, and gives the way up after 90 seconds without progress. Maps with fire walls stay with the gate goals. In the arena (16 matches, four Hard players) the score banked on Bombz Away rose from 9,950 to 28,450 in all, and 57 of 64 players banked something, against 49 ([the plan](docs/reverse_engineering/bomb_gates.md)).
 
 **Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation, and with the switch off every match plays tick for tick as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/188813e1...eb8d34c1)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/188813e1...d65beb0b)
 
 ## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
 
