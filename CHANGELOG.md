@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation, and with the switch off every match plays tick for tick as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/188813e1...d65beb0b)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/188813e1...ed2b0e84)
 
 ## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
 
