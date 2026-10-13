@@ -80,6 +80,7 @@ private:
           ferry_(kFerry, ferry_params(plan)),
           gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
           route_(kRoute) {
+        if (level_ != Level::Hard) tactics_.plan.gate_route = false;                          // (the bomb routing is Hard's: below Hard the flag changes nothing, the bomb counter included)
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }

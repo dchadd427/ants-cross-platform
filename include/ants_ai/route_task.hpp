@@ -72,7 +72,8 @@ private:
     bool have_pile_{false};
     uint32_t defuses_{0};
     uint32_t steps_{0};
-    bool gave_up_{false};
+    bool gave_up_{false};                    // given up for good, or from the start on a map with fire walls
+    bool fire_known_{false};
     bool cleared_{false};
 };
 

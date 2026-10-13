@@ -168,8 +168,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         harvest_.set_pile_limits(island_.pile_limits());                                    // and one ant at a time on a bridge
         if (island_.take_reask()) harvest_.reask_soon();                                    // a bridge was finished: the economy asks the map again now
     }
-    if (plan.gate_goals && plan.gate_route && level_ == Level::Hard && !fallback) {          // the pile the Bomber is still clearing the way to is closed to the economy too
-        std::set<uint32_t> closed = route_.closed_piles();
+    if (plan.gate_goals && plan.gate_route && level_ == Level::Hard) {                       // the pile the Bomber is still clearing the way to is closed to the economy too
+        std::set<uint32_t> closed = route_.closed_piles();                                   // (empty in the fallback: the task gave its Bomber back)
         if (plan.islands) closed.insert(island_.closed_piles().begin(), island_.closed_piles().end());
         harvest_.set_closed_piles(closed);
     }
@@ -245,8 +245,8 @@ void StandardBot::begin_fallback(uint64_t now) {
     fallback_until_ = now + span;
     progress_tick_ = now;                                                        // the clock of the next stall starts here
     ledger_.release_all(kRaids);                                                 // a thief that was kept for a raid goes back to the economy
-    gate_goals_.cancel(ledger_);
-    route_.cancel(ledger_);                                                 // so does the Fire ant or Bomber of a gate goal (its timers would run out unseen while the task sleeps)
+    gate_goals_.cancel(ledger_);                                                 // so does the Fire ant or Bomber of a gate goal (its timers would run out unseen while the task sleeps)
+    route_.cancel(ledger_);                                                      // and the Bomber of the bomb routing
     HarvestTask::Params plain;                                                   // the worker's harvest: no contested piles, no typed ants, the rescue on
     plain.cantgo_aware = plan.cantgo_aware;                                      // (and still no carrier sent into a hill that no walk joins: the fixes of "The can't-go loop" stay on)
     harvest_.set_params(plain);

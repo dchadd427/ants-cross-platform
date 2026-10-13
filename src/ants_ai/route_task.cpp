@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <deque>
+#include <utility>
 
 #include "ants_ai/bot_view.hpp"
+#include "ants_ai/gate_info.hpp"
 #include "ants_ai/map_info.hpp"
 #include "ants_sim/path_planner.hpp"
 
@@ -114,6 +116,10 @@ void RouteTask::step(TaskContext& context) {
     const BotView& view = context.view;
     if (!view.has_grid()) return;
     const uint64_t now = view.tick();
+    if (!fire_known_) {                                                                    // a map with fire walls (a maze of fire and bombs, POPcOrN's field) is the gate goals' business: a Bomber cannot follow the engine's walk through fire
+        fire_known_ = true;
+        gave_up_ = GateInfo::analyse(context.map, view.grid(), context.seat).fire_cell_count() > 0;
+    }
     if (gave_up_) {
         if (!workers_.empty() || !closed_.empty()) cancel(context.ledger);
         return;
@@ -142,7 +148,6 @@ void RouteTask::step(TaskContext& context) {
         route_bombs_ = n;
         cleared_ = n == 0 && have_pile_;
         closed_.clear();
-        if (n > 0 && have_pile_) closed_.insert(pile_);                                    // the economy keeps off the pile while the way has bombs
         if (n == 0) {                                                                      // the way is clear: the Bombers are given back to the economy
             if (!workers_.empty()) cancel_workers(context.ledger);
             return;
@@ -155,6 +160,7 @@ void RouteTask::step(TaskContext& context) {
                 progress_ = now;
             }
         }
+        if (have_pile_ && !workers_.empty()) closed_.insert(pile_);                        // the economy keeps off the pile while a Bomber is at the bombs of its way (with no Bomber to clear them it plays as it does without the routing)
     }
     if (workers_.empty() || route_bombs_ == 0) return;
     uint64_t sig = foreign * 1000003u;
@@ -191,7 +197,7 @@ void RouteTask::work(TaskContext& context, const AntView& ant, Bomber& me) {
     auto inside = [&](int x, int y) { return x >= 0 && y >= 0 && x < w && y < h; };
     std::vector<uint8_t> bomb(static_cast<size_t>(w * h), 0), fire(static_cast<size_t>(w * h), 0), onroute(static_cast<size_t>(w * h), 0);
     for (const BombView& b : view.bombs()) {
-        if (b.owner != seat && inside(b.tile.x, b.tile.y)) bomb[static_cast<size_t>(idx(b.tile))] = 1;
+        if (b.owner != seat && inside(b.tile.x, b.tile.y)) bomb[static_cast<size_t>(idx(b.tile))] = 1;      // (an own bomb is a launch pad of the gate goals' hop: MapInfo::walkable keeps every walk off it, and it is never defused here)
     }
     for (const FireWallView& f : view.fire_walls()) {
         if (inside(f.tile.x, f.tile.y)) fire[static_cast<size_t>(idx(f.tile))] = 1;
@@ -282,6 +288,65 @@ void RouteTask::work(TaskContext& context, const AntView& ant, Bomber& me) {
                     target = t;
                     stand = c;
                 }
+            }
+        }
+    }
+    if (target.x < 0) {                                                                     // no bomb of the way is next to the Bomber's ground: the bombs that lie between are part of its way too
+        // the cheapest walk (a bomb tile costs a defuse) from the Bomber to any tile of the way that it cannot reach; the first bomb on it, next to the ground the Bomber has, is the one to defuse
+        const int inf = 1 << 28;
+        std::vector<int> cost(static_cast<size_t>(w * h), inf), prev(static_cast<size_t>(w * h), -1);
+        std::vector<std::pair<int, int>> heap;                                              // (cost, tile), a plain binary heap on std::push_heap with the smallest first
+        auto push = [&](int c, int t) { heap.emplace_back(-c, t); std::push_heap(heap.begin(), heap.end()); };
+        cost[static_cast<size_t>(idx(ant.tile))] = 0;
+        push(0, idx(ant.tile));
+        int goal = -1;
+        while (!heap.empty()) {
+            std::pop_heap(heap.begin(), heap.end());
+            const int c = -heap.back().first;
+            const int t = heap.back().second;
+            heap.pop_back();
+            if (c > cost[static_cast<size_t>(t)]) continue;
+            if (onroute[static_cast<size_t>(t)] && dist[static_cast<size_t>(t)] < 0) {
+                goal = t;
+                break;
+            }
+            for (int d = 0; d < 8; ++d) {
+                const sim::TileCoord n{t % w + kDcol[d], t / w + kDrow[d]};
+                if (!inside(n.x, n.y) || !standable(n) || bomb[static_cast<size_t>(idx(n))] == 2) continue;
+                const int step = c + (bomb[static_cast<size_t>(idx(n))] != 0 ? 8 : 1);
+                if (step < cost[static_cast<size_t>(idx(n))]) {
+                    cost[static_cast<size_t>(idx(n))] = step;
+                    prev[static_cast<size_t>(idx(n))] = t;
+                    push(step, idx(n));
+                }
+            }
+        }
+        if (goal >= 0) {
+            std::vector<int> path;                                                          // from the goal back to the Bomber
+            for (int t = goal; t >= 0; t = prev[static_cast<size_t>(t)]) path.push_back(t);
+            for (size_t k = path.size(); k-- > 1;) {                                        // forward from the Bomber's tile: the first bomb
+                const int t = path[k - 1];
+                if (!bomb[static_cast<size_t>(t)]) continue;
+                const sim::TileCoord b{t % w, t / w};
+                const sim::TileCoord from_tile{path[k] % w, path[k] / w};                    // (a tile of the ground the Bomber has: every tile before the first bomb is free)
+                if (from_tile.x == b.x || from_tile.y == b.y) {
+                    target = b;
+                    stand = from_tile;
+                } else {                                                                    // a diagonal step: a tile next to both, or the bomb on it
+                    const sim::TileCoord a{from_tile.x, b.y}, c2{b.x, from_tile.y};
+                    for (const sim::TileCoord& q : {a, c2}) {
+                        if (!inside(q.x, q.y) || !standable(q)) continue;
+                        if (!bomb[static_cast<size_t>(idx(q))]) {
+                            target = b;
+                            stand = q;
+                        } else if (target.x < 0 && bomb[static_cast<size_t>(idx(q))] == 1) {
+                            target = q;
+                            stand = from_tile;
+                        }
+                        if (stand.x >= 0 && target == b) break;
+                    }
+                }
+                break;
             }
         }
     }

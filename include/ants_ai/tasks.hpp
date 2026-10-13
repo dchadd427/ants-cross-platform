@@ -261,6 +261,7 @@ public:
     const Params& params() const noexcept { return params_; }
     /// Piles that are not to be sent to now (the island task: they are reachable over a bridge that will not last a round trip); replaced at every look by the bot, empty by default
     void set_closed_piles(const std::set<uint32_t>& piles) { closed_ = piles; }
+    const std::set<uint32_t>& closed_piles() const noexcept { return closed_; }
     /// At most this many ants of the task are sent to the pile (the island task: two ants that meet head-on on a one-wide bridge stop for good, so a pile over a bridge gets one ant at a
     /// time); a pile that is not in the map has no limit of its own. Replaced at every look by the bot, empty by default
     void set_pile_limits(const std::map<uint32_t, uint32_t>& limits) { limits_ = limits; }

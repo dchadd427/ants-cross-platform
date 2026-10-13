@@ -5,6 +5,11 @@
 //   AI28.2   Bombz Away itself: a bomb on every tile and every start ant on one; after the opening no Bomber steps on a bomb, and another team's corner is never touched
 //   AI28.3   the flag off, the routing switched off, a Medium bot and a map without bombs: no Bomber held, no pile closed, no order
 //   AI28.4   a Bomber that cannot get at the bombs gives up after 90 s and the pile is open again, the Bomber given back
+//   AI28.6   both flags on and an own bomb (the gate goals' launch pad) near the way: the Bomber of the routing never steps on it and never defuses it
+//   AI28.7   a Bomber with too few hit points is not taken, and with no Bomber the pile stays open (the economy plays as without the routing)
+//   AI28.8   the fallback to the plain economy gives the Bomber back and opens the pile
+//   AI28.10  a map with fire walls (Bombz Away Supreme) is not the routing's
+//   AI28.9   Medium and Easy with the flags on play tick for tick as with them off
 //   AI28.5   Bombz Away, each team alone: the way in is cleared (the tunnel of 13, 8, 12 and 9 bombs at least, the base leg and the pile's neighbours too), the Bombers are given back, and few bombs are gone
 #include <map>
 #include <string>
@@ -31,11 +36,12 @@ assets::LevelData load_level(const std::string& path) {
 struct BombField {
     sim::SimulationEngine sim;
     int placed{0};
-    explicit BombField(uint32_t seed = 3) {
+    uint32_t bomber_id{0};
+    explicit BombField(uint32_t seed = 3, bool bomber = true) {
         empty_field(sim, seed, 14400);
         place_crackers(sim, 12, 40, 25);
         for (int k = 0; k < 8; ++k) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6 + k, 10});
-        sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{10, 12});
+        if (bomber) bomber_id = sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{10, 12});
         for (int y = 20; y < 23; ++y) {
             for (int x = 0; x < 41; ++x) {                                                  // not the whole width: the food is reachable round the band, so it is no gate
                 sim.grid_mut().place_bomb(static_cast<uint32_t>(x), static_cast<uint32_t>(y), kNeutral);
@@ -168,5 +174,90 @@ void run_route_tests() {
             for (const sim::TileCoord& start : map.hill(seat).starts) ASSERT_FALSE(sim.grid().has_bomb_at(start));      // the base leg: the walk ends on the hill's start tiles
             ASSERT_TRUE(before - bombs() < 200);                                         // a way and its edges, not the field
         }
+    } TEST_END();
+    TEST_CASE("AI28.6 Both Flags On And An Own Bomb Near The Way: The Routing's Bomber Never Steps On It And Never Defuses It") {
+        BombField f;
+        int own = 0;
+        for (int x = 0; x <= 29; ++x) {
+            f.sim.grid_mut().place_bomb(static_cast<uint32_t>(x), 15u, 0);                  // the launch pads of a hop: a row south of the Bomber with a gap far to the east
+            ++own;
+        }
+        LevelPlan plan = route_plan();
+        plan.gate_route = true;
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan));
+        auto& bot = rig.as<StandardBot>();
+        rig.run(1700);
+        ASSERT_TRUE(bot.route().defuses() >= 1u);
+        int left = 0;
+        for (int x = 0; x <= 29; ++x) left += f.sim.grid().has_bomb_at(TileCoord{x, 15}) ? 1 : 0;
+        ASSERT_EQ(left, own);
+    } TEST_END();
+    TEST_CASE("AI28.7 A Bomber With Too Few Hit Points Is Not Taken, And With No Bomber The Pile Stays Open") {
+        {
+            BombField f;
+            f.sim.get_unit(f.bomber_id).hp = 2;
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(route_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(600);
+            ASSERT_EQ(bot.route().bombers(), 0u);
+            ASSERT_TRUE(bot.route().closed_piles().empty());
+        }
+        {
+            BombField f(3, false);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(route_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(600);
+            ASSERT_EQ(bot.route().bombers(), 0u);
+            ASSERT_TRUE(bot.route().closed_piles().empty());
+            ASSERT_TRUE(bot.route().route_bombs() > 0u);
+        }
+    } TEST_END();
+    TEST_CASE("AI28.8 The Fallback To The Plain Economy Gives The Bomber Back And Opens The Pile") {
+        BombField f;
+        LevelPlan plan = route_plan();
+        plan.islands = false;                                                              // (with the island task the closed set is written there too)
+        plan.stall_ticks = 900;
+        plan.fallback_ticks = 3000;
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan));
+        auto& bot = rig.as<StandardBot>();
+        rig.run(300);
+        ASSERT_EQ(bot.route().bombers(), 1u);
+        ASSERT_FALSE(bot.harvest().closed_piles().empty());                                // (the premise: the pile is closed to the economy)
+        for (int k = 0; k < 40 && !bot.in_fallback(); ++k) rig.run(50);
+        ASSERT_TRUE(bot.in_fallback());
+        rig.run(100);
+        ASSERT_EQ(bot.route().bombers(), 0u);
+        ASSERT_TRUE(bot.harvest().closed_piles().empty());                                 // the economy may send workers to the pile again
+    } TEST_END();
+    TEST_CASE("AI28.9 Medium And Easy With The Flags On Play Tick For Tick As With Them Off") {
+        for (const Level level : {Level::Medium, Level::Easy}) {
+            uint64_t hash[2] = {0, 0};
+            for (int on = 0; on < 2; ++on) {
+                sim::SimulationEngine sim;
+                sim.init(load_level(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Bombz Away.lvl"), 7, 0x0F);
+                LevelPlan plan = peace_plan(level);
+                plan.gate_goals = on != 0;
+                plan.gate_route = on != 0;
+                Rig rig(sim, 1, level, std::make_unique<StandardBot>(plan));
+                rig.run(3000);
+                hash[on] = sim.state_hash().total;
+            }
+            ASSERT_TRUE(hash[0] == hash[1]);
+        }
+    } TEST_END();
+    TEST_CASE("AI28.10 A Map With Fire Walls (The Maze Of Bombz Away Supreme) Is Not The Routing's: No Bomber Held, No Pile Closed") {
+        sim::SimulationEngine sim;
+        sim.init(load_level(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/BombzAway_Supreme.lvl"), 7, 0x0F);
+        {
+            const BotView first = BotView::build(sim, 0, nullptr);
+            ASSERT_FALSE(first.mine().empty());
+            sim.spawn_unit(0, sim::AntType::Bomber, first.mine()[0].tile);                 // a Bomber to hold (the start ants are workers)
+        }
+        Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(route_plan()));
+        auto& bot = rig.as<StandardBot>();
+        rig.run(1500);
+        ASSERT_EQ(bot.route().bombers(), 0u);
+        ASSERT_EQ(bot.route().defuses(), 0u);
+        ASSERT_TRUE(bot.route().closed_piles().empty());
     } TEST_END();
 }
