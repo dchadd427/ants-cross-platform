@@ -235,10 +235,8 @@ void run_route_tests() {
             for (int on = 0; on < 2; ++on) {
                 sim::SimulationEngine sim;
                 sim.init(load_level(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/Bombz Away.lvl"), 7, 0x0F);
-                LevelPlan plan = peace_plan(level);
-                plan.gate_goals = on != 0;
-                plan.gate_route = on != 0;
-                Rig rig(sim, 1, level, std::make_unique<StandardBot>(plan));
+                const bool flags = on != 0;
+                Rig rig(sim, 1, level, std::make_unique<StandardBot>(level, Style::Random, [flags](LevelPlan& p) { p.gate_goals = flags; }));      // the real path: the plan of the level, then the tune
                 rig.run(3000);
                 hash[on] = sim.state_hash().total;
             }

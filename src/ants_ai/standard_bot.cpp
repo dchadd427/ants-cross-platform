@@ -22,6 +22,7 @@ void StandardBot::start(const BotContext& context) {
         style_ = requested_style_ != Style::Random ? requested_style_ : draw_style(level_, rng);
         tactics_.plan = plan_for(level_, style_, rng);
         if (tune_) tune_(tactics_.plan);
+        if (level_ != Level::Hard) tactics_.plan.gate_route = false;                       // (the bomb routing is Hard's: below Hard the flag changes nothing, the bomb counter included; after the tune, which may switch the gate goals on)
         harvest_.set_params(harvest_params(tactics_.plan));
         gate_.set_params(gate_params(tactics_.plan));
         island_.set_params(island_params(tactics_.plan));
