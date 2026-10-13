@@ -180,7 +180,8 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
     }
 
     // ---- the walks: the fewest fire cells / bombs on a walk from the hill (0-1 search over the tiles; a closed kind is not entered) ------------------------------
-    const auto search = [&](bool fire_open, bool bombs_open) {
+    std::vector<int32_t> fire_parent(cells, -1);                                 // the walk of the fire search: the tile it came from (a start has none)
+    const auto search = [&](bool fire_open, bool bombs_open, std::vector<int32_t>* parent = nullptr) {
         std::vector<int32_t> dist(cells, kFar);
         std::deque<sim::TileCoord> queue;
         for (const sim::TileCoord& s : starts) {
@@ -209,6 +210,7 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
                 const int32_t nd = dist[at(t)] + cost;
                 if (nd >= dist[i]) continue;
                 dist[i] = nd;
+                if (parent != nullptr) (*parent)[i] = static_cast<int32_t>(at(t));
                 if (cost == 0) queue.push_front(n);
                 else queue.push_back(n);
             }
@@ -216,14 +218,17 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
         return dist;
     };
     const std::vector<int32_t> d_free = search(false, false);
-    const std::vector<int32_t> d_fire = search(true, false);
+    const std::vector<int32_t> d_fire = search(true, false, &fire_parent);
     const std::vector<int32_t> d_bomb = search(false, true);
     const std::vector<int32_t> d_both = search(true, true);
-    const auto least = [&](const std::vector<int32_t>& dist, const std::vector<sim::TileCoord>& tiles) {
+    const auto least = [&](const std::vector<int32_t>& dist, const std::vector<sim::TileCoord>& tiles, sim::TileCoord* where = nullptr) {
         int32_t best = -1;
         for (const sim::TileCoord& t : tiles) {
             const int32_t v = dist[at(t)];
-            if (v != kFar && (best < 0 || v < best)) best = v;
+            if (v != kFar && (best < 0 || v < best)) {
+                best = v;
+                if (where != nullptr) *where = t;
+            }
         }
         return best;
     };
@@ -240,7 +245,13 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
         }
         std::sort(g.comps.begin(), g.comps.end());
         const int32_t free_cost = least(d_free, tiles);
-        g.fire_cells = least(d_fire, tiles);
+        sim::TileCoord fire_end{-1, -1};
+        g.fire_cells = least(d_fire, tiles, &fire_end);
+        if (g.fire_cells > 0) {                                                  // the fire cell nearest the hill on that walk: walk back from the end of it
+            for (int32_t i = static_cast<int32_t>(at(fire_end)); i >= 0; i = fire_parent[static_cast<size_t>(i)]) {
+                if (is_fire[static_cast<size_t>(i)]) g.fire_cell = sim::TileCoord{i % w, i / w};
+            }
+        }
         g.defuse_bombs = least(d_bomb, tiles);
         const int32_t mixed = least(d_both, tiles);
         if (free_cost >= 0) g.gate = GateKind::None;

@@ -10,6 +10,7 @@ constexpr uint8_t kRankGuard = 2;
 constexpr uint8_t kRankPowerUps = 3;
 constexpr uint8_t kRankWalls = 4;
 constexpr uint8_t kRankFight = 5;
+constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off: the bot banks nothing, so its Fire ant or Bomber is worth more to it than to the mines, the walls or a fight)
 }  // namespace
 
 void StandardBot::start(const BotContext& context) {
@@ -26,6 +27,7 @@ void StandardBot::start(const BotContext& context) {
         island_.set_params(island_params(tactics_.plan));
         expedition_.set_params(expedition_params(tactics_.plan));
         ferry_.set_params(ferry_params(tactics_.plan));
+        gate_goals_.set_params(gate_goal_params(tactics_.plan));
     }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
@@ -41,6 +43,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kSabotage, kRankPowerUps);                   // (below the walls of the own thief hole: the Fire Ant is theirs first)
     ledger_.set_rank(kIslands, kRankPowerUps);                    // (the Swimmers that dig, and the ants that fetch one: nobody else uses them)
     ledger_.set_rank(kExpedition, kRankPowerUps);                 // (the crew that is flown to the Swimmers and the Bombers that fly it)
+    ledger_.set_rank(kGateGoals, kRankGates);                     // (the Fire ant and the Bomber of a gate goal)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -136,6 +139,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if (plan.islands && plan.island_ferry && island_.active()) ferry_.step(context);        // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
+    if (plan.gate_goals && level_ == Level::Hard && !fallback) gate_goals_.step(context);   // (off in every plan; Hard only: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                    // (when the plan has no rush the task only gives back what it held)
     walls_.step(context);
@@ -264,6 +268,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     island_.on_command(command, fate, tick);
     expedition_.on_command(command, fate, tick);
     ferry_.on_command(command, fate, tick);
+    gate_goals_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

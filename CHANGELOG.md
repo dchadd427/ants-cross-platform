@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.37 - 2026-10-13 - Computer players can plan around fire walls and bombs (off)
+
+**For players:**
+- Nothing changes on screen or in play: the new play is off in every level. A Hard computer player (when it is switched on for a test) whose food is walled off by fire walls or bombs, as on `POPcOrN`, now gets the right ant first: a Fire ant to put a wall out, or a Bomber that bombs itself over it to a power-up or to the food, with the real rules of the bomb throw. It gives a step up after 90 seconds, an attempt after 4 minutes, tries two more times and then plays on ([the plan](docs/reverse_engineering/bomb_gates.md)).
+
+**Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...CODE)
+
 ## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
 
 **For players:**
