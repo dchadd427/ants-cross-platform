@@ -1,0 +1,17 @@
+# The golden picks of the names of the computer players (include/ants_ai/bot_names.hpp, web/front/bot_names.js). BOTH implementations are held to this file:
+# tests/test_ai/test_ai_names.cpp and tests/scripts/web_bot_names_check.js. It changes only when the list (tools/bot_names.txt) or the picker changes.
+#   digest picks N H1 H2   FNV-1a (32 bit, two start values) of the picks of N keys: key i is i for an even i and mix64(i) for an odd i, with i % 5 names, written as "Name,Name;" each
+#   digest fuzz N H1 H2    the same for N strings of tokens: parse, short form and reserved answer of each, as the two programs write them (see the tests)
+#   pick KEY COUNT NAMES   a key (16 hexadecimal digits), how many names, and the names it gives
+digest picks 10000 44a3ff23 e617182f
+digest fuzz 10000 6105bfb4 36894c70
+pick 0000000000000000 2 Rowan,Pretzel
+pick 0000000000000001 3 Cora,Abel,Anton
+pick 0000000000000002 4 Hiro,Carys,Fenna,Daisy
+pick deadbeefcafef00d 2 Wim,Speck
+pick ffffffffffffffff 3 Rowan,Remy,Myrmex
+pick 8000000000000000 4 Imogen,Basil,Nadia,Seth
+pick 00000000ffffffff 2 Iris,Saga
+pick 0000000100000000 3 Dewdrop,Sugar,Vera
+pick 0123456789abcdef 4 Anton,Kai,Crumb,Comet
+pick 000000000000002a 2 Lars,Nutmeg

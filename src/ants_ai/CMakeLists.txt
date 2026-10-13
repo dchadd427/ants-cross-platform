@@ -17,6 +17,7 @@ add_library(ants_ai STATIC
     worker_bot.cpp
     baselines.cpp
     arena.cpp
+    bot_names.cpp
 )
 
 target_include_directories(ants_ai PUBLIC
