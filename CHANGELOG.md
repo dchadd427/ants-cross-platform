@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number changed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e9d659d...bot-gates-analysis)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e9d659d...41149b58)
 
 ## v0.12.33 - 2026-10-13 - Tests for the bomb throw, knockback, fire walls and defuse
 
