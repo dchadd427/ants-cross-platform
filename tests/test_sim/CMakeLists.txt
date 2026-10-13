@@ -216,6 +216,24 @@ target_link_libraries(test_file_bombs PRIVATE ants_test_paths)
 
 add_test(NAME test_file_bombs COMMAND test_file_bombs)
 
+# Engine-fact probes of the bomb throw, the hit knockback, fire walls, defuse and power-up pick-up (docs/reverse_engineering/bomb_gates.md); no rule is changed by them
+add_executable(test_bomb_facts
+    test_bomb_facts.cpp
+)
+
+target_link_libraries(test_bomb_facts PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_bomb_facts PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_bomb_facts PRIVATE ants_test_paths)
+
+add_test(NAME test_bomb_facts COMMAND test_bomb_facts)
+
 # The map loader as the original's (docs/reverse_engineering/map_loader_fidelity.md): tile ids, tables and the file's solid bits instead of dictionary names and rules of the remake's own
 add_executable(test_loader_fidelity
     test_loader_fidelity.cpp
