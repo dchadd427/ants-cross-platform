@@ -92,6 +92,11 @@ class TheFrontPageMarkup(PageCase):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
         self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.script)       # (the list of the drop-down is the rules' list, in its order)
 
+    def test_a_leaders_bot_card_shows_the_bots_name_small_under_the_level_switch(self):
+        """protocol 20: the name (card.who[0], which the rules put there) is a span of its own right after the level select, and the style rule makes it small text"""
+        self.assertIn("txt.appendChild(select); if (card.who.length) txt.appendChild(el('span', 'botname', card.who[0].text));", self.page)
+        self.assertRegex(self.page, r"\.botname \{ display: block; font-size: 15px;")
+
     def test_the_four_colours_are_built_in_reading_order_by_the_script_and_every_control_of_a_colour_is_named(self):
         script = self.script
         # the cards lie Black, Green, Red, Blue (the four hills of the maps) and are BUILT in that order from the rules' GRID, with no CSS order, so that Tab and a screen reader follow what is on screen
