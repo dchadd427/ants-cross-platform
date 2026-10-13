@@ -31,8 +31,6 @@ struct GateGoal {
     GateKind gate{GateKind::None};               // the gate of the target
     int32_t cost{0};                             // the lower the better
     bool active() const noexcept { return kind != GoalKind::None; }
-    /// The same goal again (same kind, target and cell): a re-plan that picks it needs no new attempt
-    bool same(const GateGoal& other) const noexcept { return kind == other.kind && powerup == other.powerup && target == other.target && cell == other.cell; }
 };
 
 struct GoalRules {

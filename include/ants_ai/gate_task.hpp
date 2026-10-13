@@ -36,6 +36,7 @@ public:
         uint32_t look_every{200};            // the goal is chosen again this often while nothing is under way
         uint32_t order_gap{120};             // no second order to one ant within this many ticks (the bot's stall detector counts equal orders)
         uint32_t pause_ticks{100};           // the pause after an attempt that was given up
+        uint32_t revivals_max{2};            // times a task that ran out of attempts starts afresh because a source of its ant appeared (a new Bomber or Fire ant, a power-up of the kind)
         uint32_t goals_max{8};               // goals done in a match (a map that keeps making gates is left alone after this many)
     };
     enum class Phase : uint8_t { Idle, Fetch, Act, Exhausted };
@@ -46,6 +47,8 @@ public:
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
     void finish(AntLedger& ledger) override;
+    /// The bot goes to the plain economy (the stall detector's fallback): the ant is given back and the attempt dropped, without counting as one given up. A task that was exhausted stays so.
+    void cancel(AntLedger& ledger);
     void set_params(const Params& params) { params_ = params; }
     const Params& params() const noexcept { return params_; }
 
@@ -61,6 +64,7 @@ public:
     uint32_t duds() const noexcept { return duds_; }
     uint32_t extinguishes() const noexcept { return extinguishes_; }
     uint32_t picks() const noexcept { return picks_; }
+    uint32_t revivals() const noexcept { return revivals_; }
     uint64_t first_goal_tick() const noexcept { return first_goal_; }
     /// Why the last attempt was given up ("step", "attempt", "clock", "ant", "stranded", "hurt"); empty before one was
     const char* last_failure() const noexcept { return why_; }
@@ -75,7 +79,8 @@ private:
     void succeed(TaskContext& context);
     void fail(TaskContext& context, const char* why);
     bool may_order(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.order_gap; }
-    uint64_t signature(const BotView& view) const;
+    uint64_t signature(const TaskContext& context) const;
+    uint64_t sources(const TaskContext& context) const;
 
     Tactics& tactics_;
     Params params_;
@@ -107,6 +112,9 @@ private:
     bool landed_{false};
     const char* why_{""};
     bool thrown_{false};                     // a click onto the bomb was given and the throw has not been accounted for yet
+    bool finished_{false};                   // goals_max goals are done: nothing more is tried
+    uint64_t exhausted_sources_{0};          // the sources (typed ants and power-ups of the hill's side) when the attempts ran out
+    uint32_t revivals_{0};                   // times the task started afresh because a source appeared (at most `revivals_max`)
 };
 
 }  // namespace ants::ai

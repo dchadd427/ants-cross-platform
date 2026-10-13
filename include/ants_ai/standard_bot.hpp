@@ -112,6 +112,8 @@ public:
     AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
+    /// The gate goal for a lab that changes its parameters or cancels it (AI27)
+    GateGoalTask& gate_goals_for_labs() noexcept { return gate_goals_; }
     const Tactics& tactics() const noexcept { return tactics_; }
     /// The style that the bot plays (known once start() has run; Random for a bot with a plan of its own)
     Style style() const noexcept { return style_; }

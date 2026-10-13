@@ -7,7 +7,9 @@
 //   AI27.3   a Hard bot puts a fire wall out with a Fire ant and banks the food behind it; the same bot without the flag banks nothing
 //   AI27.4   a Hard bot bombs itself over a rock wall onto a Swimmer power-up, also when a bomb is a dud, and takes it
 //   AI27.4b  a chain of two bombs that stops at a dud: the attempt is given up as stranded
+//   AI27.4c  a hurt Bomber, the planned throw of a step from each of the 8 directions, the fallback
 //   AI27.5   the times: a goal that cannot be served is given up after a step of 90 s, three attempts at most, then the bot plays on and asks for nothing
+//   AI27.5b  a task that ran out of attempts starts afresh when a source of its ant appears
 //   AI27.6   who plays it: not Medium, not Easy, not a plan without the flag; the numbers of the plan are the owner's
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
@@ -79,7 +81,6 @@ void run_gate_goal_tests() {
             ASSERT_EQ(g.cost, 110);
             ASSERT_EQ(g.gate, GateKind::Fire);
             ASSERT_FALSE(g.powerup);
-            ASSERT_TRUE(g.same(g) && !g.same(GateGoal{}));
         }
         {
             Field f;                                                                  // two fire walls, the pile behind both: two cells to cross, the one nearest the hill is the one to put out first
@@ -142,6 +143,15 @@ void run_gate_goal_tests() {
             ASSERT_FALSE(f.goal(none).active());
         }
         {
+            Field f;                                                                  // a Bomber only on the far side of the wall is no source (and one on the mound of the hill is)
+            f.rock_wall();
+            f.powerup(30, 30, sim::AntType::Swimmer);
+            f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{10, 30});
+            ASSERT_FALSE(f.goal().active());
+            f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{5, 5});                     // a tile of the hill's mound: no component, the hill's own side
+            ASSERT_TRUE(f.goal().active());
+        }
+        {
             Field f;                                                                  // a wall five rocks thick: no flight clears it, no goal
             for (int y = 18; y <= 22; ++y) {
                 for (int x = 0; x < 60; ++x) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
@@ -194,9 +204,22 @@ void run_gate_goal_tests() {
             const GateGoal g = plan_gate_goal(GateInfo::analyse(map, sim.grid(), 0), view, GoalRules{});
             ASSERT_TRUE(!g.active() || !g.powerup || !(map.powerups()[g.target].tile == (TileCoord{1, 15})));
         }
-        ASSERT_TRUE(goals[0].cell == (TileCoord{9, 7}) && goals[0].same(goals[2]));       // the two north seats, the two south seats: the same tile, mirrored (rows 7 and 23)
-        ASSERT_TRUE(goals[1].cell == (TileCoord{9, 23}) && goals[1].same(goals[3]));
+        ASSERT_TRUE(goals[0].cell == (TileCoord{9, 7}) && goals[2].cell == goals[0].cell && goals[2].target == goals[0].target);       // the two north seats, the two south seats: the same tile, mirrored (rows 7 and 23)
+        ASSERT_TRUE(goals[1].cell == (TileCoord{9, 23}) && goals[3].cell == goals[1].cell && goals[3].target == goals[1].target);
         ASSERT_TRUE(goals[0].hop.lands.size() == 2 && goals[0].hop.lands[0] == (TileCoord{5, 11}));
+        {
+            sim::SimulationEngine sim;                                                  // a kind whose best hop lands in reach of the power-up but not on it: the chain that lands ON it is the one planned
+            sim.init(level, 7, 0x0F);
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            GoalRules thief;
+            thief.kinds = static_cast<uint8_t>(1u << static_cast<unsigned>(sim::AntType::Thief));
+            thief.hop_bombs = 4;
+            const GateGoal g = plan_gate_goal(GateInfo::analyse(map, sim.grid(), 0), view, thief);
+            ASSERT_TRUE(g.active() && g.powerup);
+            ASSERT_TRUE(g.hop.land() == map.powerups()[g.target].tile);
+            ASSERT_EQ(g.hop.bombs, 4);
+        }
     } TEST_END();
 
     TEST_CASE("AI27.3 A Hard Bot With The Goal On Puts A Fire Wall Out With a Fire Ant And Banks The Food Behind It; The Same Bot Without The Flag Banks Nothing") {
@@ -314,16 +337,167 @@ void run_gate_goal_tests() {
             f.powerup(30, 34, sim::AntType::Swimmer);
             Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
             auto& bot = rig.as<StandardBot>();
-            rig.run(1200);
-            done += bot.gate_goals().done();
-            if (std::string(bot.gate_goals().last_failure()) == "stranded") {
-                ++stranded;
-                ASSERT_TRUE(bot.gate_goals().given_up() >= 1u);
-                ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals) <= 1u, true);
+            bool counted = false;
+            for (int t = 0; t < 1200; ++t) {
+                rig.run(1);
+                if (!counted && bot.gate_goals().given_up() >= 1u) {
+                    counted = true;
+                    ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 0u);              // the ant of a failed attempt is given back at once
+                }
             }
+            done += bot.gate_goals().done();
+            if (std::string(bot.gate_goals().last_failure()) == "stranded") ++stranded;
         }
         ASSERT_TRUE(stranded >= 1u);                                                    // a dud on the second bomb (a fifth of the throws) happened in these seeds
         ASSERT_TRUE(done >= 1u);                                                        // and a chain that flew on
+    } TEST_END();
+
+    TEST_CASE("AI27.4c A Bomber That Is Hurt On The Way To The Plant Gives The Attempt Up As Hurt; A Diagonal Step Onto An Own Bomb Is Thrown As Planned; The Bot's Fallback Gives The Ant Back") {
+        {
+            Field f;
+            f.rock_wall();
+            for (int y = 21; y <= 24; ++y) {
+                for (int x = 0; x < 60; ++x) f.sim.grid_mut().place_bomb(static_cast<uint32_t>(x), static_cast<uint32_t>(y), 1);   // a chain of two bombs: five hit points to plant
+            }
+            f.powerup(8, 8, sim::AntType::Bomber);
+            f.powerup(30, 34, sim::AntType::Swimmer);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            bool hurt = false;
+            for (int t = 0; t < 1500 && bot.gate_goals().given_up() == 0u; ++t) {
+                rig.run(1);
+                if (!hurt && bot.gate_goals().phase() == GateGoalTask::Phase::Act && bot.gate_goals().ant() != 0u) {
+                    f.sim.get_unit(bot.gate_goals().ant()).hp = 3;                         // hurt before the first plant
+                    hurt = true;
+                }
+            }
+            ASSERT_TRUE(hurt);
+            ASSERT_EQ(std::string(bot.gate_goals().last_failure()), "hurt");
+            ASSERT_EQ(bot.gate_goals().plants(), 0u);
+        }
+        for (int f = 0; f < 8; ++f) {                                                   // the planned direction of a hop is the engine's: an ant on the tile next to the bomb, in each of the 8 directions
+            sim::SimulationEngine sim;
+            empty_field(sim, 3, 14400);
+            const sim::movement::TileDelta d = sim::movement::dir_delta(static_cast<uint8_t>(f));
+            const TileCoord bomb{30, 30}, from{bomb.x - d.dcol, bomb.y - d.drow};
+            sim.grid_mut().place_bomb(30, 30, 0);
+            const uint32_t id = sim.spawn_unit(0, sim::AntType::Bomber, from);
+            sim.issue_move_order(id, bomb);
+            for (int t = 0; t < 120 && sim.grid().has_bomb_at(bomb); ++t) sim.tick();
+            ASSERT_TRUE(sim.get_unit(id).flight_tile == GateInfo::simulate(sim.grid(), bomb, static_cast<uint8_t>(f)).lands[0]);
+        }
+        {
+            Field f;                                                                  // the fallback: the held ant is given back, no failure is counted
+            f.rock_wall();
+            f.powerup(8, 8, sim::AntType::Bomber);
+            f.powerup(30, 30, sim::AntType::Swimmer);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            for (int t = 0; t < 1500 && !(bot.gate_goals().phase() == GateGoalTask::Phase::Act && bot.gate_goals().ant() != 0u); ++t) rig.run(1);
+            ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 1u);
+            bot.gate_goals_for_labs().cancel(bot.ledger_for_labs());
+            ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 0u);
+            ASSERT_EQ(bot.gate_goals().phase(), GateGoalTask::Phase::Idle);
+            ASSERT_EQ(bot.gate_goals().given_up(), 0u);
+            rig.run(1500);
+            ASSERT_EQ(bot.gate_goals().done(), 1u);                                      // and it starts afresh when the bot is back
+        }
+    } TEST_END();
+
+    TEST_CASE("AI27.4d When The Bot Falls Back To The Plain Economy (The Stall Detector) The Ant Of A Gate Goal Is Given Back At That Look") {
+        Field f;
+        std::vector<uint32_t> workers;                                                  // no worker: nobody harvests while the Bomber is held, so nothing is banked
+        for (const sim::AntSnapshot& a : f.sim.get_world_state().ants) workers.push_back(a.id);
+        for (const uint32_t id : workers) f.sim.kill_unit(id);
+        f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{10, 14});
+        f.bomb_wall();                                                                  // walkable for the map analysis, so the pile counts as reachable and a stall is possible
+        LevelPlan plan = goal_plan();
+        plan.stall_ticks = 60;
+        plan.gate_step_ticks = 100000;                                                    // the goal is not given up by its own clock before the stall
+        plan.gate_attempt_ticks = 100000;
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan));
+        auto& bot = rig.as<StandardBot>();
+        bool held_before = false;
+        for (int t = 0; t < 600 && !bot.in_fallback(); ++t) {
+            rig.run(1);
+            held_before = held_before || bot.ledger().count(StandardBot::kGateGoals) != 0u;
+        }
+        ASSERT_TRUE(bot.in_fallback());
+        ASSERT_TRUE(held_before);                                                       // the task held an ant when the fallback began (or just before)
+        ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 0u);
+        ASSERT_EQ(bot.gate_goals().given_up(), 0u);                                      // and the cancel counts as no failure
+        ASSERT_EQ(bot.gate_goals().phase(), GateGoalTask::Phase::Idle);
+    } TEST_END();
+
+    TEST_CASE("AI27.4e The Gate Goal Takes Its Ant From A Fight (Rank 6 Above 5); A Source That Appears Later Starts The Search; The Number Of Goals Is Limited") {
+        {
+            Field f;
+            f.rock_wall();
+            f.powerup(30, 30, sim::AntType::Swimmer);
+            const uint32_t bomber = f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{10, 14});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            ASSERT_TRUE(bot.ledger_for_labs().take(bomber, StandardBot::kFight));         // the Bomber is in a fight
+            rig.run(1500);
+            ASSERT_EQ(bot.gate_goals().done(), 1u);
+        }
+        {
+            Field f;
+            f.rock_wall();
+            f.powerup(30, 30, sim::AntType::Swimmer);                                      // beyond the wall, and nothing at home to hop with: no goal
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(1000);
+            ASSERT_EQ(bot.gate_goals().attempts(), 0u);
+            f.powerup(8, 8, sim::AntType::Bomber);                                         // a source appears: the task looks again
+            rig.run(1500);
+            ASSERT_EQ(bot.gate_goals().done(), 1u);
+        }
+        {
+            Field f;
+            f.fire_wall();
+            f.powerup(8, 8, sim::AntType::Fire);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            GateGoalTask::Params params = bot.gate_goals().params();
+            params.goals_max = 1;
+            bot.gate_goals_for_labs().set_params(params);
+            rig.run(2500);
+            ASSERT_EQ(bot.gate_goals().done(), 1u);
+            ASSERT_TRUE(bot.gate_goals().exhausted());                                     // one goal was all that was allowed
+            f.powerup(9, 8, sim::AntType::Fire);
+            for (int x = 0; x < 60; ++x) f.sim.set_fire_at(TileCoord{x, 30}, 1000000);       // and a second wall afterwards is left alone
+            rig.run(1500);
+            ASSERT_EQ(bot.gate_goals().attempts(), 1u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI27.5b A Task That Ran Out Of Attempts Starts Afresh When A Source Of Its Ant Appears (At Most Twice): A New Fire Power-Up On The Hill's Side After Three Attempts Is Put To Use") {
+        for (uint32_t revivals_max = 0; revivals_max <= 2; revivals_max += 2) {
+            Field f;
+            f.fire_wall();
+            f.powerup(30, 10, sim::AntType::Fire);
+            f.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 10});                // nobody can take that one
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            GateGoalTask::Params params = bot.gate_goals().params();
+            params.revivals_max = revivals_max;
+            bot.gate_goals_for_labs().set_params(params);
+            rig.run(7000);
+            ASSERT_TRUE(bot.gate_goals().exhausted());
+            f.powerup(9, 12, sim::AntType::Fire);                                          // a Fire power-up that a worker can take
+            rig.run(2500);
+            if (revivals_max == 0) {
+                ASSERT_TRUE(bot.gate_goals().exhausted());
+                ASSERT_EQ(bot.gate_goals().revivals(), 0u);
+                ASSERT_EQ(fires_in_row(f.sim, 20), 60);
+            } else {
+                ASSERT_EQ(bot.gate_goals().revivals(), 1u);
+                ASSERT_EQ(bot.gate_goals().done(), 1u);
+                ASSERT_EQ(fires_in_row(f.sim, 20), 59);
+                ASSERT_TRUE(f.sim.get_player_score(0) > 0);
+            }
+        }
     } TEST_END();
 
     TEST_CASE("AI27.5 The Times: A Goal That Cannot Be Served Is Given Up After A Step Of 90 Seconds, At Most Three Attempts, Then The Bot Plays On And Asks For Nothing") {
@@ -342,8 +516,18 @@ void run_gate_goal_tests() {
         ASSERT_EQ(bot.gate_goals().given_up(), 0u);                                    // not yet: the step has 100 ticks left
         ASSERT_EQ(bot.gate_goals().phase(), GateGoalTask::Phase::Fetch);
         ASSERT_TRUE(bot.tactics().wants[static_cast<size_t>(sim::AntType::Fire)] >= 1u);   // the right ant is asked for
-        rig.run(400);
+        uint32_t until_fail = 0;
+        while (bot.gate_goals().given_up() == 0u && until_fail < 600u) {
+            rig.run(1);
+            ++until_fail;
+        }
         ASSERT_EQ(bot.gate_goals().given_up(), 1u);                                    // after the step: the first attempt is over
+        uint32_t waited = 0;
+        while (bot.gate_goals().attempts() < 2u && waited < 400u) {                    // the next one starts after the pause of 100 ticks, at the next look (20 ticks)
+            rig.run(1);
+            ++waited;
+        }
+        ASSERT_TRUE(waited >= 100u && waited <= 125u);
         rig.run(4700);
         ASSERT_EQ(bot.gate_goals().attempts(), 3u);                                    // the first and two retries
         ASSERT_EQ(bot.gate_goals().given_up(), 3u);

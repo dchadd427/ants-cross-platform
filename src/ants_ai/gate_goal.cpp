@@ -18,7 +18,7 @@ void offer(GateGoal& best, const GateGoal& candidate) {
     if (!best.active() || candidate.cost < best.cost) best = candidate;
 }
 
-// Whether the bot has the kind of ant, or a power-up of that kind lies on its own side of the gates (a tile of the hill's component): a goal that needs a kind with no source would only wait out its time
+// Whether the bot has an ant of the kind on its own side of the gates, or a power-up of that kind lies there (a tile of the hill's component): a goal that needs a kind with no source would only wait out its time
 // (a typed ant that takes a power-up leaves its old one behind: on the far side of a wall it is no source)
 bool on_home_side(const GateInfo& gates, sim::TileCoord tile) {            // the tile, or a tile next to it (a power-up is solid in a world made by hand), is in the hill's component
     for (int dy = -1; dy <= 1; ++dy) {
@@ -29,9 +29,17 @@ bool on_home_side(const GateInfo& gates, sim::TileCoord tile) {            // th
     return false;
 }
 
+bool ant_on_home_side(const BotView& view, const AntView& ant) {                // the walkers' components of the map analysis; a tile of no component (the mound) is the hill's own
+    const MapInfo* map = view.map();
+    if (map == nullptr) return true;
+    const int32_t where = map->component(view.seat(), ant.tile);
+    const int32_t side = map->hill_component(view.seat());
+    return where < 0 || side < 0 || where == side;
+}
+
 bool has_source(const GateInfo& gates, const BotView& view, sim::AntType kind) {
     for (const AntView& a : view.mine()) {
-        if (a.type == kind) return true;
+        if (a.type == kind && ant_on_home_side(view, a)) return true;
     }
     for (const PowerUpView& p : view.powerups()) {
         if (p.kind == kind && gates.home() >= 0 && on_home_side(gates, p.tile)) return true;

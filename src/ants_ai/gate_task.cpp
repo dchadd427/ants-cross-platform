@@ -10,8 +10,25 @@ uint64_t mix(uint64_t h, uint64_t v) noexcept { return (h ^ v) * 1099511628211ul
 
 }  // namespace
 
-uint64_t GateGoalTask::signature(const BotView& view) const {
+// What the ants of the gate goal come from: the own Fire ants and Bombers with the side of the walls they stand on, and the power-ups on the map by tile and kind. A change of it is a reason to look again
+// (an ant is hatched or hurt, a typed ant drops its old power-up on the hill's side), also for a task that ran out of attempts
+uint64_t GateGoalTask::sources(const TaskContext& context) const {
     uint64_t h = 1469598103934665603ull;
+    const int32_t side = context.map.hill_component(context.seat);
+    for (const AntView& a : context.view.mine()) {
+        if (a.type != sim::AntType::Fire && a.type != sim::AntType::Bomber) continue;
+        const int32_t where = context.map.component(context.seat, a.tile);
+        const bool home_side = where < 0 || side < 0 || where == side;
+        h = mix(h, (static_cast<uint64_t>(a.id) * 8u + static_cast<uint64_t>(a.type)) * 2u + (home_side ? 1u : 0u));
+    }
+    h = mix(h, 0x50C);
+    for (const PowerUpView& p : context.view.powerups()) h = mix(h, (static_cast<uint64_t>(p.tile.y) * 4096u + static_cast<uint64_t>(p.tile.x)) * 8u + static_cast<uint64_t>(p.kind));
+    return h;
+}
+
+uint64_t GateGoalTask::signature(const TaskContext& context) const {
+    const BotView& view = context.view;
+    uint64_t h = sources(context);
     for (const FireWallView& f : view.fire_walls()) h = mix(h, static_cast<uint64_t>(f.tile.y) * 4096u + static_cast<uint64_t>(f.tile.x));
     h = mix(h, 0xB0B);
     for (const BombView& b : view.bombs()) h = mix(h, (static_cast<uint64_t>(b.tile.y) * 4096u + static_cast<uint64_t>(b.tile.x)) * 8u + b.owner);
@@ -24,13 +41,29 @@ void GateGoalTask::on_command(const sim::Command&, Bot::Fate, uint64_t) {}
 
 void GateGoalTask::finish(AntLedger& ledger) {
     ledger.release_all(id());
-    phase_ = Phase::Idle;
+    if (phase_ != Phase::Exhausted) phase_ = Phase::Idle;
+}
+
+void GateGoalTask::cancel(AntLedger& ledger) {
+    ledger.release_all(id());
+    ant_ = 0;
+    goal_ = GateGoal{};
+    if (phase_ != Phase::Exhausted) phase_ = Phase::Idle;
+    signature_known_ = false;
 }
 
 void GateGoalTask::step(TaskContext& context) {
     const BotView& view = context.view;
-    if (phase_ == Phase::Exhausted || !view.has_grid()) return;
+    if (!view.has_grid()) return;
     const uint64_t now = view.tick();
+    if (phase_ == Phase::Exhausted) {                                                     // out of attempts: a new source of the ant (a Bomber hatched, a power-up of the kind on the hill's side) is a new start
+        if (finished_ || revivals_ >= params_.revivals_max || sources(context) == exhausted_sources_) return;
+        ++revivals_;
+        failures_ = 0;
+        phase_ = Phase::Idle;
+        signature_known_ = false;
+        next_plan_ = now;
+    }
     if (phase_ == Phase::Idle) {
         plan(context);
         return;
@@ -55,12 +88,13 @@ void GateGoalTask::plan(TaskContext& context) {
     const BotView& view = context.view;
     const uint64_t now = view.tick();
     if (done_ >= params_.goals_max) {
+        finished_ = true;
         phase_ = Phase::Exhausted;
         return;
     }
     if (now < pause_until_ || now < next_plan_ || view.ticks_left() < params_.min_ticks_left) return;
     next_plan_ = now + params_.look_every;
-    const uint64_t sig = signature(view);
+    const uint64_t sig = signature(context);
     if (signature_known_ && sig == signature_) return;                                    // nothing changed since the look that found no goal
     GateInfo gates = GateInfo::analyse(context.map, view.grid(), context.seat);
     GoalRules rules;
@@ -215,7 +249,8 @@ void GateGoalTask::succeed(TaskContext& context) {
     if (ant_ != 0) context.ledger.release(ant_, id());
     ant_ = 0;
     goal_ = GateGoal{};
-    phase_ = done_ >= params_.goals_max ? Phase::Exhausted : Phase::Idle;
+    finished_ = done_ >= params_.goals_max;
+    phase_ = finished_ ? Phase::Exhausted : Phase::Idle;
     next_plan_ = context.view.tick() + 20u;
     signature_known_ = false;
 }
@@ -229,6 +264,7 @@ void GateGoalTask::fail(TaskContext& context, const char* why) {
     goal_ = GateGoal{};
     if (failures_ > params_.retries) {
         phase_ = Phase::Exhausted;
+        exhausted_sources_ = sources(context);
         return;
     }
     phase_ = Phase::Idle;
