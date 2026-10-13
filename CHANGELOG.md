@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...8db42dc9)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...a4d4eecf)
 
 ## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
 
