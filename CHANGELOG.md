@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** network protocol 20: a v0.12.35 game cannot join a v0.12.36 server or room, and the other way round. Nothing in the rules or the replay format changed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6a085827...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...60cc0992)
 
 ## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
 
