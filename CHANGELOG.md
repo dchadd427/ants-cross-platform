@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.32 - 2026-10-12 - Map pictures show the food piles
+
+**For players:**
+- The map pictures in the map picker and the lobby now show the food piles. The 534 pictures of the players' maps were drawn before the game's world picture showed every food pile of a map file (v0.12.29), so they still looked like the old, pile-less map; all of them are drawn again by the game itself.
+- Nothing else in a picture changes: same size and quality, and a map without piles has exactly the same picture as before.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/714d5a35...HEAD)
+
 ## v0.12.31 - 2026-10-12 - Names of the computer players: the list, the picker and the label (code only)
 
 **For players:**
@@ -488,16 +498,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b8d2603...e40591f), [workflow](docs/WORKFLOW.md)
 
-## v0.1.2 - 2026-10-03 - Treasure is the default map; the web page opens in 16:9
+## Older versions (v0.1.2 and before)
 
-**For players:**
-- Treasure, the map that is played most, is the default everywhere a map is chosen for you: the setup screen highlights it (the list and its order are the original's), the desktop start menu's Host panel opens on it, the web page's Play online form preselects it, and an online room whose code names no map is a Treasure room. A choice you made and saved still wins.
-- The web pages open in 16:9 again for everyone: a "Classic 4:3" choice that a browser remembered earlier is forgotten once. Pick Classic 4:3 again under the game to keep it (`?aspect=4:3` in the address still works).
-
-**Rules / network:** None: the rules and network protocol 11 are unchanged (v0.1.0 to v0.1.2 games play together).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ff52c2d...74c8085), [the setup screen's deviation](docs/ORIGINAL_PROGRAM.md#differences-made-on-purpose)
-
-## Older versions (v0.1.1 and before)
-
-Every release before v0.1.2, and the long notes of v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.1.3, and the long notes of v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
