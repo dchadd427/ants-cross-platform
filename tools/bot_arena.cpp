@@ -808,6 +808,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
     if (key == "ggoal") return flag(p.gate_goals);                                    // the gate goals (fire walls and bombs that wall the food off; Hard plays them only: docs/reverse_engineering/bomb_gates.md); off in every plan
+    if (key == "groute") return flag(p.gate_route);
     if (key == "gstep") { p.gate_step_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "gattempt") { p.gate_attempt_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "gretries") { p.gate_retries = static_cast<uint32_t>(v); return true; }

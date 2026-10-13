@@ -244,6 +244,7 @@ struct LevelPlan {
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where fire walls or bombs wall the food off (POPcOrN, Bombz Away) the bot gets the right ant first (a Fire ant to put a wall out, a Bomber
     // to bomb itself over it) and does it. Hard only, and OFF in every plan (`--tune ggoal=1` switches it on at Hard); the times are the owner's numbers (ticks of 50 ms)
     bool gate_goals{false};
+    bool gate_route{true};               // with gate_goals: the bombs on the way to a food that the bot can walk to are defused (bomb routing, "Bomb routing" in that page; `--tune groute=0` leaves them to the goals' hop)
     uint32_t gate_step_ticks{1800};      // a step (fetching the ant, working the gate) that has made no progress for 90 s is given up, and with it the attempt
     uint32_t gate_attempt_ticks{4800};   // an attempt (one goal from the first look to the end) that is not done after 4 minutes is given up
     uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates

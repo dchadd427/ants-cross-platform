@@ -140,7 +140,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if (plan.islands && plan.island_ferry && island_.active()) ferry_.step(context);        // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
-    if (plan.gate_goals && level_ == Level::Hard && !fallback) route_.step(context);        // (the same flag: the Bombers that defuse the bombs on the way of the economy)
+    if (plan.gate_goals && plan.gate_route && level_ == Level::Hard && !fallback) route_.step(context);        // (the same flag: the Bombers that defuse the bombs on the way of the economy)
     if (plan.gate_goals && level_ == Level::Hard && !fallback && (route_.closed_piles().empty() || gate_goals_.phase() != GateGoalTask::Phase::Idle)) gate_goals_.step(context);   // (off in every plan; Hard only: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips; it waits while the route task clears the way to the food)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                    // (when the plan has no rush the task only gives back what it held)
@@ -168,7 +168,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         harvest_.set_pile_limits(island_.pile_limits());                                    // and one ant at a time on a bridge
         if (island_.take_reask()) harvest_.reask_soon();                                    // a bridge was finished: the economy asks the map again now
     }
-    if (plan.gate_goals && level_ == Level::Hard && !fallback) {                             // the pile the Bomber is still clearing the way to is closed to the economy too
+    if (plan.gate_goals && plan.gate_route && level_ == Level::Hard && !fallback) {          // the pile the Bomber is still clearing the way to is closed to the economy too
         std::set<uint32_t> closed = route_.closed_piles();
         if (plan.islands) closed.insert(island_.closed_piles().begin(), island_.closed_piles().end());
         harvest_.set_closed_piles(closed);

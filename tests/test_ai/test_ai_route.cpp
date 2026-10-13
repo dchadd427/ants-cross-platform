@@ -3,7 +3,7 @@
 //
 //   AI28.1   a band of neutral bombs across the way to the food: the flag on defuses a path through it, loses no ant and banks; every bomb off the path is still there
 //   AI28.2   Bombz Away itself: a bomb on every tile and every start ant on one; after the opening no Bomber steps on a bomb, and another team's corner is never touched
-//   AI28.3   the flag off, a Medium bot and a map without bombs: no Bomber held, no pile closed, no order
+//   AI28.3   the flag off, the routing switched off, a Medium bot and a map without bombs: no Bomber held, no pile closed, no order
 //   AI28.4   a Bomber that cannot get at the bombs gives up after 90 s and the pile is open again
 #include <map>
 #include <string>
@@ -105,8 +105,8 @@ void run_route_tests() {
             if (hp.count(a.id) != 0) ASSERT_EQ(static_cast<int>(a.hp), hp[a.id]);          // nobody stepped on a bomb after the opening
         }
     } TEST_END();
-    TEST_CASE("AI28.3 The Flag Off, A Medium Bot And A Map Without Bombs: No Bomber Held, No Pile Closed, No Order") {
-        for (int v = 0; v < 3; ++v) {
+    TEST_CASE("AI28.3 The Flag Off, The Routing Off, A Medium Bot And A Map Without Bombs: No Bomber Held, No Pile Closed, No Order") {
+        for (int v = 0; v < 4; ++v) {
             BombField f;
             if (v == 2) {
                 for (int y = 20; y < 23; ++y) {
@@ -115,6 +115,7 @@ void run_route_tests() {
             }
             LevelPlan plan = v == 1 ? peace_plan(Level::Medium) : route_plan(v == 2);
             plan.gate_goals = v != 0;
+            plan.gate_route = v != 3;                                                      // (the routing has its own switch below the gate goals')
             Rig rig(f.sim, 0, v == 1 ? Level::Medium : Level::Hard, std::make_unique<StandardBot>(plan));
             auto& bot = rig.as<StandardBot>();
             rig.run(1500);

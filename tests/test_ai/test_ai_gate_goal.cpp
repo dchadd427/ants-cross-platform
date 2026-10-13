@@ -52,6 +52,7 @@ struct Field {
 LevelPlan goal_plan(Level level = Level::Hard) {
     LevelPlan plan = peace_plan(level);
     plan.gate_goals = true;
+    plan.gate_route = false;                                                          // the goals' own hop over a wall of bombs (AI28 has the routing)
     return plan;
 }
 
