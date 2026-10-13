@@ -417,7 +417,7 @@ void run_gate_tests() {
             if (e.path().extension() == ".lvl") files.push_back(e.path().string());
         }
         std::sort(files.begin(), files.end());
-        size_t analysed = 0, gated = 0, with_bombs = 0, with_fire = 0;
+        size_t no_home = 0, with_home = 0, analysed = 0, gated = 0, with_bombs = 0, with_fire = 0;
         for (const std::string& file : files) {
             sim::SimulationEngine sim;
             assets::LevelData level = load_level(file);
@@ -439,6 +439,9 @@ void run_gate_tests() {
                 ASSERT_FALSE(g.empty());
                 ++analysed;
                 ASSERT_EQ(g.hops().size(), again.hops().size());
+                if (g.home() < 0) ASSERT_TRUE(g.hops().empty());
+                for (const BombHop& h : g.hops()) ASSERT_TRUE(g.home() >= 0 && h.from_comp == g.home() && h.to_comp >= 0 && h.to_comp != g.home());
+                ++(g.home() < 0 ? no_home : with_home);
                 ASSERT_EQ(g.barriers().size(), again.barriers().size());
                 for (size_t i = 0; i < g.piles().size(); ++i) {
                     ASSERT_TRUE(g.piles()[i].gate == again.piles()[i].gate && g.piles()[i].hop == again.piles()[i].hop && g.piles()[i].defuse_bombs == again.piles()[i].defuse_bombs);
@@ -453,6 +456,7 @@ void run_gate_tests() {
                 with_fire += g.fire_cell_count() > 0 ? 1u : 0u;
             }
         }
+        ASSERT_TRUE(no_home > 50 && with_home > 300);                                     // (the library has both kinds: a bomb under every ramp, and a safe way out)
         ASSERT_TRUE(analysed > 400);
         ASSERT_TRUE(with_bombs > 100 && with_fire > 0);
         ASSERT_TRUE(gated > 0);

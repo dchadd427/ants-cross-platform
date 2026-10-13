@@ -265,31 +265,33 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
     }
 
     // ---- the hops from the home component ------------------------------------------------------------------------------------------------------------------
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            const sim::TileCoord t{x, y};
-            if (!bomb_ground(grid, t)) continue;
-            bool planter = false;                                                // the Bomber works from a cardinal neighbour of the tile that it can stand on
-            for (int d = 0; d < 8; d += 2) planter = planter || out.component(step_in(t, d, 1)) == out.home_;
-            if (!planter) continue;
-            for (int f = 0; f < 8; ++f) {
-                if (out.component(step_in(t, f, -1)) != out.home_) continue;     // the ant steps onto T from P = T - f
-                BombHop hop = simulate(grid, t, static_cast<uint8_t>(f));
-                hop.from = step_in(t, f, -1);
-                hop.from_comp = out.home_;
-                if (hop.end != HopEnd::Ground) continue;
-                hop.to_comp = out.component(hop.land());
-                if (hop.to_comp < 0 || hop.to_comp == out.home_) continue;
-                out.hops_.push_back(std::move(hop));
+    if (out.home_ >= 0) {                                                        // (no safe tile in front of the ramp, home_ == -1: no ant of the hill can stand where a Bomber works, and component() is -1 for every unsafe tile and must not match it)
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const sim::TileCoord t{x, y};
+                if (!bomb_ground(grid, t)) continue;
+                bool planter = false;                                                // the Bomber works from a cardinal neighbour of the tile that it can stand on
+                for (int d = 0; d < 8; d += 2) planter = planter || out.component(step_in(t, d, 1)) == out.home_;
+                if (!planter) continue;
+                for (int f = 0; f < 8; ++f) {
+                    if (out.component(step_in(t, f, -1)) != out.home_) continue;     // the ant steps onto T from P = T - f
+                    BombHop hop = simulate(grid, t, static_cast<uint8_t>(f));
+                    hop.from = step_in(t, f, -1);
+                    hop.from_comp = out.home_;
+                    if (hop.end != HopEnd::Ground) continue;
+                    hop.to_comp = out.component(hop.land());
+                    if (hop.to_comp < 0 || hop.to_comp == out.home_) continue;
+                    out.hops_.push_back(std::move(hop));
+                }
             }
         }
     }
-    const auto better = [&](int32_t a, int32_t b) {                              // the hop a is better than the hop b: fewer bombs, then the better chance
+    const auto better = [&](int32_t a, int32_t b) {                              // the hop a is better than the hop b: fewer bombs (the chance follows from the number)
         if (b < 0) return true;
         const BombHop& x = out.hops_[static_cast<size_t>(a)];
         const BombHop& y = out.hops_[static_cast<size_t>(b)];
         if (x.bombs != y.bombs) return x.bombs < y.bombs;
-        return x.fly_percent > y.fly_percent;
+        return false;                                                            // (the same number of bombs is the same chance: the first in the scan wins)
     };
     for (std::vector<GateTarget>* list : {&out.piles_, &out.powerups_}) {
         for (GateTarget& g : *list) {
