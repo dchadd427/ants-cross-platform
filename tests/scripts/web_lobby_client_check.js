@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 19 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 20 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a colour move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
@@ -139,6 +139,7 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('setPlan refuses teams that are not a pair a < b', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 2, teamB: 1 }) === false && c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 0, teamB: 255 }) === false);
     check('rename sends a Name', c.rename('Pri') && hex(w.last().sent[7]) === hex(N.encodeName('Pri')));
     check('rename refuses a name with a space at the end, an empty one and a long one', c.rename('Pri ') === false && c.rename('') === false && c.rename('x'.repeat(33)) === false);
+    check('rename refuses a name that is a computer player\'s (a Name that the server would count as a violation): "Bot (x)", "Pip (bot)", "Pip (Bot, Hard)", "x ( bot , y )" (nothing is sent)', ['Bot (x)', 'Pip (bot)', 'Pip (Bot, Hard)', 'x ( bot , y )'].every((n) => c.rename(n) === false));
     check('start sends the fill levels and the teams of the room', c.start() && hex(w.last().sent[8]) === hex(N.encodeStartRequest([0, 0, 0, 0], 255, 255)));
     check('nothing else was sent', w.last().sent.length === 9);
     // a plan that bots fill: the StartRequest follows the room's plan

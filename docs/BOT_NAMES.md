@@ -7,7 +7,7 @@ How a computer player is named, shown and kept apart from a person. The code is 
 - A bot has a random name and is shown as `Pip (bot, Hard)`: the level is inside the parentheses. The two test kinds of `--bot` say what they are in small letters: `Pip (bot, idle)`, `Pip (bot, worker)`. The same string is shown in the lobby (also for a bot that the plan asks for and that is not seated yet, from the moment the leader sets the plan), the match, the results, the replay list and head, and the match history.
 - A bot may have the name of a person; the ending `(bot, ...)` tells them apart. Two bots of one room never share a name.
 - Matches that were stored before keep what they stored (`Bot (Hard)`); the legacy forms stay readable and reserved.
-- **Where it is built (v0.12.34): a dedicated server's rooms** (the plan's bots, the leader's fill, the room's own `bots`, the server's matches of computer players). A game on the local network and a local game still say `Bot (Level)` for now; the in-game HUD label is not changed yet (below).
+- **Where it is built (v0.12.36): a dedicated server's rooms** (the plan's bots, the leader's fill, the room's own `bots`, the server's matches of computer players). A game on the local network and a local game still say `Bot (Level)` for now; the in-game HUD label is not changed yet (below). The local game's own `--name` and `-N` are not checked against the reserved names yet (they name the local player and the teams of a game on one's own machine; the check, and what to do with a bad name there, belong to the local-game follow-up).
 
 ## The list and the picker
 

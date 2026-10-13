@@ -99,6 +99,8 @@
         for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
         return out;
     }
+    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same): starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks and case ignored
+    function reservedName(name) { return /^bot\(|\(bot(,[^()]+)?\)$/.test(String(name).replace(/[ \t\r\n]/g, '').replace(/[A-Z]/g, function (c) { return c.toLowerCase(); })); }
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }
@@ -549,7 +551,7 @@
         return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));
     };
     LobbyClient.prototype.rename = function (name) {
-        if (!this.canAct() || this.room.starting || !validPersonName(name)) return false;
+        if (!this.canAct() || this.room.starting || !validPersonName(name) || reservedName(name)) return false;        // (protocol 20: the server counts a bot-like name as a violation; a page never sends one)
         return this.send('rename', encodeName(name));
     };
     LobbyClient.prototype.remove = function (seat, guard) {

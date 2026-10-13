@@ -414,6 +414,25 @@ int main() {
         ASSERT_EQ(find(std::string(5000, 'a')), std::vector<std::string>());      // (a text far longer than any name: it matches nothing and costs nothing)
     } TEST_END();
 
+    TEST_CASE("HS2.4b The text search finds a bot by the name it is shown under (protocol 20: \"Pip (bot, Hard)\"), and a match stored before the names by \"Bot (Hard)\"") {
+        Db d;
+        ASSERT_TRUE(d.ok);
+        std::vector<HistoryRecord> v;
+        v.push_back(record_of(kT0, "TINY.LVL", "1v1", 1000, true, -1, false, {seat_of(0, "Ann", "", 5, 1, 1, 1), seat_of(1, "Pip", "Hard", 4, 1, 1, 1)}));      // (a match with a named bot)
+        v.push_back(record_of(kT0 + 1, "TINY.LVL", "1v1", 1000, true, -1, false, {seat_of(0, "Bob", "", 5, 1, 1, 1), seat_of(1, "", "Hard", 4, 1, 1, 1)}));       // (a match stored before the names)
+        ASSERT_TRUE(d.fill(v));
+        const auto find = [&](const std::string& text) {
+            HistoryQuery q;
+            q.text = text;
+            return ids_of(d.store.query(q, kNoRecordings));
+        };
+        ASSERT_EQ(find("pip (bot, hard)"), ids_at(v, {0}));
+        ASSERT_EQ(find("Pip (bot, Hard)"), ids_at(v, {0}));
+        ASSERT_EQ(find("(bot, hard)"), ids_at(v, {0}));
+        ASSERT_EQ(find("bot (hard)"), ids_at(v, {1}));
+        ASSERT_EQ(find("pip"), ids_at(v, {0}));
+    } TEST_END();
+
     TEST_CASE("HS2.5 The recording's state is asked only when the list filters by it (once for each match that fits the other filters), and the page is cut from the matches that have that state") {
         Db d;
         ASSERT_TRUE(d.ok);

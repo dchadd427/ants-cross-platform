@@ -948,7 +948,7 @@ bool ClientLobby::request_name(const std::string& name) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !room_.lobby() || !conn_->is_open()) return false;
     NameMsg m;
     m.name = trimmed(printable(name, kMaxNameChars));
-    if (m.name.empty()) return false;
+    if (m.name.empty() || ai::is_reserved_bot_name(m.name)) return false;                 // (protocol 20: the server's decoder refuses such a name and counts a violation; a client never sends one)
     return conn_->send(encode(m));
 }
 

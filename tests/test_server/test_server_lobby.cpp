@@ -924,7 +924,7 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia.lobby->request_name("Pia Lee"));                                  // the leader's too
         w.run(300);
         ASSERT_EQ(w.status("name0001").names[0], std::string("Pia Lee"));
-        ASSERT_TRUE(bob.lobby->request_name("Bot (Hard)"));                               // a person is never shown as a bot: Robert stays Robert
+        ASSERT_FALSE(bob.lobby->request_name("Bot (Hard)"));                              // a person is never shown as a bot: Robert stays Robert
         w.run(300);
         ASSERT_EQ(w.status("name0001").names[1], std::string("Robert"));
         // START: the pages go to the game page and their games take the seats with the keys, saying the name that a game knows by default; the seats keep the names that the room shows
