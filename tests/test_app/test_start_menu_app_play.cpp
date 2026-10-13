@@ -430,7 +430,7 @@ void run_start_menu_app_play_tests() {
             ASSERT_EQ(app.state(), AppState::StartMenu);
             ASSERT_EQ(app.start_menu().panel(), MenuPanel::Single);
             ASSERT_EQ(app.start_menu().selected(), MenuId::SingleName);
-            ASSERT_HAS(app.start_menu().message(), "A name that starts with \"Bot (\" is for computer players");
+            ASSERT_HAS(app.start_menu().message(), "A name like \"Bot (...)\" or \"Pip (bot)\" is for computer players");
             ASSERT_TRUE(app.bots() == nullptr && app.sim().get_player_name(0) != "Bot (Hard)");
             click(app, MenuId::SingleName);                                                  // (typing nothing keeps the selection: Ctrl+A and Backspace empty the field)
             press(app, SDLK_a, KMOD_CTRL);

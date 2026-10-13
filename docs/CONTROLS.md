@@ -33,7 +33,7 @@ The menu joins and hosts through a game server ([The server](#the-server)). A ro
 
 ### Join with a code
 
-- **Your name** is remembered ("Player" at first) and has at most 32 printable characters. A name that starts with "Bot (", whatever its blanks and capitals, is refused on the panel with the reason: the server would rename such a player, and a person is never shown as a bot.
+- **Your name** is remembered ("Player" at first) and has at most 32 printable characters. A name that starts with "Bot (" or ends with "(bot)" or "(bot, ...)", whatever its blanks and capitals, is refused on the panel with the reason: the server would rename such a player, and a person is never shown as a bot.
 - **Room code**: up to 32 letters, digits, `-` and `_`, as the screens show it (`k7m 2xq`, in two groups of three: the blanks are dropped). `Ctrl+V` / `Cmd+V` pastes. **The case is never changed**: the server's codes are case sensitive. A code alone makes no room (use Host): one that no room has is told "There is no room with the code k7m2xq on beta.playants.org:4001. Check the code (capital letters matter)." (the web page and the command line say "There is no such room on this server.")
 - **Join** connects to the game server ([The server](#the-server)), the same way as `--join HOST:PORT --room CODE --name NAME`. It ends in the guest's screen, or in the leader's host screen with START when you are the first in the room. "Connecting to <server>..." has a Cancel button (`Esc`).
 

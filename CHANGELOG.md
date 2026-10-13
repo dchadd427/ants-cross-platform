@@ -30,7 +30,17 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...a4d4eecf)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8ab3344c...a4d4eecf)
+## v0.12.36 - 2026-10-13 - Names of the computer players in the server's rooms (protocol 20)
+
+**For players:**
+- Computer players now have names. In a room on the game server a bot is called, for example, `Pip (bot, Hard)` (a random short name, then `bot` and its level) instead of `Bot (Hard)`: in the waiting room, on the results, in the replay list and in the match history. The front page's room shows the name of a bot as soon as the host picks it for a colour, before START, and the bot keeps that name in the match. The test bots are `Pip (bot, idle)` and `Pip (bot, worker)`. Matches kept before keep their old `Bot (Hard)`.
+- A name that looks like a computer player's is not for people: a name that ends with `(bot)` or `(bot, ...)` is refused like the names that start with `Bot (` (start menu, front page, game page, rooms).
+- A game on the local network and a game on your own computer still say `Bot (Level)`; the in-game label is unchanged for now.
+
+**Rules / network:** network protocol 20: a v0.12.35 game cannot join a v0.12.36 server or room, and the other way round. Nothing in the rules or the replay format changed.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b09bc246...26b4a5de)
 
 ## v0.12.35 - 2026-10-13 - Computer players can read the fire-wall and bomb gates of a map (analysis only)
 
@@ -495,23 +505,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/888e788...e57833b), [the bots](docs/BOTS.md)
 
-## v0.2.0 - 2026-10-03 - The clock waits for the start dialog; every screen in 16:9; fullscreen mouse
+## Older versions (v0.2.0 and before)
 
-**For players:**
-- **The match clock waits for the "Get ready to play!" dialog.** Every match still opens with the original's dialog for 5 s, but the clock and the ants only start when it closes, so all 12 minutes (or the map's own time) are playable. On the network the host seals the first turn 5 s after the match began and every machine closes its dialog when its first turn runs. Computer players do not move while the dialog is up either, and their first orders come one by one at the speed of their level: about 0.5 s into the match at Hard, 1.3 s at Medium and 3.1 s at Easy (the machine that runs the bots is ahead of a remote person's screen by the link's delay and the buffer, 20 - 290 ms measured, not seconds).
-- **Every screen is composed for 16:9:** the loading screen, the quick help at the start, the results and the desktop start menu use the whole 960 x 540 canvas, built from the original's own art, instead of a 640 x 480 page centred on clay. Classic 4:3 (`--aspect 4:3`, `?aspect=4:3`) is as it was.
-- **Fullscreen mouse.** On a screen that is not 16:9 the black bars count as the picture's edge: push the mouse into a bar and the map scrolls. On the web page the browser holds the mouse inside the game in fullscreen (the setting "Fullscreen mouse: Locked / Free" under the game, remembered), so every edge and corner scrolls and a Mac's Dock and menu bar stay away; the desktop game keeps the Dock and the menu bar hidden in a fullscreen Space of the green button too.
-- **The window opens in 16:9 from the first frame:** the desktop window and each of the four windows of `start_game.sh` / `start_game.bat` are created at the shape of the picture (a 4:3 window used to flash up first). `start_game.sh` builds the game every time it starts and stops when the build fails; it used to launch an old binary for ever.
-- **Your name on beta.playants.org:** one "Your name" field on the Play online page, shared by Host and Join and remembered in the browser, puts your name into the game instead of a random one. A link that somebody sends you asks for your name first.
-
-**Rules / network:** The rules did not change. Network protocol 12: v0.1.x games cannot join (refused with a version message; from this release the web page's message says "Reload the page to update.").
-
-**Fixes:**
-- A command that reaches the host before the first turn is sealed is discarded: a modified client could script an opening of up to 64 orders per seat that ran at the first tick, ahead of every person. Honest clients are not affected.
-- The loading screen drew the frame's pieces in the wrong order (145 pixels), and the results' numbers ran together ("20", "4", "10" as "204 10").
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ddf134f...f29c2f9), [network notes](docs/NETWORK_PORT.md)
-
-## Older versions (v0.1.3 and before)
-
-Every release before v0.2.0, and the long notes of v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.3.0, and the long notes of v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

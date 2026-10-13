@@ -390,7 +390,7 @@ const Golden kGoldens[] = {
     {"screen.menu.join.empty", 0xa3719b0cf65673ec, 148},
     {"screen.menu.join.typed", 0xee59ae3037c1cc35, 149},
     {"screen.menu.join.caret_off", 0x02f6dbba4e83ab42, 148},
-    {"screen.menu.join.name_refused", 0xa4d022926ae89c6f, 160},
+    {"screen.menu.join.name_refused", 0xfb7d67f821102f61, 160},
     {"screen.menu.connecting", 0xa95f45bb91fe2012, 114},
     {"screen.menu.join.error", 0xdffb5d28277afaa0, 158},
     // The host-panel rows below moved deliberately in bot games part B (network protocol 13: a level for each bot and teams chosen before the start were asked for): the panel has a row for

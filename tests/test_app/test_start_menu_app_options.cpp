@@ -976,7 +976,7 @@ void run_start_menu_app_options_tests() {
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
             const server::RoomStatus s = server.status(code);
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 4 && s.expected == 4 && s.bots.size() == 3);
-            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Medium)" && s.names[2] == "Bot (Medium)" && s.names[3] == "Bot (Medium)");
+            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == bn(code, 1, "Medium") && s.names[2] == bn(code, 2, "Medium") && s.names[3] == bn(code, 3, "Medium"));
             ASSERT_TRUE(s.bots[0].fill && s.bots[0].level == "medium" && s.bots[0].kind == "standard");
             ASSERT_EQ(app.sim().roster_mask(), 0x0F);
             hall.step(net::kMatchStartDelayMs + 4000);                                         // (the server seals the first turn kMatchStartDelayMs after the match began: 4 s of play follow)
@@ -1155,7 +1155,7 @@ void run_start_menu_app_options_tests() {
             ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing; }, 20000));
             const server::RoomStatus s = server.status(code);
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 2);
-            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == "Bot (Easy)" && s.names[3] == "Bot (Hard)");
+            ASSERT_TRUE(s.names[0] == "Solo" && s.names[1] == bn(code, 1, "Easy") && s.names[3] == bn(code, 3, "Hard"));
             ASSERT_EQ(app.sim().roster_mask(), 0x0B);                                          // Green, Red and Black play
             ASSERT_EQ(s.teams, std::string("0+1"));
             ASSERT_EQ(s.room_teams, std::string("0+1"));                                       // (the room's own: its code named them)

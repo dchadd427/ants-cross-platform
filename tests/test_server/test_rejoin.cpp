@@ -1905,7 +1905,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::Rejected && bob.lobby->reject_reason() == net::RejectReason::Superseded);
         ASSERT_TRUE(ga.net.my_seat() == 0 && gb.net.my_seat() == 1 && ga.loads == 1 && gb.loads == 1);
         ASSERT_TRUE(ga.net.start_info().teams() == sim::StartTeams({true, 0, 1}) && gb.net.start_info().teams() == sim::StartTeams({true, 0, 1}));      // the plan's teams are the match's
-        ASSERT_TRUE(ga.net.start_info().names[0] == "Ann" && ga.net.start_info().names[1] == "Bob" && ga.net.start_info().names[2].empty() && ga.net.start_info().names[3] == "Bot (Easy)");
+        ASSERT_TRUE(ga.net.start_info().names[0] == "Ann" && ga.net.start_info().names[1] == "Bob" && ga.net.start_info().names[2].empty() && ga.net.start_info().names[3] == bn("lob27001", 3, "Easy"));
         s = w.status("lob27001");
         ASSERT_TRUE(s.lobby && s.state == RoomState::Running && !s.starting && s.joined == 3 && s.plan == "oone 0+1");         // (the seat of the bot counts in the room that runs)
         ASSERT_TRUE(ga.keys_given.size() == 1 && gb.keys_given.size() == 1 && net::key_matches(ga.keys_given[0].key, ann.lobby->key()) && net::key_matches(gb.keys_given[0].key, bob.lobby->key()));      // the games keep the keys the pages had

@@ -14,7 +14,7 @@ Project rule 5 ([`AGENTS.md`](../AGENTS.md)) allows bots as virtual clients, in 
 
 - A bot never changes the simulation, the original screens, the lock-step rules of the network protocol or any golden state hash. A normal game runs no bot code.
 
-- **Off by default, always visible.** A bot exists only when asked for (command line, room specification). A bot seat is shown as a bot: its name is `Bot (Level)` (names: see "Names" below), the room marks the seat as a bot, and a person cannot take a name that looks like a bot's (the lobby renames them: spaces and case do not matter), while a bot's name always carries the marker. (In a local game `--team-name` / `-N` may rename a seat; a room never does.)
+- **Off by default, always visible.** A bot exists only when asked for (command line, room specification). A bot seat is shown as a bot: its name is `Pip (bot, Level)` (see [`BOT_NAMES.md`](BOT_NAMES.md); `Bot (Level)` in a local game and on the local network), the room marks the seat as a bot, and a person cannot take a name that looks like a bot's (the lobby renames them: spaces and case do not matter), while a bot's name always carries the marker. (In a local game `--team-name` / `-N` may rename a seat; a room never does.)
 
 - **Fair.** A bot knows nothing that a human of its team could not know, has a command budget per difficulty level (see below) and does not move before the people it plays against can: the simulation does not run while the "Get ready to play!" dialog that opens every match is up (v0.2.0: the match clock waits for it), so no bot looks or orders while it is up, and it opens with one token, not a burst. The machine that runs the bots (a LAN host, the server's referee) starts the match before a remote person's screen does, by the link's delay plus the jitter buffer (see "Fairness in detail"). Fog of War is rarely used; with fog off every player sees all ants, so a bot reads the whole world. **A bot together with fog is refused** until a per-team view exists.
 
@@ -531,11 +531,7 @@ ISLANDS has no food that a hill can walk to (0 of 5,600 points), SMALL has 1,000
 
 ## Names
 
-A bot has a random name, shown as `Pip (bot, Hard)` (level inside) in the lobby, the match, replays and history; the test kinds say what they are in small letters: `Pip (bot, idle)`, `Pip (bot, worker)`. Stored matches keep their `Bot (Hard)`, still readable and reserved. A bot may have a person's name; the ending tells them apart. A person may not take a name that starts with `Bot (` or ends with `(bot)` or `(bot, ...)` (blanks, tabs, case ignored: `is_reserved_bot_name`). **The guard must run on the same cleaned string that is stored** (trimmed, tabs gone), never on the raw input: `Pip (bot, Hard)<tab>` must not pass the check and then be stored.
-
-**Built (code only, not called yet; the game still says `Bot (Level)`):** one list of 252 names (3 to 8 ASCII letters, `tools/bot_names.txt`), from which `tools/gen_bot_names.py` makes the C++ and JavaScript tables. `pick_bot_names(key, count)` (`include/ants_ai/bot_names.hpp`, `web/front/bot_names.js`, one golden file) gives distinct names by `mix64` draws; also `bot_label`, `parse_bot_label`, `bot_short_label`. The list's order is part of the picker: new names go at the end. Tests: [`TESTING.md`](TESTING.md).
-
-**Planned:** the server fixes a key at room creation and sends the name strings (protocol 19 to 20, later); clients derive nothing for a new match except the lobby page before the server has sent one. **HUD:** it cuts a label at 15 characters and `Pip (bot, Medium)` has 17, so the proposal is `bot_short_label`, `Pip (bot)`, with the level in the lobby, results and replays.
+A bot has a random name, shown as `Pip (bot, Hard)`; the list, the picker, the label, the names a person may not take and network protocol 20 are in [`BOT_NAMES.md`](BOT_NAMES.md).
 
 ## Running bots
 

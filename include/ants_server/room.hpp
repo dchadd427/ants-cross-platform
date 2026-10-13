@@ -343,6 +343,8 @@ public:
     void release_record();
 
     const std::string& code() const noexcept { return spec_.code; }
+    /// The name that this room gives the bot of a spec (protocol 20): "Pip (bot, Hard)", from the room's code
+    std::string bot_name_of(const ai::BotSpec& bot) const;
     /// Made by a visitor's create block (protocol 15): one of the server's public rooms
     bool public_room() const noexcept { return spec_.public_room; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)

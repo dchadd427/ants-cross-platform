@@ -1,4 +1,4 @@
-// The front page's side of network protocol 19 (docs/NETWORK_PORT.md "Protocol 16" and "Protocol 17"; 18 and 19 moved no message): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
+// The front page's side of network protocol 20 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17" and "Protocol 20"; 18, 19 and 20 moved no message layout): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 19;                                             // kProtocolVersion
+    var PROTOCOL = 20;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
@@ -99,6 +99,8 @@
         for (var i = 0; i < s.length && out.length < max; i++) { var c = s.charCodeAt(i); if (c >= 0x20 && c <= 0x7E) out += s.charAt(i); }
         return out;
     }
+    // the names that are a computer player's (ai::is_reserved_bot_name; the page's nameCheck says the same): starts with "Bot (" or ends with "(bot)" or "(bot, ...)", blanks and case ignored
+    function reservedName(name) { return /^bot\(|\(bot(,[^()]+)?\)$/.test(String(name).replace(/[ \t\r\n]/g, '').replace(/[A-Z]/g, function (c) { return c.toLowerCase(); })); }
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }
@@ -124,7 +126,7 @@
         function put(byte) { h = Math.imul((h ^ byte) >>> 0, 16777619) >>> 0; }
         for (var s = 0; s < PLAYERS; s++) {
             put(room.slots[s].state);
-            var name = room.slots[s].name;
+            var name = room.slots[s].state === SLOT.Empty ? '' : room.slots[s].name;          // (protocol 20: the name of a planned bot on an empty colour is not who sits there)
             for (var i = 0; i < name.length; i++) put(name.charCodeAt(i) & 255);
             put(0);
         }
@@ -194,6 +196,7 @@
         for (var p = 0; p < PLAYERS; p++) {
             if (m.plan[p] > PLAN.Nobody || (m.plan[p] !== 0 && !m.lobby)) return null;
             if (((m.inGame >> p) & 1) !== 0 && (!m.lobby || slots[p].state !== SLOT.Client)) return null;
+            if (slots[p].state === SLOT.Empty && slots[p].name !== '' && (m.plan[p] < PLAN.Easy || m.plan[p] > PLAN.Hard || !/ \(bot(, (Easy|Medium|Hard))?\)$|^Bot \((Easy|Medium|Hard)\)$/.test(slots[p].name))) return null;       // (protocol 20: only a planned bot's label)
         }
         if ((m.inGame & ~15) !== 0) return null;
         m.fog = m.fog === 1;
@@ -548,7 +551,7 @@
         return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));
     };
     LobbyClient.prototype.rename = function (name) {
-        if (!this.canAct() || this.room.starting || !validPersonName(name)) return false;
+        if (!this.canAct() || this.room.starting || !validPersonName(name) || reservedName(name)) return false;        // (protocol 20: the server counts a bot-like name as a violation; a page never sends one)
         return this.send('rename', encodeName(name));
     };
     LobbyClient.prototype.remove = function (seat, guard) {

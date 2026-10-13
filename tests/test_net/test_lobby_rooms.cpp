@@ -1,5 +1,9 @@
-// Tests of the room before a match: the swap, the room's rules, the platforms and the lobby room of protocol 16 and 17 (N4.23 - N4.38)
+// Tests of the room before a match: the swap, the room's rules, the platforms and the lobby room of protocol 16 and 17 (N4.23 - N4.38, N4.40)
 #include "lobby_fixtures.hpp"
+
+#include <set>
+
+#include "ants_ai/bot_names.hpp"
 
 void run_lobby_rooms_tests() {
     TEST_CASE("N4.23 The Swap And The Guard (Protocol 15): Two Guests Change Places, In A Full Room As In One With A Free Colour, Each With All That Is Its Own And Each Told By The Room; A Press Acts Only On The Seating That Its Leader Saw, So A Newcomer, A Replacement Or A Second Tap Of The Same Press Is Never Moved Or Swapped By Mistake; A Colour That A Bot Or The Host Holds Stays Where It Is") {
@@ -1164,7 +1168,7 @@ void run_lobby_rooms_tests() {
             const size_t bob = room.join_seat("Bob");
             const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
             for (const char* wish : {"Bot (Hard)", "bot(x)", "B o t (x)", "BOT(Easy)"}) {
-                ASSERT_TRUE(room.guests[bob].lobby->request_name(wish));
+                ASSERT_FALSE(room.guests[bob].lobby->request_name(wish));                         // (protocol 20: the client does not even send it; the room's own rule is the second line, N4.40 sends the raw Hello)
                 room.run(1100);                                                                   // (a second apart: the refused ones took from the budget too, and it must not be the budget that refuses the later ones)
                 ASSERT_EQ(room.host.room().slots[bob_seat].name, std::string("Bob"));
             }
@@ -1519,7 +1523,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.host.renames(), 1u);
             ASSERT_EQ(room.host.activity(), seated + 3u);
             ASSERT_TRUE(room.guests[bob].lobby->request_name("Bobby"));
-            ASSERT_TRUE(room.guests[bob].lobby->request_name("Bot (Hard)"));
+            ASSERT_FALSE(room.guests[bob].lobby->request_name("Bot (Hard)"));                       // (protocol 20: not even sent)
             room.run(1100);
             ASSERT_EQ(room.host.renames(), 1u);
             ASSERT_EQ(room.host.activity(), seated + 3u);
@@ -2107,6 +2111,130 @@ void run_lobby_rooms_tests() {
             ASSERT_TRUE(set.host.start(9, 10, set.now));
             ASSERT_TRUE(encode(plain.host.start_info()) == encode(set.host.start_info()));
             ASSERT_EQ(plain.host.start_info().mode, 0);
+        }
+    } TEST_END();
+    TEST_CASE("N4.40 The Names Of The Bots (Protocol 20): With A Name Key A Lobby Room Shows The Bot That A Colour's Plan Asks For, Under Its Own Name, In The Empty Seat Of Every Guest's Room Message (The Room's Own Copy Keeps The Seat Empty, So The Guard Of A Move Is The Same On Both Sides); Without A Key The Seat Is Empty As Before; A Bot That Is Seated Keeps The Name It Is Given; A Person Cannot Be Called Like A Bot; The Decoders Refuse A Name On An Empty Seat That Is No Planned Bot's And A New Name That Is A Bot's") {
+        using K = PlanKind;
+        const uint64_t key = ai::bot_name_key("N4.40");
+        {   // the plan's bots are named in the guests' Room messages, seat by seat, and the name goes with the plan
+            HostLobby::Config hc = lobby_room_config(80);
+            hc.bot_name_key = key;
+            Room room(hc);
+            const size_t ann = room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Hard, K::Nobody})));
+            room.run(100);
+            for (const size_t g : {ann, bob}) {
+                const RoomMsg& shown = room.guests[g].lobby->room();
+                ASSERT_EQ(shown.slots[2].name, bot_room_name(key, 2, FillLevel::Hard));
+                ASSERT_EQ(shown.slots[2].name, ai::bot_label(ai::bot_seat_name(key, 2), "hard"));
+                ASSERT_TRUE(shown.slots[2].state == SlotState::Empty && shown.slots[3].name.empty());
+                ASSERT_EQ(seating_hash(shown), seating_hash(room.host.room()));                // (the guard of a move is the same on both sides)
+            }
+            ASSERT_TRUE(room.host.room().slots[2].name.empty());                           // (the owner's copy keeps the seat empty)
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Medium, K::Hard})));
+            room.run(100);
+            const RoomMsg& shown = room.guests[bob].lobby->room();
+            std::set<std::string> distinct;
+            for (uint8_t seat = 2; seat < 4; ++seat) {
+                ai::BotLabel label;
+                ASSERT_TRUE(ai::parse_bot_label(shown.slots[seat].name, label) && !label.legacy && label.name == ai::bot_seat_name(key, seat));
+                distinct.insert(label.name);
+            }
+            ASSERT_EQ(distinct.size(), size_t{2});
+            ASSERT_TRUE(shown.slots[2].name.find("(bot, Medium)") != std::string::npos && shown.slots[3].name.find("(bot, Hard)") != std::string::npos);
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Nobody, K::Open})));      // the plan goes: the names go
+            room.run(100);
+            for (const auto& slot : room.guests[bob].lobby->room().slots) ASSERT_TRUE(slot.name.empty() || slot.state != SlotState::Empty);
+            // a bot that is seated has the name it is given, as it is; a name that is no bot's is wrapped
+            ASSERT_TRUE(room.host.add_bot(2, bot_room_name(key, 2, FillLevel::Easy)));
+            ASSERT_EQ(room.host.room().slots[2].name, bot_room_name(key, 2, FillLevel::Easy));
+            ASSERT_TRUE(room.host.add_bot(3, "Zed"));
+            ASSERT_EQ(room.host.room().slots[3].name, std::string("Bot (Zed)"));
+        }
+        {   // no key: no names (the room is what protocol 19 showed)
+            Room room(lobby_room_config(81));
+            const size_t ann = room.join_seat("Ann");
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Medium, K::Hard})));
+            room.run(100);
+            for (const auto& slot : room.guests[ann].lobby->room().slots) ASSERT_TRUE(slot.name.empty() || slot.state != SlotState::Empty);
+            ASSERT_EQ(bot_room_name(0, 1, FillLevel::Easy), std::string("Bot (Easy)"));
+            ASSERT_EQ(bot_room_name(0, 1, FillLevel::None), std::string());
+        }
+        {   // a person is never called like a bot: the Hello's name is replaced, a rename is not taken
+            Room room(lobby_room_config(82));
+            const size_t ann = room.join_seat("Ann");
+            const size_t pip = room.join_seat("Pip (bot, Hard)");
+            ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[pip].lobby->my_seat())].name, std::string("Player ") + std::to_string(room.guests[pip].lobby->my_seat() + 1));
+            ASSERT_EQ(room.host.room().slots[static_cast<size_t>(room.guests[ann].lobby->my_seat())].name, std::string("Ann"));
+            // a control byte or a byte above the table between the letters, in a Hello that no honest client writes (raw bytes): the room cuts such bytes out BEFORE it checks the name, so what is stored is the cleaned
+            // name, and it is never a bot's
+            for (const char* sneaky : {"Pip (bo\x01t)", "Pip (b\x7F" "ot)", "Pip (bot\x01, Hard)", "Bo\x01t (Hard)", "Pip (bo\xC3\xA9t, Hard)", "Pip (bot)\x09"}) {
+                Room raw_room(lobby_room_config(84));
+                auto ends = raw_room.net.connect({10, 0});
+                raw_room.host.add_connection(ends.first, raw_room.now);
+                HelloMsg hello;
+                const std::string wish = sneaky;
+                hello.name = std::string(wish.size(), 'a');                                      // (encode() cleans a name: write the Hello with a plain one and put the bytes in by hand)
+                std::vector<uint8_t> bytes = encode(hello);
+                ASSERT_TRUE(bytes.size() > 4 + wish.size() && bytes[3] == wish.size());           // (type, version, the length of the name, the name)
+                for (size_t k = 0; k < wish.size(); ++k) bytes[4 + k] = static_cast<uint8_t>(wish[k]);
+                ends.second->send(bytes);
+                raw_room.run(100);
+                uint8_t seat = 255;
+                std::vector<uint8_t> m;
+                while (ends.second->poll(m)) {
+                    WelcomeMsg w;
+                    if (peek_type(m) == MsgType::Welcome && decode(m, w)) seat = w.player;
+                }
+                // the room either refuses the Hello (no seat) or seats the person under the cleaned name: never under a name that is a bot's, never with a byte outside the table
+                for (const RoomMsg::Slot& slot : raw_room.host.room().slots) {
+                    ASSERT_FALSE(slot.state == SlotState::Client && ai::is_reserved_bot_name(slot.name));
+                    for (const char c : slot.name) ASSERT_TRUE(static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) <= 0x7E);
+                }
+                (void)seat;
+            }
+        }
+        {   // the decoders
+            RoomMsg m;
+            m.flags = static_cast<uint8_t>(kRoomLobby | kRoomLeaderStarts);
+            m.slots[0].state = SlotState::Client;
+            m.slots[0].name = "Ann";
+            m.leader = 0;
+            m.plan[2] = K::Hard;
+            m.slots[2].name = "Pip (bot, Hard)";
+            RoomMsg back;
+            ASSERT_TRUE(decode(encode(m), back) && back.slots[2].name == "Pip (bot, Hard)");
+            m.slots[2].name = "Pip";                                      // (not a bot's label)
+            ASSERT_FALSE(decode(encode(m), back));
+            m.slots[2].name = "Pip (bot, Hard)";
+            m.plan[2] = K::Open;                                          // (no bot is planned there)
+            ASSERT_FALSE(decode(encode(m), back));
+            m.plan[2] = K::Nobody;
+            ASSERT_FALSE(decode(encode(m), back));
+            m.plan[2] = K::Hard;
+            m.slots[2].state = SlotState::Bot;                            // (a seated bot has its name as it always had)
+            ASSERT_TRUE(decode(encode(m), back));
+            {   // a client never sends such a name: the server would count a violation and, eight times, throw it out
+                Room rename_room(lobby_room_config(83));
+                const size_t sam = rename_room.join_seat("Sam");
+                for (const char* bad : {"Pip (bot)", "Bot (Hard)", "x ( BOT , idle )"}) ASSERT_FALSE(rename_room.guests[sam].lobby->request_name(bad));
+                ASSERT_TRUE(rename_room.guests[sam].lobby->request_name("Robot"));
+                rename_room.run(100);
+                ASSERT_EQ(rename_room.host.renames(), 1u);
+            }
+            NameMsg name;
+            NameMsg got;
+            name.name = "Pip";
+            ASSERT_TRUE(decode(encode(name), got) && got.name == "Pip");
+            for (const char* bad : {"Pip (bot)", "Pip (bot, Hard)", "Bot (Hard)", "x (BOT , idle )", "bot(x", "Pip (bo\x01t)", "Pip (bot\xC3\xA9)"}) {
+                name.name = bad;
+                ASSERT_FALSE(decode(encode(name), got));
+            }
+            for (const char* fine : {"Robot", "Pip (bots)", "Pip (bot) x", "Bot"}) {
+                name.name = fine;
+                ASSERT_TRUE(decode(encode(name), got));
+            }
         }
     } TEST_END();
 }
