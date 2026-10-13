@@ -1148,7 +1148,7 @@ void run_one_card_tests() {
             ASSERT_EQ(leader.net()->my_seat(), row.seat);                                                        // (the room of four took the colour that was asked for, whatever it is)
             server::RoomStatus s = server.status(row.code);
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 2);
-            for (size_t i = 0; i < 2; ++i) ASSERT_TRUE(s.bots[i].seat == row.bots[i].first && s.bots[i].name == row.bots[i].second && s.bots[i].fill);
+            for (size_t i = 0; i < 2; ++i) ASSERT_TRUE(s.bots[i].seat == row.bots[i].first && s.bots[i].name == bn(row.code, row.bots[i].first, std::string(row.bots[i].second).substr(5, std::string(row.bots[i].second).size() - 6)) && s.bots[i].fill);
             ASSERT_EQ(s.names[row.seat], std::string("Ann"));
             ASSERT_EQ(leader.sim().roster_mask(), row.mask);                                                     // the person and the two bots play; the fourth seat stays empty
             ASSERT_EQ(s.teams, std::string(row.teams));
@@ -1184,7 +1184,7 @@ void run_one_card_tests() {
             ASSERT_FALSE(second_led);
             server::RoomStatus s = server.status(code);
             ASSERT_TRUE(s.state == server::RoomState::Running && s.joined == 3 && s.bots.size() == 1);
-            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].name == "Bot (Medium)" && s.bots[0].fill);
+            ASSERT_TRUE(s.bots[0].seat == 1 && s.bots[0].name == bn(code, 1, "Medium") && s.bots[0].fill);
             ASSERT_TRUE(s.names[0] == "Host" && s.names[3] == "Pal" && s.names[2].empty());              // (the Nobody seat stays empty: the room of four started with three)
             ASSERT_EQ(first.net()->my_seat(), host_first ? uint8_t{0} : uint8_t{3});
             ASSERT_EQ(second.net()->my_seat(), host_first ? uint8_t{3} : uint8_t{0});

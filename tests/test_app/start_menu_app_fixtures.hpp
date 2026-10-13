@@ -36,9 +36,15 @@
 #include "ants_test_paths.hpp"
 #include "../common/ants_test_pause.hpp"
 #include "../common/test_assert.hpp"
+#include "ants_ai/bot_names.hpp"
 
 using namespace ants;
 using namespace ants::app;
+
+// The name that the server's room with this code gives the bot of a seat (protocol 20): "Pip (bot, Hard)"; `level` is Easy, Medium or Hard
+inline std::string bn(const std::string& code, unsigned seat, const std::string& level) {
+    return ai::bot_label(ai::bot_seat_name(ai::bot_name_key(code), static_cast<uint8_t>(seat)), level);
+}
 
 namespace fs = std::filesystem;
 
