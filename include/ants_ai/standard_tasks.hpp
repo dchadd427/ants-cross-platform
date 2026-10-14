@@ -79,7 +79,6 @@ private:
         uint64_t decided{0};
         uint64_t sent{kPending};             // the tick the last attack order LEFT (kPending: none, or it has not left yet); 0: never ordered
         bool ordered{false};
-        sim::TileCoord target_tile{};
         uint8_t target_hp{0};
     };
     struct Fight {
@@ -97,6 +96,7 @@ private:
         bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles, and the surplus of free ants is no longer asked for (plan.behind_free_tier)
         uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
+        bool vicinity{false};                // (with hunt) a 3-HP zero-Combat vicinity hunt (plan.vicinity_hunt)
         std::map<uint32_t, Defender> defenders;
     };
 

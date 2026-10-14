@@ -287,7 +287,8 @@ void FightTask::start_fire_defence(TaskContext& c) {
         const AntView* t = find_ant(v.others(), f.first);
         fire_ant_hunted = fire_ant_hunted || !f.second.raider || (t != nullptr && t->type == sim::AntType::Fire);
     }
-    if (active_fire >= (plan.smart_counters && ring && walls <= 2 && !fire_ant_hunted ? 2u : 1u)) return;
+    const bool spare_for_two = v.mine().size() >= plan.fight_reserve + plan.defenders + plan.fire_defence_extra + 2u;
+    if (active_fire >= (plan.smart_counters && ring && walls == 1 && !fire_ant_hunted && spare_for_two ? 2u : 1u)) return;
     // (plan.raider_hunt, the war batch; requested: try to kill their fire ant if they try to come for them) an enemy Fire or Bomber Ant near the own hill, or at a pile the own ants work, whether
     // or not walls stand: the blows stop what it is doing (a hit cancels an ability) and send it home when it is down to one hit point
     const auto near_work = [&](const AntView& e) {
@@ -344,7 +345,7 @@ bool assault_ant(const AntView& a, bool pull) noexcept {
 bool flanked_by(sim::TileCoord target, const std::vector<const AntView*>& near) noexcept {
     int32_t min_dx = 0, max_dx = 0, min_dy = 0, max_dy = 0;
     for (const AntView* a : near) {
-        if (a == nullptr || a->tile.chebyshev_dist(target) > 3) return false;
+        if (a == nullptr || a->tile.chebyshev_dist(target) > 2) return false;
         min_dx = std::min(min_dx, a->tile.x - target.x);
         max_dx = std::max(max_dx, a->tile.x - target.x);
         min_dy = std::min(min_dy, a->tile.y - target.y);
@@ -438,6 +439,7 @@ void FightTask::start_offence(TaskContext& c) {
     const AntView* best = nullptr;
     int32_t best_score = 0;
     bool best_hunt = false;
+    bool best_vicinity = false;
     bool best_assault = false;
     for (const AntView& e : v.others()) {
         if (fights_.count(e.id) != 0 || !attackable(v, e) || shunned(e.id, now)) continue;
@@ -458,7 +460,8 @@ void FightTask::start_offence(TaskContext& c) {
             }
             const size_t others = near_hunt.size() - combats;
             KillPlan kill = kill_plan(e.hp, combats, others);
-            if (!kill.possible && plan.vicinity_hunt && e.hp == 3 && combats == 0 && others >= 3 && e.state != sim::UnitState::Walking && flanked_by(e.tile, near_hunt)) {
+            const bool v_hunt = !kill.possible && plan.vicinity_hunt && e.hp == 3 && combats == 0 && others >= 3 && e.state != sim::UnitState::Walking && flanked_by(e.tile, near_hunt);
+            if (v_hunt) {
                 kill.possible = true;
                 kill.blows = 3;
             }
@@ -466,7 +469,7 @@ void FightTask::start_offence(TaskContext& c) {
                 kill.possible = true;
                 kill.blows = w_blows;
             }
-            const uint32_t max_blows = w_blows > 0 ? std::max<uint32_t>(plan.hunt_blows, 4u) : (plan.vicinity_hunt && e.hp == 3 && combats == 0 ? 3u : plan.hunt_blows);
+            const uint32_t max_blows = w_blows > 0 ? std::max<uint32_t>(plan.hunt_blows, 4u) : (v_hunt ? 3u : plan.hunt_blows);
             if (kill.possible && kill.blows <= max_blows && !near_hunt.empty()) {
                 const Strength theirs = enemy_strength(v, e.tile, plan.skirmish_near, e.id, plan.skirmish_enemy_cap);
                 const uint32_t req_odds = w_blows == 1 ? 50u : plan.hunt_odds_percent;
@@ -478,6 +481,7 @@ void FightTask::start_offence(TaskContext& c) {
                         best = &e;
                         best_score = score;
                         best_hunt = true;
+                        best_vicinity = v_hunt && w_blows == 0;
                         best_assault = false;
                     }
                     continue;
@@ -500,6 +504,7 @@ void FightTask::start_offence(TaskContext& c) {
                         best = &e;
                         best_score = score;
                         best_hunt = false;
+                        best_vicinity = false;
                         best_assault = true;
                     }
                 }
@@ -531,6 +536,7 @@ void FightTask::start_offence(TaskContext& c) {
             best = &e;
             best_score = score;
             best_hunt = false;
+            best_vicinity = false;
             best_assault = false;
         }
     }
@@ -542,6 +548,7 @@ void FightTask::start_offence(TaskContext& c) {
     f.last_alarm = now;
     f.offence = true;
     f.hunt = best_hunt;
+    f.vicinity = best_vicinity;
     f.assault = best_assault;
     f.force = static_cast<uint32_t>(assault_force);
     f.pull = pull;
@@ -689,14 +696,12 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             ++it;
         }
     }
-    size_t hunt_combats = 0;
-    for (const AntView* a : def_ptrs) hunt_combats += a->type == sim::AntType::Combat ? 1u : 0u;
     // an acknowledged attack that shows "can't go" soon after it left: no order reaches the target (it stands on something): leave it alone
     for (auto& d : f.defenders) {
         if (d.second.sent == kPending || now < d.second.sent + 2 || now > d.second.sent + kCantGoWindow) continue;
         const AntView* a = find_ant(v.mine(), d.first);
         if (a != nullptr && a->state == sim::UnitState::CantGo) {
-            if (f.hunt && hunt_combats == 0 && (w_blows > 0 || (plan.vicinity_hunt && d.second.target_hp <= 3)) && target->hp < d.second.target_hp) {
+            if (f.hunt && (w_blows > 0 || f.vicinity) && target->hp < d.second.target_hp) {
                 d.second.ordered = false;
                 d.second.sent = kPending;
                 continue;
@@ -765,7 +770,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
         if (any_combat && target->hp % 2 == 0) {
             combat_only = true;
-        } else if (any_combat || (f.hunt && plan.vicinity_hunt)) {
+        } else if (any_combat || f.vicinity) {
             int32_t best_d = 0;
             for (const auto& d : f.defenders) {
                 const AntView* a = find_ant(v.mine(), d.first);
@@ -794,7 +799,6 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         d.second.ordered = true;
         d.second.decided = now;
         d.second.sent = kPending;
-        d.second.target_tile = target->tile;
         d.second.target_hp = target->hp;
         list.push_back(d.first);
     }
@@ -1483,7 +1487,7 @@ bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& pla
     }
     const HillInfo& hill = map.hill(view.seat());
     if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) {
-        if (plan.smart_counters && view.has_grid() && ((view.grid().has_fire_at(tile) && harmless_lone_fire(view, hill, plan, tile)) || (view.grid().has_bomb_at(tile) && harmless_stray_bomb(view, map, hill, plan, tile)))) return false;
+        if (plan.smart_counters && view.has_grid() && ((view.grid().has_fire_at(tile) && harmless_lone_fire(view, hill, tile)) || (view.grid().has_bomb_at(tile) && harmless_stray_bomb(view, map, hill, tile)))) return false;
         return true;
     }
     return false;

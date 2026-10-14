@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "ants_ai/island_info.hpp"
 #include "ants_sim/movement_tables.hpp"
 
 namespace ants::ai {
@@ -627,18 +628,14 @@ bool on_hill_tile(const sim::Grid& grid, sim::TileCoord t) noexcept {
     return false;
 }
 
-bool landing_ok(const sim::Grid& grid, sim::TileCoord t) noexcept {
-    if (!grid.in_bounds(t) || grid.is_solid_object(t) || on_hill_tile(grid, t)) return false;
-    const uint8_t tc = grid.terrain_class_at(t);
-    return sim::movement::terrain_walkable(tc) || tc == sim::movement::kTerrainWater;
-}
-
 int knock_dir(const sim::Grid& grid, sim::TileCoord target, sim::TileCoord attacker, int range) noexcept {
     const int d0 = sim::movement::dir_from_delta(target.y - attacker.y, target.x - attacker.x);
     static constexpr int kOffsets[5] = {0, 1, -1, 2, -2};
     for (int attempt = 0; attempt < 5; ++attempt) {
         const int d = (d0 + kOffsets[attempt] + 8) % 8;
-        if (landing_ok(grid, step_toward(target, d, range))) return d;
+        const sim::TileCoord land = step_toward(target, d, range);
+        const uint8_t tc = grid.in_bounds(land) ? grid.terrain_class_at(land) : 0;
+        if (flight_landing_ok(grid, land) && (sim::movement::terrain_walkable(tc) || tc == sim::movement::kTerrainWater)) return d;
     }
     return -1;
 }
@@ -793,12 +790,11 @@ uint32_t water_push_blows(const BotView& v, const AntView& e, const std::vector<
     return best;
 }
 
-bool harmless_lone_fire(const BotView& view, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile) noexcept {
-    (void)plan;
+bool harmless_lone_fire(const BotView& view, const HillInfo& hill, sim::TileCoord tile) noexcept {
     if (view.piles().empty() || tile.chebyshev_dist(hill.origin) <= 6 || on_gate_ring(hill, tile)) return false;
     if (tile.chebyshev_dist(hill.queue) <= 2 || tile.chebyshev_dist(hill.entrance) <= 2 || tile.chebyshev_dist(hill.raid) <= 2) return false;
     for (const AntView& e : view.others()) {
-        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally()) && (e.tile.chebyshev_dist(hill.origin) <= 24 || e.tile.chebyshev_dist(tile) <= 18)) return false;
+        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) return false;
     }
     for (const FireWallView& w : view.fire_walls()) {
         if (w.tile != tile && w.tile.chebyshev_dist(tile) <= 2) return false;
@@ -806,12 +802,11 @@ bool harmless_lone_fire(const BotView& view, const HillInfo& hill, const LevelPl
     return open_ground(view.grid(), tile);
 }
 
-bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile) noexcept {
-    (void)plan;
+bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, sim::TileCoord tile) noexcept {
     if (view.piles().empty() || tile.chebyshev_dist(hill.origin) <= 6 || on_gate_ring(hill, tile)) return false;
     if (tile.chebyshev_dist(hill.queue) <= 3 || tile.chebyshev_dist(hill.entrance) <= 3 || tile.chebyshev_dist(hill.raid) <= 3) return false;
     for (const AntView& e : view.others()) {
-        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally()) && (e.tile.chebyshev_dist(hill.origin) <= 24 || e.tile.chebyshev_dist(tile) <= 18)) return false;
+        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) return false;
     }
     for (const AntView& a : view.mine()) {
         if (a.tile.chebyshev_dist(tile) <= 3) return false;

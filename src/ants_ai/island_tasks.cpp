@@ -205,16 +205,20 @@ bool water_locked_food(const BotView& view, const MapInfo& map, uint8_t seat) {
     for (const PileView& p : view.piles()) {
         const PileInfo* info = map.pile(p.index);
         if (info == nullptr || info->approach[seat].reachable()) continue;
+        bool touches_water = false;
+        bool touches_land = false;
         for (const sim::TileCoord& cell : info->cells) {
             for (int dy = -1; dy <= 1; ++dy) {
                 for (int dx = -1; dx <= 1; ++dx) {
                     if (dx == 0 && dy == 0) continue;
                     const sim::TileCoord n{cell.x + dx, cell.y + dy};
-                    if (!grid.in_bounds(n)) continue;
-                    if (grid.terrain_class_at(n) == sim::movement::kTerrainWater) return true;
+                    if (!grid.in_bounds(n) || std::find(info->cells.begin(), info->cells.end(), n) != info->cells.end()) continue;
+                    if (map.component(seat, n) >= 0) touches_land = true;
+                    if (grid.terrain_class_at(n) == sim::movement::kTerrainWater) touches_water = true;
                 }
             }
         }
+        if (touches_water && !touches_land) return true;
     }
     return false;
 }
@@ -266,6 +270,7 @@ bool IslandTask::start(TaskContext& c) {
     for (const IslandComponent& comp : info_.components()) {
         if (comp.id != hill_comp_ && seen[static_cast<size_t>(comp.id)] != 0 && !comp.piles.empty()) active_ = true;
     }
+    if (!active_) active_ = water_locked_food(v, c.map, c.seat);
     return active_;
 }
 

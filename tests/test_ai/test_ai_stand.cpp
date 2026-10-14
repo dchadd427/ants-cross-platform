@@ -763,11 +763,11 @@ void run_stand_tests() {
                 }
             }
         }
-        {   // (e) concurrent gate-ring fire defence: a raider hunt near the thief hole does not block hunting a second Fire Ant that lights the gate ring
+        {   // (e) concurrent gate-ring fire defence: a raider hunt near the thief hole does not block hunting a second Fire Ant that lights the gate ring when spare fighters exist
             const Home home(105);
             sim::SimulationEngine sim;
             empty_field(sim, 105);
-            for (int i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{8 + i, 12});
+            for (int i = 0; i < 8; ++i) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{8 + i, 12});
             const MapInfo map(sim);
             const TileCoord raid = map.hill(0).raid;
             const uint32_t raider = sim.spawn_unit(1, sim::AntType::Bomber, TileCoord{raid.x + 3, raid.y});
@@ -783,28 +783,33 @@ void run_stand_tests() {
             ASSERT_TRUE(rig.as<StandardBot>().fight().hunting(ring_fire));
             ASSERT_EQ(rig.as<StandardBot>().fight().fire_hunts(), 1u);
         }
-        {   // (f) water-locked food pile on a single-component map activates IslandTask (for Swimmer power-up requests and ferry/bridge work) even when channels() is empty
-            sim::SimulationEngine sim;
-            empty_field(sim, 106);
-            add_pile(sim, 30, 30, 20, 25);
-            const MapInfo probe_map(sim);
-            const PileInfo* p = probe_map.pile(0);
-            ASSERT_TRUE(p != nullptr && !p->cells.empty());
-            for (const TileCoord& c : p->cells) {
-                for (int dy = -2; dy <= 2; ++dy) {
-                    for (int dx = -2; dx <= 2; ++dx) {
-                        const TileCoord w{c.x + dx, c.y + dy};
-                        if (std::find(p->cells.begin(), p->cells.end(), w) == p->cells.end()) sim.set_terrain(w.x, w.y, sim::TERRAIN_WATER);
+        {   // (f) water-locked food pile on a map with no water channel between land components activates IslandTask (both single-component and fire-wall-split multi-component)
+            for (const bool split_by_fire : {false, true}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 106);
+                add_pile(sim, 25, 25, 20, 25);
+                if (split_by_fire) {
+                    for (int x = 0; x < 40; ++x) sim.grid_mut().place_firewall(static_cast<uint32_t>(x), 34, 255);
+                }
+                const MapInfo probe_map(sim);
+                const PileInfo* p = probe_map.pile(0);
+                ASSERT_TRUE(p != nullptr && !p->cells.empty());
+                for (const TileCoord& c : p->cells) {
+                    for (int dy = -2; dy <= 2; ++dy) {
+                        for (int dx = -2; dx <= 2; ++dx) {
+                            const TileCoord w{c.x + dx, c.y + dy};
+                            if (std::find(p->cells.begin(), p->cells.end(), w) == p->cells.end()) sim.set_terrain(w.x, w.y, sim::TERRAIN_WATER);
+                        }
                     }
                 }
+                sim.grid_mut().place_powerup(14, 14, 5);                              // reachable Swimmer power-up on the home shore
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+                rig.run(40);
+                ASSERT_TRUE(rig.as<StandardBot>().islands().info().channels().empty());
+                ASSERT_TRUE(rig.as<StandardBot>().islands().active());
+                ASSERT_TRUE(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Swimmer)] >= 1u);
             }
-            sim.grid_mut().place_powerup(14, 14, 5);                                  // reachable Swimmer power-up on the home shore
-            for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
-            rig.run(40);
-            ASSERT_TRUE(rig.as<StandardBot>().islands().info().channels().empty());
-            ASSERT_TRUE(rig.as<StandardBot>().islands().active());
-            ASSERT_TRUE(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Swimmer)] >= 1u);
         }
     } TEST_END();
 }

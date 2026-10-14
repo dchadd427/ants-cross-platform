@@ -608,15 +608,24 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().gate_goals().done(), 1u);
             ASSERT_TRUE(f.sim.get_player_score(0) > 0);
         }
-        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a worker is chosen from the unbombed side of a rock barrier rather than the closer bombed side
+        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
             Field f;
             f.fire_wall();
-            for (int y = 5; y <= 14; ++y) {
-                if (y != 8 && y != 12) f.sim.set_terrain(15, y, sim::TERRAIN_OBSTACLE);
+            for (int y = 6; y <= 10; ++y) {
+                for (int x = 15; x <= 19; ++x) {
+                    const bool border = x == 15 || x == 19 || y == 6 || y == 10;
+                    if (border && !(x == 15 && y == 8)) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
             }
-            f.sim.grid_mut().place_bomb(15, 8, 255);                                    // map bomb plugs the upper doorway (15, 8)
-            f.powerup(18, 8, sim::AntType::Fire);
+            f.sim.grid_mut().place_bomb(15, 8, 255);                                    // map bomb plugs the only doorway into the box
+            f.powerup(17, 8, sim::AntType::Fire);                                       // closer by Chebyshev distance (3 tiles from (14, 8)), but behind the bomb
+            f.powerup(12, 16, sim::AntType::Fire);                                      // 6 tiles away in open ground
+            f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 8});
             ASSERT_EQ(f.goal().kind, GoalKind::Extinguish);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(250);
+            ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), 1u);
+            ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
         }
     } TEST_END();
 }

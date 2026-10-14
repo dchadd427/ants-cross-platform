@@ -565,7 +565,7 @@ KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept;
 uint32_t water_push_blows(const BotView& v, const AntView& e, const std::vector<const AntView*>& near) noexcept;
 
 /// Whether a single enemy fire wall or bomb within `counter_hill_radius` of `hill` is a harmless stray hazard in open ground after the enemy has left.
-bool harmless_lone_fire(const BotView& view, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile) noexcept;
-bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+bool harmless_lone_fire(const BotView& view, const HillInfo& hill, sim::TileCoord tile) noexcept;
+bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, sim::TileCoord tile) noexcept;
 
 }  // namespace ants::ai
