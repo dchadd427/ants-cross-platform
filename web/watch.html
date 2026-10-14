@@ -160,7 +160,7 @@
 
 <footer class="bar">
     <div class="bar-in">
-        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
         <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
         <nav aria-label="Footer links">
             <a href="/watch.html" id="watch-link" aria-current="page">Watch matches</a>
@@ -484,6 +484,7 @@
     // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
     if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
     else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+    else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
     load();
     // the matches that are being played: looked at now, then every 10 seconds while the page is in front (a hidden page asks nothing, and asks again as soon as it is shown)
     document.addEventListener('visibilitychange', function () { if (document.hidden) { liveRound++; clearTimeout(liveTimer); liveTimer = 0; } else if (!liveStop) lookLive(); });

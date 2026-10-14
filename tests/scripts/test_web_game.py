@@ -464,11 +464,11 @@ class TheLoadingScreen(PageCase):
 class TheFooter(PageCase):
     def test_the_version_and_the_build_are_where_the_dockerfile_and_the_ci_look_for_them(self):
         footer = self.page[self.page.index('<footer class="bar">'):self.page.index("</footer>")]
-        self.assertIn('<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span>', footer)
+        self.assertIn('<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span>', footer)
         self.assertIn("<span>@@SITE_FOOTER@@<span class=\"ver\"", footer)
-        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_TIMESTAMP@@", "@@DATA_SIZE@@"):
+        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@", "@@BUILD_TIMESTAMP@@", "@@DATA_SIZE@@"):
             self.assertIn(placeholder, self.page, placeholder)
-        for placeholder in ("@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
+        for placeholder in ("@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
         self.assertIn("document.getElementById('game-version-line')", self.page)                                  # (a build that did not fill them in hides the line)
         self.assertEqual(rule(self.style, ".bar strong")["color"], "#fff")                                        # (the staging label: readable on the bar)

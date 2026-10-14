@@ -119,7 +119,7 @@ class TheListPage(unittest.TestCase):
     page = read("web", "watch.html")
 
     def test_it_is_filled_in_like_the_other_pages_and_loads_nothing_from_elsewhere(self):
-        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
+        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
         self.assertNotRegex(self.page, r'(?:src|href)="https?://(?!github\.com/dchadd427/)')
         self.assertIn('<script src="replay_page.js"></script>', self.page)

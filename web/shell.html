@@ -1414,7 +1414,7 @@
 
     <footer class="bar">
         <div class="bar-in">
-            <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
+            <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
@@ -2952,11 +2952,11 @@
                 var line = document.getElementById('game-version-line');
                 if (line) line.style.display = 'none';
             }
-            var buildId = document.getElementById('game-build-id');
-            if (buildId && buildId.textContent.indexOf('@') !== -1) {       // the same for the build id (the Docker image fills both in)
+            var buildId = document.getElementById('game-build-id'), buildDate = document.getElementById('game-build-date');
+            if (buildId && buildId.textContent.indexOf('@') !== -1) {       // the same for the build id and date (the Docker image fills them in)
                 var build = document.getElementById('game-build');
                 if (build) build.style.display = 'none';
-            }
+            } else if (buildDate && buildDate.textContent.indexOf('@') !== -1) buildDate.style.display = 'none';
         })();
 
         // The game's keys belong to the game: while it has the screen the browser's own reactions to them (Ctrl+O opens a file dialog, Ctrl+S saves the page,

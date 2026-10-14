@@ -128,13 +128,14 @@ def repo_home(repo_blob):
     return re.sub(r"/blob/[^/]+/?$", "", repo_blob.rstrip("/") + "/").rstrip("/")
 
 
-def version_line(version, build_id):
-    """The footer's pill: "v0.5.0 - build abc1234" (the same ids as the front page's footer), only the part that is known, nothing when neither is."""
+def version_line(version, build_id, build_date=""):
+    """The footer's pill: "v0.5.0 - build abc1234 (2026-01-02 09:30 PT)" (the same ids as the front page's footer), only the part that is known, nothing when neither is."""
     parts = []
     if version:
         parts.append('<span id="game-version">%s</span>' % html.escape(version))
     if build_id:
-        parts.append('<span id="game-build">%sbuild <span id="game-build-id">%s</span></span>' % (" - " if version else "", html.escape(build_id)))
+        date_part = (' <span id="game-build-date">(%s)</span>' % html.escape(build_date)) if build_date else ""
+        parts.append('<span id="game-build">%sbuild <span id="game-build-id">%s</span>%s</span>' % (" - " if version else "", html.escape(build_id), date_part))
     return '<span class="ver" id="game-version-line">%s</span>\n' % "".join(parts) if parts else ""
 
 
@@ -144,7 +145,7 @@ def slug(heading):
     return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-") or "section"
 
 
-def convert(md, repo_blob, version="", build_id="", source="CHANGELOG.md"):
+def convert(md, repo_blob, version="", build_id="", build_date="", source="CHANGELOG.md"):
     md = re.sub(r"<!--.*?-->", "", md, flags=re.S)
     title = "Changelog"
     intro, sections, nav = [], [], []
@@ -220,7 +221,7 @@ def convert(md, repo_blob, version="", build_id="", source="CHANGELOG.md"):
 
     body = "\n".join('<section id="%s" class="panel"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
     intro_html = '<div class="intro panel">%s</div>' % "\n".join(intro)
-    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id),
+    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id, build_date),
                        github=html.escape(repo_home(repo_blob), quote=True), source=html.escape(source))
 
 
@@ -231,6 +232,7 @@ def main(argv):
     parser.add_argument("repo_blob", nargs="?", default=DEFAULT_REPO_BLOB, help="the address that relative links are pointed at")
     parser.add_argument("--version", default="", help="the game's version, shown under the title")
     parser.add_argument("--build-id", default="", help="the build id, shown under the title")
+    parser.add_argument("--build-date", default="", help="the build date and time in Pacific time, shown after the build id")
     args = parser.parse_args(argv[1:])
     repo_blob = args.repo_blob
     if not repo_blob.endswith("/"):
@@ -238,7 +240,7 @@ def main(argv):
     with open(args.input, encoding="utf-8") as f:
         md = f.read()
     source = args.input.replace("\\", "/").split("/")[-1]
-    out = convert(md, repo_blob, version=args.version, build_id=args.build_id, source=source)
+    out = convert(md, repo_blob, version=args.version, build_id=args.build_id, build_date=args.build_date, source=source)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(out)
     return 0

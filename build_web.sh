@@ -43,10 +43,11 @@ mkdir -p "${DIST_DIR}"
 # The page's footer names the version (the file VERSION) and the build (ANTS_BUILD_ID, else the commit of this checkout, else the time), as the Docker image does
 GAME_VERSION="v$(head -n 1 "${SCRIPT_DIR}/VERSION" | tr -d '[:space:]')"
 BUILD_ID="$(sh "${SCRIPT_DIR}/docker/resolve_build_id.sh" "${ANTS_BUILD_ID:-}" "${SCRIPT_DIR}/.git" 2>/dev/null)"
-sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
+BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')"
+sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${DIST_DIR}/index.html" "${DIST_DIR}/play.html"            # the game page at its own path (the games on this computer), as the image has it
-sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/lobby.html" > "${DIST_DIR}/lobby.html"
-sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/watch.html" > "${DIST_DIR}/watch.html"      # the list of the replays
+sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/lobby.html" > "${DIST_DIR}/lobby.html"
+sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/watch.html" > "${DIST_DIR}/watch.html"      # the list of the replays
 cp -f "${SCRIPT_DIR}/web/replay_page.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"

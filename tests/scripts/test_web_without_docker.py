@@ -318,6 +318,7 @@ class TheRealDockerfileReplayed(Scratch):
             text = self.page("plain", name)
             self.assertRegex(text, r'id="?game-version"?>%s<' % re.escape(version), name)
             self.assertRegex(text, r'id="?game-build-id"?>abc1234<', name)
+            self.assertRegex(text, r'id="?game-build-date"?>\(\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT\)<', name)
             self.assertNotIn("@@", text, name)
             self.assertNotIn("site-label", text, name)
             self.assertNotIn("(staging)", text, name)
