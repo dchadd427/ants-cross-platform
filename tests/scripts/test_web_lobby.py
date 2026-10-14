@@ -60,7 +60,7 @@ class TheFrontPageMarkup(PageCase):
 
     def test_it_is_titled_ants_1998_and_has_the_placeholders_once(self):
         self.assertIn("<title>Ants (1998)@@SITE_TITLE@@</title>", self.page)
-        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@"):
+        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
             self.assertEqual(self.page.count(placeholder), 1, placeholder)
 
     def test_the_page_is_one_lobby_the_room_with_its_four_colours_and_the_match_with_its_map_and_start(self):

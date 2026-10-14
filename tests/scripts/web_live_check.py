@@ -31,7 +31,7 @@ from web_hidden_check import find_browser                                    # n
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "..", "..", "web")
-FILLED = {"@@SITE_TITLE@@": "", "@@SITE_FOOTER@@": "", "@@GAME_VERSION@@": "v0.0.0", "@@BUILD_ID@@": "20260101-0000", "@@BUILD_TIMESTAMP@@": "0", "@@DATA_SIZE@@": "2000"}
+FILLED = {"@@SITE_TITLE@@": "", "@@SITE_FOOTER@@": "", "@@GAME_VERSION@@": "v0.0.0", "@@BUILD_ID@@": "20260101-0000", "@@BUILD_DATE@@": "2026-01-01 00:00 PT", "@@BUILD_TIMESTAMP@@": "0", "@@DATA_SIZE@@": "2000"}
 ID = "TREASURE-20261009-082104Z"
 OTHER = "ISLANDS-20261009-082904Z"
 KEPT = "ants-TREASURE-20261009-083210Z.antsrep"

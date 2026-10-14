@@ -50,13 +50,18 @@ ARG ANTS_SITE_LABEL=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
 COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
+    BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')" && \
     echo "${BUILD_ID}" > /src/build_id.txt && \
+    echo "${BUILD_DATE}" > /src/build_date.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
-    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g" "$PAGE" /src/web/lobby.html /src/web/watch.html && \
-    ! grep -q '@@BUILD_ID@@' "$PAGE" /src/web/lobby.html /src/web/watch.html && \
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" "$PAGE" /src/web/lobby.html /src/web/watch.html && \
+    ! grep -q '@@BUILD_' "$PAGE" /src/web/lobby.html /src/web/watch.html && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE" && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html && \
-    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/watch.html
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/watch.html && \
+    grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" "$PAGE" && \
+    grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/lobby.html && \
+    grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/watch.html
 
 # The site label (the build argument ANTS_SITE_LABEL, empty for the production site, "staging" for the staging stack: docker-compose.staging.yml): a non-empty label is put in the title
 # and in the footer of the game page and of the front page (the lobby), so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
@@ -77,7 +82,8 @@ COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}"
+    BUILD_DATE="$(cat /src/build_date.txt)" && \
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
 
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server

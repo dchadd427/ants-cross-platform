@@ -355,7 +355,7 @@
 <footer class="bar" id="footer-bar"><div class="bar-in">
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
     <p class="notice" id="footer-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</p>
-    <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span></span></span></span>
+    <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/watch.html" id="watch-link">Watch matches</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav></div>
 </div></footer>
 </div>
@@ -1490,7 +1490,7 @@
 
         // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
         if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
-        else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+        else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none'; else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
 
         // ---- go ----
         runLobby();

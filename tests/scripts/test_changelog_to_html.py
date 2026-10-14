@@ -121,9 +121,9 @@ def run_tool(md_path, out_path, *extra):
     return subprocess.run([sys.executable, TOOL, md_path, out_path, *extra], capture_output=True, text=True)
 
 
-def build(md_path, out_path, version="v1.2.0", build_id="abc1234"):
-    """The Dockerfile's command, with the same options (the version and the build id) and no others."""
-    return run_tool(md_path, out_path, "--version", version, "--build-id", build_id)
+def build(md_path, out_path, version="v1.2.0", build_id="abc1234", build_date="2026-01-02 09:30 PT"):
+    """The Dockerfile's command, with the same options (the version, the build id and the build date) and no others."""
+    return run_tool(md_path, out_path, "--version", version, "--build-id", build_id, "--build-date", build_date)
 
 
 class MadeUpFiles(unittest.TestCase):
@@ -155,9 +155,10 @@ class MadeUpFiles(unittest.TestCase):
     def test_version_and_build_id_are_in_the_footer_with_the_front_pages_ids(self):
         footer = part(self.text, "footer")
         pill = re.search(r'<span class="ver" id="game-version-line">(.*?)</span></span>\n', footer, re.S).group(0)
-        self.assertEqual(re.sub(r"<[^>]*>", "", pill).strip(), "v1.2.0 - build abc1234")          # the text that the header used to carry
+        self.assertEqual(re.sub(r"<[^>]*>", "", pill).strip(), "v1.2.0 - build abc1234 (2026-01-02 09:30 PT)")          # the text that the header used to carry, with the build date
         self.assertIn('<span id="game-version">v1.2.0</span>', pill)
         self.assertIn('<span id="game-build-id">abc1234</span>', pill)
+        self.assertIn('<span id="game-build-date">(2026-01-02 09:30 PT)</span>', pill)
         self.assertNotIn("build abc1234", part(self.text, "header"))                              # (one place: the footer)
 
     def test_without_version_and_build_the_footer_has_no_version_line(self):
@@ -260,11 +261,11 @@ class MadeUpFiles(unittest.TestCase):
         md = os.path.join(self.tmp.name, "escape.md")
         with open(md, "w", encoding="utf-8") as f:
             f.write('# A <b>title</b> & more\n\n## v1.0.0 - 2026-01-01 - <i>x</i> & "y"\n\n- a bullet\n')
-        result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y")
+        result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y", "--build-date", "d<t")
         self.assertEqual(result.returncode, 0, result.stderr)
         page = read_text(out)
         for needle in ('<h1 class="banner gold">A &lt;b&gt;title&lt;/b&gt; &amp; more</h1>', '&lt;i&gt;x&lt;/i&gt; &amp; "y"', '<span id="game-version">&lt;v&gt;</span>', '<span id="game-build-id">x&amp;y</span>',
-                       'href="https://example.com/a&quot;b"', "Generated from escape.md when"):
+                       '<span id="game-build-date">(d&lt;t)</span>', 'href="https://example.com/a&quot;b"', "Generated from escape.md when"):
             self.assertIn(needle, page, needle)
         self.assertEqual(walk(page).errors, [])
         self.assertNotIn("<b>", page)
@@ -335,6 +336,7 @@ class RealFile(unittest.TestCase):
         self.assertIn("Generated from CHANGELOG.md when the site image is built", footer)
         self.assertIn('id="game-version">v1.2.0<', footer)
         self.assertIn('id="game-build-id">abc1234<', footer)
+        self.assertIn('id="game-build-date">(2026-01-02 09:30 PT)<', footer)
 
     def test_every_link_of_the_real_page_leads_somewhere_that_exists(self):
         text = read_text(self.html_path)
@@ -356,7 +358,7 @@ class RealFile(unittest.TestCase):
         oldest = re.findall(r"^## v(\d+\.\d+\.\d+)", self.md, re.M)[-1]
         major, minor, number = (int(n) for n in oldest.split("."))
         first = "v" + oldest
-        last_of_the_line = {(0, 1, 0): "v0.0.99", (0, 2, 0): "v0.1.3", (0, 3, 0): "v0.2.0"}                                               # (v0.1.0 followed v0.0.99, v0.2.0 followed v0.1.3, v0.3.0 followed v0.2.0)
+        last_of_the_line = {(0, 1, 0): "v0.0.99", (0, 2, 0): "v0.1.3", (0, 3, 0): "v0.2.0", (0, 4, 0): "v0.3.0"}                               # (v0.1.0 followed v0.0.99, v0.2.0 followed v0.1.3, v0.3.0 followed v0.2.0, v0.4.0 followed v0.3.0)
         before = last_of_the_line.get((major, minor, number), "v%d.%d.%d" % (major, minor, number - 1))
         self.assertIn("## Older versions (%s and before)" % before, self.md)
         self.assertIn("Every release before " + first + ",", self.md)
@@ -392,7 +394,7 @@ class RealFile(unittest.TestCase):
 
 
 class DockerfileBuildsThePage(unittest.TestCase):
-    """The Dockerfile builds the one changelog page with the command that the tests above run (the version and the build id, no other option), and the runner stage copies that one file."""
+    """The Dockerfile builds the one changelog page with the command that the tests above run (the version, the build id and the build date, no other option), and the runner stage copies that one file."""
 
     @classmethod
     def setUpClass(cls):
@@ -400,7 +402,7 @@ class DockerfileBuildsThePage(unittest.TestCase):
 
     def test_one_command_builds_the_page_with_the_version_and_the_build_id_and_nothing_else(self):
         found = [line for line in self.lines if "python3 changelog_to_html.py" in line]
-        self.assertEqual(found, ['python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}"'])
+        self.assertEqual(found, ['python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"'])
 
     def test_the_builder_copies_the_changelog_and_the_tool_and_no_document_of_docs(self):
         self.assertEqual([l for l in self.lines if l.startswith("COPY") and "/src/changelog/" in l and "--from" not in l],
