@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.39 - 2026-10-14 - Opportunistic water pushes, vicinity kills, smart threat counters and bomb-tunnel defusal
+
+**For players:**
+- Computer players now knock enemies standing near water into the water (one punch on the shore or four tiles out with a Combat Ant, or two to four blows in succession), finish a flanked 3-hit-point enemy with three workers, ignore harmless lone fire walls and stray bombs left in open ground after the enemy leaves, and defend their gate ring against a second enemy Fire Ant even while hunting a raider near the thief hole.
+- On maps with a food pile in a lake and no water channel between land islands, computer players now activate their island play to fetch a Swimmer, ferry food and dig bridges; when gate goals are switched on for a Hard computer player, it also defuses bomb-plugged tunnels with a Bomber and routes around map bombs on power-up trips.
+
+**Rules / network:** none. No rule, no hash and no protocol number changed; the bots stay outside the simulation.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/07ce107a...0b9a5071)
+
 ## v0.12.38 - 2026-10-13 - Bot names on the host's card and in the START line
 
 **For players:**
