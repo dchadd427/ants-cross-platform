@@ -19,14 +19,14 @@
 
 namespace ants::ai {
 
-enum class GoalKind : uint8_t { None, Extinguish, Hop };
+enum class GoalKind : uint8_t { None, Extinguish, Hop, Defuse };
 
 struct GateGoal {
     GoalKind kind{GoalKind::None};
-    sim::AntType need{sim::AntType::Worker};     // the kind of ant the goal needs: Fire for Extinguish, Bomber for Hop
+    sim::AntType need{sim::AntType::Worker};     // the kind of ant the goal needs: Fire for Extinguish, Bomber for Hop/Defuse
     bool powerup{false};                         // the target is a power-up (MapInfo::powerups() index), else a pile (MapInfo::piles() index)
     uint32_t target{0};
-    sim::TileCoord cell{-1, -1};                 // Extinguish: the fire cell to put out; Hop: the tile the bomb is planted on
+    sim::TileCoord cell{-1, -1};                 // Extinguish: the fire cell to put out; Hop: the tile the bomb is planted on; Defuse: the bomb cell to defuse
     BombHop hop;                                 // Hop: the chain (GateInfo::hops() entry, copied)
     GateKind gate{GateKind::None};               // the gate of the target
     int32_t cost{0};                             // the lower the better

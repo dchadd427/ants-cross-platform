@@ -63,6 +63,7 @@ public:
     uint32_t hops_ordered() const noexcept { return hops_ordered_; }
     uint32_t duds() const noexcept { return duds_; }
     uint32_t extinguishes() const noexcept { return extinguishes_; }
+    uint32_t defuses() const noexcept { return defuses_; }
     uint32_t picks() const noexcept { return picks_; }
     uint32_t revivals() const noexcept { return revivals_; }
     uint64_t first_goal_tick() const noexcept { return first_goal_; }
@@ -75,6 +76,7 @@ private:
     void fetch(TaskContext& context);
     void act(TaskContext& context);
     void act_extinguish(TaskContext& context, const AntView& ant);
+    void act_defuse(TaskContext& context, const AntView& ant);
     void act_hop(TaskContext& context, const AntView& ant);
     void succeed(TaskContext& context);
     void fail(TaskContext& context, const char* why);
@@ -103,6 +105,7 @@ private:
     uint32_t hops_ordered_{0};
     uint32_t duds_{0};
     uint32_t extinguishes_{0};
+    uint32_t defuses_{0};
     uint32_t picks_{0};
     uint64_t first_goal_{0};
     // watched state of the ant, to tell progress and duds

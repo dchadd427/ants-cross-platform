@@ -11,6 +11,8 @@ constexpr int32_t kExtinguishPerCell = 10;
 constexpr int32_t kPowerUpHopBase = 200;
 constexpr int32_t kPileHopBase = 400;
 constexpr int32_t kHopPerBomb = 40;
+constexpr int32_t kDefuseBase = 500;
+constexpr int32_t kDefusePerBomb = 20;
 
 bool kind_wanted(const GoalRules& rules, sim::AntType kind) noexcept { return ((rules.kinds >> static_cast<unsigned>(kind)) & 1u) != 0; }
 
@@ -73,6 +75,16 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
             g.cell = t.fire_cell;
             g.gate = t.gate;
             g.cost = kExtinguishBase + kExtinguishPerCell * t.fire_cells;
+            offer(best, g);
+        }
+        if (bomber_source && t.defuse_bombs > 0 && t.bomb_cell.x >= 0 && (t.gate == GateKind::Bombs || t.gate == GateKind::Either)) {
+            GateGoal g;
+            g.kind = GoalKind::Defuse;
+            g.need = sim::AntType::Bomber;
+            g.target = t.index;
+            g.cell = t.bomb_cell;
+            g.gate = t.gate;
+            g.cost = kDefuseBase + kDefusePerBomb * t.defuse_bombs;
             offer(best, g);
         }
         if (bomber_source && t.hop >= 0) {

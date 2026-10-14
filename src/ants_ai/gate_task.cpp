@@ -164,6 +164,7 @@ void GateGoalTask::act(TaskContext& context) {
     seen_tile_ = ant->tile;
     seen_hp_ = ant->hp;
     if (goal_.kind == GoalKind::Extinguish) act_extinguish(context, *ant);
+    else if (goal_.kind == GoalKind::Defuse) act_defuse(context, *ant);
     else act_hop(context, *ant);
 }
 
@@ -173,6 +174,32 @@ void GateGoalTask::act_extinguish(TaskContext& context, const AntView& ant) {
     for (const FireWallView& f : context.view.fire_walls()) burning = burning || f.tile == goal_.cell;
     if (!burning) {
         ++extinguishes_;
+        succeed(context);
+        return;
+    }
+    if (ant.idle() && may_order(now)) {
+        context.orders.special(ant_, goal_.cell);
+        last_order_ = now;
+    }
+}
+
+void GateGoalTask::act_defuse(TaskContext& context, const AntView& ant) {
+    const uint64_t now = context.view.tick();
+    bool armed = false;
+    for (const BombView& b : context.view.bombs()) armed = armed || (b.tile == goal_.cell && b.owner != context.seat);
+    if (!armed) {
+        ++defuses_;
+        progress_ = now;
+        GateInfo gates = GateInfo::analyse(context.map, context.view.grid(), context.seat);
+        if (!gates.empty() && goal_.target < gates.piles().size()) {
+            const GateTarget& t = gates.piles()[goal_.target];
+            if (!t.free() && t.defuse_bombs > 0 && t.bomb_cell.x >= 0) {
+                gates_ = std::move(gates);
+                goal_.cell = t.bomb_cell;
+                last_order_ = 0;
+                return;
+            }
+        }
         succeed(context);
         return;
     }

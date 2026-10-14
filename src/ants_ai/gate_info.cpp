@@ -181,6 +181,7 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
 
     // ---- the walks: the fewest fire cells / bombs on a walk from the hill (0-1 search over the tiles; a closed kind is not entered) ------------------------------
     std::vector<int32_t> fire_parent(cells, -1);                                 // the walk of the fire search: the tile it came from (a start has none)
+    std::vector<int32_t> bomb_parent(cells, -1);                                 // the walk of the bomb search: the tile it came from (a start has none)
     const auto search = [&](bool fire_open, bool bombs_open, std::vector<int32_t>* parent = nullptr) {
         std::vector<int32_t> dist(cells, kFar);
         std::deque<sim::TileCoord> queue;
@@ -219,7 +220,7 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
     };
     const std::vector<int32_t> d_free = search(false, false);
     const std::vector<int32_t> d_fire = search(true, false, &fire_parent);
-    const std::vector<int32_t> d_bomb = search(false, true);
+    const std::vector<int32_t> d_bomb = search(false, true, &bomb_parent);
     const std::vector<int32_t> d_both = search(true, true);
     const auto least = [&](const std::vector<int32_t>& dist, const std::vector<sim::TileCoord>& tiles, sim::TileCoord* where = nullptr) {
         int32_t best = -1;
@@ -252,7 +253,13 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
                 if (is_fire[static_cast<size_t>(i)]) g.fire_cell = sim::TileCoord{i % w, i / w};
             }
         }
-        g.defuse_bombs = least(d_bomb, tiles);
+        sim::TileCoord bomb_end{-1, -1};
+        g.defuse_bombs = least(d_bomb, tiles, &bomb_end);
+        if (g.defuse_bombs > 0) {                                                // the bomb cell nearest the hill on that walk: walk back from the end of it
+            for (int32_t i = static_cast<int32_t>(at(bomb_end)); i >= 0; i = bomb_parent[static_cast<size_t>(i)]) {
+                if (is_bomb[static_cast<size_t>(i)]) g.bomb_cell = sim::TileCoord{i % w, i / w};
+            }
+        }
         const int32_t mixed = least(d_both, tiles);
         if (free_cost >= 0) g.gate = GateKind::None;
         else if (g.fire_cells >= 0 && g.defuse_bombs >= 0) g.gate = GateKind::Either;

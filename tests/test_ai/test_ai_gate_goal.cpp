@@ -584,4 +584,40 @@ void run_gate_goal_tests() {
             ASSERT_EQ(fires_in_row(f.sim, 20), 60);
         }
     } TEST_END();
+
+    TEST_CASE("AI27.7 Defuse Bomb Tunnel And Map Bomb Avoidance: A Hard Bot Defuses A Bomb Plugging A Rock-Wall Tunnel With A Bomber To Bank The Food Behind It, And PowerUpTask Routes Around Map Bombs") {
+        {   // (a) a thick rock barrier (rows 15..25) with a staircase tunnel plugged by a map bomb at (12, 20): no 4-tile hop crosses it, so Defuse is planned and executed
+            Field f;
+            for (int y = 15; y <= 25; ++y) {
+                const int tx = 10 + (y - 15) / 2;
+                for (int x = 0; x < 60; ++x) {
+                    const bool open = (y == 20) ? (x == 12) : (x == tx || x == tx + 1);
+                    if (!open) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            f.sim.grid_mut().place_bomb(12, 20, 255);
+            f.powerup(8, 8, sim::AntType::Bomber);
+            const GateGoal g = f.goal();
+            ASSERT_EQ(g.kind, GoalKind::Defuse);
+            ASSERT_EQ(g.need, sim::AntType::Bomber);
+            ASSERT_EQ(g.cell.x, 12);
+            ASSERT_EQ(g.cell.y, 20);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(2500);
+            ASSERT_FALSE(f.sim.grid().has_bomb_at(TileCoord{12, 20}));
+            ASSERT_EQ(rig.as<StandardBot>().gate_goals().done(), 1u);
+            ASSERT_TRUE(f.sim.get_player_score(0) > 0);
+        }
+        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a worker is chosen from the unbombed side of a rock barrier rather than the closer bombed side
+            Field f;
+            f.fire_wall();
+            for (int y = 5; y <= 14; ++y) {
+                if (y != 8 && y != 12) f.sim.set_terrain(15, y, sim::TERRAIN_OBSTACLE);
+            }
+            f.sim.grid_mut().place_bomb(15, 8, 255);                                    // map bomb plugs the upper doorway (15, 8)
+            f.powerup(18, 8, sim::AntType::Fire);
+            ASSERT_EQ(f.goal().kind, GoalKind::Extinguish);
+        }
+    } TEST_END();
 }
+
