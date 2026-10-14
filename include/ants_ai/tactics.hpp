@@ -317,6 +317,9 @@ struct LevelPlan {
     uint32_t rush_min_left{400};
     uint32_t rush_ticks{3600};           // a rush lasts at most this long
     bool rush_workers{false};            // ... Workers go too (they kill nothing above two hit points and leave the piles: that cost 30 to 75 points a match for no win); false: the typed ants only
+    bool water_hunt{false};              // a non-Swimmer enemy near unbridged water (1..4 knockback blows from drowning) is hunted at any hit points, and non-Combat ants finish the chain
+    bool vicinity_hunt{false};           // (Medium, Hard) a low-health enemy (1..3 hit points) anywhere within hunt_reach on the same walker component is hunted and chained in succession
+    bool smart_counters{false};          // a lone harmless fire wall or a stray off-route bomb in open grass is ignored by the counters, while active thief-hole raiders are defended aggressively
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
@@ -547,5 +550,22 @@ bool wall_demand(const Tactics& tactics, const BotView& view, const MapInfo& map
 /// thief it can take)
 bool reachable_by(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcept;
 
+bool attackable(const BotView& view, const AntView& enemy, bool from_fire = false);
+bool can_fight(const BotView& view, const AntView& ant);
+bool can_strike(const BotView& view, const AntView& ant);
+
+struct KillPlan {
+    bool possible{false};
+    uint32_t blows{0};                       // the blows that it takes (the opener included)
+    bool opener{false};                      // an ant that is no Combat Ant strikes first
+};
+KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept;
+
+/// Minimum blows (1..4) to knock a non-Swimmer enemy `e` into unbridged water (`kTerrainWater`) from the approach directions of `near` attackers (0 if not possible).
+uint32_t water_push_blows(const BotView& v, const AntView& e, const std::vector<const AntView*>& near) noexcept;
+
+/// Whether a single enemy fire wall or bomb within `counter_hill_radius` of `hill` is a harmless stray hazard in open ground after the enemy has left.
+bool harmless_lone_fire(const BotView& view, const HillInfo& hill, sim::TileCoord tile) noexcept;
+bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, sim::TileCoord tile) noexcept;
 
 }  // namespace ants::ai

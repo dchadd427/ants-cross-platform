@@ -584,4 +584,49 @@ void run_gate_goal_tests() {
             ASSERT_EQ(fires_in_row(f.sim, 20), 60);
         }
     } TEST_END();
+
+    TEST_CASE("AI27.7 Defuse Bomb Tunnel And Map Bomb Avoidance: A Hard Bot Defuses A Bomb Plugging A Rock-Wall Tunnel With A Bomber To Bank The Food Behind It, And PowerUpTask Routes Around Map Bombs") {
+        {   // (a) a thick rock barrier (rows 15..25) with a staircase tunnel plugged by a map bomb at (12, 20): no 4-tile hop crosses it, so Defuse is planned and executed
+            Field f;
+            for (int y = 15; y <= 25; ++y) {
+                const int tx = 10 + (y - 15) / 2;
+                for (int x = 0; x < 60; ++x) {
+                    const bool open = (y == 20) ? (x == 12) : (x == tx || x == tx + 1);
+                    if (!open) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            f.sim.grid_mut().place_bomb(12, 20, 255);
+            f.powerup(8, 8, sim::AntType::Bomber);
+            const GateGoal g = f.goal();
+            ASSERT_EQ(g.kind, GoalKind::Defuse);
+            ASSERT_EQ(g.need, sim::AntType::Bomber);
+            ASSERT_EQ(g.cell.x, 12);
+            ASSERT_EQ(g.cell.y, 20);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(2500);
+            ASSERT_FALSE(f.sim.grid().has_bomb_at(TileCoord{12, 20}));
+            ASSERT_EQ(rig.as<StandardBot>().gate_goals().done(), 1u);
+            ASSERT_TRUE(f.sim.get_player_score(0) > 0);
+        }
+        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
+            Field f;
+            f.fire_wall();
+            for (int y = 6; y <= 10; ++y) {
+                for (int x = 15; x <= 19; ++x) {
+                    const bool border = x == 15 || x == 19 || y == 6 || y == 10;
+                    if (border && !(x == 15 && y == 8)) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            f.sim.grid_mut().place_bomb(15, 8, 255);                                    // map bomb plugs the only doorway into the box
+            f.powerup(17, 8, sim::AntType::Fire);                                       // closer by Chebyshev distance (3 tiles from (14, 8)), but behind the bomb
+            f.powerup(12, 16, sim::AntType::Fire);                                      // 6 tiles away in open ground
+            f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 8});
+            ASSERT_EQ(f.goal().kind, GoalKind::Extinguish);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(250);
+            ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), 1u);
+            ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
+        }
+    } TEST_END();
 }
+

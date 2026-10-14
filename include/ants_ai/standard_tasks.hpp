@@ -24,30 +24,6 @@
 
 namespace ants::ai {
 
-/// Whether an attack order can reach the ant now: it is not on a power-up (an ant that stands on one cannot be attacked, and one that is about to take it will not be there in a few
-/// ticks), not on a hill tile (the order would be a plain move there), not on water, not in the middle of a hit, a flight, the enter clip or a burn
-/// `from_fire`: the attacker is a Fire Ant, which walks onto a fire wall and strikes an ant that stands on one (nobody else's order reaches it: the path ends on a tile that no other ant can enter)
-bool attackable(const BotView& view, const AntView& enemy, bool from_fire = false);
-
-/// Whether an own ant may be sent to fight: it takes orders, holds nothing, is healthy and is a worker (of the level's default type) or a Combat Ant, and does not stand on a power-up
-bool can_fight(const BotView& view, const AntView& ant);
-
-/// Whether an own ant of ANY type may be sent to strike (the members of the rush): it takes orders, holds nothing, is healthy and does not stand on a power-up. (The draft of the fire hunt,
-/// plan.fire_draft, has its own test, which lets a carrier that cannot bank strike too.)
-bool can_strike(const BotView& view, const AntView& ant);
-
-/// What it takes to KILL an ant of `hp` hit points in the real engine (measured: docs/BOTS.md, "Hunting the kill"): the engine lets ONE blow land per hit clip (about 22 ticks, however many ants
-/// strike), and an ant that is down to ONE hit point walks home at the speed of its hunters and is not caught. So only a punch (a Combat Ant: 2 hit points, every other blow 1) finishes an ant:
-/// from an even number of hit points punches alone take it to 0; from an odd number one blow of another ant (`others` of them) opens first, so that one hit point is never left standing.
-/// Without a Combat Ant only an ant of 2 hit points dies, and only when three ants strike (the blows queue up and one lands as its clip ends); an ant of one hit point dies to any blow that
-/// reaches it (whether it can still be reached is for the caller to say).
-struct KillPlan {
-    bool possible{false};
-    uint32_t blows{0};                       // the blows that it takes (the opener included)
-    bool opener{false};                      // an ant that is no Combat Ant strikes first
-};
-KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept;
-
 // ---- rank 5: fights ---------------------------------------------------------------------------------------------------------------------------------------
 
 /// Fights, one per enemy ant:
@@ -103,6 +79,7 @@ private:
         uint64_t decided{0};
         uint64_t sent{kPending};             // the tick the last attack order LEFT (kPending: none, or it has not left yet); 0: never ordered
         bool ordered{false};
+        uint8_t target_hp{0};
     };
     struct Fight {
         uint32_t target{0};
@@ -119,6 +96,7 @@ private:
         bool pull{false};                    // (with assault) the Combat Ants of the bot may be taken off the piles, and the surplus of free ants is no longer asked for (plan.behind_free_tier)
         uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
+        bool vicinity{false};                // (with hunt) a 3-HP zero-Combat vicinity hunt (plan.vicinity_hunt)
         std::map<uint32_t, Defender> defenders;
     };
 

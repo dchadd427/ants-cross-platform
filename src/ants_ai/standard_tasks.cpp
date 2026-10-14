@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "ants_ai/island_info.hpp"
 #include "ants_sim/movement_tables.hpp"
 
 namespace ants::ai {
@@ -92,79 +93,7 @@ Strength enemy_strength(const BotView& v, sim::TileCoord centre, int32_t radius,
     return out;
 }
 
-bool on_hill_tile(const sim::Grid& grid, sim::TileCoord t) noexcept {
-    for (const assets::AnthillSpawn& hill : grid.anthills()) {
-        if (t.x >= static_cast<int32_t>(hill.x) && t.x <= static_cast<int32_t>(hill.x) + 3 && t.y >= static_cast<int32_t>(hill.y) && t.y <= static_cast<int32_t>(hill.y) + 3) return true;
-    }
-    return false;
-}
-
 }  // namespace
-
-KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept {
-    KillPlan k;
-    if (hp == 0) return k;
-    if (hp == 1) {
-        k.possible = combats + others > 0;
-        k.blows = 1;
-        return k;
-    }
-    if (combats > 0) {
-        if (hp % 2 == 0) {
-            k.possible = true;
-            k.blows = hp / 2;
-        } else if (others > 0) {
-            k.possible = true;
-            k.opener = true;
-            k.blows = 1 + (hp - 1) / 2;
-        }
-        return k;
-    }
-    if (hp == 2 && others >= 3) {
-        k.possible = true;
-        k.blows = 2;
-    }
-    return k;
-}
-
-bool attackable(const BotView& view, const AntView& enemy, bool from_fire) {
-    if (enemy.team == view.seat() || (view.ally() < sim::MAX_PLAYERS && enemy.team == view.ally())) return false;
-    if (view.powerup_at(enemy.tile) != nullptr) return false;
-    switch (enemy.state) {
-        case sim::UnitState::EnteringBase:
-        case sim::UnitState::Flinch:
-        case sim::UnitState::Knockback:
-        case sim::UnitState::Burn:
-        case sim::UnitState::Infiltrating:
-        case sim::UnitState::Drowning:
-        case sim::UnitState::Dead:
-            return false;
-        default:
-            break;
-    }
-    if (!view.has_grid()) return true;
-    const sim::Grid& grid = view.grid();
-    if (on_hill_tile(grid, enemy.tile)) return false;
-    if (grid.has_fire_at(enemy.tile) && !from_fire) return false;                    // only a Fire Ant stands on a fire wall, and no other ant can step onto it to strike (its path ends on the tile: "Can't go there."); a Fire Ant can
-    if (grid.terrain_class_at(enemy.tile) == sim::movement::kTerrainWater) return false;
-    return true;
-}
-
-bool can_fight(const BotView& view, const AntView& ant) {
-    if (!ant.takes_orders() || ant.state == sim::UnitState::Stunned) return false;
-    if (ant.holding || ant.carried_points > 0) return false;
-    if (ant.hp < kMinFightHp) return false;
-    if (ant.type != view.default_ant_type() && ant.type != sim::AntType::Combat) return false;
-    if (view.powerup_at(ant.tile) != nullptr) return false;
-    return true;
-}
-
-bool can_strike(const BotView& view, const AntView& ant) {
-    if (!ant.takes_orders() || ant.state == sim::UnitState::Stunned) return false;
-    if (ant.holding || ant.carried_points > 0) return false;
-    if (ant.hp < kMinFightHp) return false;
-    return view.powerup_at(ant.tile) == nullptr;
-}
 
 // ---- FightTask ------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -197,7 +126,6 @@ uint32_t duel_spare_of(const Tactics& t) noexcept {
 }
 
 }  // namespace
-
 
 bool FightTask::shunned(uint32_t enemy, uint64_t tick) const noexcept {
     const auto it = shunned_.find(enemy);
@@ -351,9 +279,16 @@ void FightTask::start_fire_defence(TaskContext& c) {
         return false;
     };
     if (!ring && !plan.raider_hunt) return;
+    size_t active_fire = 0;
+    bool fire_ant_hunted = false;
     for (const auto& f : fights_) {
-        if (f.second.fire) return;                                                                   // one hunt at a time
+        if (!f.second.fire) continue;
+        ++active_fire;
+        const AntView* t = find_ant(v.others(), f.first);
+        fire_ant_hunted = fire_ant_hunted || !f.second.raider || (t != nullptr && t->type == sim::AntType::Fire);
     }
+    const bool spare_for_two = v.mine().size() >= plan.fight_reserve + plan.defenders + plan.fire_defence_extra + 2u;
+    if (active_fire >= (plan.smart_counters && ring && walls == 1 && !fire_ant_hunted && spare_for_two ? 2u : 1u)) return;
     // (plan.raider_hunt, the war batch; requested: try to kill their fire ant if they try to come for them) an enemy Fire or Bomber Ant near the own hill, or at a pile the own ants work, whether
     // or not walls stand: the blows stop what it is doing (a hit cancels an ability) and send it home when it is down to one hit point
     const auto near_work = [&](const AntView& e) {
@@ -376,7 +311,7 @@ void FightTask::start_fire_defence(TaskContext& c) {
         if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
         const int32_t d = e.tile.chebyshev_dist(hill.origin);
         const bool ring_target = ring && fire_ant && d <= plan.fire_defence_radius;
-        if (!ring_target && !(plan.raider_hunt && near_work(e))) continue;
+        if ((active_fire >= 1 && !ring_target) || (!ring_target && !(plan.raider_hunt && near_work(e)))) continue;
         const int32_t key = plan.health_aware ? static_cast<int32_t>(blows_to_kill(e.hp, 1)) * 4 + d : d;
         if (best == nullptr || key < best_key) {
             best = &e;
@@ -405,6 +340,18 @@ namespace {
 // is never taken: it kills nothing above two hit points and the food is what the assault is not for
 bool assault_ant(const AntView& a, bool pull) noexcept {
     return (a.idle() && !a.holding && a.carried_points == 0) || (pull && a.type == sim::AntType::Combat);
+}
+
+bool flanked_by(sim::TileCoord target, const std::vector<const AntView*>& near) noexcept {
+    int32_t min_dx = 0, max_dx = 0, min_dy = 0, max_dy = 0;
+    for (const AntView* a : near) {
+        if (a == nullptr || a->tile.chebyshev_dist(target) > 2) return false;
+        min_dx = std::min(min_dx, a->tile.x - target.x);
+        max_dx = std::max(max_dx, a->tile.x - target.x);
+        min_dy = std::min(min_dy, a->tile.y - target.y);
+        max_dy = std::max(max_dy, a->tile.y - target.y);
+    }
+    return (min_dx < 0 && max_dx > 0) || (min_dy < 0 && max_dy > 0);
 }
 
 }  // namespace
@@ -453,9 +400,14 @@ void FightTask::start_offence(TaskContext& c) {
     const HillInfo& hill = c.map.hill(c.seat);
     const int leader = tactics_.standing.leader;
     // the scope of a hunt
-    const auto in_scope = [&](const AntView& e) {
+    const auto in_scope = [&](const AntView& e, uint32_t w_blows) {
         for (const AntView* a : pool) {
             if (a->tile.chebyshev_dist(e.tile) <= plan.hunt_next) return true;                       // next to the own ants: Easy's whole scope
+        }
+        if (plan.water_hunt && w_blows == 1 && e.state != sim::UnitState::Walking) {
+            for (const AntView* a : pool) {
+                if (a->tile.chebyshev_dist(e.tile) <= plan.hunt_reach) return true;
+            }
         }
         if (!plan.hunt_wide) return false;
         if (hill.present && e.tile.chebyshev_dist(hill.origin) <= plan.leash_tiles) return true;       // within the leash of the own hill
@@ -487,29 +439,49 @@ void FightTask::start_offence(TaskContext& c) {
     const AntView* best = nullptr;
     int32_t best_score = 0;
     bool best_hunt = false;
+    bool best_vicinity = false;
     bool best_assault = false;
     for (const AntView& e : v.others()) {
         if (fights_.count(e.id) != 0 || !attackable(v, e) || shunned(e.id, now)) continue;
-        // a kill that is available: of a WOUNDED ant (a fresh one is the business of the fights that a blow begins and of the skirmish), by the plan of the real blows (kill_plan); a survivor with one
-        // hit point that already walks home is out of reach
-        if (plan.hunt && e.hp >= 1 && e.hp < sim::AntUnit::MAX_HP && !(e.hp == 1 && e.state == sim::UnitState::Walking) && in_scope(e)) {
-            const std::vector<const AntView*> near = form(e, plan.hunt_reach, plan.hunt_force);
+        // a kill that is available: of a WOUNDED ant (or a non-Swimmer near unbridged water), by the plan of the real blows (kill_plan or water_push_blows); a survivor with one
+        // hit point that already walks home is out of reach unless it is on the water's edge
+        const std::vector<const AntView*> near_hunt = plan.hunt ? form(e, plan.hunt_reach, plan.hunt_force) : std::vector<const AntView*>{};
+        const uint32_t raw_w_blows = (plan.hunt && plan.water_hunt) ? water_push_blows(v, e, near_hunt) : 0u;
+        const bool water_ready = raw_w_blows == 1
+            ? (e.state != sim::UnitState::Walking || e.hp < sim::AntUnit::MAX_HP || (!near_hunt.empty() && near_hunt.front()->idle() && near_hunt.front()->tile.chebyshev_dist(e.tile) <= 2))
+            : (raw_w_blows > 1 && e.hp < sim::AntUnit::MAX_HP);
+        const uint32_t w_blows = water_ready ? raw_w_blows : 0u;
+        if (plan.hunt && e.hp >= 1 && (e.hp < sim::AntUnit::MAX_HP || w_blows > 0) && !(e.hp == 1 && e.state == sim::UnitState::Walking && w_blows == 0) && in_scope(e, w_blows)) {
             Strength own;
             size_t combats = 0;
-            for (const AntView* a : near) {
+            for (const AntView* a : near_hunt) {
                 own.add(a->hp, blow_damage(a->type));
                 combats += a->type == sim::AntType::Combat ? 1u : 0u;
             }
-            const KillPlan kill = kill_plan(e.hp, combats, near.size() - combats);
-            if (kill.possible && kill.blows <= plan.hunt_blows) {
+            const size_t others = near_hunt.size() - combats;
+            KillPlan kill = kill_plan(e.hp, combats, others);
+            const bool v_hunt = !kill.possible && plan.vicinity_hunt && e.hp == 3 && combats == 0 && others >= 3 && e.state != sim::UnitState::Walking && flanked_by(e.tile, near_hunt);
+            if (v_hunt) {
+                kill.possible = true;
+                kill.blows = 3;
+            }
+            if (w_blows > 0 && (!kill.possible || w_blows < kill.blows)) {
+                kill.possible = true;
+                kill.blows = w_blows;
+            }
+            const uint32_t max_blows = w_blows > 0 ? std::max<uint32_t>(plan.hunt_blows, 4u) : (v_hunt ? 3u : plan.hunt_blows);
+            if (kill.possible && kill.blows <= max_blows && !near_hunt.empty()) {
                 const Strength theirs = enemy_strength(v, e.tile, plan.skirmish_near, e.id, plan.skirmish_enemy_cap);
-                if (own.value() * 100u >= theirs.value() * plan.hunt_odds_percent * odds_scale / 100u) {
+                const uint32_t req_odds = w_blows == 1 ? 50u : plan.hunt_odds_percent;
+                if (own.value() * 100u >= theirs.value() * req_odds * odds_scale / 100u) {
                     available_.insert(e.id);
-                    const int32_t score = 300 - 12 * static_cast<int32_t>(kill.blows) - 4 * near.front()->tile.chebyshev_dist(e.tile) + (10 - static_cast<int32_t>(std::min<uint32_t>(e.hp, 10u))) * 6;
+                    const int32_t water_bonus = w_blows == 1 ? 120 : (w_blows > 0 ? 60 : 0);
+                    const int32_t score = 300 + water_bonus - 12 * static_cast<int32_t>(kill.blows) - 4 * near_hunt.front()->tile.chebyshev_dist(e.tile) + (10 - static_cast<int32_t>(std::min<uint32_t>(e.hp, 10u))) * 6;
                     if (!running && (best == nullptr || score > best_score)) {
                         best = &e;
                         best_score = score;
                         best_hunt = true;
+                        best_vicinity = v_hunt && w_blows == 0;
                         best_assault = false;
                     }
                     continue;
@@ -532,6 +504,7 @@ void FightTask::start_offence(TaskContext& c) {
                         best = &e;
                         best_score = score;
                         best_hunt = false;
+                        best_vicinity = false;
                         best_assault = true;
                     }
                 }
@@ -563,6 +536,7 @@ void FightTask::start_offence(TaskContext& c) {
             best = &e;
             best_score = score;
             best_hunt = false;
+            best_vicinity = false;
             best_assault = false;
         }
     }
@@ -574,6 +548,7 @@ void FightTask::start_offence(TaskContext& c) {
     f.last_alarm = now;
     f.offence = true;
     f.hunt = best_hunt;
+    f.vicinity = best_vicinity;
     f.assault = best_assault;
     f.force = static_cast<uint32_t>(assault_force);
     f.pull = pull;
@@ -608,13 +583,17 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     // Is a kill in reach? (health-aware fights.) Only then the fight is kept up after a blow: the engine lets one blow land per hit clip and only a punch finishes an ant (kill_plan), so a duel
     // of workers that cannot end in a kill ends with the first blow, as it did (and costs the economy no more). The hunts are built on a kill plan; the skirmishes, the fire hunts and the thief
     // hunts have their own ends and wait out the clips; a fight that has just begun takes its defenders below
+    std::vector<const AntView*> def_ptrs;
+    for (const auto& d : f.defenders) {
+        const AntView* a = find_ant(v.mine(), d.first);
+        if (a != nullptr) def_ptrs.push_back(a);
+    }
+    const uint32_t w_blows = (plan.water_hunt && target != nullptr) ? water_push_blows(v, *target, def_ptrs) : 0u;
     const auto kill_now = [&]() {
-        if (f.hunt) return true;
+        if (f.hunt || w_blows > 0) return true;
         size_t combats = 0;
         size_t others = 0;
-        for (const auto& d : f.defenders) {
-            const AntView* a = find_ant(v.mine(), d.first);
-            if (a == nullptr) continue;
+        for (const AntView* a : def_ptrs) {
             if (a->type == sim::AntType::Combat) ++combats;
             else ++others;
         }
@@ -638,7 +617,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     }
     // A survivor with one hit point walks home (the engine sends it) at the speed of its hunters: with a lead of two tiles it is not caught any more (measured: docs/BOTS.md, "Hunting the kill"), so the
     // fight is over and the ant is left alone for a while
-    if (plan.health_aware && !f.thief && !f.defenders.empty() && target->hp == 1 && target->state == sim::UnitState::Walking) {
+    if (plan.health_aware && !f.thief && !f.defenders.empty() && target->hp == 1 && target->state == sim::UnitState::Walking && w_blows == 0) {
         int32_t nearest = 99;
         for (const auto& d : f.defenders) {
             const AntView* a = find_ant(v.mine(), d.first);
@@ -652,7 +631,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
     }
     // a wounded target is finished: the fight lingers on and the leash is longer (requested: if they are attacking an ant and it is low on health, they continue and try to kill it)
-    const bool wounded = waits_for_clip && target->hp > 0 && target->hp <= 4;
+    const bool wounded = waits_for_clip && ((target->hp > 0 && target->hp <= 4) || w_blows > 0);
     if (f.thief) {
         const HillInfo& hill = c.map.hill(c.seat);
         if (target->holding || !hill.present || target->tile.chebyshev_dist(hill.raid) > kThiefRadius + 4 || now > f.last_alarm + plan.fight_linger_ticks) {
@@ -706,7 +685,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         const AntView* a = find_ant(v.mine(), it->first);
         uint8_t keep = kKeepFightHp;
         if (plan.health_aware && a != nullptr) {
-            if (target->hp > 0 && target->hp <= blow_damage(a->type)) keep = 1;                         // one blow from death: finish it
+            if ((target->hp > 0 && target->hp <= blow_damage(a->type)) || w_blows == 1) keep = 1;       // one blow from death or water: finish it
             else if (combat_near) keep = 4;                                                             // a punch takes 2: an ant with 3 would be dead in two
         }
         const bool carrying = a != nullptr && (a->holding || a->carried_points > 0) && !(shut && f.fire);              // (a carrier that cannot bank keeps striking)
@@ -718,10 +697,15 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
     }
     // an acknowledged attack that shows "can't go" soon after it left: no order reaches the target (it stands on something): leave it alone
-    for (const auto& d : f.defenders) {
+    for (auto& d : f.defenders) {
         if (d.second.sent == kPending || now < d.second.sent + 2 || now > d.second.sent + kCantGoWindow) continue;
         const AntView* a = find_ant(v.mine(), d.first);
         if (a != nullptr && a->state == sim::UnitState::CantGo) {
+            if (f.hunt && (w_blows > 0 || f.vicinity) && target->hp < d.second.target_hp) {
+                d.second.ordered = false;
+                d.second.sent = kPending;
+                continue;
+            }
             shunned_[f.target] = now + kShunTicks;
             ++shunned_count_;
             end = true;
@@ -775,31 +759,29 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         return;
     }
     // who strikes next (health-aware fights): with a Combat Ant among the defenders only punches finish an ant (kill_plan), so an ant of an even number of hit points is struck by Combat Ants alone, one of
-    // an odd number (3 or more) first by ONE other ant, the nearest, so that it is never left standing with one hit point; without a Combat Ant everybody strikes
+    // an odd number (3 or more) first by ONE other ant, the nearest, so that it is never left standing with one hit point; without a Combat Ant (or when pushing into water) everybody strikes
     uint32_t opener = 0;
     bool combat_only = false;
-    if (plan.health_aware && !on_fire && target->hp >= 2 && kill_now()) {
+    if (plan.health_aware && !on_fire && target->hp >= 2 && w_blows == 0 && kill_now()) {
         bool any_combat = false;
         for (const auto& d : f.defenders) {
             const AntView* a = find_ant(v.mine(), d.first);
             any_combat = any_combat || (a != nullptr && a->type == sim::AntType::Combat);
         }
-        if (any_combat) {
-            if (target->hp % 2 == 0) {
-                combat_only = true;
-            } else {
-                int32_t best_d = 0;
-                for (const auto& d : f.defenders) {
-                    const AntView* a = find_ant(v.mine(), d.first);
-                    if (a == nullptr || a->type == sim::AntType::Combat) continue;
-                    const int32_t dist = a->tile.chebyshev_dist(target->tile);
-                    if (opener == 0 || dist < best_d) {
-                        opener = a->id;
-                        best_d = dist;
-                    }
+        if (any_combat && target->hp % 2 == 0) {
+            combat_only = true;
+        } else if (any_combat || f.vicinity) {
+            int32_t best_d = 0;
+            for (const auto& d : f.defenders) {
+                const AntView* a = find_ant(v.mine(), d.first);
+                if (a == nullptr || (any_combat && a->type == sim::AntType::Combat)) continue;
+                const int32_t dist = a->tile.chebyshev_dist(target->tile);
+                if (opener == 0 || dist < best_d) {
+                    opener = a->id;
+                    best_d = dist;
                 }
-                combat_only = opener == 0;
             }
+            combat_only = any_combat && opener == 0;
         }
     }
     // the orders: an ant that was never ordered, or is idle again after its blow, gets a new attack order (one order is one blow)
@@ -817,6 +799,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         d.second.ordered = true;
         d.second.decided = now;
         d.second.sent = kPending;
+        d.second.target_hp = target->hp;
         list.push_back(d.first);
     }
     if (!list.empty()) attacks.emplace_back(target->tile, std::move(list));
@@ -894,6 +877,13 @@ const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoor
         mask_ = MapInfo::walkable_mask(v.grid(), c.seat, v.walk_context());
         for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
             if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                         // (the bridges that will not last the trip: the island task)
+        }
+        if (tactics_.plan.gate_goals) {
+            for (const BombView& b : v.bombs()) {
+                if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
+                    mask_[tile_index(v.grid(), b.tile)] = 0;                                        // (map bombs are not walked into on a pick-up trip while gate goals run)
+                }
+            }
         }
         mask_tick_ = now;
     }
@@ -1490,12 +1480,15 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
 }
 
 bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
-    const HillInfo& hill = map.hill(view.seat());
-    if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) return true;
     for (const PileView& p : view.piles()) {
         const PileInfo* info = map.pile(p.index);
         if (info == nullptr || !info->approach[view.seat()].reachable()) continue;
         if (tile.chebyshev_dist(p.anchor) <= plan.counter_pile_radius + 1) return true;
+    }
+    const HillInfo& hill = map.hill(view.seat());
+    if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) {
+        if (plan.smart_counters && view.has_grid() && ((view.grid().has_fire_at(tile) && harmless_lone_fire(view, hill, tile)) || (view.grid().has_bomb_at(tile) && harmless_stray_bomb(view, map, hill, tile)))) return false;
+        return true;
     }
     return false;
 }

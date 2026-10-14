@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "ants_ai/island_info.hpp"
 #include "ants_sim/movement_tables.hpp"
 
 namespace ants::ai {
@@ -148,6 +149,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_odds_ease = 8;
             p.behind_assault_after = 900;
             p.fire_duel = true;                      // (the stand batch: the Fire Ant strikes the Fire Ant that fires the gate in; Easy has no gate to clear, drafts nobody, mines nowhere and never rushes)
+            p.water_hunt = true;
+            p.smart_counters = true;
             break;
         case Level::Medium:
             p.assault = true;
@@ -178,6 +181,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.mine_home_apart = 2;
             p.rush = true;
             p.rush_deficit = 300;
+            p.water_hunt = true;
+            p.vicinity_hunt = true;
+            p.smart_counters = true;
             break;
         case Level::Hard:
             p.assault = true;
@@ -204,6 +210,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.mine_home_apart = 2;
             p.rush = true;
             p.rush_deficit = 200;
+            p.water_hunt = true;
+            p.vicinity_hunt = true;
+            p.smart_counters = true;
             break;
     }
     return p;
@@ -211,6 +220,7 @@ LevelPlan plan_for(Level level) noexcept {
 
 void without_stand_batch(LevelPlan& p) noexcept {
     p.fire_duel = p.fire_draft = p.ramp_unjam = p.rush = false;
+    p.water_hunt = p.vicinity_hunt = p.smart_counters = false;
     p.behind_mine_tier = 4;
     p.behind_mine_gate = p.mine_home = 0;
     p.mine_per_pile = std::min<uint32_t>(p.mine_per_pile, 3);                  // (the field of mines at the piles is the batch's: three were all there was)
@@ -602,6 +612,223 @@ bool wall_demand(const Tactics& tactics, const BotView& view, const MapInfo& map
         }
     }
     return false;
+}
+
+namespace {
+
+sim::TileCoord step_toward(sim::TileCoord from, int dir, int range) noexcept {
+    const sim::movement::TileDelta delta = sim::movement::dir_delta(static_cast<uint8_t>(dir));
+    return sim::TileCoord{from.x + delta.dcol * range, from.y + delta.drow * range};
+}
+
+bool on_hill_tile(const sim::Grid& grid, sim::TileCoord t) noexcept {
+    for (const assets::AnthillSpawn& hill : grid.anthills()) {
+        if (t.x >= static_cast<int32_t>(hill.x) && t.x <= static_cast<int32_t>(hill.x) + 3 && t.y >= static_cast<int32_t>(hill.y) && t.y <= static_cast<int32_t>(hill.y) + 3) return true;
+    }
+    return false;
+}
+
+int knock_dir(const sim::Grid& grid, sim::TileCoord target, sim::TileCoord attacker, int range) noexcept {
+    const int d0 = sim::movement::dir_from_delta(target.y - attacker.y, target.x - attacker.x);
+    static constexpr int kOffsets[5] = {0, 1, -1, 2, -2};
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        const int d = (d0 + kOffsets[attempt] + 8) % 8;
+        const sim::TileCoord land = step_toward(target, d, range);
+        const uint8_t tc = grid.in_bounds(land) ? grid.terrain_class_at(land) : 0;
+        if (flight_landing_ok(grid, land) && (sim::movement::terrain_walkable(tc) || tc == sim::movement::kTerrainWater)) return d;
+    }
+    return -1;
+}
+
+bool open_ground(const sim::Grid& grid, sim::TileCoord tile) noexcept {
+    int32_t open = 0;
+    for (int32_t ny = -1; ny <= 1; ++ny) {
+        for (int32_t nx = -1; nx <= 1; ++nx) {
+            if (nx == 0 && ny == 0) continue;
+            const sim::TileCoord n{tile.x + nx, tile.y + ny};
+            if (grid.in_bounds(n) && sim::movement::terrain_walkable(grid.terrain_class_at(n)) && !grid.is_solid_object(n)) ++open;
+        }
+    }
+    return open >= 7;
+}
+
+bool on_gate_ring(const HillInfo& hill, sim::TileCoord tile) noexcept {
+    const int32_t x = hill.origin.x;
+    const int32_t y = hill.origin.y;
+    const sim::TileCoord ring[8] = {{x + 1, y - 2}, {x, y - 2}, {x + 2, y - 2}, {x - 1, y - 2}, {x + 3, y - 2}, {x - 1, y - 1}, {x + 3, y - 1}, {x - 1, y}};
+    for (const sim::TileCoord& r : ring) {
+        if (r == tile) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+KillPlan kill_plan(uint32_t hp, size_t combats, size_t others) noexcept {
+    KillPlan k;
+    if (hp == 0) return k;
+    if (hp == 1) {
+        k.possible = combats + others > 0;
+        k.blows = 1;
+        return k;
+    }
+    if (combats > 0) {
+        if (hp % 2 == 0) {
+            k.possible = true;
+            k.blows = hp / 2;
+        } else if (others > 0) {
+            k.possible = true;
+            k.opener = true;
+            k.blows = 1 + (hp - 1) / 2;
+        }
+        return k;
+    }
+    if (hp == 2 && others >= 3) {
+        k.possible = true;
+        k.blows = 2;
+    }
+    return k;
+}
+
+bool attackable(const BotView& view, const AntView& enemy, bool from_fire) {
+    if (enemy.team == view.seat() || (view.ally() < sim::MAX_PLAYERS && enemy.team == view.ally())) return false;
+    if (view.powerup_at(enemy.tile) != nullptr) return false;
+    switch (enemy.state) {
+        case sim::UnitState::EnteringBase:
+        case sim::UnitState::Flinch:
+        case sim::UnitState::Knockback:
+        case sim::UnitState::Burn:
+        case sim::UnitState::Infiltrating:
+        case sim::UnitState::Drowning:
+        case sim::UnitState::Dead:
+            return false;
+        default:
+            break;
+    }
+    if (!view.has_grid()) return true;
+    const sim::Grid& grid = view.grid();
+    if (on_hill_tile(grid, enemy.tile)) return false;
+    if (grid.has_fire_at(enemy.tile) && !from_fire) return false;
+    if (grid.terrain_class_at(enemy.tile) == sim::movement::kTerrainWater) return false;
+    return true;
+}
+
+bool can_fight(const BotView& view, const AntView& ant) {
+    if (!ant.takes_orders() || ant.state == sim::UnitState::Stunned) return false;
+    if (ant.holding || ant.carried_points > 0 || ant.hp < 4) return false;
+    if (ant.type != view.default_ant_type() && ant.type != sim::AntType::Combat) return false;
+    return view.powerup_at(ant.tile) == nullptr;
+}
+
+bool can_strike(const BotView& view, const AntView& ant) {
+    if (!ant.takes_orders() || ant.state == sim::UnitState::Stunned) return false;
+    if (ant.holding || ant.carried_points > 0 || ant.hp < 4) return false;
+    return view.powerup_at(ant.tile) == nullptr;
+}
+
+uint32_t water_push_blows(const BotView& v, const AntView& e, const std::vector<const AntView*>& near) noexcept {
+    if (!v.has_grid() || e.type == sim::AntType::Swimmer || near.empty()) return 0;
+    const sim::Grid& grid = v.grid();
+    bool water_near = false;
+    for (int32_t dy = -4; dy <= 4 && !water_near; ++dy) {
+        for (int32_t dx = -4; dx <= 4; ++dx) {
+            const sim::TileCoord t{e.tile.x + dx, e.tile.y + dy};
+            if (grid.in_bounds(t) && grid.terrain_class_at(t) == sim::movement::kTerrainWater) {
+                water_near = true;
+                break;
+            }
+        }
+    }
+    if (!water_near) return 0;
+    bool has_combat = false;
+    for (const AntView* a : near) {
+        if (a != nullptr && a->type == sim::AntType::Combat) has_combat = true;
+    }
+    const auto clear_tile = [&](sim::TileCoord t) noexcept {
+        return grid.in_bounds(t) && sim::movement::terrain_walkable(grid.terrain_class_at(t)) && !grid.is_solid_object(t) && !grid.has_fire_at(t) && !grid.has_bomb_at(t);
+    };
+    uint32_t best = 0;
+    for (const AntView* a : near) {
+        if (a == nullptr || a->tile == e.tile) continue;
+        const int32_t dx = std::clamp<int32_t>(a->tile.x - e.tile.x, -1, 1);
+        const int32_t dy = std::clamp<int32_t>(a->tile.y - e.tile.y, -1, 1);
+        const sim::TileCoord stand{e.tile.x + dx, e.tile.y + dy};
+        if (!clear_tile(stand)) continue;
+        bool path_ok = true;
+        for (sim::TileCoord w = a->tile; w != stand;) {
+            w.x += std::clamp<int32_t>(stand.x - w.x, -1, 1);
+            w.y += std::clamp<int32_t>(stand.y - w.y, -1, 1);
+            if (!clear_tile(w)) {
+                path_ok = false;
+                break;
+            }
+        }
+        if (!path_ok) continue;
+        const int range = a->type == sim::AntType::Combat ? 4 : 1;
+        const int kd1 = knock_dir(grid, e.tile, stand, range);
+        if (kd1 >= 0) {
+            const sim::TileCoord land1 = step_toward(e.tile, kd1, range);
+            if (grid.in_bounds(land1) && grid.terrain_class_at(land1) == sim::movement::kTerrainWater) return 1;
+        }
+        if (near.size() < 2 && !has_combat) continue;
+        sim::TileCoord cur = e.tile;
+        sim::TileCoord prev = stand;
+        for (uint32_t step = 1; step <= 4; ++step) {
+            const int kd = knock_dir(grid, cur, prev, 1);
+            if (kd < 0) break;
+            const sim::TileCoord next = step_toward(cur, kd, 1);
+            if (!grid.in_bounds(next)) break;
+            if (grid.terrain_class_at(next) == sim::movement::kTerrainWater) {
+                if (best == 0 || step < best) best = step;
+                break;
+            }
+            if (!clear_tile(next)) break;
+            prev = cur;
+            cur = next;
+        }
+    }
+    return best;
+}
+
+bool harmless_lone_fire(const BotView& view, const HillInfo& hill, sim::TileCoord tile) noexcept {
+    if (view.piles().empty() || tile.chebyshev_dist(hill.origin) <= 6 || on_gate_ring(hill, tile)) return false;
+    if (tile.chebyshev_dist(hill.queue) <= 2 || tile.chebyshev_dist(hill.entrance) <= 2 || tile.chebyshev_dist(hill.raid) <= 2) return false;
+    for (const AntView& e : view.others()) {
+        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) return false;
+    }
+    for (const FireWallView& w : view.fire_walls()) {
+        if (w.tile != tile && w.tile.chebyshev_dist(tile) <= 2) return false;
+    }
+    return open_ground(view.grid(), tile);
+}
+
+bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, sim::TileCoord tile) noexcept {
+    if (view.piles().empty() || tile.chebyshev_dist(hill.origin) <= 6 || on_gate_ring(hill, tile)) return false;
+    if (tile.chebyshev_dist(hill.queue) <= 3 || tile.chebyshev_dist(hill.entrance) <= 3 || tile.chebyshev_dist(hill.raid) <= 3) return false;
+    for (const AntView& e : view.others()) {
+        if (!(view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) return false;
+    }
+    for (const AntView& a : view.mine()) {
+        if (a.tile.chebyshev_dist(tile) <= 3) return false;
+    }
+    for (const BombView& b : view.bombs()) {
+        if (b.tile != tile && b.tile.chebyshev_dist(tile) <= 3) return false;
+    }
+    if (!open_ground(view.grid(), tile)) return false;
+    const std::vector<int32_t>& own_field = map.cost_field_of(view.seat());
+    if (!own_field.empty() && view.grid().in_bounds(tile)) {
+        const size_t idx = static_cast<size_t>(tile.y) * static_cast<size_t>(view.grid().width()) + static_cast<size_t>(tile.x);
+        if (idx < own_field.size() && own_field[idx] >= 0) {
+            for (const PileView& p : view.piles()) {
+                const PileInfo* info = map.pile(p.index);
+                if (info == nullptr || !info->approach[view.seat()].reachable() || info->cells.empty()) continue;
+                int32_t near = 1 << 20;
+                for (const sim::TileCoord& q : info->cells) near = std::min(near, q.chebyshev_dist(tile));
+                if (own_field[idx] + 20 * near <= info->approach[view.seat()].cost + 40) return false;
+            }
+        }
+    }
+    return true;
 }
 
 }  // namespace ants::ai

@@ -89,6 +89,7 @@ struct GateTarget {
     int32_t fire_cells{-1};              // the fewest fire cells a Fire ant crosses on a walk to it from the hill, bombs closed; -1 none
     int32_t defuse_bombs{-1};            // the fewest bombs a Bomber defuses on a walk, fire closed; -1 none
     sim::TileCoord fire_cell{-1, -1};    // the first fire cell (nearest the hill) of a walk with the fewest fire cells: the one a Fire ant puts out to open the way (-1 when fire_cells <= 0)
+    sim::TileCoord bomb_cell{-1, -1};    // the first bomb cell (nearest the hill) of a walk with the fewest bombs: the one a Bomber defuses to open the way (-1 when defuse_bombs <= 0)
     int32_t hop{-1};                     // the best hop of GateInfo::hops() that lands in reach of it (fewest bombs, then the best chance), -1 none
     uint8_t passes{0};                   // kPassFireAnt | kPassDefuse | kPassHop
 };

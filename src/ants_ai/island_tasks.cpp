@@ -199,6 +199,30 @@ void ways_off(const sim::Grid& grid, const std::function<bool(sim::TileCoord)>& 
     }
 }
 
+bool water_locked_food(const BotView& view, const MapInfo& map, uint8_t seat) {
+    if (!view.has_grid()) return false;
+    const sim::Grid& grid = view.grid();
+    for (const PileView& p : view.piles()) {
+        const PileInfo* info = map.pile(p.index);
+        if (info == nullptr || info->approach[seat].reachable()) continue;
+        bool touches_water = false;
+        bool touches_land = false;
+        for (const sim::TileCoord& cell : info->cells) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) continue;
+                    const sim::TileCoord n{cell.x + dx, cell.y + dy};
+                    if (!grid.in_bounds(n) || std::find(info->cells.begin(), info->cells.end(), n) != info->cells.end()) continue;
+                    if (map.component(seat, n) >= 0) touches_land = true;
+                    if (grid.terrain_class_at(n) == sim::movement::kTerrainWater) touches_water = true;
+                }
+            }
+        }
+        if (touches_water && !touches_land) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 // ---- the first look -------------------------------------------------------------------------------------------------------------------------------------
@@ -219,10 +243,17 @@ bool IslandTask::start(TaskContext& c) {
     width_ = c.map.width();
     interval_ = c.profile.decision_interval;
     latency_ = c.profile.decision_interval + c.profile.reaction_delay * (100u + c.profile.jitter_percent) / 100u + 10u;
-    if (!tactics_.plan.islands || c.map.component_count(c.seat) <= 1) return false;                // one component: nothing is cut off (TINY, MEDIUM, GAUNTLET)
+    if (!tactics_.plan.islands) return false;
+    if (c.map.component_count(c.seat) <= 1) {
+        active_ = water_locked_food(v, c.map, c.seat);
+        return active_;
+    }
     info_ = IslandInfo::analyse(c.map, v.grid(), c.seat);
     hill_comp_ = c.map.hill_component(c.seat);
-    if (info_.empty() || hill_comp_ < 0) return false;
+    if (info_.empty() || hill_comp_ < 0) {
+        active_ = water_locked_food(v, c.map, c.seat);
+        return active_;
+    }
     // active when a pile lies on an island that a chain of water tiles joins to the hill's island, directly or over other islands (TREASURE has islands, walled in by rocks: no channel)
     std::vector<uint8_t> seen(info_.components().size(), 0);
     std::vector<int32_t> queue{hill_comp_};
@@ -239,6 +270,7 @@ bool IslandTask::start(TaskContext& c) {
     for (const IslandComponent& comp : info_.components()) {
         if (comp.id != hill_comp_ && seen[static_cast<size_t>(comp.id)] != 0 && !comp.piles.empty()) active_ = true;
     }
+    if (!active_) active_ = water_locked_food(v, c.map, c.seat);
     return active_;
 }
 
@@ -1057,6 +1089,7 @@ void IslandTask::step(TaskContext& c) {
     if (scan_bridges(v, now)) next_refresh_ = 0;                                                   // a new bridge tile: the piles it opens get their limits before the economy looks
     // the Swimmers that the level wants: the power-up task takes them from the map (one ant each, the closest)
     if (v.ticks_left() > params_.min_ticks_left && beyond_food(v, c.map, c.seat)) tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)] = static_cast<uint8_t>(std::max<uint32_t>(params_.swimmers, tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)]));
+    if (info_.empty() || hill_comp_ < 0) return;
     adopt_builders(c);
     if (now >= next_refresh_) {
         refresh(c);

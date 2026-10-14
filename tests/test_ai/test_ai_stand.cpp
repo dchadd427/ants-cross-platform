@@ -665,4 +665,152 @@ void run_stand_tests() {
             ASSERT_TRUE(with * 10 >= without * 9);
         }
     } TEST_END();
+
+    TEST_CASE("AI25.9 Opportunistic Kills And Smart Threat Counters: Water-Edge And Multi-Hit Water Pushes (1..4 Tiles), 3-HP Vicinity Kills, Ignoring Harmless Lone Fire Walls And Stray Bombs After The Enemy Leaves, And Concurrent Gate-Ring Fire Defence")
+    {
+        {   // (a) 1-hit water push on an undamaged 10-HP enemy standing on a water shore: knocked into water and drowned
+            for (const bool water_hunt : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 101);
+                for (int x = 18; x <= 22; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 13});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{21, 13});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+                const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.water_hunt = water_hunt;
+                plan.assault = false;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(120);
+                if (water_hunt) {
+                    ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 1u);
+                    ASSERT_FALSE(alive(sim, enemy));
+                } else {
+                    ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);
+                    ASSERT_TRUE(alive(sim, enemy));
+                }
+            }
+        }
+        {   // (b) 2-hit water push in succession: enemy 2 tiles from water is struck twice by workers and drowned
+            sim::SimulationEngine sim;
+            empty_field(sim, 102);
+            for (int x = 18; x <= 22; ++x) sim.set_terrain(x, 16, sim::TERRAIN_WATER);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{19, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{21, 12});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 14});
+            sim.get_unit(enemy).hp = 8;                                               // 8 HP cannot be killed by 3 workers on land, only by the 2-hit water push
+            LevelPlan plan = plan_for(Level::Hard);
+            plan.assault = false;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(220);
+            ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 1u);
+            ASSERT_FALSE(alive(sim, enemy));
+        }
+        {   // (c) 3-HP vicinity kill by 3 workers without a Combat Ant within 6 tiles
+            for (const bool vicinity_hunt : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 103);
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{18, 15});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 13});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 15});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8, 8});
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 8});
+                const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{20, 15});
+                sim.get_unit(enemy).hp = 3;
+                LevelPlan plan = plan_for(Level::Hard);
+                plan.vicinity_hunt = vicinity_hunt;
+                plan.assault = false;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(260);
+                if (vicinity_hunt) {
+                    ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 1u);
+                    ASSERT_FALSE(alive(sim, enemy));
+                } else {
+                    ASSERT_EQ(rig.as<StandardBot>().fight().hunts_started(), 0u);
+                }
+            }
+        }
+        {   // (d) smart threat counters: a lone fire wall or stray bomb placed 8 tiles east of hill origin off the south carrier route after the enemy leaves is ignored; two adjacent walls are put out
+            for (const bool smart : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 104);
+                add_pile(sim, 6, 18, 20, 25);
+                sim.spawn_unit(0, sim::AntType::Fire, TileCoord{6, 10});
+                sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{6, 11});
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6 + i, 12});
+                sim.set_fire_at(TileCoord{12, 6}, 3500);
+                sim.grid_mut().place_bomb(12, 4, 1);
+                LevelPlan plan = peace_plan(Level::Hard);
+                plan.smart_counters = smart;
+                plan.typed_harvest = false;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                rig.run(200);
+                if (smart) {
+                    ASSERT_EQ(rig.as<StandardBot>().walls().extinguished(), 0u);
+                    ASSERT_EQ(rig.as<StandardBot>().bombs().defused(), 0u);
+                    ASSERT_EQ(rig.as<StandardBot>().bombs().set_off(), 0u);
+                    // adding a second adjacent fire wall makes it a real barrier and triggers extinguish
+                    sim.set_fire_at(TileCoord{12, 7}, 3500);
+                    rig.run(300);
+                    ASSERT_TRUE(rig.as<StandardBot>().walls().extinguished() >= 1u);
+                } else {
+                    ASSERT_TRUE(rig.as<StandardBot>().walls().extinguished() >= 1u);
+                    ASSERT_EQ(rig.as<StandardBot>().bombs().defused(), 1u);
+                }
+            }
+        }
+        {   // (e) concurrent gate-ring fire defence: a raider hunt near the thief hole does not block hunting a second Fire Ant that lights the gate ring when spare fighters exist
+            const Home home(105);
+            sim::SimulationEngine sim;
+            empty_field(sim, 105);
+            for (int i = 0; i < 8; ++i) sim.spawn_unit(0, sim::AntType::Combat, TileCoord{8 + i, 12});
+            const MapInfo map(sim);
+            const TileCoord raid = map.hill(0).raid;
+            const uint32_t raider = sim.spawn_unit(1, sim::AntType::Bomber, TileCoord{raid.x + 3, raid.y});
+            LevelPlan plan = plan_for(Level::Hard);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(20);
+            ASSERT_TRUE(rig.as<StandardBot>().fight().hunting(raider));
+            ASSERT_EQ(rig.as<StandardBot>().fight().raider_hunts(), 1u);
+            // now an enemy Fire Ant lights a gate-ring wall and stands beside it
+            sim.grid_mut().place_firewall(static_cast<uint32_t>(home.ring[0].x), static_cast<uint32_t>(home.ring[0].y), 1);
+            const uint32_t ring_fire = sim.spawn_unit(1, sim::AntType::Fire, TileCoord{home.ring[0].x, home.ring[0].y + 1});
+            rig.run(20);
+            ASSERT_TRUE(rig.as<StandardBot>().fight().hunting(ring_fire));
+            ASSERT_EQ(rig.as<StandardBot>().fight().fire_hunts(), 1u);
+        }
+        {   // (f) water-locked food pile on a map with no water channel between land components activates IslandTask (both single-component and fire-wall-split multi-component)
+            for (const bool split_by_fire : {false, true}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 106);
+                add_pile(sim, 25, 25, 20, 25);
+                if (split_by_fire) {
+                    for (int x = 0; x < 40; ++x) sim.grid_mut().place_firewall(static_cast<uint32_t>(x), 34, 255);
+                }
+                const MapInfo probe_map(sim);
+                const PileInfo* p = probe_map.pile(0);
+                ASSERT_TRUE(p != nullptr && !p->cells.empty());
+                for (const TileCoord& c : p->cells) {
+                    for (int dy = -2; dy <= 2; ++dy) {
+                        for (int dx = -2; dx <= 2; ++dx) {
+                            const TileCoord w{c.x + dx, c.y + dy};
+                            if (std::find(p->cells.begin(), p->cells.end(), w) == p->cells.end()) sim.set_terrain(w.x, w.y, sim::TERRAIN_WATER);
+                        }
+                    }
+                }
+                sim.grid_mut().place_powerup(14, 14, 5);                              // reachable Swimmer power-up on the home shore
+                for (int i = 0; i < 4; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+                rig.run(40);
+                ASSERT_TRUE(rig.as<StandardBot>().islands().info().channels().empty());
+                ASSERT_TRUE(rig.as<StandardBot>().islands().active());
+                ASSERT_TRUE(rig.as<StandardBot>().tactics().wants[static_cast<size_t>(sim::AntType::Swimmer)] >= 1u);
+            }
+        }
+    } TEST_END();
 }
+
