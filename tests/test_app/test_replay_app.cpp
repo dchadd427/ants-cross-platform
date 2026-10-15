@@ -1846,6 +1846,77 @@ int main(int argc, char* argv[]) {
         v.app.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA8.15 A wheel zoom does not snap the Auto camera back: the zoom moves the middle of the view (it keeps the world under the pointer), and the camera glides back to its place from there") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.app.replay_control(ReplayControl::SetSpeed, 200);
+        v.frames(500);
+        v.app.replay_control(ReplayControl::SetPaused, 1);                          // (nothing more happens: the camera lets go, and the view arrives)
+        for (int i = 0; i < 400 && (v.app.auto_camera().gliding() || v.app.auto_camera().events() != 0 || v.app.auto_camera().locked()); ++i) v.frames(1);
+        AutoCamera::Point target;
+        ASSERT_TRUE(v.app.auto_camera().target(target) && !v.app.auto_camera().gliding());
+        const ViewportCamera& cam = v.app.renderer().camera();
+        const auto middle = [&cam]() {
+            return AutoCamera::Point{static_cast<double>(cam.x) + zoom::visible_exact(cam.viewport_w, cam.zoom) / 2.0, static_cast<double>(cam.y) + zoom::visible_exact(cam.viewport_h, cam.zoom) / 2.0};
+        };
+        const AutoCamera::Point before = middle();
+        const double map_x = static_cast<double>(v.app.sim().get_world_state().width) * 16.0;      // (the middle of the map, in world pixels: the pointer goes to the side of the view that is nearer to it, so the zoom has room to move the middle)
+        const double map_y = static_cast<double>(v.app.sim().get_world_state().height) * 16.0;
+        const LayoutRect view = v.app.layout().view();
+        SDL_MouseMotionEvent m{};
+        m.type = SDL_MOUSEMOTION;
+        m.x = view.x + (map_x > before.x ? view.w * 9 / 10 : view.w / 10);
+        m.y = view.y + (map_y > before.y ? view.h * 9 / 10 : view.h / 10);
+        v.app.handle_mouse_motion(m);
+        SDL_MouseWheelEvent wheel{};
+        wheel.type = SDL_MOUSEWHEEL;
+        wheel.y = 1;
+        wheel.preciseY = 1.0f;
+        wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+        wheel.timestamp = 1000;
+        const float zoom_before = cam.zoom;
+        v.app.handle_mouse_wheel(wheel);
+        ASSERT_TRUE(cam.zoom != zoom_before);
+        const AutoCamera::Point shifted = middle();
+        const double shift = std::hypot(shifted.x - before.x, shifted.y - before.y);
+        ASSERT_GT(shift, 25.0);                                                      // (the zoom moved the middle of the view)
+        v.frames(1);
+        const AutoCamera::Point next = middle();
+        ASSERT_LT(std::hypot(next.x - shifted.x, next.y - shifted.y), 12.0);         // (the frame after it: a step of the glide, not a jump back to the place)
+        ASSERT_GT(std::hypot(next.x - before.x, next.y - before.y), shift - 12.0);
+        v.frames(80);                                                                // (and later it is back at the place, at the new zoom)
+        const AutoCamera::Point later = middle();
+        ASSERT_LT(std::hypot(later.x - before.x, later.y - before.y), 6.0);
+        ASSERT_EQ(v.value(ReplayValue::Camera), 1);
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.16 The camera is told the speed of the replay (from 4x up only the big events count there): the model's speed is the replay's") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        for (const int speed100 : {100, 200, 400, 800, 50}) {
+            v.app.replay_control(ReplayControl::SetSpeed, speed100);
+            v.frames(30);                                                            // (a turn is run: the camera is told as it reads it)
+            ASSERT_EQ(v.app.auto_camera().speed(), static_cast<float>(speed100) / 100.0f);
+        }
+        v.app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA8.17 A long frame (a stall, a hidden page) moves the camera's clock by 0.25 s at the most, so that it does not rush") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer v(bot_match().bytes);
+        ASSERT_TRUE(v.ok);
+        v.frames(10);
+        const double before = v.app.auto_camera().now_ms();
+        v.app.update_simulation(2.0f);
+        ASSERT_NEAR(v.app.auto_camera().now_ms() - before, 250.0, 0.001);
+        v.app.update_simulation(0.05f);
+        ASSERT_NEAR(v.app.auto_camera().now_ms() - before, 300.0, 0.001);
+        v.app.shutdown();
+    } TEST_END();
+
     TEST_CASE("RA8.14 Nothing can be picked in a replay: no click, no drag box, no corner marks, no Move and Stop buttons, no order marker, no Ctrl+A / H / N / P, no inspect panel; the same keys and drag pick in a match that is played") {
         ASSERT_FALSE(bot_match().bytes.empty());
         Viewer v(bot_match().bytes);

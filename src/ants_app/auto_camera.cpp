@@ -9,7 +9,6 @@ namespace ants::app {
 
 namespace {
 
-constexpr size_t kMostEvents = 400;          // a bound for the work of a look: the oldest events go first
 
 /// What a cue of the engine means for the camera: how much it weighs, whether it is big (the only kind that counts at 4x and 8x), whether it is fighting, whether it belongs to the ant that
 /// the cue names (the owner), and `at_hill` that it has no place of its own (the engine gives such cues to the player they are about, `target_player`) and means that player's hill.
@@ -300,7 +299,7 @@ bool AutoCamera::target(Point& out) const {
 }
 
 bool AutoCamera::gliding() const noexcept {
-    return has_target_ && (distance(pos_.x, pos_.y, target_.x, target_.y) > 6.0 || std::hypot(vel_.x, vel_.y) > 20.0);
+    return has_target_ && (distance(pos_.x, pos_.y, target_.x, target_.y) > kGlidingPx || std::hypot(vel_.x, vel_.y) > kGlidingSpeed);
 }
 
 void AutoCamera::lock_on(const Point& at, const Point& cam) {
@@ -351,8 +350,8 @@ void AutoCamera::look(const Point& cam) {
     }
     if (now_ms_ - lock_since_ms_ < kDwellMs) return;                                   // the minimum stay
     const bool elsewhere = has_best_ && distance(best_at_.x, best_at_.y, anchor_.x, anchor_.y) > kRadius;
-    if (elsewhere && best_.score >= kEngageScore && best_.score >= kClearlyBusier * here.score) {
-        lock_on(best_at_, cam);                                                        // another place is clearly busier
+    if (elsewhere && best_.score >= kClearlyBusier * std::max(here.score, kEngageScore)) {
+        lock_on(best_at_, cam);                                                        // another place is clearly busier (than the watched one, or than an engaging one when it has cooled: a place that has just engaged does not take the camera from a fight that is dying down)
     } else if (quiet_since_ms_ >= 0.0 && now_ms_ - quiet_since_ms_ >= kDieOutMs) {
         locked_ = false;                                                               // the action has died out: the view stays where it is, and the next action that engages takes it
     }
@@ -387,7 +386,7 @@ void AutoCamera::chase(double dt_s) {
         vel_ = Point{};
     }
     pos_ = Point{nx, ny};
-    if (distance(pos_.x, pos_.y, target_.x, target_.y) < 0.05 && std::hypot(vel_.x, vel_.y) < 0.5) {
+    if (distance(pos_.x, pos_.y, target_.x, target_.y) < kSettlePx && std::hypot(vel_.x, vel_.y) < kSettleSpeed) {
         pos_ = target_;
         vel_ = Point{};
     }
@@ -409,7 +408,7 @@ bool AutoCamera::step(double dt_ms, const Point& cam, bool zoomed, Point& out) {
     if (locked_) target_ = anchor_;
     chase(dt_ms / 1000.0);
     out = pos_;
-    return zoomed || std::hypot(vel_.x, vel_.y) > 2.0 || distance(pos_.x, pos_.y, cam.x, cam.y) > 0.75;      // (a view that is where the spring is, and still, is left alone)
+    return zoomed || std::hypot(vel_.x, vel_.y) > kStillSpeed || distance(pos_.x, pos_.y, cam.x, cam.y) > kStillPx;      // (a view that is where the spring is, and still, is left alone)
 }
 
 }  // namespace ants::app

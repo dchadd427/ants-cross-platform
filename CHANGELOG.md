@@ -26,8 +26,8 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
 **For players:**
-- The Auto camera of a replay, and of a match that you watch live, now locks on the biggest action and follows it: kills, fights of several ants, bombs, fires and thefts draw it (food carried home counts a little), a lone scuffle does not, and the picture goes along with a fight that moves across the map.
-- It stays on a place at least 5 seconds and moves on only to a place that is clearly busier (1.5 times as busy) or when the action has died out, and then the picture stays where it is. It glides there smoothly, with no snap, and keeps your zoom. Taking the camera by hand still wins, and the **Auto camera** button comes back to the biggest action.
+- The Auto camera of a replay, and of a match that you watch live, now locks on the biggest action and follows it: kills, fights of several ants, thefts and chains of bombs or fires draw it (food carried home counts a little), a stray hit or blow does not, and the picture goes along with a fight that moves across the map.
+- It stays on a place at least 7 seconds and moves on only to a place that is clearly busier (1.5 times as busy; a fight that is cooling is not taken from by a place that has only just begun) or when the action has died out, and then the picture stays where it is. It glides there smoothly, with no snap, and keeps your zoom. Taking the camera by hand still wins, and the **Auto camera** button comes back to the biggest action.
 
 **Rules / network:** none. Only the camera of the viewer changed; no rule, no hash and no protocol number (protocol 20) changed.
 

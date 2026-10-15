@@ -13,6 +13,7 @@
 //
 // Every number that tunes this is in the block "The numbers" below, and nowhere else.
 
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -29,7 +30,7 @@ public:
 
     /// Time. All of it is the viewer's own time (the frame's dt), not the match's: at 8x a place still holds for its seconds of looking.
     static constexpr double kWindowMs = 5000.0;      // an event fades away linearly over this long (a "few seconds": a fight that stopped is old news after five)
-    static constexpr double kDwellMs = 5000.0;       // the camera stays on a place at least this long before it may move to another one
+    static constexpr double kDwellMs = 7000.0;       // the camera stays on a place at least this long before it may move to another one (at 5 s the public recordings had runs of hops at the minimum; at 7 s none)
     static constexpr double kDieOutMs = 3000.0;      // ... or leaves when the action it watches has been quiet (below kQuietScore) for this long, once the dwell is over
     static constexpr double kEvalMs = 100.0;         // the places are looked at again every tenth of a second (not every frame: the camera does not react to a single tick)
     static constexpr double kSmoothMs = 600.0;       // the spring: about how long a move takes to arrive (a critically damped spring, no overshoot)
@@ -38,7 +39,7 @@ public:
 
     /// Space and score
     static constexpr double kRadius = 224.0;         // world pixels (seven tiles): events this close to a place are that place's action
-    static constexpr double kEngageScore = 9.0;      // a place needs this much action to be locked on (a hit, or a hit and a blow, is not; a kill, a bomb, a fire, a theft or a brisk scuffle is)
+    static constexpr double kEngageScore = 12.0;     // a place needs this much action to be locked on (a hit, a blow, a bomb or a fire alone is not; a kill with its hits, a theft, a brisk fight is). A place that is watched counts for at least this much when another one is compared with it
     static constexpr double kQuietScore = 3.0;       // below this the place the camera watches is quiet (kDieOutMs of it and the camera lets go)
     static constexpr double kClearlyBusier = 1.5;    // another place must beat the watched one by this factor to take the camera after the dwell
     static constexpr double kCrowd = 0.12;           // a fight of several ants of two or more sides: the score grows by this for every fighter after the first ...
@@ -46,10 +47,19 @@ public:
     static constexpr double kFighter = 0.5;          // an ant is a fighter of a place when its own fighting there has at least this much score left
     static constexpr float kBigOnlySpeed = 4.0f;     // at this speed and above only the big events count (kills, thefts, fires, bombs)
 
+    /// Bounds and tolerances
+    static constexpr size_t kMostEvents = 400;       // the events that are kept (the oldest go first): a bound for the work of a look
+    static constexpr double kStillPx = 0.75;         // a view that is this near the spring (world pixels) and still is left alone
+    static constexpr double kStillSpeed = 2.0;       // ... still means slower than this (world pixels a second)
+    static constexpr double kGlidingPx = 6.0;        // the view is gliding while it is farther than this from its place ...
+    static constexpr double kGlidingSpeed = 20.0;    // ... or faster than this (world pixels a second)
+    static constexpr double kSettlePx = 0.05;        // the spring is at its place when it is this near it (world pixels) ...
+    static constexpr double kSettleSpeed = 0.5;      // ... and slower than this (world pixels a second)
+
     /// The weights of an event (before it fades). Kills and fights weigh most; food and bridges are the least.
     static constexpr float kHit = 2.0f;              // an ant lost hit points (to a blow, a blast or a fire)
     static constexpr float kBlow = 1.0f;             // an ant struck (the blow's cue, which names the ant)
-    static constexpr float kDeath = 10.0f;           // an ant died (killed; an ant that falls in the water has its own cue)
+    static constexpr float kDeath = 14.0f;           // an ant died (killed; an ant that falls in the water has its own cue): a kill with its hit engages the camera alone
     static constexpr float kBomb = 10.0f;            // a bomb went off
     static constexpr float kBombMoved = 3.0f;        // a bomb was picked up (to throw or to defuse)
     static constexpr float kDefuse = 6.0f;           // a bomb is being defused
@@ -85,6 +95,7 @@ public:
     void set_hills(const std::vector<Point>& centres);
     /// The speed of the replay (1 is normal): from kBigOnlySpeed up only the big events count
     void set_speed(float speed) noexcept { speed_ = speed; }
+    float speed() const noexcept { return speed_; }
 
     /// One cue of the engine (the sound it starts says what happened, its place where, its owner which ant). Cues that mean nothing for the camera are ignored.
     void observe_cue(const sim::AudioEvent& cue);

@@ -164,6 +164,11 @@ struct Fight {
     }
 };
 
+/// A place that engages the camera: two bombs go off there (a bomb alone is 10, the camera locks from 12)
+void boom(Rig& r, int32_t x, int32_t y) {
+    for (int i = 0; i < 2; ++i) r.cam.observe_cue(cue(S::BombDetonate, x, y));
+}
+
 /// Six ants, three of each of two sides, round (x, y), ids from `first`
 std::vector<uint32_t> melee(Rig& r, uint32_t first, int32_t x, int32_t y, int count = 6) {
     std::vector<uint32_t> ids;
@@ -206,6 +211,7 @@ int main(int argc, char* argv[]) {
         sim::AudioEvent stop = cue(S::BombDetonate, 1000, 1000);
         stop.stop = true;
         none.cam.observe_cue(stop);
+        none.cam.observe_cue(cue(S::BaseAlarmSiren, 0, 0, 0, 1));                    // (the first seat past the one hill: no such seat, and nothing is read beyond the list)
         none.cam.observe_cue(cue(S::BaseAlarmSiren, 0, 0, 0, 5));                    // (no such seat)
         none.cam.observe_cue(cue(S::BaseAlarmSiren, 0, 0, 0, 255));                  // (a cue for everyone has no hill)
         ASSERT_EQ(none.cam.events(), 0u);
@@ -271,6 +277,27 @@ int main(int argc, char* argv[]) {
         r.cam.reset();
         r.see();
         ASSERT_EQ(r.cam.events(), 0u);
+    } TEST_END();
+
+    TEST_CASE("AC1.3 The camera keeps the latest 400 events (a bound for its work): the oldest go, the newest stay") {
+        Rig r;
+        for (int i = 0; i < 50; ++i) r.cam.observe_cue(cue(S::BombDetonate, 1000, 1000));                     // the oldest: 50 bombs
+        for (int i = 0; i < 400; ++i) r.cam.observe_cue(cue(S::ShovelWater, 3000, 3000));                    // the newest: 400 shovels, a little each
+        ASSERT_EQ(r.cam.events(), Cam::kMostEvents);
+        r.run(100.0);
+        ASSERT_TRUE(is_near(r.hot(), 3000.0, 3000.0, 2.0));                          // (the bombs are gone: the shovels are the place; had the newest gone, the bombs would be it)
+    } TEST_END();
+
+    TEST_CASE("AC1.4 The camera looks at the places every kEvalMs, not every frame: an event is a place at the second 50 ms frame, not the first") {
+        Rig r;
+        boom(r, 1000, 1000);
+        r.frame();
+        Pt h;
+        ASSERT_FALSE(r.cam.hot_spot(h));
+        ASSERT_FALSE(r.cam.locked());
+        r.frame();
+        ASSERT_TRUE(r.cam.hot_spot(h));
+        ASSERT_TRUE(r.cam.locked());
     } TEST_END();
 
     TEST_CASE("AC2.1 The weights: a kill beats hits, a bomb beats a blow, a fire a theft and a death each take the camera from the low ones (a power-up, a bridge, a base alarm, an ant in the water, food), and a lone hit is nothing") {
@@ -598,6 +625,30 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("AC6.2 A fight that is cooling is not taken from by a place that has only just engaged: it needs 1.5 times the engage level, not 1.5 times the cooled score; a place that is clearly busier still takes it") {
+        for (const double rate : {1.9, 4.0}) {
+            Rig r;
+            Stream a{8.0, S::BombPick, 1000, 1000};
+            Stream b{rate, S::BombPick, 4000, 3000};
+            for (int i = 0; i < 160; ++i) {                                          // 8 s of a busy place: locked, steady score about 60
+                a.give(r);
+                r.frame();
+            }
+            ASSERT_TRUE(r.cam.locked());
+            for (int i = 0; i < 80; ++i) {                                           // 4 s: the first place stops, the second one burns (steady 14 at 1.9 a second, 30 at 4)
+                b.give(r);
+                r.frame();
+            }
+            if (rate < 3.0) {
+                ASSERT_EQ(r.cam.locks(), 1u);                                        // (the first place has cooled to a fifth, and still holds the camera)
+                ASSERT_TRUE(is_near(r.target(), 1000.0, 1000.0, 15.0));
+            } else {
+                ASSERT_EQ(r.cam.locks(), 2u);
+                ASSERT_TRUE(is_near(r.target(), 4000.0, 3000.0, 15.0));
+            }
+        }
+    } TEST_END();
+
     TEST_CASE("AC7.1 When the action dies out the camera lets go after the dwell and the quiet time, the view stays, a smaller thing elsewhere is not followed, and the next real action takes it") {
         Rig r;
         r.ant(1, 0, 1000, 1000);
@@ -606,17 +657,17 @@ int main(int argc, char* argv[]) {
         r.kill(1);
         r.run(1000.0);
         ASSERT_TRUE(r.cam.locked());
-        r.run(4000.0);                                                               // 5 s: the dwell is over, and the kill (12 at first) is less than the quiet level from 3.75 s on
+        r.run(4000.0);                                                               // 5 s: the kill (16 at first with its hit) is less than the quiet level from 4.1 s on; the dwell is not over yet
         ASSERT_TRUE(r.cam.locked());
         r.ant(3, 0, 3000, 3000);
         r.ant(4, 1, 3030, 3000);
         r.see();
         r.hurt(3);
         r.blow(4);                                                                   // a scuffle elsewhere, more than the dying action but less than the engage level: not worth a move
-        r.run(1400.0);                                                               // 6.4 s: not yet 3 s of quiet (it began at 3.75 s)
+        r.run(1400.0);                                                               // 6.4 s: not yet 3 s of quiet (it began at 4.1 s)
         ASSERT_TRUE(r.cam.locked());
         ASSERT_EQ(r.cam.locks(), 1u);
-        r.run(1100.0);                                                               // 7.5 s
+        r.run(1400.0);                                                               // 7.8 s: the dwell (7 s) and the quiet time (until 7.1 s) are over
         ASSERT_FALSE(r.cam.locked());                                                // let go
         const Pt rest = r.at;
         ASSERT_TRUE(is_near(rest, 1000.0, 1000.0, 5.0));
@@ -717,7 +768,7 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("AC9.1 The move is a critically damped spring: it starts gently (no snap), is never faster than kMaxSpeed, never goes past the place, and arrives; a trip across the map takes seconds") {
         Rig r;
-        r.cam.observe_cue(cue(S::BombDetonate, 1100, 100));                          // a short trip, 1000 px to the east
+        boom(r, 1100, 100);                          // a short trip, 1000 px to the east
         r.run(100.0);
         ASSERT_TRUE(r.cam.locked());
         Pt first = r.path.front();
@@ -738,7 +789,7 @@ int main(int argc, char* argv[]) {
             ASSERT_LE(std::fabs(v1 - v0), 0.35 * Cam::kMaxSpeed * kFrame / 1000.0);
         }
         Rig trip;                                                                     // across the map: the speed limit decides, and it still arrives, without a snap
-        trip.cam.observe_cue(cue(S::BombDetonate, 6000, 100));
+        boom(trip, 6000, 100);
         trip.run(100.0);
         trip.run(1000.0);
         ASSERT_FALSE(is_near(trip.at, 6000.0, 100.0, 1000.0));                           // (a second in: far from there)
@@ -755,7 +806,7 @@ int main(int argc, char* argv[]) {
         ASSERT_GT(mid.x, 300.0);                                                     // (on its way, fast)
         ASSERT_LT(mid.x, 2900.0);
         const double ahead = mid.x + 150.0;
-        turn.cam.observe_cue(cue(S::BombDetonate, static_cast<int32_t>(ahead), 100));
+        boom(turn, static_cast<int32_t>(ahead), 100);
         double most = 0.0;
         for (int i = 0; i < 120; ++i) {
             turn.frame();
@@ -766,10 +817,27 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(is_near(turn.at, ahead, 100.0, 1.0));
     } TEST_END();
 
+    TEST_CASE("AC9.2 Taking the camera stops its speed: after the button the new trip begins from rest, not on with the old speed") {
+        Rig r;
+        boom(r, 4000, 100);                                                          // a long trip east, fast after a second
+        r.run(1000.0);
+        const Pt mid = r.at;
+        ASSERT_GT(mid.x, 500.0);
+        ASSERT_TRUE(r.cam.take());
+        r.run(5500.0);                                                               // (Manual: it did not coast, and the bombs have faded)
+        ASSERT_TRUE(is_near(r.at, mid.x, mid.y, 0.0));
+        r.cam.observe_cue(cue(S::PowerUpDrop, 100, 1500));                            // the last thing that happened: back west
+        r.cam.set_mode(CameraMode::Auto);
+        r.run(150.0);
+        ASSERT_TRUE(r.moved);
+        ASSERT_LE(r.at.x, mid.x + 0.5);                                              // (west and south from the first frame: not on east first)
+        ASSERT_GT(r.at.y, mid.y);
+    } TEST_END();
+
     TEST_CASE("AC10.1 A zoom of the viewer's moves the middle of the view: the camera goes on from where the view is and glides back to the place, with no jump; in Manual nothing is moved") {
         Rig r;
-        r.cam.observe_cue(cue(S::FireBeam, 1500, 1800));
-        r.cam.observe_cue(cue(S::FireErupt, 1500, 1800));
+        for (int i = 0; i < 2; ++i) r.cam.observe_cue(cue(S::FireBeam, 1500, 1800));      // (two fires: one alone is not enough to be locked on)
+        for (int i = 0; i < 2; ++i) r.cam.observe_cue(cue(S::FireErupt, 1500, 1800));
         r.run(5000.0);
         ASSERT_TRUE(is_near(r.at, 1500.0, 1800.0, 2.0));
         r.at = Pt{1500.0 + 140.0, 1800.0 + 90.0};                                    // (the zoom around the pointer moved the middle of the view)
@@ -792,7 +860,7 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("AC11.1 The viewer's hand: taking the camera makes it Manual (nothing moves it whatever happens, the busiest place is still known), and the button comes back to the busiest place now, else the last thing that happened, else stays") {
         Rig r;
-        r.cam.observe_cue(cue(S::BombDetonate, 1000, 2000));
+        boom(r, 1000, 2000);
         r.run(1000.0);
         ASSERT_TRUE(r.cam.mode() == CameraMode::Auto);
         ASSERT_TRUE(r.cam.locked());
@@ -801,7 +869,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(r.cam.mode() == CameraMode::Manual);
         ASSERT_FALSE(r.cam.locked());
         r.at = Pt{4000.0, 4000.0};                                                   // (the viewer put the view there)
-        r.cam.observe_cue(cue(S::BombDetonate, 2500, 3000));
+        boom(r, 2500, 3000);
         r.cam.observe_cue(cue(S::MeleeAttack, 3000, 500));                           // (the last thing that happened)
         r.run(100.0);
         ASSERT_TRUE(is_near(r.hot(), 2500.0, 3000.0, 2.0));                             // (the hints go on in Manual)
@@ -815,7 +883,7 @@ int main(int argc, char* argv[]) {
         Rig busy;
         busy.cam.take();
         busy.at = Pt{4000.0, 4000.0};
-        busy.cam.observe_cue(cue(S::BombDetonate, 2500, 3000));
+        boom(busy, 2500, 3000);
         busy.cam.observe_cue(cue(S::MeleeAttack, 3000, 500));
         busy.run(100.0);
         busy.cam.set_mode(CameraMode::Auto);
@@ -848,7 +916,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(is_near(none.at, 100.0, 100.0, 0.0));
         // Auto while it is Auto changes nothing
         Rig same;
-        same.cam.observe_cue(cue(S::BombDetonate, 1000, 2000));
+        boom(same, 1000, 2000);
         same.run(5000.0);
         const double locks = same.cam.locks();
         same.cam.set_mode(CameraMode::Auto);
@@ -991,6 +1059,32 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(f.cam.target(t));
         ASSERT_FALSE(f.cam.hot_spot(t));
         ASSERT_TRUE(f.cam.mode() == CameraMode::Manual);                             // (the mode is the viewer's choice)
+    } TEST_END();
+
+    TEST_CASE("AC15.1 The numbers that the documents and the changelog quote (docs/REPLAYS.md \"The camera\", CHANGELOG.md): a change of one is a change of those texts") {
+        ASSERT_EQ(Cam::kDwellMs, 7000.0);                                            // "stays at least 7 seconds"
+        ASSERT_EQ(Cam::kClearlyBusier, 1.5);                                         // "1.5 times as busy"
+        ASSERT_EQ(Cam::kEngageScore, 12.0);                                          // "a score of 12"
+        ASSERT_EQ(Cam::kQuietScore, 3.0);                                            // "under a score of 3 for 3 seconds"
+        ASSERT_EQ(Cam::kDieOutMs, 3000.0);
+        ASSERT_EQ(Cam::kWindowMs, 5000.0);                                           // "fades away over 5 seconds"
+        ASSERT_EQ(Cam::kRadius, 224.0);                                              // "seven tiles"
+        ASSERT_EQ(Cam::kCrowd, 0.12);                                                // "12% more for every fighter after the first, up to 2.2 times"
+        ASSERT_EQ(Cam::kCrowdCap, 10);
+        ASSERT_EQ(Cam::kMaxSpeed, 1400.0);                                           // "at most 1400 world pixels a second"
+        ASSERT_EQ(Cam::kSmoothMs, 600.0);                                            // "about 0.6 s to arrive"
+        ASSERT_EQ(Cam::kEvalMs, 100.0);                                              // "every tenth of a second"
+        ASSERT_EQ(Cam::kBigOnlySpeed, 4.0f);                                         // "from 4x up only the big events count"
+        ASSERT_EQ(Cam::kDeath, 14.0f);                                               // "a kill 14, a bomb 10, a fire 5 for each of its two cues, a theft or a hill losing points 6, a hit 2, a blow 1, banked food 2"
+        ASSERT_EQ(Cam::kBomb, 10.0f);
+        ASSERT_EQ(Cam::kFire, 5.0f);
+        ASSERT_EQ(Cam::kTheft, 6.0f);
+        ASSERT_EQ(Cam::kScoreDown, 6.0f);
+        ASSERT_EQ(Cam::kDefuse, 6.0f);
+        ASSERT_EQ(Cam::kHit, 2.0f);
+        ASSERT_EQ(Cam::kBlow, 1.0f);
+        ASSERT_EQ(Cam::kBank, 2.0f);
+        ASSERT_EQ(Cam::kMostEvents, 400u);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " test cases, " << g_assert_count << " assertions, " << g_test_failures << " failures\n";
