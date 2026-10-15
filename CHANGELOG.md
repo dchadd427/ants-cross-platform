@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.51 - 2026-10-15 - Match stats: over time and activity
 
 **For players:**
 - **A match page tells the story of the match, not only its totals.** A band of highlights sits under the result (first blood, who led and when, the comeback, the busiest player). **Over time** charts the score and the kills of every seat (a point every 15 seconds), with a strip of who had the most points (a side of two is named), first blood marked, and the facts under them: the last kill, the changes of the lead, the best run of kills, a seat that ran out of ants. **Activity** shows every seat's orders in every minute as a strip of squares, the orders by kind and the busiest seat and minute.
@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - A match on a player's map (a community map) had no record, as the server looked for its map in the official folder only; it is counted now.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...XXXXXXXX), [the match pages and the replay pass](docs/REPLAYS.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...574acbb1), [the match pages and the replay pass](docs/REPLAYS.md)
 
 ## v0.12.48 - 2026-10-15 - Legal notice
 
