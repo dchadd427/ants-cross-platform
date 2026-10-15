@@ -983,6 +983,38 @@ endif()
 add_test(NAME test_touch_model COMMAND test_touch_model)
 set_tests_properties(test_touch_model PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The Auto camera of a replay (auto_camera.hpp), alone: made-up cues and worlds in, the middle of the view out (pure: no SDL, no window, no engine)
+add_executable(test_auto_camera
+    test_auto_camera.cpp
+)
+
+target_include_directories(test_auto_camera PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_auto_camera PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_auto_camera PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_auto_camera PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_auto_camera COMMAND test_auto_camera)
+set_tests_properties(test_auto_camera PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Touch controls in the application: synthetic finger events through the real event loop of a headless application (tap, drag and hold against the mouse's click, band and right click, the pan and the
 # pinch, the places where two fingers do nothing, cancels, the late press, the other screens, the window's letterbox, the slop's size)
 add_executable(test_touch_app

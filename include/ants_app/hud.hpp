@@ -263,7 +263,7 @@ public:
     /// sets it (Application::start_replay): a match that is played is the same.
     void set_view_only(bool on) noexcept { view_only_ = on; }
     bool view_only() const noexcept { return view_only_; }
-    /// The ring on the minimap that shows where the busiest place is (the camera of a replay, docs/REPLAYS.md "Camera"): solid when the camera follows it, dashed when it is only a hint
+    /// The ring on the minimap that shows where the busiest place is now (the camera of a replay, docs/REPLAYS.md "The camera"; not always the place that the camera is locked on): solid when the camera is Auto, dashed when it is only a hint
     void set_camera_ring(bool shown, int32_t world_x, int32_t world_y, bool solid) noexcept {
         ring_shown_ = shown;
         ring_x_ = world_x;
