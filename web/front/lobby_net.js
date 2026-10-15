@@ -1,4 +1,4 @@
-// The front page's side of network protocol 20 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17" and "Protocol 20"; 18, 19 and 20 moved no message layout): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
+// The front page's side of network protocol 21 (docs/NETWORK_PORT.md "Protocol 16", "Protocol 17" and "Protocol 20", docs/MATCH_COUNTDOWN.md; 18 to 21 moved no message layout that a lobby page uses: 21 gave the Begin a second byte, which a page leaves to the game page): the codec of the messages that a lobby page sends and hears, the guard of a colour move, and the client that keeps
 // a page in its lobby room (a keyed way back, the answers to the server's pings, what each refusal means). No screen is drawn here: the page reads the client's state and its events.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyNet, node gets module.exports (tests/scripts/web_lobby_net_check.js runs it).
 //   * Every layout is the C++ one (src/ants_net/protocol.cpp), little endian, and every decoder refuses what the C++ decoder refuses; tests/data/lobby_messages.txt holds bytes that the C++ encoders wrote,
@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 20;                                             // kProtocolVersion
+    var PROTOCOL = 21;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS

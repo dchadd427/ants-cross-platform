@@ -128,6 +128,9 @@ COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 # The players' maps (docs/PLAY_IN_BROWSER.md "Players' maps in the browser"): the game page fetches the map of a room or a recording from /maps/files/ (map_files.js)
 COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
+# The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
+COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
+
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/

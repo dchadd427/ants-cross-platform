@@ -1416,9 +1416,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="replay_page.js"></script>
-    <script src="history_page.js"></script>
-    <script src="map_files.js"></script>
+    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -2754,9 +2752,9 @@
             lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
             handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
         }, true);
-        canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock in a match or takes it back where the browser let it go
+        canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock in a match or takes it back where the browser let it go; not while the countdown card is up (ants_probe 60 is its seconds, -1 none): a locked pointer cannot click the card's Fullscreen button
             if (!e.isTrusted || handingOver || isLocked() || e.button !== 0 || antsGameTouches() !== 0) return;
-            var inMatch = false; try { inMatch = isReadyToPlay && !ANTS_REPLAY_MODE && typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* not running */ }
+            var inMatch = false; try { inMatch = isReadyToPlay && !ANTS_REPLAY_MODE && typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1 && !(Module._ants_probe && Module._ants_probe(60) >= 0); } catch (err) { /* not running */ }
             if (!isRealFullscreen() && !inMatch) return;
             var rect = canvas.getBoundingClientRect();
             var retake = lockHeldOnce && !lockRefused;
@@ -3183,6 +3181,7 @@
             }, { passive: true });
         })();
         // ANTS_CHAT_END
+        if (window.AntsCountdown) window.AntsCountdown.forPage({ doc: document, stage: stageElement, canvas: canvas, ask: function (what) { try { return Module._ants_probe ? Module._ants_probe(what) : -1; } catch (err) { return -1; } }, ready: function () { return isReadyToPlay; }, isFullscreen: isFullscreen, enter: enterFullscreen });      // the Fullscreen button of the countdown (countdown_button.js)
 
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual

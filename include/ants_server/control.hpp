@@ -12,7 +12,8 @@
 //                          (on unless --no-reconnect) unless the body says; "hold_vote_seconds" 5 .. 3600 (default 30): the others may vote on going on without a seat once it has been
 //                          away this long in all; "max_pause_seconds" 60 .. 86400 (default 1800): the match's total pause is capped, at the cap every seat that is not present is dropped;
 //                          "max_catch_up_seconds" 10 .. 3600 (default 300): one absence may spend this long catching up in all, over all its attempts; "resume_countdown_seconds" 0 .. 60
-//                          (default 10, 0 = none): after a pause of 3 s or more the match is held this long before it goes on; "record" (default true): the match is kept as a replay when the server keeps
+//                          (default 10, 0 = none): after a pause of 3 s or more the match is held this long before it goes on; "countdown_seconds" 0 .. 60 (protocol 21; what the server was started
+//                          with, --start-countdown-seconds, unless the body says; 0 = none): a room with two or more people holds the first turn this long, with the chat open, instead of the 5 s dialog; "record" (default true): the match is kept as a replay when the server keeps
 //                          replays; false: this room's match is not)
 //   GET    /rooms/<code>   -> 200 the room's status; 404
 //   GET    /rooms          -> 200 {"rooms": [status, ...]}
@@ -37,7 +38,7 @@
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
-// "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "paused": bool (the match is held: a seat is missing, or the countdown
+// "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "countdown_seconds" (protocol 21), "paused": bool (the match is held: a seat is missing, or the countdown
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",
 // "progress"}] (the seats that are missing, longest away first), "vote": {"seat", "continue", "voters"} | null, "paused_seconds" (the match's total pause so far), "rejoins",
 // "drops_by_vote", "drops_by_cap", "rejoins_refused" (Hellos with a key that a budget refused), "catch_up_expired", "streamed_bytes" (the log, streamed to returning players), "log": {"turns", "bytes", "usable"} (the turn log that a returning player is given; it is freed when the match is over and keeps what it held),

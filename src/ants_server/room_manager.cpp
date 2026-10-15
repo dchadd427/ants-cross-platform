@@ -28,6 +28,7 @@ RoomSpec RoomManager::default_spec() const {
     spec.max_catch_up_ms = limits_.max_catch_up_ms;
     spec.resume_countdown_ms = limits_.resume_countdown_ms;
     spec.max_log_bytes = limits_.room_log_bytes;
+    spec.countdown_s = limits_.countdown_s;
     return spec;
 }
 
@@ -63,6 +64,7 @@ std::string spec_range_error(const RoomSpec& spec) {
     if (spec.max_pause_ms < kMinMaxPauseMs || spec.max_pause_ms > kMaxMaxPauseMs) return "max_pause_seconds must be 60 to 86400";
     if (spec.max_catch_up_ms < kMinCatchUpMs || spec.max_catch_up_ms > kMaxCatchUpLimitMs) return "max_catch_up_seconds must be 10 to 3600";
     if (spec.resume_countdown_ms > kMaxResumeCountdownMs) return "resume_countdown_seconds must be 0 to 60";
+    if (spec.countdown_s > net::kMaxCountdownSeconds) return "countdown_seconds must be 0 to 60";
     if (spec.max_connections < spec.players || spec.max_connections > 4096) return "max_connections must be the number of players to 4096";
     if (spec.max_log_bytes < kMinLogBytes || spec.max_log_bytes > kMaxLogBytes) return "the limit of the turn log must be 1 KiB to 1 GiB";
     if (!sim::valid_game_mode(spec.mode)) return "the game mode must be one that this server knows (\"highest-score\" or \"187\")";           // (a mode that is not known is never played as another)

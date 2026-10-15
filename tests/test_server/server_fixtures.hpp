@@ -1415,6 +1415,7 @@ void run_socket_tests();
 void run_secret_tests();
 void run_reconnect_tests();
 void run_bot_tests();
+void run_countdown_tests();
 void run_persist_tests();
 void run_persist_server_tests();
 void run_persist_server_tests_2();

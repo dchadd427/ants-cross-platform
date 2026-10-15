@@ -10,7 +10,8 @@ Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --too
   3. no tracked text file names a private planning document, a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED and the vendored files of VENDORED_CODE;
   4. a test file has at most TEST_LINES lines and a production file at most PROD_LINES, except the files of LINE_CEILINGS (ceilings that may only shrink);
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
-  6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS.
+  6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS;
+  7. no tracked path begins with a build folder (build/ or build_*/ at the top: local build output that .gitignore keeps out; it gets in by `git add -f` or a tool that adds everything).
 Ratchets: a number may never grow. When a page or file shrinks by more than the tolerance, the table must be lowered, so that the gain is kept.
 """
 import argparse
@@ -237,10 +238,24 @@ def check_cmake(root, files, exceptions=CMAKE_EXCEPTIONS):
     return out
 
 
+BUILD_FOLDER = re.compile(r"^(build(?:_[^/]*)?)/")      # build/ and build_*/ at the top of the repository (build_web.sh is a file, not a folder)
+
+
+def check_build_folders(files):
+    """One finding for each build folder that holds a tracked file (a compiler's or CMake's output, thousands of files: not one line for each)."""
+    tracked = {}
+    for rel in files:
+        m = BUILD_FOLDER.match(rel)
+        if m:
+            tracked.setdefault(m.group(1), []).append(rel)
+    return ["%s/: %d tracked file(s), for example %s: a build folder is local output and never committed (git rm -r --cached %s, and keep it in .gitignore)"
+            % (folder, len(names), names[0], folder) for folder, names in sorted(tracked.items())]
+
+
 def run_checks(root):
     files = tracked_files(root)
     return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files))
+            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files))
 
 
 def list_numbers(root):
