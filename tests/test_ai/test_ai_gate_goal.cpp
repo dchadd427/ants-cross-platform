@@ -1,18 +1,31 @@
-// AI27: the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): what a Hard bot whose food is walled off by fire walls or bombs sets out to do (plan_gate_goal), and how the
-// task works it (GateGoalTask): the right ant first, then the wall put out or the Bomber's hop, with the owner's times (a step 90 s, an attempt 4 minutes, two retries). Off in every plan.
+// AI27: the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): what a Medium or Hard bot whose food is walled off by fire walls, bombs or rock sets out to do (plan_gate_goal), and how
+// the task works it (GateGoalTask): the right ant first, then the wall put out or the Bomber's hop, with the owner's times (a step 90 s, an attempt 4 minutes, two retries). There is no switch: the bot plays
+// it by itself on a walled map (GateInfo::walled at the first look, and not a map that the island play owns), never on any other map.
 //
 //   AI27.1   the planner on hand-made worlds: no goal where food is free, a wall to put out, a hop onto a wanted power-up, a hop in reach of a pile, the rules that hold a goal back
 //   AI27.2   the planner on POPcOrN: the same goal for every seat of a side, a hop of two bombs onto the Swimmer at (1,15)
 //   AI27.3b  an ant of the kind on the far side of the wall is no ant for the goal
-//   AI27.3   a Hard bot puts a fire wall out with a Fire ant and banks the food behind it; the same bot without the flag banks nothing
+//   AI27.3   a Hard bot puts a fire wall out with a Fire ant and banks the food behind it; the same world with a free pile is not played as a gate map
 //   AI27.4   a Hard bot bombs itself over a rock wall onto a Swimmer power-up, also when a bomb is a dud, and takes it
 //   AI27.4b  a chain of two bombs that stops at a dud: the attempt is given up as stranded
 //   AI27.4c  a hurt Bomber, the planned throw of a step from each of the 8 directions, the fallback
 //   AI27.5   the times: a goal that cannot be served is given up after a step of 90 s, three attempts at most, then the bot plays on and asks for nothing
 //   AI27.5b  a task that ran out of attempts starts afresh when a source of its ant appears
-//   AI27.6   who plays it: not Medium, not Easy, not a plan without the flag; the numbers of the plan are the owner's
+//   AI27.6   who plays it: Medium and Hard on a walled map, not Easy, not a map with a free pile; the numbers of the plan are the owner's
+//   AI27.7   a Bomber defuses a bomb that plugs a rock wall's tunnel; the pick-up trips avoid map bombs
+//   AI27.8   the sealed vault of HELLRAISER and the shore breach of POPcOrN, on the Rig
+//   AI27.9   HELLRAISER through the REAL controller (the arena's play_match, with the filter that refuses a click on a power-up and a plant under an ant): each seat banks food over two walls
+//   AI27.9b  the same with an idle own worker on the plant tile and on the tile to step from (the controller refuses an order onto an ant): they are sent aside and the first attempt banks
+//   AI27.10  which maps are played as gate maps: HELLRAISER and POPcOrN at Medium and Hard, none of the shipped maps (ISLANDS is left to the island play), Bombz Away not
+//   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs)
+//   AI27.12  the plant tile and the tile to step from are cleared of own ants (sent aside, held until the goal is over)
+//   AI27.12b an enemy ant on the tile to step from is waited for, not attacked (a plain move onto it is an attack)
+//   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
+#include <algorithm>
+
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
+#include "ants_ai/arena.hpp"
 #include "ants_ai/gate_goal.hpp"
 #include "ants_ai/gate_task.hpp"
 
@@ -50,9 +63,7 @@ struct Field {
 };
 
 LevelPlan goal_plan(Level level = Level::Hard) {
-    LevelPlan plan = peace_plan(level);
-    plan.gate_goals = true;
-    return plan;
+    return peace_plan(level);                                                      // (the gate play needs no switch: a walled world is enough)
 }
 
 int fires_in_row(const sim::SimulationEngine& sim, int y) {
@@ -222,22 +233,23 @@ void run_gate_goal_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI27.3 A Hard Bot With The Goal On Puts A Fire Wall Out With a Fire Ant And Banks The Food Behind It; The Same Bot Without The Flag Banks Nothing") {
-        for (int on = 0; on < 2; ++on) {
+    TEST_CASE("AI27.3 A Hard Bot Puts A Fire Wall Out With A Fire Ant And Banks The Food Behind It; The Same World With A Pile The Hill Reaches Is Not Played As A Gate Map") {
+        for (int open = 0; open < 2; ++open) {
             Field f;
             f.fire_wall();
             f.powerup(8, 8, sim::AntType::Fire);
-            LevelPlan plan = peace_plan(Level::Hard);
-            plan.gate_goals = on != 0;
-            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan));
+            if (open != 0) place_crackers(f.sim, 30, 12, 25);                          // food that the hill reaches: an open map
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(peace_plan(Level::Hard)));
             auto& bot = rig.as<StandardBot>();
             rig.run(3000);
-            if (on == 0) {
-                ASSERT_EQ(f.sim.get_player_score(0), 0);
+            if (open != 0) {
+                ASSERT_FALSE(bot.gate_map());
                 ASSERT_EQ(bot.gate_goals().attempts(), 0u);
-                ASSERT_EQ(fires_in_row(f.sim, 20), 60);
+                ASSERT_EQ(fires_in_row(f.sim, 20), 60);                                // the wall stands: the bot eats the free pile
+                ASSERT_TRUE(f.sim.get_player_score(0) > 0);
                 continue;
             }
+            ASSERT_TRUE(bot.gate_map());
             ASSERT_EQ(bot.gate_goals().extinguishes(), 1u);
             ASSERT_EQ(bot.gate_goals().done(), 1u);
             ASSERT_EQ(bot.gate_goals().given_up(), 0u);
@@ -565,23 +577,29 @@ void run_gate_goal_tests() {
         ASSERT_EQ(std::string(slow_rig.as<StandardBot>().gate_goals().last_failure()), "attempt");
     } TEST_END();
 
-    TEST_CASE("AI27.6 Who Plays It: Not Medium, Not Easy, Not A Plan Without The Flag; The Plans Have It Off, The Numbers Are The Owner's") {
+    TEST_CASE("AI27.6 Who Plays It: Medium And Hard On A Walled Map, Not Easy, Not A Map With A Free Pile; The Numbers Of The Plan Are The Owner's") {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             const LevelPlan plan = plan_for(level);
-            ASSERT_FALSE(plan.gate_goals);
             ASSERT_EQ(plan.gate_step_ticks, 1800u);
             ASSERT_EQ(plan.gate_attempt_ticks, 4800u);
             ASSERT_EQ(plan.gate_retries, 2u);
         }
-        for (const Level level : {Level::Easy, Level::Medium}) {
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             Field f;
             f.fire_wall();
             f.powerup(8, 8, sim::AntType::Fire);
-            LevelPlan plan = goal_plan(level);                                         // the flag on, below Hard
-            Rig rig(f.sim, 0, level, std::make_unique<StandardBot>(plan));
+            Rig rig(f.sim, 0, level, std::make_unique<StandardBot>(goal_plan(level)));
             rig.run(1500);
-            ASSERT_EQ(rig.as<StandardBot>().gate_goals().attempts(), 0u);
-            ASSERT_EQ(fires_in_row(f.sim, 20), 60);
+            auto& bot = rig.as<StandardBot>();
+            if (level == Level::Easy) {
+                ASSERT_FALSE(bot.gate_map());
+                ASSERT_EQ(bot.gate_goals().attempts(), 0u);
+                ASSERT_EQ(fires_in_row(f.sim, 20), 60);                                // Easy leaves the wall alone
+            } else {
+                ASSERT_TRUE(bot.gate_map());
+                ASSERT_EQ(bot.gate_goals().extinguishes(), 1u);
+                ASSERT_EQ(fires_in_row(f.sim, 20), 59);
+            }
         }
     } TEST_END();
 
@@ -608,7 +626,7 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().gate_goals().done(), 1u);
             ASSERT_TRUE(f.sim.get_player_score(0) > 0);
         }
-        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
+        {   // (b) PowerUpTask::field_for avoids map bombs when the bot plays a gate map: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
             Field f;
             f.fire_wall();
             for (int y = 6; y <= 10; ++y) {
@@ -634,7 +652,7 @@ void run_gate_goal_tests() {
             assets::LevelData level;
             ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
             sim::SimulationEngine sim;
-            sim.init(level, 1, 0x0F);
+            sim.init(level, 1, 0x01);                                                  // (the team alone: the other teams' Combat Ants, parked in its home quadrant, knock a landing carrier back over the wall; AI27.9 plays the full roster)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
             rig.run(2400);
             ASSERT_TRUE(rig.as<StandardBot>().gate_goals().hops_ordered() >= 2u);
@@ -656,5 +674,336 @@ void run_gate_goal_tests() {
             ASSERT_TRUE(sim.get_player_score(0) > 0);
         }
     } TEST_END();
-}
+    // The Rig above applies what a bot proposes with no filter. The controller of a game (and of the arena) refuses a click on a power-up tile and a special order onto a tile with an ant: the hop of
+    // HELLRAISER's vault used a power-up tile as the tile to step from (the Combat power-up at (13,13) for the way back to the north-west) and the start ants stand on the plant tile of the best
+    // hop (the north-west team's three ants stand on (9,9)), so through the controller the bots did not bank at all.
+    TEST_CASE("AI27.9 HELLRAISER Through The Real Controller: Each Seat Alone Banks Food Over Two Walls At Hard And Medium (The Tile To Step From Holds No Power-Up, The Plant Tile Is Cleared Of Own Ants); Easy Plays As It Did") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        for (uint8_t seat = 0; seat < 4; ++seat) {
+            for (const Level lvl : {Level::Hard, Level::Medium, Level::Easy}) {
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = 1;
+                spec.max_ticks = 6000;
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = lvl;
+                spec.bots.push_back(b);
+                const ArenaResult r = play_match(spec);
+                ASSERT_TRUE(r.error.empty());
+                ASSERT_EQ(r.seats.size(), 1u);
+                if (lvl == Level::Easy) {
+                    ASSERT_EQ(r.seats[0].score, 0);                                    // Easy has no gate play: nothing is banked, as before
+                } else {
+                    ASSERT_TRUE(r.seats[0].score >= 100);                              // two deposits at least in 6,000 ticks (the measured: 4)
+                    ASSERT_TRUE(r.seats[0].bombs_planted >= 4u);                       // the way in and the way back, twice
+                }
+            }
+        }
+        // and with the enemy on the map: the Bomber power-up in the north-west corner is the other hill's by the walk (power_up_side), and the start ants of the south-east hill's team stand beside it. A Medium
+        // bot takes it all the same on a gate map (Medium does not steal on an open one), and banks over the walls with the other team's Combat Ants in its quadrant
+        for (const uint32_t seed : {1u, 12u}) {
+            ArenaSpec spec;
+            spec.level = &level;
+            spec.seed = seed;
+            spec.max_ticks = 6000;
+            for (uint8_t seat = 0; seat < 2; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.kind = "standard";
+                b.level = Level::Medium;
+                spec.bots.push_back(b);
+            }
+            const ArenaResult r = play_match(spec);
+            ASSERT_TRUE(r.error.empty());
+            ASSERT_TRUE(r.seats[1].score >= 100);
+        }
+    } TEST_END();
 
+    TEST_CASE("AI27.9b HELLRAISER Through The Real Controller With Own Ants On The Plant Tile And The Tile To Step From: The Controller Refuses An Order Onto An Ant, So The Bot Sends Them Aside, And Banks At Once, With No Attempt Given Up") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        for (const uint32_t seed : {1u, 2u}) {
+            sim::SimulationEngine sim;
+            sim.init(level, seed, 0x01);                                               // the team alone (AI27.9 plays the others)
+            RecordingSink sink(sim, true);
+            BotController ctl(sim, seed);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto inner = std::make_unique<StandardBot>(spec.level, spec.style);
+            StandardBot* bot = inner.get();
+            std::string why;
+            ASSERT_TRUE(ctl.add(spec, std::move(inner), sink, why));
+            bool placed = false;
+            uint64_t first_bank = 0;
+            uint32_t given_up_then = 0;
+            for (uint64_t t = 0; t < 6000; ++t) {
+                sim.tick();
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                ctl.on_tick(sim);
+                const GateGoal& goal = bot->gate_goals().goal();
+                if (!placed && bot->gate_goals().attempts() > 0 && goal.kind == GoalKind::Hop) {      // an idle worker on the tile of the bomb and one on the tile to step from
+                    sim.spawn_unit(0, sim::AntType::Worker, goal.hop.bomb);
+                    sim.spawn_unit(0, sim::AntType::Worker, goal.hop.from);
+                    placed = true;
+                }
+                if (first_bank == 0 && sim.get_player_score(0) > 0) {
+                    first_bank = t + 1;
+                    given_up_then = bot->gate_goals().given_up();
+                }
+            }
+            ASSERT_TRUE(placed);
+            ASSERT_TRUE(first_bank > 0);                                               // the food was banked ...
+            ASSERT_TRUE(first_bank < 3000);                                            // ... in the first attempt's time (an attempt that waits for a step gives up after 1,800 ticks)
+            ASSERT_EQ(given_up_then, 0u);                                              // ... with no attempt given up first
+        }
+    } TEST_END();
+    TEST_CASE("AI27.10 Which Maps Are Played As Gate Maps: HELLRAISER And POPcOrN At Medium And Hard, Not At Easy; None Of The Six Shipped Maps (ISLANDS Is Left To The Island Play), Not Bombz Away") {
+        struct Case {
+            std::string path;
+            bool gated;                                                                // for Medium and Hard
+            bool analysed_walled;                                                      // GateInfo::walled for every seat
+        };
+        const std::string orig = ORIGINAL_ASSETS_DIR;
+        const std::string comm = std::string(ANTS_SOURCE_DIR) + "/Community-Maps/";
+        const std::vector<Case> cases = {
+            {comm + "HELLRAISER.lvl", true, true},        {comm + "POPcOrN.lvl", true, true},         {comm + "Bombz Away.lvl", false, false},
+            {orig + "/Maps/TINY.LVL", false, false},      {orig + "/Maps/SMALL.LVL", false, false},    {orig + "/Maps/MEDIUM.LVL", false, false},
+            {orig + "/Maps/GAUNTLET.LVL", false, false},  {orig + "/Maps/TREASURE.LVL", false, false}, {orig + "/Maps/ISLANDS.LVL", false, true},
+        };
+        for (const Case& c : cases) {
+            assets::LevelData level;
+            ASSERT_TRUE(level.load_from_file(c.path));
+            {
+                sim::SimulationEngine sim;
+                sim.init(level, 1, 0x0F);
+                const MapInfo map(sim);
+                for (uint8_t team = 0; team < 4; ++team) ASSERT_EQ(GateInfo::analyse(map, sim.grid(), team).walled(), c.analysed_walled);
+            }
+            for (const Level lvl : {Level::Easy, Level::Medium, Level::Hard}) {
+                ArenaSpec spec;
+                spec.level = &level;
+                spec.seed = 1;
+                spec.max_ticks = 400;
+                for (uint8_t seat = 0; seat < 4; ++seat) {
+                    BotSpec b;
+                    b.seat = seat;
+                    b.kind = "standard";
+                    b.level = lvl;
+                    spec.bots.push_back(b);
+                }
+                std::vector<StandardBot*> bots;
+                spec.factory = [&bots](const BotSpec& b) -> std::unique_ptr<Bot> {
+                    auto bot = std::make_unique<StandardBot>(b.level, b.style);
+                    bots.push_back(bot.get());
+                    return bot;
+                };
+                int gated = 0;
+                spec.inspect = [&bots, &gated](const sim::SimulationEngine&) {
+                    for (const StandardBot* bot : bots) gated += bot->gate_map() ? 1 : 0;
+                };
+                const ArenaResult r = play_match(spec);
+                ASSERT_TRUE(r.error.empty());
+                ASSERT_EQ(bots.size(), 4u);
+                ASSERT_EQ(gated, (c.gated && lvl != Level::Easy) ? 4 : 0);
+            }
+        }
+    } TEST_END();
+    TEST_CASE("AI27.11 An Open Map Is Played As It Was: The Decision Is Taken Once, At The First Look (Fire Walls Lit Later Do Not Make A Gate Map), And The Pick-Up Trips Keep Their Old Rules (Three Candidates, The Contest, The Map Bombs)") {
+        {   // (a) the decision is not taken again: a free pile at the first look, a fire wall across the world 300 ticks later
+            Field f;
+            f.powerup(8, 8, sim::AntType::Fire);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(300);
+            ASSERT_FALSE(bot.gate_map());
+            f.fire_wall();                                                             // the pile is behind fire now
+            rig.run(1500);
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_EQ(bot.gate_goals().attempts(), 0u);
+        }
+        {   // (a2) a pile that the hill reaches at the first look, and a wall round the other: when the free pile is eaten the bot still plays the open map (no goal is ever planned)
+            Field f;
+            f.rock_wall();
+            f.powerup(8, 8, sim::AntType::Bomber);
+            f.powerup(30, 30, sim::AntType::Swimmer);
+            place_crackers(f.sim, 30, 12, 25);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(4000);
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_TRUE(f.sim.get_player_score(0) >= 100);                             // the free pile was eaten (4 units of 25)
+            ASSERT_EQ(bot.gate_goals().attempts(), 0u);
+        }
+        {   // (b) the candidate limit: three Fire power-ups walled in by rocks (the three nearest) and a fourth in the open. The old trip looks at three candidates and starts none
+            Field f;
+            for (const int cx : {8, 12, 16}) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx != 0 || dy != 0) f.sim.set_terrain(cx + dx, 16 + dy, sim::TERRAIN_OBSTACLE);
+                    }
+                }
+                f.powerup(cx, 16, sim::AntType::Fire);
+            }
+            f.powerup(22, 10, sim::AntType::Fire);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(600);
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_EQ(bot.powerups().taken(), 0u);
+        }
+        {   // (c) the contest: an enemy ant two tiles from the Fire power-up gets there first, so the trip is given up (a gate map goes anyway)
+            Field f;
+            f.powerup(22, 10, sim::AntType::Fire);
+            f.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 10});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(120);
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_TRUE(bot.powerups().contested() >= 1u);
+            ASSERT_EQ(bot.powerups().taken(), 0u);
+        }
+        {   // (d) the map bombs: the nearest Fire power-up lies in a box whose only doorway is plugged by a map bomb. A trip on an open map walks into the bomb (a gate map routes round it: AI27.7)
+            Field f;
+            for (int y = 6; y <= 10; ++y) {
+                for (int x = 15; x <= 19; ++x) {
+                    const bool border = x == 15 || x == 19 || y == 6 || y == 10;
+                    if (border && !(x == 15 && y == 8)) f.sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            f.sim.grid_mut().place_bomb(15, 8, 255);
+            f.powerup(17, 8, sim::AntType::Fire);
+            f.powerup(12, 16, sim::AntType::Fire);
+            f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14, 8});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(250);
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_FALSE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
+        }
+        {   // (d2) a pile beyond a lake: no pile that the hill reaches on foot, but the island play owns this map, so it is no gate map and the bot opens as it did (it takes the Fire power-up of its side)
+            Field f;
+            for (int y = 20; y <= 22; ++y) {
+                for (int x = 0; x < 60; ++x) f.sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            f.powerup(8, 8, sim::AntType::Fire);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(600);
+            ASSERT_TRUE(bot.islands().active());
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_TRUE(bot.powerups().taken() >= 1u);
+        }
+        {   // (d3) a pile in a ring of power-ups: the analysis calls it walled off, but the plain economy takes the power-ups and so opens the ring itself (Running Ants): not a gate map
+            sim::SimulationEngine sim;
+            empty_field(sim, 3, 14400);
+            for (int k = 0; k < 8; ++k) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6 + k, 10});
+            place_crackers(sim, 30, 30, 25);
+            for (int y = 28; y <= 33; ++y) {
+                for (int x = 28; x <= 33; ++x) {
+                    if (x == 28 || x == 33 || y == 28 || y == 33) sim.grid_mut().place_powerup(x, y, static_cast<uint8_t>(sim::AntType::Swimmer));
+                }
+            }
+            ASSERT_TRUE(GateInfo::analyse(MapInfo(sim), sim.grid(), 0).walled());
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(200);
+            ASSERT_FALSE(rig.as<StandardBot>().gate_map());
+        }
+        {   // (f) the ferry: an idle Swimmer on an open world (a pile the hill reaches on foot) is nobody's ferry job off a gate map and off the island play; the economy keeps it
+            Field f;
+            f.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{10, 12});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            size_t claimed = 0;
+            for (int look = 0; look < 30; ++look) {
+                rig.run(20);
+                claimed = std::max(claimed, bot.ledger().count(StandardBot::kFerry));
+            }
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_FALSE(bot.islands().active());
+            ASSERT_EQ(claimed, 0u);
+        }
+        {   // (e) a world with no pile at all has no pile that is walled off: not a gate map
+            sim::SimulationEngine sim;
+            empty_field(sim, 3, 14400);
+            for (int k = 0; k < 8; ++k) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{6 + k, 10});
+            sim.grid_mut().place_powerup(8, 8, static_cast<uint8_t>(sim::AntType::Fire));
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(300);
+            ASSERT_FALSE(rig.as<StandardBot>().gate_map());
+        }
+    } TEST_END();
+
+    TEST_CASE("AI27.12 The Plant Tile And The Tile To Step From Are Cleared Of Own Ants: An Idle Worker On Each Is Sent Aside, The Hop Is Done, And No Ant Stays Held") {
+        Field f;
+        f.rock_wall();
+        f.powerup(8, 8, sim::AntType::Bomber);
+        f.powerup(30, 30, sim::AntType::Swimmer);
+        const GateGoal g = f.goal();
+        ASSERT_EQ(g.kind, GoalKind::Hop);
+        const uint32_t on_bomb = f.sim.spawn_unit(0, sim::AntType::Worker, g.hop.bomb);
+        f.sim.spawn_unit(0, sim::AntType::Worker, g.hop.from);
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+        auto& bot = rig.as<StandardBot>();
+        size_t held = 0;
+        for (int look = 0; look < 120; ++look) {
+            rig.run(20);
+            held = std::max(held, bot.ledger().count(StandardBot::kGateGoals));
+        }
+        ASSERT_TRUE(held >= 2u);                                                       // the Bomber and an ant that was sent aside were held at once
+        ASSERT_EQ(bot.gate_goals().done(), 1u);                                        // the hop was done, though an ant stood on the tile of the bomb and on the tile in front of it
+        ASSERT_TRUE(bot.gate_goals().plants() >= 1u);
+        ASSERT_TRUE(f.sim.get_unit(on_bomb).pixel_y / 32 != g.hop.bomb.y || f.sim.get_unit(on_bomb).pixel_x / 32 != g.hop.bomb.x);
+        ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 0u);                    // and the ants that were sent aside are free again
+    } TEST_END();
+    TEST_CASE("AI27.12b An Enemy Ant On The Tile To Step From Is Waited For, Not Attacked: A Plain Move Onto An Enemy Ant's Tile Is An Attack In The Engine, So The Bomber Stays Off It And The Enemy Is Unhurt") {
+        Field f;
+        f.rock_wall();
+        f.powerup(8, 8, sim::AntType::Bomber);
+        f.powerup(30, 30, sim::AntType::Swimmer);
+        const GateGoal g = f.goal();
+        ASSERT_EQ(g.kind, GoalKind::Hop);
+        const uint32_t enemy = f.sim.spawn_unit(1, sim::AntType::Worker, g.hop.from);
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+        auto& bot = rig.as<StandardBot>();
+        for (int look = 0; look < 60; ++look) rig.run(20);                             // 1,200 ticks: the Bomber is fetched, plants and wants to step; the step of the task gives up only after 1,800
+        ASSERT_TRUE(bot.gate_goals().plants() >= 1u);                                  // the Bomber got as far as the plant ...
+        ASSERT_EQ(f.sim.get_unit(enemy).hp, 10);                                       // ... and the ant on the tile to step from was not touched
+        ASSERT_EQ(f.sim.get_unit(enemy).pixel_x / 32, g.hop.from.x);
+        ASSERT_EQ(f.sim.get_unit(enemy).pixel_y / 32, g.hop.from.y);
+        ASSERT_EQ(bot.gate_goals().done(), 0u);
+    } TEST_END();
+    TEST_CASE("AI27.13 The Opening Of A Gate Map: The Trip To The Fire Power-Up Of The Own Side Is Held Back While Nothing Is Banked, For 2,400 Ticks, And Made After Them") {
+        Field f;
+        f.rock_wall();                                                                 // a gate map with no Bomber and no Swimmer anywhere: no goal can be planned
+        f.powerup(8, 8, sim::AntType::Fire);
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+        auto& bot = rig.as<StandardBot>();
+        rig.run(2300);
+        ASSERT_TRUE(bot.gate_map());
+        ASSERT_EQ(bot.powerups().taken(), 0u);                                         // held back: the Fire Ant of the own side is not secured
+        rig.run(1700);
+        ASSERT_TRUE(bot.powerups().taken() >= 1u);                                     // and secured when the opening is over
+    } TEST_END();
+    TEST_CASE("AI27.13b The Opening Of A Gate Map Puts No Fire Ant On Wall Duty: A Thief Power-Up That The Enemy Reaches Calls For Walls On An Open Map, Not On A Gate Map Before It Has Banked") {
+        for (const bool gate : {false, true}) {
+            Field f;
+            if (gate) f.rock_wall();                                                   // the pile of the Field is walled in, or free
+            f.powerup(40, 40, sim::AntType::Thief);                                    // the enemy hills reach it: a thief threatens
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            bool demand = false;
+            for (int k = 0; k < 20; ++k) {
+                rig.run(30);
+                demand = demand || bot.tactics().wall_demand;
+            }
+            ASSERT_EQ(bot.gate_map(), gate);
+            ASSERT_EQ(demand, !gate);                                                  // (the open map asks for walls; the opening of a gate map asks for none)
+        }
+    } TEST_END();
+}

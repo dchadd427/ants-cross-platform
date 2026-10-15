@@ -14,7 +14,7 @@
 //                scatters the ant: neither is a way over.
 //
 // What is here is the map AT THE START (like MapInfo and IslandInfo): bombs and fire walls that appear later are read from the grid at the moment of use by whoever plans with it. The special tiles
-// of every hill count as live (the safe side, as in IslandInfo). No threads, no clock, no randomness: the same map gives the same analysis, bit for bit. It changes no behaviour: no task uses it yet.
+// of every hill count as live (the safe side, as in IslandInfo). No threads, no clock, no randomness: the same map gives the same analysis, bit for bit. The analysis itself changes no behaviour; plan_gate_goal (gate_goal.hpp) and GateGoalTask (gate_task.hpp) plan with it, and StandardBot::decide_gate_map asks walled() once at the first look whether the bot plays the gate goals.
 
 #include <cstdint>
 #include <vector>
@@ -135,6 +135,9 @@ public:
     /// The hops (of hops()) that land in component `to` / whose last landing is exactly `tile`
     std::vector<const BombHop*> hops_to(int32_t to) const;
     std::vector<const BombHop*> hops_onto(sim::TileCoord tile) const;
+    /// Whether the map is WALLED for this team: the analysis is valid, the hill's ants leave into a safe component (home() >= 0), the map has piles and none of them is free of every
+    /// gate (HELLRAISER and its family, POPcOrN, and ISLANDS, which the island play keeps; not Bombz Away, where home() is -1). Read at the start: it decides whether the bot plays the gate goals (StandardBot).
+    bool walled() const noexcept;
     /// How many piles / power-ups are free of every gate, and how many can be reached by some means at all
     int32_t free_piles() const noexcept;
     int32_t passable_piles() const noexcept;

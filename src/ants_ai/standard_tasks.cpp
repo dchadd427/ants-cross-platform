@@ -878,7 +878,7 @@ const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoor
         for (size_t i = 0; i < mask_.size() && i < tactics_.shut_tiles.size(); ++i) {
             if (tactics_.shut_tiles[i] != 0) mask_[i] = 0;                                         // (the bridges that will not last the trip: the island task)
         }
-        if (tactics_.plan.gate_goals) {
+        if (tactics_.gate_map) {
             for (const BombView& b : v.bombs()) {
                 if (b.owner != c.seat && !(v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) && v.grid().in_bounds(b.tile)) {
                     mask_[tile_index(v.grid(), b.tile)] = 0;                                        // (map bombs are not walked into on a pick-up trip while gate goals run)
@@ -908,7 +908,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
         const int side = power_up_side(c.map, p.tile, present);
-        if (side >= 0 && side != c.seat && (!tactics_.plan.steals || (v.ally() < sim::MAX_PLAYERS && side == v.ally()))) continue;       // another side's power-up is a theft: Hard's alone, and never the ally's
+        if (side >= 0 && side != c.seat && (!(tactics_.plan.steals || tactics_.gate_map) || (v.ally() < sim::MAX_PLAYERS && side == v.ally()))) continue;       // another side's power-up is a theft: Hard's alone (and a gate map's: the start ants of a walled map stand beside the power-ups of the hill that cannot reach them), and never the ally's
         bool taken = false;
         for (const auto& t : takes_) taken = taken || t.second.tile == p.tile;
         if (!taken) cands.push_back(Cand{&p, side});
@@ -934,7 +934,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         return nearest(x.p) < nearest(y.p);
     });
     const sim::Grid& grid = v.grid();
-    const size_t limit = tactics_.plan.gate_goals ? cands.size() : std::min<size_t>(3, cands.size());
+    const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());
     for (size_t i = 0; i < limit; ++i) {
         const PowerUpView& p = *cands[i].p;
         const std::vector<int32_t>& f = field_for(c, p.tile);
@@ -953,7 +953,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         if (walk > params_.max_trip_ticks) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
         // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate)
-        const bool skip_contest = tactics_.plan.gate_goals && takes_.empty() &&
+        const bool skip_contest = tactics_.gate_map && takes_.empty() &&
                                   (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
                                    c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;

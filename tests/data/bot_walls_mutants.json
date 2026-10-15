@@ -1,0 +1,238 @@
+{
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.13b of suite 2.20.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "walled_every_map",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() == 0;",
+   "new": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() >= 0;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.10 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.10"
+  },
+  {
+   "id": "walled_one_free_pile_ok",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() == 0;",
+   "new": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() <= 1;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.10 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.10"
+  },
+  {
+   "id": "walled_without_home",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() == 0;",
+   "new": "return valid_ && !piles_.empty() && free_piles() == 0;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.10 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.10"
+  },
+  {
+   "id": "walled_without_piles",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "return valid_ && home_ >= 0 && !piles_.empty() && free_piles() == 0;",
+   "new": "return valid_ && home_ >= 0 && free_piles() == 0;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "hops_from_power_up_tile",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "                    if (grid.has_powerup_at(step_in(t, f, -1))) continue;             // P must not hold a power-up: a click on it takes the power-up (and the controller refuses the click)\n",
+   "new": "",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI26.4 ./build/tests/test_ai/test_ai",
+   "expect": "AI26.4"
+  },
+  {
+   "id": "best_hop_from_power_up_tile",
+   "file": "src/ants_ai/gate_info.cpp",
+   "old": "                if (grid.has_powerup_at(from)) continue;                          // (see analyse: P holds no power-up)\n",
+   "new": "",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9"
+  },
+  {
+   "id": "easy_plays_gate",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (level_ == Level::Easy) return;\n    if (!GateInfo",
+   "new": "    if (!GateInfo",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.6 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.6"
+  },
+  {
+   "id": "medium_does_not_play",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (level_ == Level::Easy) return;",
+   "new": "if (level_ != Level::Hard) return;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.6 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.6"
+  },
+  {
+   "id": "hard_does_not_play",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (level_ == Level::Easy) return;",
+   "new": "if (level_ != Level::Medium) return;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.6 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.6"
+  },
+  {
+   "id": "island_play_does_not_own",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (tactics_.plan.islands && island_.probe(context)) return;                           // the island play owns the water maps (ISLANDS)\n",
+   "new": "",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.10 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.10"
+  },
+  {
+   "id": "decision_taken_every_look",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    gate_decided_ = true;\n    tactics_.gate_map = false;",
+   "new": "    tactics_.gate_map = false;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "goal_task_steps_everywhere",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (tactics_.gate_map && !fallback) gate_goals_.step(context);",
+   "new": "if (!fallback) gate_goals_.step(context);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "ferry_steps_everywhere",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "|| tactics_.gate_map) ferry_.step(context);",
+   "new": "|| true) ferry_.step(context);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "trip_candidates_everywhere",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());",
+   "new": "const size_t limit = true ? cands.size() : std::min<size_t>(3, cands.size());",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "trip_contest_skip_everywhere",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "const bool skip_contest = tactics_.gate_map && takes_.empty() &&",
+   "new": "const bool skip_contest = takes_.empty() &&",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "trip_bomb_mask_everywhere",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "        if (tactics_.gate_map) {\n            for (const BombView& b : v.bombs()) {",
+   "new": "        if (true) {\n            for (const BombView& b : v.bombs()) {",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
+  },
+  {
+   "id": "plant_tile_not_cleared",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "    else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);",
+   "new": "    else context.orders.special(ant_, hop.bomb);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
+  },
+  {
+   "id": "step_tile_not_cleared",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "        } else if (!tile_blocked(context, hop.from)) {\n            context.orders.move({ant_}, hop.from);",
+   "new": "        } else {\n            context.orders.move({ant_}, hop.from);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
+  },
+  {
+   "id": "tile_blocked_never",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "    if (occupant == nullptr) return false;\n    if (!occupant->idle()",
+   "new": "    return false;\n    if (!occupant->idle()",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
+  },
+  {
+   "id": "aside_ants_not_held",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": " || !occupant->takes_orders() || !context.ledger.take(occupant->id, id())) return true;",
+   "new": " || !occupant->takes_orders()) return true;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.12"
+  },
+  {
+   "id": "aside_ants_kept_after_goal",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "    context.ledger.release_all(id());                                                      // (the ant of the goal and the ants that were sent aside)",
+   "new": "    if (ant_ != 0) context.ledger.release(ant_, id());",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.12"
+  },
+  {
+   "id": "foreign_ant_not_waited_for",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "    for (const AntView& o : view.others()) {\n        if (o.tile == tile) return true;\n    }\n    const AntView* occupant",
+   "new": "    const AntView* occupant",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.12b"
+  },
+  {
+   "id": "gate_map_may_not_take_other_sides_power_ups",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(!(tactics_.plan.steals || tactics_.gate_map) ||",
+   "new": "(!tactics_.plan.steals ||",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9",
+   "build": "test_ai"
+  },
+  {
+   "id": "power_up_ring_is_a_wall",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "        if (!GateInfo::analyse(context.map, bare, seat_).walled()) return;\n",
+   "new": "",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11",
+   "build": "test_ai"
+  },
+  {
+   "id": "breaching_keeps_the_walls_up",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);",
+   "new": "    tactics_.wall_demand = wall_demand(tactics_, view, *map);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13b",
+   "build": "test_ai"
+  },
+  {
+   "id": "breaching_without_time_limit",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "now < kBreachTicks && (view.score() == 0",
+   "new": "(view.score() == 0",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13",
+   "build": "test_ai"
+  },
+  {
+   "id": "opening_trips_not_held_back",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (plan.secure_side && !gate_breaching) {",
+   "new": "    if (plan.secure_side) {",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13",
+   "build": "test_ai"
+  },
+  {
+   "id": "breaching_keeps_walls_stepping",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (!gate_breaching) walls_.step(context);",
+   "new": "    walls_.step(context);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27 ./build/tests/test_ai/test_ai",
+   "expect": "AI27",
+   "build": "test_ai"
+  }
+ ]
+}

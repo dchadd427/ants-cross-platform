@@ -241,9 +241,9 @@ struct LevelPlan {
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
-    // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where fire walls or bombs wall the food off (POPcOrN, Bombz Away) the bot gets the right ant first (a Fire ant to put a wall out, a Bomber
-    // to bomb itself over it) and does it. Hard only, and OFF in every plan (`--tune ggoal=1` switches it on at Hard); the times are the owner's numbers (ticks of 50 ms)
-    bool gate_goals{false};
+    // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to
+    // put a wall out, a Bomber to bomb itself over it) and does it. There is no switch: Medium and Hard play it on a walled map (Tactics::gate_map, decided from the analysis of the start), Easy never;
+    // the times are the owner's numbers (ticks of 50 ms)
     uint32_t gate_step_ticks{1800};      // a step (fetching the ant, working the gate) that has made no progress for 90 s is given up, and with it the attempt
     uint32_t gate_attempt_ticks{4800};   // an attempt (one goal from the first look to the end) that is not done after 4 minutes is given up
     uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates
@@ -540,6 +540,9 @@ struct Tactics {
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one
     /// Bridge tiles that no trip may be planned over now (index = y * width + x; empty: none): the bridges that will not last another trip (set by the IslandTask at its last refresh)
     std::vector<uint8_t> shut_tiles;
+    /// The map is walled for this seat (GateInfo::walled at the first look: no pile that the hill reaches with fire walls and bombs closed) and the island play does not own it, and the level is
+    /// Medium or Hard: the gate goals play, and the pick-up trips, the ferry and the opening are shaped by them (StandardBot, PowerUpTask). False on every other map: there the bot is as it was.
+    bool gate_map{false};
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that
