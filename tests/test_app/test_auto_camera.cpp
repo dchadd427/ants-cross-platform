@@ -436,7 +436,7 @@ int main(int argc, char* argv[]) {
             c.run(100.0);
             ASSERT_TRUE(is_near(c.hot(), 1060.0, 1000.0, 60.0));
         }
-        // the ants of a fight that are killed and gone are still its fighters while their events last: five of two sides killed (raw 60) beat seven bombs and a pick (73) only as a fight
+        // the ants of a fight that are killed and gone are still its fighters while their events last: five of two sides killed (raw 80) beat ten bombs (100) only as a fight
         {
             Rig c;
             for (uint32_t i = 0; i < 5; ++i) c.ant(10 + i, static_cast<uint8_t>(i % 2), 1000 + static_cast<int32_t>(i) * 25, 1000);
@@ -445,8 +445,7 @@ int main(int argc, char* argv[]) {
             c.see();
             c.world.ants.clear();
             c.see();
-            for (int i = 0; i < 7; ++i) c.cam.observe_cue(cue(S::BombDetonate, 3000, 3000));
-            c.cam.observe_cue(cue(S::BombPick, 3000, 3000));
+            for (int i = 0; i < 10; ++i) c.cam.observe_cue(cue(S::BombDetonate, 3000, 3000));
             c.run(100.0);
             ASSERT_TRUE(is_near(c.hot(), 1060.0, 1000.0, 60.0));
         }

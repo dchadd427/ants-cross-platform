@@ -53,8 +53,6 @@ public:
     static constexpr double kStillSpeed = 2.0;       // ... still means slower than this (world pixels a second)
     static constexpr double kGlidingPx = 6.0;        // the view is gliding while it is farther than this from its place ...
     static constexpr double kGlidingSpeed = 20.0;    // ... or faster than this (world pixels a second)
-    static constexpr double kSettlePx = 0.05;        // the spring is at its place when it is this near it (world pixels) ...
-    static constexpr double kSettleSpeed = 0.5;      // ... and slower than this (world pixels a second)
 
     /// The weights of an event (before it fades). Kills and fights weigh most; food and bridges are the least.
     static constexpr float kHit = 2.0f;              // an ant lost hit points (to a blow, a blast or a fire)

@@ -386,10 +386,6 @@ void AutoCamera::chase(double dt_s) {
         vel_ = Point{};
     }
     pos_ = Point{nx, ny};
-    if (distance(pos_.x, pos_.y, target_.x, target_.y) < kSettlePx && std::hypot(vel_.x, vel_.y) < kSettleSpeed) {
-        pos_ = target_;
-        vel_ = Point{};
-    }
 }
 
 bool AutoCamera::step(double dt_ms, const Point& cam, bool zoomed, Point& out) {
