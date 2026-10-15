@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught, except the two that carry a note (explained there). The tests are AI26.4 and AI27.6 - AI27.13b of suite 2.20.",
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.13b of suite 2.20.",
  "defaults": {
   "build": "test_ai"
  },
@@ -106,8 +106,7 @@
    "old": "|| tactics_.gate_map) ferry_.step(context);",
    "new": "|| true) ferry_.step(context);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.11",
-   "note": "expected to survive: on a map that is not a gate map the ferry has nothing to carry unless the island play is on, and the island play steps it already (island_.active()); the unconditional step is unobservable there"
+   "expect": "AI27.11"
   },
   {
    "id": "trip_candidates_everywhere",
@@ -178,9 +177,8 @@
    "file": "src/ants_ai/gate_task.cpp",
    "old": "    for (const AntView& o : view.others()) {\n        if (o.tile == tile) return true;\n    }\n    const AntView* occupant",
    "new": "    const AntView* occupant",
-   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.12",
-   "note": "expected to survive: an order onto a tile with an ant of another team is refused by the controller and the engine alike, so ordering it is the same as waiting for the ant to leave"
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.12b"
   },
   {
    "id": "gate_map_may_not_take_other_sides_power_ups",

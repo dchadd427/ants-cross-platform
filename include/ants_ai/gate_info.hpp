@@ -14,7 +14,7 @@
 //                scatters the ant: neither is a way over.
 //
 // What is here is the map AT THE START (like MapInfo and IslandInfo): bombs and fire walls that appear later are read from the grid at the moment of use by whoever plans with it. The special tiles
-// of every hill count as live (the safe side, as in IslandInfo). No threads, no clock, no randomness: the same map gives the same analysis, bit for bit. It changes no behaviour: no task uses it yet.
+// of every hill count as live (the safe side, as in IslandInfo). No threads, no clock, no randomness: the same map gives the same analysis, bit for bit. The analysis itself changes no behaviour; plan_gate_goal (gate_goal.hpp) and GateGoalTask (gate_task.hpp) plan with it, and StandardBot::decide_gate_map asks walled() once at the first look whether the bot plays the gate goals.
 
 #include <cstdint>
 #include <vector>

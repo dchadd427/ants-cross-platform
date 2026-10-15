@@ -10,7 +10,7 @@ constexpr uint8_t kRankGuard = 2;
 constexpr uint8_t kRankPowerUps = 3;
 constexpr uint8_t kRankWalls = 4;
 constexpr uint8_t kRankFight = 5;
-constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off: the bot banks nothing, so its Fire ant or Bomber is worth more to it than to the mines, the walls or a fight)
+constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off for the seat; a Sealed vault (HELLRAISER) is raided again and again, so the goal repeats while the vault has food: the Fire ant or Bomber is worth more to the bot than to the mines, the walls or a fight)
 constexpr uint64_t kBreachTicks = 2400;           // (the opening of a gate map: the fire walls against a thief and the trips to the power-ups of the own side wait this long at most, 2 minutes)
 }  // namespace
 
@@ -182,7 +182,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
 
 // The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
 // does not own the map. Medium and Hard play it; Easy never does. The decision is made once: a map that is open at the start stays open for the bot when its free piles are eaten, so an open map is
-// played exactly as it was.
+// played exactly as it was. A bot that is created in the middle of a match (a server that restores a match after a restart, room.cpp) takes this decision at its first look on the grid of that moment,
+// not of the start: fire walls and bombs that exist then are the map it sees (low impact; not redesigned, docs/BOTS.md "Walled maps").
 void StandardBot::decide_gate_map(TaskContext& context) {
     if (!context.view.has_grid()) return;                                                   // (no grid, no analysis: asked again at the next look)
     gate_decided_ = true;

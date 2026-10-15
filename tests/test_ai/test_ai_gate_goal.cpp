@@ -19,6 +19,7 @@
 //   AI27.10  which maps are played as gate maps: HELLRAISER and POPcOrN at Medium and Hard, none of the shipped maps (ISLANDS is left to the island play), Bombz Away not
 //   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs)
 //   AI27.12  the plant tile and the tile to step from are cleared of own ants (sent aside, held until the goal is over)
+//   AI27.12b an enemy ant on the tile to step from is waited for, not attacked (a plain move onto it is an attack)
 //   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
 #include <algorithm>
 
@@ -625,7 +626,7 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().gate_goals().done(), 1u);
             ASSERT_TRUE(f.sim.get_player_score(0) > 0);
         }
-        {   // (b) PowerUpTask::field_for avoids map bombs when gate_goals is on: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
+        {   // (b) PowerUpTask::field_for avoids map bombs when the bot plays a gate map: a closer Fire power-up behind a map-bombed doorway is skipped in favour of the bomb-free one
             Field f;
             f.fire_wall();
             for (int y = 6; y <= 10; ++y) {
@@ -913,6 +914,20 @@ void run_gate_goal_tests() {
             rig.run(200);
             ASSERT_FALSE(rig.as<StandardBot>().gate_map());
         }
+        {   // (f) the ferry: an idle Swimmer on an open world (a pile the hill reaches on foot) is nobody's ferry job off a gate map and off the island play; the economy keeps it
+            Field f;
+            f.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{10, 12});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            size_t claimed = 0;
+            for (int look = 0; look < 30; ++look) {
+                rig.run(20);
+                claimed = std::max(claimed, bot.ledger().count(StandardBot::kFerry));
+            }
+            ASSERT_FALSE(bot.gate_map());
+            ASSERT_FALSE(bot.islands().active());
+            ASSERT_EQ(claimed, 0u);
+        }
         {   // (e) a world with no pile at all has no pile that is walled off: not a gate map
             sim::SimulationEngine sim;
             empty_field(sim, 3, 14400);
@@ -945,6 +960,23 @@ void run_gate_goal_tests() {
         ASSERT_TRUE(bot.gate_goals().plants() >= 1u);
         ASSERT_TRUE(f.sim.get_unit(on_bomb).pixel_y / 32 != g.hop.bomb.y || f.sim.get_unit(on_bomb).pixel_x / 32 != g.hop.bomb.x);
         ASSERT_EQ(bot.ledger().count(StandardBot::kGateGoals), 0u);                    // and the ants that were sent aside are free again
+    } TEST_END();
+    TEST_CASE("AI27.12b An Enemy Ant On The Tile To Step From Is Waited For, Not Attacked: A Plain Move Onto An Enemy Ant's Tile Is An Attack In The Engine, So The Bomber Stays Off It And The Enemy Is Unhurt") {
+        Field f;
+        f.rock_wall();
+        f.powerup(8, 8, sim::AntType::Bomber);
+        f.powerup(30, 30, sim::AntType::Swimmer);
+        const GateGoal g = f.goal();
+        ASSERT_EQ(g.kind, GoalKind::Hop);
+        const uint32_t enemy = f.sim.spawn_unit(1, sim::AntType::Worker, g.hop.from);
+        Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+        auto& bot = rig.as<StandardBot>();
+        for (int look = 0; look < 60; ++look) rig.run(20);                             // 1,200 ticks: the Bomber is fetched, plants and wants to step; the step of the task gives up only after 1,800
+        ASSERT_TRUE(bot.gate_goals().plants() >= 1u);                                  // the Bomber got as far as the plant ...
+        ASSERT_EQ(f.sim.get_unit(enemy).hp, 10);                                       // ... and the ant on the tile to step from was not touched
+        ASSERT_EQ(f.sim.get_unit(enemy).pixel_x / 32, g.hop.from.x);
+        ASSERT_EQ(f.sim.get_unit(enemy).pixel_y / 32, g.hop.from.y);
+        ASSERT_EQ(bot.gate_goals().done(), 0u);
     } TEST_END();
     TEST_CASE("AI27.13 The Opening Of A Gate Map: The Trip To The Fire Power-Up Of The Own Side Is Held Back While Nothing Is Banked, For 2,400 Ticks, And Made After Them") {
         Field f;

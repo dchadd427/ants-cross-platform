@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Medium and Hard computer players now play maps whose food is walled in.** On HELLRAISER (rock walls round a vault of food) and POPcOrN (fire walls, a lake, a field of bombs) they used to stand still with a score of 0. A bot that finds no food it can walk to now puts a fire wall out with a Fire Ant, defuses a bomb that plugs a tunnel, or has a Bomber hop over a wall with its own bombs, takes the food and carries it home.
-- **Only on such maps, and not Easy.** The bot decides once, at the start of a match. Every original map, ISLANDS and SMALL (with their ferry play), Bombz Away and any other map with food in reach play exactly as before.
+- **Only where no food is in reach, and not Easy.** The bot decides once, at the start of a match. Every original map, ISLANDS and SMALL (with their ferry play), Bombz Away and the 456 community maps with food in reach play exactly as before. On 71 of the 84 community maps with a walled-in seat the computer players now play differently: over Hard 1v1, seeds 1 to 4, the scores add up to 102,535 where they were 85,988; 9 maps score more, 5 less (ANTS_PARTY 30,294 -> 27,825, Ghetto 3,706 -> 2,475, FKD Deathmatch 3,369 -> 2,400, !-Midz-! 675 -> 375, Dustbin 324 -> 45).
 - **What to watch on HELLRAISER:** the Bomber plants a bomb behind itself, hops over the wall into the vault, bites the food, hops out with it and banks it. Against another computer player the food is a fight, and a thief or a Combat Ant can take it back.
 - **POPcOrN works only in part:** a lone Hard bot banks food there in some games, two bots seldom do.
 
