@@ -38,7 +38,7 @@ public:
 
     /// Space and score
     static constexpr double kRadius = 224.0;         // world pixels (seven tiles): events this close to a place are that place's action
-    static constexpr double kEngageScore = 9.0;      // a place needs this much action to be locked on (a lone hit is not; a scuffle with a blow or two is)
+    static constexpr double kEngageScore = 9.0;      // a place needs this much action to be locked on (a hit, or a hit and a blow, is not; a kill, a bomb, a fire, a theft or a brisk scuffle is)
     static constexpr double kQuietScore = 3.0;       // below this the place the camera watches is quiet (kDieOutMs of it and the camera lets go)
     static constexpr double kClearlyBusier = 1.5;    // another place must beat the watched one by this factor to take the camera after the dwell
     static constexpr double kCrowd = 0.12;           // a fight of several ants of two or more sides: the score grows by this for every fighter after the first ...
