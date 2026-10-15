@@ -67,6 +67,19 @@ function delayedWebSocket(ms) {
     };
 }
 
+// A link that jitters: every word of the page reaches the server 0 to `ms` milliseconds late, the words of one socket in the order they were sent (a TCP link keeps the order), the delays from a fixed seed
+function jitteredWebSocket(ms, seed) {
+    let state = seed >>> 0;
+    const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+    return class extends MiniWebSocket {
+        send(bytes) {
+            const at = Math.max(this.lastAt || 0, Date.now() + Math.floor(random() * (ms + 1)));
+            this.lastAt = at;
+            this.tail = (this.tail || Promise.resolve()).then(() => sleep(Math.max(0, at - Date.now()))).then(() => { if (this.readyState === 1) super.send(bytes); });
+        }
+    };
+}
+
 const ALL = [];
 function page(name, code, extra) {
     const c = new N.LobbyClient(Object.assign({ url: wsUrl, code: code, map: 'TINY.LVL', name: name, WebSocket: WS }, extra || {}));
@@ -295,6 +308,81 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('(colour 1, not colour 2)', C.seat === 1, 'seat ' + C.seat);
         check('(B holds no key and wrote no entry for a game)', B.key === null && B.rejoinEntry() === null);
         A.leave();
+        C.leave();
+    });
+
+    // ---- the chat: pages talk in the lobby, at the server's pace (docs/NETWORK_PORT.md "Chat in the waiting room": the server already relays a page's line; the page's say() is the whole of it) ------------------------------
+    await scenario('the chat: pages talk in the lobby, at the server\'s pace', async () => {
+        const A = page('Ada', code('t'));
+        const B = page('Bea', code('t'));
+        const C = page('Cy', code('t'));
+        A.connect();
+        await step('Ada makes the room', () => online(A), 5000);
+        B.connect();
+        C.connect();
+        await step('Bea and Cy join it', () => () => online(B)() && online(C)() && names(A) === 'Ada|Bea|Cy|-');
+        const said = (p) => p.of('chat').map((e) => e.sender + ':' + e.text);
+        check('Ada says a line', A.say('hello there') === true);
+        await step('everybody in the room hears it, Ada too (the room\'s word that it was heard), with the seat of her connection and no team', () => () => [A, B, C].every((p) => said(p).join('|') === '0:hello there'));
+        check('(and no team flag)', [A, B, C].every((p) => p.of('chat')[0].team === false));
+        check('Bea answers; the lines come in the order they were said, the same for all three', B.say('hi Ada') === true);
+        await step('... in the same order for all three', () => () => [A, B, C].every((p) => said(p).join('|') === '0:hello there|1:hi Ada'));
+        check('a line of 100 characters is relayed whole (the server\'s own limit)', C.say('c'.repeat(100)) === true);
+        await step('... whole', () => () => A.of('chat').length === 3 && A.of('chat')[2].text === 'c'.repeat(100) && A.of('chat')[2].sender === 2);
+        // the pace: eight lines at once from the page: four go, the page refuses the others (it keeps a line in reserve below the server's five: lobby_net.js BUDGETS); the server drops none (the budget of the
+        // connection is whole again after five quiet seconds)
+        await sleep(5200);
+        const before = A.of('chat').length;
+        const results = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => A.say('burst ' + i));
+        check('eight lines at once: the first four are sent, the others refused by the page', results.join() === 'true,true,true,true,false,false,false,false', results.join());
+        await step('the others hear the four, in order (the server dropped none)', () => () => B.of('chat').length === before + 4 && C.of('chat').length === before + 4);
+        check('(exactly the four: burst 1 .. burst 4)', B.of('chat').slice(before).map((e) => e.text).join('|') === 'burst 1|burst 2|burst 3|burst 4');
+        check('(Ada is still in the room)', A.status === 'online' && A.count('refused') === 0);
+        // what no honest page does: lines by hand beyond the pace; the server drops them without a word, and a connection that goes on is thrown out
+        await sleep(5200);
+        const x = B.of('chat').length;
+        for (let i = 1; i <= 8; i++) B.sendBytes(N.encodeChat(B.seat, false, 'by hand ' + i));
+        await step('the five that the server\'s budget allows are relayed', () => () => A.of('chat').slice(x).filter((e) => /^by hand/.test(e.text)).length >= 5);
+        await sleep(600);                                                // (and the time for a sixth that must not come: the three others are dropped without a word)
+        check('eight lines by hand at once from Bea: five are relayed, three are dropped (the budget of her connection)', A.of('chat').slice(x).filter((e) => /^by hand/.test(e.text)).length === 5, String(A.of('chat').length - x));
+        check('(Bea is not thrown out for it: a few lines beyond the pace are tolerated)', B.status === 'online');
+        // a page that keeps asking as fast as it can sends no more than the pace allows and is never thrown out
+        await sleep(6000);
+        const start = Date.now();
+        let sent = 0;
+        while (Date.now() - start < 4000) { if (C.say('flood ' + sent)) sent++; await sleep(5); }
+        check('four seconds of asking every 5 ms: the page sent 4 and then a line every 1.25 s (6 to 8)', sent >= 6 && sent <= 8, String(sent));
+        await step('every line that the page sent was heard by the others', () => () => A.of('chat').filter((e) => /^flood/.test(e.text)).length === sent && B.of('chat').filter((e) => /^flood/.test(e.text)).length === sent);
+        check('(and nobody was thrown out)', A.status === 'online' && B.status === 'online' && C.status === 'online');
+        // a link that jitters: the page keeps the pace below the server's, so that a line that is handled early is not lost. The server counts the moment at which it HANDLES a line; a page that paced itself at
+        // exactly the server's rate (5, then one a second) lost a line whenever one line was handled late and the next was not (it failed on the macOS CI, and now and then in a local run), and the server drops a line without a word.
+        // Dee's words reach the server 0 to 150 ms late (in order, from a fixed seed); she asks every 5 ms for eight seconds; every line she sent has to be heard, by all four.
+        const D = page('Dee', code('t'), { WebSocket: jitteredWebSocket(150, 20251015) });
+        D.connect();
+        await step('Dee joins the room on a link that jitters', () => () => online(D)() && names(A) === 'Ada|Bea|Cy|Dee', 8000);
+        const jitterStart = Date.now();
+        let jitterSent = 0;
+        while (Date.now() - jitterStart < 8000) { if (D.say('jitter ' + jitterSent)) jitterSent++; await sleep(5); }
+        check('eight seconds of asking every 5 ms: the page sent 4 and then a line every 1.25 s (9 to 11)', jitterSent >= 9 && jitterSent <= 11, String(jitterSent));
+        const jitterLines = (p) => p.of('chat').filter((e) => /^jitter /.test(e.text)).map((e) => e.sender + ':' + e.text).join('|');
+        const jitterWant = Array.from({ length: jitterSent }, (_, i) => '3:jitter ' + i).join('|');
+        await until('every line heard', () => [A, B, C, D].every((p) => jitterLines(p) === jitterWant), 3000).catch(() => null);
+        check('every line that Dee\'s page sent was heard by all four, in order (the server dropped none)', [A, B, C, D].every((p) => jitterLines(p) === jitterWant), 'heard ' + [A, B, C, D].map((p) => p.of('chat').filter((e) => /^jitter /.test(e.text)).length).join('/') + ' of ' + jitterSent);
+        check('(and nobody was thrown out, Dee neither)', [A, B, C, D].every((p) => p.status === 'online') && D.count('refused') === 0);
+        D.leave();
+        // the lines are said to the room as it is: a seat that is taken over with its key hears nothing of what was said before (the room does not replay) and hears what is said after
+        const key = A.key;
+        const A2 = page('Ada', code('t'), { key: key });
+        A2.connect();
+        await step('Ada\'s seat is taken over by a new page with her key (a reload)', () => () => online(A2)() && A.status === 'superseded');
+        await sleep(300);
+        check('it hears none of the earlier lines', A2.of('chat').length === 0, String(A2.of('chat').length));
+        check('Cy says a line', C.say('after the reload') === true);
+        await step('and the new page hears what is said after', () => () => A2.of('chat').length === 1 && A2.of('chat')[0].text === 'after the reload' && A2.of('chat')[0].sender === 2);
+        check('Ada\'s new page says one, and the others hear it from seat 0', A2.say('back again') === true);
+        await step('... from seat 0', () => () => B.of('chat').some((e) => e.text === 'back again' && e.sender === 0));
+        A2.leave();
+        B.leave();
         C.leave();
     });
 

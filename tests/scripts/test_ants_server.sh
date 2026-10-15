@@ -1076,7 +1076,7 @@ stop_server
 
 # the lobby page's own client (web/front/lobby_net.js: the codec, the reconnect with the key, what each refusal means), run by node over a WebSocket against this server, as a browser behind the
 # site's proxy reaches it: the lobby made by one code and joined by the same link, a colour move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
-# key for a room that is gone, a second window, START that waits, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
+# key for a room that is gone, a second window, START that waits, the chat at the server's pace, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
 if command -v node > /dev/null 2>&1; then
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
     SERVER_PID=$!
@@ -1084,7 +1084,7 @@ if command -v node > /dev/null 2>&1; then
     PAGE_OUT="$(node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" 2>&1)"
     PAGE_RC=$?
     [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'
-    check "the lobby page's client (web/front/lobby_net.js, run with node) against a real server over a WebSocket: two pages in one lobby, a move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a stale key, a second window, START that waits, GET /busy" "$PAGE_RC"
+    check "the lobby page's client (web/front/lobby_net.js, run with node) against a real server over a WebSocket: two pages in one lobby, a move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a stale key, a second window, START that waits, the chat at the server's pace, GET /busy" "$PAGE_RC"
     stop_server
     # ... and the hand-over to the game, with the native game: two pages in a lobby, the plan for the two of them and START; the START waits for the games, the pages go (in one run they are gone first and their
     # seats are held, in the other they are still connected and the games supersede them), a game of each name takes its seat over with the key of its page (read from a rejoin file, as the game page reads

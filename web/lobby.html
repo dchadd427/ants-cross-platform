@@ -182,7 +182,7 @@
     .live { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; vertical-align: -1px; }
     .shape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 16px; color: var(--cream); }     /* the Picture row of the match column; in a window too narrow for the label and four buttons the label sits above them */
 
-    .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; max-width: min(520px, 92vw); text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
+    .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; width: max-content; max-width: min(520px, 92vw); overflow-wrap: anywhere; pointer-events: none; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
     .how { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); overflow: auto; }
     .how .panel { max-width: 920px; width: 100%; max-height: 92vh; overflow: auto; }
     .how h3 { font-weight: 500; font-size: 18px; margin: 12px 0 4px; }
@@ -202,25 +202,6 @@
     .name-step-msg:empty { display: none; }
     .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
     .name-step-back { margin-top: 14px; }
-
-    /* ---- the map list (front/map_picker.js): a dialog opened from the map selector; a bottom sheet on a phone ---- */
-    .pickhow .panel > * { flex: none; } .pickhow .panel > .pk-out { flex: 1 1 auto; }
-    .pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
-    .pk-bar, .pk-sorts, .pk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; } .pk-seg { display: flex; gap: 6px; }
-    .pk-q { flex: 1 1 200px; min-width: 0; min-height: 44px; padding: 6px 12px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; }
-    .pk-chip { min-height: 38px; padding: 3px 12px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
-    .pk-chip:hover { border-color: var(--frame-hi); color: var(--cream); } .pk-chip[aria-pressed="true"] { color: var(--gold); background: #1c1b0e; border-color: var(--gold); }
-    .pk-sorts { font-size: 14px; color: var(--muted); } .pk-foot { justify-content: space-between; margin: 10px 0 0; } .pk-count { font-size: 14px; color: var(--muted); }
-    .pk-out { flex: 1 1 auto; min-height: 140px; overflow: auto; background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; }
-    .pk-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #17382f; cursor: pointer; }
-    .pk-row img, .pk-nopic { display: block; width: 64px; height: 64px; background: var(--edge); border: 2px solid var(--edge); } .pk-nopic { border: 2px dashed #28493e; }
-    .pk-nm { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; } .pk-meta { font-size: 14px; color: var(--muted); } .pk-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pk-badge { margin-left: 8px; padding: 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
-    .pk-pl { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; } .pk-pl b { display: block; font-weight: 500; font-size: 18px; color: var(--cream); }
-    .pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
-    .pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
-    .pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
-    .pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
 
     /* ---- narrower windows ---- */
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
@@ -265,10 +246,7 @@
         .bar { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
         .share { display: inline-flex; }
         .toast { bottom: 150px; }
-        .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; max-height: calc(100dvh - 24px); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
-        .pk-sorts { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; } .pk-sorts > * { flex: none; white-space: nowrap; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { scrollbar-width: thin; } .pk-bar { margin-bottom: 8px; }       /* the sorts are one row that scrolls sideways: the controls leave the list most of the sheet */       /* the map list is a sheet at the bottom of the screen */
-        .pk-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; } .pk-row img, .pk-nopic { width: 56px; height: 56px; } .pk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
-        .pk-q { flex-basis: 100%; } .maprow .browse { grid-column: 2; justify-self: start; }
+        .maprow .browse { grid-column: 2; justify-self: start; }
     }
     @media (max-width: 374px) {
         .mode { font-size: 15px; padding: 6px 28px 6px 6px; background-position: right 4px center; } .pname, .pname input { font-size: 19px; } .teamset button { padding: 3px 4px; font-size: 14px; }
@@ -310,6 +288,7 @@
     @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css">
 </head>
 <body>
 <div class="screen">
@@ -335,6 +314,7 @@
             <p class="slots-note" id="slots-note" role="status"></p>
             <p class="slots-note teams-note" id="teams-note" role="status"></p>
         </section>
+        <section class="panel chat" id="chat" hidden></section>
 
         <aside class="side" aria-label="The match">
             <div class="maprow">
@@ -389,6 +369,7 @@
 
 <script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script>
+<script src="front/lobby_chat.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="map_files.js"></script>
 <script>
@@ -396,7 +377,8 @@
         'use strict';
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
-        if (!Rules || !Net) {                    // the two scripts of front/ did not come: the page cannot do anything, and says so
+        var Chat = window.AntsLobbyChat;
+        if (!Rules || !Net || !Chat) {           // the three scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -652,6 +634,7 @@
         var toastTimer = 0;
         var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
         var lis = {};                                 // the card of each colour (by seat)
+        var chat = Chat.mount({ doc: document, host: $('chat'), colours: COLOURS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
             var e = document.createElement(tag);
@@ -965,6 +948,7 @@
         function stripRoom() { try { window.history.replaceState(null, '', window.location.pathname.replace(/^\/+/, '/')); } catch (e) { /* the address stays: it is not essential */ } }
 
         function hook(c) {
+            try { chat.attach(c); } catch (e) { if (window.console) console.error(e); }      // (the box follows every client of the page: its own room, a room that was joined, a room that was made again; if it breaks, the lobby does not)
             function mine(fn) { return function (e) { if (c === client && !handing) fn(e); }; }
             c.on('status', mine(onStatus));
             c.on('welcome', mine(onWelcome));
