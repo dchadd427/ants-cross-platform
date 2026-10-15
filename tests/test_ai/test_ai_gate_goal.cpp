@@ -15,6 +15,7 @@
 //   AI27.7   a Bomber defuses a bomb that plugs a rock wall's tunnel; the pick-up trips avoid map bombs
 //   AI27.8   the sealed vault of HELLRAISER and the shore breach of POPcOrN, on the Rig
 //   AI27.9   HELLRAISER through the REAL controller (the arena's play_match, with the filter that refuses a click on a power-up and a plant under an ant): each seat banks food over two walls
+//   AI27.9b  the same with an idle own worker on the plant tile and on the tile to step from (the controller refuses an order onto an ant): they are sent aside and the first attempt banks
 //   AI27.10  which maps are played as gate maps: HELLRAISER and POPcOrN at Medium and Hard, none of the shipped maps (ISLANDS is left to the island play), Bombz Away not
 //   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs)
 //   AI27.12  the plant tile and the tile to step from are cleared of own ants (sent aside, held until the goal is over)
@@ -720,6 +721,47 @@ void run_gate_goal_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("AI27.9b HELLRAISER Through The Real Controller With Own Ants On The Plant Tile And The Tile To Step From: The Controller Refuses An Order Onto An Ant, So The Bot Sends Them Aside, And Banks At Once, With No Attempt Given Up") {
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+        for (const uint32_t seed : {1u, 2u}) {
+            sim::SimulationEngine sim;
+            sim.init(level, seed, 0x01);                                               // the team alone (AI27.9 plays the others)
+            RecordingSink sink(sim, true);
+            BotController ctl(sim, seed);
+            BotSpec spec;
+            spec.seat = 0;
+            spec.kind = "standard";
+            spec.level = Level::Hard;
+            auto inner = std::make_unique<StandardBot>(spec.level, spec.style);
+            StandardBot* bot = inner.get();
+            std::string why;
+            ASSERT_TRUE(ctl.add(spec, std::move(inner), sink, why));
+            bool placed = false;
+            uint64_t first_bank = 0;
+            uint32_t given_up_then = 0;
+            for (uint64_t t = 0; t < 6000; ++t) {
+                sim.tick();
+                sim.clear_news_events();
+                sim.clear_audio_events();
+                ctl.on_tick(sim);
+                const GateGoal& goal = bot->gate_goals().goal();
+                if (!placed && bot->gate_goals().attempts() > 0 && goal.kind == GoalKind::Hop) {      // an idle worker on the tile of the bomb and one on the tile to step from
+                    sim.spawn_unit(0, sim::AntType::Worker, goal.hop.bomb);
+                    sim.spawn_unit(0, sim::AntType::Worker, goal.hop.from);
+                    placed = true;
+                }
+                if (first_bank == 0 && sim.get_player_score(0) > 0) {
+                    first_bank = t + 1;
+                    given_up_then = bot->gate_goals().given_up();
+                }
+            }
+            ASSERT_TRUE(placed);
+            ASSERT_TRUE(first_bank > 0);                                               // the food was banked ...
+            ASSERT_TRUE(first_bank < 3000);                                            // ... in the first attempt's time (an attempt that waits for a step gives up after 1,800 ticks)
+            ASSERT_EQ(given_up_then, 0u);                                              // ... with no attempt given up first
+        }
+    } TEST_END();
     TEST_CASE("AI27.10 Which Maps Are Played As Gate Maps: HELLRAISER And POPcOrN At Medium And Hard, Not At Easy; None Of The Six Shipped Maps (ISLANDS Is Left To The Island Play), Not Bombz Away") {
         struct Case {
             std::string path;

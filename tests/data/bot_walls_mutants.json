@@ -138,24 +138,24 @@
    "file": "src/ants_ai/gate_task.cpp",
    "old": "    else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);",
    "new": "    else context.orders.special(ant_, hop.bomb);",
-   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.12"
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
   },
   {
    "id": "step_tile_not_cleared",
    "file": "src/ants_ai/gate_task.cpp",
    "old": "        } else if (!tile_blocked(context, hop.from)) {\n            context.orders.move({ant_}, hop.from);",
    "new": "        } else {\n            context.orders.move({ant_}, hop.from);",
-   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.12"
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
   },
   {
    "id": "tile_blocked_never",
    "file": "src/ants_ai/gate_task.cpp",
    "old": "    if (occupant == nullptr) return false;\n    if (!occupant->idle()",
    "new": "    return false;\n    if (!occupant->idle()",
-   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.12 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.12"
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.9b ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9b"
   },
   {
    "id": "aside_ants_not_held",
