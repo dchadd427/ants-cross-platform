@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.48 - 2026-10-15 - Legal notice
 
 **For players:**
 - A new **Legal** page (`/legal.html`) says in plain words that the game is free to play and use, comes with no warranty, and that its authors are not liable for problems from using it (online play, the computer players, the website, the servers). It says the online servers may be down or restarted at any time, that this is an unofficial fan remake of the 1998 game and not endorsed by the original authors or owners, and it links the MIT License of the source code and the third-party credits.
@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Only the new page, the footers' last link and the README changed; network protocol 21 is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e4c069a3...e4c069a3)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e4c069a3...16af2a29)
 
 ## v0.12.45 - 2026-10-15 - The bot arena container is gone from the stack
 
