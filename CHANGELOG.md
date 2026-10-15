@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.49 - 2026-10-15 - Computer players play maps whose food is walled in
+
+**For players:**
+- **Medium and Hard computer players now play maps whose food is walled in.** On HELLRAISER (rock walls round a vault of food) and POPcOrN (fire walls, a lake, a field of bombs) they used to stand still with a score of 0. A bot that finds no food it can walk to now puts a fire wall out with a Fire Ant, defuses a bomb that plugs a tunnel, or has a Bomber hop over a wall with its own bombs, takes the food and carries it home.
+- **Only on such maps, and not Easy.** The bot decides once, at the start of a match. Every original map, ISLANDS and SMALL (with their ferry play), Bombz Away and any other map with food in reach play exactly as before.
+- **What to watch on HELLRAISER:** the Bomber plants a bomb behind itself, hops over the wall into the vault, bites the food, hops out with it and banks it. Against another computer player the food is a fight, and a thief or a Combat Ant can take it back.
+- **POPcOrN works only in part:** a lone Hard bot banks food there in some games, two bots seldom do.
+
+**Rules / network:** none. No rule, no hash and no protocol number (protocol 21) changed; the computer players are outside the simulation.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...8c041550)
+
 ## v0.12.48 - 2026-10-15 - Legal notice
 
 **For players:**
@@ -538,16 +550,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8591392...7947eb2), [the front page](docs/NETWORK_PORT.md), [bot games](docs/BOTS.md)
 
-## v0.7.0 - 2026-10-05 - A phone can pan, zoom and right click
+## Older versions (v0.7.0 and before)
 
-**For players:**
-- **A phone can pan, zoom and right click:** a tap is a left click and a drag is a selection box, as before. Hold a finger still on the map for about half a second (a ring closes around it, the phone buzzes) and lift it: that is a right click (a move order, a special power, or "send the selected ants there" on the minimap). Two fingers move the map, and pinching zooms towards them.
-- **The page stays out of the way:** no double-tap zoom, no pull to reload, no text selection or menu on a long press, and the sound still unlocks on the first touch.
-- Taps and drags on the menus, the dialogs and the minimap work as they did. Two fingers do nothing under a dialog. A touch screen on a desktop or a laptop gets the same controls; a mouse, a trackpad and a pen are unchanged.
-- Made for Android Chrome first; the guards for iPhone and iPad are in but have not been tried on a real device.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3bc868...12fa1ef), [the touch notes](docs/TOUCH.md)
-
-## Older versions (v0.6.0 and before)
-
-Every release before v0.7.0, and the long notes of v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.8.0, and the long notes of v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
