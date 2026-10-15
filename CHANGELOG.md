@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.42 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
+
+**For players:**
+- The Auto camera of a replay, and of a match that you watch live, now locks on the biggest action and follows it: kills, fights of several ants, bombs, fires and thefts draw it (food carried home counts a little), a lone scuffle does not, and the picture goes along with a fight that moves across the map.
+- It stays on a place at least 5 seconds and moves on only to a place that is clearly busier (1.5 times as busy) or when the action has died out, and then the picture stays where it is. It glides there smoothly, with no snap, and keeps your zoom. Taking the camera by hand still wins, and the **Auto camera** button comes back to the biggest action.
+
+**Rules / network:** none. Only the camera of the viewer changed; no rule, no hash and no protocol number (protocol 20) changed.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...5847f987)
+
 ## v0.12.41 - 2026-10-14 - Universal gate planner, windowed web mouse lock and server hardening
 
 **For players:**
@@ -519,17 +529,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516)
 
-## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
+## Older versions (v0.4.0 and before)
 
-**For players:**
-- **Many zoom levels:** the mouse wheel steps through four levels to a doubling (2, 1.68, 1.41, 1.19, 1, 0.84, 0.71, 0.59, 0.5 ...) down to the map's own limit, where the map's width or height just fills the view, so you never see past its edge; matches on the network offer the zoom-out too (it was local games only), and with Fog of War on every level hides exactly what zoom 1 hides. 2, 1 and 0.5 are exact pictures, the levels between are smoothed, scrolling moves whole screen pixels and a click picks the tile under the middle of the pointer. `--zoom` and the settings key `zoom` take any number from 0.05 to 2.
-- **A level for each bot and teams before the start.** On the front page each bot (Red, Blue, Black) has its own level (None, Easy, Medium, Hard), and with two or more bots a Teams choice (Free for all, or you and one bot against the others); the desktop start menu has the same Teams choice and `--teams 0+1` does it from the command line. The teams are made with the original's own team-up at the first tick. A bot that declines a team-up says why ("Bots team up only while three or more teams play.", "You already have a teammate.").
-- **Your name in single player on the desktop:** the start menu's Single player panel has a name field (the same remembered name as Join and Host), and the game is played under it.
-- **Your own orders can show at once in a network match** (off by default: add `?prediction=on` to the game's address, or start the desktop game with `--prediction on`): your ants answer a click as in a game on one computer instead of a round trip later; the corner's `delay` shows what a click feels. It switches itself off for a while on a device that is too slow for it, and is off in a hidden tab, in a pause and behind the "Get ready" dialog.
-- **Desktop:** `start_game.sh` / `start_game.bat` open one game with the start menu (Single player, Join, Host); the four-window test match is `--players 4`.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the bots](docs/BOTS.md)
-
-## Older versions (v0.3.0 and before)
-
-Every release before v0.4.0, and the long notes of v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.5.0, and the long notes of v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
