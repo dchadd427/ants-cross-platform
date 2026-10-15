@@ -11,6 +11,10 @@ An HTML comment (<!-- ... -->, the template at the top of CHANGELOG.md) is dropp
 The page is in the Classic look of the front page: it links the site's /front/classic.css (the tokens, the buttons, the frame, the footer), preloads the font and shows the logo
 from /front/, and adds only the rules of its own panels here. Nothing else is loaded; a long line scrolls inside its panel. The footer names the version and the build.
 
+The page is the whole list of releases (a long page that works without JavaScript); a small inline script shows it in pages (PAGE_SIZE releases, PAGE_SIZE_PHONE on a phone), named by the versions
+they hold, and the address of a release (#v0-12-30 or #v0.12.30) opens the page that has it. The script touches nothing it cannot put back: it hides the releases of the other pages and adds the page
+bar at the top and the Newer / Older bar at the bottom, so tests/scripts/web_changelog_pages_check.js runs it on the generated page with a small fake of the DOM.
+
 No dependencies (the Emscripten build image only has the standard library). It understands exactly the Markdown subset the changelog
 uses: one `#` title, paragraphs, `##` version headings, `- ` bullets with indented continuation lines, `code`, **bold** and [links](url).
 Relative links (README.md, docs/...) are pointed at the repository, because those files are not part of the site.
@@ -23,7 +27,12 @@ import sys
 
 DEFAULT_REPO_BLOB = "https://github.com/dchadd427/ants-cross-platform/blob/main/"
 
-# The page's own rules (the look itself is /front/classic.css): the panels of the intro, the list of releases and each release; a release's heading, its text, links and code
+# Releases to a page of the page (the script rounds the count of pages, so that the last page is never shorter than half a page), the same on a phone, and the width up to which the page is a phone's
+PAGE_SIZE = 10
+PAGE_SIZE_PHONE = 5
+PHONE_WIDTH = 700
+
+# The page's own rules (the look itself is /front/classic.css): the panels of the intro, the list of releases and each release; a release's heading, its text, links and code; the page bar
 STYLE = """main { margin-top: 26px; }
 .panel { margin: 0 0 22px; padding: 16px 22px; overflow-x: auto; overflow-wrap: anywhere; }
 .panel > :last-child { margin-bottom: 0; }
@@ -38,17 +47,165 @@ STYLE = """main { margin-top: 26px; }
 .panel a { color: var(--mint); text-underline-offset: 2px; }
 .panel a:hover { color: #fff; }
 .panel code { color: #d7f3e5; background: #0d1a16; border: 1px solid #1d4a3a; border-radius: 3px; padding: 0 4px; }
-nav.versions { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 12px 22px; font-size: 14px; line-height: 1.8; }
+details.versions { padding: 0; }
+.versions summary { cursor: pointer; padding: 10px 22px; font-size: 15px; color: var(--mint); }
+.versions nav { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 2px 22px 12px; font-size: 14px; line-height: 1.8; }
+.versions a.here { color: var(--gold); }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 22px; }
+.pager .btn { min-width: 44px; color: var(--cream); text-decoration: none; }
+.pager .btn:hover { color: #fff; }
+.pager .off { opacity: .4; cursor: default; pointer-events: none; box-shadow: none; }
+.pager .where { margin: 0 auto; color: var(--muted); font-size: 14px; line-height: 1.3; text-align: center; }
+.pager.tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.pager .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 52px; padding: 6px 8px; font-size: 16px; line-height: 1.15;
+    color: var(--cream); text-decoration: none; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
+.pager .tab span { font-size: 12.5px; color: #cfe3da; }
+.pager .tab:hover { background-color: var(--teal-hi); }
+.pager .tab.on { background: var(--pressed); color: var(--pressed-ink); transform: translate(1px, 2px); box-shadow: var(--btn-shadow-chosen); }
+.pager .tab.on span { color: #c9b66a; }
 section h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; line-height: 1.7; color: var(--gold); }
 section h2 a { color: var(--gold); }
 .rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal) var(--sheen, none); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
-section:target { border-color: var(--gold); }
-@media (max-width: 700px) {
+main:not(.paged) section:target { border-color: var(--gold); }
+section.deep { border-color: var(--gold); }
+@media (max-width: @PHONE_WIDTH@px) {
     main { margin-top: 16px; }
     .panel { padding: 14px 14px; }
-    nav.versions { padding: 10px 14px; max-height: 9.5em; overflow-y: auto; }
+    .versions summary { padding: 10px 14px; }
+    .versions nav { padding: 2px 14px 12px; max-height: 9.5em; overflow-y: auto; }
+    .pager { padding: 12px 14px; gap: 8px; }
+    .pager .prev, .pager .next { flex: 1 1 40%; min-height: 44px; }
+    .pager .prev { order: 1; }
+    .pager .next { order: 2; }
+    .pager .where { order: 3; flex: 1 1 100%; margin: 0; }
+    .pager.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pager .tab { padding: 6px 4px; font-size: 15px; }
+    .pager .tab span { font-size: 11.5px; }
     section h2 { font-size: 18px; }
-}"""
+}""".replace("@PHONE_WIDTH@", str(PHONE_WIDTH))
+
+# The page's one script: shows the releases in pages. Without it (or when it fails) the page is the whole list. It reads the sections of <main> and the labels of the version list (the details
+# element with the id "versions"), hides the sections of the other pages, and puts a bar of page tabs above the list of versions and a Newer / Older bar below the last release. The address is the
+# state: #<release id> (a dot in it is a dash: #v0.12.30 is #v0-12-30) is the page that holds the release and the release is framed in gold (the class "deep": :target would not match the dotted form),
+# no address is the first page, so the browser's own Back and Forward move between pages; a link of the bars is an ordinary link to the first release of its page and frames nothing. Run by node, with a small fake of the DOM, in tests/scripts/web_changelog_pages_check.js.
+SCRIPT = r"""(function () {
+  var SIZE = @SIZE@, PHONE_SIZE = @PHONE_SIZE@, PHONE_QUERY = '(max-width: @PHONE_WIDTH@px)';
+  var main = document.getElementsByTagName('main')[0], versions = document.getElementById('versions');
+  var secs = [], index = {}, labels = {}, kids = main.children, chips = versions ? versions.getElementsByTagName('a') : [], i;
+  for (i = 0; i < kids.length; i++) if (kids[i].tagName === 'SECTION') { index[kids[i].id] = secs.length; secs.push(kids[i]); }
+  for (i = 0; i < chips.length; i++) labels[chips[i].getAttribute('href').slice(1)] = chips[i].textContent;
+  var mq = window.matchMedia(PHONE_QUERY), size, pages, cur = 0, top = null, foot = null, tabs = [], prev, next, where, folded = false, clicked = null;
+  function make(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+  function pageOf(k) { return Math.min(Math.floor(k / size), pages - 1); }
+  function firstOf(p) { return p * size; }
+  function lastOf(p) { return p === pages - 1 ? secs.length - 1 : (p + 1) * size - 1; }
+  function label(k) { return labels[secs[k].id] || secs[k].id; }
+  function endLabel(k) { return /^v\d/.test(label(k)) ? label(k) : 'older'; }
+  function link(e, p) { e.setAttribute('href', '#' + secs[firstOf(p)].id); e.removeAttribute('aria-disabled'); e.classList.remove('off'); }
+  function drop(e) { if (e && e.parentNode) e.parentNode.removeChild(e); }
+  function noted(e) {
+    var a = e.target;
+    while (a && a.tagName !== 'A') a = a.parentNode;
+    clicked = a ? a.getAttribute('href') : null;
+  }
+  function wanted() {
+    var raw = location.hash.slice(1), id;
+    if (!raw) return -2;
+    try { id = decodeURIComponent(raw).toLowerCase().replace(/\./g, '-'); } catch (e) { return -1; }
+    return index.hasOwnProperty(id) ? index[id] : -1;
+  }
+  function make_bars() {
+    var p, a;
+    top = make('nav', 'pager tabs panel');
+    top.id = 'pages-top';
+    top.setAttribute('aria-label', 'Release pages');
+    tabs = [];
+    for (p = 0; p < pages; p++) {
+      a = make('a', 'tab');
+      a.setAttribute('href', '#' + secs[firstOf(p)].id);
+      a.setAttribute('aria-label', 'Page ' + (p + 1) + ', ' + label(firstOf(p)) + ' to ' + endLabel(lastOf(p)));
+      a.appendChild(make('b', '', label(firstOf(p))));
+      a.appendChild(make('span', '', 'to ' + endLabel(lastOf(p))));
+      top.appendChild(a);
+      tabs.push(a);
+    }
+    top.addEventListener('click', noted);
+    main.insertBefore(top, versions || secs[0]);
+    foot = make('nav', 'pager foot panel');
+    foot.setAttribute('aria-label', 'Newer and older releases');
+    prev = make('a', 'btn sm prev', '\u00ab Newer');
+    prev.setAttribute('rel', 'prev');
+    where = make('span', 'where');
+    where.setAttribute('role', 'status');
+    next = make('a', 'btn sm next', 'Older \u00bb');
+    next.setAttribute('rel', 'next');
+    foot.appendChild(prev);
+    foot.appendChild(where);
+    foot.appendChild(next);
+    foot.addEventListener('click', noted);
+    main.appendChild(foot);
+  }
+  function show(p) {
+    var k, a, id;
+    cur = p;
+    for (k = 0; k < secs.length; k++) {
+      secs[k].hidden = pageOf(k) !== p;
+    }
+    for (k = 0; k < tabs.length; k++) {
+      tabs[k].classList.toggle('on', k === p);
+      if (k === p) tabs[k].setAttribute('aria-current', 'page'); else tabs[k].removeAttribute('aria-current');
+    }
+    for (k = 0; k < chips.length; k++) {
+      id = chips[k].getAttribute('href').slice(1);
+      chips[k].classList.toggle('here', index.hasOwnProperty(id) && pageOf(index[id]) === p);
+    }
+    if (p > 0) link(prev, p - 1); else { prev.removeAttribute('href'); prev.setAttribute('aria-disabled', 'true'); prev.classList.add('off'); }
+    if (p < pages - 1) link(next, p + 1); else { next.removeAttribute('href'); next.setAttribute('aria-disabled', 'true'); next.classList.add('off'); }
+    where.textContent = 'Page ' + (p + 1) + ' of ' + pages;
+  }
+  function apply(keep) {
+    var k;
+    size = mq.matches ? PHONE_SIZE : SIZE;
+    pages = Math.max(1, Math.round(secs.length / size));
+    drop(top);
+    drop(foot);
+    top = foot = null;
+    if (pages < 2) {
+      for (k = 0; k < secs.length; k++) secs[k].hidden = false;
+      main.classList.remove('paged');
+      return;
+    }
+    main.classList.add('paged');
+    make_bars();
+    show(pageOf(keep));
+    if (versions && !folded) { folded = true; versions.removeAttribute('open'); }
+  }
+  function frame(k) {
+    for (var j = 0; j < secs.length; j++) secs[j].classList.toggle('deep', j === k);
+  }
+  function reveal(k) { if (k >= 0) (k === firstOf(cur) ? top : secs[k]).scrollIntoView(); }
+  function route() {
+    var k = wanted(), keep = clicked !== null && clicked === location.hash;
+    clicked = null;
+    if (!top || k === -1) return;
+    show(k < 0 ? 0 : pageOf(k));
+    frame(keep ? -1 : k);
+    reveal(k);
+    if (keep) tabs[cur].focus({ preventScroll: true });
+  }
+  function resized() { apply(top ? firstOf(cur) : 0); }
+  var start = wanted();
+  apply(Math.max(0, start));
+  if (top) { frame(start); reveal(start); }
+  window.addEventListener('hashchange', route);
+  if (mq.addEventListener) mq.addEventListener('change', resized); else if (mq.addListener) mq.addListener(resized);
+})();"""
+SCRIPT = SCRIPT.replace("@SIZE@", str(PAGE_SIZE)).replace("@PHONE_SIZE@", str(PAGE_SIZE_PHONE)).replace("@PHONE_WIDTH@", str(PHONE_WIDTH))
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -73,9 +230,12 @@ PAGE = """<!DOCTYPE html>
 </header>
 <main>
 {intro}
-<nav class="versions panel" aria-label="Versions">{nav}</nav>
+<details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">{nav}</nav></details>
 {sections}
 </main>
+<script>
+{script}
+</script>
 </div>
 <footer class="bar"><div class="bar-in">
 {versionline}<span class="grow">Generated from {source} when the site image is built, so this page always matches the running build.</span>
@@ -221,7 +381,7 @@ def convert(md, repo_blob, version="", build_id="", build_date="", source="CHANG
 
     body = "\n".join('<section id="%s" class="panel"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
     intro_html = '<div class="intro panel">%s</div>' % "\n".join(intro)
-    return PAGE.format(style=STYLE, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id, build_date),
+    return PAGE.format(style=STYLE, script=SCRIPT, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id, build_date),
                        github=html.escape(repo_home(repo_blob), quote=True), source=html.escape(source))
 
 
