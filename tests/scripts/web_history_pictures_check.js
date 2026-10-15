@@ -1,9 +1,8 @@
-// Runs the list page's OWN code for the map pictures (web/watch.html: pictureNode, fillPicture, lookMaps, forgetPictures) with a small fake of the browser's DOM and of GET /maps, and the real
-// AntsMapPicker and AntsReplay. tests/scripts/test_web_replay.py runs it with node (the quick tier). usage: node web_watch_pictures_check.js web/watch.html web/front/map_picker.js web/replay_page.js
+// Runs the OWN code of the match pages for the map pictures (web/history_page.js: AntsHistory.pictures: node, forget, lookMaps) with a small fake of the browser's DOM and of GET /maps, and the real
+// AntsMapPicker. tests/scripts/test_web_matches.py runs it with node (the quick tier). usage: node web_history_pictures_check.js web/history_page.js web/front/map_picker.js
 'use strict';
-const fs = require('fs');
 const path = require('path');
-const [pagePath, pickerPath, replayPath] = process.argv.slice(2).map((p) => path.resolve(p));
+const [historyPath, pickerPath] = process.argv.slice(2).map((p) => path.resolve(p));
 const P = require(pickerPath);
 let checks = 0, failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
@@ -21,21 +20,17 @@ class Node {
     contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }
 }
 
-// the page's script, from the picture code to the first match entry
-const page = fs.readFileSync(pagePath, 'utf8');
-const from = page.indexOf("    // The picture of a match's map"), to = page.indexOf('    function entryNode(');
-if (from < 0 || to < from) { console.log('FAIL the picture code is not where the check looks'); process.exit(1); }
-const code = page.slice(from, to);
+// the pictures' own code (web/history_page.js: AntsHistory.pictures), run with the real AntsMapPicker and AntsReplay's rule for the six, on a fake DOM
+const H = require(historyPath);
 
 function rig(mapsAnswer) {
     const body = new Node('body');
     const log = { fetched: [] };
     const document = { body, createElement: (t) => new Node(t) };
-    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-    const window = { AntsMapPicker: P };
     const R = { mapKey: (m) => { const n = String(m).replace(/\.lvl$/i, '').toUpperCase(); return ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'ISLANDS'].includes(n) ? n.toLowerCase() : ''; } };
     const fetch = (url) => { log.fetched.push(url); return mapsAnswer === 'fail' ? Promise.reject(new Error('down')) : Promise.resolve({ ok: true, json: () => Promise.resolve(mapsAnswer) }); };
-    const api = new Function('el', 'R', 'window', 'document', 'fetch', code + '\nreturn { pictureNode: pictureNode, forgetPictures: forgetPictures, count: function () { return pictures.length; } };')(el, R, window, document, fetch);
+    const pics = H.pictures({ document, replay: R, picker: P, fetch });
+    const api = { pictureNode: (map, group) => pics.node(map, group), forgetPictures: (group) => pics.forget(group), count: () => pics.count(), lookMaps: () => pics.lookMaps() };
     return { api, body, log };
 }
 const img = (tv) => tv.children[0];

@@ -1,0 +1,64 @@
+/* The stats of a match on the game page in replay mode (docs/REPLAYS.md "The match pages"), and the page in the frame of a match page (embed mode). Loaded by web/shell.html next to its own style; the
+   panel is built by AntsHistory.replayStats (web/history_page.js). The colours are the page's. */
+/* ================= THE STATS OF THE MATCH (docs/REPLAYS.md "The match pages"): a replay of a match that the server has a record of. The "Stats" button of the header (wide screens) opens a panel under it, over the
+   corner of the picture; a phone has a row under the controls instead, that opens in the page. Both hold the same numbers (the record's, final: they do not follow the picture). ================= */
+#stats-btn[hidden], .mstats[hidden] { display: none !important; }
+.mstats { --won-bg: #2a2408; --won-edge: #7c6a1d; background: var(--inset); color: var(--cream); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); font-size: 15px; line-height: 1.4; padding: 14px 16px 12px; text-align: left; user-select: text; -webkit-user-select: text; }
+.mstats.pop { position: fixed; right: 22px; top: 108px; width: min(560px, calc(100vw - 44px)); max-height: calc(100vh - 130px); overflow: auto; z-index: 60; }
+.mstats.flow { width: min(100%, 560px); margin-top: 14px; }
+.mstats .mh { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.mstats h2 { font-size: 20px; font-weight: 500; }
+.mstats .x { width: 32px; height: 32px; border-radius: 4px; border: 1px solid #1c3a30; background: #0d171f; color: var(--cream); font-size: 18px; line-height: 1; cursor: pointer; }
+.mstats .mv { font-size: 17px; margin-bottom: 10px; line-height: 1.3; }
+.mstats .mv em { font-style: normal; color: var(--gold); }
+.mstats .mv span { color: #c3d6cd; font-size: 15px; margin-left: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mstats table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0 4px; font-variant-numeric: tabular-nums; }
+.mstats th { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 500; text-align: right; padding: 0 8px 1px; white-space: nowrap; width: 66px; }
+.mstats th:first-child { text-align: left; width: auto; }
+.mstats td { padding: 6px 8px 5px; background: #0d171f; border-top: 1px solid #1c3a30; border-bottom: 1px solid #1c3a30; text-align: right; vertical-align: top; font-size: 16px; }
+.mstats td:first-child { text-align: left; border-left: 1px solid #1c3a30; border-radius: 4px 0 0 4px; font-size: 15px; }
+.mstats td:last-child { border-right: 1px solid #1c3a30; border-radius: 0 4px 4px 0; }
+.mstats tr.w td { background: var(--won-bg); border-color: var(--won-edge); }
+.mstats tr.g td:first-child { box-shadow: inset 3px 0 0 var(--frame-hi); }
+.mstats tr.tot td { background: #0a1016; color: #c3d6cd; font-size: 14px; padding-top: 3px; padding-bottom: 3px; }
+.mstats tr.tot td:first-child { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding-left: 24px; }
+.mstats .nm { display: flex; align-items: center; gap: 8px; }
+.mstats .nm i { width: 12px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px #000; flex: none; background: var(--c); }
+.mstats .nm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mstats .left { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #f2c48c; border: 1px solid #6b4a14; background: #2a1d08; border-radius: 2px; padding: 0 4px; line-height: 1.5; flex: none; }
+.mstats .won { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #1a1400; background: var(--gold); border-radius: 2px; padding: 0 4px; line-height: 1.5; flex: none; }
+.mstats .sub { display: block; margin: 2px 0 0 20px; font-size: 12px; color: var(--muted); line-height: 1.3; }
+.mstats .zero { color: #6f8a7f; }
+.mstats .mf { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.mstats .mf a { color: var(--cream); font-size: 15px; text-underline-offset: 3px; }
+.mstats .cards { display: none; gap: 8px; }
+.mstats .sc { background: #0d171f; border: 1px solid #1c3a30; border-radius: 4px; padding: 8px 10px 10px; }
+.mstats .sc.w { background: var(--won-bg); border-color: var(--won-edge); }
+.mstats .sc .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 15px; }
+.mstats .sc .top i { width: 12px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px #000; flex: none; background: var(--c); }
+.mstats .sc .g { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.mstats .sc .g.two { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 6px; padding-top: 6px; border-top: 1px solid #1c3a30; }
+.mstats .sc .c span { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.mstats .sc .c b { font-weight: 500; font-size: 18px; font-variant-numeric: tabular-nums; }
+.mstats .sc.tot { background: #0a1016; padding: 5px 10px 6px; }
+.mstats .sc.tot .top { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.mstats .sc.tot .c b { font-size: 15px; color: #c3d6cd; }
+.mstats .nmt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mstats [data-c="Green"] { --c: var(--c-green); } .mstats [data-c="Red"] { --c: var(--c-red); } .mstats [data-c="Blue"] { --c: var(--c-blue); } .mstats [data-c="Black"] { --c: var(--c-black); }
+.mstats .mt { display: none; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: none; border: 0; color: var(--cream); font: inherit; font-size: 17px; padding: 0; text-align: left; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.mstats .mt small { display: block; color: var(--muted); font-size: 14px; }
+.mstats.flow .mt { display: flex; }
+.mstats.flow .mh { display: none; }
+.mstats.flow .mbody { margin-top: 10px; }
+.mstats.flow.closed .mbody { display: none; }
+.mstats.flow:not(.closed) .mt small { display: none; }
+.mstats.flow:not(.closed) .mt > span:last-child { transform: rotate(180deg); }
+.mstats.flow table { display: none; } .mstats.flow .cards { display: grid; }
+@media (max-width: 700px) { .mstats.pop { display: none !important; } }
+@media (min-width: 701px) { .mstats.flow { display: none !important; } }
+
+/* ================= EMBED MODE: play.html?replay=<file>&embed=1, the page inside the frame of a match page (web/match.html). Only the picture and the bar are left: no header, no tip, no footer, no frame of
+   the page's own (the match page has its own), and no Stats (the match page has the stats). ================= */
+body.embed header, body.embed footer, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }
+body.embed::after { content: none; }
+body.embed { padding-top: 10px; padding-left: 12px; padding-right: 12px; --side: 12px; }

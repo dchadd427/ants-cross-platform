@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Match — Ants (1998)@@SITE_TITLE@@</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+    <style>
+        /* the colours of the front page, token for token (tests/scripts/test_web_pages_classic.py); the rest of the look is matches.css */
+        :root { --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #31765f; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f; }
+        :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
+    </style>
+    <link rel="stylesheet" href="matches.css">
+</head>
+<body>
+<div class="screen">
+<main class="wrap">
+    <header class="mast" id="mast">
+        <h1 class="sr">Ants (1998): a match</h1>
+        <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
+        <p><span class="tag">A match, with all its stats.</span><span class="sub">The stats of every seat; the replay opens right here.</span></p>
+        <span class="grow"></span>
+        <div class="acts"><a class="btn sm live" id="live-btn" href="/live.html" hidden>Live now</a><a class="btn sm" id="all-btn" href="/matches.html">&lsaquo; All matches</a><a class="btn sm hide-s" href="/">Play a match</a></div>
+    </header>
+    <div id="sections" aria-live="polite"><section class="panel"><div class="note"><p><b>Loading the match&hellip;</b></p></div></section></div>
+    <noscript><section class="panel"><div class="note"><p><b>This page needs JavaScript.</b> It shows a match from the game server.</p></div></section></noscript>
+</main>
+
+<footer class="bar">
+    <div class="bar-in">
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
+        <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
+        <nav aria-label="Footer links">
+            <a href="/matches.html" id="matches-link" aria-current="page">Matches</a>
+            <a href="/live.html">Live now</a>
+            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
+            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
+        </nav>
+    </div>
+</footer>
+</div>
+
+<script src="replay_page.js"></script>
+<script src="front/map_picker.js"></script>
+<script src="history_page.js"></script>
+<script>
+(function () {
+    'use strict';
+    var R = window.AntsReplay, H = window.AntsHistory;
+    var $ = function (id) { return document.getElementById(id); };
+    var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
+    var id = H.idOf(window.location.search);
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function panel(sectionId, labelId, title) {
+        var s = el('section', 'panel'); s.id = sectionId; s.setAttribute('aria-labelledby', labelId);
+        if (title) { var head = el('div', 'head'), h2 = el('h2', '', title); h2.id = labelId; head.appendChild(h2); s.appendChild(head); }
+        return s;
+    }
+    function who(seat, side, rec) {
+        var w = el('span', 'who'), sq = el('i', 'sq'); sq.setAttribute('data-c', seat.colour); w.appendChild(sq); w.appendChild(el('span', '', H.seatLabel(seat)));
+        if (side.winner && rec.draw !== true) w.appendChild(el('span', 'won', 'Won'));
+        if (seat.left === true) w.appendChild(el('span', 'left', 'Left early'));
+        return w;
+    }
+    function meter(seat, value, max) { var bar = el('span', 'mb'), i = el('i'); i.style.width = max ? Math.round(value / max * 100) + '%' : '0%'; i.setAttribute('data-c', seat.colour); bar.appendChild(i); return bar; }
+    function sum(seats, key) { var n = 0; seats.forEach(function (s) { n += typeof s[key] === 'number' && s[key] > 0 ? Math.floor(s[key]) : 0; }); return n; }
+    function copyText(textToCopy, done) {
+        function fallback() {
+            var t = el('textarea'); t.value = textToCopy; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select();
+            var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } document.body.removeChild(t); done(ok);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textToCopy).then(function () { done(true); }, fallback); else fallback();
+    }
+
+    // ---- the sections of the page: each builds a panel (or nothing) from the record, in this order. A later section (what a replay pass counts: over time, activity, combat, ants and economy) is one more
+    // entry here that reads H.detailsOf(rec) and builds nothing when its keys are not there, so a match without them looks as it does today; see docs/REPLAYS.md "The match pages". ----
+    function resultSection(rec, ctx) {
+        var s = panel('result', 'h1'); s.className = 'panel hero';
+        var tv = pics.node(rec.map, 'page'); s.appendChild(tv);
+        var top = el('div', 'top'), h1 = el('h1', '', R.mapTitle(rec.map)); h1.id = 'h1';
+        var tags = el('span', 'tags'); tags.appendChild(el('span', 'pill fmt', H.formatText(rec.format))); tags.appendChild(el('span', 'pill ' + (rec.mode === '187' ? 'mode' : 'fmt'), H.modeText(rec.mode)));
+        if (rec.draw === true) tags.appendChild(el('span', 'pill draw', 'Draw')); else if (rec.result === 'cut') tags.appendChild(el('span', 'pill cut', 'Cut short'));
+        h1.appendChild(tags); top.appendChild(h1);
+        top.appendChild(el('p', 'meta', R.whenText(rec.ended, new Date()) + ' · ' + R.lengthText(rec.seconds) + ' long'));
+        s.appendChild(top);
+        var rest = el('div', 'rest'), v = el('div', 'verdict'), w = el('span', 'who'), win = H.winnerSide(rec, ctx.sides);
+        if (win) { w.appendChild(el('em', '', H.sideName(win))); w.appendChild(document.createTextNode(' won')); }
+        else w.textContent = H.noWinnerText(rec);
+        v.appendChild(w);
+        var ranked = H.rankedOf(ctx.sides);
+        if (ranked.length > 1) v.appendChild(el('span', 'sc', ranked.map(function (sd) { return H.scoreText(rec, sd); }).join('  –  ')));
+        rest.appendChild(v);
+        var acts = el('div', 'acts'), st = H.recState(rec);
+        if (st.kind === 'watch') {
+            var show = el('button', 'btn', '▶ Show replay'); show.type = 'button'; show.id = 'show'; show.setAttribute('aria-expanded', 'false'); show.setAttribute('aria-controls', 'replay'); acts.appendChild(show);
+        } else acts.appendChild(el('span', 'why', st.note));
+        if (st.file) { var dl = el('a', 'dl', 'Download file'); dl.href = '/replays/' + encodeURIComponent(st.file); dl.setAttribute('download', st.file); acts.appendChild(dl); }
+        var cp = el('button', 'btn sm ghost', 'Copy link'); cp.type = 'button';
+        cp.addEventListener('click', function () { copyText(window.location.href, function (ok) { cp.textContent = ok ? 'Copied' : 'Copy the address'; setTimeout(function () { cp.textContent = 'Copy link'; }, 2000); }); });
+        acts.appendChild(cp);
+        rest.appendChild(acts); s.appendChild(rest);
+        return s;
+    }
+    // The replay: the game page itself in an iframe (play.html?replay=<file>&embed=1), made only when "Show replay" is pressed, so that nothing of the game (the wasm and its data) and no recording is fetched before,
+    // and taken away again by "Hide replay" (which frees the game). The page and the frame are one origin and carry the same COOP/COEP headers (docker/nginx.conf).
+    function replaySection(rec) {
+        var st = H.recState(rec);
+        if (st.kind !== 'watch') return null;
+        var s = panel('replay', 'rep-h'); s.hidden = true; s.setAttribute('tabindex', '-1');
+        var head = el('div', 'rhead'), h2 = el('h2', '', 'Replay'); h2.id = 'rep-h'; head.appendChild(h2);
+        var r = el('div', 'r'), full = el('button', 'btn sm', 'Fullscreen'); full.type = 'button'; full.id = 'rep-full'; r.appendChild(full);
+        var own = el('a', 'btn sm', 'Own page ↗'); own.href = '/play.html?replay=' + encodeURIComponent(st.file); own.target = '_blank'; own.rel = 'noopener noreferrer'; r.appendChild(own);
+        head.appendChild(r); s.appendChild(head);
+        s.appendChild(el('div', 'player', undefined)); s.lastChild.id = 'rep-player';
+        s.appendChild(el('p', 'lgd', 'The game page loads when you press Show replay (about 9 MB the first time, kept by your browser after that) and plays this match from its recording.'));
+        return s;
+    }
+    var frame = null, current = null;
+    function setReplay(open) {
+        var sec = $('replay'), btn = $('show'), file = current ? H.recState(current).file : '';
+        if (!sec || !btn || !file) return;
+        if (open && !frame) {
+            frame = el('iframe'); frame.title = 'Replay of this match'; frame.setAttribute('allow', 'fullscreen; autoplay');
+            frame.src = '/play.html?replay=' + encodeURIComponent(file) + '&embed=1';
+            $('rep-player').appendChild(frame);
+        }
+        if (!open && frame) { frame.src = 'about:blank'; if (frame.parentNode) frame.parentNode.removeChild(frame); frame = null; }
+        sec.hidden = !open;
+        btn.textContent = open ? 'Hide replay' : '▶ Show replay'; btn.setAttribute('aria-expanded', String(open));
+        $('rep-full').hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+        if (open) { try { sec.scrollIntoView({ block: 'start' }); sec.focus({ preventScroll: true }); } catch (e) { /* it is shown anyway */ } }
+    }
+    function boardSection(rec, ctx) {
+        var s = panel('board', 'board-h', 'Scoreboard'), sides = ctx.sides, cols = H.columnsOf(rec), seats = H.seatsOf(rec);
+        s.firstChild.appendChild(el('span', 'count', rec.mode === '187' ? 'Ranked by kills' : 'Ranked by score, as the game ranks them'));
+        var max = {}; cols.forEach(function (c) { max[c.key] = 0; seats.forEach(function (x) { max[c.key] = Math.max(max[c.key], sum([x], c.key)); }); });
+        var ranked = H.rankedOf(sides), share = H.shareOf(rec, ranked);
+        if (share.length) {
+            var sh = el('div', 'share'), bar = el('div', 'sbar'), ul = el('ul'); bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', rec.mode === '187' ? 'Share of the kills' : 'Share of the score');
+            ranked.forEach(function (sd, i) {
+                var seg = el('i'); seg.style.flex = share[i].value ? share[i].value + ' 1 0' : '0 0 3px'; seg.setAttribute('data-c', sd.seats[0].colour); bar.appendChild(seg);
+                var li = el('li'), sq = el('i'); sq.setAttribute('data-c', sd.seats[0].colour); li.appendChild(sq); li.appendChild(document.createTextNode(H.sideName(sd) + ' ')); li.appendChild(el('b', '', share[i].percent + '%')); ul.appendChild(li);
+            });
+            sh.appendChild(bar); sh.appendChild(ul); s.appendChild(sh);
+        }
+        // the table (wide screens)
+        var t = el('table', 'tbl'); t.appendChild(el('caption', 'sr', 'The stats of every seat'));
+        var hr = el('tr'); hr.appendChild(el('th', '', 'Player')); cols.forEach(function (c) { hr.appendChild(el('th', c.first ? 'sp' : '', c.label)); });
+        var thead = el('thead'); thead.appendChild(hr); t.appendChild(thead);
+        var tb = el('tbody');
+        sides.forEach(function (sd) {
+            sd.seats.forEach(function (seat) {
+                var tr = el('tr', (sd.winner && rec.draw !== true ? 'w' : '') + (sd.seats.length > 1 ? ' g' : '')), td = el('td'); td.appendChild(who(seat, sd, rec)); tr.appendChild(td);
+                cols.forEach(function (c) { var cell = el('td', c.first ? 'sp' : ''), n = sum([seat], c.key); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); cell.lastChild.style.fontWeight = '500'; cell.appendChild(meter(seat, n, max[c.key])); tr.appendChild(cell); });
+                tb.appendChild(tr);
+            });
+            if (sd.seats.length > 1) {
+                var tot = el('tr', 'tot g' + (sd.winner && rec.draw !== true ? ' w' : '')); tot.appendChild(el('td', '', 'Side total'));
+                cols.forEach(function (c) { tot.appendChild(el('td', c.first ? 'sp' : '', H.numberText(sum(sd.seats, c.key)))); }); tb.appendChild(tot);
+            }
+        });
+        t.appendChild(tb); s.appendChild(t);
+        // the same as cards (phones)
+        var cards = el('div', 'seatcards');
+        sides.forEach(function (sd) {
+            sd.seats.forEach(function (seat) {
+                var c = el('div', 'sc-card' + (sd.winner && rec.draw !== true ? ' w' : '')), top = el('div', 'top'); top.appendChild(who(seat, sd, rec)); c.appendChild(top);
+                var main = cols.filter(function (x) { return !x.first && ['bombs_defused', 'fires_lit'].indexOf(x.key) === -1; }), extra = cols.filter(function (x) { return x.first || ['bombs_defused', 'fires_lit'].indexOf(x.key) !== -1; });
+                [main, extra].forEach(function (group, gi) {
+                    var g = el('div', gi ? 'grid two' : 'grid');
+                    group.forEach(function (k) { var cell = el('div', 'cell'), n = sum([seat], k.key); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', n ? '' : 'zero', H.numberText(n))); if (!gi) cell.appendChild(meter(seat, n, max[k.key])); g.appendChild(cell); });
+                    c.appendChild(g);
+                });
+                cards.appendChild(c);
+            });
+            if (sd.seats.length > 1) {
+                var tc = el('div', 'sc-card tot'); tc.appendChild(el('div', 'top', 'Side total')); var g = el('div', 'grid');
+                cols.filter(function (x) { return !x.first && ['bombs_defused', 'fires_lit'].indexOf(x.key) === -1; }).forEach(function (k) { var cell = el('div', 'cell'); cell.appendChild(el('span', '', k.label)); cell.appendChild(el('b', '', H.numberText(sum(sd.seats, k.key)))); g.appendChild(cell); });
+                tc.appendChild(g); cards.appendChild(tc);
+            }
+        });
+        s.appendChild(cards);
+        s.appendChild(el('p', 'lgd', 'Killed: enemy ants killed. Lost: your own ants lost. Hatched: new ants hatched from eggs. Bombs set, Defused and Fires lit count what each player did. A side that is an alliance adds its seats up.' + (rec.mode === '187' ? ' In this mode the score is the kills, so no score is shown.' : '')));
+        return s;
+    }
+    function aboutSection(rec, ctx) {
+        var s = panel('about', 'about-h', 'About this match'), f = el('dl', 'facts'), mapLine = H.mapFact(rec.map, pics.maps());
+        [['Map', R.mapTitle(rec.map) + (mapLine ? '  ' + mapLine : '')], ['Mode', H.modeText(rec.mode)], ['Players', H.playersText(rec)],
+         ['Format', H.formatText(rec.format) + (H.rankedOf(ctx.sides).length !== H.seatsOf(rec).length ? ', ' + H.rankedOf(ctx.sides).length + ' sides at the end' : '')],
+         ['Length', R.lengthText(rec.seconds) + ' (' + H.numberText(rec.turns) + ' turns)'], ['Ended', R.whenText(rec.ended, new Date())], ['How it ended', H.howEnded(rec)], ['Recorded by', typeof rec.game === 'string' ? rec.game : '']
+        ].forEach(function (x) { var d = el('div'); d.appendChild(el('dt', '', x[0])); var dd = el('dd', '', x[1]); if (x[0] === 'Map') dd.id = 'fact-map'; d.appendChild(dd); f.appendChild(d); });
+        s.appendChild(f); s.appendChild(el('p', 'idline', 'Match ' + rec.id));
+        return s;
+    }
+    var SECTIONS = [resultSection, replaySection, boardSection, aboutSection];
+
+    // ---- the page ----
+    function notice(bold, rest, buttons) {
+        var s = panel('note', 'note-h'), n = el('div', 'note'), p = el('p'); p.appendChild(el('b', '', bold)); if (rest) p.appendChild(document.createTextNode(' ' + rest)); n.appendChild(p);
+        (buttons || []).forEach(function (b) { var x = el(b.href ? 'a' : 'button', 'btn sm', b.label); if (b.href) x.href = b.href; else { x.type = 'button'; x.addEventListener('click', b.click); } n.appendChild(x); });
+        s.appendChild(n); return s;
+    }
+    function put(nodes) { var box = $('sections'); box.textContent = ''; nodes.forEach(function (n) { if (n) box.appendChild(n); }); }
+    function missing() {
+        var file = H.fileOfId(id);
+        put([notice('This match is not in the history.', 'A match that has only just ended can take a few minutes to be counted; its replay may already be there.',
+            [file ? { label: 'Try the replay', href: '/play.html?replay=' + encodeURIComponent(file) } : null, { label: 'All matches', href: '/matches.html' }].filter(Boolean))]);
+    }
+    function problem(status, body) { var p = H.problemOf(status, body); put([notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { window.location.reload(); } }] : [{ label: 'All matches', href: '/matches.html' }])]); }
+    function build(rec) {
+        current = rec;
+        var ctx = { sides: H.sidesOf(rec) };
+        put(SECTIONS.map(function (f) { return f(rec, ctx); }));
+        document.title = document.title.replace(/^Match/, R.mapTitle(rec.map) + ', ' + H.formatText(rec.format));
+        var show = $('show'); if (show) show.addEventListener('click', function () { setReplay(!frame); });
+        var full = $('rep-full');
+        if (full) full.addEventListener('click', function () { var f = frame; if (!f) return; var go = f.requestFullscreen || f.webkitRequestFullscreen; if (go) { try { go.call(f); } catch (e) { /* the page's own button is there */ } } });
+        pics.lookMaps().then(function () { var d = $('fact-map'); if (d) d.textContent = R.mapTitle(rec.map) + (H.mapFact(rec.map, pics.maps()) ? '  ' + H.mapFact(rec.map, pics.maps()) : ''); });
+    }
+    function load() {
+        if (!id) { put([notice('That is not the address of a match.', '', [{ label: 'All matches', href: '/matches.html' }])]); return; }
+        var request;
+        try { request = fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' }); } catch (e) { problem(0, null); return; }
+        request.then(function (response) {
+            return response.json().then(function (data) { return { status: response.status, data: data }; }, function () { return { status: response.status, data: null }; });
+        }).then(function (r) {
+            if (r.status === 404 && r.data && r.data.error === 'no such match') { missing(); return; }
+            if (r.status !== 200 || !r.data || typeof r.data !== 'object' || r.data.id !== id || !Array.isArray(r.data.seats)) { problem(r.status === 200 ? 0 : r.status, r.data); return; }
+            build(r.data);
+        }).catch(function () { problem(0, null); });
+    }
+    // "All matches" goes back to the list as the visitor left it (its filters, its page) when the visitor came from it
+    $('all-btn').addEventListener('click', function (ev) {
+        try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && new URL(document.referrer).pathname === '/matches.html' && window.history.length > 1) { ev.preventDefault(); window.history.back(); } } catch (e) { /* the link works */ }
+    });
+    // the game page in the frame says so when its own Quit is pressed
+    window.addEventListener('message', function (ev) { if (ev.origin === window.location.origin && ev.data && ev.data.ants === 'replay-leave' && frame && ev.source === frame.contentWindow) setReplay(false); });
+    function lookLive() {
+        var request;
+        try { request = fetch('/live', { cache: 'no-store', credentials: 'omit' }); } catch (e) { return; }
+        request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
+            var n = data ? R.liveEntriesOf(data).length : 0;
+            if (n > 0) { $('live-btn').textContent = n + ' live now'; $('live-btn').hidden = false; }
+        }).catch(function () { /* no button */ });
+    }
+
+    // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
+    if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
+    else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+    else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
+    if (typeof fetch === 'function') { load(); lookLive(); }
+})();
+</script>
+</body>
+</html>

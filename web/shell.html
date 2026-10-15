@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="stylesheet" href="replay_stats.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colours are the front page's, token for token (tests/scripts/test_web_game.py
@@ -943,38 +944,19 @@
         }
 
         @media (max-width: 440px) {
-            .btn-text {
-                display: none;
-            }
-
-            .btn-text-short {
-                display: inline;
-            }
-
-            .logo img {
-                width: 76px;
-            }
-
-            .btn.sm {
-                padding: 6px 10px;
-            }
+            .btn-text { display: none; }
+            .btn-text-short { display: inline; }
+            .logo img { width: 76px; }
+            .btn.sm { padding: 6px 10px; }
         }
 
         @media (max-width: 380px) {
-            .logo img {
-                width: 64px;
-            }
-
-            .header-actions {
-                gap: 8px 6px;
-            }
-
-            .btn.sm {
-                padding: 6px 8px;
-            }
+            .logo img { width: 64px; }
+            .header-actions { gap: 8px 6px; }
+            .btn.sm { padding: 6px 8px; }
         }
 
-        /* The header holds its eight buttons in one row from 1140 px; between 701 and 1139 px it keeps the seven it had (a ninth of the width would make two rows) and the footer's Watch matches is the way */
+        /* The header holds its eight buttons in one row from 1140 px; between 701 and 1139 px it keeps the seven it had (a ninth of the width would make two rows) and the footer's Matches is the way */
         @media (min-width: 701px) and (max-width: 1139px) {
             #watch-btn {
                 display: none;
@@ -1198,7 +1180,7 @@
     </style>
 </head>
 <body>
-    <script>if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay';</script>
+    <script>if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed';</script>
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
@@ -1208,7 +1190,7 @@
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
-            <a href="/watch.html" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Watch matches: the ones being played now and the ones kept for 30 days (opens in a new tab: a match that is being played here goes on)">Watch matches</a>
+            <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
             <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
             <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
@@ -1218,7 +1200,7 @@
             <details class="more">
                 <summary><span class="btn sm">More</span></summary>
                 <div class="more-list">
-                    <a href="/watch.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="Watch matches: the ones being played now and the ones kept for 30 days (opens in a new tab: a match that is being played here goes on)">Watch matches</a>
+                    <a href="/matches.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
                     <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
                     <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
                     <button type="button" class="btn sm" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
@@ -1228,8 +1210,9 @@
             </details>
         </div>
         <div class="header-actions rep-only">
-            <a href="/watch.html" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
+            <a href="/matches.html" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
             <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
+            <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
             <a href="#" data-dl="" class="btn sm wide-only" title="Download the recording (.antsrep)">Download</a>
             <button id="fullscreen-btn-r" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
             <details class="more">
@@ -1276,7 +1259,7 @@
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
-            <div class="name-step-hint name-step-notice">Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players&rsquo; names.</div>
+            <div class="name-step-hint name-step-notice">Online matches are recorded. Recordings are kept for 30 days and anybody can watch them, live or later. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
     </div>
@@ -1315,6 +1298,7 @@
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
         <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
+    <section class="mstats flow rep-only" id="mstats-flow" aria-label="Match stats" hidden></section>
 
     <div class="mobile-tip-banner" id="mobile-tip-banner">
         <span><strong>Tip:</strong>&#8197;Turn your phone&#8197;<strong>sideways</strong>&#8197;for a bigger picture</span>
@@ -1418,7 +1402,8 @@
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
-                <a href="/watch.html" target="_blank" rel="noopener noreferrer" id="watch-link">Watch matches</a>
+                <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
+                <a href="/live.html" target="_blank" rel="noopener noreferrer">Live now</a>
                 <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
                 <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
                 <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -1427,9 +1412,12 @@
         </div>
     </footer>
 
+    <aside class="mstats pop rep-only" id="mstats" role="dialog" aria-label="Match stats" hidden></aside>
+
     <div class="toast" id="toast" role="status" hidden></div>
 
     <script src="replay_page.js"></script>
+    <script src="history_page.js"></script>
     <script src="map_files.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
@@ -1913,6 +1901,7 @@
         var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
         var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
+        var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
         var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
         (function () {
             if (ANTS_REPLAY_MODE) return;
@@ -3333,7 +3322,7 @@
                 };
                 var all = function () {
                     var a = el('a', 'btn', '‹ All matches');
-                    a.href = '/watch.html';
+                    a.href = '/matches.html';
                     buttons.appendChild(a);
                 };
                 var made = info && info.game ? info.game : 'a version of the game';
@@ -3363,7 +3352,7 @@
                     all();
                 } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
                     title = 'That match isn’t live';
-                    paragraph(['It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are at the top of the list.']);
+                    paragraph(['It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are on the Live now page.']);
                     all();
                 } else {
                     title = 'This replay can’t be played here';
@@ -3566,7 +3555,10 @@
                 setHeader();
                 if (report.failure) cardFor(report.failure, report.text);
             };
-            window.antsReplayLeave = function () { window.location.assign('/watch.html'); };
+            window.antsReplayLeave = function () {
+                if (ANTS_EMBED) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }      // (the frame of a match page: it hides the replay)
+                window.location.assign('/matches.html');
+            };
 
             // ---- the wiring ----
             $('b-play').addEventListener('click', toggle);
@@ -3846,6 +3838,10 @@
             setInterval(tick, 100);
             tick();
         })();
+
+        // ---- the stats of the match on show (docs/REPLAYS.md "The match pages"): the server's record of it as a panel (the Stats button on a wide screen, a row under the controls on a phone); web/history_page.js.
+        // Only for a recording of the server's own store: a live match, a file from elsewhere and the frame of a match page have none. ----
+        if (ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_EMBED && ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats({ document: document, fetch: fetch.bind(window), file: ANTS_REPLAY_FILE });
     </script>
     <!-- END replay glue -->
     <script>

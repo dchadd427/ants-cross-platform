@@ -3,9 +3,9 @@
 
 No Docker image, no game server, no game program: the check serves the pages of web/ itself, with a FAKE DOOR (GET /live, GET /live/<id>, GET /replays, GET /replays/<file>: the shapes of
 docs/SERVER.md "Replays") and a stand-in for the game (tests/scripts/web_live_stub.js: Module._ants_replay_get / _ants_replay_do as src/ants_app/application.cpp has them). What it shows is the
-page's own part: the glue that fetches the growing file again and again and tells the game, the tag and the notes, the cards, the list. It does not show that the real game follows a file (the
+page's own part: the glue that fetches the growing file again and again and tells the game, the tag and the notes, the cards, the live page. It does not show that the real game follows a file (the
 C++ tests do). The DevTools protocol is spoken with the client of web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
-Parts (--only): list (the "Live now" box: the matches, hostile names as text, a match that comes later, no box when the door is not there), watch (a match at its present: the tag, Pause and
+Parts (--only): list (the "Live now" page, web/live.html: the matches, hostile names as text, a match that comes later, the words when the door is not there), watch (a match at its present: the tag, Pause and
 "Jump to live", the file that grows, the feed that stops and comes back), ends (a match that ends and was kept, one that ends and was not kept, a kept replay that is slow to appear), cards
 (a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), rewind (Back 30 seconds: where a press seeks, play / pause and speed kept, not on a live match, the bar at 390 px), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
 in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
@@ -210,19 +210,21 @@ class Door:
         return time.time() >= self.kept_at and (self.kept_at or self.mode == "ended")
 
     def route(self, h, path):
-        if path in ("/play.html", "/watch.html"):
-            text = open(os.path.join(WEB, "shell.html" if path == "/play.html" else "watch.html"), encoding="utf-8").read()
+        if path in ("/play.html", "/live.html"):
+            text = open(os.path.join(WEB, "shell.html" if path == "/play.html" else "live.html"), encoding="utf-8").read()
             for k, v in FILLED.items():
                 text = text.replace(k, v)
             return self.send(h, 200, text, "text/html; charset=utf-8")
-        if path in ("/replay_page.js", "/index.js"):
-            name = "replay_page.js" if path == "/replay_page.js" else None
+        if path in ("/replay_page.js", "/history_page.js", "/index.js"):
+            name = path[1:] if path != "/index.js" else None
             body = open(os.path.join(WEB, name) if name else os.path.join(HERE, "web_live_stub.js"), "rb").read()
             return self.send(h, 200, body, "text/javascript")
         if path == "/index.data":
             return self.send(h, 200, b"\0" * 2000, "application/octet-stream")
         if path == "/index.wasm":
             return self.send(h, 200, b"\0asm", "application/wasm")
+        if path in ("/matches.css", "/replay_stats.css"):
+            return self.send(h, 200, open(os.path.join(WEB, path[1:]), "rb").read(), "text/css")
         if path.startswith("/front/") or path in ("/favicon.png", "/favicon.ico"):
             f = os.path.join(WEB, path[1:])
             if os.path.isfile(f):
@@ -343,38 +345,37 @@ def main():
 
     try:
         if args.only in ("", "list"):
-            print("[web live] part list: the box 'Live now' above the earlier matches")
+            print("[web live] part list: the page 'Live now' (web/live.html)")
             fresh(names=[HOSTILE, "Red (Bot (Medium))", "Blue (Bot (Medium))", "Black (Bot (Medium))"])
             tab = new_tab()
-            open_page(tab, "/watch.html")
-            check(until(tab, "document.querySelectorAll('#live-body .liveentry').length === 2") is True, "two matches are in the box")
-            check(tab.ev("(" + SHOWN + ")('live-panel')") is True and tab.ev("document.getElementById('live-count').textContent") == "2 matches", "the box is up and counts them: 2 matches")
-            check(tab.ev("[].map.call(document.querySelectorAll('#live-body .liveentry .acts a'), function (a) { return a.getAttribute('href'); })") == ["/play.html?live=" + ID, "/play.html?live=" + OTHER],
+            open_page(tab, "/live.html")
+            check(until(tab, "document.querySelectorAll('#body .liveentry').length === 2") is True, "two matches are on the page")
+            check(tab.ev("document.getElementById('count').textContent") == "2 matches", "the page counts them: 2 matches")
+            check(tab.ev("[].map.call(document.querySelectorAll('#body .liveentry .act a'), function (a) { return a.getAttribute('href'); })") == ["/play.html?live=" + ID, "/play.html?live=" + OTHER],
                   "each entry's button goes to the player with the match's id")
-            check(tab.ev("document.getElementById('tag').textContent") == "Watch a match, live or again.", "the title says live or again")
-            check(tab.ev("!window.__pwn && document.querySelectorAll('#live-body img[src=x]').length === 0 && document.getElementById('live-body').textContent.indexOf('<img src=x') !== -1"),
+            check(tab.ev("document.querySelector('.mast .tag').textContent") == "Matches being played right now.", "the title says what the page has")
+            check(tab.ev("!window.__pwn && document.querySelectorAll('#body img[src=x]').length === 0 && document.getElementById('body').textContent.indexOf('<img src=x') !== -1"),
                   "a name that is markup is shown as text: nothing of it ran, nothing of it became an element")
-            check(tab.ev("document.getElementById('list-h').textContent") == "Earlier matches", "the list below is 'Earlier matches'")
+            check(tab.ev("document.body.textContent.indexOf('Earlier matches') === -1 && document.querySelector('.mast a[href=\"/matches.html\"]') !== null"), "the earlier matches are not here: the list of all matches is one button away")
             shot(tab, "list-live")
             door.set(live=[ID, OTHER, "SMALL-20261009-090000Z"])
-            check(until(tab, "document.querySelectorAll('#live-body .liveentry').length === 3", 14) is True, "a match that starts later shows up by itself (the list looks again every 10 seconds)")
+            check(until(tab, "document.querySelectorAll('#body .liveentry').length === 3", 14) is True, "a match that starts later shows up by itself (the page looks again every 10 seconds)")
             tab.close()
             tab = new_tab()
             door.set(live=[])
-            open_page(tab, "/watch.html")
-            check(until(tab, "document.getElementById('live-body').textContent.indexOf('No match is on right now.') !== -1") is True, "no match: the box says so")
+            open_page(tab, "/live.html")
+            check(until(tab, "document.getElementById('body').textContent.indexOf('No match is on right now.') !== -1") is True, "no match: the page says so")
             shot(tab, "list-nothing-live")
             tab.close()
             tab = new_tab()
             door.set(live_door=False)
-            open_page(tab, "/watch.html")
-            check(until(tab, "document.getElementById('tag').textContent === 'Watch a match again.'") is True and tab.ev("document.getElementById('live-panel').hidden") is True,
-                  "a door that answers 404: no box, and the title is the old one")
+            open_page(tab, "/live.html")
+            check(until(tab, "document.getElementById('body').textContent.indexOf('doesn\u2019t show matches that are being played') !== -1") is True, "a door that answers 404: the page says that this server has none")
             tab.close()
             tab = new_tab(390, 844, 2, True)
             fresh()
-            open_page(tab, "/watch.html")
-            until(tab, "document.querySelectorAll('#live-body .liveentry').length === 2")
+            open_page(tab, "/live.html")
+            until(tab, "document.querySelectorAll('#body .liveentry').length === 2")
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "a phone: no sideways scroll")
             tab.close()
 
@@ -391,7 +392,7 @@ def main():
             check(tab.ev("(" + SHOWN + ")('livenow')") is True and tab.ev("(" + SHOWN + ")('b-live')") is False, "the red Live mark is up, 'Jump to live' is not (there is nothing to jump to)")
             check(tab.ev("[].every.call(document.querySelectorAll('[data-dl]'), function (a) { return getComputedStyle(a).display === 'none'; })") is True, "no Download while the file is not whole")
             check(tab.ev("document.querySelector('#r-title .pill.lv') !== null && document.getElementById('r-title').textContent.indexOf('Treasure') === 0"), "the header says Treasure and that it is live")
-            check(tab.ev("document.getElementById('watch-link').getAttribute('aria-current')") == "page", "the footer's 'Watch matches' is marked")
+            check(tab.ev("document.getElementById('watch-link').getAttribute('aria-current')") == "page", "the footer's 'Matches' is marked")
             check(tab.ev("document.getElementById('watch-link').hasAttribute('target')") is False, "and it goes to the list in this tab (nothing is being played here: a match played is not left by it)")
             shot(tab, "watching")
             tab.ev("(function () { __stub.state = 3; __stub.turn = Math.max(0, Module._ants_replay_get(8) - 50 * 20); })()")             # paused, 50 seconds behind
@@ -460,7 +461,7 @@ def main():
             for size, tab in (("wide", new_tab()), ("phone", new_tab(390, 844, 2, True))):
                 open_page(tab, "/play.html?live=" + ID)
                 check(until(tab, "document.getElementById('rm-title').textContent === 'This match is over'") is True, "%s: the link of a match that is over has its card" % size)
-                check(tab.ev("[].map.call(document.querySelectorAll('#rm-body a'), function (a) { return a.getAttribute('href'); })") == ["/play.html?replay=" + KEPT, "/watch.html"], "%s: 'Watch the replay' goes to the kept file, '‹ All matches' to the list" % size)
+                check(tab.ev("[].map.call(document.querySelectorAll('#rm-body a'), function (a) { return a.getAttribute('href'); })") == ["/play.html?replay=" + KEPT, "/matches.html"], "%s: 'Watch the replay' goes to the kept file, '‹ All matches' to the list" % size)
                 check(until(tab, "document.querySelectorAll('#r-meta .chip').length === 4") is True and tab.ev("(" + SHOWN + ")('splash-overlay')") is True, "%s: the header says what the match was and the clay stays behind the card" % size)
                 check(tab.ev("document.querySelector('[data-dl]').getAttribute('href')") == "/replays/" + KEPT, "%s: Download goes to the kept file" % size)
                 shot(tab, "over-" + size)
@@ -471,7 +472,7 @@ def main():
                 tab = new_tab()                                                # (a tab for each: the card of the one before must not be mistaken for this one's)
                 open_page(tab, address)
                 check(until(tab, "document.getElementById('rm-title').textContent === 'That match isn’t live'") is True, "%s: 'That match isn’t live'" % what)
-                check(tab.ev("[].map.call(document.querySelectorAll('#rm-body a'), function (a) { return a.getAttribute('href'); })") == ["/watch.html"], "%s: its card goes back to the list" % what)
+                check(tab.ev("[].map.call(document.querySelectorAll('#rm-body a'), function (a) { return a.getAttribute('href'); })") == ["/matches.html"], "%s: its card goes back to the list" % what)
                 if "NOSUCH" in address:
                     shot(tab, "not-live")
                 tab.close()
