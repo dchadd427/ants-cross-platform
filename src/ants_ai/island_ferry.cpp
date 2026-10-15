@@ -45,7 +45,7 @@ void FerryTask::search(TaskContext& c) {
     cost_.assign(n, -1);
     const WalkContext ctx = v.walk_context();
     const auto passable = [&](sim::TileCoord t) {
-        if (!grid.in_bounds(t)) return false;
+        if (!grid.in_bounds(t) || grid.has_bomb_at(t)) return false;
         if (MapInfo::walkable(grid, c.seat, t, ctx)) return true;
         return grid.terrain_class_at(t) == sim::movement::kTerrainWater && grid.get_cell(t).is_empty_overlay() && !grid.is_solid_object(t);   // open water: a Swimmer swims over it (a dig in progress, a bomb, an object, a rock or a reed do not: the engine's R4)
     };

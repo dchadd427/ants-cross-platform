@@ -87,9 +87,15 @@ compile_commands.json
 .vs/
 CMakeUserPresets.json
 
-# A local run of ants_server (docs/SERVER.md: "Starting a server"): its results folder, the control secret that it makes (and the temporary files of making it), and the
-# .env files of the compose examples (secrets: never commit them)
+# A local run of ants_server (docs/SERVER.md: "Starting a server"): its results folder, the control secret that it makes (and the temporary files of making it), and any
+# environment or key/certificate files (secrets: never commit them)
 results/
 control-secret
 control-secret.*
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.jks
+*.keystore

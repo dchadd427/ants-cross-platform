@@ -90,6 +90,10 @@ struct GateTarget {
     int32_t defuse_bombs{-1};            // the fewest bombs a Bomber defuses on a walk, fire closed; -1 none
     sim::TileCoord fire_cell{-1, -1};    // the first fire cell (nearest the hill) of a walk with the fewest fire cells: the one a Fire ant puts out to open the way (-1 when fire_cells <= 0)
     sim::TileCoord bomb_cell{-1, -1};    // the first bomb cell (nearest the hill) of a walk with the fewest bombs: the one a Bomber defuses to open the way (-1 when defuse_bombs <= 0)
+    int32_t shore_fire_cells{-1};        // for a Sealed water-moated pile: fire cells on the shortest walk+swim from the hill (-1 when none)
+    int32_t shore_bombs{-1};             // for a Sealed water-moated pile: bomb cells on the shortest walk+swim from the hill (-1 when none)
+    sim::TileCoord shore_fire_cell{-1, -1};
+    sim::TileCoord shore_bomb_cell{-1, -1};
     int32_t hop{-1};                     // the best hop of GateInfo::hops() that lands in reach of it (fewest bombs, then the best chance), -1 none
     uint8_t passes{0};                   // kPassFireAnt | kPassDefuse | kPassHop
 };
@@ -103,6 +107,10 @@ public:
     /// The throw rule on its own: a bomb planted on `bomb` and an ant that steps onto it with `facing`, on the map `grid` shows. Components are not known to it (from_comp and to_comp are -1,
     /// `end` is Ground for any landing that is neither water nor fire). The engine's own rule (see the top); the conformance test holds it against the simulation on every tile.
     static BombHop simulate(const sim::Grid& grid, sim::TileCoord bomb, uint8_t facing);
+    /// The best planted-bomb hop from component `from_comp` that lands on safe ground in component `to_comp` (bombs == 0 when none exists).
+    static BombHop best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp);
+    /// The best map-bomb chain triggered by stepping 1 tile from `from` onto an adjacent map bomb that lands on safe ground in `to_comp` (bombs == 0 when none exists).
+    static BombHop best_map_bomb_bounce(const GateInfo& gates, const sim::Grid& grid, sim::TileCoord from, int32_t to_comp);
 
     /// A bomb costs this many hit points (the ant of a chain pays it for every bomb), is a dud this often (percent), and a flight is this many tiles
     static constexpr int32_t kBombHp = 2;

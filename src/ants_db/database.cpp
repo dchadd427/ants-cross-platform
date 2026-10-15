@@ -87,6 +87,12 @@ Error Database::open(const std::string& path, const OpenOptions& options) {
 Error Database::use_journal(const std::string& request, std::string& mode) {
     mode.clear();
     if (db_ == nullptr) return make_error(kErrNotOpen, "journal mode", "the database is not open");
+    if (request.empty()) return make_error(SQLITE_MISUSE, "journal mode", "bad journal mode name");
+    for (char c : request) {
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_')) {
+            return make_error(SQLITE_MISUSE, "journal mode", "bad journal mode name");
+        }
+    }
     Statement st;
     Error e = prepare(st, "PRAGMA journal_mode=" + request);
     if (!e.ok()) return e;
