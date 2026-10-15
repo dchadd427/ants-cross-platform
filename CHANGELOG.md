@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Only the new page, the footers' last link and the README changed; network protocol 21 is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e4c069a3...16af2a29)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b843839c...b704515e)
 
 ## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
 
