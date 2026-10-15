@@ -72,7 +72,7 @@ struct HistoryRecord {
     bool computers_only{false};          // no person played
     std::vector<HistorySeat> seats;      // the seats that played, in seat order
     std::vector<HistoryRow> rows;        // the results, ranked
-    std::string details;                 // JSON text, "" when none: reserved for what a later version keeps about a match (events); stored and given back as it is
+    std::string details;                 // JSON text, "" when none: the stats that the replay pass keeps about a match (ants_server/history_details.hpp); stored and given back as it is
     uint32_t seconds() const noexcept { return turns / 20; }
     /// Whether the match counts as one play of its map (docs/SERVER.md "The database", map_plays): a person took part (a match of computer players only does not count) and it ran at least kMapPlayMinTurns,
     /// however it ended (a draw, a quit and a time-out count as the history records them). The site's count of online games has the same two rules (SiteStats).

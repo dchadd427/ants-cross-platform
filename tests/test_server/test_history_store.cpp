@@ -232,7 +232,7 @@ int main() {
         HistoryRecord none;
         ASSERT_FALSE(d.store.find(id_at(kT0 + 99999), none));
         ASSERT_FALSE(d.store.find("not an id", none));
-        // the details that a later version keeps are stored as they are
+        // the details are stored as they are
         HistoryRecord with_details = all[0];
         with_details.details = "{\"events\":[{\"t\":1}]}";
         std::string why;
@@ -1068,7 +1068,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("HS6.3 GET /history/<id> gives the whole record (the bombs and fires, the layout number, the mode, what a later version keeps in \"details\") and the state of the recording; an id that is not one, a match that is not there and a query are 404; both doors give the same") {
+    TEST_CASE("HS6.3 GET /history/<id> gives the whole record (the bombs and fires, the layout number, the mode, the stats in \"details\") and the state of the recording; an id that is not one, a match that is not there and a query are 404; both doors give the same") {
         Server s;
         ASSERT_TRUE(s.open());
         const std::vector<HistoryRecord> all = eight_records();
