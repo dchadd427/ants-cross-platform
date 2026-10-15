@@ -94,7 +94,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
-        for name, text in (("lobby.html", LOBBY_PAGE), ("watch.html", WATCH_PAGE), ("replay_page.js", "window.AntsReplay = {};\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE),
+        for name, text in (("lobby.html", LOBBY_PAGE), ("watch.html", WATCH_PAGE), ("replay_page.js", "window.AntsReplay = {};\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)

@@ -191,6 +191,7 @@ ants-cross-platform/
 │   │                                   # hidden-tab timer, sound unlock, the picture's box, touch guards)
 │   ├── lobby.html                      # The front page: the lobby, a room on the game server (four colours,
 │   │                                   # a code and link, the map, START), a code to join, rejoin a running match
+│   ├── legal.html                      # The Legal page: free, no warranty, no liability, unofficial (static, in the changelog page's look)
 │   ├── front/                          # The front page's pictures and rules (lobby_rules.js, lobby_net.js; art made by tools/front_page_art), its font Libre
 │   │                                   # Franklin (SIL Open Font License, licence beside it) and classic.css, the
 │   │                                   # look that the other pages link
