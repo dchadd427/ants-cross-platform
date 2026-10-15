@@ -166,8 +166,8 @@ void Application::take_camera() {
     if (replay_mode_ && auto_camera_.take()) ++camera_taken_;
 }
 
-// A frame of a replay: the model says where the view should be (Auto: it glides to the busiest place and holds there; a zoom puts it back at the place at the viewer's zoom), and the minimap's ring
-// shows the busiest place, whole while the camera follows it and dashed while it is Manual
+// A frame of a replay: the model says where the view should be (Auto: it is locked on the biggest action and glides along with it; a zoom of the viewer's is followed by a glide back to the place, at
+// the viewer's zoom), and the minimap's ring shows the busiest place, whole while the camera follows it and dashed while it is Manual
 void Application::update_auto_camera(float dt) {
     if (!replay_mode_ || !renderer_ || state_ != AppState::Playing) return;
     ViewportCamera& camera = renderer_->camera();
@@ -177,7 +177,7 @@ void Application::update_auto_camera(float dt) {
     camera_zoom_seen_ = camera.zoom;
     AutoCamera::Point out;
     const AutoCamera::Point middle{static_cast<double>(camera.x) + view_w / 2.0, static_cast<double>(camera.y) + view_h / 2.0};
-    if (auto_camera_.step(static_cast<double>(std::min(dt, 0.25f)) * 1000.0, middle, AutoCamera::Point{view_w, view_h}, zoomed, out)) {
+    if (auto_camera_.step(static_cast<double>(std::min(dt, 0.25f)) * 1000.0, middle, zoomed, out)) {
         const double ox = out.x - view_w / 2.0;
         const double oy = out.y - view_h / 2.0;
         const bool plain = camera.zoom == zoom::kNormal;

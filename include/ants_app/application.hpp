@@ -670,7 +670,7 @@ private:
     std::string replay_failure_text_;
     size_t replay_next_{0};                               // the next order of the file to give
     float replay_speed_{1.0f};
-    AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto follows the busiest place, Manual leaves the view where the viewer put it
+    AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto locks on the biggest action and follows it, Manual leaves the view where the viewer put it
     int camera_taken_{0};                                 // how many times the viewer has taken the camera from Auto (ReplayValue::CameraTaken)
     float camera_zoom_seen_{0.0f};                        // the zoom of the last frame: a change keeps Auto, at the viewer's zoom
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
