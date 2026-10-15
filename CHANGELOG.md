@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
+
+**For players:**
+- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, colour, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
+- **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
+- **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
+- **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
+- **What is kept, said plainly** on the front page and in the name card: recordings are kept for 30 days; results and names are kept for good and are public.
+
+**Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...800f1517)
+
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
 **For players:**
@@ -539,17 +552,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516)
 
-## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
+## Older versions (v0.4.0 and before)
 
-**For players:**
-- **Many zoom levels:** the mouse wheel steps through four levels to a doubling (2, 1.68, 1.41, 1.19, 1, 0.84, 0.71, 0.59, 0.5 ...) down to the map's own limit, where the map's width or height just fills the view, so you never see past its edge; matches on the network offer the zoom-out too (it was local games only), and with Fog of War on every level hides exactly what zoom 1 hides. 2, 1 and 0.5 are exact pictures, the levels between are smoothed, scrolling moves whole screen pixels and a click picks the tile under the middle of the pointer. `--zoom` and the settings key `zoom` take any number from 0.05 to 2.
-- **A level for each bot and teams before the start.** On the front page each bot (Red, Blue, Black) has its own level (None, Easy, Medium, Hard), and with two or more bots a Teams choice (Free for all, or you and one bot against the others); the desktop start menu has the same Teams choice and `--teams 0+1` does it from the command line. The teams are made with the original's own team-up at the first tick. A bot that declines a team-up says why ("Bots team up only while three or more teams play.", "You already have a teammate.").
-- **Your name in single player on the desktop:** the start menu's Single player panel has a name field (the same remembered name as Join and Host), and the game is played under it.
-- **Your own orders can show at once in a network match** (off by default: add `?prediction=on` to the game's address, or start the desktop game with `--prediction on`): your ants answer a click as in a game on one computer instead of a round trip later; the corner's `delay` shows what a click feels. It switches itself off for a while on a device that is too slow for it, and is off in a hidden tab, in a pause and behind the "Get ready" dialog.
-- **Desktop:** `start_game.sh` / `start_game.bat` open one game with the start menu (Single player, Join, Host); the four-window test match is `--players 4`.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the bots](docs/BOTS.md)
-
-## Older versions (v0.3.0 and before)
-
-Every release before v0.4.0, and the long notes of v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.5.0, and the long notes of v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
