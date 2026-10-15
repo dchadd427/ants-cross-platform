@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no state hash and no protocol number changed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...7b944fa8), [the bot tool](docs/BOTS.md#running-bots)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...a366cb21), [the bot tool](docs/BOTS.md#running-bots)
 
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
