@@ -808,7 +808,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const form = find((e) => e.tagName === 'form');
     const hint = find((e) => e.getAttribute('id') === 'chat-hint');
     const log = find((e) => e.getAttribute('id') === 'chat-log');
-    check('the field is open and the log says to say hello', input.disabled === false && log.children.length === 1 && /Say hello/.test(log.textContent));
+    check('the field is open and the log says to say hello', input.disabled === false && input.readOnly === false && log.children.length === 1 && /Say hello/.test(log.textContent));
     const sentChat = () => s.sent.filter((b) => b[0] === 9);
     input.value = 'hello there';
     form.fire('submit', { preventDefault() {} });
@@ -816,19 +816,19 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('the field is empty again', input.value === '');
     const say = (text) => Uint8Array.from([9, 1, 0, text.length].concat(Array.from(text).map((c) => c.charCodeAt(0))));
     s.receive(say('hi Maya'));
-    same('the room\'s line comes with the name of the seat, as text and not as markup', log.children.map((li) => li.textContent), [evil + ':hi Maya']);
+    same('the room\'s line comes with the name of the seat, as text and not as markup', log.children.map((li) => li.textContent), [evil + ': hi Maya']);
     check('(a name that is markup made no element: the page wrote no innerHTML)', env.innerHTMLWrites.length === 0 && log.children[0].getAttribute('data-c') === 'red');
     // the pace (the client's: tests/scripts/web_lobby_client_check.js has its clock): six more at once; three go (the burst of four is spent with the first), the others stay and the hint says so
     for (let i = 1; i <= 6; i++) { input.value = 'line ' + i; form.fire('submit', { preventDefault() {} }); }
     check('lines at once: four in all go out, the line that was refused stays in the field, and the hint asks for a little slower', sentChat().length === 4 && input.value === 'line 6' && /A little slower/.test(hint.textContent), sentChat().length + ' ' + input.value + ' ' + hint.textContent);
     // START waits: the field is shut; the start is given up: it opens
     s.receive(roomMessage([[C, 'Maya'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7, inGame: 1 }));
-    check('while START waits the field is shut and says that the game is opening', input.disabled === true && /Opening the game/.test(input.placeholder));
+    check('while START waits the field is shut (read-only) and says that the game is opening', input.readOnly === true && input.disabled === false && /Opening the game/.test(input.placeholder));
     s.receive(roomMessage([[C, 'Maya'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0 }));
-    check('the start is given up: the field is open', input.disabled === false);
+    check('the start is given up: the field is open', input.readOnly === false);
     // the link is down: shut, and the log stays
     s.drop();
-    check('while the link is down the field is shut, and the lines stay', input.disabled === true && /back when you are in the room again/.test(input.placeholder) && log.children.length === 1 && log.children[0].textContent === evil + ':hi Maya', [input.disabled, input.placeholder, log.children.length].join(' | '));
+    check('while the link is down the field is shut (read-only: it keeps its focus), and the lines stay', input.readOnly === true && input.disabled === false && /back when you are in the room again/.test(input.placeholder) && log.children.length === 1 && log.children[0].textContent === evil + ': hi Maya', [input.readOnly, input.placeholder, log.children.length].join(' | '));
     check('no markup was ever written by the page for a name or a line', env.innerHTMLWrites.length === 0);
 }
 {   // a person who joins is a small line of the system, a person who goes too; a room that is made again (after a restart) starts an empty box

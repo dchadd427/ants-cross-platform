@@ -2,7 +2,8 @@
 // (nothing before a room, the hint when alone, the hint when nobody has spoken, "Chat is back when you are in the room again." while the link is down, "Opening the game" while START waits), the
 // words of the lines of the system, and the whole box built and driven with a small fake of the DOM and of the page's client: a line of a player and a line of the room's guests are set as TEXT only
 // (the fake throws when innerHTML is assigned), a colour for each seat, the last 200 lines, the box follows the newest line unless it was scrolled up, a line that arrives while the box is off
-// screen is also a toast, what a line that the room did not take does (the typed text stays, and the hint says why), what happens to the box when the page changes its client.
+// screen is also a toast (cut to 60 characters, at most one in 4 s: the log has every line), what a line that the room did not take does (the typed text stays, and the hint says why), a line that the
+// room did not echo within 3 s or before the link dropped (the hint says it may not have arrived, the text is back in the field), what happens to the box when the page changes its client.
 //   - every exported function of lobby_chat.js must be called by this check (a function that no table reaches is a failure);
 //   - the pace of the lines is the client's (web/front/lobby_net.js, tests/scripts/web_lobby_client_check.js), not this script's.
 // usage: node web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js     (exit 0: every check holds; every failure is printed)
@@ -37,9 +38,10 @@ Object.keys(RAW).forEach((k) => {
 });
 
 // ---- 0. what the library offers -------------------------------------------------------------------------------------------------------------------------------------------------------------------
-same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['MAX_LINE', 'MAX_LINES', 'TEXT', 'cleanLine', 'joinedText', 'leftText', 'mount', 'nameOf', 'peopleIn', 'sendable', 'stateOf', 'toastText']);
+same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), ['MAX_LINE', 'MAX_LINES', 'PENDING_MS', 'TEXT', 'TOAST_CHARS', 'TOAST_GAP', 'cleanLine', 'joinedText', 'leftText', 'mount', 'nameOf', 'peopleIn', 'sendable', 'stateOf', 'toastText']);
 check('a line is at most 100 characters: the match\'s chat entry (the server\'s kMaxChatChars, the client\'s MAX_CHAT)', C.MAX_LINE === 100 && C.MAX_LINE === Net.MAX_CHAT);
 check('the box keeps the last 200 lines, as the room\'s own log does (ChatLog::kMaxLines)', C.MAX_LINES === 200);
+same('a toast is at most 60 characters of the line, one chat toast in 4 s, and a line is called lost after 3 s without its echo', [C.TOAST_CHARS, C.TOAST_GAP, C.PENDING_MS], [60, 4000, 3000]);
 check('the person states that the box counts are the protocol\'s Host and Client', Net.SLOT.Host === 1 && Net.SLOT.Client === 2 && Net.SLOT.Bot === 3 && Net.SLOT.Empty === 0);
 
 // ---- 1. the words: plain text, printable ASCII and the ellipsis, no markup, no stray blank, "player" not "friend" -----------------------------------------------------------------------------------------
@@ -53,7 +55,8 @@ check('the person states that the box counts are the protocol\'s Host and Client
     same('the heading, the note under it and the button', [C.TEXT.title, C.TEXT.note, C.TEXT.send], ['Chat', 'Only the people in this room can read it.', 'Send']);
     same('the two empty states (alone, and with people who have not spoken)', [C.TEXT.alone, C.TEXT.empty], ['You are the only one here. Send the link above, then say hello.', 'Nothing said yet. Say hello: everyone in this room will see it.']);
     same('the placeholder, and the two that replace it', [C.TEXT.placeholder, C.TEXT.down, C.TEXT.opening], ['Say something to the room', 'Chat is back when you are in the room again.', 'Opening the game…']);
-    same('the two hints under the field', [C.TEXT.tooFast, C.TEXT.accent], ['A little slower, please. Your line is still here.', 'Letters, digits and signs without accents only: the game cannot show the rest.']);
+    same('the hints under the field', [C.TEXT.tooFast, C.TEXT.accent], ['A little slower, please. Your line is still here.', 'Letters, digits and signs without accents only: the game cannot show the rest.']);
+    same('the two hints for a line that may not have arrived (its text is back in the field, or the hint holds it)', [C.TEXT.lostBack, C.TEXT.lostSaid], ['Your last line may not have arrived. It is back in the field.', 'Your last line may not have arrived:']);
 }
 
 // ---- 2. what may be typed and what is sent ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -105,11 +108,12 @@ function roomOf(states, o) {
     same('a person who goes', C.leftText('Sam'), 'Sam left.');
     same('a name is put in as it is (it is text; nothing is cut or escaped here)', [C.leftText('<b>'), C.joinedText('<i>&', 3, Rules.COLOURS)], ['<b> left.', '<i>& joined as Black.']);
     same('the toast of a line is "name: line"', C.toastText('Sam', 'hello there'), 'Sam: hello there');
+    same('a line of 60 characters is whole in the toast, one of 61 is cut with an ellipsis (a stranger\'s line of 100 must not fill the screen)', [C.toastText('Sam', 'y'.repeat(60)), C.toastText('Sam', 'x'.repeat(61)), C.toastText('Sam', 'x'.repeat(100))], ['Sam: ' + 'y'.repeat(60), 'Sam: ' + 'x'.repeat(59) + '…', 'Sam: ' + 'x'.repeat(59) + '…']);
 }
 
 // ---- 5. the box, built and driven: a small fake of the DOM and of the page's client -----------------------------------------------------------------------------------------------------------------------
 function node(tag) {
-    const n = { tag, children: [], attrs: {}, listeners: {}, className: '', textValue: '', hidden: false, disabled: false, value: '', placeholder: '', parentNode: null, scrollTop: 0, clientHeight: 100, focused: 0, rect: { top: 0, bottom: 200 } };
+    const n = { tag, children: [], attrs: {}, listeners: {}, className: '', textValue: '', hidden: false, disabled: false, readOnly: false, value: '', placeholder: '', parentNode: null, scrollTop: 0, clientHeight: 100, focused: 0, rect: { top: 0, bottom: 200 } };
     for (const bad of ['innerHTML', 'outerHTML']) Object.defineProperty(n, bad, { get() { return ''; }, set() { throw new Error(bad + ' was assigned: a name or a line must be text only'); } });
     n.insertAdjacentHTML = () => { throw new Error('insertAdjacentHTML was called'); };
     Object.defineProperty(n, 'textContent', {
@@ -133,8 +137,22 @@ function world() {
     const host = node('section');
     host.hidden = true;
     const toasts = [];
-    const state = { current: null, sayResult: true, said: [], onScreen: true };
-    const chat = C.mount({ doc, host, colours: Rules.COLOURS, say: (text) => { state.said.push(text); return state.sayResult; }, toast: (text) => toasts.push(text), onScreen: () => state.onScreen });
+    const state = { current: null, sayResult: true, said: [], onScreen: true, now: 1000000, timers: [], nextTimer: 1 };
+    state.advance = (ms) => {                                       // a clock that the check drives: the timers that fall due run in their order
+        const until = state.now + ms;
+        for (;;) {
+            const due = state.timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+            if (!due) break;
+            state.timers = state.timers.filter((t) => t !== due);
+            state.now = Math.max(state.now, due.at);
+            due.fn();
+        }
+        state.now = until;
+    };
+    const chat = C.mount({
+        doc, host, colours: Rules.COLOURS, say: (text) => { state.said.push(text); return state.sayResult; }, toast: (text) => toasts.push(text), onScreen: () => state.onScreen,
+        now: () => state.now, setTimeout: (fn, ms) => { const id = state.nextTimer++; state.timers.push({ id, at: state.now + ms, fn }); return id; }, clearTimeout: (id) => { state.timers = state.timers.filter((t) => t.id !== id); }
+    });
     return { doc, host, toasts, state, chat };
 }
 function fakeClient(code, seat, room, status) {
@@ -156,7 +174,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     check('a heading "Chat" that the section is named by', !!heading && heading.tag === 'h2' && heading.textContent === 'Chat' && w.host.getAttribute('aria-labelledby') === 'chat-h');
     check('the note says who reads it', !!find(w.host, (x) => x.className === 'note' && x.textContent === 'Only the people in this room can read it.'));
     const log = logOf(w);
-    check('the log is a list that is a live log for a screen reader, in reading order, that a keyboard can scroll', log.tag === 'ul' && log.getAttribute('role') === 'log' && log.getAttribute('aria-live') === 'polite' && log.getAttribute('aria-relevant') === 'additions' && log.getAttribute('tabindex') === '0' && !!log.getAttribute('aria-label'));
+    check('the log is a live log for a screen reader (a div: the rows are not list items of a list that the role took away), in reading order, that a keyboard can scroll', log.tag === 'div' && log.getAttribute('role') === 'log' && log.getAttribute('aria-live') === 'polite' && log.getAttribute('aria-relevant') === 'additions' && log.getAttribute('tabindex') === '0' && !!log.getAttribute('aria-label'));
     const input = byId(w.host, 'chat-input');
     same('the field: a text field for one line of 100 that no keyboard corrects, with the key that says Send',
         [input.tag, input.getAttribute('type'), input.getAttribute('maxlength'), input.getAttribute('autocomplete'), input.getAttribute('autocapitalize'), input.getAttribute('autocorrect'), input.getAttribute('spellcheck'), input.getAttribute('enterkeyhint'), input.getAttribute('inputmode')],
@@ -174,24 +192,24 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const room = roomOf([P, E, E, E]);
     const c = fakeClient('k7m2xq', 0, room);
     w.chat.attach(c);
-    check('a client in a lobby room: the box is shown, the field is open', w.host.hidden === false && byId(w.host, 'chat-input').disabled === false && byTag(w.host, 'button').disabled === false);
+    check('a client in a lobby room: the box is shown, the field is open', w.host.hidden === false && byId(w.host, 'chat-input').readOnly === false && byId(w.host, 'chat-input').disabled === false && byTag(w.host, 'button').disabled === false);
     same('alone: the log holds the hint to send the link', lineTexts(w), [C.TEXT.alone]);
     check('the field says what it is for', byId(w.host, 'chat-input').placeholder === C.TEXT.placeholder);
     c.room = roomOf([P, P, E, E]);
     c.emit('room', c.room);
     same('a second person: the hint says to say hello', lineTexts(w), [C.TEXT.empty]);
     c.emit('chat', { sender: 1, team: false, text: 'hey! is this the room link?' });
-    same('a line of a player: "Name:" and the line, and the hint is gone', lineTexts(w), ['Sam:hey! is this the room link?']);
+    same('a line of a player: "Name:", a blank and the line (a copy reads "Sam: hey!"), and the hint is gone', lineTexts(w), ['Sam: hey! is this the room link?']);
     const li = logOf(w).children[0];
     check('the line carries the seat\'s colour (Red is seat 1) and no other class that styles it as the system', li.getAttribute('data-c') === 'red' && li.className === '');
-    check('the name and the line are two spans (the name is in the colour)', li.children.length === 2 && li.children[0].className === 'who' && li.children[0].textContent === 'Sam:' && li.children[1].className === 'say');
+    check('the name and the line are two spans (the name is in the colour, a blank after its colon)', li.tag === 'div' && li.children.length === 2 && li.children[0].className === 'who' && li.children[0].textContent === 'Sam: ' && li.children[1].className === 'say' && li.children[1].textContent === 'hey! is this the room link?');
     for (const [seat, id] of [[0, 'green'], [1, 'red'], [2, 'blue'], [3, 'black']]) {
         c.room = roomOf([P, P, P, P]);
         c.emit('chat', { sender: seat, team: false, text: 'x' });
         check('seat ' + seat + ' is ' + id, logOf(w).children[logOf(w).children.length - 1].getAttribute('data-c') === id);
     }
     c.emit('chat', { sender: 1, team: true, text: 'a team line (there is no team before the match; the server clears the flag)' });
-    check('a line is a line whatever its flag says', lineTexts(w)[lineTexts(w).length - 1].indexOf('Sam:a team line') === 0);
+    check('a line is a line whatever its flag says', lineTexts(w)[lineTexts(w).length - 1].indexOf('Sam: a team line') === 0);
     // the lines of the system
     const before = lineTexts(w).length;
     c.emit('joined', { type: 'joined', seat: 3, name: 'Pip' });
@@ -208,7 +226,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E], { names: ['Maple', '<img src=x onerror=alert(1)>', '', ''] }));
     w.chat.attach(c);
     c.emit('chat', { sender: 1, team: false, text: '<script>alert(2)</script> & "quotes"' });
-    same('the name and the line are shown as the characters that they are', lineTexts(w), ['<img src=x onerror=alert(1)>:<script>alert(2)</script> & "quotes"']);
+    same('the name and the line are shown as the characters that they are', lineTexts(w), ['<img src=x onerror=alert(1)>: <script>alert(2)</script> & "quotes"']);
     c.emit('joined', { type: 'joined', seat: 2, name: '<b>Eve</b>' });
     check('so is the name in a line of the system', lineTexts(w)[1] === '<b>Eve</b> joined as Blue.');
     check('the fake DOM never saw markup assigned (it would have thrown)', true);
@@ -219,7 +237,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
     w.chat.attach(c);
     for (let i = 1; i <= 205; i++) c.emit('chat', { sender: 1, team: false, text: 'line ' + i });
-    check('205 lines: the last 200 are kept, the oldest five are gone', logOf(w).children.length === 200 && lineTexts(w)[0] === 'Sam:line 6' && lineTexts(w)[199] === 'Sam:line 205' && w.chat.lines().length === 200);
+    check('205 lines: the last 200 are kept, the oldest five are gone', logOf(w).children.length === 200 && lineTexts(w)[0] === 'Sam: line 6' && lineTexts(w)[199] === 'Sam: line 205' && w.chat.lines().length === 200);
 }
 
 {   // the box follows the newest line unless it was scrolled up; a line of one's own always shows
@@ -241,8 +259,8 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
     w.chat.attach(c);
     w.state.onScreen = false;
+    c.emit('chat', { sender: 0, team: false, text: 'mine' });                // (first: a toast of one's own line would also hold the next one back for 4 s)
     c.emit('chat', { sender: 1, team: false, text: 'hi' });
-    c.emit('chat', { sender: 0, team: false, text: 'mine' });
     c.emit('joined', { type: 'joined', seat: 2, name: 'Eve' });
     same('only the line of somebody else, as "name: line"', w.toasts, ['Sam: hi']);
     w.state.onScreen = true;
@@ -250,22 +268,58 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     check('on screen: no toast', w.toasts.length === 1);
 }
 
+{   // the toast is for a stranger's text: it is cut, and there is at most one chat toast in 4 s (the log has every line)
+    const w = world();
+    const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
+    w.chat.attach(c);
+    w.state.onScreen = false;
+    c.emit('chat', { sender: 1, team: false, text: 'one' });
+    w.state.advance(1000);
+    c.emit('chat', { sender: 1, team: false, text: 'two' });
+    w.state.advance(2000);
+    c.emit('chat', { sender: 1, team: false, text: 'three' });
+    same('three lines in 3 s: one toast (a talker every second must not keep the toast up)', w.toasts, ['Sam: one']);
+    check('(the log has all three)', lineTexts(w).join('|') === 'Sam: one|Sam: two|Sam: three');
+    w.state.advance(999);
+    c.emit('chat', { sender: 1, team: false, text: 'too soon' });
+    check('999 ms short of 4 s after the toast: still none', w.toasts.length === 1);
+    w.state.advance(1);
+    c.emit('chat', { sender: 1, team: false, text: 'four' });
+    same('4 s after the toast: the next line is a toast', w.toasts, ['Sam: one', 'Sam: four']);
+    w.state.advance(4000);
+    c.emit('chat', { sender: 1, team: false, text: 'x'.repeat(100) });
+    check('a line of 100 characters is a toast of 60 (the log holds it whole)', w.toasts[2] === 'Sam: ' + 'x'.repeat(59) + '…' && lineTexts(w)[lineTexts(w).length - 1] === 'Sam: ' + 'x'.repeat(100));
+    w.state.advance(4000);
+    w.state.onScreen = true;
+    c.emit('chat', { sender: 1, team: false, text: 'in view' });
+    w.state.onScreen = false;
+    w.state.advance(10);
+    c.emit('chat', { sender: 1, team: false, text: 'after the one in view' });
+    check('a line that was in view started no wait (only a toast that was shown does)', w.toasts.length === 4 && w.toasts[3] === 'Sam: after the one in view');
+}
+
 {   // the default of "on screen": the box's place in the window (the page's sticky START bar covers the bottom 140 px)
     const doc = { defaultView: { innerHeight: 800 }, createElement: node };
     const host = node('section');
     const toasts = [];
-    const chat = C.mount({ doc, host, colours: Rules.COLOURS, say: () => true, toast: (t) => toasts.push(t) });
+    let clock = 0;                                                  // (one chat toast in 4 s: the lines of this check come 5 s apart)
+    const chat = C.mount({ doc, host, colours: Rules.COLOURS, say: () => true, toast: (t) => toasts.push(t), now: () => clock });
     const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
     chat.attach(c);
     host.rect = { top: 100, bottom: 500 };
+    clock += 5000;
     c.emit('chat', { sender: 1, team: false, text: '1' });
     host.rect = { top: 900, bottom: 1300 };
+    clock += 5000;
     c.emit('chat', { sender: 1, team: false, text: '2' });
     host.rect = { top: 700, bottom: 1100 };
+    clock += 5000;
     c.emit('chat', { sender: 1, team: false, text: '3' });
     host.rect = { top: -500, bottom: -10 };
+    clock += 5000;
     c.emit('chat', { sender: 1, team: false, text: '4' });
     host.rect = { top: -200, bottom: 20 };
+    clock += 5000;
     c.emit('chat', { sender: 1, team: false, text: '5' });
     same('in the window: none; below it, under the START bar, above it: toasts; a corner of it above: none', toasts, ['Sam: 2', 'Sam: 3', 'Sam: 4']);
 }
@@ -321,20 +375,124 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const input = byId(w.host, 'chat-input'), button = byTag(w.host, 'button'), form = byTag(w.host, 'form');
     c.status = 'offline';
     c.emit('status', 'offline');
-    check('the link is down: the box stays, the field and the button are shut, the field says when it is back', w.host.hidden === false && input.disabled && button.disabled && input.placeholder === C.TEXT.down);
+    check('the link is down: the box stays, the field and the button are shut, the field says when it is back', w.host.hidden === false && input.readOnly === true && input.disabled === false && button.disabled && input.placeholder === C.TEXT.down);
+    check('(the field is read-only and not disabled: a disabled field loses the focus, and a phone\'s keyboard closes with it)', input.readOnly === true && input.disabled === false);
     input.value = 'typed while down';
     form.fire('submit');
     check('a submit while shut sends nothing (a browser may submit a field that a script shut)', w.state.said.length === 0);
     input.value = '';
     c.status = 'online';
     c.emit('welcome', { seat: 0, created: false, rejoin: true });
-    check('the link is back: open again', !input.disabled && !button.disabled && input.placeholder === C.TEXT.placeholder);
+    check('the link is back: open again', !input.readOnly && !button.disabled && input.placeholder === C.TEXT.placeholder);
     c.room = roomOf([P, P, E, E], { starting: true });
     c.emit('room', c.room);
-    check('START pressed: shut, "Opening the game"', input.disabled && button.disabled && input.placeholder === C.TEXT.opening);
+    check('START pressed: shut, "Opening the game"', input.readOnly && button.disabled && input.placeholder === C.TEXT.opening);
     c.room = roomOf([P, P, E, E]);
     c.emit('room', c.room);
-    check('the start is given up: open again', !input.disabled && input.placeholder === C.TEXT.placeholder);
+    check('the start is given up: open again', !input.readOnly && input.placeholder === C.TEXT.placeholder);
+}
+
+{   // a line that the room does not echo. The client's say() is true as soon as the socket took the bytes, and the line is drawn when the room echoes it (the sender too): a stalled uplink, or a link that
+    // drops with the line in it, loses the line without a word. So a line stays pending until its echo comes; no echo in 3 s, or the link dropped first: the hint says that it may not have arrived and the
+    // text is back in the field (or, when the person has typed something else meanwhile, in the hint)
+    const setup = () => {
+        const w = world();
+        const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
+        w.chat.attach(c);
+        return { w, c, input: byId(w.host, 'chat-input'), hint: byId(w.host, 'chat-hint'), form: byTag(w.host, 'form') };
+    };
+    const say = (x, text) => { x.input.value = text; x.form.fire('submit'); };
+    const echo = (x, text, sender) => x.c.emit('chat', { sender: sender === undefined ? 0 : sender, team: false, text });
+    {
+        const x = setup();
+        say(x, 'hello');
+        check('a line that the client took is pending: a timer waits for its echo', x.w.state.timers.length === 1 && x.input.value === '');
+        x.w.state.advance(2999);
+        echo(x, 'hello');
+        x.w.state.advance(20000);
+        check('the echo within 3 s: no hint, the field stays empty, no timer is left', x.hint.textContent === '' && x.input.value === '' && x.w.state.timers.length === 0);
+        same('(and the line is in the log once, as the room said it)', lineTexts(x.w), ['Maple: hello']);
+    }
+    {
+        const x = setup();
+        say(x, 'hello');
+        x.w.state.advance(2999);
+        check('2999 ms without an echo: nothing yet', x.hint.textContent === '' && x.input.value === '');
+        x.w.state.advance(1);
+        check('3 s without the echo: the hint says that it may not have arrived, and the text is back in the field to be sent again', x.hint.textContent === C.TEXT.lostBack && x.input.value === 'hello' && x.w.state.timers.length === 0, x.hint.textContent + ' | ' + x.input.value);
+        echo(x, 'hello');
+        check('the echo comes after all: the hint goes and the field is empty again (the line would be said twice)', x.hint.textContent === '' && x.input.value === '');
+    }
+    {
+        const x = setup();
+        say(x, 'first');
+        x.input.value = 'something else';
+        x.input.fire('input');
+        x.w.state.advance(3000);
+        check('the field holds other text by then: it is left alone, and the hint holds the line that may be lost', x.input.value === 'something else' && x.hint.textContent === C.TEXT.lostSaid + ' first', x.hint.textContent);
+        echo(x, 'first');
+        check('(a late echo takes the hint away and leaves the field alone)', x.hint.textContent === '' && x.input.value === 'something else');
+    }
+    {
+        const x = setup();
+        say(x, 'hello');
+        x.w.state.advance(500);
+        x.c.status = 'offline';
+        x.c.emit('status', 'offline');
+        check('the link drops 0.5 s after the line, before its echo: at once the hint and the text (the field is read-only until the link is back)', x.hint.textContent === C.TEXT.lostBack && x.input.value === 'hello' && x.input.readOnly === true && x.w.state.timers.length === 0);
+        x.c.status = 'online';
+        x.c.emit('welcome', { seat: 0, created: false, rejoin: true });
+        check('back in the room: the text is still in the field, to send again', x.input.value === 'hello' && x.input.readOnly === false);
+    }
+    {
+        const x = setup();
+        say(x, 'a'); say(x, 'b'); say(x, 'c');
+        x.w.state.advance(100);
+        echo(x, 'a');
+        x.w.state.advance(2900);
+        check('three lines at once, the first one echoed: at 3 s the two others are lost, the last of them is back in the field', x.input.value === 'c' && x.hint.textContent === C.TEXT.lostBack && x.w.state.timers.length === 0, x.input.value + ' | ' + x.hint.textContent);
+    }
+    {
+        const x = setup();
+        say(x, 'a');
+        x.w.state.advance(1500);
+        say(x, 'b');
+        x.w.state.advance(1500);
+        check('a line that is 1.5 s old is not lost when an older one is', x.input.value === 'a' && x.w.state.timers.length === 1);
+        x.w.state.advance(1500);
+        check('... it is lost 3 s after its own sending', x.hint.textContent === C.TEXT.lostSaid + ' b' && x.input.value === 'a' && x.w.state.timers.length === 0, x.hint.textContent);
+    }
+    {
+        const x = setup();
+        say(x, 'hello');
+        echo(x, 'another line of mine');
+        echo(x, 'hello', 1);
+        x.w.state.advance(3000);
+        check('an echo is the same text from the same seat: another text of one\'s own, or the same text from somebody else, is none', x.hint.textContent === C.TEXT.lostBack && x.input.value === 'hello');
+    }
+    {
+        const x = setup();
+        x.w.state.sayResult = false;
+        say(x, 'too fast');
+        x.w.state.advance(10000);
+        check('a line that the client did not take is not pending: no timer, no "lost", the field and the hint of the pace stay', x.w.state.timers.length === 0 && x.input.value === 'too fast' && x.hint.textContent === C.TEXT.tooFast);
+    }
+    {
+        const x = setup();
+        say(x, 'hello');
+        const other = fakeClient('bbbbbb', 0, roomOf([P, E, E, E]));
+        x.w.chat.attach(other);
+        x.w.state.advance(10000);
+        check('the page goes to another room: the line of the first is nobody\'s business now (no hint, no text, no timer)', x.hint.textContent === '' && x.input.value === '' && x.w.state.timers.length === 0);
+    }
+    {
+        const x = setup();
+        say(x, 'hello');
+        x.c.emit('gone', {});
+        check('the room is lost and made again: the line is lost with it, and the hint says so', x.hint.textContent === C.TEXT.lostBack && x.input.value === 'hello' && x.w.state.timers.length === 0);
+        x.input.fire('input');
+        check('typing on takes the hint away', x.hint.textContent === '');
+    }
 }
 
 {   // the page changes its client: another room clears the lines, the same room keeps them, a room that was made again clears them, the old client is not heard
@@ -344,10 +502,10 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     a.emit('chat', { sender: 1, team: false, text: 'in room a' });
     const again = fakeClient('aaaaaa', 0, roomOf([P, P, E, E]));
     w.chat.attach(again);
-    check('a new client for the same room (the window took the room back) keeps the lines', lineTexts(w).join('|') === 'Sam:in room a');
+    check('a new client for the same room (the window took the room back) keeps the lines', lineTexts(w).join('|') === 'Sam: in room a');
     a.emit('chat', { sender: 1, team: false, text: 'from the old client' });
     again.emit('chat', { sender: 1, team: false, text: 'from the new one' });
-    check('the client that was let go is not heard any more', lineTexts(w).join('|') === 'Sam:in room a|Sam:from the new one');
+    check('the client that was let go is not heard any more', lineTexts(w).join('|') === 'Sam: in room a|Sam: from the new one');
     const b = fakeClient('bbbbbb', 0, roomOf([P, E, E, E]));
     w.chat.attach(b);
     same('a client of another room: the lines of the first are gone, the hint to send the link is back', lineTexts(w), [C.TEXT.alone]);

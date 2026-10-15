@@ -144,8 +144,8 @@
   {
    "id": "chat_toast_words",
    "file": "web/front/lobby_chat.js",
-   "old": "who + ': ' + text",
-   "new": "who + ' says ' + text",
+   "old": "return who + ': ' + (text.length",
+   "new": "return who + ' says ' + (text.length",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -158,8 +158,8 @@
   {
    "id": "chat_a_name_is_markup",
    "file": "web/front/lobby_chat.js",
-   "old": "li.appendChild(el('span', 'who', who + ':'));",
-   "new": "li.appendChild(el('span', 'who', '')); li.children[0].innerHTML = who + ':';",
+   "old": "li.appendChild(el('span', 'who', who + ': '));",
+   "new": "li.appendChild(el('span', 'who', '')); li.children[0].innerHTML = who + ': ';",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -207,22 +207,22 @@
   {
    "id": "chat_toast_for_own_line",
    "file": "web/front/lobby_chat.js",
-   "old": "if (e.sender !== c.seat && !inView() && opts.toast)",
-   "new": "if (!inView() && opts.toast)",
+   "old": "if (e.sender === c.seat) echoed(e.text);\n            else if (!inView()",
+   "new": "if (e.sender === c.seat) echoed(e.text);\n            if (!inView()",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
    "id": "chat_toast_in_view",
    "file": "web/front/lobby_chat.js",
-   "old": "if (e.sender !== c.seat && !inView() && opts.toast)",
-   "new": "if (e.sender !== c.seat && opts.toast)",
+   "old": "else if (!inView() && opts.toast",
+   "new": "else if (opts.toast",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
    "id": "chat_toast_never",
    "file": "web/front/lobby_chat.js",
-   "old": "if (e.sender !== c.seat && !inView() && opts.toast)",
-   "new": "if (false)",
+   "old": "else if (!inView() && opts.toast && (lastToast === null",
+   "new": "else if (false && (lastToast === null",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -249,8 +249,8 @@
   {
    "id": "chat_field_not_emptied_after_a_line",
    "file": "web/front/lobby_chat.js",
-   "old": "                input.value = '';\n                setHint('');\n                input.focus();",
-   "new": "                setHint('');\n                input.focus();",
+   "old": "                input.value = '';\n                setHint('');\n                lostText = null;",
+   "new": "                setHint('');\n                lostText = null;",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -340,8 +340,8 @@
   {
    "id": "chat_room_made_again_keeps_the_lines",
    "file": "web/front/lobby_chat.js",
-   "old": "c.on('gone', function () { if (c === current) clear(); });",
-   "new": "c.on('gone', function () { if (c === current) paint(); });",
+   "old": "c.on('gone', function () { if (c === current) { loseAll(); clear(); } });",
+   "new": "c.on('gone', function () { if (c === current) { loseAll(); paint(); } });",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -375,8 +375,8 @@
   {
    "id": "chat_field_never_shut",
    "file": "web/front/lobby_chat.js",
-   "old": "input.disabled = !st.live;",
-   "new": "input.disabled = false;",
+   "old": "input.readOnly = !st.live;",
+   "new": "input.readOnly = false;",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -581,6 +581,216 @@
    "old": "return new Writer().u8(MSG.Chat).u8(sender)",
    "new": "return new Writer().u8(MSG.Plan).u8(sender)",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "chat_toast_not_cut",
+   "file": "web/front/lobby_chat.js",
+   "old": "(text.length > TOAST_CHARS ? text.slice(0, TOAST_CHARS - 1) + '\\u2026' : text)",
+   "new": "text",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_toast_cut_at_61",
+   "file": "web/front/lobby_chat.js",
+   "old": "var TOAST_CHARS = 60;",
+   "new": "var TOAST_CHARS = 61;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_toast_gap_none",
+   "file": "web/front/lobby_chat.js",
+   "old": "now() - lastToast >= TOAST_GAP)",
+   "new": "now() - lastToast >= 0)",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_toast_gap_one_second",
+   "file": "web/front/lobby_chat.js",
+   "old": "var TOAST_GAP = 4000;",
+   "new": "var TOAST_GAP = 1000;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_toast_gap_never_starts",
+   "file": "web/front/lobby_chat.js",
+   "old": "                lastToast = now();\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_pending_two_seconds",
+   "file": "web/front/lobby_chat.js",
+   "old": "var PENDING_MS = 3000;",
+   "new": "var PENDING_MS = 2000;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_pending_four_seconds",
+   "file": "web/front/lobby_chat.js",
+   "old": "var PENDING_MS = 3000;",
+   "new": "var PENDING_MS = 4000;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_line_is_not_pending",
+   "file": "web/front/lobby_chat.js",
+   "old": "                pending.push({ text: line, at: now() });\n                if (timer === null) watch();\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_echo_does_not_clear_the_line",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (pending[i].text === text) { pending.splice(i, 1); watch(); return; }",
+   "new": "if (false) { pending.splice(i, 1); watch(); return; }",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_echo_of_anybody_clears_the_line",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (e.sender === c.seat) echoed(e.text);",
+   "new": "echoed(e.text);",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_lost_text_not_put_back",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (input.value === '') { input.value = lostText; lostHint = TEXT.lostBack; }",
+   "new": "if (input.value === '') { lostHint = TEXT.lostBack; }",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_lost_text_overwrites_the_field",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (input.value === '') { input.value = lostText;",
+   "new": "if (true) { input.value = lostText;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_link_drop_loses_nothing",
+   "file": "web/front/lobby_chat.js",
+   "old": "paint(); if (c.status !== 'online') loseAll(); }",
+   "new": "paint(); }",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_room_gone_loses_nothing",
+   "file": "web/front/lobby_chat.js",
+   "old": "{ loseAll(); clear(); }",
+   "new": "{ clear(); }",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_late_echo_keeps_the_hint",
+   "file": "web/front/lobby_chat.js",
+   "old": "                if (hint.textContent === lostHint) setHint('');\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_late_echo_keeps_the_text",
+   "file": "web/front/lobby_chat.js",
+   "old": "                if (input.value === lostText) input.value = '';\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_lost_puts_back_the_oldest",
+   "file": "web/front/lobby_chat.js",
+   "old": "lostText = list[list.length - 1].text;",
+   "new": "lostText = list[0].text;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_lost_takes_the_young_ones_too",
+   "file": "web/front/lobby_chat.js",
+   "old": "while (pending.length > 0 && t - pending[0].at >= PENDING_MS) old.push(pending.shift());",
+   "new": "while (pending.length > 0) old.push(pending.shift());",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_another_room_keeps_pending",
+   "file": "web/front/lobby_chat.js",
+   "old": "        function forget() {                      // another room, or the same room made again: the lines of the old one are nobody's business\n            stopTimer();\n            pending = [];\n            lostText = null;\n        }",
+   "new": "        function forget() {\n        }",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_shut_field_is_disabled",
+   "file": "web/front/lobby_chat.js",
+   "old": "input.readOnly = !st.live;",
+   "new": "input.disabled = !st.live;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_no_blank_after_the_name",
+   "file": "web/front/lobby_chat.js",
+   "old": "who + ': '));",
+   "new": "who + ':'));",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_log_is_a_list",
+   "file": "web/front/lobby_chat.js",
+   "old": "var log = el('div', 'chat-log');",
+   "new": "var log = el('ul', 'chat-log');",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_rows_are_list_items",
+   "file": "web/front/lobby_chat.js",
+   "old": "var li = el('div', kind === 'sys' ? 'sys' : '');",
+   "new": "var li = el('li', kind === 'sys' ? 'sys' : '');",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_toast_wraps_nowhere",
+   "file": "web/lobby.html",
+   "old": "overflow-wrap: anywhere; pointer-events: none; text-align: center;",
+   "new": "pointer-events: none; text-align: center;",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "page_toast_takes_taps",
+   "file": "web/lobby.html",
+   "old": "overflow-wrap: anywhere; pointer-events: none; text-align: center;",
+   "new": "overflow-wrap: anywhere; text-align: center;",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "page_toast_shrinks_to_fit",
+   "file": "web/lobby.html",
+   "old": "width: max-content; max-width: min(520px, 92vw);",
+   "new": "max-width: min(520px, 92vw);",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "page_attach_can_break_the_lobby",
+   "file": "web/lobby.html",
+   "old": "try { chat.attach(c); } catch (e) { if (window.console) console.error(e); }",
+   "new": "chat.attach(c);",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "css_dimmed_names_are_unreadable",
+   "file": "web/front/lobby_chat.css",
+   "old": "filter: saturate(.5) brightness(.94);",
+   "new": "filter: saturate(.4) brightness(.72);",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "css_shut_field_is_not_dimmed",
+   "file": "web/front/lobby_chat.css",
+   "old": ".chat-form input[readonly] { opacity: .6; }",
+   "new": ".chat-form input[readonly] { opacity: 1; }",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "css_rows_do_not_wrap",
+   "file": "web/front/lobby_chat.css",
+   "old": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }",
+   "new": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); }",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   }
  ]
 }

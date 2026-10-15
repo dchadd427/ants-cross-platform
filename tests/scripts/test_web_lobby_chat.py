@@ -114,6 +114,21 @@ class ThePage(unittest.TestCase):
         self.assertIn("chat.attach(c);", hook, "a client of the room, a link that the host's code gave or a probe that was taken, is the box's")
         self.assertEqual(self.page.count("chat.attach("), 1)
 
+    def test_a_box_that_breaks_cannot_break_the_lobby(self):
+        """the hook runs for every client of the page: a throw in the box's attach must not stop the page from hooking the rest (the cards, the link, START)"""
+        hook = self.page[self.page.index("function hook(c) {"):self.page.index("function makeClient(p)")]
+        self.assertRegex(hook, r"try \{ chat\.attach\(c\); \} catch \(e\) \{ [^}]*console\.error\(e\)[^}]*\}")
+        self.assertLess(hook.index("chat.attach(c)"), hook.index("c.on("), "the box is still the first thing that the hook does")
+
+    def test_the_toast_is_a_frame_that_a_stranger_s_text_cannot_break_out_of_and_that_takes_no_tap(self):
+        """a toast shows a stranger's name and line: a word of 100 characters with no blank must wrap inside the frame (it ran out of it: 1681 px in a 353 px frame on a phone), the box must be as wide as its
+        text allows (a shrink-to-fit box that starts at left: 50% is half the screen), and it must let a tap through to the cards and the Remove buttons under it"""
+        rule = re.search(r"\.toast \{([^}]*)\}", self.page).group(1)
+        self.assertRegex(rule, r"overflow-wrap:\s*anywhere")
+        self.assertRegex(rule, r"pointer-events:\s*none")
+        self.assertRegex(rule, r"width:\s*max-content")
+        self.assertRegex(rule, r"max-width:\s*min\(520px,\s*92vw\)")
+
     def test_the_box_is_inert_with_the_page_behind_the_open_map_list(self):
         """the section is inside #lobby, which the open list makes inert: nothing of the chat takes a key while the list is open"""
         self.assertRegex(self.page, r"\[document\.querySelector\('header\.mast'\), \$\('banner'\), \$\('rejoin'\), \$\('lobby'\), \$\('footer-bar'\)\]")
@@ -139,7 +154,7 @@ class TheStylesheet(unittest.TestCase):
         default = re.search(r"\.slot \{ --accent: (#[0-9a-f]{6});", page).group(1)
         cards["green"] = default
         for colour, value in cards.items():
-            self.assertRegex(self.css, r'\.chat-log li\[data-c="%s"\] \{ --accent: %s; \}' % (colour, value) if colour != "green" else r"--accent: %s;" % re.escape(default), colour)
+            self.assertRegex(self.css, r'\.chat-log > div\[data-c="%s"\] \{ --accent: %s; \}' % (colour, value) if colour != "green" else r"--accent: %s;" % re.escape(default), colour)
 
     def test_a_phone_does_not_zoom_into_the_field(self):
         field = re.search(r"\.chat-form input \{([^}]*)\}", self.css).group(1)
@@ -154,7 +169,7 @@ class TheStylesheet(unittest.TestCase):
     def test_the_places_at_each_width(self):
         self.assertRegex(self.css, r"@media \(min-width: 1041px\) \{[^@]*\.grid > \.chat \{ grid-column: 1 / -1; grid-row: 2; \}")          # (a wide window: across the page, under the room and the map)
         self.assertRegex(self.css, r"@media \(max-width: 720px\)")                                                                      # (a phone: shorter box)
-        self.assertRegex(self.css, r"\.chat-log li\.sys \{[^}]*font-size:\s*14px")                                                      # (the system's lines are the smaller size, as a notice in the game's box is)
+        self.assertRegex(self.css, r"\.chat-log \.sys \{[^}]*font-size:\s*14px")                                                      # (the system's lines are the smaller size, as a notice in the game's box is)
 
     def test_the_log_scrolls_by_itself_and_leaves_the_page_alone(self):
         log = re.search(r"\.chat-log \{([^}]*)\}", self.css).group(1)
@@ -163,10 +178,48 @@ class TheStylesheet(unittest.TestCase):
         self.assertRegex(self.css, r"\.chat-log > :first-child \{ margin-top: auto; \}")                                                 # (the newest line at the bottom, as in the game's box)
 
     def test_long_words_wrap(self):
-        self.assertRegex(self.css, r"\.chat-log li \{[^}]*overflow-wrap:\s*anywhere")
+        self.assertRegex(self.css, r"\.chat-log > div \{[^}]*overflow-wrap:\s*anywhere")
+        self.assertNotRegex(self.css, r"\.chat-log li\b", "the log is a div with div rows: no list item is left to style")
 
-    def test_the_box_is_dimmed_with_the_cards_while_the_link_is_down(self):
-        self.assertRegex(self.css, r"body\.offline \.chat-log \{ filter: saturate\(\.4\) brightness\(\.72\); \}")
+    def test_the_box_is_dimmed_with_the_cards_while_the_link_is_down_and_its_names_stay_readable(self):
+        found = re.search(r"body\.offline \.chat-log \{ filter: saturate\(([\d.]+)\) brightness\(([\d.]+)\); \}", self.css)
+        self.assertIsNotNone(found, "the log is dimmed with a filter while the link is down")
+        saturate, brightness = float(found.group(1)), float(found.group(2))
+        self.assertLess(saturate * brightness, 1.0, "it is dimmed")
+
+        def rgb(text):
+            return [int(text[i:i + 2], 16) for i in (1, 3, 5)]
+
+        def dim(colour):                                   # the CSS filters, in the sRGB values: saturate() is a matrix, brightness() a factor
+            r, g, b = (v / 255 for v in colour)
+            out = ((0.213 + 0.787 * saturate) * r + (0.715 - 0.715 * saturate) * g + (0.072 - 0.072 * saturate) * b,
+                   (0.213 - 0.213 * saturate) * r + (0.715 + 0.285 * saturate) * g + (0.072 - 0.072 * saturate) * b,
+                   (0.213 - 0.213 * saturate) * r + (0.715 - 0.715 * saturate) * g + (0.072 + 0.928 * saturate) * b)
+            return [round(max(0.0, min(1.0, v * brightness)) * 255) for v in out]
+
+        def luminance(colour):
+            lin = [(v / 255 / 12.92) if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in colour]
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+        def ratio(one, other):
+            a, b = sorted((luminance(one), luminance(other)), reverse=True)
+            return (a + 0.05) / (b + 0.05)
+
+        page = read(LOBBY)
+        back = rgb(re.search(r"\.chat-log \{[^}]*background:\s*(#[0-9a-f]{6})", self.css).group(1))
+        accents = dict(re.findall(r'\.chat-log > div\[data-c="(\w+)"\] \{ --accent: (#[0-9a-f]{6}); \}', self.css))
+        accents["green"] = re.search(r"\.chat-log > div \{ --accent: (#[0-9a-f]{6});", self.css).group(1)
+        self.assertEqual(sorted(accents), ["black", "blue", "green", "red"])
+        words = dict(accents)
+        words["cream"] = re.search(r"--cream:\s*(#[0-9a-f]{6})", page).group(1)
+        words["the system's lines"] = re.search(r"\.chat-log \.sys \{[^}]*color:\s*(#[0-9a-f]{6})", self.css).group(1)
+        words["muted"] = re.search(r"--muted:\s*(#[0-9a-f]{6})", page).group(1)
+        for name, colour in sorted(words.items()):
+            self.assertGreaterEqual(ratio(dim(rgb(colour)), dim(back)), 4.5, "%s %s on the dimmed log: %.2f" % (name, colour, ratio(dim(rgb(colour)), dim(back))))
+
+    def test_a_field_that_is_shut_is_read_only_and_not_disabled_so_that_it_keeps_the_focus(self):
+        self.assertRegex(self.css, r"\.chat-form input\[readonly\] \{[^}]*opacity:\s*\.6")
+        self.assertNotIn("input:disabled", self.css)
 
 
 @unittest.skipUnless(NODE, "node is not installed: the lobby page's chat was NOT run (tests/scripts/web_lobby_chat_check.js)")
@@ -187,8 +240,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/lobby_chat.js", "web/front/lobby_rules.js", "web/front/lobby_net.js", "tests/scripts/web_lobby_chat_check.js", "tests/scripts/web_lobby_client_check.js",
-             "tests/scripts/web_lobby_net_check.js", "tests/data/lobby_messages.txt")
+    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/lobby.html", "tests/scripts/web_lobby_chat_check.js",
+             "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt")
 
     @classmethod
     def setUpClass(cls):

@@ -11,24 +11,24 @@
 .chat .note { font-size: 15px; color: var(--muted); text-align: right; }
 
 /* The log: the newest line at the bottom, as in the game's own box; it scrolls by itself and leaves the page where it is. */
-.chat-log { list-style: none; display: flex; flex-direction: column; gap: 5px; height: 272px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px;
+.chat-log { display: flex; flex-direction: column; gap: 5px; height: 272px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px;
     background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f; }
 .chat-log > :first-child { margin-top: auto; }
-.chat-log li { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }
-.chat-log li[data-c="red"] { --accent: #d4707f; } .chat-log li[data-c="blue"] { --accent: #8f8fd6; } .chat-log li[data-c="black"] { --accent: #b3afb9; }
-.chat-log .who { margin-right: 6px; color: var(--accent); }
-.chat-log li.sys { font-size: 14px; color: #a8c2b8; }
-.chat-log li.empty { margin: auto; max-width: 40ch; text-align: center; font-size: 15px; color: var(--muted); }
+.chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }
+.chat-log > div[data-c="red"] { --accent: #d4707f; } .chat-log > div[data-c="blue"] { --accent: #8f8fd6; } .chat-log > div[data-c="black"] { --accent: #b3afb9; }
+.chat-log .who { color: var(--accent); }
+.chat-log .sys { font-size: 14px; color: #a8c2b8; }
+.chat-log .empty { margin: auto; max-width: 40ch; text-align: center; font-size: 15px; color: var(--muted); }
 
 /* The field and Send: a finger tall, 16 px (a phone does not zoom into a field below that), the field as the page's other fields. */
 .chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 12px; }
 .chat-form input { min-width: 0; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
 .chat-form input::placeholder { color: #7f9c92; opacity: 1; }
-.chat-form input:disabled { opacity: .6; }
+.chat-form input[readonly] { opacity: .6; }              /* (a field that is shut is read-only, not disabled: it keeps the focus, so a phone's keyboard stays up through a link that drops) */
 .chat-form .btn { min-height: 48px; }
 
-/* While the link is down the box is dimmed with the cards. */
-body.offline .chat-log { filter: saturate(.4) brightness(.72); }
+/* While the link is down the box is dimmed with the cards, but the names stay readable: every colour of the log keeps 4.5:1 on the dimmed log (tests/scripts/test_web_lobby_chat.py works the filter out). */
+body.offline .chat-log { filter: saturate(.5) brightness(.94); }
 
 @media (max-width: 720px) {
     .chat .note { text-align: left; }
