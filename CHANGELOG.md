@@ -27,11 +27,11 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - The changelog page now shows the releases ten at a time (five on a phone) in pages named by their versions, for example "v0.12.29 to v0.12.19", with Newer and Older buttons at the bottom; the long row of every version is folded behind "Jump to a version".
-- A link to one release (`#v0-12-30` or `#v0.12.30`) opens the page that holds it, and the Back and Forward buttons move between the pages you looked at. Without JavaScript the page is the whole list, as before.
+- A link to one release (`#v0-12-30` or `#v0.12.30`) opens the page that holds it and frames the release in gold, and the Back and Forward buttons move between the pages you looked at. Without JavaScript the page is the whole list, as before.
 
 **Rules / network:** none. Only the changelog page changed; network protocol 20 is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...b2c70138)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...b4100330)
 
 ## v0.12.41 - 2026-10-14 - Universal gate planner, windowed web mouse lock and server hardening
 
