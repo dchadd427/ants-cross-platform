@@ -1,0 +1,26 @@
+/* The map list of the front page (front/map_picker.js): a dialog opened from the map selector; a bottom sheet on a phone. It was inline in web/lobby.html, which is at the 1500 lines of
+   tools/check_hygiene.py; the page links this sheet AFTER its own <style>, so a rule that wins a tie by order (.pickhow .panel against .how .panel) still comes later, as it did. The colours are the
+   page's own tokens (:root of web/lobby.html). */
+.pickhow .panel > * { flex: none; } .pickhow .panel > .pk-out { flex: 1 1 auto; }
+.pickhow .panel { max-width: 780px; width: 100%; max-height: 92vh; max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+.pk-bar, .pk-sorts, .pk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; } .pk-seg { display: flex; gap: 6px; }
+.pk-q { flex: 1 1 200px; min-width: 0; min-height: 44px; padding: 6px 12px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; }
+.pk-chip { min-height: 38px; padding: 3px 12px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
+.pk-chip:hover { border-color: var(--frame-hi); color: var(--cream); } .pk-chip[aria-pressed="true"] { color: var(--gold); background: #1c1b0e; border-color: var(--gold); }
+.pk-sorts { font-size: 14px; color: var(--muted); } .pk-foot { justify-content: space-between; margin: 10px 0 0; } .pk-count { font-size: 14px; color: var(--muted); }
+.pk-out { flex: 1 1 auto; min-height: 140px; overflow: auto; background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; }
+.pk-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #17382f; cursor: pointer; }
+.pk-row img, .pk-nopic { display: block; width: 64px; height: 64px; background: var(--edge); border: 2px solid var(--edge); } .pk-nopic { border: 2px dashed #28493e; }
+.pk-nm { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; } .pk-meta { font-size: 14px; color: var(--muted); } .pk-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-badge { margin-left: 8px; padding: 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pk-pl { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; } .pk-pl b { display: block; font-weight: 500; font-size: 18px; color: var(--cream); }
+.pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
+.pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
+.pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
+.pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
+@media (max-width: 720px) {
+    .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; max-height: calc(100dvh - 24px); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+    .pk-sorts { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; } .pk-sorts > * { flex: none; white-space: nowrap; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { scrollbar-width: thin; } .pk-bar { margin-bottom: 8px; }       /* the sorts are one row that scrolls sideways: the controls leave the list most of the sheet */       /* the map list is a sheet at the bottom of the screen */
+    .pk-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; } .pk-row img, .pk-nopic { width: 56px; height: 56px; } .pk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+    .pk-q { flex-basis: 100%; }
+}

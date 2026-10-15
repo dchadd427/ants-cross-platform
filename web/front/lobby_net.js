@@ -104,6 +104,8 @@
     // a name that a person may go by: 1 - 32 printable characters, no space at either end (NameMsg)
     function validPersonName(name) { return printable(name, MAX_NAME) && name.length > 0 && name.charAt(0) !== ' ' && name.charAt(name.length - 1) !== ' '; }
     function validTeams(a, b) { return (a === NO_TEAM && b === NO_TEAM) || (isWhole(a) && isWhole(b) && a >= 0 && a < b && b < PLAYERS); }
+    // a line of chat that the server's decoder reads (ChatMsg): 1 - 100 printable ASCII characters, and not only blanks (a line of blanks says nothing; the game's own box sends none)
+    function validChatLine(text) { return printable(text, MAX_CHAT) && text.replace(/ /g, '') !== ''; }
 
     // ---- messages that a page sends ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -155,7 +157,12 @@
         for (var i = 0; i < PLAYERS; i++) out.push(plan[i] === PLAN.Easy ? FILL.Easy : plan[i] === PLAN.Medium ? FILL.Medium : plan[i] === PLAN.Hard ? FILL.Hard : FILL.None);
         return out;
     }
-    function encodeChat(sender, team, text) { return new Writer().u8(MSG.Chat).u8(sender).u8(team ? 1 : 0).str8(text.slice(0, MAX_CHAT)).done(); }
+    // a line of chat: the server stamps the seat of the connection and clears the team flag whatever is written here. A character outside printable ASCII is a mistake of the caller and throws
+    // (str8 writes the low byte of a code: an accent would reach the server as 0xE9, which its decoder refuses and counts as a violation); a line longer than 100 is cut, as the game's box cuts what is typed
+    function encodeChat(sender, team, text) {
+        if (!printable(text, Infinity)) throw new RangeError('chat text');
+        return new Writer().u8(MSG.Chat).u8(sender).u8(team ? 1 : 0).str8(text.slice(0, MAX_CHAT)).done();
+    }
 
     // ---- messages that a page hears (null: the message is no message of this protocol; { type: 'other' }: a message that a page does not use) --------------------------------------------------------------------
 
@@ -295,14 +302,14 @@
     //   'removed'                   the leader took us out of the room (Kicked, which nothing else is answered with: a flood is BadRequest): the page forgets the key and makes a room of its own with a new code
     //   'superseded'                another window of this browser took the seat
     // A handler that throws does not stop the client or the other handlers: the error goes to onError(error, event), else to console.error. After leave() (or any final status) no event is handed out any more.
-    // Requests (move, setPlan, rename, remove, start, leave) return false when they cannot be made now (not connected, not the leader, a START waits, the arguments do not fit), and send nothing. The numbers
-    // of a request are whole numbers; the client keeps the server's own pace (a name 3, then 1 a second; a plan or a colour move 6, then 4 a second; a removal 3, then 1 a second) and answers false to a
-    // request that is too fast, which spends nothing (a page that sends faster would be put out of its room).
+    // Requests (move, setPlan, rename, remove, say, start, leave) return false when they cannot be made now (not connected, not the leader, a START waits, the arguments do not fit), and send nothing. The numbers
+    // of a request are whole numbers; the client keeps the server's own pace (a name 3, then 1 a second; a plan or a colour move 6, then 4 a second; a removal 3, then 1 a second; a line of chat 5, then 1 a
+    // second) and answers false to a request that is too fast, which spends nothing (a page that sends faster would be put out of its room).
     // move and remove act on the person that the leader's screen showed in that colour: the page takes guardNow() when the leader picks the row up or opens the question and gives it back as the last
     // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     // Limits: connectMs (20 s) is how long a socket may take to open, silenceMs (8 s) how long a link that is open may say nothing (the server pings every second), stableMs (10 s) how long a link must stay
     // online before its loss counts as a first loss again (else the waits of the way back go on growing); 0 for a limit waits for the browser.
-    var BUDGETS = { move: [6, 4], plan: [6, 4], rename: [3, 1], remove: [3, 1] };      // [burst, a second]: include/ants_net/flood.hpp
+    var BUDGETS = { move: [6, 4], plan: [6, 4], rename: [3, 1], remove: [3, 1], chat: [5, 1] };      // [burst, a second]: include/ants_net/flood.hpp (kChatBurst, kChatPerSecond: a line beyond it is dropped without a word, and a connection that goes on is thrown out)
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -561,6 +568,12 @@
         if (guard !== undefined && guard !== now) return false;
         return this.send('remove', encodeRemove(seat, now));
     };
+    // A line of chat to the room (any person, the leader or not): the room sends it back to everybody, the sender too, with the seat of this connection ('chat' event). Refused (false, nothing sent,
+    // nothing spent) when the link is not online, the room is no lobby room or its START waits (the pages are on their way to the game), or the line is none (validChatLine).
+    LobbyClient.prototype.say = function (text) {
+        if (!this.canAct() || this.room.starting || !validChatLine(text)) return false;
+        return this.send('chat', encodeChat(this.seat, false, text));
+    };
     LobbyClient.prototype.start = function () {
         var r = this.room;
         if (!this.canAct() || !this.isLeader() || r.starting) return false;
@@ -586,7 +599,7 @@
     return {
         PROTOCOL: PROTOCOL, LAST_GAME_MODE: LAST_GAME_MODE, MSG: MSG, REJECT: REJECT, SLOT: SLOT, PLAN: PLAN, FILL: FILL, OS: OS, PLATFORM_BROWSER: PLATFORM_BROWSER, PLAYERS: PLAYERS,
         NO_TEAM: NO_TEAM, NO_LEADER: NO_LEADER, ROOM_SENDER: ROOM_SENDER, MAX_NAME: MAX_NAME, MAX_CHAT: MAX_CHAT,
-        validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform,
+        validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform, validChatLine: validChatLine,
         encodeHello: encodeHello, encodeLeave: encodeLeave, encodePong: encodePong, encodePing: function (nonce, sentMs) { return encodePing(MSG.Ping, nonce, sentMs); },
         encodeSeatMove: encodeSeatMove, encodePlan: encodePlan, encodeName: encodeName, encodeRemove: encodeRemove, encodeStartRequest: encodeStartRequest, encodeChat: encodeChat,
         fillOfPlan: fillOfPlan, seatingHash: seatingHash, decode: decode, diffRooms: diffRooms, rejoinEntry: rejoinEntry, LobbyClient: LobbyClient,

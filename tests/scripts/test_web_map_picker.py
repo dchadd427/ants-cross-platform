@@ -33,6 +33,7 @@ class ThePage(unittest.TestCase):
     def setUpClass(cls):
         cls.page = read("web", "lobby.html")
         cls.script = read("web", "front", "map_picker.js")
+        cls.css = read("web", "front", "map_picker.css")
 
     def test_the_selector_stays_and_a_button_opens_the_list(self):
         for ident in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'id="picker-panel"'):
@@ -76,8 +77,17 @@ class ThePage(unittest.TestCase):
 
     def test_the_lobbys_own_look_is_used_and_nothing_from_another_site(self):
         for token in ("var(--gold)", "var(--frame)", "var(--cream)", "var(--muted)", "var(--edge)"):
-            self.assertTrue(re.search(r"\.pk-[\w-]+[^{]*\{[^}]*" + re.escape(token), self.page) is not None, token)
+            self.assertTrue(re.search(r"\.pk-[\w-]+[^{]*\{[^}]*" + re.escape(token), self.css) is not None, token)
         self.assertTrue(re.search(r"https?://", self.script) is None)
+        self.assertTrue(re.search(r"https?://|@import", self.css) is None)
+
+    def test_the_lists_rules_are_in_its_own_stylesheet_which_the_page_links_after_its_own_style(self):
+        """the rules of the map list left web/lobby.html (at the 1500 lines of tools/check_hygiene.py) for web/front/map_picker.css, which is linked after the page's <style>: a rule that wins a tie
+        by order (.pickhow .panel against .how .panel) still comes later, as it did"""
+        self.assertNotRegex(re.search(r"<style>.*?</style>", self.page, re.S).group(0), r"\.pk-|\.pickhow")
+        self.assertTrue(self.page.index('<link rel="stylesheet" href="front/map_picker.css">') > self.page.index("</style>"))
+        for needle in (".pickhow .panel {", ".pk-row {", ".pk-grid {", ".pk-card {", ".pk-badge {", ".pk-note {", "@media (max-width: 720px)", ".pk-sorts { flex-wrap: nowrap; overflow-x: auto;"):
+            self.assertIn(needle, self.css, needle)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the picker's own code was NOT run (tests/scripts/web_map_picker_check.js)")

@@ -44,7 +44,8 @@ PICTURES = {
 }
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
-SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser) and its client of network protocol 16 (tests/scripts/test_web_lobby_net.py): scripts, not pictures
+SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py) and the map list: scripts, not pictures
+LOBBY_STYLES = ("map_picker.css", "lobby_chat.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py) and the chat box's
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 BUDGET = 1000 * 1000        # bytes: the whole folder (about 0.66 MB: the pictures, the font and the scripts); a picture that grows past this is a decision, not an accident
@@ -216,8 +217,8 @@ class Sheet:
 
 
 class TheFolder(unittest.TestCase):
-    def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_and_the_two_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS)))
+    def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_the_lobbys_stylesheets_and_the_scripts(self):
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -252,7 +253,7 @@ class TheWayIntoTheImage(unittest.TestCase):
 
     def test_the_ci_looks_for_the_pictures_the_font_the_scripts_and_the_stylesheet_in_the_image(self):
         ci = read(".github", "workflows", "ci.yml")
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/classic\.css")
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/lobby_chat\.js front/lobby_chat\.css front/map_picker\.css front/classic\.css")
 
     def test_git_does_not_ignore_the_pictures(self):
         ignore = read(".gitignore")
@@ -617,7 +618,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
@@ -648,6 +649,9 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:
             self.assertNotRegex(read("web", "front", name), r"https?://", name + " names no other site")
+        self.assertEqual(re.findall(r'<link rel="stylesheet" href="([^"]*)">', self.page), ["front/" + name for name in LOBBY_STYLES])      # (the lobby's two stylesheets of this folder, in this order, after the page's own style, and no other)
+        for name in LOBBY_STYLES:
+            self.assertNotRegex(read("web", "front", name), r"https?://|@import|url\(\s*[\"']?(?:https?:)?//", name + " names no other site")
         self.assertNotRegex(self.page, r'<link[^>]*href="(?:https?:)?//')
         self.assertNotRegex(self.page, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotIn("@import", self.page)

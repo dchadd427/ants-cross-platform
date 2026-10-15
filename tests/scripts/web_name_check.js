@@ -370,7 +370,7 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.index
 const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 {
-    same('the page loads its scripts (the rules, the network client, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/map_picker.js', 'map_files.js', 'inline']);
+    same('the page loads its scripts (the rules, the network client, the chat box, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/map_picker.js', 'map_files.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -416,7 +416,8 @@ function loadFront(file, scope) {
 const NOSCOPE = { WebSocket: function () { throw new Error('no socket here'); }, setTimeout() { return 0; }, clearTimeout() {} };
 const RULES0 = loadFront('lobby_rules.js', NOSCOPE).AntsLobbyRules;
 const NET0 = loadFront('lobby_net.js', NOSCOPE).AntsLobbyNet;
-check('the two scripts of front/ give the page its globals', !!RULES0 && !!NET0 && typeof RULES0.nameCheck === 'function' && typeof NET0.LobbyClient === 'function');
+const CHAT0 = loadFront('lobby_chat.js', NOSCOPE).AntsLobbyChat;
+check('the three scripts of front/ give the page its globals', !!RULES0 && !!NET0 && !!CHAT0 && typeof RULES0.nameCheck === 'function' && typeof NET0.LobbyClient === 'function' && typeof CHAT0.mount === 'function');
 const SUGGESTION = RULES0.pickName(0.5);               // the page's picked name when Math.random() says 0.5 (the fake page's does)
 const hex = (bytes) => NET0.hexOf(bytes);
 
@@ -468,6 +469,7 @@ class El {
     set innerHTML(v) { this.env.innerHTMLWrites.push(String(v)); this.children = []; this._text = String(v); }
     get innerHTML() { return this._text; }
     get firstChild() { return this.children[0] || null; }
+    getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
     appendChild(c) { c.parent = this; this.children.push(c); return c; }
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parent = null; return c; }
     replaceChild(fresh, old) {
@@ -621,6 +623,7 @@ function runLobby(search, stored, options) {
     const scope = { WebSocket: options.noWebSocket ? undefined : FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer };
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
+    win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
     if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
@@ -789,6 +792,53 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('... the field holds it (a name is never in it)', env.$('link').value === 'https://play.test/?room=' + code && env.param(env.$('link').value, 'name') === null);
     const plain = runLobby('', {});
     check('a browser that cannot share has no Share button', plain.$('share').hidden === true);
+}
+
+// ---- 5.2c the chat box (front/lobby_chat.js, tests/scripts/web_lobby_chat_check.js): the page mounts it once and gives it every client; it is there when the room is a lobby, a line goes out as a Chat message at the
+// server's pace, the room's lines are text, and it is shut while START waits and while the link is down
+{
+    const evil = '<img src=x onerror=alert(1)>';
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const box = env.$('chat');
+    check('before the room has welcomed the page the chat box is not there', box.hidden === true && box.children.length > 0);
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, evil], [E, ''], [E, '']] });
+    check('a room that is a lobby: the chat box is there, with its field open', box.hidden === false);
+    const find = (pred) => box.findAll(pred)[0];
+    const input = find((e) => e.getAttribute('id') === 'chat-input');
+    const form = find((e) => e.tagName === 'form');
+    const hint = find((e) => e.getAttribute('id') === 'chat-hint');
+    const log = find((e) => e.getAttribute('id') === 'chat-log');
+    check('the field is open and the log says to say hello', input.disabled === false && log.children.length === 1 && /Say hello/.test(log.textContent));
+    const sentChat = () => s.sent.filter((b) => b[0] === 9);
+    input.value = 'hello there';
+    form.fire('submit', { preventDefault() {} });
+    same('a line goes out as a Chat message of this seat (Green, 0), no team', sentChat().map(hex), [hex(NET0.encodeChat(0, false, 'hello there'))]);
+    check('the field is empty again', input.value === '');
+    const say = (text) => Uint8Array.from([9, 1, 0, text.length].concat(Array.from(text).map((c) => c.charCodeAt(0))));
+    s.receive(say('hi Maya'));
+    same('the room\'s line comes with the name of the seat, as text and not as markup', log.children.map((li) => li.textContent), [evil + ':hi Maya']);
+    check('(a name that is markup made no element: the page wrote no innerHTML)', env.innerHTMLWrites.length === 0 && log.children[0].getAttribute('data-c') === 'red');
+    // the pace (the client's: tests/scripts/web_lobby_client_check.js has its clock): six more at once; four go (the burst of five is spent with the first), the others stay and the hint says so
+    for (let i = 1; i <= 6; i++) { input.value = 'line ' + i; form.fire('submit', { preventDefault() {} }); }
+    check('lines at once: five in all go out, the line that was refused stays in the field, and the hint says one a second', sentChat().length === 5 && input.value === 'line 6' && /One line a second/.test(hint.textContent), sentChat().length + ' ' + input.value + ' ' + hint.textContent);
+    // START waits: the field is shut; the start is given up: it opens
+    s.receive(roomMessage([[C, 'Maya'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7, inGame: 1 }));
+    check('while START waits the field is shut and says that the game is opening', input.disabled === true && /Opening the game/.test(input.placeholder));
+    s.receive(roomMessage([[C, 'Maya'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    check('the start is given up: the field is open', input.disabled === false);
+    // the link is down: shut, and the log stays
+    s.drop();
+    check('while the link is down the field is shut, and the lines stay', input.disabled === true && /back when you are in the room again/.test(input.placeholder) && log.children.length === 1 && log.children[0].textContent === evil + ':hi Maya', [input.disabled, input.placeholder, log.children.length].join(' | '));
+    check('no markup was ever written by the page for a name or a line', env.innerHTMLWrites.length === 0);
+}
+{   // a person who joins is a small line of the system, a person who goes too; a room that is made again (after a restart) starts an empty box
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+    const log = env.$('chat').findAll((e) => e.getAttribute('id') === 'chat-log')[0];
+    check('alone: the hint says to send the link', /Send the link above/.test(log.textContent));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    s.receive(roomMessage([[C, 'Maya'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    same('Sam comes and goes: two small lines of the system', log.children.map((li) => li.textContent), ['Sam joined as Red.', 'Sam left.']);
 }
 
 // ---- 5.3 the name card of a link that somebody sent (?room=): asked first, every time; nothing connects before the button

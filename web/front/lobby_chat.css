@@ -1,0 +1,38 @@
+/* The chat box of the front page's lobby (front/lobby_chat.js, docs/PLAY_IN_BROWSER.md "Chat in the lobby"). It is the lobby's own look: the black box with the green frame (.panel), the cream words,
+   the four colour accents of the cards (.slot[data-c]), the teal button, and the page's tokens (:root of web/lobby.html), which is why the page links this sheet after its own <style>. */
+
+/* Where it sits. A wide window: across the page, under the colours and the map. Below 1041 px the page is one column and the box is where the markup puts it, after the colours and before the map. */
+@media (min-width: 1041px) {
+    .grid > :first-child { grid-column: 1; grid-row: 1; }
+    .grid > .side { grid-column: 2; grid-row: 1; }
+    .grid > .chat { grid-column: 1 / -1; grid-row: 2; }
+}
+.chat .head { margin-bottom: 12px; }
+.chat .note { font-size: 15px; color: var(--muted); text-align: right; }
+
+/* The log: the newest line at the bottom, as in the game's own box; it scrolls by itself and leaves the page where it is. */
+.chat-log { list-style: none; display: flex; flex-direction: column; gap: 5px; height: 272px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px;
+    background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f; }
+.chat-log > :first-child { margin-top: auto; }
+.chat-log li { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }
+.chat-log li[data-c="red"] { --accent: #d4707f; } .chat-log li[data-c="blue"] { --accent: #8f8fd6; } .chat-log li[data-c="black"] { --accent: #b3afb9; }
+.chat-log .who { margin-right: 6px; color: var(--accent); }
+.chat-log li.sys { font-size: 14px; color: #a8c2b8; }
+.chat-log li.empty { margin: auto; max-width: 40ch; text-align: center; font-size: 15px; color: var(--muted); }
+
+/* The field and Send: a finger tall, 16 px (a phone does not zoom into a field below that), the field as the page's other fields. */
+.chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 12px; }
+.chat-form input { min-width: 0; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.chat-form input::placeholder { color: #7f9c92; opacity: 1; }
+.chat-form input:disabled { opacity: .6; }
+.chat-form .btn { min-height: 48px; }
+
+/* While the link is down the box is dimmed with the cards. */
+body.offline .chat-log { filter: saturate(.4) brightness(.72); }
+
+@media (max-width: 720px) {
+    .chat .note { text-align: left; }
+    .chat-log { height: 244px; padding: 8px 10px; }
+    .chat-form { gap: 8px; }
+    .chat-form input { scroll-margin-bottom: 150px; }     /* a browser that scrolls the tapped field into view leaves room for the START bar that sticks to the bottom of the screen */
+}

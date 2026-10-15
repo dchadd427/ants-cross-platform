@@ -1022,5 +1022,83 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     same('a line from a player and a line of the room are heard', [events(d, 'chat'), events(d, 'notice')], [[{ sender: 3, team: true, text: 'hi' }], [{ text: 'hi' }]]);
 }
 
+{   // say(): a line of chat from the page, at the server's own pace (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped without a word and a connection that goes on is thrown out)
+    const w = world();
+    const c = client(w);
+    check('before the Hello there is nobody to say it to', c.say('hi') === false && w.sockets.length === 0);
+    c.connect();
+    w.last().open();
+    check('between the Hello and the Welcome nothing is said', c.say('hi') === false && w.last().sent.length === 1);
+    w.last().receive(welcome(0, seq(0x30), 2));
+    check('welcomed but no Room message yet: nothing is said', c.say('hi') === false && w.last().sent.length === 1);
+    w.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+    const sent = () => w.last().sent.length - 1;
+    check('a line is the Chat message of this seat, no team, as the C++ encoder writes it', c.say('hello there') === true && hex(w.last().sent[1]) === hex(N.encodeChat(0, false, 'hello there')) && hex(w.last().sent[1]) === '0900000b68656c6c6f207468657265');
+    check('the sender byte is the seat that the room gave (the server stamps it anyway)', (() => { const x = world(); const d = client(x); online(x, d, [[C, 'A'], [C, 'B'], [C, 'Priya'], [E, '']], { you: 2, leader: 0 }); return d.say('x') === true && x.last().sent[1][1] === 2; })());
+    // what is no line
+    const before = sent();
+    for (const bad of ['', '   ', 'caf\u00e9', '\u263a', 'a\tb', 'a\nb', 'a\x7f', 'x'.repeat(101), null, undefined, 42, {}]) check('a line that is no line (' + JSON.stringify(bad) + ') is refused and sends nothing', c.say(bad) === false);
+    check('(nothing was sent for any of them)', sent() === before);
+    check('a line of 100 characters is whole', c.say('y'.repeat(100)) === true && w.last().sent[w.last().sent.length - 1].length === 4 + 100);
+    // the pace: the first 5 at once (one is gone already: 2 lines so far), the sixth is refused and spends nothing
+    check('lines 3 and 4 and 5 go at once', c.say('3') && c.say('4') && c.say('5'));
+    const five = sent();
+    check('the sixth line at once is refused: the server would drop it', c.say('6') === false && sent() === five);
+    check('and so is the seventh (a refusal spends nothing)', c.say('7') === false && sent() === five);
+    w.advance(999);
+    check('999 ms later there is still no token', c.say('8') === false);
+    w.advance(1);
+    check('a second after the sixth was refused: one line goes', c.say('9') === true && sent() === five + 1);
+    check('... and only one', c.say('10') === false);
+    w.advance(5000);
+    check('five seconds later the burst is whole again (5 lines, then the pace)', [1, 2, 3, 4, 5].every((i) => c.say('b' + i) === true) && c.say('b6') === false);
+    // the budget is the chat's own: the plan and the moves are not asked for it (and a chat line does not use theirs)
+    {
+        const x = world();
+        const d = client(x);
+        online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+        for (let i = 0; i < 5; i++) d.say('line');
+        check('after 5 lines the leader can still set the plan and rename', d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && d.rename('Pri') === true);
+        for (let i = 0; i < 6; i++) d.rename('N' + i);
+        check('and a person who used the budget of the names can still say a line after a second', (() => { x.advance(1000); return d.say('hi') === true; })());
+    }
+    // a START that waits, a room that is no lobby, a link that is down
+    {
+        const x = world();
+        const d = client(x);
+        online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7, inGame: 1 });
+        check('while START waits (the pages are on their way to the game) nothing is said', d.say('hi') === false && x.last().sent.length === 1);
+        const y = world();
+        const e = client(y);
+        online(y, e, [[C, 'A'], [C, 'B'], [E, ''], [E, '']], { you: 0, leader: 255, flags: 0 });
+        check('a room that no lobby made (a game\'s) is none for the page: nothing is said', e.say('hi') === false);
+        const z = world();
+        const f = client(z);
+        online(z, f, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+        z.last().drop();
+        check('a link that is down says nothing (and spends nothing)', f.say('hi') === false);
+        z.advance(600);
+        z.last().open();
+        z.last().receive(welcome(0, seq(0x30), 1));
+        z.last().receive(room([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+        check('back in the room it says a line again', f.say('hi again') === true);
+    }
+    // a guest says it too (any person: the leader is not asked)
+    {
+        const x = world();
+        const g = client(x);
+        online(x, g, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0 });
+        check('a guest, who leads nothing, says a line', g.say('I am a guest') === true && x.last().sent[1][1] === 1);
+    }
+    // what comes back is a chat event: the room's word that the line was heard (the sender too)
+    {
+        const x = world();
+        const g = client(x);
+        online(x, g, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+        x.last().receive(Uint8Array.from([9, 0, 0, 2, 104, 105]));
+        same('the line comes back as the room\'s: sender, no team, the text', events(g, 'chat'), [{ sender: 0, team: false, text: 'hi' }]);
+    }
+}
+
 console.log('LobbyClient: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures === 0 ? 0 : 1);
