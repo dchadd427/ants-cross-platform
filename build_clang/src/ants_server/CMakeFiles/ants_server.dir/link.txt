@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/ants_server.dir/main.cpp.o -o ants_server  libants_server_core.a ../../libants_version.a ../ants_ctl/libants_ctl.a ../ants_db/libants_db.a ../../third_party/sqlite/libants_sqlite.a ../ants_replay/libants_replay.a ../ants_net/libants_net.a ../ants_ai/libants_ai.a ../ants_sim/libants_sim.a ../ants_assets/libants_assets.a 

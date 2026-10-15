@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/map_sweep.dir/tools/map_sweep.cpp.o -o map_sweep  src/ants_net/libants_net.a src/ants_sim/libants_sim.a src/ants_assets/libants_assets.a libants_test_paths.a src/ants_ai/libants_ai.a src/ants_sim/libants_sim.a src/ants_assets/libants_assets.a 

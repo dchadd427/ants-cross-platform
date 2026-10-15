@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/gen_food_footprints.dir/tools/gen_food_footprints.cpp.o -o gen_food_footprints  src/ants_sim/libants_sim.a src/ants_assets/libants_assets.a libants_test_paths.a 

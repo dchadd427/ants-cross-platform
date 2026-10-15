@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libants_assets.a CMakeFiles/ants_assets.dir/mirroring.cpp.o CMakeFiles/ants_assets.dir/chd_parser.cpp.o CMakeFiles/ants_assets.dir/lvl_parser.cpp.o CMakeFiles/ants_assets.dir/asset_archive.cpp.o CMakeFiles/ants_assets.dir/object_footprint.cpp.o
+/usr/bin/llvm-ranlib libants_assets.a

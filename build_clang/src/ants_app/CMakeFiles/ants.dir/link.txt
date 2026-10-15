@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/ants.dir/main.cpp.o -o ants  libants_app.a ../ants_replay/libants_replay.a ../ants_net/libants_net.a ../ants_ai/libants_ai.a ../ants_sim/libants_sim.a ../ants_assets/libants_assets.a ../../libants_version.a /usr/lib/x86_64-linux-gnu/libSDL2.so /usr/lib/x86_64-linux-gnu/libSDL2_ttf.so 

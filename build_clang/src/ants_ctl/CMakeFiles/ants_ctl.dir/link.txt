@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libants_ctl.a CMakeFiles/ants_ctl.dir/json.cpp.o CMakeFiles/ants_ctl.dir/http.cpp.o
+/usr/bin/llvm-ranlib libants_ctl.a

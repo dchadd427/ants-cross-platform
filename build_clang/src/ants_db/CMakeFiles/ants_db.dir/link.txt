@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libants_db.a CMakeFiles/ants_db.dir/database.cpp.o CMakeFiles/ants_db.dir/migrations.cpp.o
+/usr/bin/llvm-ranlib libants_db.a

@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/test_assets.dir/test_assets.cpp.o -o test_assets  ../../src/ants_assets/libants_assets.a ../../libants_test_paths.a 

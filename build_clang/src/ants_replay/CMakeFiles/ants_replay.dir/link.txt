@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libants_replay.a CMakeFiles/ants_replay.dir/replay.cpp.o CMakeFiles/ants_replay.dir/recorder.cpp.o CMakeFiles/ants_replay.dir/player.cpp.o
+/usr/bin/llvm-ranlib libants_replay.a

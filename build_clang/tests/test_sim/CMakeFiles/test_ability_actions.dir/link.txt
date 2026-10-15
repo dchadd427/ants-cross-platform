@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/test_ability_actions.dir/test_ability_actions.cpp.o -o test_ability_actions  ../../src/ants_sim/libants_sim.a ../../src/ants_assets/libants_assets.a 

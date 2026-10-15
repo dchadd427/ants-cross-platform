@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/test_netgame.dir/test_netgame.cpp.o CMakeFiles/test_netgame.dir/test_netgame_teams.cpp.o -o test_netgame  ../../src/ants_net/libants_net.a ../../src/ants_sim/libants_sim.a ../../src/ants_assets/libants_assets.a ../../libants_test_paths.a ../../src/ants_ai/libants_ai.a ../../src/ants_sim/libants_sim.a ../../src/ants_assets/libants_assets.a 

@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libants_test_paths.a CMakeFiles/ants_test_paths.dir/generated/ants_test_paths.cpp.o
+/usr/bin/llvm-ranlib libants_test_paths.a

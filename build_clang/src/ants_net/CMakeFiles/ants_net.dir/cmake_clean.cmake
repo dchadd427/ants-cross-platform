@@ -1,0 +1,41 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/ants_net.dir/attendance.cpp.o"
+  "CMakeFiles/ants_net.dir/attendance.cpp.o.d"
+  "CMakeFiles/ants_net.dir/cue_router.cpp.o"
+  "CMakeFiles/ants_net.dir/cue_router.cpp.o.d"
+  "CMakeFiles/ants_net.dir/jitter.cpp.o"
+  "CMakeFiles/ants_net.dir/jitter.cpp.o.d"
+  "CMakeFiles/ants_net.dir/lan.cpp.o"
+  "CMakeFiles/ants_net.dir/lan.cpp.o.d"
+  "CMakeFiles/ants_net.dir/latency.cpp.o"
+  "CMakeFiles/ants_net.dir/latency.cpp.o.d"
+  "CMakeFiles/ants_net.dir/lobby.cpp.o"
+  "CMakeFiles/ants_net.dir/lobby.cpp.o.d"
+  "CMakeFiles/ants_net.dir/lockstep.cpp.o"
+  "CMakeFiles/ants_net.dir/lockstep.cpp.o.d"
+  "CMakeFiles/ants_net.dir/loopback.cpp.o"
+  "CMakeFiles/ants_net.dir/loopback.cpp.o.d"
+  "CMakeFiles/ants_net.dir/netgame.cpp.o"
+  "CMakeFiles/ants_net.dir/netgame.cpp.o.d"
+  "CMakeFiles/ants_net.dir/prediction.cpp.o"
+  "CMakeFiles/ants_net.dir/prediction.cpp.o.d"
+  "CMakeFiles/ants_net.dir/protocol.cpp.o"
+  "CMakeFiles/ants_net.dir/protocol.cpp.o.d"
+  "CMakeFiles/ants_net.dir/sequencer.cpp.o"
+  "CMakeFiles/ants_net.dir/sequencer.cpp.o.d"
+  "CMakeFiles/ants_net.dir/session.cpp.o"
+  "CMakeFiles/ants_net.dir/session.cpp.o.d"
+  "CMakeFiles/ants_net.dir/tcp.cpp.o"
+  "CMakeFiles/ants_net.dir/tcp.cpp.o.d"
+  "CMakeFiles/ants_net.dir/turnlog.cpp.o"
+  "CMakeFiles/ants_net.dir/turnlog.cpp.o.d"
+  "CMakeFiles/ants_net.dir/ws.cpp.o"
+  "CMakeFiles/ants_net.dir/ws.cpp.o.d"
+  "libants_net.a"
+  "libants_net.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/ants_net.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

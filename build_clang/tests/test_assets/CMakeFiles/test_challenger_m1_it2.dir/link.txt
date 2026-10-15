@@ -1,0 +1,1 @@
+/usr/bin/clang++ CMakeFiles/test_challenger_m1_it2.dir/test_challenger_m1_it2.cpp.o -o test_challenger_m1_it2  ../../src/ants_assets/libants_assets.a ../../libants_test_paths.a 
