@@ -235,11 +235,11 @@ public:
     // Input task (Ants.exe INPUT, every 50 ms): edge scrolling with the pointer and the minimap drag; see edge_scroll.hpp. `map_w` / `map_h`
     // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
-    /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     /// The countdown card is the only dialog that is up (protocol 21): the chat is open behind it
     bool countdown_takes_chat() const noexcept {
         return show_match_start_modal_ && match_countdown_ && !options_.is_open() && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
     }
+    /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     bool is_modal_open() const noexcept {
         return options_.is_open() || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
     }

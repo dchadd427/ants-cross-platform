@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The countdown before a match (network protocol 21), in REAL browsers (opt-in; see tests/scripts/test_web_countdown.sh and docs/MATCH_COUNTDOWN.md).
 
-The request: after the game is started from the lobby it started too fast; a 30 second countdown before the match, with the chat active during it, and a Fullscreen button so that the players can go
+What the change does: a match of a room with two or more people opens with a 30 second countdown, with the chat active during it and a Fullscreen button so that the players can go
 fullscreen before the match starts. The quick tier runs the host's rule, the message, the application's card and the page's script with fakes, each by itself; nothing but a real page can show
 the chain: two games in a room of the real game server behind the real nginx, the Begin that says 30, the card in the canvas, the page's real button over it, the chat through the server to the
 other screen, the first turn that comes 30 s after the match began, and a match that then runs with equal state hashes.

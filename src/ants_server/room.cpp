@@ -303,7 +303,7 @@ void Room::begin_match(uint32_t now_ms) {
     }
     start_teams_ = start.teams();
     sim::apply_start_teams(*sim_, start_teams_);                 // the teams of the Start, before the first tick: what every machine does with the same message (after the names: the News Flash names the players)
-    started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
+    started_ms_ = now_ms;                                        // (run_ms counts from here: the wait before the first turn counts, the 5 s dialog or the countdown of protocol 21; the match's pauses do not)
     last_person_ms_ = now_ms;
     build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs, begin_delay_ms_);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
