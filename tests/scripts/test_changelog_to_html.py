@@ -480,12 +480,25 @@ class ThePagesOfThePage(unittest.TestCase):
         for word in ("document.createElement", "textContent", "location.hash", "hashchange"):
             self.assertIn(word, script, word)
 
-    def test_the_pager_looks_like_the_pages_buttons_and_a_deep_link_keeps_its_frame(self):
+    def test_the_pager_looks_like_the_pages_buttons_and_every_deep_link_is_framed_in_gold(self):
         style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
-        for needle in (".pager .tab {", ".pager .tab.on {", ".pager .off {", "section.first:target { border-color: var(--frame-bevel); }", ".versions a.here {", "details.versions {"):
+        for needle in (".pager .tab {", ".pager .tab.on {", ".pager .off {", ".versions a.here {", "details.versions {"):
             self.assertIn(needle, style, needle)
-        self.assertLess(style.index("section:target { border-color: var(--gold); }"), style.index("section.first:target"))      # (the first release of a page is the frame of the panels, a release that a link names is gold)
+        # a release that a link names is framed in gold: by :target when the page is the plain list, by the class "deep" (the script sets it for the dotted address too, and not for a click in the bars) when it is paged
+        self.assertIn("main:not(.paged) section:target { border-color: var(--gold); }", style)
+        self.assertIn("section.deep { border-color: var(--gold); }", style)
+        self.assertNotIn("section:target {", style.replace("main:not(.paged) section:target {", ""))                              # (no :target rule that the paged page could not switch off)
+        self.assertNotIn("section.first", style)                                                                                  # (the first release of a page is framed like any other that a link names)
         self.assertNotIn("nav.versions", style)
+
+    def test_the_bars_wrap_and_the_tabs_keep_one_width_in_a_grid(self):
+        style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
+        self.assertRegex(style, r"\.pager \{ display: flex; flex-wrap: wrap;")
+        self.assertRegex(style, r"\.versions nav \{ display: flex; flex-wrap: wrap;")
+        self.assertIn(".pager.tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }", style)           # (a last row with fewer tabs leaves its cells empty: the tabs do not stretch)
+        phone = style[style.index("@media (max-width: 700px)"):]
+        self.assertIn(".pager.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }", phone)
+        self.assertNotRegex(style, r"\.pager \.tab \{[^}]*\bflex:")
 
     def test_the_current_tab_and_a_button_that_leads_nowhere_look_different_from_the_others(self):
         style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
@@ -568,13 +581,20 @@ class TheScriptRunByNode(unittest.TestCase):
         ("an address that names nothing resets the page", "if (!top || k === -1) return;", "if (!top) return;"),
         ("the last page ends early", "p === pages - 1 ? secs.length - 1 : (p + 1) * size - 1", "(p + 1) * size - 1"),
         ("a release after the last full page has no page", "Math.min(Math.floor(k / size), pages - 1)", "Math.floor(k / size)"),
-        ("no release is the first of its page", "secs[k].classList.toggle('first', k === firstOf(pageOf(k)));", "secs[k].classList.toggle('first', false);"),
+        ("a deep-linked release is not framed", "secs[j].classList.toggle('deep', j === k);", "secs[j].classList.toggle('deep', false);"),
+        ("a click in the bars frames the first release of the page", "frame(keep ? -1 : k);", "frame(k);"),
+        ("the page that opens on an address has no frame", "if (top) { frame(start); reveal(start); }", "if (top) { reveal(start); }"),
+        ("a paged list is not marked as paged", "main.classList.add('paged');", ""),
+        ("a list of one page stays marked as paged", "main.classList.remove('paged');", ""),
+        ("aria-disabled stays on a button after the first page", "e.removeAttribute('aria-disabled'); ", ""),
+        ("the dim class stays on a button after the first page", "e.classList.remove('off'); }", "}"),
+        ("a name that every object has (constructor) is a release", "return index.hasOwnProperty(id) ? index[id] : -1;", "return index[id] !== undefined ? index[id] : -1;"),
         ("Newer stays a link on the first page", "if (p > 0) link(prev, p - 1); else {", "if (p > -1) link(prev, p - 1); else {"),
         ("the bar names the page before", "where.textContent = 'Page ' + (p + 1) + ' of ' + pages;", "where.textContent = 'Page ' + p + ' of ' + pages;"),
         ("a resize leaves the old bars", "    drop(top);\n    drop(foot);\n", ""),
         ("text becomes markup", "if (text) e.textContent = text;", "if (text) e.innerHTML = text;"),
         ("the list of versions does not say which are on the page", "chips[k].classList.toggle('here', index.hasOwnProperty(id) && pageOf(index[id]) === p);", ""),
-        ("the page that opens on an address is not scrolled", "if (top) reveal(start);", ""),
+        ("the page that opens on an address is not scrolled", "if (top) { frame(start); reveal(start); }", "if (top) { frame(start); }"),
         ("a resize loses the release in sight", "apply(top ? firstOf(cur) : 0)", "apply(0)"),
         ("an invalid address is read as no address", "catch (e) { return -1; }", "catch (e) { return -2; }"),
         ("the tab of the page is not marked as the current one", "tabs[k].setAttribute('aria-current', 'page')", "tabs[k].setAttribute('aria-current', 'true')"),

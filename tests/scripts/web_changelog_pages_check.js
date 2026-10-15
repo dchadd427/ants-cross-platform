@@ -128,7 +128,8 @@ const endText = (id) => (isVersion(pageLabels[id]) ? pageLabels[id] : 'older');
         check('tab ' + (p + 1) + ' is the chosen one only on page 1', cls(tab, 'on') === (p === 0) && (tab.getAttribute('aria-current') === 'page') === (p === 0));
     });
     same('the tabs are above the list of versions, which is folded; the Newer / Older bar is the last thing in main', [r.main.children.indexOf(r.tabs()) + 1 === r.main.children.indexOf(r.details), r.details.getAttribute('open'), r.main.children[r.main.children.length - 1] === r.foot()], [true, null, true]);
-    same('the first release of the page has the class "first" (the deep-link frame is for the others)', r.secs.map((s, k) => cls(s, 'first') === (k % SIZE === 0 && k <= firstOf(P - 1, SIZE))).every(Boolean), true);
+    check('the list is marked as paged (the stylesheet frames a deep link by the class, not by :target, while it is)', cls(r.main, 'paged'));
+    check('no release is framed while no address names one', r.secs.every((s) => !cls(s, 'deep')));
     const prev = r.foot().children[0], where = r.foot().children[1], next = r.foot().children[2];
     same('the bars are navigations with names: the tabs have the id that the page\'s own links name, the bar below says what it is for', [r.tabs().id, r.tabs().tagName, r.tabs().getAttribute('aria-label'), r.foot().tagName, r.foot().getAttribute('aria-label')], ['pages-top', 'NAV', 'Release pages', 'NAV', 'Newer and older releases']);
     same('the two buttons say Newer and Older (with the guillemets of the page\'s text)', [r.foot().children[0].textContent, r.foot().children[2].textContent, cls(r.foot().children[0], 'btn'), cls(r.foot().children[2], 'btn')], ['\u00ab Newer', 'Older \u00bb', true, true]);
@@ -148,17 +149,21 @@ const endText = (id) => (isVersion(pageLabels[id]) ? pageLabels[id] : 'older');
             if (JSON.stringify(r.visible()) !== JSON.stringify(want)) bad.push(form + ' shows ' + r.visible().length);
             const wantTarget = k === firstOf(pageOf(k, N, SIZE), SIZE) ? r.tabs() : r.secs[k];
             if (r.doc.scrolled.length !== 1 || r.doc.scrolled[0] !== wantTarget) bad.push(form + ' scrolled wrongly');
+            const framed = r.secs.filter((s) => cls(s, 'deep')).map((s) => s.id);
+            if (JSON.stringify(framed) !== JSON.stringify([id])) bad.push(form + ' frames ' + JSON.stringify(framed));
         }
     });
-    same('the address of every release (#v0-12-30, #v0.12.30, #V0-12-30) opens the page that has it and scrolls to the release, or to the tabs for the first of a page', bad, []);
+    same('the address of every release (#v0-12-30, #v0.12.30, #V0-12-30) opens the page that has it, scrolls to the release (or to the tabs for the first of a page) and frames that release, the first of a page too', bad, []);
     same('a page\'s tab and the bar\'s Older / Newer are ordinary links that lead to the page they name', (() => {
         const out = [];
         for (let p = 0; p < P; p++) {
-            r.go(r.tabList()[p].getAttribute('href'));
+            r.followed(r.tabList()[p]);
+            if (r.secs.some((s) => cls(s, 'deep'))) out.push('a click in the bars framed a release on page ' + p);
             if (JSON.stringify(r.visible()) !== JSON.stringify(pageIds.slice(firstOf(p, SIZE), lastOf(p, N, SIZE) + 1))) out.push('tab ' + p);
             if (r.foot().children[1].textContent !== 'Page ' + (p + 1) + ' of ' + P) out.push('status ' + p);
             const pv = r.foot().children[0], nx = r.foot().children[2];
             if ((pv.getAttribute('href') === null) !== (p === 0) || (nx.getAttribute('href') === null) !== (p === P - 1)) out.push('off ' + p);
+            if (pv.getAttribute('aria-disabled') !== (p === 0 ? 'true' : null) || nx.getAttribute('aria-disabled') !== (p === P - 1 ? 'true' : null) || cls(pv, 'off') !== (p === 0) || cls(nx, 'off') !== (p === P - 1)) out.push('disabled ' + p);
             if (p > 0 && pv.getAttribute('href') !== '#' + pageIds[firstOf(p - 1, SIZE)]) out.push('prev ' + p);
             if (p < P - 1 && nx.getAttribute('href') !== '#' + pageIds[firstOf(p + 1, SIZE)]) out.push('next ' + p);
             if (r.tabList().filter((t) => cls(t, 'on')).length !== 1 || !cls(r.tabList()[p], 'on') || r.tabList()[p].getAttribute('aria-current') !== 'page' || r.tabList().filter((t) => t.getAttribute('aria-current')).length !== 1) out.push('on ' + p);
@@ -169,12 +174,17 @@ const endText = (id) => (isVersion(pageLabels[id]) ? pageLabels[id] : 'older');
     // the address that names nothing, and the empty one
     r.go('#' + pageIds[firstOf(2, SIZE)]);
     const there = r.visible();
+    r.go('#' + pageIds[firstOf(2, SIZE) + 1]);
+    const framedBefore = r.secs.filter((s) => cls(s, 'deep')).map((s) => s.id);
     r.go('#nothing-like-it');
-    same('an address that names no release leaves the page as it is', r.visible(), there);
+    same('an address that names no release leaves the page and the frame as they are', [r.visible(), r.secs.filter((s) => cls(s, 'deep')).map((s) => s.id)], [there, framedBefore]);
+    let thrown = null;
+    try { for (const word of ['#constructor', '#__proto__', '#hasownproperty', '#tostring', '#valueof', '#__defineGetter__']) { r.go(word); if (JSON.stringify(r.visible()) !== JSON.stringify(there)) thrown = word + ' moved the page'; } } catch (e) { thrown = e.message; }
+    same('the names that every object has (constructor, __proto__, ...) are no releases: the page stays, nothing throws', thrown, null);
     r.go('#%E0%A4%A');
     same('and so does one that is not even valid text', r.visible(), there);
     r.go('#');
-    same('no address (or a bare #) is the first page', r.visible(), pageIds.slice(0, lastOf(0, N, SIZE) + 1));
+    same('no address (or a bare #) is the first page, and nothing is framed', [r.visible(), r.secs.some((s) => cls(s, 'deep'))], [pageIds.slice(0, lastOf(0, N, SIZE) + 1), false]);
     // Back and Forward are the same address changes
     const trail = [1, 3, 0, 2].map((p) => '#' + pageIds[firstOf(Math.min(p, P - 1), SIZE)]);
     const seen = [];
@@ -221,7 +231,7 @@ for (const n of [1, 2, 4, 9, 14, 15, 16, 24, 25, 26, 34, 35, 55, 100]) {
     const P = pagesFor(n, SIZE);
     check('n=' + n + ': no error', r.thrown === null, r.thrown && r.thrown.message);
     if (P < 2) {
-        same('n=' + n + ': one page is no pages: every release shows, no bars, the list of versions stays open', [r.visible().length, r.tabs() === undefined, r.foot() === undefined, r.details.getAttribute('open')], [n, true, true, '']);
+        same('n=' + n + ': one page is no pages: every release shows, no bars, the list of versions stays open, the list is not marked as paged (so :target frames a deep link)', [r.visible().length, r.tabs() === undefined, r.foot() === undefined, r.details.getAttribute('open'), cls(r.main, 'paged')], [n, true, true, '', false]);
     } else {
         same('n=' + n + ': ' + P + ' pages, the first with ' + SIZE, [r.tabList().length, r.visible().length], [P, SIZE]);
         r.go('#' + ids[n - 1]);
@@ -236,11 +246,12 @@ for (const n of [1, 2, 4, 9, 14, 15, 16, 24, 25, 26, 34, 35, 55, 100]) {
 // a phone's size on its own lists (a list of 12 is one page on a desktop and three on a phone)
 {
     const ids = names(12), r = rig({ ids, labels: labelsFor(ids) });
-    same('twelve releases: one page on a desktop', [r.visible().length, r.tabs() === undefined], [12, true]);
+    same('twelve releases: one page on a desktop', [r.visible().length, r.tabs() === undefined, cls(r.main, 'paged')], [12, true, false]);
     r.phone(true);
+    check('... marked as paged on a phone', cls(r.main, 'paged'));
     same('... two pages on a phone (5 and 7), the list folded', [r.tabList().length, r.visible().length, r.details.getAttribute('open')], [pagesFor(12, SIZE_PHONE), 5, null]);
     r.phone(false);
-    same('... and one page again on a desktop: no bars, every release shows', [r.visible().length, r.tabs() === undefined, r.foot() === undefined], [12, true, true]);
+    same('... and one page again on a desktop: no bars, every release shows, not marked as paged', [r.visible().length, r.tabs() === undefined, r.foot() === undefined, cls(r.main, 'paged')], [12, true, true, false]);
     const p = rig({ ids, labels: labelsFor(ids), phone: true });
     same('a page that opens on a phone is on five to a page at once', [p.tabList().length, p.visible().length], [2, 5]);
 }
@@ -265,8 +276,11 @@ for (const n of [1, 2, 4, 9, 14, 15, 16, 24, 25, 26, 34, 35, 55, 100]) {
     same('a page that opens with the address of a release shows its page and scrolls to the release', [r.visible()[0], r.visible().includes(ids[23]), r.doc.scrolled.length, r.doc.scrolled[0] === r.secs[23]], [ids[20], true, 1, true]);
     const f = rig({ ids, labels: labelsFor(ids), hash: '#' + ids[20] });
     same('... and for the first release of a page, to the tabs', [f.visible()[0], f.doc.scrolled[0] === f.tabs()], [ids[20], true]);
+    same('the release that the opening address names is framed, the first of a page too (and no other)', [r.secs.filter((s) => cls(s, 'deep')).map((s) => s.id), f.secs.filter((s) => cls(s, 'deep')).map((s) => s.id)], [[ids[23]], [ids[20]]]);
+    const dotted = rig({ ids, labels: labelsFor(ids), hash: '#' + ids[20].replace(/-/g, '.') });
+    same('... and so is one that the dotted address names (:target would not match it)', dotted.secs.filter((s) => cls(s, 'deep')).map((s) => s.id), [ids[20]]);
     const u = rig({ ids, labels: labelsFor(ids), hash: '#elsewhere' });
-    same('an address that is no release is the first page, and nothing scrolls', [u.visible()[0], u.doc.scrolled.length], [ids[0], 0]);
+    same('an address that is no release is the first page, nothing scrolls and nothing is framed', [u.visible()[0], u.doc.scrolled.length, u.secs.some((s) => cls(s, 'deep'))], [ids[0], 0, false]);
 }
 check('no text became markup anywhere (a fake that refuses innerHTML ran every scenario)', true);
 

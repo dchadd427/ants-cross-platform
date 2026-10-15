@@ -56,7 +56,8 @@ details.versions { padding: 0; }
 .pager .btn:hover { color: #fff; }
 .pager .off { opacity: .4; cursor: default; pointer-events: none; box-shadow: none; }
 .pager .where { margin: 0 auto; color: var(--muted); font-size: 14px; line-height: 1.3; text-align: center; }
-.pager .tab { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 52px; padding: 6px 8px; font-size: 16px; line-height: 1.15;
+.pager.tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.pager .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 52px; padding: 6px 8px; font-size: 16px; line-height: 1.15;
     color: var(--cream); text-decoration: none; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 .pager .tab span { font-size: 12.5px; color: #cfe3da; }
 .pager .tab:hover { background-color: var(--teal-hi); }
@@ -65,8 +66,8 @@ details.versions { padding: 0; }
 section h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; line-height: 1.7; color: var(--gold); }
 section h2 a { color: var(--gold); }
 .rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal) var(--sheen, none); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
-section:target { border-color: var(--gold); }
-section.first:target { border-color: var(--frame-bevel); }
+main:not(.paged) section:target { border-color: var(--gold); }
+section.deep { border-color: var(--gold); }
 @media (max-width: @PHONE_WIDTH@px) {
     main { margin-top: 16px; }
     .panel { padding: 14px 14px; }
@@ -77,15 +78,16 @@ section.first:target { border-color: var(--frame-bevel); }
     .pager .prev { order: 1; }
     .pager .next { order: 2; }
     .pager .where { order: 3; flex: 1 1 100%; margin: 0; }
-    .pager .tab { flex: 1 1 28%; padding: 6px 4px; font-size: 15px; }
+    .pager.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pager .tab { padding: 6px 4px; font-size: 15px; }
     .pager .tab span { font-size: 11.5px; }
     section h2 { font-size: 18px; }
 }""".replace("@PHONE_WIDTH@", str(PHONE_WIDTH))
 
 # The page's one script: shows the releases in pages. Without it (or when it fails) the page is the whole list. It reads the sections of <main> and the labels of the version list (the details
 # element with the id "versions"), hides the sections of the other pages, and puts a bar of page tabs above the list of versions and a Newer / Older bar below the last release. The address is the
-# state: #<release id> (a dot in it is a dash: #v0.12.30 is #v0-12-30) is the page that holds the release, no address is the first page, so the browser's own Back and Forward move between pages
-# and a pager link is an ordinary link to the first release of its page. Run by node, with a small fake of the DOM, in tests/scripts/web_changelog_pages_check.js.
+# state: #<release id> (a dot in it is a dash: #v0.12.30 is #v0-12-30) is the page that holds the release and the release is framed in gold (the class "deep": :target would not match the dotted form),
+# no address is the first page, so the browser's own Back and Forward move between pages; a link of the bars is an ordinary link to the first release of its page and frames nothing. Run by node, with a small fake of the DOM, in tests/scripts/web_changelog_pages_check.js.
 SCRIPT = r"""(function () {
   var SIZE = @SIZE@, PHONE_SIZE = @PHONE_SIZE@, PHONE_QUERY = '(max-width: @PHONE_WIDTH@px)';
   var main = document.getElementsByTagName('main')[0], versions = document.getElementById('versions');
@@ -153,7 +155,6 @@ SCRIPT = r"""(function () {
     cur = p;
     for (k = 0; k < secs.length; k++) {
       secs[k].hidden = pageOf(k) !== p;
-      secs[k].classList.toggle('first', k === firstOf(pageOf(k)));
     }
     for (k = 0; k < tabs.length; k++) {
       tabs[k].classList.toggle('on', k === p);
@@ -175,12 +176,17 @@ SCRIPT = r"""(function () {
     drop(foot);
     top = foot = null;
     if (pages < 2) {
-      for (k = 0; k < secs.length; k++) { secs[k].hidden = false; secs[k].classList.remove('first'); }
+      for (k = 0; k < secs.length; k++) secs[k].hidden = false;
+      main.classList.remove('paged');
       return;
     }
+    main.classList.add('paged');
     make_bars();
     show(pageOf(keep));
     if (versions && !folded) { folded = true; versions.removeAttribute('open'); }
+  }
+  function frame(k) {
+    for (var j = 0; j < secs.length; j++) secs[j].classList.toggle('deep', j === k);
   }
   function reveal(k) { if (k >= 0) (k === firstOf(cur) ? top : secs[k]).scrollIntoView(); }
   function route() {
@@ -188,13 +194,14 @@ SCRIPT = r"""(function () {
     clicked = null;
     if (!top || k === -1) return;
     show(k < 0 ? 0 : pageOf(k));
+    frame(keep ? -1 : k);
     reveal(k);
     if (keep) tabs[cur].focus({ preventScroll: true });
   }
   function resized() { apply(top ? firstOf(cur) : 0); }
   var start = wanted();
   apply(Math.max(0, start));
-  if (top) reveal(start);
+  if (top) { frame(start); reveal(start); }
   window.addEventListener('hashchange', route);
   if (mq.addEventListener) mq.addEventListener('change', resized); else if (mq.addListener) mq.addListener(resized);
 })();"""

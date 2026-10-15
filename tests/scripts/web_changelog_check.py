@@ -26,6 +26,7 @@ from web_hidden_check import find_browser                                    # n
 
 PROFILES = {
     "desktop": {"label": "a desktop, 1280 wide", "size": (1280, 900), "dpr": 1.0, "mobile": False, "per_page": 10},
+    "tablet": {"label": "a window 800 wide (no phone rules, narrow tabs panel)", "size": (800, 900), "dpr": 1.0, "mobile": False, "per_page": 10},
     "phone": {"label": "a phone, 390 wide (touch)", "size": (390, 844), "dpr": 2.0, "mobile": True, "per_page": 5},
 }
 PAGE_STATE = """(function () {
@@ -40,6 +41,11 @@ PAGE_STATE = """(function () {
     tabHeights: tabs.map(function (t) { return Math.round(t.getBoundingClientRect().height); }),
     status: foot ? foot.querySelector('.where').textContent : null, folded: d ? !d.open : null,
     overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth, hash: location.hash,
+    framed: (function () {
+      var probe = document.createElement('i'); probe.style.color = 'var(--gold)'; document.body.appendChild(probe);
+      var gold = getComputedStyle(probe).color; document.body.removeChild(probe);
+      return secs.filter(function (s) { return getComputedStyle(s).borderTopColor === gold; }).map(function (s) { return s.id; });
+    })(),
     active: document.activeElement ? document.activeElement.className : '', activeInBar: !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.pager'))
   });
 })()"""
@@ -49,10 +55,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--web", required=True, help="the site, e.g. http://127.0.0.1:19980/")
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--profile", default="all", help="desktop, phone or all (default)")
+    ap.add_argument("--profile", default="all", help="desktop, tablet, phone or all (default)")
     args = ap.parse_args()
     if args.profile != "all" and args.profile not in PROFILES:
-        print("unknown profile %r (desktop, phone or all)" % args.profile)
+        print("unknown profile %r (desktop, tablet, phone or all)" % args.profile)
         return 2
     url = args.web.rstrip("/") + "/changelog.html"
     failures = []
@@ -125,10 +131,12 @@ def main():
             check(second["shown"] == st["all"][per:2 * per] and second["current"] == [1], "a click on the second tab shows the second page (%d releases)" % len(second["shown"]))
             check(second["hash"] == "#" + st["all"][per], "the address is the id of the page's first release (%s)" % second["hash"])
             check(second["activeInBar"], "the focus is in the bar after the click (%s)" % second["active"])
+            check(second["framed"] == [], "a click on a tab frames nothing: the first release of the new page is not framed (%s)" % second["framed"])
             click(tab, ".pager.foot .next")
             third = state(tab)
             check(third["shown"] == st["all"][2 * per:3 * per] and third["current"] == [2] and third["status"] == "Page 3 of %d" % pages, "Older at the bottom shows the third page (%s)" % third["status"])
             check(third["activeInBar"], "the focus is in the bar after Older (%s)" % third["active"])
+            check(third["framed"] == [], "Older frames nothing either (%s)" % third["framed"])
             bar_in_view = tab.ev("(function () { var r = document.getElementById('pages-top').getBoundingClientRect(); return r.top >= -1 && r.top < innerHeight; })()")
             check(bar_in_view, "after Older at the bottom the tabs are at the top of the screen: the new page starts in view")
             tab.ev("history.back()")
@@ -140,6 +148,25 @@ def main():
             tab.ev("history.forward()")
             time.sleep(0.5)
             check(state(tab)["shown"] == st["all"][per:2 * per], "Forward shows the second page")
+
+
+            # the bars and the tabs in a grid: wrapped, inside their panels, one width for every tab (a short last row does not stretch)
+            geometry = json.loads(tab.ev("""(function () {
+              var top = document.getElementById('pages-top'), foot = document.querySelector('.pager.foot'), box = top.getBoundingClientRect(), tabs = Array.prototype.slice.call(top.children);
+              var widths = tabs.map(function (t) { return Math.round(t.getBoundingClientRect().width); }), rows = {};
+              tabs.forEach(function (t) { rows[t.offsetTop] = (rows[t.offsetTop] || 0) + 1; });                        // (offsetTop: the chosen tab is moved by a transform)
+              var inside = function (e, p) { var r = e.getBoundingClientRect(), q = p.getBoundingClientRect(); return r.left >= q.left - 1 && r.right <= q.right + 1; };
+              var fb = foot.getBoundingClientRect();
+              return JSON.stringify({ widths: widths, rows: Object.keys(rows).map(Number).sort(function (a, b) { return a - b; }).map(function (k) { return rows[k]; }),
+                tabsInside: tabs.every(function (t) { return inside(t, top); }), footInside: Array.prototype.every.call(foot.children, function (c) { return inside(c, foot); }),
+                topScroll: top.scrollWidth <= top.clientWidth, footScroll: foot.scrollWidth <= foot.clientWidth });
+            })()"""))
+            check(max(geometry["widths"]) - min(geometry["widths"]) <= 1, "every tab has the same width, also in a short last row (widths %s, tabs per row %s)" % (sorted(set(geometry["widths"])), geometry["rows"]))
+            check(geometry["tabsInside"] and geometry["topScroll"] and geometry["footInside"] and geometry["footScroll"], "the tabs and the Newer / Older bar stay inside their panels, with no scrollbar of their own")
+            if profile["mobile"]:
+                check(geometry["rows"][0] == 3 and len(geometry["rows"]) >= 2, "the tabs wrap in rows of three on a phone (%s)" % geometry["rows"])
+            elif profile["size"][0] < 900:
+                check(len(geometry["rows"]) >= 2, "the tabs wrap in a window 800 wide (%s)" % geometry["rows"])
 
             # no page of the list is wider than the screen
             wide = []
@@ -157,7 +184,15 @@ def main():
                 landed = state(tab)
                 inside = tab.ev("(function () { var r = document.getElementById(%s).getBoundingClientRect(); return r.top >= -1 && r.top < innerHeight; })()" % json.dumps(target))
                 check(landed["shown"] == st["all"][per:2 * per] and inside, "a fresh load on #%s (%s) shows page 2 and has the release in view" % (form, text))
+            for form, text in ((target.replace("-", "."), "dotted"), (target, "dashed")):
+                load(tab, url + "#" + form)
+                check(state(tab)["framed"] == [target], "a fresh load on the %s address #%s frames that release in gold, and no other (%s)" % (text, form, state(tab)["framed"]))
             first_of_third = st["all"][2 * per]
+            for form, text in ((first_of_third.replace("-", "."), "dotted"), (first_of_third, "dashed")):
+                load(tab, url + "#" + form)
+                check(state(tab)["framed"] == [first_of_third], "... and so does the %s address of the FIRST release of a page, #%s (%s)" % (text, form, state(tab)["framed"]))
+            load(tab, url)
+            check(state(tab)["framed"] == [], "a fresh load with no address frames nothing")
             load(tab, url + "#" + first_of_third)
             inside = tab.ev("(function () { var r = document.getElementById(%s).getBoundingClientRect(); return r.top >= -1 && r.top < innerHeight; })()" % json.dumps(first_of_third))
             check(state(tab)["current"] == [2] and inside, "an address on the first release of a page (#%s) shows page 3 and has the release in view" % first_of_third)
@@ -172,6 +207,11 @@ def main():
             click(tab, '#versions a[href="#%s"]' % old)
             jumped = state(tab)
             check(old in jumped["shown"] and jumped["hash"] == "#" + old, "a link of the list opens the page of its release (%s)" % old)
+            check(jumped["framed"] == [old], "... and frames that release (%s)" % jumped["framed"])
+            wrapped = json.loads(tab.ev("""(function () { var nav = document.querySelector('#versions nav'), tops = {};
+              Array.prototype.forEach.call(nav.children, function (a) { tops[Math.round(a.getBoundingClientRect().top)] = true; });
+              return JSON.stringify({ rows: Object.keys(tops).length, scroll: nav.scrollWidth <= nav.clientWidth }); })()"""))
+            check(wrapped["rows"] >= 2 and wrapped["scroll"], "the list of versions wraps into rows and has no sideways scroll (%d rows)" % wrapped["rows"])
 
             # without JavaScript: the whole list
             tab.call("Emulation.setScriptExecutionDisabled", {"value": True})
