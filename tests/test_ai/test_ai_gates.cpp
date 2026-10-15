@@ -347,8 +347,8 @@ void run_gate_tests() {
         // the hops: only from the half's own tiles, only onto ground of another component, none onto water or fire
         ASSERT_EQ(gates[0].hops().size(), 42u);
         ASSERT_EQ(gates[2].hops().size(), 42u);
-        ASSERT_EQ(gates[1].hops().size(), 44u);
-        ASSERT_EQ(gates[3].hops().size(), 45u);
+        ASSERT_EQ(gates[1].hops().size(), 43u);                                   // (a hop whose stepping tile P holds a power-up is no hop: the click on it takes the power-up)
+        ASSERT_EQ(gates[3].hops().size(), 44u);
         for (const GateInfo& g : gates) {
             for (const BombHop& h : g.hops()) {
                 ASSERT_EQ(h.end, HopEnd::Ground);

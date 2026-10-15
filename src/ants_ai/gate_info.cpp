@@ -355,6 +355,7 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
                 if (!planter) continue;
                 for (int f = 0; f < 8; ++f) {
                     if (out.component(step_in(t, f, -1)) != out.home_) continue;     // the ant steps onto T from P = T - f
+                    if (grid.has_powerup_at(step_in(t, f, -1))) continue;             // P must not hold a power-up: a click on it takes the power-up (and the controller refuses the click)
                     BombHop hop = simulate(grid, t, static_cast<uint8_t>(f));
                     hop.from = step_in(t, f, -1);
                     hop.from_comp = out.home_;
@@ -403,6 +404,7 @@ BombHop GateInfo::best_hop_between(const GateInfo& gates, const sim::Grid& grid,
             for (int f = 0; f < 8; ++f) {
                 const sim::TileCoord from = step_in(t, f, -1);
                 if (gates.component(from) != from_comp) continue;
+                if (grid.has_powerup_at(from)) continue;                          // (see analyse: P holds no power-up)
                 BombHop hop = simulate(grid, t, static_cast<uint8_t>(f));
                 if (hop.end != HopEnd::Ground) continue;
                 hop.from = from;
@@ -447,6 +449,10 @@ std::vector<const BombHop*> GateInfo::hops_onto(sim::TileCoord tile) const {
         if (h.land() == tile) out.push_back(&h);
     }
     return out;
+}
+
+bool GateInfo::walled() const noexcept {
+    return valid_ && home_ >= 0 && !piles_.empty() && free_piles() == 0;
 }
 
 int32_t GateInfo::free_piles() const noexcept {

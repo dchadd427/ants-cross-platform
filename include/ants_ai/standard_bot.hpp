@@ -112,6 +112,8 @@ public:
     AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
+    /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
+    bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)
     GateGoalTask& gate_goals_for_labs() noexcept { return gate_goals_; }
     const Tactics& tactics() const noexcept { return tactics_; }
@@ -285,6 +287,9 @@ private:
     bool hammered(uint64_t now);
     void begin_fallback(uint64_t now);
     void end_fallback();
+    void decide_gate_map(TaskContext& context);      // once, at the first look with a grid: sets Tactics::gate_map
+
+    bool gate_decided_{false};
 
     uint32_t denials_{0};
     uint32_t accepts_{0};

@@ -250,7 +250,7 @@ Every task of the standard bot claims its ants in one ledger (`AntLedger`: an an
 
 | Rank | Tasks | Takes from |
 |---|---|---|
-| 6 | the gate goal (off in every plan, Hard only: the Fire ant or Bomber it needs, only while the bot banks nothing) | every rank below 6, the fights too |
+| 6 | the gate goal (Medium and Hard, on a walled map only: the Fire ant or Bomber it needs, while the food is walled off for the seat; a sealed vault such as HELLRAISER's is raided again and again, so the goal repeats while the vault has food) | every rank below 6, the fights too |
 | 5 | fights: strike back, hunts, the skirmish | the economy, the guard and the ferry only: a fight never takes an ant whose task has rank 3 or more (its own rule) |
 | 4 | fire walls, bombs, the strike, the harassment squad | ranks below 4 |
 | 3 | power-ups, raids, the sabotage, **the island task, the expedition** | ranks below 3, so not from each other |
@@ -533,6 +533,14 @@ ISLANDS has no food that a hill can walk to (0 of 5,600 points), SMALL has 1,000
 
 **The ferry** (`FerryTask`, `island_ferry.hpp`, where the island task is active): a Swimmer carries food across the water. It is sent like a worker (one move onto a cell of the pile) to the pile that pays best per tick of its own trip, the search over land and water with the Swimmer's step weights (the water weighs 21 for it and 8,000 for a walker), the piles that no walker reaches first, at most two Swimmers to a pile (`AI18.6`); the engine's harvest loop does the rest (bite, swim home, deposit, back to the pile). Open water only: a tile with a rock or a reed in the lake is no way, the engine lets no ant into it (`AI18.9`). A Swimmer that stands where it stood, empty, 160 ticks after its order left did not obey: it is let go and kept from that pile for 900 ticks (`AI18.7`); one that stands idle with its food for 900 ticks (the engine's walk home ended in "Can't go there.", e.g. a ring of fire walls round the hill) is sent to the hill's entrance, whether or not it works a pile; once it has banked the food its record ends (`AI18.8`; the record of a Swimmer that carried was never looked at before the review). No bridge is needed and none can collapse or jam. A trip to the western pile of the ring takes 464 ticks for 20 points, to the island north of hill 0 223 predicted and 251 measured for 30 points (`AI18.4`); a single Medium bot on ISLANDS (seeds 1, 3, 4, 5; 14,400 ticks, no enemy) scores 2,040 to 2,130 with three Swimmers that carry food: the more Swimmers the better, up to the three of a row, which is why the levels want 2, 3 and 3 (`AI18.3`).
 
+### Walled maps (the gate goals)
+
+A Medium or Hard bot plays the gate goals (`GateGoalTask`: put a fire wall out, defuse a bomb that plugs a tunnel, hop a Bomber over a wall; the rules and the numbers are in [bomb_gates.md](reverse_engineering/bomb_gates.md#gate-goals-ants_ai-medium-and-hard-walled-maps)) when `GateInfo::walled()` finds no pile that is free for its seat (also with the power-ups cleared away) and the island play does not own the map. `StandardBot::decide_gate_map` decides once, at the first look (`Tactics::gate_map`); Easy never plays it, and a map that is open at the start stays open for the bot, so every other map is played exactly as before (state-hash identical, AI27.10 and AI27.11). Known limits:
+
+- **"No free pile" is the analysis of the start.** A pile that workers reach on foot only by walking through bombs (2 hit points each, but a walk) counts as walled, so the gate play is chosen there although the plain economy scores by attrition: FKD Deathmatch and Dustbin (seats 1 to 3, kind Bombs with a walk) are such maps, and the plain bot scores more there (Hard 1v1).
+- **A bot that is created in the middle of a match** (a server that restores a match after a restart) decides on the grid of that moment, not of the start. Low impact; not redesigned.
+- **The carrier is not protected.** The other team's Combat start ants stand in the home quadrant of a vault map (HELLRAISER) and knock a landing Bomber back; a thief takes the food back. The bot does neither avoid nor kill them.
+
 ## Names
 
 A bot has a random name, shown as `Pip (bot, Hard)`; the list, the picker, the label, the names a person may not take and network protocol 20 are in [`BOT_NAMES.md`](BOT_NAMES.md).
@@ -592,7 +600,7 @@ The bot suites (2.20 to 2.22 and 2.28) are listed in [`TESTING.md`](TESTING.md).
 
 - When two ants that are shut in fail on the same pile together, the pile is blacklisted once (900 ticks) before the ants are blamed; a lone shut-in ant never blacklists a pile that the seat works elsewhere.
 
-- Many community maps give walking ants no food at all; a bot idles gracefully there.
+- Many community maps give walking ants no food at all; an Easy bot, and a Medium or Hard bot on a map that the gate play does not take, idle gracefully there (a Medium or Hard bot on a walled map plays the gate goals instead, see "Walled maps").
 
 - **The standard bot on the community maps** (user-made maps; the review played the whole library, of which `Community-Maps/` holds the 534 that pass the checks of `tools/community_maps.py` (42 of them repaired); `bot_arena --maps-dir DIR` plays any library read-only): the independent review played 533 of the 587 files, alone and with four Hard bots, two seeds each, and found no crash, no hang and no breach of the budget, the view, the determinism or the filters; its economy findings are fixed. Alone the bot banks 1.165 times the worker on the maps where the worker scores at least 400 and under 75 percent of it on 7 of 225 (choices of the Hard opening's power-up trips, one stranded ant, noise: the notes say which). Not played on the library: Easy and Medium, and the styles against each other. It was also played in hand-made worlds of every rule and in sixteen random worlds with lakes, rocks, unreachable piles and power-ups anywhere (`AI13.3`: nothing refused, bit-reproducible), and its tests ran under AddressSanitizer and UBSan clean.
 
