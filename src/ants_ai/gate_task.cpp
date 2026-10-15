@@ -309,6 +309,43 @@ void GateGoalTask::act_defuse(TaskContext& context, const AntView& ant) {
     }
 }
 
+// Whether `tile` is not clear for the hop yet: a special order onto a tile with an ant on it (the plant) is refused by the controller and the engine alike, and a click on the tile in front of the bomb
+// does not get the Bomber there when an ant stands on it. An own ant that has nothing to do is held by the task and sent to a free tile near by (the start ants of a walled map stand on
+// the tiles of the best hops); an ant of another team, or one that is busy, is waited for (the step timer ends the attempt if it never leaves). True: not clear (an order was given, or the wait goes on).
+bool GateGoalTask::tile_blocked(TaskContext& context, sim::TileCoord tile) {
+    const BotView& view = context.view;
+    for (const AntView& o : view.others()) {
+        if (o.tile == tile) return true;
+    }
+    const AntView* occupant = nullptr;
+    for (const AntView& o : view.mine()) {
+        if (o.id != ant_ && o.tile == tile) occupant = &o;
+    }
+    if (occupant == nullptr) return false;
+    if (!occupant->idle() || !occupant->takes_orders() || !context.ledger.take(occupant->id, id())) return true;
+    const sim::Grid& grid = view.grid();
+    sim::TileCoord best{-1, -1};
+    for (int r = 1; r <= 3 && best.x < 0; ++r) {
+        for (int dy = -r; dy <= r && best.x < 0; ++dy) {
+            for (int dx = -r; dx <= r; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                const sim::TileCoord n{tile.x + dx, tile.y + dy};
+                if (!grid.in_bounds(n) || n == goal_.hop.bomb || n == goal_.hop.from || n == return_hop_.bomb || n == return_hop_.from) continue;
+                if (!MapInfo::walkable(grid, context.seat, n, view.walk_context()) || grid.has_bomb_at(n) || grid.has_powerup_at(n) || grid.get_cell(n).is_food) continue;
+                if (gates_.component(n) != gates_.component(tile) && gates_.component(tile) >= 0) continue;
+                bool taken = false;
+                for (const AntView& o : view.mine()) taken = taken || o.tile == n;
+                for (const AntView& o : view.others()) taken = taken || o.tile == n;
+                if (taken) continue;
+                best = n;
+                break;
+            }
+        }
+    }
+    if (best.x >= 0) context.orders.move({occupant->id}, best);
+    return true;
+}
+
 void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     const BotView& view = context.view;
     const uint64_t now = view.tick();
@@ -537,7 +574,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                     if (ant.tile == return_hop_.from) {
                         context.orders.move({ant_}, return_hop_.bomb);
                         ++hops_ordered_;
-                    } else {
+                    } else if (!tile_blocked(context, return_hop_.from)) {
                         context.orders.move({ant_}, return_hop_.from);
                     }
                 } else {
@@ -546,7 +583,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                         return;
                     }
                     if (ant.tile == return_hop_.bomb) context.orders.move({ant_}, return_hop_.from);
-                    else context.orders.special(ant_, return_hop_.bomb);
+                    else if (!tile_blocked(context, return_hop_.bomb)) context.orders.special(ant_, return_hop_.bomb);
                 }
                 last_order_ = now;
                 return;
@@ -578,7 +615,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             context.orders.move({ant_}, hop.bomb);
             ++hops_ordered_;
             thrown_ = true;
-        } else {
+        } else if (!tile_blocked(context, hop.from)) {
             context.orders.move({ant_}, hop.from);
         }
     } else {
@@ -592,7 +629,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             return;
         }
         if (ant.tile == hop.bomb) context.orders.move({ant_}, hop.from);                  // a plant needs the tile empty: off it after a dud
-        else context.orders.special(ant_, hop.bomb);
+        else if (!tile_blocked(context, hop.bomb)) context.orders.special(ant_, hop.bomb);
     }
     last_order_ = now;
 }
@@ -600,7 +637,7 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
 void GateGoalTask::succeed(TaskContext& context) {
     ++done_;
     failures_ = 0;
-    if (ant_ != 0) context.ledger.release(ant_, id());
+    context.ledger.release_all(id());                                                      // (the ant of the goal and the ants that were sent aside)
     ant_ = 0;
     goal_ = GateGoal{};
     return_hop_ = BombHop{};
@@ -615,7 +652,7 @@ void GateGoalTask::fail(TaskContext& context, const char* why) {
     why_ = why;
     ++given_up_;
     ++failures_;
-    if (ant_ != 0) context.ledger.release(ant_, id());
+    context.ledger.release_all(id());
     ant_ = 0;
     goal_ = GateGoal{};
     if (failures_ > params_.retries) {

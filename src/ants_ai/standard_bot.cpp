@@ -11,6 +11,7 @@ constexpr uint8_t kRankPowerUps = 3;
 constexpr uint8_t kRankWalls = 4;
 constexpr uint8_t kRankFight = 5;
 constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off: the bot banks nothing, so its Fire ant or Bomber is worth more to it than to the mines, the walls or a fight)
+constexpr uint64_t kBreachTicks = 2400;           // (the opening of a gate map: the fire walls against a thief and the trips to the power-ups of the own side wait this long at most, 2 minutes)
 }  // namespace
 
 void StandardBot::start(const BotContext& context) {
@@ -70,6 +71,9 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.memory.update(view, *map);
     TaskContext context{view, orders, ledger_, profile_, *map, seat_};
 
+    // 1a. the gate play (Tactics::gate_map): decided once, from the analysis of the start
+    if (!gate_decided_) decide_gate_map(context);
+
     // 1b. the stall detector: the score is the only progress; a stall sends the bot to the plain economy for a while
     update_progress(view);
     if (fallback_until_ != 0 && now >= fallback_until_) end_fallback();
@@ -86,12 +90,13 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (last_look_ != 0 && now > last_look_) war_ticks_[st.war] += static_cast<uint32_t>(std::min<uint64_t>(now - last_look_, 1000u));    // (the ticks the bot spent at every war tier, for the arena's report)
     last_look_ = now;
     const bool escalating = plan.catchup && st.tier >= 1;                                    // behind the leader enough to escalate (the tiers: tactics.hpp, Standing)
+    // In the opening of a gate map, while the bot reaches no food and has banked nothing, the fire walls against a thief and the trips to the power-ups of its side only take ants from the gate goal
     bool any_reachable_pile = false;
     for (const PileView& p : view.piles()) {
         const PileInfo* info = map->pile(p.index);
         if (info == nullptr || info->approach[seat_].reachable()) any_reachable_pile = true;
     }
-    const bool gate_breaching = plan.gate_goals && level_ == Level::Hard && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
+    const bool gate_breaching = tactics_.gate_map && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
     uint8_t present = 0;
@@ -101,7 +106,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             if (((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && power_up_side(*map, p.tile, present) == seat_) tactics_.wants[static_cast<size_t>(p.kind)] = 1;
         }
     }
-    if ((plan.flower_sides || plan.flower_fire) && !gate_breaching) {  // the drops of the flowers (docs/BOTS.md, "The flowers"): a landed drop has a side like a power-up of the start, and a bot without a Fire Ant wants the Fire that lands
+    if (plan.flower_sides || plan.flower_fire) {  // the drops of the flowers (docs/BOTS.md, "The flowers"): a landed drop has a side like a power-up of the start, and a bot without a Fire Ant wants the Fire that lands
         for (const PowerUpView& p : view.powerups()) {
             const FlowerInfo* flower = map->flower_at(p.tile);
             if (flower == nullptr) continue;
@@ -115,7 +120,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const TeamRow& row = view.rows()[t];
         if (t != seat_ && row.present && !row.dropped && !(view.ally() < sim::MAX_PLAYERS && t == view.ally()) && tactics_.memory.plays(t)) enemy_plays = true;
     }
-    if (enemy_plays && view.ticks_left() > 2400 && !gate_breaching) {
+    if (enemy_plays && view.ticks_left() > 2400) {
         // the war batch: Bomber Ants for the mines, Fire Ants for the fire-in (the power-ups that the flowers let fall and those on the map; the pick-up trips are the ordinary ones)
         const bool war_now = !plan.war_free_only || tactics_.surplus > 0 || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_free_tier);
         const bool mine_now = war_now || (plan.behind_war && st.war >= 1 && st.war >= plan.behind_mine_tier)        // (the stand batch: a loser wants its Bomber from an earlier tier ...
@@ -144,21 +149,21 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     // 3. the tasks, the one that takes ants from the others first
     if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
-    if ((plan.islands && plan.island_ferry && island_.active()) || (plan.gate_goals && level_ == Level::Hard)) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
-    if (plan.gate_goals && level_ == Level::Hard && !fallback) gate_goals_.step(context);   // (off in every plan; Hard only: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
+    if ((plan.islands && plan.island_ferry && island_.active()) || tactics_.gate_map) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
+    if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     fight_.step(context);
-    if ((plan.rush || rush_.active()) && !gate_breaching) rush_.step(context);              // (when the plan has no rush the task only gives back what it held)
+    if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
     powerups_.step(context);
-    if (!gate_breaching) bombs_.step(context);
-    if (!gate_breaching && (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0)) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
-    const bool raiding = !gate_breaching && (plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier));
+    bombs_.step(context);
+    if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
+    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
     raids_.set_launching(raiding);
-    if ((raiding || ledger_.count(kRaids) != 0) && !fallback && !gate_breaching) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
-    if (plan.guards && !gate_breaching) guard_.step(context);
-    if ((plan.strikes || plan.wipe_focus || plan.catchup) && !gate_breaching) strike_.step(context);
-    if (plan.harass && !gate_breaching) harass_.step(context);
-    if (plan.sabotage && !gate_breaching) sabotage_.step(context);
+    if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
+    if (plan.guards) guard_.step(context);
+    if (plan.strikes || plan.wipe_focus || plan.catchup) strike_.step(context);
+    if (plan.harass) harass_.step(context);
+    if (plan.sabotage) sabotage_.step(context);
     if (plan.hatches) hatch_.step(context);
     if (plan.gate && !fallback) gate_.step(context);
     if (plan.gate && !fallback) {                                                      // (review experiment) the economy's rescue is only off while the gate really guides
@@ -173,6 +178,28 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (island_.take_reask()) harvest_.reask_soon();                                    // a bridge was finished: the economy asks the map again now
     }
     harvest_.step(context);
+}
+
+// The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
+// does not own the map. Medium and Hard play it; Easy never does. The decision is made once: a map that is open at the start stays open for the bot when its free piles are eaten, so an open map is
+// played exactly as it was.
+void StandardBot::decide_gate_map(TaskContext& context) {
+    if (!context.view.has_grid()) return;                                                   // (no grid, no analysis: asked again at the next look)
+    gate_decided_ = true;
+    tactics_.gate_map = false;
+    if (level_ == Level::Easy) return;
+    if (!GateInfo::analyse(context.map, context.view.grid(), seat_).walled()) return;
+    {   // a wall of power-ups (Running Ants: the pile lies in a ring of them) is cleared by the plain economy, which takes them: the map must be walled without them
+        sim::Grid bare = context.view.grid();
+        for (uint32_t y = 0; y < bare.height(); ++y) {
+            for (uint32_t x = 0; x < bare.width(); ++x) {
+                if (bare.has_powerup_at(sim::TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)})) bare.clear_powerup(static_cast<int32_t>(x), static_cast<int32_t>(y));
+            }
+        }
+        if (!GateInfo::analyse(context.map, bare, seat_).walled()) return;
+    }
+    if (tactics_.plan.islands && island_.probe(context)) return;                           // the island play owns the water maps (ISLANDS)
+    tactics_.gate_map = true;
 }
 
 bool StandardBot::accepts_invitation(const BotView& view, uint8_t from) {

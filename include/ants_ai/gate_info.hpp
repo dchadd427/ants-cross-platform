@@ -135,6 +135,9 @@ public:
     /// The hops (of hops()) that land in component `to` / whose last landing is exactly `tile`
     std::vector<const BombHop*> hops_to(int32_t to) const;
     std::vector<const BombHop*> hops_onto(sim::TileCoord tile) const;
+    /// Whether the map is WALLED for this team: the analysis is valid, the hill's ants leave into a safe component (home() >= 0), the map has piles and none of them is free of every
+    /// gate (HELLRAISER and its family, POPcOrN, and ISLANDS, which the island play keeps; not Bombz Away, where home() is -1). Read at the start: it decides whether the bot plays the gate goals (StandardBot).
+    bool walled() const noexcept;
     /// How many piles / power-ups are free of every gate, and how many can be reached by some means at all
     int32_t free_piles() const noexcept;
     int32_t passable_piles() const noexcept;
