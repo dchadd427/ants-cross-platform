@@ -91,6 +91,8 @@ class ComposeFilesAsText(unittest.TestCase):
             self.assertIn("dockerfile: Dockerfile.server\n", text)
             self.assertRegex(text, r"(?m)^  ants-beta:\s*$")
             self.assertRegex(text, r"(?m)^  ants-server:\s*$")
+            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server"])      # (these two and no other: the server plays its own matches of computer players, there is no bot arena container)
+            self.assertNotIn("profiles:", "\n".join(code_lines(text)))                            # (and none that waits behind a profile for somebody to ask for it)
         command = lambda text: [l.strip() for l in code_lines(text) if l.strip().startswith("command:")]
         self.assertEqual(len(command(self.staging)), 1)
         self.assertEqual(command(self.staging), command(self.stack))                          # the same server options, the demo rooms and TREASURE.LVL as the default map
