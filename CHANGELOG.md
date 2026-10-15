@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.41 - 2026-10-14 - Universal gate planner, windowed web mouse lock and server hardening
+
+**For players:**
+- In a browser window, clicking the game during a match now locks the mouse inside the picture (when *Fullscreen mouse: Locked* is on) so you can pan freely at every edge without the cursor leaving the window; hold **Ctrl+Alt** (or press **Esc**) to release the mouse.
+- When gate goals are switched on for a Hard computer player, it plans multi-hop power-up, fire-wall and bomb-barrier chains from any reachable land component where its ants stand, and unseals power-up doorways and shore approaches without map-specific rules.
+- Hardened the web and match server stack with `/ws` connection rate limiting, read-only container and capability restrictions, parameterized database backup bindings and pinned build dependencies.
+
+**Rules / network:** none. No simulation rule, golden hash or network protocol number changed (protocol 20).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2b102759...fb846d3a)
+
 ## v0.12.40 - 2026-10-14 - Build date and time in the web footer
 
 **For players:**
@@ -30,7 +41,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Only the pages' footer text changed; network protocol 20 is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b0f2a5c3...HEAD)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b0f2a5c3...2b102759)
 
 ## v0.12.39 - 2026-10-14 - Opportunistic water pushes, vicinity kills, smart threat counters and bomb-tunnel defusal
 
