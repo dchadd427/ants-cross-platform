@@ -193,6 +193,14 @@ check "--resume-countdown-seconds above 60 is refused" "$([ "$(exit_of --resume-
 check "--resume-countdown-seconds below 0 is refused" "$([ "$(exit_of --resume-countdown-seconds -1)" = "2" ]; echo $?)"
 check "--resume-countdown-seconds that is no number is refused" "$([ "$(exit_of --resume-countdown-seconds ten)" = "2" ]; echo $?)"
 check "--resume-countdown-seconds without a value is refused" "$([ "$(exit_of --resume-countdown-seconds)" = "2" ]; echo $?)"
+check "--start-countdown-seconds above 60 is refused" "$([ "$(exit_of --start-countdown-seconds 61)" = "2" ]; echo $?)"
+check "--start-countdown-seconds below 0 is refused" "$([ "$(exit_of --start-countdown-seconds -1)" = "2" ]; echo $?)"
+check "--start-countdown-seconds that is no number is refused" "$([ "$(exit_of --start-countdown-seconds half)" = "2" ]; echo $?)"
+check "--start-countdown-seconds without a value is refused" "$([ "$(exit_of --start-countdown-seconds)" = "2" ]; echo $?)"
+check "--start-countdown-seconds 0 and 60 start the server" "$([ "$(exit_of --start-countdown-seconds 0)" = "142" ] && [ "$(exit_of --start-countdown-seconds 60)" = "142" ]; echo $?)"
+check "the log says the countdown: 30 s by default (network protocol 21)" "$(log_of | grep -q 'holds the first turn of its match 30 s, with the chat open'; echo $?)"
+check "... the number that --start-countdown-seconds says" "$(log_of --start-countdown-seconds 12 | grep -q 'holds the first turn of its match 12 s, with the chat open'; echo $?)"
+check "... and that 0 means none, in a server that holds no seats too" "$(log_of --no-reconnect --start-countdown-seconds 0 | grep -q 'no countdown before the first turn'; echo $?)"
 check "--log-mb 0 is refused" "$([ "$(exit_of --log-mb 0)" = "2" ]; echo $?)"
 check "--log-mb above 256 is refused" "$([ "$(exit_of --log-mb 257)" = "2" ]; echo $?)"
 check "--log-mb that is no number is refused" "$([ "$(exit_of --log-mb big)" = "2" ]; echo $?)"
@@ -201,7 +209,7 @@ check "good reconnect options start the server (the alarm ends it: status 142)" 
 check "the edges of the other side start it too" "$([ "$(exit_of --no-reconnect --hold-vote-seconds 3600 --max-pause-seconds 60 --log-mb 1)" = "142" ]; echo $?)"
 check "the new options' edges start it: 10 and 0" "$([ "$(exit_of --reconnect --max-catch-up-seconds 10 --resume-countdown-seconds 0)" = "142" ]; echo $?)"
 check "the new options' edges start it: 3600 and 60" "$([ "$(exit_of --reconnect --max-catch-up-seconds 3600 --resume-countdown-seconds 60)" = "142" ]; echo $?)"
-check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--max-catch-up-seconds 10-3600' && "$SERVER" --help 2>&1 | grep -q -- '--resume-countdown-seconds 0-60' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
+check "--help names the reconnect options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--reconnect | --no-reconnect' && "$SERVER" --help 2>&1 | grep -q -- '--hold-vote-seconds 5-3600' && "$SERVER" --help 2>&1 | grep -q -- '--max-pause-seconds 60-86400' && "$SERVER" --help 2>&1 | grep -q -- '--max-catch-up-seconds 10-3600' && "$SERVER" --help 2>&1 | grep -q -- '--resume-countdown-seconds 0-60' && "$SERVER" --help 2>&1 | grep -q -- '--start-countdown-seconds 0-60' && "$SERVER" --help 2>&1 | grep -q -- '--log-mb 1-256'; echo $?)"
 # the restart records (docs/NETWORK_PORT.md "Restart records"): the options and their edges
 check "--restart-vote-seconds below 30 is refused" "$([ "$(exit_of --restart-vote-seconds 29)" = "2" ]; echo $?)"
 check "--restart-vote-seconds above 3600 is refused" "$([ "$(exit_of --restart-vote-seconds 3601)" = "2" ]; echo $?)"
@@ -338,7 +346,7 @@ fi
 # ---- part rooms: the control secret, a room by code, the leader, bots that fill the seats, chat, flood control, closing a room, SIGTERM ---------------------------
 if part_enabled rooms; then
 WS_PORT="$(free_port)"
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ws-port "$WS_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" > "$WORK/server.log" 2>&1 &
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ws-port "$WS_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" --start-countdown-seconds 0 > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
 UP=1
 for _ in $(seq 1 50); do
@@ -1081,7 +1089,7 @@ if command -v node > /dev/null 2>&1; then
     # ... and the hand-over to the game, with the native game: two pages in a lobby, the plan for the two of them and START; the START waits for the games, the pages go (in one run they are gone first and their
     # seats are held, in the other they are still connected and the games supersede them), a game of each name takes its seat over with the key of its page (read from a rejoin file, as the game page reads
     # the browser's storage), and the match loads, starts and runs (tests/scripts/web_lobby_handoff_check.js)
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 12 > "$WORK/lobbyh.log" 2>&1 &
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 12 --start-countdown-seconds 8 > "$WORK/lobbyh.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
     HAND_OUT="$(ANTS_E2E_SECRET="$SECRET" ANTS_HANDOFF_WAIT_MS=$((60000 * TIME_SCALE)) node "$ROOT/tests/scripts/web_lobby_handoff_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_CTL" "127.0.0.1:$LOBBY_PORT" "$GAME" "$ROOT" "$WORK" 2>&1)"
@@ -1171,7 +1179,7 @@ rc_field() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$1" 
 for part in sys.argv[1].split("."):
     v = v.get(part) if isinstance(v, dict) else None
 print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 --resume-countdown-seconds 8 > "$WORK/rc_server.log" 2>&1 &
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 --resume-countdown-seconds 8 --start-countdown-seconds 0 > "$WORK/rc_server.log" 2>&1 &
 SERVER_PID=$!
 RC_UP=1
 for _ in $(seq 1 50); do
@@ -1339,7 +1347,7 @@ for part in sys.argv[1].split("."):
     v = v.get(part) if isinstance(v, dict) else None
 print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
 rr_launch() {      # rr_launch [EXTRA ARGUMENTS]: starts the server of this section over the same folder and does not wait for it
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RR_PORT" --ctl-port "$RR_CTL" --results-dir "$RR_RESULTS" --reconnect --resume-countdown-seconds 0 "$@" >> "$WORK/rr_server.log" 2>&1 &
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RR_PORT" --ctl-port "$RR_CTL" --results-dir "$RR_RESULTS" --reconnect --resume-countdown-seconds 0 --start-countdown-seconds 0 "$@" >> "$WORK/rr_server.log" 2>&1 &
     SERVER_PID=$!
 }
 rr_start() {      # rr_start [EXTRA ARGUMENTS]: rr_launch, and it returns when the control interface answers (the restore of the records goes on after that: rr_wait_room)
@@ -1573,7 +1581,7 @@ RP_RESULTS="$WORK/rp_results"
 RP_CODE="RP-ROOM-$RANDOM"
 RP_PUBURL="http://127.0.0.1:$RP_PUB"
 rp_server() {      # rp_server [options]: the server over the results folder, with the control interface; 0 when it answers
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$RP_RESULTS" "$@" >> "$WORK/rp_server.log" 2>&1 &
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$RP_RESULTS" --start-countdown-seconds 0 "$@" >> "$WORK/rp_server.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do
         if curl -s -m 1 "$CTL/healthz" | grep -q '"ok"'; then return 0; fi

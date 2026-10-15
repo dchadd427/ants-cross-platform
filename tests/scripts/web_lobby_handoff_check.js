@@ -151,9 +151,16 @@ async function main() {
         if (running !== null) {
             check(title + ': both games took their seats over and the match started (state running, START no longer waits)', running.starting === false && running.joined === 2);
             check(title + ': the two people are Ada and Bea, in the seats that their pages had', JSON.stringify(running.players.map((p) => [p.seat, p.name])) === JSON.stringify([[keys.a.seat, 'Ada'], [keys.b.seat, 'Bea']]), JSON.stringify(running.players));
+            // protocol 21: the server of this check counts down 8 s (--start-countdown-seconds 8) for a room of two people: it says so, and has sealed nothing when the match has just begun
+            const countdownMs = (running.countdown_seconds || 0) * 1000;
+            check(title + ': the room holds the first turn for its countdown (' + running.countdown_seconds + ' s) and has sealed none yet (turns ' + running.turns + ', ticks ' + running.ticks + ')',
+                  running.countdown_seconds === 8 && running.turns === 0 && running.ticks === 0);
+            const ranAt = Date.now();
             let ticks = 0;
             try { ticks = await new Promise((resolve, reject) => { const t0 = Date.now(); const poll = async () => { const r = await room(code); if (r !== null && r.ticks > 0) { resolve(r.ticks); return; } if (Date.now() - t0 > waitMs) { reject(new Error('no tick')); return; } setTimeout(poll, 150); }; poll(); }); } catch (e) { /* ticks stays 0 */ }
             check(title + ': the referee\'s clock runs (both games loaded the map and report their state: ticks ' + ticks + ')', ticks > 0);
+            const waited = Date.now() - ranAt;
+            check(title + ': ... and the first turn came with the countdown, not before it (' + waited + ' ms after the match began, countdown ' + countdownMs + ' ms)', waited >= countdownMs - 1000 && waited <= countdownMs + 10000);
             await sleep(1500);                                                      // (a desync of the two games would be reported within a second or two)
             const later = await room(code);
             check(title + ': the match goes on with both games in it', later !== null && later.state === 'running' && later.ticks > ticks && games.every((g) => !g.exited), JSON.stringify(later && { state: later.state, ticks: later.ticks, reason: later.reason }));

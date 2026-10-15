@@ -1725,6 +1725,27 @@ void test_text_sizes(Renderer& r) {
         if (h == 12) ink12 = ink;
         if (h == 35) check(ink * 12 >= ink12 * 35 * 90 / 100 && ink * 12 <= ink12 * 35 * 110 / 100, "the letters grow in proportion to the cell (12 -> 35)");
     }
+    // the countdown's count (protocol 21): the remake's own 96 px size; the digits are as big as the cell says (a 96 px cell holds a digit of 53 - 72 % of it) and two of them fit the count box (170 px)
+    {
+        check(font_cell_height(FontSize::Px96) == 96 && r.get_text_height(FontSize::Px96) == 96, "the countdown's size is a 96 px cell");
+        check(r.get_text_width("28", FontSize::Px96) > r.get_text_width("28", FontSize::Px35) * 2 && r.get_text_width("28", FontSize::Px96) < 150, "two digits of 96 px are wider than of 35 px and fit the box of the count");
+        SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);
+        SDL_RenderClear(sr);
+        r.draw_text("8", 5, 2, assets::ColorRGBA{255, 255, 255, 255}, FontSize::Px96);
+        const Image big = read_region(sr, 0, 0, 120, 110);
+        int top = 1000;
+        int bottom = -1;
+        for (int y = 0; y < big.h; ++y) {
+            for (int x = 0; x < big.w; ++x) {
+                if (big.at(x, y)[0] > 128) {
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        const int ink = bottom - top + 1;
+        check(bottom >= 0 && ink * 100 >= 96 * 53 && ink * 100 <= 96 * 72 + 100, "a digit of size 96 is " + std::to_string(ink) + " px tall");
+    }
     // the text of a multi-line string advances by the cell height
     const int32_t line = font_cell_height(FontSize::Px24);
     SDL_SetRenderDrawColor(sr, 0, 0, 0, 255);

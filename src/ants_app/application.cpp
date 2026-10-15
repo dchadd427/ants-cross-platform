@@ -715,6 +715,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_quit([this]() {
         confirm_quit();
     });
+    hud_.set_on_fullscreen([this]() { toggle_fullscreen(); });          // (the countdown card's Fullscreen button, protocol 21: the native game's own; the page's button does it in the browser)
 
     hud_.set_on_sfx_volume([this](int32_t v) {
         audio_mixer_.set_sound_volume(v);                       // 0x102d7cf: the Sound Volume 0 .. 100 enters every sound's law
@@ -1212,6 +1213,8 @@ void Application::enter_match(bool rejoin) {
     prediction_cooldowns_reported_ = 0;
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
+    countdown_deadline_ms_ = -1.0;                                           // (net_begin_match starts the countdown card after this)
+    countdown_status_shown_ = -1;
     scorecard_.hide();
     match_over_handled_ = false;
     local_match_reported_ = network_active();                               // (a game on this computer tells the page at its first tick: once; a match of a room never does, also when it is left before the page is gone)
@@ -1769,6 +1772,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
+// The countdown card (protocol 21), for the page's Fullscreen button (web/countdown_button.js): 60 - 65, see Application::countdown_probe (application_net.cpp).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -1838,6 +1842,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 34: return static_cast<int>(g_web_app->touch().fingers());
         case 35: return static_cast<int>(g_web_app->touch().mode());
         case 36: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
+        case 60: case 61: case 62: case 63: case 64: case 65: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
         case 50: return g_web_app->match_running() ? static_cast<int>(g_web_app->hud().get_selected_ant_ids().size()) + (g_web_app->hud().get_selected_base_team_id() >= 0 ? 1000 : 0) + (g_web_app->hud().get_selected_ant_id() != 0 ? 100000 : 0) : -1;
         default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)
     }
@@ -2442,6 +2447,7 @@ void Application::update_simulation(float dt) {
         tick_accumulator_ = static_cast<float>(net_->sub_tick_ms()) / 1000.0f;
         // The "Get ready" dialog of the match's start: no tick runs while it is up (the host seals the first turn kMatchStartDelayMs after the match began) and it ends with the first turn that
         // runs (post_tick). Meanwhile the HUD is stepped in real time, 50 ms at a time, so that its portrait moves and the wait does not look like a hang.
+        tick_net_countdown();
         if (hud_.is_match_start_modal_active()) {
             start_dialog_clock_ms_ += static_cast<double>(dt) * 1000.0;
             while (start_dialog_clock_ms_ >= static_cast<double>(sim::TICK_MS) && hud_.is_match_start_modal_active()) {
@@ -2583,7 +2589,7 @@ void Application::confirm_quit() {
     }
     // A match that is held (a seat is missing, the countdown runs, this machine is on its way back) seals no turn, and no session plays in the lobby phases of a match that starts again after a BadRequest (the
     // catch-up screen is up): a Quit command would be lost and the player would stay. The player leaves for good instead (NetGame::leave: the key is let go of, the others are told when the link is up).
-    if (network_active() && (net_->paused() || catch_up_screen_active())) {
+    if (network_active() && (net_->paused() || catch_up_screen_active() || hud_.is_match_start_modal_active())) {      // (protocol 21: the countdown card has a Quit button, and the first turn is not sealed yet either)
         leave_game();
         return;
     }
@@ -2856,70 +2862,6 @@ void Application::net_start_from_setup(const std::string& map_path) {
     map_select_.lock();                                                      // START ran: the map and the fog option are fixed (+0x130)
 }
 
-void Application::handle_net_events() {
-    if (!net_) return;
-    for (const std::string& text : room_chat_log_.take({}, static_cast<uint32_t>(net_time_ms_))) std::cerr << "[Application] Room chat: " << text << std::endl;      // (the count of the lines that the log left out, once the budget allows it)
-    for (const net::NetGame::Event& ev : net_->take_events()) {
-        switch (ev.type) {
-            case net::NetGame::Event::Type::StartRequested:
-                map_select_.lock();                                  // the start is on (a host's START locks the screen itself; the leader's START is answered by this Start): nothing more to press
-                net_load_match();
-                break;
-            case net::NetGame::Event::Type::Begun:
-                net_begin_match(ev.rejoin);
-                break;
-            case net::NetGame::Event::Type::Cancelled:               // the start failed: back in the room, the host's controls work again
-                map_select_.unlock();
-                for (const ai::BotSpec& spec : fill_specs_) net_->remove_bot(spec.seat);      // the room is as it was before the START: the bots that it seated go again
-                fill_specs_.clear();
-                break;
-            case net::NetGame::Event::Type::RoomChanged:             // (protocol 14) a player that the leader moved takes the bot that was for its colour: NetGame moves it in its plan when the room shows the
-                if (net_->is_leader()) config_.fill_bots = net_->fill_bots();      // move, and the application's copy of the plan, which the footer of the setup screen shows, follows
-                break;
-            case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
-                for (const std::string& text : room_chat_log_.take(net_->take_pregame_chat(), static_cast<uint32_t>(net_time_ms_))) {       // (a budget: a flooded room does not flood the log)
-                    std::cerr << "[Application] Room chat: " << text << std::endl;
-                }
-                break;
-            case net::NetGame::Event::Type::HostLeft:                // the host is gone and no other machine could take over (or the server dropped this player for being away)
-                net_notice_ = net_->status_text();                   // the reason, as the network layer says it: "The connection to the other players was lost." or "You were away too long ..."
-                std::cerr << "[Application] " << net_notice_ << std::endl;                    // (for the scripts that run a headless client: nothing else says it)
-                if (state_ == AppState::Playing && !scorecard_.is_open()) {
-                    if (menu_enabled_) {
-                        return_to_start_menu(net_notice_);                   // (the net is gone: the rest of the events belong to it)
-                        return;
-                    }
-                    return_to_map_select();
-                }
-                break;
-            case net::NetGame::Event::Type::Desync:
-                std::cerr << "[Application] The network match is out of sync (turn " << net_->turns_executed() << ")" << std::endl;
-                break;
-            default:
-                break;                                        // the rest of the room is shown by sync_room_view, the match by the overlay and the chat log
-        }
-    }
-}
-
-// Everybody has loaded: the match runs here from now on.
-void Application::net_begin_match(bool rejoin) {
-    local_player_id_ = net_->my_seat();
-    hud_.set_command_sink(net_.get());
-    close_room_chat();
-    enter_match(rejoin);
-    // The match's chat log starts with what was said in the waiting room (protocol 11: the lobby kept the last 200 lines, this player's own among them): the people of a room who talked
-    // before the START find their talk in the log of the match. The room's own notices ("Bots cannot play with Fog of War.") were for the setup screen and are not repeated. A machine that
-    // rejoins has no waiting room behind it (and its second begin, after a server that lost the last turns, must not say the old lines again).
-    for (const net::ChatLine& line : net_->pregame_chat()) {
-        if (rejoin) break;
-        if (line.notice()) continue;
-        // (under the name that the sender had when it spoke: the seat may have another player now, a player who left and a newcomer who took the seat)
-        const std::string name = !line.name.empty() ? line.name : (line.seat < sim::MAX_PLAYERS ? sim_.get_player_name(line.seat) : std::string());
-        hud_.receive_chat_message(line.seat, name, line.text, false, sim_.get_world_state());
-    }
-    start_net_bots();
-}
-
 // The session is over (the player left, the host left, a match ended and its results were closed): back to the local setup screen.
 void Application::net_end_session(const std::string& notice) {
     stop_bots();
@@ -2927,6 +2869,8 @@ void Application::net_end_session(const std::string& notice) {
     prev_missing_.clear();
     back_name_.clear();
     vote_press_ = 0;
+    countdown_deadline_ms_ = -1.0;
+    countdown_status_shown_ = -1;
     room_chat_.close();
     room_chat_press_taken_ = false;
     fill_specs_.clear();

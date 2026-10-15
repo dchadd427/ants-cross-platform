@@ -51,6 +51,7 @@
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -244,6 +245,10 @@ public:
     /// Protocol 16: the file name that the server gives a map of a PlanMsg ("" when it offers none by that name: the plan's map is then not taken, the rest of the plan is). Unset (the default): any valid_map_name.
     void set_map_choice(std::function<std::string(const std::string&)> fn) { map_choice_ = std::move(fn); }
     void host_loaded(bool ok);
+    /// Protocol 21: the seconds that the Begin of the start that is made next tells everybody (0 .. kMaxCountdownSeconds; more is cut): how long the host holds the first turn. 0 (the default): the plain 5 s
+    /// "Get ready" dialog. The owner sets it before start() and the same number as the first turn's delay (HostSession::Config::start_delay_ms) in its session: the lobby only tells.
+    void set_countdown_seconds(uint32_t seconds) noexcept { countdown_seconds_ = static_cast<uint8_t>(std::min<uint32_t>(seconds, kMaxCountdownSeconds)); }
+    uint8_t countdown_seconds() const noexcept { return countdown_seconds_; }
     /// The host abandons the start (Cancel to everybody, back to the room)
     void cancel();
     const StartMsg& start_info() const noexcept { return start_; }
@@ -376,6 +381,7 @@ private:
     std::array<Guest, sim::MAX_PLAYERS> guests_{};
     bool host_loaded_{false};
     uint32_t load_started_ms_{0};
+    uint8_t countdown_seconds_{0};          // protocol 21: what the Begin tells (set_countdown_seconds)
     std::vector<Pending> pending_;
     std::vector<Event> events_;
     uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
@@ -485,6 +491,8 @@ public:
     CancelMsg::Reason cancel_reason() const noexcept { return cancel_reason_; }
     /// The seat that caused the cancel (a player who left, a machine that could not load the map), 255 when unknown
     uint8_t cancel_player() const noexcept { return cancel_player_; }
+    /// Protocol 21: the seconds that the Begin of this match told (0: the plain 5 s dialog); valid from Begun on. A machine that is given a match that runs is told 0.
+    uint8_t countdown_seconds() const noexcept { return countdown_seconds_; }
 
     /// The map named by start_info() is loaded (ok) or cannot be (missing file, a different file)
     void report_loaded(bool ok);
@@ -507,6 +515,7 @@ private:
     RejectReason reject_{RejectReason::BadRequest};
     CancelMsg::Reason cancel_reason_{CancelMsg::Reason::HostCancelled};
     uint8_t cancel_player_{255};
+    uint8_t countdown_seconds_{0};          // protocol 21: what the Begin told
     uint32_t joined_at_ms_{0};
     bool joined_stamp_pending_{false};      // the Hello went out through send_hello(): update() stamps the time
     PingMeter ping_;

@@ -264,10 +264,10 @@ bool Room::start_bots(uint32_t seed, std::string& why) {
 }
 
 // The session of the match, as a match that starts and a match that is restored both make it: a host without a seat that holds seats when the room says so
-void Room::build_session(uint32_t restart_vote_after_ms) {
+void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms) {
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
-    hc.start_delay_ms = net::kMatchStartDelayMs;                  // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp)
+    hc.start_delay_ms = start_delay_ms;                           // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp); protocol 21: or the countdown of a room with two or more people
     // (no waiting for a seat that falls behind: the room keeps its pace, the seat catches up alone, and one that is 60 s behind or has run nothing for 30 s is dropped:
     // the lag policy of a host without a seat, session.hpp)
     // A room that holds seats pauses the match for a player whose connection is lost (and whose key it knows) instead of dropping it: the vote, the cap and the log are the room's settings
@@ -305,7 +305,7 @@ void Room::begin_match(uint32_t now_ms) {
     sim::apply_start_teams(*sim_, start_teams_);                 // the teams of the Start, before the first tick: what every machine does with the same message (after the names: the News Flash names the players)
     started_ms_ = now_ms;                                        // (run_ms counts from here: the 5 s before the first turn count, the match's pauses do not)
     last_person_ms_ = now_ms;
-    build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs);
+    build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs, begin_delay_ms_);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
         if (lobby_.room().slots[seat].state == net::SlotState::Bot) session_->add_bot_seat(seat);       // a computer player: no connection, acknowledged by the server itself
@@ -384,6 +384,11 @@ bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::p
         bot_specs_.push_back(bot);
         fill_seats_ = static_cast<uint8_t>(fill_seats_ | (1u << bot.seat));
     }
+    // Protocol 21: the people who play decide whether the first turn waits for a countdown (the Begin of this start tells the same seconds that the session holds the turn for)
+    const uint32_t people = static_cast<uint32_t>(lobby_.humans());
+    const uint32_t countdown = people >= net::kCountdownMinPeople ? std::min(spec_.countdown_s, net::kMaxCountdownSeconds) : 0u;
+    lobby_.set_countdown_seconds(countdown);
+    begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs;
     if (seated && lobby_.start(seed_, map_.hash, now_ms, teams)) {
         state_ = RoomState::Loading;
         lobby_.host_loaded(true);                            // the server loaded the map when it made the room (the record of the match was made by the lobby's hook before its Start went out)
@@ -1090,6 +1095,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.max_pause_ms = spec_.max_pause_ms;
     s.max_catch_up_ms = spec_.max_catch_up_ms;
     s.resume_countdown_ms = spec_.resume_countdown_ms;
+    s.countdown_s = spec_.countdown_s;
     s.connections = static_cast<uint32_t>(connections_.size());
     const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)

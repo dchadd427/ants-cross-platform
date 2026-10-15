@@ -1429,8 +1429,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="replay_page.js"></script>
-    <script src="map_files.js"></script>
+    <script src="replay_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -3194,6 +3193,7 @@
             }, { passive: true });
         })();
         // ANTS_CHAT_END
+        if (window.AntsCountdown) window.AntsCountdown.forPage({ doc: document, stage: stageElement, canvas: canvas, ask: function (what) { try { return Module._ants_probe ? Module._ants_probe(what) : -1; } catch (err) { return -1; } }, ready: function () { return isReadyToPlay; }, isFullscreen: isFullscreen, enter: enterFullscreen });      // the Fullscreen button of the countdown (countdown_button.js)
 
         window.addEventListener('keydown', function(e) {
             if (!isReadyToPlay) return;                                      // before the game is ready the page behaves as usual

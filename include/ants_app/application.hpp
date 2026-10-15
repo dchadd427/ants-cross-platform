@@ -361,6 +361,10 @@ public:
     bool web_chat_available() const noexcept;
     /// ... the box where a finger taps, in the CANVAS's pixels (the picture sits in the canvas: picture().x / y)
     LayoutRect web_chat_box() const noexcept;
+    /// Protocol 21, for the page (ants_probe 60 - 64): the seconds that the countdown has left (-1 when no countdown card is up) and the place of the Fullscreen button on it, in the page's canvas pixels
+    int32_t countdown_seconds_left() const noexcept;
+    LayoutRect web_countdown_button() const noexcept;
+    int countdown_probe(int what) const noexcept;         // ants_probe 60 - 65: the two above, the button's x, y, width and height, and the lines of the chat log (application_net.cpp)
     /// ... and the page edits the HUD's chat line (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character `value`, 2 Backspace, 3 Enter (a
     /// key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's). Returns false when the box takes nothing (web_chat_available)
     bool web_chat_do(int what, int value);
@@ -801,7 +805,9 @@ private:
     void net_load_match();                                // the host said Start: load the map (a map that is not in the maps folder is fetched first: map_fetcher_), initialise the simulation, report
     void net_finish_load();                               // the map file is here: check its hash, load it, report (net_load_match, poll_map_fetch)
     void poll_map_fetch();                                // once a frame of a room: the room's map is asked for ahead of the Start, and a Start that waits for its map is carried on or failed
-    void net_begin_match(bool rejoin = false);            // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin)
+    void net_begin_match(bool rejoin = false, uint8_t countdown_seconds = 0);   // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin; `countdown_seconds`: protocol 21, the Begin said the first turn is held that long)
+    void begin_net_countdown(uint8_t seconds);            // the countdown card of a room with two or more people: the count, the colours, the chat (hud.hpp start_match_countdown)
+    void tick_net_countdown();                            // once a frame while the card is up: what is left of the count, the status line, and the end of it when the first turn (or a pause) has closed the dialog
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
     void net_request_start();                             // START of the leader of a server's room: the request goes to the server; the can't-go cue when there is nobody to play with
@@ -906,6 +912,8 @@ private:
     uint64_t last_frame_time_{0};
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
+    double countdown_deadline_ms_{-1.0};   // protocol 21: net_time_ms_ at which the countdown ends (-1: no countdown card is up)
+    int32_t countdown_status_shown_{-1};   // ... the second that the status line says now
     double start_dialog_clock_ms_{0.0};  // a match of the network: the real milliseconds of the "Get ready" dialog that are not handed to the HUD yet (its portrait moves in real time while it waits for the first turn)
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
     float current_fps_{60.0f};

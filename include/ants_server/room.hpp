@@ -28,7 +28,7 @@
 // door (RoomManager: Room::rejoin) and the session gives the player the match again from its turn log. The others may vote to go on without the seat (more than half of those who are
 // there, after 30 s of absence in all) and the match's total pause is capped (30 minutes): at the cap every seat that is not present is dropped. The room is finished by its rules as before, and
 // when everybody has left: a held seat counts as present, so a room whose players all lost their connection waits (until the cap) and then ends "everybody left". The wall-clock limit
-// `run_ms` counts the time since the match began (the five seconds of the start dialog before the first turn included, protocol 12), not the time that it waited for a seat. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
+// `run_ms` counts the time since the match began (the seconds of the start dialog or the countdown before the first turn included, protocols 12 and 21), not the time that it waited for a seat. The log of the match, which the stream of a returning player is cut from, is bounded per room and by the
 // server's budget (net::LogBudget), and is freed when the match is over. A room without `reconnect` is exactly what it was before: keys are zero, a Hello for a running match is
 // MatchRunning, a lost connection is a drop at once. No key is ever in a status, a result file or a log line.
 //
@@ -116,7 +116,7 @@ struct RoomSpec {
     uint32_t keep_ms{10u * 60u * 1000u};    // a finished or failed room stays visible to status calls this long
     uint32_t run_ms{2u * 3600u * 1000u};    // a match that is still running this long after it began is ended (failed, "took too long"): a wall-clock limit on the life of
                                             // a room (it never waits for a seat, but a match that does not end by its rules would run on for ever). It counts from the moment the match
-                                            // began (the 5 s before its first turn, the start dialog, count: protocol 12), without the time that it waited for a seat that was away
+                                            // began (the 5 s or the countdown before its first turn, the start dialog, count: protocols 12 and 21), without the time that it waited for a seat that was away
     // Reconnect (protocol 10): the room holds the seat of a player whose connection is lost. A spec built by code says what it wants (false here); the server's rooms start from
     // RoomManager::default_spec(), which holds seats unless `--no-reconnect` or the room's own "reconnect": false says otherwise (kReconnectByDefault).
     bool reconnect{false};
@@ -132,6 +132,10 @@ struct RoomSpec {
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
     /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
     bool bots_only{false};
+    /// Protocol 21: the seconds that the room holds the first turn of its match (the countdown: everybody can chat and go fullscreen) when at least net::kCountdownMinPeople people play; 0 .. net::kMaxCountdownSeconds,
+    /// 0 = none (the plain 5 s "Get ready" dialog of protocol 12). A spec built by code says what it wants (0 here); the server's rooms start from RoomManager::default_spec(), which has the server's own setting
+    /// (--start-countdown-seconds, default 30; the control key "countdown_seconds"). A room of one person, with or without computer players, never counts down.
+    uint32_t countdown_s{0};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -224,6 +228,7 @@ struct RoomStatus {
     uint32_t max_pause_ms{0};
     uint32_t max_catch_up_ms{0};            // ... one absence may spend this long catching up in all; the match is held this long after a pause (0: not at all)
     uint32_t resume_countdown_ms{0};
+    uint32_t countdown_s{0};                // protocol 21: the seconds that the room holds the first turn when two or more people play (0: none)
     uint8_t resume_s{0};                    // the countdown that follows a pause is running: the seconds that are left (0: none)
     bool paused{false};                     // the match waits for a seat (running rooms only)
     struct Absent {
@@ -414,7 +419,7 @@ private:
     std::string replay_keep(replay::Recorder& recorder);     // the part of replay_end that makes the file and sets replay_file_ or replay_note_: the file's name, "" when the match is not kept
     void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
-    void build_session(uint32_t restart_vote_after_ms);      // the session of the match, as begin_match and restore both make it (the engine is made already)
+    void build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms = net::kMatchStartDelayMs);      // the session of the match, as begin_match and restore both make it (the engine is made already); `start_delay_ms`: how long the first turn is held (the 5 s dialog, or the countdown of protocol 21)
     // Bots (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
     void unseat_fill();
@@ -437,6 +442,7 @@ private:
     std::string reason_;
     uint32_t cancels_{0};
     uint32_t started_ms_{0};                 // when the match began (run_ms)
+    uint32_t begin_delay_ms_{net::kMatchStartDelayMs};   // protocol 21: how long the first turn of the match that starts now is held (set by start_lobby together with what the Begin tells)
     uint32_t retry_at_ms_{0};                // after a cancelled start the room waits a moment before it tries again (a client that cannot load the map does not make a tight loop): until here, while retry_pending_
     bool retry_pending_{false};              // (a flag and not an old time: a lobby room waits for ever, and a time that is older than 24.8 days reads as a time to come in a signed comparison)
     uint32_t last_cancel_ms_{0};             // a lobby room: when its start was last cancelled (cancels_ counts those in a row)

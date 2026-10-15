@@ -915,6 +915,10 @@ Nothing on the wire changed, the way a level is read did: 18 made the ids 129 ..
 
 No layout changed: a bot is named `Pip (bot, Hard)`, a lobby room's Room message shows a planned bot's name in its empty seat, and the decoders refuse a name on an empty seat that is no planned bot's and a reserved person's name in a Name message. All of it is in [`BOT_NAMES.md`](BOT_NAMES.md). A Hello of 19 is refused.
 
+## Protocol 21
+
+[`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md): `Begin` carries the seconds of the countdown.
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided

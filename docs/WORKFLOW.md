@@ -65,7 +65,7 @@ The version is the single line of the file [`VERSION`](../VERSION) (`MAJOR.MINOR
 
 [`CHANGELOG.md`](../CHANGELOG.md) is short, one entry per release, newest first, in a fixed template that is at the top of that file (copy it from there).
 
-An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that goes live writes its entry (the same template, for players) under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry with the pull request's version ("Version policy", above); a pull request that goes nowhere has no entry. The site builds the file into `changelog.html` with `tools/changelog_to_html.py`, linked from the game page. The releases before v0.4.0 are only in git history.
+An entry is 5 - 15 lines, in plain words. No test counts, no mutation or review lists: those belong in commit messages and in the documents. A pull request that goes live writes its entry (the same template, for players) under a section headed exactly `## Next` (no version, no date) above the newest release, and `tools/release.py` turns that section into the entry with the pull request's version ("Version policy", above); a pull request that goes nowhere has no entry. The site builds the file into `changelog.html` with `tools/changelog_to_html.py`, linked from the game page. The releases before v0.5.0 are only in git history.
 
 ## Speed: compiler caches
 
