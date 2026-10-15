@@ -34,7 +34,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...800f1517)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
 
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
