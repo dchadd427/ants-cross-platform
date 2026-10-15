@@ -797,7 +797,10 @@ int main() {
         ASSERT_TRUE(rig.history.find(id1, rec));
         const Played played = play_file(match_file(1));
         ASSERT_TRUE(played.ok);
-        ASSERT_TRUE(same_record(rec, make_history_record(id1, rec.ended_s, played.rep, played.outcome)));
+        HistoryRecord expected = make_history_record(id1, rec.ended_s, played.rep, played.outcome);
+        ASSERT_TRUE(!rec.details.empty() && expected.details.empty());                // (the details of the same play: test_history_details.cpp checks what is in them)
+        expected.details = rec.details;
+        ASSERT_TRUE(same_record(rec, expected));
         ASSERT_TRUE(rec.map == "TINY.LVL" && rec.game == "v0.12.0-test" && rec.mode == "highest-score" && rec.format == "1v1" && rec.seats.size() == 2 && rec.rows.size() == 2);
         ASSERT_TRUE(rec.seats[0].name == "Cy" && rec.seats[1].name == "Di" && rec.finished == played.outcome.match_over && rec.turns == played.outcome.turns);
         ASSERT_TRUE(rec.draw || rec.rows[0].winner);
@@ -876,6 +879,18 @@ int main() {
         missing.keep(match_file(1));
         missing.drain(4);
         ASSERT_TRUE(missing.history.count() == 0 && missing.feeder.left_out() == 1);
+        // a match on a map of the players (the community folder, which the server asks after its maps folder): counted. A name that the maps folder holds is that folder's: the same name there that is
+        // another file is refused, and the community's file does not stand in for it
+        Rig players(empty_maps.path.string(), maps_dir());
+        ASSERT_TRUE(players.open());
+        const std::string played_id = players.keep(match_file(1));
+        players.drain(4);
+        ASSERT_TRUE(players.history.count() == 1 && players.history.knows(played_id) && players.feeder.left_out() == 0);
+        Rig shadowed(other_maps.path.string(), maps_dir());
+        ASSERT_TRUE(shadowed.open());
+        shadowed.keep(match_file(1));
+        shadowed.drain(4);
+        ASSERT_TRUE(shadowed.history.count() == 0 && shadowed.feeder.left_out() == 1);
         // a recording of other rules (sim_rules 99) and a damaged file next to a good one
         Rig mixed;
         ASSERT_TRUE(mixed.open());

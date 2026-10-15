@@ -122,6 +122,23 @@ target_include_directories(test_history_store PRIVATE
 add_test(NAME test_history_store COMMAND test_history_store)
 set_tests_properties(test_history_store PROPERTIES COST 6)
 
+# The stats that a replay pass keeps in a record's details (ants_replay/match_stats.hpp, ants_server/history_details.hpp) and the feeder that counts them with the match and gives the older records theirs
+add_executable(test_history_details
+    test_history_details.cpp
+)
+
+target_link_libraries(test_history_details PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_history_details PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_history_details COMMAND test_history_details)
+set_tests_properties(test_history_details PROPERTIES COST 6)
+
 # The play counts of the maps (HistoryStore::put and map_plays, table map_plays): the 30-second and people-only rules, one play for each match however often it is kept, the key of file name and hash, the
 # count in the file, a database that stops answering, and real recordings counted by the feeder. No network, no room that runs a match
 add_executable(test_map_plays

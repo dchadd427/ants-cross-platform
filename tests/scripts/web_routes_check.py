@@ -142,7 +142,7 @@ def main():
     for path, want in (("/matches", "/matches.html"), ("/watch.html", "/matches.html")):
         status, headers, names, body = get(path)
         check(status == 301 and headers.get("location") == want, "%s answers 301 to %s (%s %s)" % (path, want, status, headers.get("location")))
-    for path, word, kind in (("/replay_page.js", "AntsReplay", "javascript"), ("/history_page.js", "AntsHistory", "javascript"), ("/matches.css", "--won", "css"), ("/replay_stats.css", "body.embed", "css")):
+    for path, word, kind in (("/replay_page.js", "AntsReplay", "javascript"), ("/history_page.js", "AntsHistory", "javascript"), ("/match_stats.js", "AntsMatchStats", "javascript"), ("/matches.css", "--won", "css"), ("/match_stats.css", ".chips", "css"), ("/replay_stats.css", "body.embed", "css")):
         status, headers, names, body = get(path)
         check(status == 200 and word in body and not headers.get("content-type", "").startswith("text/html"), "%s is the file, not the game page that an unknown address falls back to (%s, %s)" % (path, status, headers.get("content-type")))
         check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))

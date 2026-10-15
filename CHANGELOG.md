@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **A match page tells the story of the match, not only its totals.** A band of highlights sits under the result (first blood, who led and when, the comeback, the busiest player). **Over time** charts the score and the kills of every seat (a point every 15 seconds), with a strip of who had the most points (a side of two is named), first blood marked, and the facts under them: the last kill, the changes of the lead, the best run of kills, a seat that ran out of ants. **Activity** shows every seat's orders in every minute as a strip of squares, the orders by kind and the busiest seat and minute.
+- The server counts these stats from the recording at the same time as the totals, and it counts them in the background for the matches of the last 30 days that were counted without them, one at a time. A match recorded by an older version, one whose recording was removed before it was counted, and a match that has just ended show their totals and one line that says why there is no more.
+- Who killed whom, damage, raids, power-ups, food and bombs are counted and kept for every match too; their sections of the page come next. The note of a recording from an older version now says that the **totals** are complete.
+
+**Rules / network:** none. The simulation, the hashes and network protocol 21 are as before; the stats are read from the recording while it plays, and the engine is not touched.
+
+**Fixes:**
+- A match on a player's map (a community map) had no record, as the server looked for its map in the official folder only; it is counted now.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...XXXXXXXX), [the match pages and the replay pass](docs/REPLAYS.md)
+
 ## v0.12.48 - 2026-10-15 - Legal notice
 
 **For players:**
@@ -538,16 +552,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/8591392...7947eb2), [the front page](docs/NETWORK_PORT.md), [bot games](docs/BOTS.md)
 
-## v0.7.0 - 2026-10-05 - A phone can pan, zoom and right click
+## Older versions (v0.7.0 and before)
 
-**For players:**
-- **A phone can pan, zoom and right click:** a tap is a left click and a drag is a selection box, as before. Hold a finger still on the map for about half a second (a ring closes around it, the phone buzzes) and lift it: that is a right click (a move order, a special power, or "send the selected ants there" on the minimap). Two fingers move the map, and pinching zooms towards them.
-- **The page stays out of the way:** no double-tap zoom, no pull to reload, no text selection or menu on a long press, and the sound still unlocks on the first touch.
-- Taps and drags on the menus, the dialogs and the minimap work as they did. Two fingers do nothing under a dialog. A touch screen on a desktop or a laptop gets the same controls; a mouse, a trackpad and a pen are unchanged.
-- Made for Android Chrome first; the guards for iPhone and iPad are in but have not been tried on a real device.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3bc868...12fa1ef), [the touch notes](docs/TOUCH.md)
-
-## Older versions (v0.6.0 and before)
-
-Every release before v0.7.0, and the long notes of v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.8.0, and the long notes of v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

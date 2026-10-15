@@ -1264,7 +1264,16 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(error.empty() && level.width() == tiny.level.width());
         ASSERT_FALSE(load_map(h, (dir.path / "nowhere").string(), level, error));
         ASSERT_TRUE(contains(error, "TINY.LVL") && contains(error, "not in"));
+        TempDir nothing;                                                         // several folders are asked in order: the first that holds the name is the map's
+        const std::vector<std::string> both{nothing.path.string(), dir.path.string()};
+        ASSERT_TRUE(load_map(h, both, level, error) && error.empty());
+        const std::vector<std::string> none{nothing.path.string(), (dir.path / "nowhere").string()};
+        ASSERT_FALSE(load_map(h, none, level, error));
+        ASSERT_TRUE(contains(error, nothing.path.string()) && contains(error, " or ") && contains(error, "nowhere"));
         h.map_hash ^= 1u;
+        const std::vector<std::string> first_wins{dir.path.string(), nothing.path.string()};
+        ASSERT_FALSE(load_map(h, first_wins, level, error));
+        ASSERT_TRUE(contains(error, "not the file"));
         ASSERT_FALSE(load_map(h, dir.path.string(), level, error));
         ASSERT_TRUE(contains(error, "not the file") && contains(error, "hash"));
         h.map_hash ^= 1u;

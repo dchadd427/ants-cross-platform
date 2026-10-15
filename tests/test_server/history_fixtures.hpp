@@ -102,6 +102,7 @@ struct TempDir {
 // ---- matches played with the engine (real recordings) ------------------------------------------------------------------------------
 
 struct MatchSpec {
+    std::string map{"TINY"};                            // the shipped map's name without ".LVL"
     uint32_t seed{7};
     uint32_t turns{1200};
     uint8_t roster{0x0F};
@@ -111,10 +112,10 @@ struct MatchSpec {
     uint16_t sim_rules{replay::kSimRules};
 };
 
-// A match on the shipped TINY map: the standard computer players gather food (the scores move), and on top of what they do every seat hatches an ant every 100 ticks and, from tick 1000, sends all its ants
+// A match on a shipped map (TINY unless the spec says another): the standard computer players gather food (the scores move), and on top of what they do every seat hatches an ant every 100 ticks and, from tick 1000, sends all its ants
 // against an ant of the next seat every 200 ticks (so that ants are hatched, killed and lost), recorded as the server's rooms record one. Empty when the map is not there.
 [[maybe_unused]] std::vector<uint8_t> record_match(const MatchSpec& spec) {
-    const std::string path = maps_dir() + "/TINY.LVL";
+    const std::string path = maps_dir() + "/" + spec.map + ".LVL";
     assets::LevelData level;
     uint64_t hash = 0;
     if (!level.load_from_file(path) || !net::hash_file(path, hash)) return std::vector<uint8_t>();
@@ -132,7 +133,7 @@ struct MatchSpec {
     shell.head.game_version = "v0.12.0-test";
     shell.head.build_id = "test";
     shell.head.venue = "game server";
-    shell.head.map_name = "TINY.LVL";
+    shell.head.map_name = spec.map + ".LVL";
     shell.head.map_hash = hash;
     shell.head.seed = spec.seed;
     shell.head.roster = spec.roster;
@@ -199,7 +200,8 @@ struct MatchSpec {
     return rec.finish(engine, error);
 }
 
-// Four recordings that the tests share (made once): 0 four people free for all, 1 two people, 2 two people where the second one quits, 3 four people in two teams
+// Six recordings that the tests share (made once): 0 four people free for all, 1 two people, 2 two people where the second one quits, 3 four people in two teams, 4 and 5 four computer players on TREASURE
+// (the map that has power-ups, thieves and bombs: the first four are on TINY, which has none; in 5 a seat runs out of ants)
 [[maybe_unused]] const std::vector<uint8_t>& match_file(int k) {
     static std::map<int, std::vector<uint8_t>> cache;
     auto it = cache.find(k);
@@ -223,6 +225,13 @@ struct MatchSpec {
             spec.roster = 0x03;
             spec.quit_seat = 1;
             spec.names = {"Ed", "Flo", "", ""};
+            break;
+        case 4:
+        case 5:
+            spec.map = "TREASURE";
+            spec.seed = k == 4 ? 31u : 23u;                              // (5: a seat that runs out of ants)
+            spec.turns = 7000;
+            spec.names = {"Bot (Hard)", "Bot (Hard)", "Bot (Hard)", "Bot (Hard)"};
             break;
         default:
             spec.seed = 14;
@@ -269,8 +278,8 @@ struct Rig {
     uint64_t work_us{1000};                              // what the feeder's clock says that each look takes (the pace follows it)
     uint64_t work_clock{0};
 
-    explicit Rig(const std::string& maps = maps_dir())
-        : replay_dir(temp.path / "replays"), db_ok(open_server_db(database, (temp.path / "ants.db").string())), replays(replay_config()), history(database, history_config()), feeder(history, replays, maps, [this]() { return work_clock += work_us; }) {}
+    explicit Rig(const std::string& maps = maps_dir(), const std::string& community = std::string())
+        : replay_dir(temp.path / "replays"), db_ok(open_server_db(database, (temp.path / "ants.db").string())), replays(replay_config()), history(database, history_config()), feeder(history, replays, maps, [this]() { return work_clock += work_us; }, community) {}
 
     ReplayConfig replay_config() {
         ReplayConfig c;
