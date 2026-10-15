@@ -23,17 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.47 - 2026-10-15 - Computer players play maps whose food is walled in
+## v0.12.48 - 2026-10-15 - Legal notice
 
 **For players:**
-- **Medium and Hard computer players now play maps whose food is walled in.** On HELLRAISER (rock walls round a vault of food) and POPcOrN (fire walls, a lake, a field of bombs) they used to stand still with a score of 0. A bot that finds no food it can walk to now puts a fire wall out with a Fire Ant, defuses a bomb that plugs a tunnel, or has a Bomber hop over a wall with its own bombs, takes the food and carries it home.
-- **Only on such maps, and not Easy.** The bot decides once, at the start of a match. Every original map, ISLANDS and SMALL (with their ferry play), Bombz Away and any other map with food in reach play exactly as before.
-- **What to watch on HELLRAISER:** the Bomber plants a bomb behind itself, hops over the wall into the vault, bites the food, hops out with it and banks it. Against another computer player the food is a fight, and a thief or a Combat Ant can take it back.
-- **POPcOrN works only in part:** a lone Hard bot banks food there in some games, two bots seldom do.
+- A new **Legal** page (`/legal.html`) says in plain words that the game is free to play and use, comes with no warranty, and that its authors are not liable for problems from using it (online play, the computer players, the website, the servers). It says the online servers may be down or restarted at any time, that this is an unofficial fan remake of the 1998 game and not endorsed by the original authors or owners, and it links the MIT License of the source code and the third-party credits.
+- Every footer now ends with a **Legal** link (the front page, the game page, the match pages and the changelog); it opens in a new tab, so a match that runs is not left. The README's License section opens with the same notice.
 
-**Rules / network:** none. No rule, no hash and no protocol number (protocol 21) changed; the computer players are outside the simulation.
+**Rules / network:** none. Only the new page, the footers' last link and the README changed; network protocol 21 is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...8c041550)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b843839c...b704515e)
 
 ## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
 

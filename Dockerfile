@@ -131,6 +131,9 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
+# The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from every footer, with no placeholder to fill in
+COPY web/legal.html /usr/share/nginx/html/legal.html
+
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/

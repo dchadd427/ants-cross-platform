@@ -280,6 +280,11 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(self.text.count('href="%s"' % GITHUB), 2)                                       # the header button and the footer link
         self.assertIn('href="%s/issues"' % GITHUB, part(self.text, "footer"))
 
+    def test_the_footer_links_end_with_the_legal_page_in_a_new_tab(self):
+        footer = part(self.text, "footer")
+        self.assertEqual(re.findall(r'<a href="([^"]*)"[^>]*>([^<]*)</a>', footer), [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal.html", "Legal")])
+        self.assertIn('<a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav>', footer)
+
     def test_a_long_word_cannot_widen_the_page(self):
         out = os.path.join(self.tmp.name, "long.html")
         md = os.path.join(self.tmp.name, "long.md")
@@ -356,8 +361,10 @@ class RealFile(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(REPO, path)), "a link of the changelog names %s, which the repository does not have" % path)
             elif href.startswith("https://"):
                 self.assertNotIn(" ", href)
+            elif href == "/legal.html":
+                self.assertTrue(os.path.exists(os.path.join(REPO, "web", "legal.html")), "the footer links the Legal page, which the site does not have")
             else:
-                self.assertEqual(href, "/", "a link that is neither the front page of the site nor an address: %s" % href)     # (a path of the repository is an address, not a file of the site)
+                self.assertEqual(href, "/", "a link that is neither the front page of the site, the Legal page nor an address: %s" % href)     # (a path of the repository is an address, not a file of the site)
 
     def test_the_oldest_release_that_the_file_holds_is_the_one_the_readme_the_workflow_and_the_footer_name(self):
         oldest = re.findall(r"^## v(\d+\.\d+\.\d+)", self.md, re.M)[-1]

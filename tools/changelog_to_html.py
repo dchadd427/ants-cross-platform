@@ -239,7 +239,7 @@ PAGE = """<!DOCTYPE html>
 </div>
 <footer class="bar"><div class="bar-in">
 {versionline}<span class="grow">Generated from {source} when the site image is built, so this page always matches the running build.</span>
-<nav aria-label="Footer links"><a href="/">Play</a><a href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a><a href="{github}/issues" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
+<nav aria-label="Footer links"><a href="/">Play</a><a href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a><a href="{github}/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav>
 </div></footer>
 </div>
 </body>

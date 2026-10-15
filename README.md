@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.12.47** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.7.0 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.7.0 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.12.48** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.7.0 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.7.0 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -57,6 +57,8 @@ The script builds the game each time it starts (quick when nothing changed) and 
 The method, the tools and the use of your own copy of the original program are described in [The original program and reverse engineering](docs/ORIGINAL_PROGRAM.md), and what the project knows about the original is written down in [`docs/GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md).
 
 ## License
+
+This game is free to play and free to use. It is provided "as is", with no warranty of any kind, express or implied. Its authors are not liable for any damage, data loss or other problem from using it, including online play, the bots, the website and the servers. There is no promise that the online servers will be up: they may be slow, down, restarted or shut down at any time, with no notice. It is an unofficial fan remake of the 1998 game Ants, not affiliated with or endorsed by the authors or owners of the original game. The same notice, in plain words, is the site's **[Legal page](https://beta.playants.org/legal.html)**; it is not legal advice.
 
 The source code and the documents written for this project are released under the **MIT License** ([`LICENSE`](LICENSE)): anybody may use, copy, change and distribute them, including in other projects and commercial ones, as long as the licence text stays with them.
 
