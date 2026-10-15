@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Watching a replay, and a match that is being played, on the web (run by ./run_tests.sh --fast and by the CI): the list page (web/watch.html), the game page in replay mode (web/shell.html,
-play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code that they share (web/replay_page.js). docs/REPLAYS.md "Watching" says what they do.
+"""Watching a replay, and a match that is being played, on the web (run by ./run_tests.sh --fast and by the CI): the game page in replay mode (web/shell.html,
+play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code that they share (web/replay_page.js). docs/REPLAYS.md "Watching a replay" says what they do (the pages of the match history have their own file: test_web_matches.py).
 
   - the shared code is RUN (node, when it is installed): the address of a replay or of a live match, the day and the time in the visitor's zone, the length, the maps, the players, the chips, the
     live tag and the verdict on an answer of the live door (tests/scripts/web_replay_check.js);
-  - what needs no browser is read from the files: the one place of the "Watch matches" link on each page (and its button in the header of the front page and of the game page), the pieces of the player that the game's glue looks for by id,
+  - what needs no browser is read from the files: the one place of the "Matches" and "Live now" links on each page (and the Matches button in the header of the front page and of the game page), the pieces of the player that the game's glue looks for by id,
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
@@ -44,31 +44,40 @@ def footer_links(page):
 
 
 class TheLink(unittest.TestCase):
-    """ONE link to the matches, "Watch matches", for the live ones and the earlier ones alike (it was "Watch live" and "Watch replays", two links to the same page): in the footer of the front page,
-    the game page and the list, and as a button in the header of the front page and of the game page."""
+    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page, the game page and the three pages of the match history,
+    and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
 
-    def test_every_page_with_the_footer_links_to_the_list_once_by_one_name(self):
-        for name, page, before in (("the game page", read("web", "shell.html"), "Menu"), ("the front page", read("web", "lobby.html"), "How it works"), ("the list page", read("web", "watch.html"), None)):
-            found = footer_links(page)
-            watch = [f for f in found if f[2] == "Watch matches"]
-            self.assertEqual(len(watch), 1, name)
-            self.assertEqual(watch[0][0], "/watch.html", name)
-            self.assertIn('id="watch-link"', watch[0][1], name)
+    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"), ("the list", "matches.html", None), ("a match", "match.html", None), ("the live page", "live.html", None))
+
+    def test_every_page_with_the_footer_links_has_matches_then_live_now_once_each(self):
+        for name, file, before in self.PAGES:
+            found = footer_links(read("web", file))
             texts = [f[2] for f in found]
-            self.assertEqual(texts.index("Watch matches"), texts.index(before) + 1 if before in texts else 0, name)      # (after the Menu link, or after "How it works" on the front page; the first on the list page)
-            self.assertFalse({"Watch live", "Watch replays"} & set(texts), name)                                      # (the two old names are gone: one link)
-        self.assertIn('aria-current="page"', [f for f in footer_links(read("web", "watch.html")) if f[2] == "Watch matches"][0][1])
+            self.assertEqual((texts.count("Matches"), texts.count("Live now")), (1, 1), name)
+            at = texts.index("Matches")
+            self.assertEqual(at, texts.index(before) + 1 if before in texts else 0, name)                    # (after the Menu link, or after "How it works" on the front page; the first on the pages of the history)
+            self.assertEqual(texts[at + 1], "Live now", name)
+            self.assertEqual({f[2]: f[0] for f in found}["Matches"], "/matches.html", name)
+            self.assertEqual({f[2]: f[0] for f in found}["Live now"], "/live.html", name)
+            if file in ("shell.html", "lobby.html"):
+                self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
+            self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
+        for file, label in (("matches.html", "Matches"), ("match.html", "Matches"), ("live.html", "Live now")):
+            self.assertIn('aria-current="page"', [f for f in footer_links(read("web", file)) if f[2] == label][0][1], file)      # (a page marks its own place)
         self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
-        self.assertIn("<title>Watch matches \u2014 Ants (1998)@@SITE_TITLE@@</title>", read("web", "watch.html"))   # (the tab's title agrees with the link)
+        for file, title in (("matches.html", "Matches"), ("match.html", "Match"), ("live.html", "Live now")):
+            self.assertIn("<title>%s \u2014 Ants (1998)@@SITE_TITLE@@</title>" % title, read("web", file))     # (the tab's title agrees with the link)
 
-    def test_the_site_own_tab_on_the_front_page_and_the_list_and_a_new_tab_on_the_game_page(self):
-        for name, page in (("the front page", read("web", "lobby.html")), ("the list page", read("web", "watch.html"))):
-            watch = [f for f in footer_links(page) if f[2] == "Watch matches"][0]
-            self.assertNotIn("target=", watch[1], name)                                                    # (the site's own page: this tab)
+    def test_the_site_own_tab_on_the_front_page_and_the_history_and_a_new_tab_on_the_game_page(self):
+        for name, file, _ in self.PAGES[1:]:
+            for text in ("Matches", "Live now"):
+                link = [f for f in footer_links(read("web", file)) if f[2] == text][0]
+                self.assertNotIn("target=", link[1], name)                                                  # (the site's own page: this tab)
         game = read("web", "shell.html")
-        watch = [f for f in footer_links(game) if f[2] == "Watch matches"][0]
-        self.assertIn('target="_blank"', watch[1])                                                         # (a match that is being played here goes on: the way back to the menu asks first, this link does not leave)
-        self.assertIn('rel="noopener noreferrer"', watch[1])
+        for text in ("Matches", "Live now"):
+            link = [f for f in footer_links(game) if f[2] == text][0]
+            self.assertIn('target="_blank"', link[1])                                                       # (a match that is being played here goes on: the way back to the menu asks first, this link does not leave)
+            self.assertIn('rel="noopener noreferrer"', link[1])
         glue = game[game.index("<!-- BEGIN replay glue"):game.index("<!-- END replay glue")]
         self.assertIn("$('watch-link').removeAttribute('target');", glue)                                  # (a replay is watched in this tab, like "All matches": nothing is being played; only in the replay glue: a match played keeps the new tab)
         self.assertIn("$('watch-link').removeAttribute('rel');", glue)
@@ -77,8 +86,8 @@ class TheLink(unittest.TestCase):
     def test_the_header_of_the_front_page_has_the_button_at_the_right(self):
         lobby = read("web", "lobby.html")
         header = re.search(r'<header class="mast">(.*?)</header>', lobby, re.S).group(1)
-        self.assertEqual(re.findall(r'<a class="btn sm" href="/watch.html" id="watch-top"[^>]*>Watch matches</a>', header).__len__(), 1)
-        self.assertTrue(header.rstrip().endswith("Watch matches</a>"))                                      # (after the logo and the tagline: the right of the row)
+        self.assertEqual(re.findall(r'<a class="btn sm" href="/matches.html" id="watch-top"[^>]*>Matches</a>', header).__len__(), 1)
+        self.assertTrue(header.rstrip().endswith("Matches</a>"))                                            # (after the logo and the tagline: the right of the row)
         self.assertIn(".mast #watch-top { margin-left: auto;", lobby)
         phone = block(lobby, "@media (max-width: 720px)")
         self.assertIn('grid-template-areas: "logo btn" "text text"', phone)                                # (a phone: the button on the logo's row, the tagline under them; the rule is the phone's, not the page's)
@@ -90,121 +99,29 @@ class TheLink(unittest.TestCase):
         game = read("web", "shell.html")
         actions = re.search(r'<div class="header-actions">(.*?)</header>', game, re.S).group(1)
         links = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', actions)
-        self.assertEqual([t for _, _, t in links][:3], ["Menu", "Watch matches", "Sprites and sounds"])
+        self.assertEqual([t for _, _, t in links][:3], ["Menu", "Matches", "Sprites and sounds"])
         wide = links[1]
-        self.assertEqual(wide[0], "/watch.html")
+        self.assertEqual(wide[0], "/matches.html")
         self.assertIn('id="watch-btn"', wide[1])
         self.assertIn('wide-only', wide[1])                                                                 # (a narrow window has Menu, Full and More only)
         self.assertIn('target="_blank"', wide[1])
         more = re.search(r'<div class="more-list">(.*?)</div>', actions, re.S).group(1)
         first = re.findall(r'<(?:a|button)\b([^>]*)>([^<]+)</(?:a|button)>', more)[0]
-        self.assertEqual(first[1], "Watch matches")
-        self.assertIn('href="/watch.html"', first[0])
+        self.assertEqual(first[1], "Matches")
+        self.assertIn('href="/matches.html"', first[0])
         self.assertIn('target="_blank"', first[0])
         self.assertNotIn("wide-only", first[0])
         replay = re.search(r'<div class="header-actions rep-only">(.*?)</header>', game, re.S).group(1)
-        self.assertNotIn("Watch matches", replay)                                                           # (a replay's header keeps "All matches": no second way to the list)
+        self.assertNotIn(">Matches<", replay)                                                               # (a replay's header keeps "All matches": no second way to the list)
         self.assertIn("body.replay .header-actions:not(.rep-only)", game)                                   # (and the ordinary header is not shown there)
 
     def test_the_words_on_the_screens_say_player_never_friend(self):
-        for path in (("web", "watch.html"), ("web", "replay_page.js")):
+        for path in (("web", "matches.html"), ("web", "match.html"), ("web", "live.html"), ("web", "history_page.js"), ("web", "replay_page.js")):
             self.assertNotRegex(read(*path), r"(?i)friend", path[-1])
         shell = read("web", "shell.html")
         start = shell.index("<!-- BEGIN replay glue")
         end = shell.index("<!-- END replay glue")
         self.assertNotRegex(shell[start:end], r"(?i)friend")
-
-
-class TheListPage(unittest.TestCase):
-    page = read("web", "watch.html")
-
-    def test_it_is_filled_in_like_the_other_pages_and_loads_nothing_from_elsewhere(self):
-        for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
-            self.assertEqual(self.page.count(placeholder), 1, placeholder)
-        self.assertNotRegex(self.page, r'(?:src|href)="https?://(?!github\.com/dchadd427/)')
-        self.assertIn('<script src="replay_page.js"></script>', self.page)
-        self.assertIn('url("front/LibreFranklin-Medium.ttf")', self.page)                                    # (the font of the game, from the page's own folder)
-
-    def test_it_reads_the_public_list_and_links_to_the_player_and_the_file(self):
-        self.assertIn("fetch('/replays'", self.page)
-        self.assertIn("/play.html?replay=", self.page)
-        self.assertIn("'/replays/'", self.page)
-        for words in ("Earlier matches", "Nothing to watch yet", "The list can\u2019t be loaded right now", "This server doesn\u2019t keep replays", "Earlier versions", "Show them", "Hide them", "Show more", "Cut short"):
-            self.assertIn(words, self.page, words)
-
-    def test_a_map_of_the_players_has_its_picture_in_both_lists_and_a_missing_one_leaves_the_dark_square(self):
-        self.assertIn('<script src="front/map_picker.js"></script>', self.page)                              # (the picker's own address rules: tests/scripts/web_map_picker_check.js)
-        self.assertIn("window.AntsMapPicker.thumbFor(map, maps)", self.page)
-        self.assertIn("window.AntsMapPicker.parseList(data)", self.page)
-        self.assertIn("fetch('/maps'", self.page)
-        for token in ("img.loading = 'lazy'", "img.decoding = 'async'", "img.addEventListener('error'", "el('div', 'blank')"):
-            self.assertIn(token, self.page, token)
-        self.assertIn("img.src = 'front/preview_' + key + '.png'", self.page)                                # (the six keep their art)
-        self.assertNotIn("innerHTML", self.page)
-
-    def test_the_live_box_looks_at_the_door_every_ten_seconds_and_says_what_the_picture_shows(self):
-        self.assertIn("fetch('/live'", self.page)
-        self.assertIn("LIVE_EVERY = 10000", self.page)
-        self.assertIn("/play.html?live=", self.page)
-        self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
-        for words in ("Live now", "Watch a match, live or again.", "Watch a match again.", "Matches that are being played show first.", "No match is on right now.", "so far", "Watch live",
-                      "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
-            self.assertIn(words, self.page, words)
-        self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
-        self.assertIn("fetch('/live', { cache: 'no-store', credentials: 'omit'", self.page)                  # (a public list: no cookies, never from the cache)
-
-    def test_a_match_is_playable_only_when_its_rules_are_the_ones_of_this_version(self):
-        self.assertIn("sim_rules", self.page)
-        self.assertRegex(self.page, r"\.sim_rules\s*(?:===|!==|==|!=)")
-
-    def test_a_match_of_game_mode_187_is_playable_as_well_with_its_own_rules_number_and_its_mode(self):
-        # replay.hpp: kSimRulesMode187 = 6 and the list entry says "mode": "187"; an entry of rules 6 that does not say the mode is not one of that game
-        self.assertIn("var RULES_187 = 6;", self.page)
-        header = read("include", "ants_replay", "replay.hpp")                                                # (the page's number is the header's, or the game of a mode would move to "Earlier versions")
-        self.assertRegex(header, r"inline constexpr uint16_t kSimRulesMode187 = 6;")
-        self.assertRegex(self.page, r"e\.sim_rules\s*===\s*RULES_187\s*&&\s*e\.mode\s*===\s*'187'")
-
-    @unittest.skipUnless(shutil.which("node"), "node is not installed: the page's rule for a playable match was NOT run")
-    def test_the_rule_for_a_playable_match_is_run_with_every_kind_of_entry(self):
-        # the page's own two lines (the number of 187's rules and playable()) are cut out of it and run on a table: the text checks above cannot tell && from || or a missing guard
-        number = re.search(r"^\s*var RULES_187 = \d+;$", self.page, re.M)
-        function = re.search(r"^\s*function playable\(e, rules\) \{.*\}$", self.page, re.M)
-        self.assertTrue(number and function)
-        table = [  # (the list's sim_rules, an entry's sim_rules, the entry's mode, playable)
-            (5, 5, None, True),           # the original's game on a build of rules 5 (entries of servers before 187 say no mode)
-            (5, 5, "highest-score", True),
-            (5, 6, "187", True),          # a match of 187 on that build
-            (5, 6, "highest-score", False),  # rules 6 are the rules of 187 only: the entry does not say it
-            (5, 6, None, False),
-            (5, 6, "", False),
-            (5, 5, "187", True),          # (rules 5 are this build's: the mode word is not looked at)
-            (5, 7, "187", False),         # rules that no build plays yet
-            (5, 7, "highest-score", False),
-            (5, 4, "187", False),         # the rules of 187 before the loader as the original's: an earlier version
-            (5, 3, None, False),          # the original's game before it
-            (5, 2, "187", False),
-            (5, 1, None, False),
-            (5, 0, "187", False),
-            (5, 0, None, False),          # an entry of unknown rules is an earlier version
-            (5, None, "187", False),         # an entry that names no rules at all
-            (0, 0, None, False),          # a list that does not say the server's rules: nothing is playable
-            (0, 0, "187", False),
-            (0, 6, "187", False),
-            (0, 5, "highest-score", False),
-        ]
-        script = number.group(0) + "\n" + function.group(0) + "\n" + "const table = " + json.dumps(table) + ";\n" + (
-            "let bad = [];\n"
-            "for (const [rules, sim, mode, want] of table) { const e = {}; if (sim !== null) e.sim_rules = sim; if (mode !== null) e.mode = mode;"
-            " const got = playable(e, rules); if (got !== want) bad.push(JSON.stringify([rules, sim, mode, want, got])); }\n"
-            "console.log(bad.length === 0 ? 'all ' + table.length + ' ok' : 'wrong: ' + bad.join(' '));\n")
-        done = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True, timeout=60)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stdout.strip(), "all %d ok" % len(table), done.stdout)
-
-    def test_nothing_that_a_recording_carries_becomes_markup(self):
-        for bad in (".innerHTML", "document.write", "insertAdjacentHTML", "outerHTML", "eval(", "new Function"):
-            self.assertNotIn(bad, self.page, bad)
-            self.assertNotIn(bad, read("web", "replay_page.js"), bad)
 
 
 class ThePlayerPage(unittest.TestCase):
@@ -215,7 +132,7 @@ class ThePlayerPage(unittest.TestCase):
                       "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote", "b-cam", "cam-lbl", "camnote"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
         self.assertEqual(len(re.findall(r'data-s="(?:0\.5|1|2|4|8)"', self.page)), 5)
-        self.assertIn('href="/watch.html"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
+        self.assertIn('href="/matches.html"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
 
     def test_everything_of_the_replay_is_hidden_unless_the_address_asks_for_a_replay(self):
         self.assertIn("body:not(.replay) .rep-only { display: none !important; }", self.page)
@@ -325,7 +242,7 @@ class TheLiveGlue(unittest.TestCase):
     def test_the_words_of_the_notes_and_the_cards_are_the_approved_ones(self):
         for words in ("The live feed stopped. Trying again…", "The match is over. It is now in the list as a replay.", "The match is over.", "This match is over", "Watch the replay",
                       "The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.", "That match isn’t live",
-                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are at the top of the list."):
+                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are on the Live now page."):
             self.assertIn(words, self.glue, words)
 
     def test_a_match_that_became_a_replay_has_the_address_of_the_replay(self):
@@ -588,13 +505,16 @@ class TheFiles(unittest.TestCase):
         nginx = read("docker", "nginx.conf")
         self.assertIn(r"ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?\.antsrep", nginx)
 
-    def test_the_image_the_ci_and_the_local_web_build_carry_the_two_new_files(self):
+    def test_the_image_the_ci_and_the_local_web_build_carry_the_files_of_the_replay_pages(self):
         dockerfile, ci, build = read("Dockerfile"), read(".github", "workflows", "ci.yml"), read("build_web.sh")
-        self.assertIn("COPY web/replay_page.js", dockerfile)
-        self.assertRegex(dockerfile, r"COPY --from=builder /src/watch\.html [^\n]*watch\.html")
-        self.assertIn("replay_page.js", build)
-        self.assertIn("watch.html", build)
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html watch\.html replay_page\.js")
+        for name in ("replay_page.js", "history_page.js", "matches.css", "replay_stats.css"):
+            self.assertIn("COPY web/%s " % name, dockerfile, name)
+            self.assertIn(name, build, name)
+        for name in ("matches", "match", "live"):
+            self.assertRegex(dockerfile, r"COPY --from=builder /src/%s\.html [^\n]*%s\.html" % (name, name))
+        self.assertIn("for PAGE in matches match live; do", build)
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js")
+        self.assertNotIn("watch.html", dockerfile + build + ci)                                              # (the list of the recordings is gone: the pages of the match history replace it)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the replay pages' shared code was NOT run (tests/scripts/web_replay_check.js)")
@@ -632,57 +552,6 @@ class TheSharedCode(unittest.TestCase):
                     f.write(text.replace(old, new))
                 done = subprocess.run([shutil.which("node"), CHECK_JS, path], capture_output=True, text=True, timeout=120)
                 self.assertNotEqual(done.returncode, 0, "the check accepted a script where " + why)
-
-
-PICTURES_JS = os.path.join(REPO, "tests", "scripts", "web_watch_pictures_check.js")
-
-
-def run_pictures(page):
-    return subprocess.run([shutil.which("node"), PICTURES_JS, page, os.path.join(REPO, "web", "front", "map_picker.js"), os.path.join(REPO, "web", "replay_page.js")],
-                          capture_output=True, text=True, timeout=120)
-
-
-@unittest.skipUnless(shutil.which("node"), "node is not installed: the list page's pictures were NOT run (tests/scripts/web_watch_pictures_check.js)")
-class TheListPagesPictures(unittest.TestCase):
-    page = read("web", "watch.html")
-
-    def test_the_pictures_of_the_maps_of_the_players_on_a_fake_page(self):
-        done = run_pictures(os.path.join(REPO, "web", "watch.html"))
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("ok: ", done.stdout)
-
-    def test_every_box_that_is_built_again_forgets_its_old_squares(self):
-        live = self.page[self.page.index("function renderLive()"):self.page.index("function intro(")]
-        self.assertIn("forgetPictures('live');", live)
-        self.assertEqual(self.page.count("forgetPictures('list');"), 3)                                      # (render, fail, nothingKept)
-        self.assertIn("pictureNode(e.map, 'live')", self.page)
-        self.assertEqual(self.page.count("pictureNode(e.map, 'list')"), 1)
-        self.assertNotIn("lookMaps();\n    // the matches", self.page)
-
-    def test_the_check_can_fail(self):
-        text = self.page
-        broken = {
-            "the list never corrects an address": ("if (url !== item.tried) fillPicture(", "if (false) fillPicture("),
-            "every square is redone when the list comes": ("if (url !== item.tried) fillPicture(", "if (true) fillPicture("),
-            "the picture is the map's name": ("            img.src = url;\n", "            img.src = map;\n"),
-            "a failed picture stays": ("img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });", "img.addEventListener('error', function () {});"),
-            "a failed picture leaves an empty square": ("if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); }", "if (img.parentNode === tv) { tv.textContent = ''; }"),
-            "a map with no address gets an image": ("if (!key && !url) {", "if (false) {"),
-            "the list of the maps is never asked for": ("if (!mapsAsked) { mapsAsked = true; lookMaps(); }", ""),
-            "the list is asked for with every square": ("if (!mapsAsked) { mapsAsked = true; lookMaps(); }", "lookMaps();"),
-            "a box forgets nothing": ("function forgetPictures(group) { pictures = pictures.filter(function (item) { return item.group !== group; }); }", "function forgetPictures(group) {}"),
-            "a box forgets the other box": ("return item.group !== group; }); }", "return item.group === group; }); }"),
-            "the squares that left the page are kept": ("pictures = pictures.filter(function (item) { return document.body.contains(item.tv); });", ""),
-            "the image is not lazy": ("img.loading = 'lazy'; ", ""),
-            "the image decodes on the main thread": ("img.decoding = 'async';", ""),
-        }
-        with tempfile.TemporaryDirectory() as folder:
-            for why, (old, new) in broken.items():
-                self.assertEqual(text.count(old), 1, why)
-                path = os.path.join(folder, "watch.html")
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(text.replace(old, new))
-                self.assertNotEqual(run_pictures(path).returncode, 0, "the check accepted a page where " + why)
 
 
 if __name__ == "__main__":

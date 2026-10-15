@@ -193,8 +193,8 @@ LAYOUT_JS = """(function () {
     mapFit: [widest, map.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)] });
 })()"""
 
-LOBBY_NOTICE = "Online matches are recorded and kept for 30 days. The recordings are public and show the players’ names."        # (the line under the name field of the front page's name card and in its footer)
-NOTICE_TEXT = "Online matches are recorded and kept for 30 days. Anybody can watch them, live or later, and they show the players’ names."      # (the line under the name field of the game page's name card)
+LOBBY_NOTICE = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."        # (the line under the name field of the front page's name card and in its footer)
+NOTICE_TEXT = "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public."      # (the line under the name field of the game page's name card)
 NAME_CARD_JS = """JSON.stringify((function () {
   var card = document.querySelector('.name-step').getBoundingClientRect(), hint = document.getElementById('name-step-hint').getBoundingClientRect(), n = document.getElementById('who-notice'), own = document.getElementById('name-step-own').getBoundingClientRect();
   var r = n.getBoundingClientRect(), s = getComputedStyle(n), h = getComputedStyle(document.getElementById('name-step-hint'));
@@ -711,13 +711,13 @@ def main():
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
                   "the footer names the version and the build (%r)" % re.sub(r"\s+", " ", info["footer"]).strip()[:80])
             hrefs = {n[1]: (n[0], n[2], n[3]) for n in info["nav"]}
-            check([n[1] for n in info["nav"]] == ["How it works", "Watch matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Watch matches"][1] == "/watch.html"
+            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches.html" and hrefs["Live now"][1] == "/live.html"
                   and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog.html" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues"),
-                  "the footer links: How it works, Watch matches (one link, for the live matches and the earlier ones), Sprites and sounds, Changelog, GitHub, Feedback (%s)" % [n[1] for n in info["nav"]])
-            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback")) and hrefs["Watch matches"][2] is None, "the links that leave the front page keep their new tab, the one that watches a match does not")
+                  "the footer links: How it works, Matches, Live now, Sprites and sounds, Changelog, GitHub, Feedback (%s)" % [n[1] for n in info["nav"]])
+            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback")) and hrefs["Matches"][2] is None and hrefs["Live now"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
-            check(top["text"] == "Watch matches" and top["href"] == "/watch.html" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Watch matches, at the right of the row, in this tab (%s)" % top)
-            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, kept for 30 days and public with the players' names (%r)" % info["notice"])
+            check(top["text"] == "Matches" and top["href"] == "/matches.html" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
+            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
             stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
             check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online(\d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
                   "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
@@ -885,7 +885,7 @@ def main():
                     wrong.append((width, problems[:3]))
             check(not wrong, "%d widths from 320 to 1600 px: no sideways scroll and nothing out of the window, two columns from 1041 px (the room, the map and START! at its side) and one under it, the cards two by two above 720 px and one column below it in the order Black, Green, Red, Blue, "
                              "nothing out of a card or of the room's box, the grip's dots clear of the names and the drop-down, START! held in view on a phone, the longest map name whole (wrong: %s)" % (len(widths), wrong))
-            # the header: the one button of Watch matches at the right of the row, the logo and the tagline clear of it, at every width (a phone: the button on the logo's row, the tagline under them)
+            # the header: the one button of Matches at the right of the row, the logo and the tagline clear of it, at every width (a phone: the button on the logo's row, the tagline under them)
             bad = []
             for width in widths:
                 tab.emulate(width, 900, 1, width <= 480)
@@ -905,7 +905,7 @@ def main():
                     why.append("the tagline is under the button")
                 if why:
                     bad.append((width, why[:2]))
-            check(not bad, "the header at %d widths: the Watch matches button at the right of the row (on a phone, on the logo's row), clear of the logo and the tagline (wrong: %s)" % (len(widths), bad))
+            check(not bad, "the header at %d widths: the Matches button at the right of the row (on a phone, on the logo's row), clear of the logo and the tagline (wrong: %s)" % (len(widths), bad))
             # the tag under the LAST button (21:9) ends with the button: on a computer with a mouse and a 3440 x 1440 screen (nearest to 21:9), in a narrow window, the tag stays inside it and the page does not scroll sideways
             fresh_tab()
             tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 3440, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
@@ -1800,7 +1800,7 @@ def main():
                 if m["scroll"][0] > m["inner"][0]:
                     wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
                 texts = [c["text"] for c in m["controls"]]
-                want = (["", "Menu", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu"] + (["Watch matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub", "Feedback"])
+                want = (["", "Menu", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu"] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub", "Feedback"])
                 height = m["header"][3] - m["header"][1]
                 if texts != want or m["more"] != narrow or ((narrow or width >= 1024) and height > 60):
                     wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
@@ -1818,7 +1818,7 @@ def main():
                 if abs(m["bar"][0]) > 0.5 or abs(m["bar"][2] - m["inner"][0]) > 0.5:
                     wrong["foot"].append((width, [round(v, 1) for v in m["bar"]]))
             check(not wrong["scroll"], "no sideways scroll from 320 to 1600 px (wrong: %s)" % (wrong["scroll"],))
-            check(not wrong["header"], "the header: up to 700 px one row of the logo, Menu, Fullscreen (Full up to 440 px) and More; above it the logo and the controls in their order (the seven it had, and Watch matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
+            check(not wrong["header"], "the header: up to 700 px one row of the logo, Menu, Fullscreen (Full up to 440 px) and More; above it the logo and the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
             check(not wrong["overlap"], "no control of the header lies over another or over the logo, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
             check(not wrong["frame"], "the header's controls, the pair buttons and the guide stay inside the thin green frame at every width (wrong: %s)" % (wrong["frame"],))
             check(not wrong["picture"], "the picture with its ring and shadow is centred and inside the frame at every width (wrong: %s)" % (wrong["picture"],))
@@ -1830,11 +1830,11 @@ def main():
             shot("game_1440")
             footer = json.loads(value("""JSON.stringify({text: document.querySelector('footer').innerText.replace(/\\s+/g, ' '), ids: [!!document.getElementById('game-version'), !!document.getElementById('game-build-id')],
                 links: Array.prototype.map.call(document.querySelectorAll('footer nav a'), function (a) { return a.innerText; }), bg: getComputedStyle(document.querySelector('footer')).backgroundImage})"""))
-            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Watch matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback"],
+            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback"],
                   "the footer is the front page's emerald bar with the version, the build and the links (%r)" % footer["text"][:90])
             head = json.loads(value("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('header .header-actions:not(.rep-only) > a, header .header-actions:not(.rep-only) > button'), function (a) { var r = a.getBoundingClientRect(); return [a.textContent.trim(), a.getAttribute('target'), r.width > 0]; }))"))
-            check([h[0] for h in head][:3] == ["Menu", "Watch matches", "Sprites and sounds"] and head[1][1] == "_blank" and all(h[2] for h in head),
-                  "the header of the game page has Watch matches right after Menu, in a new tab (a match that is being played goes on), and every button is shown at 1440 px (%s)" % [h[0] for h in head])
+            check([h[0] for h in head][:3] == ["Menu", "Matches", "Sprites and sounds"] and head[1][1] == "_blank" and all(h[2] for h in head),
+                  "the header of the game page has Matches right after Menu, in a new tab (a match that is being played goes on), and every button is shown at 1440 px (%s)" % [h[0] for h in head])
             contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
 
             # --- the pairs under the game: the chosen button is pressed in, a click keeps its id and what it remembers
@@ -1882,8 +1882,8 @@ def main():
                 var mid = document.elementFromPoint((r.left + r.right) / 2, r.top + 8), picture = document.getElementById('game-container').getBoundingClientRect();
                 return { open: document.querySelector('header .more').open, items: items, list: [r.left, r.right, r.top, r.bottom], above: !!(mid && mid.closest('.more-list')), overPicture: r.top < picture.bottom && r.bottom > picture.top && r.left < picture.right };
             })())"""))
-            check(more["open"] and [i[0] for i in more["items"]] == ["Watch matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
-                  "More opens the other six links (Watch matches first), whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
+            check(more["open"] and [i[0] for i in more["items"]] == ["Matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
+                  "More opens the other six links (Matches first), whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
             check(more["above"] and more["overPicture"], "... over the picture and above it (the loading screen's layer does not cover it)")
             shot("game_390_more")
             contrast_of("the More list", 5)

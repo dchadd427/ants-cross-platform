@@ -468,7 +468,7 @@ void Application::run_replay(float dt) {
 // Quit and Leave Game: back to the page's list of matches (a native game ends)
 void Application::leave_replay() {
 #if defined(__EMSCRIPTEN__)
-    emscripten_run_script("try{if(window.antsReplayLeave)window.antsReplayLeave();else window.location.assign('/watch.html');}catch(e){}");
+    emscripten_run_script("try{if(window.antsReplayLeave)window.antsReplayLeave();else window.location.assign('/matches.html');}catch(e){}");
 #else
     is_running_ = false;
 #endif

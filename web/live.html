@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Live now — Ants (1998)@@SITE_TITLE@@</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+    <style>
+        /* the colours of the front page, token for token (tests/scripts/test_web_pages_classic.py); the rest of the look is matches.css */
+        :root { --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #31765f; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f; }
+        :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
+    </style>
+    <link rel="stylesheet" href="matches.css">
+</head>
+<body>
+<div class="screen">
+<main class="wrap">
+    <header class="mast" id="mast">
+        <h1 class="sr">Ants (1998): matches that are being played</h1>
+        <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
+        <p><span class="tag">Matches being played right now.</span><span class="sub">Watch one as it goes. When it ends it moves to the list of all matches, with its stats.</span></p>
+        <span class="grow"></span>
+        <div class="acts"><a class="btn sm" href="/matches.html">All matches</a><a class="btn sm hide-s" href="/">Play a match</a></div>
+    </header>
+    <section class="panel" aria-labelledby="live-h">
+        <div class="head"><h2 id="live-h">Live now</h2><span class="count" id="count" aria-live="polite"></span></div>
+        <div id="body" aria-live="polite"><div class="note"><p><b>Looking for matches&hellip;</b></p></div></div>
+    </section>
+    <noscript><section class="panel"><div class="note"><p><b>This page needs JavaScript.</b> It lists the matches that the game server is running.</p></div></section></noscript>
+</main>
+
+<footer class="bar">
+    <div class="bar-in">
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
+        <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
+        <nav aria-label="Footer links">
+            <a href="/matches.html">Matches</a>
+            <a href="/live.html" id="live-link" aria-current="page">Live now</a>
+            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
+            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
+        </nav>
+    </div>
+</footer>
+</div>
+
+<script src="replay_page.js"></script>
+<script src="front/map_picker.js"></script>
+<script src="history_page.js"></script>
+<script>
+(function () {
+    'use strict';
+    var R = window.AntsReplay, H = window.AntsHistory;
+    var $ = function (id) { return document.getElementById(id); };
+    var LIVE_EVERY = 10000;                   // the list of the matches that are being played is looked at again every 10 seconds while the page is in front
+    var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    // One match that is being played: the map, a red Live mark, how long it has run, the players, and the button that opens the player on it (play.html?live=<id>)
+    function card(e) {
+        var length = R.lengthText(e.seconds), li = el('li', 'm liveentry');
+        li.appendChild(pics.node(e.map, 'live'));
+        var url = '/play.html?live=' + encodeURIComponent(e.id);          // (the id has the server's shape: R.liveEntriesOf let nothing else through)
+        var info = el('div', 'info'), h = el('h3'), a = el('a', '', R.mapTitle(e.map));
+        a.href = url;
+        h.appendChild(a); info.appendChild(h);
+        var tags = el('span', 'tags'); tags.appendChild(el('span', 'pill lv', 'Live')); info.appendChild(tags);
+        var when = el('span', 'when', R.startedText(e.started, new Date())); when.appendChild(el('span', 'l', ' · ' + length + ' so far')); info.appendChild(when);
+        li.appendChild(info);
+        var sides = el('ul', 'sides'); sides.setAttribute('aria-label', 'Who is playing');
+        e.players.forEach(function (p) {
+            var q = R.parsePlayer(p), x = el('li', 'side'), sq = el('span', 'sq'), i = el('i');
+            i.setAttribute('data-c', R.SEATS.indexOf(q.colour) !== -1 ? q.colour : ''); sq.appendChild(i); x.appendChild(sq);
+            x.appendChild(el('span', 'nm', q.name || q.colour)); x.title = q.name ? q.colour + ': ' + q.name : q.colour; sides.appendChild(x);
+        });
+        li.appendChild(sides);
+        var col = el('div', 'side-col'), len = el('div', 'len'); len.appendChild(el('span', 'lab', 'So far')); len.appendChild(el('b', '', length)); col.appendChild(len);
+        var act = el('div', 'act'), go = el('a', 'btn sm go', 'Watch live'); go.href = url; act.appendChild(go); col.appendChild(act);
+        li.appendChild(col);
+        return li;
+    }
+    function render(list) {
+        var body = $('body');
+        body.textContent = '';
+        pics.forget('live');
+        if (list === null) {                                     // (a server with no door for the matches that run now answers 404: it keeps no replays, or it is an older one)
+            $('count').textContent = '';
+            var n = el('div', 'note'), p = el('p'); p.appendChild(el('b', '', 'This server doesn’t show matches that are being played.')); n.appendChild(p);
+            var b = el('a', 'btn sm', 'All matches'); b.href = '/matches.html'; n.appendChild(b); body.appendChild(n);
+            return;
+        }
+        if (!list.length) {
+            $('count').textContent = '';
+            var note = el('div', 'note'), q = el('p'); q.appendChild(el('b', '', 'No match is on right now.'));
+            q.appendChild(document.createTextNode(' Players’ matches show up here while they are played, and the computer players start one every hour.'));
+            note.appendChild(q);
+            var all = el('a', 'btn sm', 'See all matches'); all.href = '/matches.html'; note.appendChild(all);
+            body.appendChild(note);
+            return;
+        }
+        $('count').textContent = list.length + (list.length === 1 ? ' match' : ' matches');
+        var ul = el('ul', 'list');
+        list.forEach(function (e) { ul.appendChild(card(e)); });
+        body.appendChild(ul);
+        body.appendChild(el('p', 'lgd', 'A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players. A running match has no stats yet: its scores show in the game picture, and the match page opens in the list when it is over.'));
+    }
+
+    var timer = 0, round = 0;
+    function look() {
+        var mine = ++round;
+        clearTimeout(timer);
+        timer = 0;
+        var done = function () { if (mine === round && !document.hidden) timer = setTimeout(look, LIVE_EVERY); };
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var cut = setTimeout(function () { if (controller) controller.abort(); }, 8000);
+        var request;
+        try { request = fetch('/live', { cache: 'no-store', credentials: 'omit', signal: controller ? controller.signal : undefined }); } catch (e) { clearTimeout(cut); done(); return; }
+        request.then(function (response) {
+            if (mine !== round) return;
+            if (response.status === 404) { render(null); return; }          // (looked at again: the door may come back)
+            if (!response.ok) return;                                // (a feed that fails: the page keeps what it shows and the next look comes)
+            return response.json().then(function (data) {
+                if (mine !== round || !data || typeof data !== 'object' || !Array.isArray(data.live)) return;
+                render(R.liveEntriesOf(data));
+            });
+        }).catch(function () { /* the same: the next look comes */ }).then(function () { clearTimeout(cut); done(); });
+    }
+
+    // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
+    if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
+    else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+    else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
+    // looked at now, then every 10 seconds while the page is in front (a hidden page asks nothing, and asks again as soon as it is shown)
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { round++; clearTimeout(timer); timer = 0; } else look(); });
+    if (typeof fetch === 'function' && !document.hidden) look();
+})();
+</script>
+</body>
+</html>

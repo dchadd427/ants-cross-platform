@@ -1,4 +1,4 @@
-// Runs the code that the two replay pages share (web/replay_page.js: the list, web/watch.html, and the game page in replay mode, web/shell.html) on tables:
+// Runs the code that the two replay pages share (web/replay_page.js: the matches that run now, web/live.html, and the game page in replay mode, web/shell.html) on tables:
 //   - the address of a replay (?replay=<file>): only the shape of the names that the server's store makes, which docker/nginx.conf lets through, is ever asked for (no path, no other ending);
 //   - the time of a match in the visitor's own time zone ("Today, 7:32 AM", "Yesterday, ...", "Oct 6, ..."), the length of a match as a clock, the six maps' names;
 //   - the players as the list gives them ("Green (Mika)", "Red (Bot (Medium))") and as the game reports them (the roster's bits and the four seats' names);

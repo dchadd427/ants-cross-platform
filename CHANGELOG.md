@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
+
+**For players:**
+- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, colour, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
+- **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
+- **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
+- **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
+- **What is kept, said plainly** on the front page and in the name card: recordings are kept for 30 days; results and names are kept for good and are public.
+
+**Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
+
 ## v0.12.45 - 2026-10-15 - The bot arena container is gone from the stack
 
 **For players:**
@@ -540,19 +553,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [Network Port](docs/NETWORK_PORT.md)
 
-## v0.5.1 - 2026-10-05 - Every page in the front page's look
+## Older versions (v0.5.1 and before)
 
-**For players:**
-- **Every page in the front page's look:** the game page, the changelog pages and "Sprites and sounds" now have the front page's clay, thin green frame, teal buttons and black boxes, the "ants!" logo (a link back to the front page; on the game page it asks first while a match runs, as Menu does) and a Play button. The game page's loading screen shows the logo and a teal bar, and on a phone its header is one row (the logo, Menu, Fullscreen and a More button). Nothing about the game, its keys or its addresses changed; the picture is 3 to 7 percent smaller at common window sizes, because of the frame's room.
-- **Phones:** "Sprites and sounds" shows its animation details and its sprites table (they were cut off) and keeps its Play button; every page fits from 320 to 1600 px wide with no sideways scroll.
-- **A way back from a shared link:** the name step that a shared room link opens has a "Back to the front page" link.
-
-**Fixes:**
-- The two changelog pages link to each other (the short page's links to the detailed history opened GitHub's file view).
-- A bullet after a blank line in a changelog was written outside its list.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283)
-
-## Older versions (v0.5.0 and before)
-
-Every release before v0.5.1, and the long notes of v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.6.0, and the long notes of v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
