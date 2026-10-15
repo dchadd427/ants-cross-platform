@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. No rule, no hash and no protocol number (protocol 21) changed; the computer players are outside the simulation.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...8c041550)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...21c1ecd8)
 
 ## v0.12.48 - 2026-10-15 - Legal notice
 
