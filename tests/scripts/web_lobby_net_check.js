@@ -80,6 +80,25 @@ same('fillOfPlan nobody', N.fillOfPlan([N.PLAN.Nobody, N.PLAN.Open, N.PLAN.Nobod
 // a long name is cut to the byte that str8 holds, a name with a character beyond Latin-1 never reaches the wire as a wrong byte count
 check('encodeName cuts at 255 bytes at most', N.encodeName('x'.repeat(300)).length === 2 + 255);
 
+// a line of chat: made from its fields it is the C++ bytes (the golden file above); a character outside printable ASCII is never put on the wire as a wrong byte (str8 writes the low byte of a code:
+// an accent is 0xE9, a byte that the server's decoder refuses and counts as a violation, and eight of them put the sender out of the room)
+{
+    const text100 = 'x'.repeat(100);
+    same('encodeChat: type, sender, team flag, the line', arr(N.encodeChat(3, true, 'hi')), [9, 3, 1, 2, 104, 105]);
+    same('encodeChat: a line of exactly 100 characters is whole', N.encodeChat(0, false, text100).length, 4 + 100);
+    same('encodeChat: a longer line is cut at 100, as the game cuts what is typed', arr(N.encodeChat(0, false, text100 + 'yz')), arr(N.encodeChat(0, false, text100)));
+    for (const bad of ['caf\u00e9', '\u263a', 'tab\there', 'line\nbreak', 'del\x7f', '\x1f', '\ud83d\ude00', 'x'.repeat(99) + '\u00e9']) {
+        let threw = false;
+        try { N.encodeChat(0, false, bad); } catch (e) { threw = e instanceof RangeError; }
+        check('encodeChat refuses ' + JSON.stringify(bad) + ' with a RangeError (nothing is made)', threw);
+    }
+    check('encodeChat refuses what is no text', [null, undefined, 42, {}].every((bad) => { try { N.encodeChat(0, false, bad); return false; } catch (e) { return e instanceof RangeError; } }));
+    const table = [['hello', true], ['a', true], [' a ', true], [text100, true], [text100 + 'x', false], ['', false], ['   ', false], ['caf\u00e9', false], ['\u263a', false], ['a\tb', false], ['a\nb', false], ['a\x7f', false],
+        ['~', true], [' ', false], [null, false], [undefined, false], [42, false], [{}, false]];
+    for (const [text, ok] of table) check('validChatLine(' + String(JSON.stringify(text)).slice(0, 30) + ') is ' + ok, N.validChatLine(text) === ok);
+    check('what validChatLine takes, encodeChat makes (and the server\'s decoder reads: the same line back)', table.filter((r) => r[1]).every(([text]) => { const m = N.decode(N.encodeChat(1, false, text)); return m !== null && m.type === 'chat' && m.text === text && m.sender === 1 && m.team === false; }));
+}
+
 // ---- what a page hears: the fields that the C++ decoder reads ----------------------------------------------------------------------------------------------------------------------------------------
 
 const slot = (state, name, rtt, platform) => ({ state, name, rtt, platform });

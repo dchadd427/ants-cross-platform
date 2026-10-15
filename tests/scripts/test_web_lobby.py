@@ -446,12 +446,13 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
-        for name in ("lobby_rules.js", "lobby_net.js", "map_picker.js"):
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        if (!Rules || !Net) {", self.script)
+        self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        if (!Rules || !Net || !Chat) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 

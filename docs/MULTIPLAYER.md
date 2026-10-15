@@ -15,7 +15,7 @@ There is no NAT traversal in the game. Over the internet every player connects o
 - Host a room (`--host`) or join one (`--join`) over TCP, and list the rooms of a local network (`--lan-list`).
 - Join and host rooms on the game server from the desktop start menu or the browser, and come back to a match after a lost connection.
 - Fill the empty seats of a room with bots, or play against bots on your own computer.
-- Chat in the waiting room (the T key on the setup screen) and in the match.
+- Chat in the waiting room (the T key on the setup screen, or the Chat box of the web front page) and in the match.
 - Team up with another player (three dialogs: the invitation, the waiting dialog and the confirmation before a team is broken). A team line reaches only the sender and its ally.
 - Play on when a player leaves. A game on the local network chooses a new host when the host leaves.
 - Read `ping` and `delay` in the corner of the screen.
