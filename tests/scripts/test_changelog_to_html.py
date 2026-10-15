@@ -6,10 +6,15 @@
 The Docker image builds the page with the command below (Dockerfile); this test runs the same command on the real file and on small made-up ones. The page is in the Classic look of
 the front page (it links the site's /front/classic.css, shows the logo, and carries the version and the build in the footer): what is pinned here is its structure, not its colours
 (web/front/classic.css and tests/scripts/test_web_front.py own those).
+
+The page is the whole list of releases, which is all that a browser without JavaScript gets, and one small inline script shows it in pages (ten releases to a page, five on a phone, named by the
+versions they hold; the address of a release opens its page). The script is RUN here, with node and a small fake of the DOM (tests/scripts/web_changelog_pages_check.js; without node these tests
+are skipped and say so), and the check is shown able to fail: broken copies of the page's script are refused by it. The real browsers' check is opt-in: tests/scripts/test_web_changelog.sh.
 """
 import html.parser
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -245,13 +250,13 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
                          [("icon", "/favicon.png"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css")])
         self.assertEqual([i.get("src") for i in page.imgs], ["/front/logo.png"])
-        self.assertEqual(page.scripts, [])
+        self.assertEqual(page.scripts, ["script"])                                                 # (the one inline script that makes the pages: TheScript, below)
         style = re.search(r"<style>(.*?)</style>", self.text, re.S).group(1)
         self.assertNotIn("@import", style)
         self.assertNotIn("url(", style)
         self.assertNotRegex(style, r"--(?:clay|teal|gold|inset|frame|edge|shadow|cream)\s*:")      # (the tokens are the stylesheet's: the page does not make its own)
-        self.assertLess(len(style), 4000)
-        for needle in ('<div class="screen">', '<h1 class="banner gold">', '<footer class="bar">', '<nav class="versions panel" aria-label="Versions">'):
+        self.assertLess(len(style), 8000)
+        for needle in ('<div class="screen">', '<h1 class="banner gold">', '<footer class="bar">', '<details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">'):
             self.assertIn(needle, self.text)
         self.assertEqual(self.text.count("<h1"), 1)
         self.assertEqual(self.text.count("<main>"), 1)
@@ -326,7 +331,7 @@ class RealFile(unittest.TestCase):
         self.assertEqual(len(sections), len(re.findall(r"^## ", body, re.M)))
         self.assertEqual(len(set(sections)), len(sections), "every section has an id of its own")
         self.assertEqual(len(set(page.ids)), len(page.ids), "no id twice on the page")
-        nav = part(text, "nav", r' class="versions panel"')
+        nav = part(text, "nav", r' aria-label="Versions"')
         self.assertEqual(re.findall(r'<a href="#([^"]+)">', nav), sections, "the list of releases is the sections, in order")
         self.assertEqual(len(re.findall(r'<span class="rel">v', text)), len(versions), "every release heading has its version plate")
         header = part(text, "header")
@@ -391,6 +396,188 @@ class RealFile(unittest.TestCase):
             positions = [entry.find(label) for label in ("**For players:**", "**Rules / network:**", "**Fixes:**", "**Details:**") if label in entry]
             self.assertEqual(positions, sorted(positions), "%s: the labels are in the order For players, Rules / network, Fixes, Details" % head)
             self.assertNotRegex(entry, r"\b[0-9,]+ (assertions|test cases)\b", head)             # no test counts in the changelog
+
+
+NODE = shutil.which("node")
+PAGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_changelog_pages_check.js")
+
+
+def script_of(page):
+    return re.search(r"<script>\n(.*?)\n</script>", page, re.S).group(1)
+
+
+def releases_md(n, older=True):
+    """A changelog of n releases (v1.0.n newest first), with the Older versions section at the end when asked."""
+    out = ["# Changelog\n\nIntro.\n"]
+    for k in range(n, 0, -1):
+        out.append("## v1.0.%d - 2026-01-%02d - Release %d\n\n**For players:**\n- bullet %d\n\n**Details:** [commits](https://github.com/example/ants/compare/aaaaaaa...bbbbbbb)\n" % (k, 1 + k % 28, k, k))
+    if older:
+        out.append("## Older versions (v0.9.0 and before)\n\nEvery release before v1.0.1 is only in the git history.\n")
+    return "\n".join(out)
+
+
+def page_of(tmp, name, md, *extra):
+    src, out = os.path.join(tmp, name + ".md"), os.path.join(tmp, name + ".html")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write(md)
+    result = run_tool(src, out, *extra)
+    assert result.returncode == 0, result.stderr
+    return read_text(out)
+
+
+def run_pages_check(page_path):
+    return subprocess.run([NODE, PAGES_CHECK, page_path], capture_output=True, text=True, timeout=120)
+
+
+class ThePagesOfThePage(unittest.TestCase):
+    """The page is the whole list, and an inline script makes the pages: what the page holds for the script, and what it must never do."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.real = page_of(cls.tmp.name, "real", read_text(os.path.join(REPO, "CHANGELOG.md")), "--version", "v1.2.0", "--build-id", "abc1234")
+        cls.long = page_of(cls.tmp.name, "long", releases_md(55))
+        cls.short = page_of(cls.tmp.name, "short", releases_md(3, older=False))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_without_the_script_the_page_is_the_whole_list(self):
+        for page in (self.real, self.long, self.short):
+            bare = re.sub(r"<script>.*?</script>", "", re.sub(r"<style>.*?</style>", "", page, flags=re.S), flags=re.S)
+            self.assertNotRegex(bare, r"<[^>]*\shidden[\s>=]")                                         # (no release is hidden by the page: only the script hides, and only when it runs)
+            self.assertNotRegex(bare, r"pager|pages-top|class=\"tab|class=\"foot")             # (the tabs and the Newer / Older bar are made by the script)
+            self.assertIn('<details class="versions panel" id="versions" open>', bare)         # (the list of versions is open: it is all that a visitor without JavaScript has to jump with)
+            sections = re.findall(r'<section id="([^"]+)" class="panel">', bare)
+            nav = re.search(r'<nav aria-label="Versions">(.*?)</nav>', bare, re.S).group(1)
+            self.assertEqual(re.findall(r'<a href="#([^"]+)">', nav), sections)
+
+    def test_one_inline_script_after_the_releases_and_before_the_footer(self):
+        for page in (self.real, self.long, self.short):
+            self.assertEqual(page.count("<script"), 1)
+            self.assertEqual(page.count("</script>"), 1)
+            self.assertIn("</main>\n<script>\n(function () {", page)
+            self.assertLess(page.index("</script>"), page.index("<footer"))
+            self.assertNotRegex(page, r"<script[^>]*\b(src|type|defer|async)=")
+            self.assertNotIn("@", script_of(page))                                           # (every placeholder of the template was filled)
+
+    def test_the_script_is_the_same_for_every_changelog(self):
+        self.assertEqual(script_of(self.real), script_of(self.long))
+        self.assertEqual(script_of(self.real), script_of(self.short))
+
+    def test_ten_to_a_page_five_on_a_phone_up_to_the_stylesheets_phone_width(self):
+        script = script_of(self.real)
+        self.assertIn("var SIZE = 10, PHONE_SIZE = 5, PHONE_QUERY = '(max-width: 700px)';", script)
+        self.assertIn("@media (max-width: 700px) {", self.real)
+        self.assertIn("Math.round(secs.length / size)", script)                                 # (the count of pages is the rounded quotient: the last page has the rest, never less than half a page)
+
+    def test_the_script_makes_nothing_from_text_and_reaches_for_nothing(self):
+        script = script_of(self.real)
+        for word in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval", "Function(", "setTimeout", "setInterval", "fetch", "XMLHttpRequest", "localStorage", "sessionStorage",
+                     "http", "cookie", "import(", "</script", "<!--"):
+            self.assertNotIn(word, script, word)
+        for word in ("document.createElement", "textContent", "location.hash", "hashchange"):
+            self.assertIn(word, script, word)
+
+    def test_the_pager_looks_like_the_pages_buttons_and_a_deep_link_keeps_its_frame(self):
+        style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
+        for needle in (".pager .tab {", ".pager .tab.on {", ".pager .off {", "section.first:target { border-color: var(--frame-bevel); }", ".versions a.here {", "details.versions {"):
+            self.assertIn(needle, style, needle)
+        self.assertLess(style.index("section:target { border-color: var(--gold); }"), style.index("section.first:target"))      # (the first release of a page is the frame of the panels, a release that a link names is gold)
+        self.assertNotIn("nav.versions", style)
+
+    def test_a_tab_is_at_least_a_finger_wide_and_tall(self):
+        style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
+        self.assertRegex(style, r"\.pager \.tab \{[^}]*min-height: 52px")
+        phone = style[style.index("@media (max-width: 700px)"):]
+        self.assertRegex(phone, r"\.pager \.prev, \.pager \.next \{[^}]*min-height: 44px")
+
+
+@unittest.skipUnless(NODE, "node is not installed: the changelog page's script was NOT run (tests/scripts/web_changelog_pages_check.js)")
+class TheScriptRunByNode(unittest.TestCase):
+    """The script of the generated page, run against the page with a small fake of the DOM (tests/scripts/web_changelog_pages_check.js), and the check shown able to fail."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.real = page_of(cls.tmp.name, "real", read_text(os.path.join(REPO, "CHANGELOG.md")))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def write(self, name, page):
+        path = os.path.join(self.tmp.name, name + ".html")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(page)
+        return path
+
+    def test_every_check_holds_on_the_real_page(self):
+        done = run_pages_check(self.write("real", self.real))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"web changelog pages: \d+ checks, 0 failed")
+
+    def test_and_on_changelogs_of_other_lengths_on_both_sides_of_every_rounding(self):
+        for n in (15, 16, 20, 24, 25, 34, 35, 52, 55, 100):
+            for older in (True, False):
+                page = page_of(self.tmp.name, "n%d%s" % (n, older), releases_md(n, older))
+                done = run_pages_check(self.write("n%d%s" % (n, older), page))
+                self.assertEqual(done.returncode, 0, "%d releases, older=%s: %s%s" % (n, older, done.stdout, done.stderr))
+
+    def test_a_page_without_the_script_is_refused(self):
+        bare = re.sub(r"<script>.*?</script>", "", self.real, flags=re.S)
+        done = run_pages_check(self.write("bare", bare))
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("no inline script", done.stdout)
+
+    # (what to break in the page's script, and the words for it). Every copy has to be refused: a check that none of these fails proves nothing.
+    BROKEN = [
+        ("the count of pages is cut, not rounded", "Math.round(secs.length / size)", "Math.floor(secs.length / size)"),
+        ("a short list is paged too", "if (pages < 2) {", "if (pages < 1) {"),
+        ("the address is read in its own case", ".toLowerCase()", ""),
+        ("a dot in the address is not a dash", ".replace(/\\./g, '-')", ""),
+        ("the wrong releases are hidden", "secs[k].hidden = pageOf(k) !== p;", "secs[k].hidden = pageOf(k) === p;"),
+        ("the list of versions is not folded", "versions.removeAttribute('open')", "versions.setAttribute('open', '')"),
+        ("Back and Forward do nothing", "window.addEventListener('hashchange', route);", ""),
+        ("ten to a page is twelve", "var SIZE = 10,", "var SIZE = 12,"),
+        ("five on a phone is six", "PHONE_SIZE = 5,", "PHONE_SIZE = 6,"),
+        ("the first release of a page is not what the tab scrolls to", "(k === firstOf(cur) ? top : secs[k]).scrollIntoView()", "secs[k].scrollIntoView()"),
+        ("the focus is lost after a click on the bar", "tabs[cur].focus({ preventScroll: true })", "tabs[cur].focus({})"),
+        ("a click in the bars is not noted", "clicked = a ? a.getAttribute('href') : null;", "clicked = null;"),
+        ("every change of the address takes the focus", "keep = clicked !== null && clicked === location.hash", "keep = true"),
+        ("a click on the words inside a tab is not a click on the tab", "while (a && a.tagName !== 'A') a = a.parentNode;", ""),
+        ("the bar at the top is not told of clicks", "    top.addEventListener('click', noted);\n", ""),
+        ("the bar at the bottom is not told of clicks", "    foot.addEventListener('click', noted);\n", ""),
+        ("a release has no label but its id", "labels[secs[k].id] || secs[k].id", "secs[k].id"),
+        ("a page that ends in Older versions is named by it", "/^v\\d/.test(label(k)) ? label(k) : 'older'", "label(k)"),
+        ("an older browser is not told of the resize", " else if (mq.addListener) mq.addListener(resized);", ";"),
+        ("an address that names nothing resets the page", "if (!top || k === -1) return;", "if (!top) return;"),
+        ("the last page ends early", "p === pages - 1 ? secs.length - 1 : (p + 1) * size - 1", "(p + 1) * size - 1"),
+        ("a release after the last full page has no page", "Math.min(Math.floor(k / size), pages - 1)", "Math.floor(k / size)"),
+        ("no release is the first of its page", "secs[k].classList.toggle('first', k === firstOf(pageOf(k)));", "secs[k].classList.toggle('first', false);"),
+        ("Newer stays a link on the first page", "if (p > 0) link(prev, p - 1); else {", "if (p > -1) link(prev, p - 1); else {"),
+        ("the bar names the page before", "where.textContent = 'Page ' + (p + 1) + ' of ' + pages;", "where.textContent = 'Page ' + p + ' of ' + pages;"),
+        ("a resize leaves the old bars", "    drop(top);\n    drop(foot);\n", ""),
+        ("text becomes markup", "if (text) e.textContent = text;", "if (text) e.innerHTML = text;"),
+        ("the list of versions does not say which are on the page", "chips[k].classList.toggle('here', index.hasOwnProperty(id) && pageOf(index[id]) === p);", ""),
+        ("the page that opens on an address is not scrolled", "if (top) reveal(start);", ""),
+        ("a resize loses the release in sight", "apply(top ? firstOf(cur) : 0)", "apply(0)"),
+        ("an invalid address is read as no address", "catch (e) { return -1; }", "catch (e) { return -2; }"),
+        ("the tab of the page is not marked as the current one", "tabs[k].setAttribute('aria-current', 'page')", "tabs[k].setAttribute('aria-current', 'true')"),
+    ]
+
+    def test_the_check_is_shown_able_to_fail_on_broken_copies_of_the_script(self):
+        script = script_of(self.real)
+        survivors = []
+        for number, (what, old, new) in enumerate(self.BROKEN):
+            self.assertEqual(script.count(old), 1, "%s: the text to break occurs %d times in the script" % (what, script.count(old)))
+            page = self.real.replace(script, script.replace(old, new))
+            self.assertNotEqual(page, self.real, what)
+            done = run_pages_check(self.write("broken%d" % number, page))
+            if done.returncode == 0:
+                survivors.append(what)
+        self.assertEqual(survivors, [], "the check did not notice these broken copies of the script")
 
 
 class DockerfileBuildsThePage(unittest.TestCase):
