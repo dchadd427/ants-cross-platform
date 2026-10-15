@@ -56,6 +56,23 @@ def footer_links(page):
     return [(m.group(1), m.group(2), plain(m.group(3))) for m in re.finditer(r'<(?:a|button)\b[^>]*?\bhref="([^"]*)"([^>]*)>(.*?)</(?:a|button)>', nav, re.S)]
 
 
+def addresses_that_leave_the_site(page):
+    """What in a page would load something from, or lead to, another site than this one and the project's own repository: an address in href, src, srcset, action, poster or data that
+    is not a path of this site ("/x", never "//host") or an anchor ("#x") or a link into the repository (the repository's address and then "/" or the end), and any @import or url() in a style."""
+    found = []
+    for name, value in re.findall(r'\b(href|src|srcset|action|poster|data)="([^"]*)"', page):
+        for address in ([part.split()[0] for part in value.split(",") if part.strip()] if name == "srcset" else [value]):
+            if address.startswith("/") and not address.startswith("//") or address.startswith("#"):
+                continue
+            if address == GITHUB or address.startswith(GITHUB + "/"):
+                continue
+            found.append(address)
+    for style in re.findall(r"<style[^>]*>(.*?)</style>", page, re.S):
+        found += ["@import" for _ in re.findall(r"@import\b", style)]
+        found += ["url(" for _ in re.findall(r"\burl\(", style)]
+    return found
+
+
 def changelog_page():
     sys.path.insert(0, os.path.join(REPO, "tools"))
     try:
@@ -84,7 +101,7 @@ class TheLegalPage(unittest.TestCase):
         cls.main = cls.page[cls.page.index("<main>"):cls.page.index("</main>")]
         cls.text = plain(cls.main)
 
-    def test_it_is_a_page_in_the_changelog_pages_look_that_loads_nothing_from_elsewhere(self):
+    def test_it_is_a_page_in_the_changelog_pages_look(self):
         self.assertTrue(self.page.startswith("<!DOCTYPE html>"))
         self.assertIn("<title>Ants (1998) - Legal</title>", self.page)
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
@@ -92,12 +109,29 @@ class TheLegalPage(unittest.TestCase):
         self.assertEqual(re.findall(r'class="btn sm" href="([^"]*)"', self.page), ["/", GITHUB])                 # the header's two buttons, as the changelog page's
         self.assertNotIn("<script", self.page)
         self.assertNotIn("@@", self.page)                                                                         # (the page is copied as it is: nothing in it is filled in by the build)
-        for url in re.findall(r'(?:href|src)="(https?://[^"]*)"', self.page):
-            self.assertTrue(url.startswith(GITHUB), "%s: the page links the project's own repository and nothing else" % url)
-        for url in re.findall(r"url\(([^)]*)\)", self.page):
-            self.fail("the page's own rules load %s: the look is the style sheet's" % url)
         for blank in re.findall(r"<a [^>]*target=\"_blank\"[^>]*>", self.page):
             self.assertIn('rel="noopener noreferrer"', blank)
+
+    def test_it_loads_nothing_from_another_site(self):
+        self.assertEqual(addresses_that_leave_the_site(self.page), [])
+
+    def test_the_check_of_the_addresses_is_shown_able_to_fail(self):
+        """Copies of the page with one address that leaves the site: each must be named by the check (a protocol-relative one and an @import included)."""
+        mutants = {
+            "a protocol-relative style sheet": ('<link rel="stylesheet" href="/front/classic.css">', '<link rel="stylesheet" href="/front/classic.css"><link rel="stylesheet" href="//cdn.example/x.css">', "//cdn.example/x.css"),
+            "a protocol-relative image": ('<img src="/front/logo.png"', '<img src="//cdn.example/logo.png"', "//cdn.example/logo.png"),
+            "an image of another site": ('<img src="/front/logo.png"', '<img src="https://cdn.example/logo.png"', "https://cdn.example/logo.png"),
+            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
+            "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
+            "an @import of a quoted address": ("main { margin-top: 26px; }", '@import "https://cdn.example/x.css";\nmain { margin-top: 26px; }', "@import"),
+            "an @import url()": ("main { margin-top: 26px; }", "@import url(//cdn.example/x.css);\nmain { margin-top: 26px; }", "@import"),
+            "a url() in the page's own rules": ("main { margin-top: 26px; }", 'main { margin-top: 26px; background: url("/front/clay.png"); }', "url("),
+            "a srcset": ('<img src="/front/logo.png"', '<img src="/front/logo.png" srcset="//cdn.example/l.png 2x"', "//cdn.example/l.png"),
+        }
+        for name, (old, new, needle) in sorted(mutants.items()):
+            self.assertGreaterEqual(self.page.count(old), 1, "%s: the mutation's anchor is in the page" % name)
+            found = addresses_that_leave_the_site(self.page.replace(old, new, 1))
+            self.assertTrue(found and any(needle in f for f in found), "%s: the check did not name it (%s)" % (name, found))
 
     def test_it_says_the_notice_in_the_words_that_the_owner_approved(self):
         for sentence in NOTICE:
