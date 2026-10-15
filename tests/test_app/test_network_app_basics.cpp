@@ -1585,7 +1585,7 @@ void run_guest_tests() {
         ASSERT_EQ(app.hud().status_line().text(), "Match starts in " + std::to_string(later) + " s");
         ASSERT_TRUE(app.sim().current_tick() == 0 && bob.sim.current_tick() == 0 && bob.net.phase() == net::NetGame::Phase::Playing);
         // the map is out of reach: a click on an own ant selects nothing (the dialog takes it), as in the 5 s dialog
-        const uint32_t mine = static_cast<uint32_t>(ants_of(app.sim(), static_cast<int>(app.local_player_id())).front());
+        const uint32_t mine = ants_of(app.sim(), app.local_player_id()).front();
         for (const auto& a : app.sim().get_world_state().ants) {
             if (a.id != mine) continue;
             app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
