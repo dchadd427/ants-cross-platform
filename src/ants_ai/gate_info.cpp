@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <deque>
 #include <limits>
+#include <queue>
 
 #include "ants_ai/island_info.hpp"
 #include "ants_ai/map_info.hpp"
@@ -222,6 +223,40 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
     const std::vector<int32_t> d_fire = search(true, false, &fire_parent);
     const std::vector<int32_t> d_bomb = search(false, true, &bomb_parent);
     const std::vector<int32_t> d_both = search(true, true);
+    std::vector<int32_t> swim_parent(cells, -1);
+    std::vector<int32_t> d_swim(cells, kFar);
+    if (out.home_ >= 0) {
+        using Node = std::pair<int32_t, int32_t>;
+        std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const sim::TileCoord s{x, y};
+                if (out.comp_of_[at(s)] != out.home_) continue;
+                d_swim[at(s)] = 0;
+                pq.push({0, static_cast<int32_t>(at(s))});
+            }
+        }
+        while (!pq.empty()) {
+            const auto [cur_d, idx] = pq.top();
+            pq.pop();
+            if (cur_d > d_swim[static_cast<size_t>(idx)]) continue;
+            const sim::TileCoord t{idx % w, idx / w};
+            for (int d = 0; d < 8; d += 2) {
+                const sim::TileCoord n = step_in(t, d, 1);
+                if (n.x < 0 || n.y < 0 || n.x >= w || n.y >= h) continue;
+                const size_t i = at(n);
+                const bool water = grid.terrain_class_at(n) == sim::movement::kTerrainWater && grid.get_cell(n).is_empty_overlay() && !grid.is_solid_object(n);
+                int32_t cost = 1;
+                if (is_fire[i] || is_bomb[i]) cost = 1001;
+                else if (!walk[i] && !water && !grid.has_powerup_at(n)) continue;
+                const int32_t nd = cur_d + cost;
+                if (nd >= d_swim[i]) continue;
+                d_swim[i] = nd;
+                swim_parent[i] = idx;
+                pq.push({nd, static_cast<int32_t>(i)});
+            }
+        }
+    }
     const auto least = [&](const std::vector<int32_t>& dist, const std::vector<sim::TileCoord>& tiles, sim::TileCoord* where = nullptr) {
         int32_t best = -1;
         for (const sim::TileCoord& t : tiles) {
@@ -267,6 +302,33 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
         else if (g.defuse_bombs >= 0) g.gate = GateKind::Bombs;
         else if (mixed >= 0) g.gate = GateKind::Mixed;
         else g.gate = GateKind::Sealed;
+        if (!walkable_cells && g.gate == GateKind::Sealed) {
+            sim::TileCoord swim_end{-1, -1};
+            if (least(d_swim, tiles, &swim_end) >= 0) {
+                int32_t s_fires = 0;
+                int32_t s_bombs = 0;
+                sim::TileCoord s_fire_cell{-1, -1};
+                sim::TileCoord s_bomb_cell{-1, -1};
+                bool crosses_water = false;
+                for (int32_t i = static_cast<int32_t>(at(swim_end)); i >= 0; i = swim_parent[static_cast<size_t>(i)]) {
+                    const sim::TileCoord cur{i % w, i / w};
+                    if (grid.terrain_class_at(cur) == sim::movement::kTerrainWater) crosses_water = true;
+                    if (is_fire[static_cast<size_t>(i)]) {
+                        ++s_fires;
+                        s_fire_cell = cur;
+                    } else if (is_bomb[static_cast<size_t>(i)]) {
+                        ++s_bombs;
+                        s_bomb_cell = cur;
+                    }
+                }
+                if (crosses_water) {
+                    g.shore_fire_cells = s_fires;
+                    g.shore_bombs = s_bombs;
+                    g.shore_fire_cell = s_fire_cell;
+                    g.shore_bomb_cell = s_bomb_cell;
+                }
+            }
+        }
     };
     for (const PileInfo& p : map.piles()) {
         GateTarget g;
@@ -324,6 +386,51 @@ GateInfo GateInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_t te
         }
     }
     return out;
+}
+
+BombHop GateInfo::best_hop_between(const GateInfo& gates, const sim::Grid& grid, int32_t from_comp, int32_t to_comp) {
+    BombHop best;
+    if (gates.empty() || from_comp < 0 || to_comp < 0 || from_comp == to_comp) return best;
+    const int w = gates.w_;
+    const int h = gates.h_;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const sim::TileCoord t{x, y};
+            if (!bomb_ground(grid, t)) continue;
+            bool planter = false;
+            for (int d = 0; d < 8; d += 2) planter = planter || gates.component(step_in(t, d, 1)) == from_comp;
+            if (!planter) continue;
+            for (int f = 0; f < 8; ++f) {
+                const sim::TileCoord from = step_in(t, f, -1);
+                if (gates.component(from) != from_comp) continue;
+                BombHop hop = simulate(grid, t, static_cast<uint8_t>(f));
+                if (hop.end != HopEnd::Ground) continue;
+                hop.from = from;
+                hop.from_comp = from_comp;
+                hop.to_comp = gates.component(hop.land());
+                if (hop.to_comp != to_comp) continue;
+                if (best.bombs == 0 || hop.bombs < best.bombs) best = std::move(hop);
+            }
+        }
+    }
+    return best;
+}
+
+BombHop GateInfo::best_map_bomb_bounce(const GateInfo& gates, const sim::Grid& grid, sim::TileCoord from, int32_t to_comp) {
+    BombHop best;
+    if (gates.empty() || to_comp < 0 || !grid.in_bounds(from)) return best;
+    for (int f = 0; f < 8; ++f) {
+        const sim::TileCoord b = step_in(from, f, 1);
+        if (!grid.in_bounds(b) || !grid.has_bomb_at(b)) continue;
+        BombHop hop = simulate(grid, b, static_cast<uint8_t>(f));
+        if (hop.end != HopEnd::Ground) continue;
+        hop.from = from;
+        hop.from_comp = gates.component(from);
+        hop.to_comp = gates.component(hop.land());
+        if (hop.to_comp != to_comp) continue;
+        if (best.bombs == 0 || hop.bombs < best.bombs) best = std::move(hop);
+    }
+    return best;
 }
 
 std::vector<const BombHop*> GateInfo::hops_to(int32_t to) const {

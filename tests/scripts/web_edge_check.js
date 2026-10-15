@@ -268,10 +268,21 @@ try {
         expect('4000 random motions in six sizes: the cursor is always on a pixel of the picture (' + sample + ')', bad, 0);
     }
 
-    // ---- the setting
+    // ---- the setting & Ctrl+Alt release
     expect('lockSetting: nothing remembered is on', P.lockSetting(null), true);
     expect('lockSetting: "off" is off', P.lockSetting('off'), false);
     for (const v of ['on', '', '0', 'false', 'OFF', 'Off', ' off', 'off ', 'no', undefined, 'junk']) expect('lockSetting: ' + JSON.stringify(v) + ' is on (only "off" turns the lock off)', P.lockSetting(v), true);
+    expect('releasesMouseLock: Ctrl then Alt', P.releasesMouseLock({ key: 'Alt', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), true);
+    expect('releasesMouseLock: Alt then Ctrl', P.releasesMouseLock({ key: 'Control', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), true);
+    expect('releasesMouseLock: AltGraph with Ctrl', P.releasesMouseLock({ key: 'AltGraph', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), true);
+    expect('releasesMouseLock: single modifier or extra modifiers or letter keys do not release', [
+        P.releasesMouseLock({ key: 'Control', ctrlKey: true, altKey: false }),
+        P.releasesMouseLock({ key: 'Alt', ctrlKey: false, altKey: true }),
+        P.releasesMouseLock({ key: 'Alt', ctrlKey: true, altKey: true, shiftKey: true }),
+        P.releasesMouseLock({ key: 'Alt', ctrlKey: true, altKey: true, metaKey: true }),
+        P.releasesMouseLock({ key: 'n', ctrlKey: true, altKey: true }),
+        P.releasesMouseLock(null),
+    ], [false, false, false, false, false, false]);
 
     // the block of the control, with a page of fakes
     function runLock(stored, canHaveLock) {

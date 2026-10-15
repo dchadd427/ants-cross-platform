@@ -90,6 +90,9 @@ class TheListeners(PageCase):
         self.found(self.page, r"function fullscreenEnded\(\) \{[^\n]*\n\s*releaseLock\(\);\s*lockKeys\(false\);")
         self.assertIn("keyboard.lock(['Escape'])", self.page)                                                # Esc reaches the game in the Chromium browsers
         self.assertNotIn("emscripten_request_pointerlock", self.page)
+        self.assertIn("releasesMouseLock: releasesMouseLock", self.page)
+        self.assertIn("if (!isLocked() || !ANTS_PAGE.releasesMouseLock(e)) return;", self.page)
+        self.assertIn("if (!isRealFullscreen() && !inMatch) return;", self.page)
 
     def test_the_game_is_not_told_of_the_lock_and_gets_the_pages_cursor(self):
         self.found(self.page, r"\['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'\]\.forEach")

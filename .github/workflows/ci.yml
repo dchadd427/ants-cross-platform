@@ -156,6 +156,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sdl-src" && cd "$RUNNER_TEMP/sdl-src"
           curl -fsSL -o SDL2.tar.gz https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz
           curl -fsSL -o SDL2_ttf.tar.gz https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.24.0/SDL2_ttf-2.24.0.tar.gz
+          printf '%s  %s\n' \
+            '5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165' 'SDL2.tar.gz' \
+            '0b2bf1e7b6568adbdbc9bb924643f79d9dedafe061fa1ed687d1d9ac4e453bfd' 'SDL2_ttf.tar.gz' | shasum -a 256 -c -
           tar xzf SDL2.tar.gz && tar xzf SDL2_ttf.tar.gz
           cmake -S SDL2-2.32.10 -B sdl2-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/sdl2" -DSDL_TEST=OFF
           cmake --build sdl2-build

@@ -36,6 +36,7 @@ struct GateGoal {
 struct GoalRules {
     uint32_t hop_bombs{3};                       // the most bombs of a hop chain (LevelPlan::gate_hop_bombs)
     uint8_t kinds{static_cast<uint8_t>((1u << static_cast<unsigned>(sim::AntType::Swimmer)) | (1u << static_cast<unsigned>(sim::AntType::Fire)))};   // power-up kinds worth a hop
+    bool shore_breach{false};                    // plan multi-step shore breach (Fire hat -> extinguish -> defuse -> Swimmer) for water-moated Sealed piles
 };
 
 /// The goal for the look `view` shows, given the analysis of the map as it is (GateInfo::analyse of the current grid). GoalKind::None when the analysis is empty or some pile with units left is

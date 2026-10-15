@@ -934,7 +934,8 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         return nearest(x.p) < nearest(y.p);
     });
     const sim::Grid& grid = v.grid();
-    for (size_t i = 0; i < cands.size() && i < 3; ++i) {
+    const size_t limit = tactics_.plan.gate_goals ? cands.size() : std::min<size_t>(3, cands.size());
+    for (size_t i = 0; i < limit; ++i) {
         const PowerUpView& p = *cands[i].p;
         const std::vector<int32_t>& f = field_for(c, p.tile);
         if (f.empty()) continue;
@@ -952,9 +953,12 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         if (walk > params_.max_trip_ticks) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
         // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate)
+        const bool skip_contest = tactics_.plan.gate_goals && takes_.empty() &&
+                                  (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
+                                   c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;
         for (const AntView& e : v.others()) {
-            if (e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+            if (skip_contest || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
             if (e.state == sim::UnitState::EnteringBase || e.state == sim::UnitState::PoweringUp) continue;
             const int32_t cost = f[tile_index(grid, e.tile)];
             if (cost < 0) continue;
@@ -3500,7 +3504,7 @@ void GateTask::step(TaskContext& c) {
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.ledger.rank(c.ledger.owner(a.id)) < 6 && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
     if (!ramp_standing) ramp_since_ = -1;
     else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);

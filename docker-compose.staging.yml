@@ -29,6 +29,8 @@ services:
       - "${ANTS_STAGING_PORT:-19981}:80"
     networks:
       - staging
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
 
   ants-server:
     build:

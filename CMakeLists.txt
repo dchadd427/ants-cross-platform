@@ -72,6 +72,7 @@ if(WIN32)
         FetchContent_Declare(
             SDL2_prebuilt
             URL https://github.com/libsdl-org/SDL/releases/download/release-2.30.12/SDL2-devel-2.30.12-VC.zip
+            URL_HASH SHA256=1ca980f9964fb44cf94be235c9818fa1dc8e3f76b08096d751b2d689e5e37d02
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         )
         FetchContent_GetProperties(SDL2_prebuilt)
@@ -88,6 +89,7 @@ if(WIN32)
         FetchContent_Declare(
             SDL2_ttf_prebuilt
             URL https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-devel-2.22.0-VC.zip
+            URL_HASH SHA256=94548d889a44b5301181a1d7b620cf5eab85ea657fcaa2ab4e8700916306eac2
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         )
         FetchContent_GetProperties(SDL2_ttf_prebuilt)

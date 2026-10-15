@@ -113,6 +113,8 @@ private:
     uint8_t seen_hp_{0};
     bool seen_bomb_{false};
     bool landed_{false};
+    sim::TileCoord island_target_{-1, -1};
+    BombHop return_hop_{};
     const char* why_{""};
     bool thrown_{false};                     // a click onto the bomb was given and the throw has not been accounted for yet
     bool finished_{false};                   // goals_max goals are done: nothing more is tried

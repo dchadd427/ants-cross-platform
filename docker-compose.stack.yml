@@ -57,6 +57,8 @@ services:
       - "${ANTS_PORT:-19980}:80"
     networks:
       - proxy-network
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
 
   ants-server:
     build:

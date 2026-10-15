@@ -628,5 +628,33 @@ void run_gate_goal_tests() {
             ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
         }
     } TEST_END();
+
+    TEST_CASE("AI27.8 Sealed Vault Raid And Shore Breach: Hard Bots Bank Food On HELLRAISER And POPcOrN") {
+        {   // (a) HELLRAISER: food pile sealed in central vault; a Hard Bomber hops in from its starting component, grabs food, and hops to its anthill component to bank it
+            assets::LevelData level;
+            ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/HELLRAISER.lvl"));
+            sim::SimulationEngine sim;
+            sim.init(level, 1, 0x0F);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            rig.run(2400);
+            ASSERT_TRUE(rig.as<StandardBot>().gate_goals().hops_ordered() >= 2u);
+            ASSERT_TRUE(sim.get_player_score(0) > 0);
+        }
+        {   // (b) POPcOrN: Bomber hops to island Fire hat, bounces back, extinguishes shore fire, converts to Bomber, defuses shore bombs, hops to island Swimmer hat, and banks food
+            assets::LevelData level;
+            ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/POPcOrN.lvl"));
+            sim::SimulationEngine sim;
+            sim.init(level, 1, 0x01);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            for (int step = 0; step < 25; ++step) {
+                rig.run(200);
+                if (sim.get_player_score(0) > 0) break;
+            }
+            ASSERT_TRUE(bot.gate_goals().extinguishes() >= 1u);
+            ASSERT_TRUE(bot.gate_goals().defuses() >= 1u);
+            ASSERT_TRUE(sim.get_player_score(0) > 0);
+        }
+    } TEST_END();
 }
 
