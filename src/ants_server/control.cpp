@@ -88,6 +88,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("max_pause_seconds", JsonValue::make_int(s.max_pause_ms / 1000));
     o.set("max_catch_up_seconds", JsonValue::make_int(s.max_catch_up_ms / 1000));
     o.set("resume_countdown_seconds", JsonValue::make_int(s.resume_countdown_ms / 1000));
+    o.set("countdown_seconds", JsonValue::make_int(s.countdown_s));
     o.set("paused", JsonValue::make_bool(s.paused));
     o.set("resume_seconds", JsonValue::make_int(s.resume_s));
     JsonValue absent = JsonValue::make_array();
@@ -258,6 +259,9 @@ bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {
     if (!number("max_catch_up_seconds", kMinCatchUpMs / 1000, kMaxCatchUpLimitMs / 1000, catch_s) || !number("resume_countdown_seconds", 0, kMaxResumeCountdownMs / 1000, resume_s)) return false;
     spec.max_catch_up_ms = static_cast<uint32_t>(catch_s * 1000);
     spec.resume_countdown_ms = static_cast<uint32_t>(resume_s * 1000);
+    int64_t countdown_s = spec.countdown_s;                  // protocol 21: the seconds that the first turn waits when two or more people play
+    if (!number("countdown_seconds", 0, net::kMaxCountdownSeconds, countdown_s)) return false;
+    spec.countdown_s = static_cast<uint32_t>(countdown_s);
     // The computer players that sit in the room from the start (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): [{"seat": 2, "bot": "medium"}]; "bot" is what --bot takes after the seat ("easy", "medium", "hard",
     // "idle", "worker", "worker:easy", "hard:raider" (a pinned style), ...; "standard" is the default kind)
     if (const JsonValue* v = body.find("bots")) {

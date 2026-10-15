@@ -2,7 +2,7 @@
 //
 //   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
 //               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--max-catch-up-seconds N]
-//               [--resume-countdown-seconds N] [--log-mb N]
+//               [--resume-countdown-seconds N] [--start-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
 //               [--bot-match-every-min N] [--db FILE | --no-db] [--no-history]
@@ -46,6 +46,9 @@
 //                      is refused (10 - 3600, default 300; the control interface's "max_catch_up_seconds")
 //   --resume-countdown-seconds N
 //                      after a pause of 3 s or more the match is held this long before it goes on (0 - 60, default 10, 0 = none; the control interface's "resume_countdown_seconds")
+//   --start-countdown-seconds N
+//                      protocol 21: a room with two or more people holds the first turn of its match this long, with the chat open, instead of the 5 s "Get ready" dialog (0 - 60, default 30, 0 = none; the
+//                      control interface's "countdown_seconds"); a room of one person, with or without computer players, never counts down
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
@@ -148,6 +151,7 @@ struct Options {
     long max_pause_s{1800};
     long max_catch_up_s{300};
     long resume_countdown_s{10};
+    long start_countdown_s{static_cast<long>(ants::net::kMatchCountdownSeconds)};     // --start-countdown-seconds (protocol 21)
     long log_mb{16};
     std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
     bool no_restart_records{false};
@@ -172,7 +176,7 @@ void usage(FILE* to) {
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N] [--community-maps DIR]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
-                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--log-mb 1-256]\n"
+                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
@@ -306,7 +310,7 @@ int main(int argc, char** argv) {
             }
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
                    a == "--restart-budget-mb" || a == "--replays-days" || a == "--replays-max-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
@@ -317,6 +321,7 @@ int main(int argc, char** argv) {
             else if (a == "--max-pause-seconds") { lo = 60; hi = 86400; target = &o.max_pause_s; }
             else if (a == "--max-catch-up-seconds") { lo = 10; hi = 3600; target = &o.max_catch_up_s; }
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
+            else if (a == "--start-countdown-seconds") { lo = 0; hi = 60; target = &o.start_countdown_s; }
             else if (a == "--restart-vote-seconds") { lo = 30; hi = 3600; target = &o.restart_vote_s; }
             else if (a == "--restart-budget-mb") { lo = 1; hi = 4096; target = &o.restart_budget_mb; }
             else if (a == "--replays-days") { lo = 1; hi = 3650; target = &o.replays_days; }
@@ -483,6 +488,7 @@ int main(int argc, char** argv) {
     limits.max_pause_ms = static_cast<uint32_t>(o.max_pause_s * 1000);
     limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
+    limits.countdown_s = static_cast<uint32_t>(o.start_countdown_s);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
@@ -654,6 +660,8 @@ int main(int argc, char** argv) {
     } else {
         log("rooms hold no seats (--no-reconnect): a player whose connection is lost is dropped at once, unless a room's specification says \"reconnect\": true");
     }
+    log(o.start_countdown_s > 0 ? "a room with two or more people holds the first turn of its match " + std::to_string(o.start_countdown_s) + " s, with the chat open (--start-countdown-seconds)"
+                                : "no countdown before the first turn (--start-countdown-seconds 0): the plain 5 s dialog");
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (http) log("control interface on port " + std::to_string(http->port()) + (o.ctl_any_interface ? " (all interfaces: the host must restrict it, bearer secret)" : " (this machine only, bearer secret)"));

@@ -408,7 +408,7 @@ void HostLobby::check_all_loaded() {
         if (guests_[s].conn != nullptr && !guests_[s].loaded) return;
     }
     phase_ = Phase::Begun;
-    broadcast(encode_begin());
+    broadcast(encode_begin(countdown_seconds_));
     events_.push_back(Event{Event::Type::Begun, cfg_.host_seat});
 }
 
@@ -1048,12 +1048,15 @@ void ClientLobby::update(uint32_t now_ms) {
                 }
                 break;
             }
-            case MsgType::Begin:
-                if (phase_ == Phase::Loaded && msg.size() == 1) {
+            case MsgType::Begin: {
+                uint8_t countdown = 0;
+                if (phase_ == Phase::Loaded && decode_begin(msg.data(), msg.size(), countdown)) {      // (protocol 21: two bytes; the one byte of 20 is no Begin)
+                    countdown_seconds_ = countdown;
                     phase_ = Phase::Begun;
                     events_.push_back(Event{Event::Type::Begun});
                 }
                 break;
+            }
             case MsgType::Cancel: {
                 CancelMsg c;
                 if ((phase_ == Phase::Loading || phase_ == Phase::Loaded) && decode(msg, c)) {

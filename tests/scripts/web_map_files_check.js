@@ -77,7 +77,7 @@ check('a number is no name', M.validName(5) === false);
     // a head made by hand (the checksum is not read): any name, any hash; the six originals are in the game's data and name nothing to fetch
     const head = (name, hash) => {
         const field = (id, body) => [id, body.length, ...body];
-        const payload = [1, 0, 20, 0, ...field(3, [...Buffer.from(name)]), ...field(4, [...Buffer.from(hash, 'hex').reverse()])];
+        const payload = [1, 0, 21, 0, ...field(3, [...Buffer.from(name)]), ...field(4, [...Buffer.from(hash, 'hex').reverse()])];
         return Uint8Array.from([0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a, ...Buffer.from('HEAD'), payload.length, 0, 0, 0, ...payload, 0, 0, 0, 0]);
     };
     same('a hand-made head', M.mapOfReplay(head('Some Map.lvl', 'aabbccddeeff0011')), { name: 'Some Map.lvl', hash: 'aabbccddeeff0011' });

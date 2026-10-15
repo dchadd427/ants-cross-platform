@@ -106,6 +106,7 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     show_match_start_modal_ = false;
     match_start_modal_ticks_ = 0;
     match_start_modal_until_dismissed_ = false;
+    match_countdown_ = false; match_countdown_left_ms_ = 0; countdown_seats_ = {}; countdown_button_pressed_ = false;          // (protocol 21)
     show_quit_dialog_ = false;
     show_quick_help_ = false;
     options_.close();
@@ -923,52 +924,6 @@ void HUD::request_team_up(sim::SimulationEngine& sim, uint8_t target) {
     submit_command(sim, invite);
 }
 
-void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
-    using assets::ColorRGBA;
-
-    // Start modal (Ants.exe 0x1017127): std_dialg at origin (100,100), one wrapped centred label (string 105) in the
-    // rect (130,110) 240x160, footer (string 104) in (130,290) 240x20, animated worker portrait at (245,250).
-    const int32_t mx = 100;
-    const int32_t my = 100;
-
-    const auto* seq = assets.find_animation("std_dialg");
-    if (seq && !seq->subitems.empty()) {
-        const auto& frames = seq->subitems[0].frames;
-        for (size_t i = frames.size(); i-- > 0; ) {
-            renderer.draw_sprite(frames[i].sprite_index, mx + frames[i].dx, my + frames[i].dy);
-        }
-    } else {
-        renderer.fill_rect(mx, my, 320, 224, ColorRGBA{219, 75, 19, 255});
-        renderer.draw_rect(mx, my, 320, 224, ColorRGBA{36, 82, 77, 255});
-    }
-
-    // Dark slate text colour #1F1733 (COLORREF 0x33171F)
-    const ColorRGBA text_color{31, 23, 51, 255};
-
-    // Label: "Get ready to play!  You are the <Colour> Ants." (string 105): the original's wrapped, centred label of 35 px letters in the box
-    // (30, 10) 240 x 160 of the dialog (FUN_01017127: FUN_0102b0b5 wraps it, DrawTextA centres every line, the lines are one cell height apart)
-    static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
-    const std::string label = std::string("Get ready to play!  You are the ") + TEAM_NAMES[local_player_id_ % 4] + " Ants.";
-    draw_label(renderer, label, mx + 30, my + 10, 240, text_color, FontSize::Px35, true);
-
-    // Animated portrait of the local colour's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
-    renderer.set_hud_team(local_player_id_);
-    if (const auto* ant = assets.find_animation("agst301")) {
-        if (!ant->subitems.empty()) {
-            const uint32_t ms = match_start_modal_ticks_ * 50u;
-            const size_t frame = Renderer::get_anim_subitem_by_time(*ant, ms);
-            const auto& parts = ant->subitems[frame].frames;
-            for (size_t k = parts.size(); k-- > 0; ) {
-                renderer.draw_sprite(parts[k].sprite_index, 245 + parts[k].dx, 250 + parts[k].dy);
-            }
-        }
-    }
-    renderer.set_hud_team(0);
-
-    // Footer: "Waiting for others..." (string 104): a centred label of 24 px letters in the box (30, 190) 240 x 20
-    draw_label(renderer, "Waiting for others...", mx + 30, my + 190, 240, text_color, FontSize::Px24, true);
-}
-
 void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets) {
     // In-game quick help (Ants.exe 0x10145d2, qh_screen): a 32-part full-screen composite (frame pieces plus qh2 at
     // (267,10) and qh1 at (10,9)) drawn over the live game, and the Return button qh_return1 at (529,437).
@@ -1145,7 +1100,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         if (button == SDL_BUTTON_LEFT) options_.on_press(x - page.x, y - page.y, clock_ms());
         return true;
     }
-    if (show_match_start_modal_) {
+    if (show_match_start_modal_ && !match_countdown_) {
         return true; // Consume all clicks while match start modal is open
     }
     if (alliance_dialog_ != AllianceDialog::None) {
@@ -1175,6 +1130,7 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         }
         return true; // Consume all clicks while dialog is open
     }
+    if (show_match_start_modal_) return handle_countdown_mouse_down(x, y, button);          // (protocol 21: the countdown card, hud_match_start.cpp)
 
     // ProcessInput (0x102737e) ignores mouse events while the input is locked (after Stop, FUN_01028bdd) and while the cursor is a scroll
     // arrow (mode 6); the strip test does not run while a button is captured
@@ -1288,7 +1244,7 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         return true;
     }
 
-    if (show_match_start_modal_) {
+    if (show_match_start_modal_ && !match_countdown_) {
         return true;
     }
 
@@ -1320,6 +1276,8 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
         }
         return true;
     }
+
+    if (show_match_start_modal_) return handle_countdown_mouse_up(x, y, left_release, fire_quit, fire_all, fire_team);          // (protocol 21: the countdown card)
 
     // ProcessInput ignores the button events of an input lock and of a scroll arrow (the strip test is off while a button is captured)
     const bool right = (button == SDL_BUTTON_RIGHT);
@@ -1462,7 +1420,7 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
 
 bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamera& camera, uint16_t mod, bool repeat) {
     // FUN_0102609a. A dialog takes every key first.
-    if (show_match_start_modal_) return true;
+    if (show_match_start_modal_ && !match_countdown_) return true;
 
     if (alliance_dialog_ != AllianceDialog::None) {            // the dialogs' own key handlers (0x1016015, 0x10163d5, 0x1016761): a dialog takes every key
         const bool esc = key == SDLK_ESCAPE;
@@ -1509,6 +1467,8 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
         else if (key == SDLK_ESCAPE) options_.on_key(ScreenEdit::KEY_ESCAPE);
         return true;
     }
+
+    if (show_match_start_modal_) return handle_countdown_key(key, mod, repeat);          // (protocol 21: the countdown card takes the keys of the chat)
 
     const bool ctrl = (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
     const auto& world = sim.get_world_state();
@@ -1615,7 +1575,7 @@ void HUD::handle_text_input(const std::string& text) {
         options_.on_text(text);                   // the focused edit field takes the printable characters (at most 100)
         return;
     }
-    if (show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || !options_.state().chat) return;     // a dialog or the chat cover takes the keys
+    if (show_quit_dialog_ || show_quick_help_ || (show_match_start_modal_ && !match_countdown_) || !options_.state().chat) return;     // a dialog or the chat cover takes the keys (the countdown card does not: protocol 21)
     for (char c : text) {
         if (c >= 32 && c <= 126) {
             if (chat_input_.size() < kChatInputMax) {

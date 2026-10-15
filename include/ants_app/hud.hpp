@@ -12,6 +12,7 @@
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/config_store.hpp"
+#include "ants_app/countdown_card.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/options_screen.hpp"
 #include "ants_app/screen_button.hpp"
@@ -153,7 +154,7 @@ public:
         return LayoutRect{layout_.right(479), view.y, 143, layout_.bottom(437) - view.y};
     }
     /// The input box takes text now: the option "Participate In Chat" is on and no dialog is open (the same conditions as handle_text_input)
-    bool chat_takes_text() const noexcept { return options_.state().chat && !is_modal_open(); }
+    bool chat_takes_text() const noexcept { return options_.state().chat && (!is_modal_open() || countdown_takes_chat()); }
     /// Enter (FUN_010103eb with hasAlly): sends the text to the team when the local player has an ally, else to everybody, and clears the box.
     void send_chat_message() { send_chat(is_on_team_); }
     /// The [All] / [Team] buttons and Enter: sends the text of the chat box (FUN_010103eb) and clears it; nothing when it is empty or chat is off.
@@ -234,6 +235,10 @@ public:
     // Input task (Ants.exe INPUT, every 50 ms): edge scrolling with the pointer and the minimap drag; see edge_scroll.hpp. `map_w` / `map_h`
     // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
+    /// The countdown card is the only dialog that is up (protocol 21): the chat is open behind it
+    bool countdown_takes_chat() const noexcept {
+        return show_match_start_modal_ && match_countdown_ && !options_.is_open() && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
+    }
     /// A dialog (options, quit, quick help, the "get ready" modal) is open: it gets all input, the hover and scroll logic does not run.
     bool is_modal_open() const noexcept {
         return options_.is_open() || show_quit_dialog_ || show_quick_help_ || show_match_start_modal_ || alliance_dialog_ != AllianceDialog::None;
@@ -413,13 +418,37 @@ public:
     }
     /// The 50 ms steps that the dialog has been up (update() counts them; 0 once it was opened)
     uint32_t match_start_modal_ticks() const noexcept { return match_start_modal_ticks_; }
-    void dismiss_match_start_modal() noexcept { show_match_start_modal_ = false; }
+    void dismiss_match_start_modal() noexcept {
+        show_match_start_modal_ = false;
+        match_countdown_ = false;
+    }
+    /// Protocol 21: the dialog of a match of a room with two or more people is a COUNTDOWN CARD (countdown_card.hpp): the count of the seconds that the host still holds the first turn, the colours with who
+    /// plays them, and a Fullscreen button, in the middle of the map view. The dialog is up as ever (until dismiss_match_start_modal: the match's first turn), and every click and key stays out of the match, but
+    /// the chat is the player's now: typing, Enter, F9 - F12, the All and Team buttons, and the Quit button (Ctrl+Q) work, because the people in the room are there to talk. `ms_left` is what the application
+    /// reckons from its clock; it calls set_match_countdown_left_ms every frame.
+    void start_match_countdown(int64_t ms_left, const std::array<CountdownSeat, 4>& seats) {
+        start_match_modal(true);
+        match_countdown_ = true;
+        match_countdown_left_ms_ = ms_left;
+        countdown_seats_ = seats;
+    }
+    bool is_match_countdown_active() const noexcept { return show_match_start_modal_ && match_countdown_; }
+    void set_match_countdown_left_ms(int64_t ms_left) noexcept { match_countdown_left_ms_ = ms_left; }
+    int64_t match_countdown_left_ms() const noexcept { return match_countdown_left_ms_; }
+    /// Where the Fullscreen button is (the picture's pixels): the page's button is laid over this place on the web (ants_probe 61 - 64), the native game draws its own there and calls the function that
+    /// set_on_fullscreen gave when it is clicked
+    LayoutRect countdown_button_rect() const noexcept { return countdown_card_layout(layout_.view()).button; }
+    void set_on_fullscreen(std::function<void()> fn) { on_fullscreen_ = std::move(fn); }
     /// The dialog's length in steps of 50 ms (a local game's dialog closes itself after this many)
     static constexpr uint32_t kMatchStartModalSteps = sim::kMatchStartDialogMs / sim::TICK_MS;
     bool is_shift_held() const noexcept;
     void set_shift_held(bool held) noexcept { shift_held_ = held; }
 
 private:
+    void render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets);
+    bool handle_countdown_key(int32_t key, uint16_t mod, bool repeat);
+    bool handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button);
+    bool handle_countdown_mouse_up(int32_t x, int32_t y, bool left_release, bool fire_quit, bool fire_all, bool fire_team);
     void render_top_bar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
     void render_radar(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
     void render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world);
@@ -603,6 +632,11 @@ private:
     bool show_match_start_modal_{false};
     uint32_t match_start_modal_ticks_{0};                // 50 ms steps since the dialog opened (update)
     bool match_start_modal_until_dismissed_{false};      // a match of the network: the dialog does not close by itself (its first turn closes it, dismiss_match_start_modal)
+    bool match_countdown_{false};                        // protocol 21: the dialog is the countdown card (start_match_countdown)
+    int64_t match_countdown_left_ms_{0};
+    std::array<CountdownSeat, 4> countdown_seats_{};
+    bool countdown_button_pressed_{false};               // the native game's Fullscreen button of the card is held
+    std::function<void()> on_fullscreen_{nullptr};
 
     bool show_quit_dialog_{false};
     UIButton yes_button_{};

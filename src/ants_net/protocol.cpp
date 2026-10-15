@@ -590,7 +590,14 @@ bool decode(const uint8_t* data, size_t size, CancelMsg& out) {
     return true;
 }
 
-std::vector<uint8_t> encode_begin() { return {static_cast<uint8_t>(MsgType::Begin)}; }
+std::vector<uint8_t> encode_begin(uint8_t countdown_seconds) {
+    return {static_cast<uint8_t>(MsgType::Begin), static_cast<uint8_t>(std::min<uint32_t>(countdown_seconds, kMaxCountdownSeconds))};
+}
+bool decode_begin(const uint8_t* data, size_t size, uint8_t& countdown_seconds) {
+    if (data == nullptr || size != 2 || data[0] != static_cast<uint8_t>(MsgType::Begin) || data[1] > kMaxCountdownSeconds) return false;
+    countdown_seconds = data[1];
+    return true;
+}
 std::vector<uint8_t> encode(const ProposeMsg& m) {
     return {static_cast<uint8_t>(MsgType::Propose), m.epoch, m.candidate};
 }

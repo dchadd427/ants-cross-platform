@@ -153,6 +153,15 @@ Teaming up follows the original's protocol ([`GAME_REVERSE_ENGINEERING.md`](GAME
 - The chat log keeps the original's entries: a header in the sender's team colour ("Name:" or "Name (To Teammate):", "[m:ss] News Flash:" for news) and a body of up to 100 characters, wrapped by pixels and set 10 px in (see Chat Log Window).
 - Chat needs the "Participate In Chat" option. F9 - F12 chat the quick-chat texts to everybody. A team message reaches only the sender and the sender's allies.
 
+## The countdown card
+
+A match of a server's room with two or more people holds its first turn for 30 s (network protocol 21, [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md)), and the "Get ready to play!" dialog is a card of the same look for that long: the original's clay orange inside its thin green frame, in the middle of the map view (`include/ants_app/countdown_card.hpp`, 400 x 346 px, in the picture's own pixels whatever its shape).
+
+- **From the top:** `Get ready to play!` (35 px) and `You are the Blue Ants.` (20 px), a black box with the count in 96 px gold digits (the seconds left, rounded up; `0` and "starting..." until the first turn arrives) and "seconds to the start", the four colours in two rows of two in the order of the seats (a dot in the colour, the name, `in` for a person, `bot` for a computer player named like "Pip (bot, Hard)"; your own is "(you)"), the line "Everybody is in. Say hello in the chat." ("The match starts soon." when Participate In Chat is off), and the Fullscreen button (the native game draws it, the web page lays its own over the place, `HUD::countdown_button_rect`).
+- **The chat is open.** The HUD's chat box, its line and the All / Team buttons work: the typed characters (text input; the key events of printable keys are left out, or every letter would be typed twice) and Backspace edit the line, Enter sends it (to the team when you have an ally, else to everybody), F9 - F12 send the quick chat texts, and the lines of the others come into the log. The status line says "Match starts in N s" every second, above the chat box.
+- **Everything else stays out of reach**, as in the 5 s dialog: a click on the map or the pedestals, the keys of the match (F1, Esc, Ctrl+A and the others) and the zoom do nothing. The Quit button and Ctrl+Q ask to leave (the quit dialog is drawn in place of the card; N keeps you here).
+- The card closes with the first executed turn, or for good when a seat is lost and the match is held (the pause overlay and the vote take its place). The 5 s dialog of a match with one person, a game on the local network and a game on this computer is as it was.
+
 ## Chat Log Window
 
 The log box is the original's window ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.56): 138 x 101 px at (482, 299), and in the 16:9 picture 138 x 161 at (802, 299).
