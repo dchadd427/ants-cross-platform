@@ -81,6 +81,9 @@ public:
     void set_params(const Params& params) { params_ = params; }
     const Params& params() const noexcept { return params_; }
 
+    /// Makes the first look now if it has not been made (the same look step() makes first: nothing differs but the moment, inside one think of the bot) and says whether the island play is on
+    bool probe(TaskContext& context) { return context.view.has_grid() && start(context); }
+
     // ---- for the tests and the reports ----
     /// Whether anything lies beyond water that a bridge reaches (known after the first look)
     bool active() const noexcept { return active_; }

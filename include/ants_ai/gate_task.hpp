@@ -1,14 +1,16 @@
 #pragma once
 
-// GateTask: works the gate goal (gate_goal.hpp) with an ant of the right kind (docs/reverse_engineering/bomb_gates.md, "Gate goals"). Hard only, and only when the plan says so
-// (LevelPlan::gate_goals, off in every plan): a bot whose food is walled off by fire walls or bombs gets the ant that the way past needs first, and does it.
+// GateTask: works the gate goal (gate_goal.hpp) with an ant of the right kind (docs/reverse_engineering/bomb_gates.md, "Gate goals"). Medium and Hard, on a walled map only
+// (Tactics::gate_map: the analysis of the start finds no pile that the hill reaches): a bot whose food is walled off by fire walls, bombs or rock gets the ant that the way past needs first, and does it.
 //
 //   plan       every `look_every` ticks while nothing is under way (and when the fire walls and bombs on the map changed): GateInfo::analyse of the grid as it is, then plan_gate_goal
 //   fetch      the ant of the goal's kind: an own ant of that type (a Fire ant, a Bomber) is taken from the lower ranks, else the task WANTS one (Tactics::wants) and the power-up task fetches it
 //   extinguish the Fire ant is ordered onto the fire cell (a special order: it walks next to it and puts it out); done when the cell is no longer fire
 //   hop        the Bomber plants on the bomb tile T (a special order), steps to the tile P in front of it, and is clicked onto the bomb (the own bomb is no obstacle for an order onto it): it is thrown
 //              by the real rule. A bomb that was a dud (the ant burns on the spot, the bomb is gone) is planted again while the ant has the hit points for the chain (2 per bomb and one over);
-//              the ant that lands where the chain ends is done, and for a power-up it is clicked onto it (a flight takes nothing; a move that ends on the tile does)
+//              the ant that lands where the chain ends is done, and for a power-up it is clicked onto it (a flight takes nothing; a move that ends on the tile does). The tile of the bomb and the
+//              tile in front of it must be free of ants: an own ant without a job that stands on one is sent aside (and held until the goal is over), an ant of another team is waited for
+//              (a special order onto a tile with an ant is refused by the controller and the engine alike)
 //   time       a step with no progress for `step_ticks` (90 s) gives up the attempt; so does an attempt that is not done after `attempt_ticks` (4 minutes); `retries` (2) more attempts follow, then the task
 //              is exhausted and the bot plays as if there were no gates
 //
@@ -81,6 +83,7 @@ private:
     void succeed(TaskContext& context);
     void fail(TaskContext& context, const char* why);
     bool may_order(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.order_gap; }
+    bool tile_blocked(TaskContext& context, sim::TileCoord tile);
     uint64_t signature(const TaskContext& context) const;
     uint64_t sources(const TaskContext& context) const;
 
