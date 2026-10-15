@@ -8,7 +8,7 @@ spoken with the client of web_hidden_check.py (standard library only); the brows
 
 Two profiles, each in a real page: a DESKTOP (1440 x 900, a mouse) and a PHONE (390 x 844, a touch screen, the DevTools protocol's multi-touch). What it checks:
 
-  * the bar: the button sits between the clock and the speeds without crowding the timeline (a desktop); on a phone it has a row of its own under the speeds, as wide as the bar; in fullscreen
+  * the bar: the button sits between the clock and the speeds without crowding the timeline (a desktop); on a phone it has a row under the speeds, three quarters of the bar (the Picture button has the rest of the row); in fullscreen
     only its icon is left;
   * Auto camera is the default (the game says so, the button says so, nothing is remembered yet) and the picture really moves to the places where things happen (the view's origin, read through
     the game's `ants_probe`);
@@ -338,7 +338,7 @@ def phone(p, check, args):
     p.open(390, 844, 2, storage={})
     s = p.bar()
     check(s["game"][0] == 1 and s["mode"] == "auto" and s["label"] == "Auto camera", "the replay plays with the camera on Auto")
-    check(s["cam"][1] >= s["speed"][1] + s["speed"][3] - 1 and s["cam"][2] >= 0.85 * s["bar"][2] and s["labelWidth"] > 40, "the button has a row of its own under the speeds, as wide as the bar, with its word (%d of %d px)" % (s["cam"][2], s["bar"][2]))
+    check(s["cam"][1] >= s["speed"][1] + s["speed"][3] - 1 and s["cam"][2] >= 0.6 * s["bar"][2] and s["labelWidth"] > 40, "the button has a row under the speeds, three quarters of the bar (the Picture button has the last quarter), with its word (%d of %d px)" % (s["cam"][2], s["bar"][2]))
     check(s["tl"][2] > 200 and rect_inside(s["cam"], [0, 0, s["inner"][0], 10000]), "nothing is crowded or cut off")
     p.tab.save_shot(args.shots, "camera-phone-auto")
     p.tab.ev("window.scrollTo(0, 0); 1")

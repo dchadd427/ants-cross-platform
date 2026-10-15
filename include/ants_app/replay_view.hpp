@@ -37,7 +37,7 @@ enum class ReplayControl : int {
     Restart = 4,     // from the start, playing (the bar's "Watch again")
     Extend = 5,      // a recording that is still being made (--replay-live): the page has put a newer copy of the same match in the file; the game reads it again (a copy that is not the same match, or shorter, is ignored)
     LiveOver = 6,    // no newer copy will come: the game stops waiting for more and plays to the end of what it holds
-    SetCamera = 7    // value 1 is the Auto camera (the view follows the busiest place), 0 the Manual camera (the view stays where the viewer put it)
+    SetCamera = 7    // value 1 is the Auto camera (the view locks on the biggest action and follows it), 0 the Manual camera (the view stays where the viewer put it)
 };
 
 /// What the page reads (Application::replay_value)

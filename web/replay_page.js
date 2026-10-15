@@ -230,7 +230,7 @@
                 seen = Math.max(seen, taken);
                 paint(env.get(env.VALUE.camera) === 1);
             },
-            // the button: the other camera, remembered; Auto glides back to the last action (the game does it)
+            // the button: the other camera, remembered; Auto glides back to the busiest place now, else the last thing that happened, and locks on it (the game does it)
             press: function () {
                 var auto = env.get(env.VALUE.camera) === 1;
                 env.command(env.DO.camera, auto ? 0 : 1);
