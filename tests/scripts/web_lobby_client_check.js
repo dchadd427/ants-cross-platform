@@ -1022,7 +1022,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     same('a line from a player and a line of the room are heard', [events(d, 'chat'), events(d, 'notice')], [[{ sender: 3, team: true, text: 'hi' }], [{ text: 'hi' }]]);
 }
 
-{   // say(): a line of chat from the page, at the server's own pace (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped without a word and a connection that goes on is thrown out)
+{   // say(): a line of chat from the page, at a pace a little UNDER the server's own (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped without a word and a connection that goes on is thrown out)
     const w = world();
     const c = client(w);
     check('before the Hello there is nobody to say it to', c.say('hi') === false && w.sockets.length === 0);
@@ -1040,27 +1040,89 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     for (const bad of ['', '   ', 'caf\u00e9', '\u263a', 'a\tb', 'a\nb', 'a\x7f', 'x'.repeat(101), null, undefined, 42, {}]) check('a line that is no line (' + JSON.stringify(bad) + ') is refused and sends nothing', c.say(bad) === false);
     check('(nothing was sent for any of them)', sent() === before);
     check('a line of 100 characters is whole', c.say('y'.repeat(100)) === true && w.last().sent[w.last().sent.length - 1].length === 4 + 100);
-    // the pace: the first 5 at once (one is gone already: 2 lines so far), the sixth is refused and spends nothing
-    check('lines 3 and 4 and 5 go at once', c.say('3') && c.say('4') && c.say('5'));
-    const five = sent();
-    check('the sixth line at once is refused: the server would drop it', c.say('6') === false && sent() === five);
-    check('and so is the seventh (a refusal spends nothing)', c.say('7') === false && sent() === five);
-    w.advance(999);
-    check('999 ms later there is still no token', c.say('8') === false);
+    // the pace: the first 4 at once (two are gone already), the fifth is refused and spends nothing: the server's bucket holds 5, the page's holds 4, so that the server has a line in hand for a line that
+    // arrives early (the page paced exactly at the server's rate once lost a line to a delay of a few ms: the server drops it without a word)
+    check('lines 3 and 4 go at once', c.say('3') && c.say('4'));
+    const four = sent();
+    check('the fifth line at once is refused (the server would take it; the page keeps one in reserve) and sends nothing', c.say('5') === false && sent() === four);
+    check('and so is the sixth (a refusal spends nothing)', c.say('6') === false && sent() === four);
+    w.advance(1249);
+    check('1249 ms later there is still no token (a line every 1.25 s: 250 ms more than the server asks for)', c.say('8') === false);
     w.advance(1);
-    check('a second after the sixth was refused: one line goes', c.say('9') === true && sent() === five + 1);
+    check('1.25 s after the burst was used up one line goes', c.say('9') === true && sent() === four + 1);
     check('... and only one', c.say('10') === false);
+    w.advance(1249);
+    check('and the next one is 1.25 s after that', c.say('11') === false);
+    w.advance(1);
+    check('(a line every 1.25 s)', c.say('12') === true && sent() === four + 2);
     w.advance(5000);
-    check('five seconds later the burst is whole again (5 lines, then the pace)', [1, 2, 3, 4, 5].every((i) => c.say('b' + i) === true) && c.say('b6') === false);
+    check('five seconds later the burst is whole again (4 lines, then the pace)', [1, 2, 3, 4].every((i) => c.say('b' + i) === true) && c.say('b5') === false);
     // the budget is the chat's own: the plan and the moves are not asked for it (and a chat line does not use theirs)
     {
         const x = world();
         const d = client(x);
         online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
-        for (let i = 0; i < 5; i++) d.say('line');
-        check('after 5 lines the leader can still set the plan and rename', d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && d.rename('Pri') === true);
+        for (let i = 0; i < 3; i++) d.say('line');
+        check('after 3 lines the leader can still set the plan and rename', d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && d.rename('Pri') === true);
         for (let i = 0; i < 6; i++) d.rename('N' + i);
-        check('and a person who used the budget of the names can still say a line after a second', (() => { x.advance(1000); return d.say('hi') === true; })());
+        check('and a person who used the budget of the names has the last line of the burst still (the names took nothing from the chat\'s)', d.say('hi') === true && d.say('and again') === false);
+    }
+    // the margin, replayed through the SERVER's own bucket (include/ants_net/flood.hpp MessageBudget::take with kChatBurst 5 and kChatPerSecond 1: thousandths of a line, a bucket that is full at the first line, a
+    // line that finds less than a whole one is DROPPED without a word and still sets the clock). The server counts the moment at which it HANDLES a line, which is later than the moment at which the page said
+    // it by a delay that differs from line to line (the network, the server's own loop: on the macOS CI two lines that the page had said 1000 ms apart were handled 990 ms apart and the second was lost).
+    // The page says lines the moment it may; each line is delayed by 0 or by the jitter, in EVERY combination (the bucket is a minimum of straight lines, so its worst delays are among the ends of the
+    // range; the link keeps the order of the lines: a line is never handled before the one before it).
+    {
+        const serverDrops = (moments, delays) => {                   // how many of the lines the server's bucket drops, for these delays
+            let tokens = 5000, last = null, dropped = 0, before = -Infinity;
+            moments.forEach((t, i) => {
+                const at = Math.max(before, t + delays[i]);
+                before = at;
+                if (last !== null) tokens = Math.min(5000, tokens + (at - last));
+                last = at;
+                if (tokens < 1000) dropped++; else tokens -= 1000;
+            });
+            return dropped;
+        };
+        // the moments at which a page says its lines when it asks at every millisecond in the given spans (ms), as the client keeps its pace
+        const momentsOf = (spans) => {
+            const x = world();
+            const d = client(x, { silenceMs: 0 });
+            online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+            const moments = [];
+            for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
+                if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && d.say('line ' + moments.length); k++) moments.push(ms);
+                x.advance(1);
+            }
+            return moments;
+        };
+        const worst = (moments, jitter, most) => {                   // the largest number of dropped lines over every combination of 0 and `jitter` for the first `most` lines
+            const n = Math.min(most, moments.length);
+            const t = moments.slice(0, n);
+            let max = 0, at = '';
+            for (let bits = 0; bits < (1 << n); bits++) {
+                const delays = t.map((_, i) => ((bits >> i) & 1) * jitter);
+                const dropped = serverDrops(t, delays);
+                if (dropped > max) { max = dropped; at = bits.toString(2); }
+            }
+            return { max, at, lines: n };
+        };
+        const asking = { 'a page that asks every millisecond for 16 s': [[0, 16000]],
+                         'a page that pastes three times (2 s, 2.5 s of quiet, 1.5 s, 7 s of quiet, 3 s)': [[0, 2000], [4500, 6000], [13000, 16000]],
+                         'a page that talks after 5 s of quiet': [[5000, 12000]] };
+        for (const name of Object.keys(asking)) {
+            const moments = momentsOf(asking[name]);
+            check(name + ': ' + moments.length + ' lines, the first four at once', moments.length >= 8 && moments[3] === moments[0]);
+            for (const jitter of [0, 50, 100, 150]) {
+                const w2 = worst(moments, jitter, 14);
+                check(name + ', every line late by 0 or ' + jitter + ' ms (' + (1 << w2.lines) + ' combinations): the server drops none', w2.max === 0, w2.max + ' dropped at ' + w2.at);
+            }
+        }
+        const steady = momentsOf([[0, 16000]]);
+        check('once the burst is used, a page that asks all the time (and asks at every millisecond: the float of the budget adds up) says a line every 1250 ms, no sooner (the margin: 250 ms of the server\'s 1000)', steady.slice(3).every((t, i, all) => i === 0 || t - all[i - 1] === 1250), steady.slice(3, 9).join());
+        // the replay can tell: a page that kept to the server's own rate (5, then 1.00 a second) loses a line to a delay of a few ms
+        const exact = []; { let tokens = 5000, last = 0; for (let ms = 0; ms < 16000; ms++) { tokens = Math.min(5000, tokens + (ms - last)); last = ms; if (tokens >= 1000) { tokens -= 1000; exact.push(ms); } } }
+        check('(the replay can tell: lines at exactly the server\'s own rate are dropped when a line is 15 ms late and the next on time)', worst(exact, 15, 14).max > 0, String(worst(exact, 15, 14).max));
     }
     // a START that waits, a room that is no lobby, a link that is down
     {

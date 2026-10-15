@@ -431,35 +431,63 @@
   {
    "id": "net_chat_burst_of_six",
    "file": "web/front/lobby_net.js",
-   "old": "chat: [5, 1] }",
-   "new": "chat: [6, 1] }",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [6, 0.8] }",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
-   "id": "net_chat_burst_of_four",
+   "id": "net_chat_burst_without_reserve",
    "file": "web/front/lobby_net.js",
-   "old": "chat: [5, 1] }",
-   "new": "chat: [4, 1] }",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [5, 0.8] }",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
    "id": "net_chat_two_a_second",
    "file": "web/front/lobby_net.js",
-   "old": "chat: [5, 1] }",
-   "new": "chat: [5, 2] }",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [4, 2] }",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
    "id": "net_chat_one_every_two_seconds",
    "file": "web/front/lobby_net.js",
-   "old": "chat: [5, 1] }",
-   "new": "chat: [5, 0.5] }",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [4, 0.5] }",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_chat_at_the_servers_own_rate",
+   "file": "web/front/lobby_net.js",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [5, 1] }",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_chat_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [4, 1] }",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_chat_rate_a_little_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "chat: [4, 0.8] }",
+   "new": "chat: [4, 0.9] }",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_budget_exact_float",
+   "file": "web/front/lobby_net.js",
+   "old": "return b.tokens >= 999.9999;",
+   "new": "return b.tokens >= 1000;",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
    "id": "net_chat_has_no_budget",
    "file": "web/front/lobby_net.js",
-   "old": ", chat: [5, 1] }",
+   "old": ", chat: [4, 0.8] }",
    "new": " }",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },

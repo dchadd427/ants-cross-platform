@@ -3,7 +3,8 @@
 // already hears those lines (web/front/lobby_net.js, the 'chat' event) and now says them (LobbyClient.say, at the server's pace). Nothing of the server or of the protocol changed.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsLobbyChat, node gets module.exports (tests/scripts/web_lobby_chat_check.js runs it with a small fake of the DOM).
 //   * Every name and every line is set as TEXT (textContent), never as markup: a name may be any printable ASCII, "<b>" included.
-//   * The pace of the lines is the client's (BUDGETS in lobby_net.js: 5, then one a second), so that no line is dropped by the server and nobody is thrown out for a flood; this script only says so
+//   * The pace of the lines is the client's (BUDGETS in lobby_net.js: 4 at once, then one every 1.25 s: a little under the room's own, so that a line that is handled early is not dropped), so that no line is
+//     dropped by the server and nobody is thrown out for a flood; this script only says so
 //     when the client refuses a line.
 //   * The lines live in the page: nothing is stored, a reload starts an empty box (the room does not replay, as it does not for a game that takes a seat over).
 (function (root, factory) {
@@ -31,7 +32,7 @@
         opening: 'Opening the game…',
         alone: 'You are the only one here. Send the link above, then say hello.',
         empty: 'Nothing said yet. Say hello: everyone in this room will see it.',
-        tooFast: 'One line a second, please. Your line is still here.',
+        tooFast: 'A little slower, please. Your line is still here.',
         accent: 'Letters, digits and signs without accents only: the game cannot show the rest.'
     };
 

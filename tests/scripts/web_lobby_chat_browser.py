@@ -201,28 +201,28 @@ def main():
             time.sleep(0.2)
             check(ann.field()["value"] == "caf ok " and "without accents" in (ann.hint() or ""), "an accent and a smiley are left out as they are typed, and the hint says why (%r)" % ann.field()["value"])
             ann.ev("document.getElementById('chat-input').value = ''")
-            # the pace: six lines at once: five go, the page keeps the sixth and says so; it goes a second later; nobody is thrown out
+            # the pace: five lines at once: four go, the page keeps the fifth and says so; it goes a moment later; nobody is thrown out
             time.sleep(5.5)
-            for i in range(1, 7):
+            for i in range(1, 6):
                 ann.say("fast %d" % i)
             time.sleep(0.6)
             got = [t for t in bea.texts() if t.startswith("Ann:fast")]
-            check(got == ["Ann:fast %d" % i for i in range(1, 6)], "six lines at once: five reach the others (%s)" % got)
-            check(ann.field()["value"] == "fast 6", "the page keeps the line that it did not send (%r)" % ann.field()["value"])
-            check("One line a second" in (ann.hint() or ""), "and says one a second (%r)" % ann.hint())
+            check(got == ["Ann:fast %d" % i for i in range(1, 5)], "five lines at once: four reach the others (%s)" % got)
+            check(ann.field()["value"] == "fast 5", "the page keeps the line that it did not send (%r)" % ann.field()["value"])
+            check("A little slower" in (ann.hint() or ""), "and asks for a little slower (%r)" % ann.hint())
             check(bool(ann.ev("document.getElementById('banner').hidden")) and ann.people() == 3 and bea.people() == 3, "nobody was thrown out and no strip came up")
-            time.sleep(1.3)
+            time.sleep(1.4)
             ann.enter()
-            check(bool(wait_for(lambda: len([t for t in bea.texts() if t.startswith("Ann:fast")]) == 6, 5, 0.1)), "a second later the kept line goes")
+            check(bool(wait_for(lambda: len([t for t in bea.texts() if t.startswith("Ann:fast")]) == 5, 5, 0.1)), "a moment later the kept line goes")
             ann.ev("document.getElementById('chat-input').value = ''")
             # a line of 100 characters stays inside the box
-            time.sleep(1.3)
+            time.sleep(1.4)
             hundred = ("abcdefghi " * 10)[:99] + "x"
             ann.say(hundred)
             check(bool(wait_for(lambda: bea.texts()[-1:] == ["Ann:" + hundred], 5, 0.1)), "a line of 100 characters comes whole")
             inside = ann.ev("(function () { var l = document.getElementById('chat-log'); return [l.scrollWidth <= l.clientWidth, document.documentElement.scrollWidth <= window.innerWidth]; })()")
             check(inside == [True, True], "and stays inside the box and the page (%s)" % inside)
-            time.sleep(1.3)
+            time.sleep(1.4)
             ann.say("x" * 99 + "y")
             check(bool(wait_for(lambda: ann.ev("(function () { var l = document.getElementById('chat-log'); return l.scrollHeight - l.scrollTop - l.clientHeight < 40; })()"), 5, 0.1)), "the box follows the newest line")
             ann.shot(args.shots, "desktop-lines")

@@ -218,8 +218,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         self.assertGreaterEqual(len(ids), 60)
         for needed in ("chat_ascii_upper_includes_del", "chat_ascii_lower_includes_control", "chat_line_101", "net_chat_burst_of_six", "net_chat_has_no_budget", "net_encode_chat_accent", "net_valid_line_of_101",
-                       "chat_a_line_is_markup", "chat_sends_while_shut"):
-            self.assertIn(needed, ids, "the proof of the pace, the ASCII rule and the text rule needs " + needed)
+                       "chat_a_line_is_markup", "chat_sends_while_shut",
+                       "net_chat_at_the_servers_own_rate", "net_chat_burst_without_reserve", "net_chat_rate_without_margin"):
+            self.assertIn(needed, ids, "the proof of the pace and its margin under the server's, the ASCII rule and the text rule needs " + needed)
 
     def test_every_mutant_is_seen(self):
         missed = []

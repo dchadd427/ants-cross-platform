@@ -53,7 +53,7 @@ check('the person states that the box counts are the protocol\'s Host and Client
     same('the heading, the note under it and the button', [C.TEXT.title, C.TEXT.note, C.TEXT.send], ['Chat', 'Only the people in this room can read it.', 'Send']);
     same('the two empty states (alone, and with people who have not spoken)', [C.TEXT.alone, C.TEXT.empty], ['You are the only one here. Send the link above, then say hello.', 'Nothing said yet. Say hello: everyone in this room will see it.']);
     same('the placeholder, and the two that replace it', [C.TEXT.placeholder, C.TEXT.down, C.TEXT.opening], ['Say something to the room', 'Chat is back when you are in the room again.', 'Opening the game…']);
-    same('the two hints under the field', [C.TEXT.tooFast, C.TEXT.accent], ['One line a second, please. Your line is still here.', 'Letters, digits and signs without accents only: the game cannot show the rest.']);
+    same('the two hints under the field', [C.TEXT.tooFast, C.TEXT.accent], ['A little slower, please. Your line is still here.', 'Letters, digits and signs without accents only: the game cannot show the rest.']);
 }
 
 // ---- 2. what may be typed and what is sent ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -288,7 +288,7 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     w.state.sayResult = false;
     input.value = 'too fast';
     form.fire('submit');
-    check('a line that the client does not take (the pace) stays in the field, and the hint says one a second', input.value === 'too fast' && hint.textContent === C.TEXT.tooFast && w.state.said.length === 2);
+    check('a line that the client does not take (the pace) stays in the field, and the hint asks for a little slower', input.value === 'too fast' && hint.textContent === C.TEXT.tooFast && w.state.said.length === 2);
     input.fire('input');
     check('typing on clears the hint', hint.textContent === '');
     w.state.sayResult = true;

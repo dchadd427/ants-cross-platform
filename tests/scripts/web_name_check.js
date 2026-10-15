@@ -818,9 +818,9 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     s.receive(say('hi Maya'));
     same('the room\'s line comes with the name of the seat, as text and not as markup', log.children.map((li) => li.textContent), [evil + ':hi Maya']);
     check('(a name that is markup made no element: the page wrote no innerHTML)', env.innerHTMLWrites.length === 0 && log.children[0].getAttribute('data-c') === 'red');
-    // the pace (the client's: tests/scripts/web_lobby_client_check.js has its clock): six more at once; four go (the burst of five is spent with the first), the others stay and the hint says so
+    // the pace (the client's: tests/scripts/web_lobby_client_check.js has its clock): six more at once; three go (the burst of four is spent with the first), the others stay and the hint says so
     for (let i = 1; i <= 6; i++) { input.value = 'line ' + i; form.fire('submit', { preventDefault() {} }); }
-    check('lines at once: five in all go out, the line that was refused stays in the field, and the hint says one a second', sentChat().length === 5 && input.value === 'line 6' && /One line a second/.test(hint.textContent), sentChat().length + ' ' + input.value + ' ' + hint.textContent);
+    check('lines at once: four in all go out, the line that was refused stays in the field, and the hint asks for a little slower', sentChat().length === 4 && input.value === 'line 6' && /A little slower/.test(hint.textContent), sentChat().length + ' ' + input.value + ' ' + hint.textContent);
     // START waits: the field is shut; the start is given up: it opens
     s.receive(roomMessage([[C, 'Maya'], [C, evil], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7, inGame: 1 }));
     check('while START waits the field is shut and says that the game is opening', input.disabled === true && /Opening the game/.test(input.placeholder));
