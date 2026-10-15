@@ -194,7 +194,7 @@ LAYOUT_JS = """(function () {
 })()"""
 
 LOBBY_NOTICE = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."        # (the line under the name field of the front page's name card and in its footer)
-NOTICE_TEXT = "Online matches are recorded. Recordings are kept for 30 days and anybody can watch them, live or later. Results and names are kept for good and are public."      # (the line under the name field of the game page's name card)
+NOTICE_TEXT = "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public."      # (the line under the name field of the game page's name card)
 NAME_CARD_JS = """JSON.stringify((function () {
   var card = document.querySelector('.name-step').getBoundingClientRect(), hint = document.getElementById('name-step-hint').getBoundingClientRect(), n = document.getElementById('who-notice'), own = document.getElementById('name-step-own').getBoundingClientRect();
   var r = n.getBoundingClientRect(), s = getComputedStyle(n), h = getComputedStyle(document.getElementById('name-step-hint'));

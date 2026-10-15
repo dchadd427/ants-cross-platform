@@ -1259,7 +1259,7 @@
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
-            <div class="name-step-hint name-step-notice">Online matches are recorded. Recordings are kept for 30 days and anybody can watch them, live or later. Results and names are kept for good and are public.</div>
+            <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
     </div>
@@ -3556,7 +3556,7 @@
                 if (report.failure) cardFor(report.failure, report.text);
             };
             window.antsReplayLeave = function () {
-                if (ANTS_EMBED) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }      // (the frame of a match page: it hides the replay)
+                if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }      // (the frame of a match page: it hides the replay; opened on its own it goes to the list)
                 window.location.assign('/matches.html');
             };
 

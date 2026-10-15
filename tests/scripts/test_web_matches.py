@@ -124,7 +124,11 @@ class TheListPage(unittest.TestCase):
         self.assertIn("if (mine !== round) return;", self.page)
         self.assertIn("controller.abort()", self.page)
         self.assertIn("window.addEventListener('popstate'", self.page)                                       # (Back and Forward: the address is the state)
-        self.assertIn("window.history[push ? 'pushState' : 'replaceState']", self.page)
+        self.assertIn("window.history[push && !askTimer ? 'pushState' : 'replaceState']", self.page)        # (choices that come quickly are one step of the history)
+        self.assertIn("var ASK_WAIT = 350;", self.page)                                                      # (a select, a button and the pager wait a moment too: six presses of an arrow key are one request)
+        self.assertIn("askTimer = setTimeout(run, wait)", self.page)
+        self.assertIn("go(copy(state, { q: q }), false, false, 0)", self.page)                               # (the search has waited already)
+        self.assertIn("'Back to the first page'", self.page)                                                 # (a page past the last one has a way back)
         self.assertIn("fetch('/live'", self.page)                                                            # (the button of the live page, one look)
         self.assertIn("' live now'", self.page)
 
@@ -155,6 +159,10 @@ class TheMatchPage(unittest.TestCase):
         self.assertIn("H.detailsOf(rec)", self.page)                                                         # (the comment that says how a later section reads what a replay pass adds)
         for ident in ("result", "replay", "board", "about"):
             self.assertRegex(self.page, r"panel\('%s'," % ident)
+
+    def test_a_map_name_is_text_in_the_title_whatever_characters_it_has(self):
+        self.assertIn("document.title.replace(/^Match/, function () { return R.mapTitle(rec.map)", self.page)      # (a function: a string would read $& and $' in a map name as patterns of replace)
+        self.assertNotIn("replace(/^Match/, R.mapTitle", self.page)
 
     def test_every_number_of_the_record_is_on_the_page(self):
         columns = ("score", "killed", "lost", "hatched", "bombs_planted", "bombs_defused", "fires_lit")
@@ -234,8 +242,14 @@ class TheGamePagesStats(unittest.TestCase):
         self.assertIn("@media (min-width: 701px) { .mstats.flow { display: none !important; } }", css)
         self.assertIn(".mstats.flow.closed .mbody { display: none; }", css)
 
+    def test_the_closed_row_of_a_phone_does_not_tell_who_won(self):
+        helpers = read("web", "history_page.js")
+        self.assertNotIn("' won with '", helpers)                                                           # (the owner's wish: closed at first so that it does not tell who won; the picture of the row had the winner on it)
+        self.assertNotIn("mk('small'", helpers)
+        self.assertNotIn(".mt small", read("web", "replay_stats.css"))
+
     def test_the_frame_of_a_match_page_leaves_by_telling_it(self):
-        self.assertIn("if (ANTS_EMBED) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }", self.page)
+        self.assertIn("if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }", self.page)
         self.assertIn("window.location.assign('/matches.html');", self.page)
 
 
@@ -255,6 +269,7 @@ class TheSharedCode(unittest.TestCase):
         "a seat with an unknown colour is a seat": ("if (s && typeof s === 'object' && COLOURS.indexOf(s.colour) !== -1) out.push(s);", "if (s && typeof s === 'object') out.push(s);"),
         "the winner of a side is not its row's": ("winner: r.winner === true, left: false }); members", "winner: false, left: false }); members"),
         "a seat with no row is a side that left": ("winner: false, left: true }); });\n        return out;", "winner: false, left: false }); });\n        return out;"),
+        "a card of mode 187 calls its kills a score": ("if (k && sort === 'score' && rec && rec.mode === '187') k = SORT_KEYS.kills;", ""),
         "a draw is not told as one": ("rec && rec.draw === true ? 'A draw: nobody won' : 'No winner'", "'No winner'"),
         "a side that left is in the ranking": ("return sides.filter(function (s) { return !s.left; });", "return sides.slice();"),
         "a record with no rows has no sides": ("            seats.sort(function (a, b) { return whole(b.score) - whole(a.score); });\n            return seats.map(", "            seats.sort(function (a, b) { return whole(b.score) - whole(a.score); });\n            return [].map("),

@@ -65,6 +65,7 @@
     var R = window.AntsReplay, H = window.AntsHistory;
     var $ = function (id) { return document.getElementById(id); };
     var SEARCH_WAIT = 450;                    // ms of quiet after the last key before the search is asked for (the server allows two a second)
+    var ASK_WAIT = 350;                       // ms of quiet after the last choice (a select, a button, a page) before the list is asked for: six presses of an arrow key on a select are one request
     var state = H.stateOf(window.location.search);
     var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
 
@@ -114,7 +115,7 @@
     var searchTimer = 0;
     function onSearch(now) {
         clearTimeout(searchTimer);
-        var run = function () { var q = H.cleanQuery($('q').value); if (q !== state.q) go(copy(state, { q: q }), false); };
+        var run = function () { var q = H.cleanQuery($('q').value); if (q !== state.q) go(copy(state, { q: q }), false, false, 0); };
         if (now) run(); else searchTimer = setTimeout(run, SEARCH_WAIT);
     }
 
@@ -165,9 +166,9 @@
     }
 
     // ---- what the page shows in the list's place ----
-    function notice(bold, rest, label, onclick, href) {
+    function notice(bold, rest, buttons) {
         var note = el('div', 'note'), p = el('p'); p.appendChild(el('b', '', bold)); if (rest) p.appendChild(document.createTextNode(' ' + rest)); note.appendChild(p);
-        if (label) { var b = el(href ? 'a' : 'button', 'btn sm', label); if (href) b.href = href; else { b.type = 'button'; b.addEventListener('click', onclick); } note.appendChild(b); }
+        (buttons || []).forEach(function (x) { var b = el(x.href ? 'a' : 'button', 'btn sm', x.label); if (x.href) b.href = x.href; else { b.type = 'button'; b.addEventListener('click', x.click); } note.appendChild(b); });
         return note;
     }
     function show(node, count, pager) { var body = $('body'); body.textContent = ''; pics.forget('list'); body.appendChild(node); $('count').textContent = count || ''; if (!pager) $('pager').textContent = ''; }
@@ -193,15 +194,17 @@
     }
     function fail(status, body) {
         var p = H.problemOf(status, body);
-        show(notice(p.text, '', p.retry ? 'Try again' : '', function () { ask(state, false); }), '');
+        show(notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { ask(state, false); } }] : []), '');
     }
     function render(data, plan, scroll) {
         var list = data.history.filter(function (r) { return r && typeof r === 'object' && typeof r.id === 'string' && H.ID_RE.test(r.id) && typeof r.map === 'string'; }).slice(plan.skip, plan.skip + plan.take);
         var count = typeof data.count === 'number' ? data.count : list.length, total = typeof data.total === 'number' ? data.total : count;
         if (!list.length) {
             var filtered = H.activeOf(state).length > 0;
-            show(filtered ? notice('No match fits those filters.', '', 'Clear the filters', function () { go(H.defaults(), true); })
-                : notice(total ? 'There are no matches on this page.' : 'No match has been played here yet.', total ? '' : 'A match that ran 30 seconds or more shows up here.', 'Play a match', null, '/'), total ? '0 of ' + H.numberText(total) + ' matches' : '');
+            var home = { label: 'Play a match', href: '/' };
+            show(filtered ? notice('No match fits those filters.', '', [{ label: 'Clear the filters', click: function () { go(H.defaults(), true); } }])
+                : total ? notice('There are no matches on this page.', '', [{ label: 'Back to the first page', click: function () { go(copy(state, { page: 1 }), true); } }, home])      // (a page past the last one: an old link)
+                : notice('No match has been played here yet.', 'A match that ran 30 seconds or more shows up here.', [home]), total ? '0 of ' + H.numberText(total) + ' matches' : '');
             return;
         }
         var ul = el('ul', 'list');
@@ -212,17 +215,27 @@
     }
 
     // ---- moving about: the address is the state, so a link can be shared and Back works ----
-    function go(next, push, scroll) {
+    // A choice shows at once (the address, the tools, the chips) and the list is asked for after a pause: the choices that come within `wait` ms of each other are one request (the site allows two lists
+    // with a query a second to each address, and a request that is dropped on the page still counts), and they are one step in the history, not one for each. The search has waited already: it passes 0.
+    var askTimer = 0, askScroll = false;
+    function askSoon(scroll, wait) {
+        clearTimeout(askTimer);
+        askTimer = 0;
+        askScroll = askScroll || !!scroll;
+        var run = function () { askTimer = 0; var s = askScroll; askScroll = false; ask(state, s); };
+        if (wait > 0) askTimer = setTimeout(run, wait); else run();
+    }
+    function go(next, push, scroll, wait) {
         state = next;
         var url = H.urlOf(state);
-        try { window.history[push ? 'pushState' : 'replaceState'](null, '', url); } catch (e) { /* the address stays as it is */ }
+        try { window.history[push && !askTimer ? 'pushState' : 'replaceState'](null, '', url); } catch (e) { /* the address stays as it is */ }
         if ($('q') !== document.activeElement) $('q').value = state.q;
         var focused = document.activeElement && document.activeElement.id;      // (the tools are made again: the one that was used keeps the keyboard's place)
         buildTools();
         if (focused && /^(s-|who-)/.test(focused) && $(focused)) $(focused).focus();
-        ask(state, scroll);
+        askSoon(scroll, wait === undefined ? ASK_WAIT : wait);
     }
-    window.addEventListener('popstate', function () { state = H.stateOf(window.location.search); $('q').value = state.q; buildTools(); ask(state, false); });
+    window.addEventListener('popstate', function () { clearTimeout(askTimer); askTimer = 0; askScroll = false; state = H.stateOf(window.location.search); $('q').value = state.q; buildTools(); ask(state, false); });
     $('q').addEventListener('input', function () { onSearch(false); });
     $('q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); onSearch(true); } });
     $('q').addEventListener('search', function () { onSearch(true); });

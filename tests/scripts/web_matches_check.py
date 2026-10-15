@@ -35,6 +35,7 @@ ID_187 = "ants-ISLANDS-20261014-103932Z"
 ID_COMMUNITY = "ants-Pond-20261015-040000Z"
 ID_UNCOUNTED = "ants-SMALL-20261015-111111Z"
 ID_LEFT = "ants-SMALL-20261014-120000Z"
+ID_DOLLAR = "ants-Dollar-20261013-120000Z"
 READY = live.READY
 
 
@@ -90,6 +91,8 @@ def make_records():
 
 RECORDS = make_records()
 BY_ID = {r["id"]: r for r in RECORDS}
+BY_ID[ID_DOLLAR] = record(ID_DOLLAR, NOW - 3 * 86400, "Ant$&s$'x.lvl", "1v1", [seat(0, "Green", "Ann", "", score=900, killed=2, winner=True), seat(2, "Blue", "Cy", "Easy", score=300)],      # (a map name made of replace patterns; it is not in the list)
+                          [{"seats": [0], "score": 900, "killed": 2, "lost": 0, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 0, "lost": 2, "hatched": 0, "winner": False}])
 SORTS = {"new": lambda r: (-r["ended"], r["id"]), "old": lambda r: (r["ended"], r["id"]), "long": lambda r: (-r["turns"], -r["ended"]), "short": lambda r: (r["turns"], -r["ended"]),
          "kills": lambda r: (-max(s["killed"] for s in r["seats"]), -r["ended"]), "score": lambda r: (-max(s["score"] for s in r["seats"]), -r["ended"]), "hatched": lambda r: (-max(s["hatched"] for s in r["seats"]), -r["ended"])}
 WORDS = {"who": ("all", "people", "computers"), "format": ("all", "1v1", "team", "ffa"), "result": ("all", "decided", "draw", "cut"), "rec": ("all", "watch", "old", "removed"),
@@ -256,6 +259,12 @@ def main():
             return [h for h in seen if h == "/maps"]
         return [h for h in seen if h.startswith(prefix)]
 
+    def seen(prefix, n, wait=5.0):                      # the requests of a prefix, once there are n of them (a choice is asked for after a short pause)
+        end = time.time() + wait
+        while len(hits(prefix)) < n and time.time() < end:
+            time.sleep(0.05)
+        return hits(prefix)
+
     try:
         if args.only in ("", "list"):
             print("[web matches] part list: every match, the filters, the search, the pager")
@@ -289,7 +298,8 @@ def main():
                 door.hits[:] = []
             tab.ev("(function () { var s = document.getElementById('s-format'); s.value = 'ffa'; s.dispatchEvent(new Event('change')); })()")
             check(until(tab, "location.search === '?who=people&format=ffa'") is True and until(tab, "document.querySelectorAll('#body .m').length > 0 && [].every.call(document.querySelectorAll('#body .m .pill.fmt'), function (p, i) { return i % 1 === 0; })") is True, "the Format select adds its word to the address")
-            check(hits("/history") == ["/history?who=people&format=ffa&limit=25&offset=0"], "... and to the request: %s" % hits("/history"))
+            check(seen("/history", 1) == ["/history?who=people&format=ffa&limit=25&offset=0"], "... and to the request: %s" % hits("/history"))
+            until(tab, "document.getElementById('count').textContent.indexOf('Loading') === -1")
             # the search: keys that come quickly are one request, after a pause
             with door.lock:
                 door.hits[:] = []
@@ -305,6 +315,26 @@ def main():
             tab.ev("history.back()")
             check(until(tab, "location.search === '?who=people&format=ffa&q=zzz'") is True, "Back goes to the view before (the address is the state: %s)" % tab.ev("location.search"))
             check(tab.ev("window.__keep") == 1, "... and the page is still the same page")
+            # choices that come quickly are one request, and one step of the history (the site allows two lists with a query a second, and a request that is dropped still counts)
+            before = tab.ev("location.search")
+            with door.lock:
+                door.hits[:] = []
+            for word in ("score", "kills", "hatched", "long", "short", "old"):
+                tab.ev("(function () { var s = document.getElementById('s-sort'); s.value = %s; s.dispatchEvent(new Event('change')); })()" % json.dumps(word))
+                time.sleep(0.05)
+            check(tab.ev("document.getElementById('s-sort').value") == "old" and tab.ev("location.search") == "?who=people&format=ffa&sort=old&q=zzz", "six quick changes of Sort: the address and the select follow at once (%s)" % tab.ev("location.search"))
+            time.sleep(1.0)
+            check(hits("/history") == ["/history?who=people&format=ffa&sort=old&q=zzz&limit=25&offset=0"], "... and they are one request, for the last one: %s" % hits("/history"))
+            tab.ev("history.back()")
+            check(until(tab, "location.search === %s" % json.dumps(before)) is True, "... and one step of the history: Back is the view before all six")
+            time.sleep(0.8)
+            with door.lock:
+                door.hits[:] = []
+            for index in (0, 1, 2):
+                tab.ev("document.querySelectorAll('#who button')[%d].click()" % index)
+                time.sleep(0.05)
+            time.sleep(1.0)
+            check(hits("/history") == ["/history?who=computers&format=ffa&q=zzz&limit=25&offset=0"], "three quick presses of All / With people / Computers only are one request, for the last: %s" % hits("/history"))
             # the pager
             fresh()
             tab.close()
@@ -317,6 +347,24 @@ def main():
             check(tab.ev("document.querySelector('#pager a.wide:first-child').getAttribute('href')") == "matches.html?page=2" and tab.ev("document.querySelector('#pager .wide:last-child').tagName") == "SPAN", "the last page has Newer, and Older is no link")
             tab.ev("document.querySelector('#pager a.wide:first-child').click()")
             check(until(tab, "location.search === '?page=2' && document.getElementById('count').textContent.indexOf('Showing 26 to 50') === 0") is True, "Newer goes back a page, without loading the page again")
+            with door.lock:
+                door.hits[:] = []
+            for number in ("1", "3"):
+                tab.ev("[].filter.call(document.querySelectorAll('#pager a.num'), function (a) { return a.textContent === %s; })[0].click()" % json.dumps(number))
+                time.sleep(0.05)
+            check(until(tab, "location.search === '?page=3' && document.getElementById('count').textContent.indexOf('Showing 51 to') === 0") is True and hits("/history") == ["/history?limit=25&offset=50"], "two quick presses in the pager are one request, for the last page: %s" % hits("/history"))
+            # a page past the last one (an old link): the way back to the first
+            tab.close()
+            tab = new_tab()
+            open_page(tab, "/matches.html?page=999")
+            check(until(tab, "document.getElementById('body').textContent.indexOf('There are no matches on this page.') !== -1") is True and tab.ev("[].map.call(document.querySelectorAll('#body .note .btn'), function (b) { return b.textContent; })") == ["Back to the first page", "Play a match"], "a page past the last one: its words and two ways out")
+            tab.ev("document.querySelector('#body .note button').click()")
+            check(until(tab, "location.search === '' && " + cards + " === 25") is True, "'Back to the first page' shows the first page")
+            # mode 187 has no score: sorted by score, a card shows its kills
+            tab.close()
+            tab = new_tab()
+            open_page(tab, "/matches.html?mode=187&sort=score")
+            check(until(tab, cards + " >= 1") is True and tab.ev("[].map.call(document.querySelectorAll('#body .m .pill.sk'), function (p) { return p.textContent; })") == ["Most kills 12"] and tab.ev("document.querySelector('#body .m .side-col .lab').textContent") == "Most kills", "mode 187 sorted by score: the card shows the kills and never calls them a score (%s)" % tab.ev("[].map.call(document.querySelectorAll('#body .m .pill.sk'), function (p) { return p.textContent; })"))
             # a busy server, and the way out
             fresh(history="busy")
             tab.close()
@@ -371,6 +419,11 @@ def main():
             rows = tab.ev("[].map.call(document.querySelectorAll('#board .tbl tbody tr'), function (r) { return r.children[0].textContent; })")
             check(rows == ["AnnWon", "Cy (bot, Hard)", "Di (bot, Hard)", "QuinLeft early"], "a seat that left has no row in the record: it is last in the scoreboard, marked Left early (%s)" % rows)
             check(tab.ev("document.querySelector('#result .verdict').textContent") == "Ann won500  \u2013  300  \u2013  200" and tab.ev("document.querySelectorAll('#board .share li').length") == 3, "... and it is no part of the verdict or of the share: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
+            tab.close()
+            tab = new_tab()
+            open_page(tab, "/match.html?id=" + ID_DOLLAR)
+            until(tab, "!!document.getElementById('board')")
+            check(tab.ev("document.title") == "Ant$&s$'x, 1 v 1 \u2014 Ants (1998)" and tab.ev("document.querySelector('#result h1').firstChild.textContent") == "Ant$&s$'x", "a map name made of replace patterns is text in the title and the heading (%r)" % tab.ev("document.title"))
             tab.close()
             tab = new_tab()
             open_page(tab, "/matches.html?q=quin")
@@ -450,6 +503,14 @@ def main():
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and tab.ev("(function () { var r = document.querySelector('iframe').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth; })()") is True, "a phone: the frame fits the window")
             shot(tab, "frame-phone")
             tab.close()
+            # the frame's address opened on its own (no page around it): Quit goes to the list instead of doing nothing
+            fresh()
+            tab = new_tab()
+            open_page(tab, "/play.html?replay=" + ID_PEOPLE + ".antsrep&embed=1")
+            until(tab, "!!window.__stub && window.__stub.total > 0 && !!window.antsReplayLeave", 20)
+            tab.ev("window.antsReplayLeave()")
+            check(until(tab, "location.pathname === '/matches.html'", 10) is True, "the game page of the frame, opened on its own: its Quit goes to the list of matches (%s)" % tab.ev("location.pathname"))
+            tab.close()
 
         if args.only in ("", "stats"):
             print("[web matches] part stats: the Stats of the replay page")
@@ -473,7 +534,7 @@ def main():
             open_page(tab, "/play.html?replay=" + ID_PEOPLE + ".antsrep")
             until(tab, READY)
             check(until(tab, "!document.getElementById('mstats-flow').hidden") is True and tab.ev("(" + live.SHOWN + ")('mstats')") is False and tab.ev("(" + live.SHOWN + ")('stats-btn')") is False, "a phone: the row under the controls, not the button and not the panel")
-            check(tab.ev("document.querySelector('#mstats-flow .mbody') && getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") == "none" and "Pip (bot, Hard) won with 2,040" in tab.ev("document.querySelector('#mstats-flow .mt').textContent"), "... closed, with who won on its line")
+            check(tab.ev("document.querySelector('#mstats-flow .mbody') && getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") == "none" and tab.ev("document.querySelector('#mstats-flow .mt').textContent") == "Match stats\u25be" and tab.ev("document.querySelector('#mstats-flow .mt').getBoundingClientRect().height") < 80, "... closed, and its line says nothing of who won (%r)" % tab.ev("document.querySelector('#mstats-flow .mt').textContent"))
             tab.ev("document.querySelector('#mstats-flow .mt').click()")
             check(tab.ev("getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") != "none" and tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "... it opens in the page, inside the window")
             shot(tab, "stats-phone")

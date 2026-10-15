@@ -45,7 +45,7 @@ function between(text, begin, end, path) {
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const LOBBY_NOTICE_HTML = 'Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.';       // (the front page's: its footer and the card of a link)
-const NOTICE_HTML = 'Online matches are recorded. Recordings are kept for 30 days and anybody can watch them, live or later. Results and names are kept for good and are public.';       // (the game page's line under its name field; the lobby's own sentence is LOBBY_NOTICE_HTML)
+const NOTICE_HTML = 'Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.';       // (the game page's line under its name field; the lobby's own sentence is LOBBY_NOTICE_HTML)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The rules of a name: the same text in both pages, on a table

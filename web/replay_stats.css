@@ -46,12 +46,10 @@
 .mstats .nmt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mstats [data-c="Green"] { --c: var(--c-green); } .mstats [data-c="Red"] { --c: var(--c-red); } .mstats [data-c="Blue"] { --c: var(--c-blue); } .mstats [data-c="Black"] { --c: var(--c-black); }
 .mstats .mt { display: none; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: none; border: 0; color: var(--cream); font: inherit; font-size: 17px; padding: 0; text-align: left; cursor: pointer; user-select: none; -webkit-user-select: none; }
-.mstats .mt small { display: block; color: var(--muted); font-size: 14px; }
 .mstats.flow .mt { display: flex; }
 .mstats.flow .mh { display: none; }
 .mstats.flow .mbody { margin-top: 10px; }
 .mstats.flow.closed .mbody { display: none; }
-.mstats.flow:not(.closed) .mt small { display: none; }
 .mstats.flow:not(.closed) .mt > span:last-child { transform: rotate(180deg); }
 .mstats.flow table { display: none; } .mstats.flow .cards { display: grid; }
 @media (max-width: 700px) { .mstats.pop { display: none !important; } }

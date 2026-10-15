@@ -152,6 +152,7 @@ same('the chips of what is not the default', H.activeOf(H.stateOf('?who=computer
 same('the sort is not a filter', H.activeOf(H.stateOf('?sort=long')), []);
 same('what a sort by a count shows on a card', [H.sortKeyOf(rec2v2, 'kills'), H.sortKeyOf(rec2v2, 'hatched'), H.sortKeyOf(rec2v2, 'score'), H.sortKeyOf(rec2v2, 'new'), H.sortKeyOf(rec2v2, 'long')],
     [{ label: 'Most kills', value: 7 }, { label: 'Most hatched', value: 1 }, { label: 'Top score', value: 2040 }, null, null]);
+same('mode 187 has no score: a sort by score shows the kills, whatever the card', [H.sortKeyOf(rec187, 'score'), H.sortKeyOf(rec187, 'kills')], [{ label: 'Most kills', value: 12 }, { label: 'Most kills', value: 12 }]);
 same('the line over the list', [H.rangeText(296, 296, 0, 25, 'new'), H.rangeText(296, 296, 25, 25, 'kills'), H.rangeText(21, 296, 0, 21, 'new'), H.rangeText(5, 5, 0, 0, 'new')],
     ['Showing 1 to 25 of 296 matches, newest first', 'Showing 26 to 50 of 296 matches, most kills', 'Showing 1 to 21 of the 21 that fit (296 in all)', '']);
 same('the pager', [H.pagerOf(296, 1, 25), H.pagerOf(296, 3, 25), H.pagerOf(296, 12, 25), H.pagerOf(20, 1, 25), H.pagerOf(26, 2, 25), H.pagerOf(0, 1, 25), H.pagerOf(296, 99, 25).page],

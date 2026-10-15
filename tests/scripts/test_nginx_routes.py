@@ -68,6 +68,17 @@ class TheFile(unittest.TestCase):
     def test_the_old_play_online_address_redirects_for_good_with_its_query(self):
         self.assertRegex(self.conf, r"location = /four\.html \{\s*return 301 /\$is_args\$args;\s*\}")
 
+    def test_the_old_addresses_of_the_list_of_matches_redirect_for_good(self):
+        """/matches and the old /watch.html are 301s to /matches.html: exact locations, a `return` and no header of their own (a location with an add_header of its own drops the server's)."""
+        for path in ("/matches", "/watch.html"):
+            blocks = re.findall(r"location = %s \{([^{}]*)\}" % re.escape(path), self.conf)
+            self.assertEqual(len(blocks), 1, path)
+            self.assertEqual(blocks[0].split(), ["return", "301", "/matches.html;"], path)
+        locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
+        self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches", "= /watch.html"])      # (no other location could catch them: the pages themselves are files of the html location)
+        for page in ("live", "matches", "match"):
+            self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: a page named so would be one of them; these are files)
+
     def test_the_game_page_has_no_route_of_its_own_it_is_a_file_play_html(self):
         self.assertNotIn("location = /play.html", self.conf)                               # (a file of the image: index.html copied, see the Dockerfile)
         dockerfile = read(os.path.join(REPO, "Dockerfile"))

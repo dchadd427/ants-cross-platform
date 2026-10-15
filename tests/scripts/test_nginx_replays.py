@@ -238,7 +238,7 @@ class TheLocations(unittest.TestCase):
         lobby = read("web", "lobby.html")
         shell = read("web", "shell.html")
         for page, text, line in (("lobby.html", lobby, "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public."),
-                                 ("shell.html", shell, "Online matches are recorded. Recordings are kept for %s days and anybody can watch them, live or later. Results and names are kept for good and are public.")):
+                                 ("shell.html", shell, "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for %s days. Results and names are kept for good and are public.")):
             self.assertIn(line % days, text, page)
         # the front page shows it in two places, both with the stack's number: the footer (for a visitor who is not asked for a name) and under the name field of the card of a link that somebody sent
         # (the element who-notice, which docs/SERVER.md names); the game page shows it once, under its name field

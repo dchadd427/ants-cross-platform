@@ -216,6 +216,7 @@
     // The count that a sort by a count shows on each card: { label, value } or null for the other sorts (they show the length)
     function sortKeyOf(rec, sort) {
         var k = Object.prototype.hasOwnProperty.call(SORT_KEYS, sort) ? SORT_KEYS[sort] : null;
+        if (k && sort === 'score' && rec && rec.mode === '187') k = SORT_KEYS.kills;      // (mode 187 has no score: the engine's score there is the kills, and a card never calls it a score)
         return k ? { label: k[0], value: bestOf(rec, k[1]) } : null;
     }
     // The line over the list: "Showing 1 to 25 of 296 matches, newest first" (every match fits) or "Showing 1 to 21 of the 21 that fit (296 in all)"
@@ -360,7 +361,6 @@
         function mount(rec) {
             var btn = doc.getElementById('stats-btn'), pop = doc.getElementById('mstats'), flow = doc.getElementById('mstats-flow');
             if (!btn || !pop || !flow) return;
-            var win = winnerSide(rec, sidesOf(rec));
             var mh = mk('div', 'mh'), x = mk('button', 'x', '\u00d7');
             mh.appendChild(mk('h2', '', 'Match stats')); x.type = 'button'; x.setAttribute('aria-label', 'Close the stats'); mh.appendChild(x); pop.appendChild(mh); pop.appendChild(body(rec));
             function setOpen(open) {
@@ -373,7 +373,7 @@
             btn.hidden = false;
             var mt = mk('button', 'mt'), l = mk('span');
             mt.type = 'button'; mt.setAttribute('aria-expanded', 'false'); l.appendChild(mk('b', '', 'Match stats'));
-            l.appendChild(mk('small', '', win ? sideName(win) + ' won with ' + scoreText(rec, win) : noWinnerText(rec))); mt.appendChild(l); mt.appendChild(mk('span', '', '\u25be'));
+            mt.appendChild(l); mt.appendChild(mk('span', '', '\u25be'));      // (the closed row says nothing of the result: the panel is closed so that it does not tell who won)
             flow.appendChild(mt); flow.appendChild(body(rec)); flow.classList.add('closed');
             mt.addEventListener('click', function () { var closed = flow.classList.toggle('closed'); mt.setAttribute('aria-expanded', String(!closed)); });
             flow.hidden = false;
