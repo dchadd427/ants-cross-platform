@@ -341,10 +341,10 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn('<a class="btn sm" href="/matches.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
-        self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback)</(?:a|button)>", nav),
-                         ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback"])
+        self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
+                         ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
         for needle in ('href="/matches.html" id="watch-link"', 'href="/live.html"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
-                       'href="https://github.com/dchadd427/ants-cross-platform/issues"'):
+                       'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal.html"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
         self.assertIn('id="game-build-id"', self.page)
@@ -374,7 +374,7 @@ class TheFrontPageMarkup(PageCase):
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))
-        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues"])
+        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues"])
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 0, "the front page opens no window of its own")
 
     def test_start_goes_to_this_tab(self):

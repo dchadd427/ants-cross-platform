@@ -17,8 +17,8 @@ the game page has the stage (id="game-stage"; the build writes it with or withou
 /front/classic.css, the font          the Classic look's own files: served as files (an unknown address falls back to the game page, so the type is checked), the stylesheet with the pages' revalidation
 /matches.html, /match.html, /live.html, their stylesheet and the code that they and the game page in replay mode (play.html?replay=<file>) share; /matches and
                                       /watch.html go to /matches.html
-/changelog.html, /asset_catalog/      the other pages of the site: each is its own page with the pages' headers and links /front/classic.css; /changelog,
-                                        /catalog, /viewer and /asset_catalog go to them
+/changelog.html, /legal.html,         the other pages of the site: each is its own page with the pages' headers and links /front/classic.css; /changelog, /legal,
+/asset_catalog/                         /catalog, /viewer and /asset_catalog go to them
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
 """
 import argparse
@@ -115,7 +115,7 @@ def main():
         status, headers, names, body = get(path)
         check(status == 200 and bool(GAME.search(body)), "%s is no address of the numbers: it is the game page like any unknown address (%s)" % (path, status))
 
-    print("[web routes] the Classic look: its stylesheet and font are files of the site, and the changelog page and Sprites and sounds are pages of their own that link the stylesheet")
+    print("[web routes] the Classic look: its stylesheet and font are files of the site, and the changelog page, the Legal page and Sprites and sounds are pages of their own that link the stylesheet")
     status, headers, names, body = get("/front/classic.css")
     check(status == 200 and headers.get("content-type", "").startswith("text/css") and "--clay" in body, "/front/classic.css is the stylesheet, not the game page that an unknown address falls back to (%s, %s)" % (status, headers.get("content-type")))
     check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "/front/classic.css: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % headers.get("cache-control"))
@@ -124,11 +124,11 @@ def main():
     check(bool(tag) and status2 == 304, "/front/classic.css: an unchanged stylesheet is answered 304 to If-None-Match (%s)" % status2)
     status, headers, names, body = get("/front/LibreFranklin-Medium.ttf")
     check(status == 200 and not headers.get("content-type", "").startswith("text/html"), "/front/LibreFranklin-Medium.ttf is the font, not a page (%s, %s)" % (status, headers.get("content-type")))
-    for path in ("/changelog.html", "/asset_catalog/"):
+    for path in ("/changelog.html", "/legal.html", "/asset_catalog/"):
         status, headers, names, body = get(path)
         page_headers(path, status, headers, names)
         check('href="/front/classic.css"' in body and not GAME.search(body) and not LOBBY.search(body), "%s is a page of its own that links the Classic stylesheet (not the game page, not the front page)" % path)
-    for path, want in (("/changelog", "/changelog.html"), ("/catalog", "/asset_catalog/"), ("/viewer", "/asset_catalog/"), ("/asset_catalog", "/asset_catalog/")):
+    for path, want in (("/changelog", "/changelog.html"), ("/legal", "/legal.html"), ("/catalog", "/asset_catalog/"), ("/viewer", "/asset_catalog/"), ("/asset_catalog", "/asset_catalog/")):
         status, headers, names, body = get(path)
         check(status == 301 and headers.get("location") == want, "%s answers 301 to %s (%s %s)" % (path, want, status, headers.get("location")))
 
