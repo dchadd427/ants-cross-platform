@@ -98,7 +98,7 @@ def pages():
 class TheSitesPages(unittest.TestCase):
     def test_the_pages_are_the_ones_that_the_image_serves(self):
         found = sorted(pages())
-        self.assertEqual(found, ["asset_catalog/index.html", "changelog.html (generated from CHANGELOG.md)", "web/legal.html", "web/lobby.html", "web/shell.html", "web/watch.html"],
+        self.assertEqual(found, ["asset_catalog/index.html", "changelog.html (generated from CHANGELOG.md)", "web/legal.html", "web/live.html", "web/lobby.html", "web/match.html", "web/matches.html", "web/shell.html"],
                          "the site has a page that this list does not name (or lost one): a new page needs the Classic look too (link /front/classic.css), then name it here")
 
     def test_every_page_is_in_the_classic_look_but_the_pending_ones(self):

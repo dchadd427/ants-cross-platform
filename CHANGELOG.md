@@ -27,11 +27,24 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - A new **Legal** page (`/legal.html`) says in plain words that the game is free to play and use, comes with no warranty, and that its authors are not liable for problems from using it (online play, the computer players, the website, the servers). It says the online servers may be down or restarted at any time, that this is an unofficial fan remake of the 1998 game and not endorsed by the original authors or owners, and it links the MIT License of the source code and the third-party credits.
-- The footer of every page now ends with a **Legal** link (front page, game page, the list of matches, the changelog); it opens in a new tab, so a match that runs is not left. The README's License section opens with the same notice.
+- Every footer now ends with a **Legal** link (the front page, the game page, the match pages and the changelog); it opens in a new tab, so a match that runs is not left. The README's License section opens with the same notice.
 
 **Rules / network:** none. Only the new page, the footers' last link and the README changed; network protocol 21 is as before.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e4c069a3...16af2a29)
+
+## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
+
+**For players:**
+- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, colour, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
+- **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
+- **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
+- **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
+- **What is kept, said plainly** on the front page and in the name card: recordings are kept for 30 days; results and names are kept for good and are public.
+
+**Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
 
 ## v0.12.45 - 2026-10-15 - The bot arena container is gone from the stack
 
@@ -535,21 +548,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b3bc868...12fa1ef), [the touch notes](docs/TOUCH.md)
 
-## v0.6.0 - 2026-10-05 - An online match waits for you
+## Older versions (v0.6.0 and before)
 
-**For players:**
-- **An online match waits for you:** if you reload the page, lose the network or your phone falls asleep, your seat is held and the match pauses for everybody ("Ann (Green) lost the connection, waiting 0:06"); when you come back the match goes on where it was. The page keeps a key for three hours and the front page shows **Rejoin your match (CODE)** while it holds one (the desktop game keeps it in a file and rejoins by itself). After 30 seconds the others may vote to go on without you; the pauses of a match are capped at 30 minutes (10 in the rooms the front page makes).
-- **Leaving on purpose is immediate:** Menu or the logo, then Yes, drops your seat at once: nobody waits for you. A closed tab or a reload still holds it.
-- **Matches survive a restart of the game server:** a running match is replayed from its record, and its players come back with their keys.
-
-**Rules / network:** the network protocol stays 12. The server holds seats by default now (`--no-reconnect` turns it off, a room's `"reconnect": false` too). Operators: on the native TCP door (port 4001) a seat's key travels in clear; close that port or use `--no-reconnect` if that matters (the browser's door is the WebSocket one).
-
-**Fixes:**
-- A reload of the game page no longer asks for a name: it takes your seat back (the address carries your seat).
-- An online match that nobody comes back to gives its place up (it held a slot for as long as it was paused).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [Network Port](docs/NETWORK_PORT.md)
-
-## Older versions (v0.5.1 and before)
-
-Every release before v0.6.0, and the long notes of v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.7.0, and the long notes of v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

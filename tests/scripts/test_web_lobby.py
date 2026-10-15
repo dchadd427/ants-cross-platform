@@ -336,19 +336,19 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
     def test_the_footer_links_the_name_card_the_picture_row_and_the_test_room_buttons_are_there(self):
-        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Watch matches: the other links are in the footer")
+        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Matches: the other links are in the footer")
         self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
-        self.assertIn('<a class="btn sm" href="/watch.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
+        self.assertIn('<a class="btn sm" href="/matches.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
-        self.assertEqual(re.findall(r">(How it works|Watch matches|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
-                         ["How it works", "Watch matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
-        for needle in ('href="/watch.html" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+        self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
+                         ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
+        for needle in ('href="/matches.html" id="watch-link"', 'href="/live.html"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
                        'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal.html"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
         self.assertIn('id="game-build-id"', self.page)
-        self.assertIn('<p class="notice" id="footer-notice">Online matches are recorded and kept for 30 days. The recordings are public and show the players&rsquo; names.</p>', self.markup)
+        self.assertIn('<p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>', self.markup)
         self.found(self.markup, r'<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>')
         # the name: asked on a card (a link, a code that was typed, an old address) and changed with the pencil on the player's own colour; the field of the card takes the name rules of the game page
         self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', self.markup)), 1)
@@ -564,7 +564,7 @@ class TheImageAndTheCi(PageCase):
         ci = read(".github", "workflows", "ci.yml")
         self.assertNotIn("four.html page", ci)
         self.assertIn("ls -l index.html play.html lobby.html", ci)
-        self.assertIn('for page in index.html play.html lobby.html watch.html; do grep -q "(staging)</title>" $page', ci)
+        self.assertIn('for page in index.html play.html lobby.html matches.html match.html live.html; do grep -q "(staging)</title>" $page', ci)
         self.assertIn("! grep -qi staging index.html play.html lobby.html", ci)
         self.assertIn("python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/", ci)
 
