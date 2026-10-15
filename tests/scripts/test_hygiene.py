@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -175,6 +176,44 @@ class CMake(Tree):
         self.put("tests/t/CMakeLists.txt", "add_executable(t test_c.cpp)\n")
         self.put("tests/t/test_c.cpp")
         self.assertEqual(ch.check_cmake(self.root, self.files(), exceptions=set()), [])
+
+
+class BuildFolders(Tree):
+    def git(self, *args):
+        subprocess.run(["git", "-C", self.root] + list(args), check=True, capture_output=True)
+
+    def test_a_file_below_a_build_folder_fails_one_line_for_each_folder(self):
+        self.put("build/CMakeCache.txt", "x\n")
+        self.put("build_clang/CMakeFiles/a.cmake", "x\n")
+        self.put("build_clang/CMakeFiles/b.cmake", "x\n")
+        self.put("build_x/y.o", "x\n")
+        out = ch.check_build_folders(self.files())
+        self.assertEqual([l.split("/:")[0] for l in out], ["build", "build_clang", "build_x"])
+        self.assertIn("2 tracked file(s), for example build_clang/CMakeFiles/a.cmake", out[1])
+
+    def test_other_paths_are_not_build_folders(self):
+        for rel in ("build_web.sh", "builder/x", "rebuild/x", "Build/x", "docs/build/x.md", "src/build_x/y.cpp", "tools/build_all.py"):
+            self.put(rel, "x\n")
+        self.assertEqual(ch.check_build_folders(self.files()), [])
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_in_a_checkout_the_ignored_folder_passes_and_a_force_added_file_fails(self):
+        self.git("init", "-q")
+        self.put(".gitignore", "build_*/\n")
+        self.put("build_x/a.o", "x\n")
+        self.git("add", "-A")                                                # (the ignore rule keeps the folder out)
+        self.assertEqual(ch.check_build_folders(self.files()), [])
+        self.git("add", "-f", "build_x/a.o")                                 # (what put build_clang in a pull request)
+        out = ch.check_build_folders(self.files())
+        self.assertEqual(len(out), 1)
+        self.assertTrue(out[0].startswith("build_x/: 1 tracked file(s), for example build_x/a.o"))
+
+    def test_the_tool_exits_1_and_names_the_folder(self):
+        self.put("README.md", "hello\n")
+        self.put("build_x/CMakeCache.txt", "x\n")
+        done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 1)
+        self.assertTrue(any(l.startswith("build_x/: ") for l in done.stdout.splitlines()), done.stdout)
 
 
 class Cli(Tree):
