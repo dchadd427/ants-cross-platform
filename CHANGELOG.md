@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.44 - 2026-10-15 - A 30 second countdown with the chat open before an online match
 
 **For players:**
 - A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which colour (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
@@ -32,7 +32,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** the simulation, its rules and every state hash are unchanged (the countdown is not a turn, so recordings and replays are as before). Network protocol 21 (was 20): the Begin message carries the seconds that the host holds the first turn, so a game of an older version cannot join a room of this one (a browser page asks for a reload). The server's `--start-countdown-seconds` (default 30, 0 = none) and a room's `countdown_seconds` set the length.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...start-countdown), [the countdown](docs/MATCH_COUNTDOWN.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/079b8428...773a47e9), [the countdown](docs/MATCH_COUNTDOWN.md)
 
 ## v0.12.41 - 2026-10-14 - Universal gate planner, windowed web mouse lock and server hardening
 
