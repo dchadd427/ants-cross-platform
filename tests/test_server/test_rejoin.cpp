@@ -1924,6 +1924,62 @@ void run_way_back_tests() {
         ASSERT_FALSE(ga.net.desynced() || gb.net.desynced());
         w.between = nullptr;
     } TEST_END();
+
+    TEST_CASE("RJ1.28 Protocol 21, The Countdown Through The NetGame: Both Machines Are Told 30 s At Begun And Run Nothing Until The Server Seals The First Turn, A Line Said In It Reaches The Other, A Page That Is Reloaded In It Is Given The Match With No Countdown Of Its Own (Begun With Rejoin And 0), And The Match Then Runs In Step") {
+        World w("rejoin-countdown");
+        ASSERT_TRUE(w.server.start(w.now));
+        RoomSpec spec = held_spec("RJ-28");
+        spec.countdown_s = net::kMatchCountdownSeconds;                                  // what a server's rooms have by default: a room of two people holds the first turn 30 s
+        ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-28");
+        Machine& b = w.join("Bob", "RJ-28");
+        std::vector<net::ChatMsg> bob_heard;
+        b.net.set_on_chat([&bob_heard](const net::ChatMsg& m) { bob_heard.push_back(m); });
+        ASSERT_TRUE(w.run_until([&]() { return a.saw(NetGame::Event::Type::Begun) && b.saw(NetGame::Event::Type::Begun); }, 12000));
+        const uint32_t begun_at = w.now;
+        for (Machine* m : {&a, &b}) {
+            ASSERT_EQ(m->count(NetGame::Event::Type::Begun), size_t{1});
+            for (const NetGame::Event& e : m->events) {
+                if (e.type != NetGame::Event::Type::Begun) continue;
+                ASSERT_EQ(static_cast<unsigned>(e.countdown_seconds), net::kMatchCountdownSeconds);      // the Begin said 30
+                ASSERT_FALSE(e.rejoin);
+            }
+        }
+        ASSERT_EQ(w.status("RJ-28").countdown_s, net::kMatchCountdownSeconds);
+        w.run(8000);                                                                     // eight seconds into the wait: nothing runs on any machine, the room has sealed nothing
+        ASSERT_TRUE(a.ticks == 0 && b.ticks == 0 && w.status("RJ-28").turns == 0 && w.status("RJ-28").state == RoomState::Running && !w.status("RJ-28").paused);
+        ASSERT_EQ(a.net.phase(), NetGame::Phase::Playing);
+        ASSERT_FALSE(a.net.paused() || b.net.paused());
+        ASSERT_TRUE(a.net.chat("hello from Ann"));                                       // chat is the match's: the room relays it before the first turn
+        ASSERT_TRUE(w.run_until([&]() { return !bob_heard.empty(); }, 1000));
+        ASSERT_TRUE(bob_heard.size() == 1 && bob_heard[0].text == "hello from Ann" && bob_heard[0].sender == a.net.my_seat());
+        ASSERT_TRUE(a.ticks == 0 && b.ticks == 0);                                       // (still in the wait)
+        const uint8_t seat = b.net.my_seat();
+        const net::SeatKey key = w.server.read_record("RJ-28").head.keys[seat];
+        ASSERT_FALSE(net::key_is_zero(key));
+        w.machines.erase(w.machines.begin() + 1);                                        // the page of Bob is gone, in the countdown
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-28").paused; }, 3000));
+        ASSERT_EQ(w.status("RJ-28").turns, 0u);
+        Machine& b2 = w.add_machine("Bob");                                              // a new machine with nothing but the key
+        ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", seat, "RJ-28", "", key));
+        ASSERT_TRUE(w.run_until([&]() { return b2.saw(NetGame::Event::Type::Begun); }, 30000));
+        for (const NetGame::Event& e : b2.events) {
+            if (e.type != NetGame::Event::Type::Begun) continue;
+            ASSERT_TRUE(e.rejoin);                                                       // a machine that is given a match that runs has no countdown of its own: the screen shows no card
+            ASSERT_EQ(static_cast<unsigned>(e.countdown_seconds), 0u);
+        }
+        ASSERT_TRUE(w.now - begun_at < net::kMatchCountdownSeconds * 1000u);             // (the seat came back in the wait: with no resume countdown the first turn is sealed at once, as the room's pause rule has it)
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b2}); }, 20000));
+        w.run(3000);
+        ASSERT_FALSE(a.net.desynced() || b2.net.desynced());
+        ASSERT_TRUE(w.status("RJ-28").ticks >= 60 && hashes_agree(a, b2));
+        a.quit();
+        ASSERT_TRUE(w.run_until([&]() { return w.finished("RJ-28") && a.sim.is_match_over() && b2.sim.is_match_over(); }, 20000));
+        w.run(2000);
+        const RoomStatus end = w.status("RJ-28");
+        ASSERT_TRUE(end.state == RoomState::Finished && end.referee_hash != 0);
+        ASSERT_TRUE(all_equal({&a, &b2}) && a.sim.state_hash().total == end.referee_hash);
+    } TEST_END();
 }
 
 int main() {

@@ -1055,3 +1055,195 @@ void test_label_wrap() {
     draw_label(mono, "left text", 40, 50, 300, assets::ColorRGBA{}, FontSize::Px18, false);
     check(mono.drawn.size() == 1 && mono.drawn[0].x == 40 && mono.drawn[0].y == 50 && mono.drawn[0].size == FontSize::Px18, "draw_label: a left aligned label starts at the box's left edge");
 }
+
+// The countdown card (protocol 21, countdown_card.hpp): where it lies, what it says, what it takes and what it leaves to the chat
+void test_countdown_card(const assets::AssetArchive& arc) {
+    std::printf("[hud] the countdown card of a room of two or more people\n");
+    // the layout: 400 x 346 in the middle of the map view, everything inside the card, whatever the view's shape
+    for (const LayoutRect& view : {LayoutRect{16, 21, 442, 440}, LayoutRect{17, 20, 762, 500}, LayoutRect{17, 20, 1062, 500}, LayoutRect{0, 0, 300, 300}}) {
+        const CountdownCardLayout l = countdown_card_layout(view);
+        check(l.card.w == 400 && l.card.h == 346, "countdown: the card is 400 x 346");
+        if (view.w > 400 && view.h > 346) {
+            check(l.card.x == view.x + (view.w - 400) / 2 && l.card.y == view.y + (view.h - 346) / 2, "countdown: the card is in the middle of the map view");
+            check(l.card.x >= view.x && l.card.right() <= view.right() && l.card.y >= view.y && l.card.bottom() <= view.bottom(), "countdown: the card is inside the map view");
+        } else {
+            check(l.card.x == view.x && l.card.y == view.y, "countdown: a view that is smaller than the card puts it at its top left");
+        }
+        bool inside = l.count_box.x >= l.card.x + 4 && l.count_box.right() <= l.card.right() - 4 && l.button.x >= l.card.x + 4 && l.button.right() <= l.card.right() - 4 && l.button.bottom() <= l.card.bottom() - 4;
+        for (const LayoutRect& r : l.seat) inside = inside && r.x >= l.card.x + 4 && r.right() <= l.card.right() - 4 && r.bottom() <= l.hint_y;
+        check(inside, "countdown: the count, the four colours and the button are inside the card's frame");
+        check(l.seat[0].y == l.seat[1].y && l.seat[2].y == l.seat[3].y && l.seat[2].y > l.seat[0].y && l.seat[0].x == l.seat[2].x && l.seat[1].x == l.seat[3].x && l.seat[1].x > l.seat[0].right(),
+              "countdown: the colours are two rows of two, in the order of the seats");
+    }
+    check(countdown_seconds_shown(30000) == 30 && countdown_seconds_shown(29001) == 30 && countdown_seconds_shown(29000) == 29 && countdown_seconds_shown(1001) == 2 && countdown_seconds_shown(1000) == 1 &&
+          countdown_seconds_shown(1) == 1 && countdown_seconds_shown(0) == 0 && countdown_seconds_shown(-50) == 0, "countdown: the count is whole seconds, rounded up, 0 at the end");
+
+    const std::array<CountdownSeat, 4> seats = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, false, "Sam"}, CountdownSeat{true, false, "Maple"}, CountdownSeat{true, true, "Pip (bot, Hard)"}};
+    const auto find = [](const RecordingRenderer& rr, const std::string& text) -> const RecordingRenderer::Text* {
+        for (const auto& t : rr.texts) {
+            if (t.text == text) return &t;
+        }
+        return nullptr;
+    };
+    // what it draws: the card in the original's clay orange with its green frame, the dialog's two lines, the count, the colours with who is in, the line about the chat
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(2);
+        hud.start_match_countdown(28000, seats);
+        check(hud.is_match_start_modal_active() && hud.is_match_countdown_active() && hud.is_modal_open() && hud.chat_takes_text(), "countdown: it is the start dialog, and the chat takes text behind it");
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        const CountdownCardLayout l = countdown_card_layout(hud.layout().view());
+        bool clay = false;
+        bool frame = false;
+        for (const auto& f : rr.fills) {
+            clay = clay || (f.x == l.card.x + 4 && f.y == l.card.y + 4 && f.w == 392 && f.h == 338 && f.color.r == 219 && f.color.g == 75 && f.color.b == 19);
+            frame = frame || (f.x == l.card.x && f.y == l.card.y && f.w == 400 && f.h == 346 && f.color.r == 43 && f.color.g == 95 && f.color.b == 67);
+        }
+        check(clay && frame, "countdown: the card is the original's clay orange (219, 75, 19) inside its green frame");
+        const auto* title = find(rr, "Get ready to play!");
+        const auto* who = find(rr, "You are the Blue Ants.");
+        check(title != nullptr && title->size == FontSize::Px35 && title->y == l.title_y && title->colour.r == 31 && title->colour.g == 23 && title->colour.b == 51, "countdown: the dialog's own first line, 35 px, in its dark violet");
+        check(who != nullptr && who->size == FontSize::Px20 && who->y == l.subtitle_y, "countdown: ... and the colour of the player");
+        const auto* count = find(rr, "28");
+        check(count != nullptr && count->size == FontSize::Px96 && count->y == l.digits_y && count->colour.r == 246, "countdown: the count is 96 px high, in gold");
+        const auto* caption = find(rr, "seconds to the start");
+        check(caption != nullptr && caption->size == FontSize::Px18 && caption->y == l.caption_y, "countdown: the words under the count");
+        check(find(rr, "Juniper") != nullptr && find(rr, "Sam") != nullptr && find(rr, "Maple (you)") != nullptr && find(rr, "Pip (bot, Hard)") != nullptr, "countdown: the four colours with their names (the player's own is told)");
+        size_t in = 0;
+        size_t bots = 0;
+        for (const auto& t : rr.texts) {
+            in += t.text == "in" ? 1u : 0u;
+            bots += t.text == "bot" ? 1u : 0u;
+        }
+        check(in == 3 && bots == 1, "countdown: three people are in and one computer player says so");
+        const auto* hint = find(rr, "Everybody is in. Say hello in the chat.");
+        check(hint != nullptr && hint->y == l.hint_y, "countdown: the line that says the chat is open");
+        check(find(rr, "Fullscreen") != nullptr, "countdown: the native game draws its own Fullscreen button");
+        const auto* mine = find(rr, "Maple (you)");
+        check(mine != nullptr && mine->y >= l.seat[2].y && mine->y < l.seat[2].bottom() && mine->x > l.seat[2].x && mine->x < l.seat[2].right(), "countdown: the player's own name is in its colour's box (Blue is the third)");
+    }
+    // the count follows what the application hands over every frame; the end says so
+    for (const auto& step : std::vector<std::pair<int64_t, std::pair<std::string, std::string>>>{{30000, {"30", "seconds to the start"}}, {1001, {"2", "seconds to the start"}}, {1, {"1", "seconds to the start"}},
+                                                                                              {0, {"0", "starting..."}}, {-300, {"0", "starting..."}}}) {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.start_match_countdown(30000, seats);
+        hud.set_match_countdown_left_ms(step.first);
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        check(find(rr, step.second.first) != nullptr && find(rr, step.second.second) != nullptr, "countdown: the count shows " + step.second.first + " for " + std::to_string(step.first) + " ms left");
+    }
+    // "Participate In Chat" is off: the chat box is covered, the card says the match starts soon, and nothing is typed or sent
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        sim::SimulationEngine sim;
+        HUD hud;
+        hud.init(0);
+        hud.options().chat = false;
+        hud.start_match_countdown(30000, seats);
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        check(!hud.chat_takes_text() && find(rr, "Everybody is in. The match starts soon.") != nullptr && find(rr, "Everybody is in. Say hello in the chat.") == nullptr, "countdown: with the chat off the card does not invite to it");
+        hud.handle_key_down('h', sim, camera, 0, false);
+        hud.handle_text_input("h");
+        hud.handle_key_down(SDLK_F9, sim, camera, 0, false);
+        check(hud.get_chat_input().empty() && hud.is_match_countdown_active(), "countdown: with the chat off a key types nothing and the card stays");
+    }
+    // what it takes: the chat's keys and nothing of the match; the map's clicks never reach the match
+    {
+        sim::SimulationEngine sim;
+        ViewportCamera camera;
+        HUD hud;
+        hud.init(0);
+        std::vector<std::pair<std::string, bool>> sent;
+        hud.set_on_chat_send([&](const std::string& text, bool team) { sent.emplace_back(text, team); });
+        int fullscreen_calls = 0;
+        hud.set_on_fullscreen([&]() { ++fullscreen_calls; });
+        hud.start_match_countdown(30000, seats);
+        hud.handle_text_input("hi");
+        check(hud.get_chat_input() == "hi", "countdown: text input (the keyboard's characters, a phone's keyboard through the page) types into the chat line");
+        check(hud.handle_key_down('h', sim, camera, 0, false) && hud.get_chat_input() == "hi", "countdown: the key event of a printable key types nothing (its text input does: a key event as well would type every letter twice)");
+        hud.handle_text_input("!");
+        check(hud.get_chat_input() == "hi!", "countdown: ... and the line grows by the text");
+        check(hud.handle_key_down(SDLK_BACKSPACE, sim, camera, 0, false) && hud.get_chat_input() == "hi", "countdown: Backspace takes a character off");
+        check(hud.handle_key_down(SDLK_RETURN, sim, camera, 0, false) && hud.get_chat_input().empty() && sent.size() == 1 && sent[0].first == "hi" && !sent[0].second, "countdown: Enter sends the line to everybody and empties it");
+        hud.handle_key_down('a', sim, camera, KMOD_CTRL, false);
+        check(hud.get_chat_input().empty() && hud.get_selected_ant_ids().empty(), "countdown: Ctrl+A is no key of the chat (nothing is selected, nothing typed)");
+        hud.handle_key_down(SDLK_F1, sim, camera, 0, false);
+        hud.handle_key_down(SDLK_ESCAPE, sim, camera, 0, false);
+        check(!hud.is_quick_help_open() && !hud.is_quit_dialog_open() && hud.is_match_countdown_active(), "countdown: F1 and Esc do nothing");
+        // the All button of the chat is a button of the card's time too: a press and a release on it send the line
+        hud.handle_text_input("yo");
+        const UIButton all = hud.send_to_button();
+        check(all.w > 0, "countdown: the All button exists");
+        check(hud.handle_mouse_down(all.x + 2, all.y + 2, SDL_BUTTON_LEFT, sim, camera) && hud.send_to_button().is_pressed, "countdown: a press on All is taken");
+        check(hud.handle_mouse_up(all.x + 2, all.y + 2, SDL_BUTTON_LEFT, sim, camera) && sent.size() == 2 && sent[1].first == "yo", "countdown: ... and acts at the release");
+        // a click on the map or the pedestals is the dialog's, not the match's
+        hud.handle_mouse_down(200, 200, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(200, 200, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.get_selected_ant_ids().empty() && sent.size() == 2, "countdown: a click on the map does nothing");
+        // Fullscreen: the card's button, at the release, on the button
+        const LayoutRect b = hud.countdown_button_rect();
+        check(b.w == 150 && b.h == 32, "countdown: the Fullscreen button's place is 150 x 32");
+        hud.handle_mouse_down(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(b.x + b.w + 40, b.y + 5, SDL_BUTTON_LEFT, sim, camera);                  // released away from it: no fullscreen
+        check(fullscreen_calls == 0, "countdown: a press that is let go of away from the Fullscreen button does nothing");
+        hud.handle_mouse_down(200, 200, SDL_BUTTON_LEFT, sim, camera);                                // pressed elsewhere (the dialog's), then dragged onto the button and released there: the button was never pressed
+        hud.handle_mouse_up(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, sim, camera);
+        check(fullscreen_calls == 0, "countdown: a release on the Fullscreen button that was not pressed on it does nothing");
+        hud.handle_mouse_down(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, sim, camera);
+        check(fullscreen_calls == 1, "countdown: a click on the Fullscreen button goes fullscreen once");
+        // Quit: Ctrl+Q asks, and its dialog takes the keys (N keeps the player here)
+        hud.handle_key_down('q', sim, camera, KMOD_CTRL, false);
+        check(hud.is_quit_dialog_open(), "countdown: Ctrl+Q opens the quit dialog");
+        check(!hud.countdown_takes_chat(), "countdown: the quit dialog is up: the chat is not taking text");
+        hud.handle_key_down('n', sim, camera, 0, false);
+        check(!hud.is_quit_dialog_open() && hud.is_match_countdown_active() && hud.get_chat_input().empty(), "countdown: N keeps the player in the countdown and types nothing");
+        // the quit button of the top bar
+        const UIButton quit = hud.quit_button();
+        hud.handle_mouse_down(quit.x + 2, quit.y + 2, SDL_BUTTON_LEFT, sim, camera);
+        hud.handle_mouse_up(quit.x + 2, quit.y + 2, SDL_BUTTON_LEFT, sim, camera);
+        check(hud.is_quit_dialog_open(), "countdown: the Quit button of the top bar asks too");
+        hud.close_quit_dialog();
+        // the first turn closes it for good
+        hud.dismiss_match_start_modal();
+        check(!hud.is_match_start_modal_active() && !hud.is_match_countdown_active() && !hud.is_modal_open(), "countdown: dismissed with the first turn, nothing of it stays");
+        hud.handle_key_down('z', sim, camera, 0, false);
+        check(hud.get_chat_input() == "z", "countdown: after it the chat is the match's own");
+    }
+    // the 5 s dialog is as it was: every key and click, no chat
+    {
+        sim::SimulationEngine sim;
+        ViewportCamera camera;
+        HUD hud;
+        hud.init(0);
+        hud.start_match_modal(true);
+        check(!hud.is_match_countdown_active() && !hud.chat_takes_text(), "dialog: the plain dialog of protocol 12 is no countdown and covers the chat");
+        hud.handle_key_down('h', sim, camera, 0, false);
+        hud.handle_text_input("x");
+        check(hud.get_chat_input().empty(), "dialog: it takes every key");
+        const UIButton all = hud.send_to_button();
+        hud.handle_text_input("x");
+        hud.handle_mouse_down(all.x + 2, all.y + 2, SDL_BUTTON_LEFT, sim, camera);
+        check(!hud.send_to_button().is_pressed, "dialog: it takes every click");
+    }
+    // the quit dialog over the card is drawn alone (as it is over the match)
+    {
+        RecordingRenderer rr(arc);
+        sim::WorldState world;
+        HUD hud;
+        hud.init(0);
+        hud.start_match_countdown(30000, seats);
+        hud.open_quit_dialog();
+        ViewportCamera camera;
+        hud.render(rr, arc, world, camera);
+        check(find(rr, "Do you really want to quit?") != nullptr && find(rr, "Get ready to play!") == nullptr, "countdown: the quit dialog is drawn in place of the card");
+    }
+}

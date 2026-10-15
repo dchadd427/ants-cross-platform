@@ -1549,6 +1549,257 @@ void run_guest_tests() {
         duo.step(2000);
         ASSERT_TRUE(app.sim().state_hash() == host.sim.state_hash() && !app.net()->desynced());
     } TEST_END();
+
+    TEST_CASE("N5.76 Protocol 21, The Countdown Card Of A Server's Room Of Two People: The Dialog Counts 30 s Down From The Begin And Says The Seconds In The Status Line, Shows Who Plays, Keeps The Map Out Of Reach And The Chat In It, Takes Ctrl+Q To Leave, And Is Gone With The First Executed Turn") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-1";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-1"));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-1";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_start_modal_active(); }, 15000));
+        const uint32_t begin = srv.now;                                                      // (the frame of the Begin: within a few steps of it)
+        ASSERT_TRUE(app.hud().is_match_countdown_active() && app.hud().is_modal_open());
+        const int32_t first = app.countdown_seconds_left();
+        ASSERT_TRUE(first == 30 || first == 29);
+        ASSERT_EQ(app.sim().current_tick(), 0u);
+        ASSERT_EQ(app.hud().status_line().text(), "Match starts in " + std::to_string(first) + " s");       // the status line says it, above the chat box
+        hall.step(5000);
+        const int32_t later = app.countdown_seconds_left();
+        ASSERT_TRUE(later >= 23 && later <= 26);                                              // the count follows the clock
+        ASSERT_EQ(app.hud().status_line().text(), "Match starts in " + std::to_string(later) + " s");
+        ASSERT_TRUE(app.sim().current_tick() == 0 && bob.sim.current_tick() == 0 && bob.net.phase() == net::NetGame::Phase::Playing);
+        // the map is out of reach: a click on an own ant selects nothing (the dialog takes it), as in the 5 s dialog
+        const uint32_t mine = ants_of(app.sim(), app.local_player_id()).front();
+        for (const auto& a : app.sim().get_world_state().ants) {
+            if (a.id != mine) continue;
+            app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
+            int32_t sx = 0;
+            int32_t sy = 0;
+            ASSERT_TRUE(app.renderer().camera().world_to_screen(a.px, a.py, sx, sy));
+            ASSERT_TRUE(app.hud().handle_mouse_down(sx, sy, 1, app.sim(), app.renderer().camera()));
+            app.hud().handle_mouse_up(sx, sy, 1, app.sim(), app.renderer().camera());
+            ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+        }
+        // the chat is the player's: the line is typed, Enter sends it, the other machine hears it with the sender's seat; the keys of the match are only letters for the line
+        ASSERT_TRUE(app.hud().chat_takes_text());
+        app.hud().handle_text_input("hi Bob");
+        ASSERT_EQ(app.hud().get_chat_input(), std::string("hi Bob"));
+        SDL_KeyboardEvent enter{};
+        enter.type = SDL_KEYDOWN;
+        enter.keysym.sym = SDLK_RETURN;
+        app.handle_key_down(enter);
+        ASSERT_TRUE(app.hud().get_chat_input().empty());
+        ASSERT_TRUE(hall.until([&]() { return !bob.chats.empty(); }, 3000));
+        ASSERT_TRUE(bob.chats.size() == 1 && bob.chats[0].text == "hi Bob" && bob.chats[0].sender == app.local_player_id());
+        {   // a key as the keyboard makes it, through the application's own event loop: the key event, then the text event (SDL_TEXTINPUT). The letter is in the line ONCE.
+            SDL_Event key_event{};
+            key_event.type = SDL_KEYDOWN;
+            key_event.key.type = SDL_KEYDOWN;
+            key_event.key.state = SDL_PRESSED;
+            key_event.key.keysym.sym = SDLK_a;
+            SDL_PushEvent(&key_event);
+            SDL_Event text_event{};
+            text_event.type = SDL_TEXTINPUT;
+            text_event.text.type = SDL_TEXTINPUT;
+            std::snprintf(text_event.text.text, sizeof text_event.text.text, "a");
+            SDL_PushEvent(&text_event);
+            app.run_frame_with_delta(0.001f);
+            ASSERT_EQ(app.hud().get_chat_input(), std::string("a"));
+        }
+        SDL_KeyboardEvent a_key{};
+        a_key.type = SDL_KEYDOWN;
+        a_key.keysym.sym = SDLK_a;
+        a_key.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(a_key);                                                           // Ctrl+A selects nothing and types nothing (there is no select-all here)
+        ASSERT_TRUE(app.hud().get_chat_input() == "a" && app.hud().get_selected_ant_ids().empty());
+        SDL_KeyboardEvent backspace{};
+        backspace.type = SDL_KEYDOWN;
+        backspace.keysym.sym = SDLK_BACKSPACE;
+        app.handle_key_down(backspace);
+        ASSERT_TRUE(app.hud().get_chat_input().empty());
+        SDL_KeyboardEvent f1{};
+        f1.type = SDL_KEYDOWN;
+        f1.keysym.sym = SDLK_F1;
+        app.handle_key_down(f1);
+        ASSERT_FALSE(app.hud().is_quick_help_open());                                         // every other key stays out of the match
+        app.hud().set_chat_input(std::string());
+        ASSERT_TRUE(app.hud().is_match_countdown_active());
+        // the Quit button's key: Ctrl+Q asks, N keeps the player in the countdown
+        SDL_KeyboardEvent q_ev{};
+        q_ev.type = SDL_KEYDOWN;
+        q_ev.keysym.sym = SDLK_q;
+        q_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(q_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open());
+        SDL_KeyboardEvent n_ev{};
+        n_ev.type = SDL_KEYDOWN;
+        n_ev.keysym.sym = SDLK_n;
+        app.handle_key_down(n_ev);
+        ASSERT_FALSE(app.hud().is_quit_dialog_open());
+        ASSERT_TRUE(app.hud().is_match_countdown_active() && app.is_running());
+        // the card goes with the first executed turn, 30 s after the Begin (the link, the second turn and a step on top)
+        uint32_t waited = srv.now - begin;
+        while (app.sim().current_tick() == 0 && waited < 40000) {
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            hall.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active() || app.hud().is_match_countdown_active());
+        ASSERT_EQ(app.countdown_seconds_left(), -1);
+        ASSERT_TRUE(waited >= net::kMatchCountdownSeconds * 1000u - 150 && waited <= net::kMatchCountdownSeconds * 1000u + 400);
+        hall.step(3000);
+        ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash() || hall.identical(app.sim(), bob.sim));
+        bob.net.freeze();
+    } TEST_END();
+
+    TEST_CASE("N5.78 Protocol 21, Quit In The Countdown Leaves For Good: Ctrl+Q And Yes End The Program (No Quit Command Can Be Sealed Before The First Turn), The Server Drops The Seat In The First Turn And The Player Who Stayed Wins At Once") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-3";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = 12;                                                                // (a shorter wait: the test is about leaving in it)
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-3"));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-3";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.hud().is_match_countdown_active() && bob.net.phase() == net::NetGame::Phase::Playing; }, 15000));
+        const uint8_t ana = app.local_player_id();
+        ASSERT_TRUE(ana < 2 && app.net()->phase() == net::NetGame::Phase::Playing);
+        hall.step(2000);
+        SDL_KeyboardEvent q_ev{};
+        q_ev.type = SDL_KEYDOWN;
+        q_ev.keysym.sym = SDLK_q;
+        q_ev.keysym.mod = KMOD_LCTRL;
+        app.handle_key_down(q_ev);
+        ASSERT_TRUE(app.hud().is_quit_dialog_open() && app.is_running());
+        SDL_KeyboardEvent y_ev{};
+        y_ev.type = SDL_KEYDOWN;
+        y_ev.keysym.sym = SDLK_y;
+        app.handle_key_down(y_ev);
+        ASSERT_FALSE(app.is_running());                                                       // the quit dialog's Yes: leave_game, not a Quit command that no turn would carry
+        ASSERT_TRUE(hall.until([&]() { return bob.sim.is_match_over() && bob.sim.is_player_dropped(ana); }, 30000));       // the first turn carries the drop: Bob is the only side left
+        ASSERT_TRUE(bob.sim.get_world_state().match_result.is_winner(bob.net.my_seat()));
+        ASSERT_FALSE(bob.net.desynced());
+    } TEST_END();
+
+    TEST_CASE("N5.77 Protocol 21, A Room Whose Setting Is 0 Keeps The 5 s Dialog Of Every Match Before (The Begin Says 0): The Dialog Takes Every Key, No Countdown Card, The Chat Is Not Open, The First Turn Comes After 5 s") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-2";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = 0;                                                                  // (a room that does not count down says 0 in its Begin, as a room of one person and a game on the local network do: S3.192, N4.4c)
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-2"));
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-2";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_start_modal_active(); }, 15000));
+        ASSERT_FALSE(app.hud().is_match_countdown_active());
+        ASSERT_EQ(app.countdown_seconds_left(), -1);
+        ASSERT_FALSE(app.hud().chat_takes_text());                                             // the dialog covers the chat as before
+        app.hud().handle_text_input("hi");
+        SDL_KeyboardEvent a_key{};
+        a_key.type = SDL_KEYDOWN;
+        a_key.keysym.sym = SDLK_a;
+        app.handle_key_down(a_key);
+        ASSERT_TRUE(app.hud().get_chat_input().empty());
+        ASSERT_TRUE(app.hud().status_line().text().find("Match starts") == std::string::npos);
+        uint32_t waited = 0;
+        while (app.sim().current_tick() == 0 && waited < 20000) {
+            hall.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(waited >= kDialogMs - 300 && waited <= kDialogMs + 400);
+        bob.net.freeze();
+    } TEST_END();
+
+    TEST_CASE("N5.79 Protocol 21, The Native Game's Fullscreen Button On The Countdown Card Is Wired To The Game's Fullscreen: A Click On It (Press And Release) Puts The Window Fullscreen, The Next One Takes It Back (A Real Window On SDL's Dummy Video Driver; The Page's Own Button Does It In A Browser)") {
+        SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");                                            // (SDL_Quit clears the hints: set before every start)
+        SDL_SetHint(SDL_HINT_AUDIODRIVER, "dummy");
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-3";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        Peer bob;
+        ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-3"));
+        const std::filesystem::path settings = std::filesystem::temp_directory_path() / "ants_n579_settings.ini";       // (the player's own settings are never read or written)
+        ApplicationConfig cfg = headless_config();
+        cfg.headless = false;                                                                  // a real window, without a screen
+        cfg.skip_intro = true;
+        cfg.settings_path = settings.string();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-3";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {&bob}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_countdown_active(); }, 15000));
+        SDL_Window* window = SDL_GetWindowFromID(1);
+        ASSERT_TRUE(window != nullptr);
+        const auto fullscreen = [&]() { return (SDL_GetWindowFlags(window) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0; };
+        ASSERT_FALSE(fullscreen());
+        const LayoutRect b = app.hud().countdown_button_rect();
+        ASSERT_TRUE(app.hud().handle_mouse_down(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, app.sim(), app.renderer().camera()));
+        ASSERT_FALSE(fullscreen());                                                            // a press only holds the button
+        app.hud().handle_mouse_up(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, app.sim(), app.renderer().camera());
+        ASSERT_TRUE(fullscreen());                                                             // the release on it acts
+        app.hud().handle_mouse_down(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, app.sim(), app.renderer().camera());
+        app.hud().handle_mouse_up(b.x + 5, b.y + 5, SDL_BUTTON_LEFT, app.sim(), app.renderer().camera());
+        ASSERT_FALSE(fullscreen());                                                            // and the next click is the way back
+        ASSERT_TRUE(app.hud().is_match_countdown_active());                                    // the card is still up through it all
+        bob.net.freeze();
+        std::error_code ignored;
+        std::filesystem::remove(settings, ignored);
+    } TEST_END();
 }
 
 

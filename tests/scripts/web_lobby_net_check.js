@@ -127,6 +127,7 @@ same('chat notice of the room', N.decode(bytesOf('chat-notice-from-room')), { ty
 same('chat of a player', N.decode(bytesOf('chat-plain')), { type: 'chat', sender: 0, team: false, text: 'hello there' });
 check('the server sentence of the back-off fits a chat line', (N.decode(bytesOf('chat-notice-fits')) || {}).text === 'The match could not start a few times in a row: try again in a minute.');
 same('begin is a message that a page does not use', N.decode(bytesOf('begin')), { type: 'other', code: 15 });
+same('... with the seconds of the countdown (protocol 21) it is still one', N.decode(bytesOf('begin-countdown')), { type: 'other', code: 15 });
 check('welcome of a game\'s Hello is not in the golden file of a page', golden['game-joins'] !== undefined);
 
 // ---- what the C++ decoders refuse, the page refuses ---------------------------------------------------------------------------------------------------------------------------------------------

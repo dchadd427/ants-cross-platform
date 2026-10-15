@@ -5,6 +5,7 @@ add_executable(test_lockstep
     test_lockstep_failures.cpp
     test_lockstep_reconnect_session.cpp
     test_lockstep_protocols.cpp
+    test_lockstep_countdown.cpp
 )
 
 target_link_libraries(test_lockstep PRIVATE

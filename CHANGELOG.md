@@ -34,6 +34,17 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...a366cb21), [the bot tool](docs/BOTS.md#running-bots)
 
+## v0.12.44 - 2026-10-15 - A 30 second countdown with the chat open before an online match
+
+**For players:**
+- A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which colour (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
+- The card has a **Fullscreen** button, so you can go fullscreen before the match starts (in the browser the page's own button, on the desktop a button on the card). The Quit button and Ctrl+Q still leave the room; clicks on the map and the keys of the match stay out of reach until the match begins.
+- Rooms of one person (with computer players), games on the local network and games on this computer keep the 5 second dialog.
+
+**Rules / network:** the simulation, its rules and every state hash are unchanged (the countdown is not a turn, so recordings and replays are as before). Network protocol 21 (was 20): the Begin message carries the seconds that the host holds the first turn, so a game of an older version cannot join a room of this one (a browser page asks for a reload). The server's `--start-countdown-seconds` (default 30, 0 = none) and a room's `countdown_seconds` set the length.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...58b8f468), [the countdown](docs/MATCH_COUNTDOWN.md)
+
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
 **For players:**

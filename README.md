@@ -49,6 +49,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md): the specification of the original game, system by system
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
 - [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
+- [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20
 
 ## Reverse Engineering & Historical Preservation
