@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.50 - 2026-10-15 - Chat in the lobby
+
+**For players:**
+- **The front page has a chat now.** A **Chat** box under the colours lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the colour of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
+- A small line tells who comes and goes ("Sam joined as Red."). A line that arrives while the box is out of view (below the window, or under START on a phone) also shows as a message at the bottom of the page.
+- The box keeps to the room's pace, five lines at once and then one a second, and says so when you are faster (your line stays in the field); what the game cannot show, an accent or a smiley, is left out as you type. On a phone the field is big enough to tap and the keyboard does not hide it behind START.
+- Nothing is saved: a reload starts an empty box, and when START takes everybody to the game the lines stay behind (they are not in the countdown's chat; that is a later change).
+
+**Rules / network:** none. The server already passed a page's chat line on; network protocol 21 is as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...804b00b1), [the notes](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
+
 ## v0.12.48 - 2026-10-15 - Legal notice
 
 **For players:**
