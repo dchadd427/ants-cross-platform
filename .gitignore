@@ -1,8 +1,6 @@
-# Build directories and binaries
+# Build directories and binaries (build/ and every build_*/ folder: build_asan, build_e2e, build_web, a compiler's own, ...; tools/check_hygiene.py fails when a file below one is tracked)
 build/
-build_asan/
-build_e2e/
-build_web/
+build_*/
 dist/
 bin/
 lib/

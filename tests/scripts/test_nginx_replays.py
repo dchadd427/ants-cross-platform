@@ -220,7 +220,7 @@ class TheLocations(unittest.TestCase):
             self.assertIn(variable, stack.split("services:")[0], variable)                    # the header of the stack file names them
             self.assertIn(variable, read("docs", "SERVER.md"), variable)
         dockerfile = read("Dockerfile.server")
-        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", dockerfile)[-1]                       # (the last stage is the server; the stage before it is the bot arena's)
+        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", dockerfile)[-1]                       # (the last stage is the server)
         self.assertIn('"--replay-any-interface"', entry)                                      # (a published port does not reach the loopback address of a container: nginx does not either)
         self.assertNotIn("--replay-port", entry)                                              # (off in the program and in the image: the stack file gives the port)
         main = read("src", "ants_server", "main.cpp")
@@ -230,24 +230,43 @@ class TheLocations(unittest.TestCase):
             for needle in needles:
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
+    def test_the_stack_plays_the_servers_own_hourly_match_of_computer_players_and_says_so(self):
+        # the site's list of live matches always has one to watch because the game server plays one itself (--bot-match-every-min); no other container of the stack plays bots
+        stack = read("docker-compose.stack.yml")
+        staging = read("docker-compose.staging.yml")
+        for text in (stack, staging):
+            self.assertRegex(text, r'"--bot-match-every-min", "\$\{ANTS_BOT_MATCH_EVERY_MIN:-60\}"')
+            self.assertRegex(text.split("services:")[0], r"(?m)^#   ANTS_BOT_MATCH_EVERY_MIN")
+        self.assertRegex(stack, r"(?m)^#   ANTS_BOT_MATCH_EVERY_MIN=60 ")
+        self.assertIn("`ANTS_BOT_MATCH_EVERY_MIN`", read("docs", "SERVER.md"))
+        self.assertIn('"--bot-match-every-min"', read("src", "ants_server", "main.cpp"))
+
+    def test_the_server_keeps_its_results_and_its_replays_folder_in_the_volume_that_the_stack_mounts(self):
+        # the image's ENTRYPOINT says --results-dir /results (the replays are /results/replays, the restart records /results/restart, the control secret /results/control-secret), and each stack mounts a
+        # volume of its own there: without the one or the other the matches and the records are lost with the container
+        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", read("Dockerfile.server"))[-1]
+        self.assertIn('"--results-dir", "/results"', entry)
+        self.assertIn("      - ants-server-results:/results\n", read("docker-compose.stack.yml"))
+        self.assertIn("      - ants-staging-results:/results\n", read("docker-compose.staging.yml"))
+
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
-        # decided on 2026-10-08: the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
-        # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so). The two pages word the second sentence differently:
-        # the front page as the lobby picture draws it ("The recordings are public and show the players' names."), the game page in its older words ("Anybody can watch them, live or later, and ...").
+        # decided on 2026-10-08 and worded again on 2026-10-15: the front page and the game page's name card say that online matches are recorded, that the recordings are kept for N days, and that the results
+        # and the names are kept for good and are public. The pages are static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md
+        # says so). The two pages word it a little differently: the game page also says that anybody can watch the recordings, live or later.
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         lobby = read("web", "lobby.html")
         shell = read("web", "shell.html")
-        for page, text, second in (("lobby.html", lobby, "The recordings are public and show the players&rsquo; names."),
-                                   ("shell.html", shell, "Anybody can watch them, live or later, and they show the players&rsquo; names.")):
-            self.assertIn("Online matches are recorded and kept for %s days. %s" % (days, second), text, page)
+        for page, text, line in (("lobby.html", lobby, "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public."),
+                                 ("shell.html", shell, "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for %s days. Results and names are kept for good and are public.")):
+            self.assertIn(line % days, text, page)
         # the front page shows it in two places, both with the stack's number: the footer (for a visitor who is not asked for a name) and under the name field of the card of a link that somebody sent
         # (the element who-notice, which docs/SERVER.md names); the game page shows it once, under its name field
-        words = "Online matches are recorded and kept for %s days. The recordings are public and show the players&rsquo; names." % days
+        words = "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public." % days
         self.assertEqual(lobby.count(words), 2)
         self.assertIn('<p class="notice" id="footer-notice">' + words + "</p>", lobby)
         self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + words + "</div>", lobby)
-        self.assertEqual(len(re.findall(r"Online matches are recorded and kept for \d+ days\.", lobby)), 2)       # (no page says another number)
-        self.assertEqual(len(re.findall(r"Online matches are recorded and kept for \d+ days\.", shell)), 1)
+        self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", lobby)), 2)       # (no page says another number)
+        self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", shell)), 1)
         self.assertNotIn("Anybody can watch them", lobby)                                       # (the old second sentence is the game page's only)
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))

@@ -23,6 +23,41 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
+
+**For players:**
+- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, colour, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
+- **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
+- **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
+- **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
+- **What is kept, said plainly** on the front page and in the name card: recordings are kept for 30 days; results and names are kept for good and are public.
+
+**Rules / network:** none. No rule, no hash and no protocol number (protocol 20) changed; the pages read what the server already keeps (`GET /history`).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...ec086294)
+
+## v0.12.45 - 2026-10-15 - The bot arena container is gone from the stack
+
+**For players:**
+- Nothing changes in the game or on the site. The list of matches still always has one to watch: the game server itself starts a match of computer players every hour (`ANTS_BOT_MATCH_EVERY_MIN`, 60 by default), and anybody can watch it live.
+- **For whoever runs a stack:** one container less. The extra bot arena container (`ants-arena`, which started only when the `arena` profile of `docker-compose.stack.yml` was asked for) is gone, with its image stage in `Dockerfile.server`, its loop script and its setting `ANTS_ARENA_EVERY_MIN`; the stack is the web page and the game server again. If you had started it, remove the old container once with `docker rm -f ants-arena`.
+- The `bot_arena` command-line tool stays as it was: it plays computer players against each other on your own computer, and `--save-replays` still puts its matches in the server's replays folder.
+
+**Rules / network:** none. No rule, no state hash and no protocol number changed.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...a366cb21), [the bot tool](docs/BOTS.md#running-bots)
+
+## v0.12.44 - 2026-10-15 - A 30 second countdown with the chat open before an online match
+
+**For players:**
+- A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which colour (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
+- The card has a **Fullscreen** button, so you can go fullscreen before the match starts (in the browser the page's own button, on the desktop a button on the card). The Quit button and Ctrl+Q still leave the room; clicks on the map and the keys of the match stay out of reach until the match begins.
+- Rooms of one person (with computer players), games on the local network and games on this computer keep the 5 second dialog.
+
+**Rules / network:** the simulation, its rules and every state hash are unchanged (the countdown is not a turn, so recordings and replays are as before). Network protocol 21 (was 20): the Begin message carries the seconds that the host holds the first turn, so a game of an older version cannot join a room of this one (a browser page asks for a reload). The server's `--start-countdown-seconds` (default 30, 0 = none) and a room's `countdown_seconds` set the length.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d94b705...58b8f468), [the countdown](docs/MATCH_COUNTDOWN.md)
+
 ## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
 **For players:**
@@ -518,38 +553,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/09961f8...ec4906c), [Network Port](docs/NETWORK_PORT.md)
 
-## v0.5.1 - 2026-10-05 - Every page in the front page's look
+## Older versions (v0.5.1 and before)
 
-**For players:**
-- **Every page in the front page's look:** the game page, the changelog pages and "Sprites and sounds" now have the front page's clay, thin green frame, teal buttons and black boxes, the "ants!" logo (a link back to the front page; on the game page it asks first while a match runs, as Menu does) and a Play button. The game page's loading screen shows the logo and a teal bar, and on a phone its header is one row (the logo, Menu, Fullscreen and a More button). Nothing about the game, its keys or its addresses changed; the picture is 3 to 7 percent smaller at common window sizes, because of the frame's room.
-- **Phones:** "Sprites and sounds" shows its animation details and its sprites table (they were cut off) and keeps its Play button; every page fits from 320 to 1600 px wide with no sideways scroll.
-- **A way back from a shared link:** the name step that a shared room link opens has a "Back to the front page" link.
-
-**Fixes:**
-- The two changelog pages link to each other (the short page's links to the detailed history opened GitHub's file view).
-- A bullet after a blank line in a changelog was written outside its list.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60dea01...8511283)
-
-## v0.5.0 - 2026-10-04 - A new front page in the game's own look, with game statistics
-
-**For players:**
-- **A new front page in the game's own look:** the 1998 game's menu style (the clay, the green frame, the teal buttons, the original "ants!" logo and START! button, a picture of the chosen map). Two cards: **Play vs the computer** (each opponent's level is a row of one-click buttons; Teams as before) and **Play online** (host a match or join one by its code); the help is behind "How it works". It fits phones and wide screens with no sideways scrolling, and every address, link and remembered choice works as before.
-- **Game statistics on the front page:** a line under the welcome banner shows the matches being played and the players online now, and the games played today and in all: online matches of 30 seconds or more, and single-player games (a game in the browser tells the server once that it began: a count, nothing else).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56c4c5d...2b28516)
-
-## v0.4.0 - 2026-10-04 - Many zoom levels, a level for each bot, teams before the start
-
-**For players:**
-- **Many zoom levels:** the mouse wheel steps through four levels to a doubling (2, 1.68, 1.41, 1.19, 1, 0.84, 0.71, 0.59, 0.5 ...) down to the map's own limit, where the map's width or height just fills the view, so you never see past its edge; matches on the network offer the zoom-out too (it was local games only), and with Fog of War on every level hides exactly what zoom 1 hides. 2, 1 and 0.5 are exact pictures, the levels between are smoothed, scrolling moves whole screen pixels and a click picks the tile under the middle of the pointer. `--zoom` and the settings key `zoom` take any number from 0.05 to 2.
-- **A level for each bot and teams before the start.** On the front page each bot (Red, Blue, Black) has its own level (None, Easy, Medium, Hard), and with two or more bots a Teams choice (Free for all, or you and one bot against the others); the desktop start menu has the same Teams choice and `--teams 0+1` does it from the command line. The teams are made with the original's own team-up at the first tick. A bot that declines a team-up says why ("Bots team up only while three or more teams play.", "You already have a teammate.").
-- **Your name in single player on the desktop:** the start menu's Single player panel has a name field (the same remembered name as Join and Host), and the game is played under it.
-- **Your own orders can show at once in a network match** (off by default: add `?prediction=on` to the game's address, or start the desktop game with `--prediction on`): your ants answer a click as in a game on one computer instead of a round trip later; the corner's `delay` shows what a click feels. It switches itself off for a while on a device that is too slow for it, and is off in a hidden tab, in a pause and behind the "Get ready" dialog.
-- **Desktop:** `start_game.sh` / `start_game.bat` open one game with the start menu (Single player, Join, Host); the four-window test match is `--players 4`.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9e6ed37...6744e04), [the bots](docs/BOTS.md)
-
-## Older versions (v0.3.0 and before)
-
-Every release before v0.4.0, and the long notes of v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.6.0, and the long notes of v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

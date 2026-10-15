@@ -34,10 +34,6 @@
 #                                                   map, at the normal speed (6 to 12 minutes), so that the site's list of matches that are being played always has one to watch and the match is kept
 #                                                   as a replay afterwards. A value out of range makes the server exit at its start (see ANTS_REPLAY_DAYS). The first match begins a minute after the
 #                                                   server starts. (docs/SERVER.md "Matches of computer players")
-#   ANTS_ARENA_EVERY_MIN=60                         only with the profile "arena" (docker compose --profile arena up): minutes between two matches of the headless bot arena (service ants-arena,
-#                                                   below), which plays its match in a second and keeps it as a replay nobody can watch live. The game server's own matches (ANTS_BOT_MATCH_EVERY_MIN)
-#                                                   replace it, so the service is not started unless the profile is asked for. 5 to 1440 (a value out of range is replaced by the nearest one, the
-#                                                   container keeps running). Its matches show in the site's list as "Bot (Medium)" or "Bot (Hard)" (docs/BOTS.md "On the game server").
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -101,40 +97,6 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
-
-  # The bot arena (NOT started by default: the game server plays its own matches of computer players, ANTS_BOT_MATCH_EVERY_MIN, which can be watched live; start this one with `docker compose --profile arena up`):
-  # every ANTS_ARENA_EVERY_MIN minutes (60 by default) it plays ONE match of two to four computer players headless, on a random map and on random seats of the four, Medium or Hard each (about a second of one processor) and keeps it as a
-  # replay in /results/replays, the folder of the game server in the volume below; the server looks at its folder again every 30 seconds, so the match shows in the site's list
-  # (web/watch.html) as "Bot (Medium)" / "Bot (Hard)" without a restart. These files count like the others: the server's ANTS_REPLAY_DAYS and ANTS_REPLAY_MAX_MB purge the oldest first
-  # (a match is 4 to 8 KB), and the list shows the newest 200 files of all kinds together, so one match an hour (24 a day, 168 a week) leaves room for the matches of players of the last week while they make about 4 a day or fewer: a longer ANTS_ARENA_EVERY_MIN keeps more of theirs on the list. The log says
-  # the map, the seats and the seed of each match: bot_arena with the same arguments plays it again bit for bit (docker/arena_loop.sh, docs/BOTS.md).
-  # The program needs nothing but the volume and the maps: no network at all, no ports, no secret.
-  ants-arena:
-    profiles: ["arena"]
-    build:
-      context: .
-      dockerfile: Dockerfile.server
-      target: arena
-      args:
-        # the same value as the game server's, so that the two images share the compiled layers of the server stage (see ants-server)
-        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
-    container_name: ants-arena
-    restart: unless-stopped
-    stop_grace_period: 5s
-    depends_on:
-      - ants-server
-    environment:
-      ANTS_ARENA_EVERY_MIN: ${ANTS_ARENA_EVERY_MIN:-60}
-    volumes:
-      - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
-      - ants-server-results:/results
-    network_mode: none
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    pids_limit: 32
-    mem_limit: 256m
-    cpus: 0.5
 
 volumes:
   ants-server-results:

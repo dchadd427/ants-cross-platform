@@ -25,6 +25,7 @@ int main() {
     run_protocol15_tests();
     run_protocol16_tests();
     run_protocol17_tests();
+    run_protocol21_tests();
     run_restart_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

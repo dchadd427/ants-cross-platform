@@ -15,6 +15,7 @@ import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+HISTORY_PAGES = ("matches", "match", "live")          # the pages of the match history (web/matches.html, web/match.html, web/live.html), which the image stamps like the front page
 STACK = os.path.join(REPO, "docker-compose.stack.yml")
 STAGING = os.path.join(REPO, "docker-compose.staging.yml")
 
@@ -91,6 +92,8 @@ class ComposeFilesAsText(unittest.TestCase):
             self.assertIn("dockerfile: Dockerfile.server\n", text)
             self.assertRegex(text, r"(?m)^  ants-beta:\s*$")
             self.assertRegex(text, r"(?m)^  ants-server:\s*$")
+            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server"])      # (these two and no other: the server plays its own matches of computer players, there is no bot arena container)
+            self.assertNotIn("profiles:", "\n".join(code_lines(text)))                            # (and none that waits behind a profile for somebody to ask for it)
         command = lambda text: [l.strip() for l in code_lines(text) if l.strip().startswith("command:")]
         self.assertEqual(len(command(self.staging)), 1)
         self.assertEqual(command(self.staging), command(self.stack))                          # the same server options, the demo rooms and TREASURE.LVL as the default map
@@ -157,14 +160,17 @@ class SiteLabelInThePages(unittest.TestCase):
             os.makedirs(os.path.join(tmp, "src", "web"))
             os.makedirs(os.path.join(tmp, "src", "build_web", "src", "ants_app"))
             shutil.copyfile(os.path.join(REPO, "web", "lobby.html"), os.path.join(tmp, "src", "web", "lobby.html"))
-            shutil.copyfile(os.path.join(REPO, "web", "watch.html"), os.path.join(tmp, "src", "web", "watch.html"))
+            for name in HISTORY_PAGES:
+                shutil.copyfile(os.path.join(REPO, "web", name + ".html"), os.path.join(tmp, "src", "web", name + ".html"))
             shutil.copyfile(os.path.join(REPO, "web", "shell.html"), os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html"))
             script = re.sub(r"(?<![A-Za-z0-9_./])/src/", lambda m: tmp + "/src/", self.script).replace("sed -i ", "sed -i.bak ")      # (GNU sed in the image; -i.bak is BSD sed's too)
             env = dict(os.environ, ANTS_SITE_LABEL=label)
             done = subprocess.run(["sh", "-c", script], capture_output=True, text=True, env=env)
             pages = {}
             if done.returncode == 0:
-                pages = {"index": read(os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html")), "lobby": read(os.path.join(tmp, "src", "lobby.html")), "watch": read(os.path.join(tmp, "src", "watch.html"))}
+                pages = {"index": read(os.path.join(tmp, "src", "build_web", "src", "ants_app", "index.html")), "lobby": read(os.path.join(tmp, "src", "lobby.html"))}
+                for name in HISTORY_PAGES:
+                    pages[name] = read(os.path.join(tmp, "src", name + ".html"))
             return done, pages
 
     def test_a_label_goes_into_the_title_and_the_footer_of_both_pages(self):
@@ -172,10 +178,12 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("<title>Ants (1998) — beta.playants.org (staging)</title>", pages["index"])
         self.assertIn("<title>Ants (1998) (staging)</title>", pages["lobby"])
-        self.assertIn("<title>Watch matches — Ants (1998) (staging)</title>", pages["watch"])
+        self.assertIn("<title>Matches — Ants (1998) (staging)</title>", pages["matches"])
+        self.assertIn("<title>Match — Ants (1998) (staging)</title>", pages["match"])
+        self.assertIn("<title>Live now — Ants (1998) (staging)</title>", pages["live"])
         # the footer of the pages is the emerald bar: the label stands in front of the version (and the build), in the same box. The game page's and the replays' footer is that one box; the front page's
         # footer has the line of numbers and the recording notice above its row, whose first box is the version's (then the footer links)
-        for name in ("index", "watch"):
+        for name in ("index",) + HISTORY_PAGES:
             self.assertRegex(pages[name], r'<footer class="bar">\s*<div class="bar-in">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
         footer = pages["lobby"][pages["lobby"].index('<footer class="bar" id="footer-bar">'):pages["lobby"].index("</footer>")]
         self.assertRegex(footer, r'<div class="bar-row">\s*<span><strong id="site-label">staging</strong>&#8197;&bull;&#8197;<span class="ver" id="game-version-line">')
@@ -190,12 +198,13 @@ class SiteLabelInThePages(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(pages["lobby"], read(os.path.join(REPO, "web", "lobby.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
         self.assertEqual(pages["index"], read(os.path.join(REPO, "web", "shell.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
-        self.assertEqual(pages["watch"], read(os.path.join(REPO, "web", "watch.html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""))
+        for name in HISTORY_PAGES:
+            self.assertEqual(pages[name], read(os.path.join(REPO, "web", name + ".html")).replace("@@SITE_TITLE@@", "").replace("@@SITE_FOOTER@@", ""), name)
         self.assertNotIn("staging", pages["index"].lower())
         self.assertNotIn("site-label", pages["lobby"])
 
     def test_the_placeholders_are_in_the_pages_of_the_repository_once_each(self):
-        for name in ("shell.html", "lobby.html", "watch.html"):
+        for name in ("shell.html", "lobby.html", "matches.html", "match.html", "live.html"):
             text = read(os.path.join(REPO, "web", name))
             self.assertEqual(text.count("@@SITE_TITLE@@"), 1, name)
             self.assertEqual(text.count("@@SITE_FOOTER@@"), 1, name)

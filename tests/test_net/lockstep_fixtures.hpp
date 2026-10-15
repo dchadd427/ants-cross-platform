@@ -1007,5 +1007,6 @@ void run_protocol13_tests();
 void run_protocol15_tests();
 void run_protocol16_tests();
 void run_protocol17_tests();
+void run_protocol21_tests();
 void run_restart_tests();
 void run_reconnect_session_tests_2();

@@ -15,7 +15,8 @@ request is answered 304), and the redirect has the server's cross-origin headers
 the game page has the stage (id="game-stage"; the build writes it with or without quotes).
 /stats, /stats/local                  the numbers of the front page: a GET and a POST that go to the game server (only what nginx itself refuses is checked here: other methods, a query)
 /front/classic.css, the font          the Classic look's own files: served as files (an unknown address falls back to the game page, so the type is checked), the stylesheet with the pages' revalidation
-/watch.html, /replay_page.js          the list of the matches to watch and the code that it and the game page in replay mode (play.html?replay=<file>) share
+/matches.html, /match.html, /live.html, their stylesheet and the code that they and the game page in replay mode (play.html?replay=<file>) share; /matches and
+                                      /watch.html go to /matches.html
 /changelog.html, /asset_catalog/      the other pages of the site: each is its own page with the pages' headers and links /front/classic.css; /changelog,
                                         /catalog, /viewer and /asset_catalog go to them
 Exit status 0: every check passed; 1: a check failed; 3: nothing answers at the address.
@@ -131,15 +132,21 @@ def main():
         status, headers, names, body = get(path)
         check(status == 301 and headers.get("location") == want, "%s answers 301 to %s (%s %s)" % (path, want, status, headers.get("location")))
 
-    print("[web routes] the replays: the list page and the code it shares with the player are files of the site (/replays itself is the game server's, tests/scripts/test_nginx_replays.py)")
-    status, headers, names, body = get("/watch.html")
-    page_headers("/watch.html", status, headers, names)
-    check('id="list-body"' in body and "@@" not in body and not GAME.search(body) and not LOBBY.search(body), "/watch.html is the list page, filled in, not the game page or the front page")
-    tag = headers.get("etag")
-    check(bool(tag) and get("/watch.html", {"If-None-Match": tag})[0] == 304, "/watch.html: an unchanged page is answered 304 to If-None-Match")
-    status, headers, names, body = get("/replay_page.js")
-    check(status == 200 and "AntsReplay" in body and not headers.get("content-type", "").startswith("text/html"), "/replay_page.js is the script, not the game page that an unknown address falls back to (%s, %s)" % (status, headers.get("content-type")))
-    check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "/replay_page.js: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % headers.get("cache-control"))
+    print("[web routes] the match history: its three pages, their stylesheet and the code they share with the player are files of the site (/history, /live and /replays themselves are the game server's, tests/scripts/test_nginx_replays.py)")
+    for path, marker in (("/matches.html", 'id="list-panel"'), ("/match.html", 'id="sections"'), ("/live.html", 'id="live-h"')):
+        status, headers, names, body = get(path)
+        page_headers(path, status, headers, names)         # (the same Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy as the game page: match.html puts the game page in a frame)
+        check(marker in body and "@@" not in body and not GAME.search(body) and not LOBBY.search(body), "%s is its own page, filled in, not the game page or the front page" % path)
+        tag = headers.get("etag")
+        check(bool(tag) and get(path, {"If-None-Match": tag})[0] == 304, "%s: an unchanged page is answered 304 to If-None-Match" % path)
+    for path, want in (("/matches", "/matches.html"), ("/watch.html", "/matches.html")):
+        status, headers, names, body = get(path)
+        check(status == 301 and headers.get("location") == want, "%s answers 301 to %s (%s %s)" % (path, want, status, headers.get("location")))
+    for path, word, kind in (("/replay_page.js", "AntsReplay", "javascript"), ("/history_page.js", "AntsHistory", "javascript"), ("/matches.css", "--won", "css"), ("/replay_stats.css", "body.embed", "css")):
+        status, headers, names, body = get(path)
+        check(status == 200 and word in body and not headers.get("content-type", "").startswith("text/html"), "%s is the file, not the game page that an unknown address falls back to (%s, %s)" % (path, status, headers.get("content-type")))
+        check(headers.get("cache-control") == "no-cache, must-revalidate" and names.count("cache-control") == 1, "%s: Cache-Control is exactly one line, no-cache, must-revalidate (%s)" % (path, headers.get("cache-control")))
+        check(headers.get("cross-origin-opener-policy") == "same-origin" and headers.get("cross-origin-embedder-policy") == "require-corp", "%s carries the cross-origin isolation headers (%s, %s)" % (path, headers.get("cross-origin-opener-policy"), headers.get("cross-origin-embedder-policy")))
 
     print("[web routes] %d checks, %d failed" % (count[0], len(failures)))
     return 1 if failures else 0

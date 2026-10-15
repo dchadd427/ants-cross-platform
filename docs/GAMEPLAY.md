@@ -187,6 +187,8 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 
 Every match opens with the original's dialog: its picture, `Get ready to play!  You are the Green Ants.` (Green, Red, Blue or Black: your team's colour), the worker, "Waiting for others...", the 5 s of its task KWFO. It takes every click and key.
 
+A match of a server's room with two or more people opens with the **countdown card** instead (network protocol 21): the same dialog, bigger, with the seconds that are left of 30, the colours and who plays them, and the chat open; the 30 s start when every game has loaded, and the match's clock and ants wait for them as they wait for the 5 s ([`MULTIPLAYER.md`](MULTIPLAYER.md), "How a match runs"; [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md), "The countdown card").
+
 ### The "Get ready to play!" dialog does not cost match time (a deliberate deviation)
 
 - How the original handles the match clock and the ants while the dialog is up is described in [GAME_REVERSE_ENGINEERING.md](GAME_REVERSE_ENGINEERING.md#21-match-start-get-ready-modal-mutual-friendly-bouncing--snapped-redirection-ground-truth-antsexe-0x1017127-0x1021cb0-0x101b938-rsrc-strings-100105), section 6.2, item 21.

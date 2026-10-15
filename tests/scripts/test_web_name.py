@@ -60,18 +60,20 @@ class TheMarkup(unittest.TestCase):
         self.assertEqual(len(re.findall(r"\bstartGame\(\)", page)), 1)                      # only the definition: function startGame()
 
     def test_both_name_screens_say_that_online_matches_are_recorded(self):
-        # The game page's card has the older words (live watching changed its second sentence); the front page, as the lobby picture draws it, says "The recordings are public and ..." in two places:
+        # The game page's card says that anybody can watch the recordings, live or later; the front page, as the lobby picture draws it, says what is kept and what is public in two places:
         # in the footer, for a visitor who is not asked for a name, and in the name card (under the hint; only the step of a game on this computer hides it, by script).
-        first = "Online matches are recorded and kept for 30 days."
-        game = first + " Anybody can watch them, live or later, and they show the players&rsquo; names."
-        front = first + " The recordings are public and show the players&rsquo; names."
+        first = "Online matches are recorded."
+        owner = "Recordings are kept for 30 days. Results and names are kept for good and are public."       # (the owner's own sentence: both pages say it as it is; extra words go in a sentence before it)
+        game = first + " Anybody can watch them, live or later. " + owner
+        front = first + " Recordings are kept for 30 days. Results and names are kept for good and are public."
         self.assertEqual(read(LOBBY).count(front), 2)
         self.assertEqual(read(SHELL).count(game), 1)
         self.assertIn('<p class="notice" id="footer-notice">' + front + "</p>", read(LOBBY))
         self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + front + "</div>", read(LOBBY))
         self.assertIn('<div class="name-step-hint name-step-notice">' + game + "</div>", read(SHELL))
-        self.assertNotIn("Anybody can watch them", read(LOBBY))                                     # (the older second sentence is the game page's only)
-        self.assertNotIn("The recordings are public", read(SHELL))
+        self.assertNotIn("Anybody can watch them", read(LOBBY))                                     # (the extra sentence is the game page's only)
+        self.assertIn(owner, read(SHELL))
+        self.assertIn(owner, read(LOBBY))
         docs = read(os.path.join(REPO, "docs", "SERVER.md"))                                       # (the one document that quotes them: it also says when the line is true)
         self.assertIn(front.replace("&rsquo;", "'"), docs)
         self.assertIn(game.replace("&rsquo;", "'"), docs)

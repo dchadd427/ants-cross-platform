@@ -39,6 +39,7 @@ add_library(ants_app STATIC
     hud.cpp
     hud_input.cpp
     hud_radar.cpp
+    hud_match_start.cpp
     minimap_tables.cpp
     map_preview.cpp
     wide_page.cpp
@@ -68,6 +69,7 @@ add_library(ants_app STATIC
     map_fetch.cpp
     application_touch.cpp
     application_view.cpp
+    application_net.cpp
 )
 
 if(NOT EMSCRIPTEN)

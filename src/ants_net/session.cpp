@@ -617,7 +617,7 @@ void HostSession::pump_rejoiners(uint32_t now_ms) {
                         fate = Fate::Failed;
                         break;
                     }
-                    conn->send(encode_begin());
+                    conn->send(encode_begin(0));                  // (protocol 21: a machine that is given a match that runs has no countdown: its Begin tells 0)
                     r.stage = Rejoiner::Stage::Streaming;
                     r.next = 0;
                     r.acked = 0;

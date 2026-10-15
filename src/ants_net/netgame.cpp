@@ -1233,7 +1233,7 @@ void NetGame::begin_match() {
     phase_ = Phase::Playing;
     loaded_reported_ = false;
     status_.clear();
-    events_.push_back(Event{Event::Type::Begun, 255, rejoin});
+    events_.push_back(Event{Event::Type::Begun, 255, rejoin, client_lobby_ ? client_lobby_->countdown_seconds() : uint8_t{0}});       // (protocol 21: what the Begin told a guest, 0 for a machine that is given a match that runs; a host that holds a seat, a game on the local network, has the 5 s dialog)
 }
 
 LockstepRunner* NetGame::runner() const {

@@ -231,6 +231,14 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         for needle in ("docker build -t ants-beta .", "docker build -f Dockerfile.server -t ants-server .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
                        "docker compose -f docker-compose.staging.yml config --quiet", "--build-arg ANTS_SITE_LABEL=staging", "(staging)</title>", "! grep -qi staging"):
             self.assertIn(needle, block)
+        self.assertNotIn("--target", block)          # (both images are built whole: the server is the last stage of Dockerfile.server, see the next test)
+
+    def test_the_server_is_the_last_stage_of_its_dockerfile_because_the_ci_and_the_stacks_build_it_without_a_target(self):
+        stages = re.findall(r"(?m)^FROM\s+\S+\s+AS\s+(\S+)\s*$", read(os.path.join(REPO, "Dockerfile.server")))
+        self.assertEqual(stages[-1], "runner")
+        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+            code = "\n".join(l for l in read(os.path.join(REPO, name)).splitlines() if not l.lstrip().startswith("#"))
+            self.assertNotIn("target:", code, name)
 
 
 def step_of(job, needle):

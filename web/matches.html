@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Matches — Ants (1998)@@SITE_TITLE@@</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
+    <style>
+        /* the colours of the front page, token for token (tests/scripts/test_web_pages_classic.py); the rest of the look is matches.css */
+        :root { --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #31765f; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f; }
+        :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
+    </style>
+    <link rel="stylesheet" href="matches.css">
+</head>
+<body>
+<div class="screen">
+<main class="wrap">
+    <header class="mast" id="mast">
+        <h1 class="sr">Ants (1998): matches</h1>
+        <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
+        <p><span class="tag">Every match played here.</span><span class="sub">Open a match for its stats and its replay. The stats are kept for good, the recordings for 30 days.</span></p>
+        <span class="grow"></span>
+        <div class="acts"><a class="btn sm live" id="live-btn" href="/live.html" hidden>Live now</a><a class="btn sm" href="/">Play a match</a></div>
+    </header>
+    <section class="panel tools" id="tools" aria-label="Find a match">
+        <div class="r1">
+            <div class="search"><input id="q" type="search" placeholder="Find a map or a player" autocomplete="off" maxlength="40" aria-label="Find a map or a player"></div>
+            <div class="seg" id="who" role="group" aria-label="Who played"></div>
+        </div>
+        <div class="r2" id="r2"></div>
+        <div class="fchips" id="fchips" hidden></div>
+    </section>
+    <section class="panel" id="list-panel" aria-labelledby="list-h">
+        <div class="head"><h2 id="list-h">Matches</h2><span class="count" id="count" aria-live="polite"></span></div>
+        <div id="body" aria-live="polite"></div>
+        <nav class="pager" id="pager" aria-label="Pages of matches"></nav>
+    </section>
+    <noscript><section class="panel"><div class="note"><p><b>This page needs JavaScript.</b> It lists the matches from the game server.</p></div></section></noscript>
+</main>
+
+<footer class="bar">
+    <div class="bar-in">
+        <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
+        <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
+        <nav aria-label="Footer links">
+            <a href="/matches.html" id="matches-link" aria-current="page">Matches</a>
+            <a href="/live.html">Live now</a>
+            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
+            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
+        </nav>
+    </div>
+</footer>
+</div>
+
+<script src="replay_page.js"></script>
+<script src="front/map_picker.js"></script>
+<script src="history_page.js"></script>
+<script>
+(function () {
+    'use strict';
+    var R = window.AntsReplay, H = window.AntsHistory;
+    var $ = function (id) { return document.getElementById(id); };
+    var SEARCH_WAIT = 450;                    // ms of quiet after the last key before the search is asked for (the server allows two a second)
+    var ASK_WAIT = 350;                       // ms of quiet after the last choice (a select, a button, a page) before the list is asked for: six presses of an arrow key on a select are one request
+    var state = H.stateOf(window.location.search);
+    var pics = H.pictures({ document: document, replay: R, picker: window.AntsMapPicker, fetch: window.fetch ? window.fetch.bind(window) : null });
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    // ---- the tools: the search, who played, the filters and the sort; the chips of what is not the default ----
+    function copy(st, change) { var out = {}; Object.keys(st).forEach(function (k) { out[k] = st[k]; }); Object.keys(change).forEach(function (k) { out[k] = change[k]; }); out.page = change.page === undefined ? 1 : change.page; return out; }
+    function buildTools() {
+        var who = $('who');
+        who.textContent = '';
+        H.WHO.forEach(function (w) {
+            var b = el('button'); b.type = 'button'; b.id = 'who-' + w[0]; b.setAttribute('aria-pressed', String(state.who === w[0]));
+            b.appendChild(el('span', 'long', w[1])); b.appendChild(el('span', 'short', w[2]));
+            b.addEventListener('click', function () { go(copy(state, { who: w[0] }), true); });
+            who.appendChild(b);
+        });
+        var r2 = $('r2');
+        r2.textContent = '';
+        H.FILTERS.concat([{ key: 'sort', label: 'Sort by', options: H.SORTS }]).forEach(function (f) {
+            var d = el('div', 'sel' + (f.key === 'sort' ? ' sort' : '') + (f.key !== 'sort' && state[f.key] !== 'all' ? ' on' : ''));
+            var l = el('label', 'lab', f.label); l.setAttribute('for', 's-' + f.key); d.appendChild(l);
+            var sel = el('select'); sel.id = 's-' + f.key;
+            f.options.forEach(function (o) { var op = el('option', '', o[1]); op.value = o[0]; if (state[f.key] === o[0]) op.selected = true; sel.appendChild(op); });
+            sel.addEventListener('change', function () { var c = {}; c[f.key] = sel.value; go(copy(state, c), true); });
+            d.appendChild(sel); r2.appendChild(d);
+        });
+        var active = H.activeOf(state);
+        var fb = el('button', 'btn sm filt-btn', 'Filters' + (active.length ? ' (' + active.length + ')' : '') + ' ▾'); fb.type = 'button';
+        fb.addEventListener('click', function () { $('tools').classList.add('open'); });
+        r2.appendChild(fb);
+        var chips = $('fchips');
+        chips.textContent = '';
+        active.forEach(function (a) {
+            var c = el('button', 'fchip'); c.type = 'button'; c.title = 'Take this filter off';
+            c.appendChild(el('b', '', a.label + ':')); c.appendChild(document.createTextNode(' ' + a.value)); c.appendChild(el('span', 'x', '×'));
+            c.addEventListener('click', function () { var ch = {}; ch[a.key] = H.defaults()[a.key]; go(copy(state, ch), true); });
+            chips.appendChild(c);
+        });
+        if (active.length) { var clear = el('button', 'clear', 'Clear all'); clear.type = 'button'; clear.addEventListener('click', function () { go(H.defaults(), true); }); chips.appendChild(clear); }
+        chips.hidden = !active.length;
+    }
+    var searchTimer = 0;
+    function onSearch(now) {
+        clearTimeout(searchTimer);
+        var run = function () { var q = H.cleanQuery($('q').value); if (q !== state.q) go(copy(state, { q: q }), false, false, 0); };
+        if (now) run(); else searchTimer = setTimeout(run, SEARCH_WAIT);
+    }
+
+    // ---- one match of the list ----
+    function recNode(rec, cls) { var s = H.recState(rec); var n = el('span', 'rec' + (s.kind === 'watch' ? '' : ' ' + s.kind) + (cls ? ' ' + cls : ''), s.label); if (s.kind === 'old') n.title = 'Recorded by ' + (rec.game || 'an earlier version') + ': this version of the game cannot play it'; return n; }
+    function card(rec) {
+        var s = H.recState(rec), href = 'match.html?id=' + encodeURIComponent(rec.id);
+        var li = el('li', 'm' + (s.kind === 'watch' ? '' : ' dim'));
+        var tv = pics.node(rec.map, 'list'); li.appendChild(tv);
+        var info = el('div', 'info'), h = el('h3'), a = el('a', '', R.mapTitle(rec.map)); a.href = href; h.appendChild(a); info.appendChild(h);
+        var tags = el('span', 'tags'); tags.appendChild(el('span', 'pill fmt', H.formatText(rec.format)));
+        if (rec.mode !== 'highest-score') tags.appendChild(el('span', 'pill mode', H.modeText(rec.mode)));
+        if (rec.draw === true) tags.appendChild(el('span', 'pill draw', 'Draw')); else if (rec.result === 'cut') tags.appendChild(el('span', 'pill cut', 'Cut short'));
+        var key = H.sortKeyOf(rec, state.sort);
+        if (key) tags.appendChild(el('span', 'pill fmt sk', key.label + ' ' + H.numberText(key.value)));
+        info.appendChild(tags);
+        var when = el('span', 'when', R.whenText(rec.ended, new Date())), l = el('span', key ? 'l force' : 'l', ' · ' + R.lengthText(rec.seconds)); when.appendChild(l); info.appendChild(when);
+        info.appendChild(recNode(rec, 'rec-s'));
+        li.appendChild(info);
+        var sides = el('ul', 'sides'); sides.setAttribute('aria-label', 'Who played and what they scored');
+        H.sidesOf(rec).forEach(function (sd) {
+            var x = el('li', 'side' + (sd.winner ? ' w' : '')); x.title = H.sideName(sd);
+            var sq = el('span', 'sq'); sd.seats.forEach(function (m) { var i = el('i'); i.setAttribute('data-c', m.colour); sq.appendChild(i); }); x.appendChild(sq);
+            x.appendChild(el('span', 'nm', H.sideName(sd)));
+            if (sd.left) x.appendChild(el('span', 'left', 'Left')); else x.appendChild(el('span', 'sc', H.scoreText(rec, sd)));
+            if (sd.winner && rec.draw !== true) x.appendChild(el('span', 'won', 'Won'));
+            sides.appendChild(x);
+        });
+        li.appendChild(sides);
+        var col = el('div', 'side-col'), len = el('div', 'len');
+        len.appendChild(el('span', 'lab', key ? key.label : 'Length')); len.appendChild(el('b', '', key ? H.numberText(key.value) : R.lengthText(rec.seconds))); col.appendChild(len);
+        var act = el('div', 'act'); act.appendChild(recNode(rec)); var go = el('a', 'btn sm go', s.kind === 'watch' ? 'Stats & replay' : 'Stats'); go.href = href; act.appendChild(go); col.appendChild(act);
+        li.appendChild(col);
+        return li;
+    }
+    function pagerNode(count) {
+        var nav = $('pager'); nav.textContent = '';
+        var p = H.pagerOf(count, state.page, H.PAGE);
+        if (p.pages < 2) return;
+        function link(label, page, cls) { var x = el('a', 'pg ' + cls, label); x.href = H.urlOf(state, page); x.addEventListener('click', function (ev) { if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; ev.preventDefault(); go(copy(state, { page: page }), true, true); }); return x; }
+        nav.appendChild(p.page > 1 ? link('‹ Newer', p.page - 1, 'wide') : el('span', 'pg wide off', '‹ Newer'));
+        p.items.forEach(function (n) {
+            if (n === 'gap') { nav.appendChild(el('span', 'gap', '…')); return; }
+            if (n === p.page) { var cur = el('span', 'pg cur num', String(n)); cur.setAttribute('aria-current', 'page'); nav.appendChild(cur); } else nav.appendChild(link(String(n), n, 'num'));
+        });
+        nav.appendChild(el('span', 'of', 'of ' + p.pages));
+        nav.appendChild(p.page < p.pages ? link('Older ›', p.page + 1, 'wide') : el('span', 'pg wide off', 'Older ›'));
+    }
+
+    // ---- what the page shows in the list's place ----
+    function notice(bold, rest, buttons) {
+        var note = el('div', 'note'), p = el('p'); p.appendChild(el('b', '', bold)); if (rest) p.appendChild(document.createTextNode(' ' + rest)); note.appendChild(p);
+        (buttons || []).forEach(function (x) { var b = el(x.href ? 'a' : 'button', 'btn sm', x.label); if (x.href) b.href = x.href; else { b.type = 'button'; b.addEventListener('click', x.click); } note.appendChild(b); });
+        return note;
+    }
+    function show(node, count, pager) { var body = $('body'); body.textContent = ''; pics.forget('list'); body.appendChild(node); $('count').textContent = count || ''; if (!pager) $('pager').textContent = ''; }
+
+    // ---- looking at the server ----
+    var round = 0, controller = null;
+    function ask(st, scroll) {
+        var mine = ++round, plan = H.planOf(st);
+        if (controller) { try { controller.abort(); } catch (e) { /* the old look is over anyway */ } }
+        var ctl = controller = typeof AbortController === 'function' ? new AbortController() : null;      // (this look's own: a late timer never cuts a newer look)
+        var cut = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+        $('count').textContent = 'Loading…';
+        var request;
+        try { request = fetch('/history' + (plan.query ? '?' + plan.query : ''), { cache: 'no-store', credentials: 'omit', signal: ctl ? ctl.signal : undefined }); } catch (e) { clearTimeout(cut); fail(0, null); return; }
+        request.then(function (response) {
+            return response.json().then(function (data) { return { status: response.status, ok: response.ok, data: data }; }, function () { return { status: response.status, ok: false, data: null }; });
+        }).then(function (r) {
+            clearTimeout(cut);
+            if (mine !== round) return;
+            if (!r.ok || !r.data || typeof r.data !== 'object' || !Array.isArray(r.data.history)) { fail(r.ok ? 0 : r.status, r.data); return; }
+            render(r.data, plan, scroll);
+        }).catch(function () { clearTimeout(cut); if (mine === round) fail(0, null); });
+    }
+    function fail(status, body) {
+        var p = H.problemOf(status, body);
+        show(notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { ask(state, false); } }] : []), '');
+    }
+    function render(data, plan, scroll) {
+        var list = data.history.filter(function (r) { return r && typeof r === 'object' && typeof r.id === 'string' && H.ID_RE.test(r.id) && typeof r.map === 'string'; }).slice(plan.skip, plan.skip + plan.take);
+        var count = typeof data.count === 'number' ? data.count : list.length, total = typeof data.total === 'number' ? data.total : count;
+        if (!list.length) {
+            var filtered = H.activeOf(state).length > 0;
+            var home = { label: 'Play a match', href: '/' };
+            show(filtered ? notice('No match fits those filters.', '', [{ label: 'Clear the filters', click: function () { go(H.defaults(), true); } }])
+                : total ? notice('There are no matches on this page.', '', [{ label: 'Back to the first page', click: function () { go(copy(state, { page: 1 }), true); } }, home])      // (a page past the last one: an old link)
+                : notice('No match has been played here yet.', 'A match that ran 30 seconds or more shows up here.', [home]), total ? '0 of ' + H.numberText(total) + ' matches' : '');
+            return;
+        }
+        var ul = el('ul', 'list');
+        list.forEach(function (rec) { ul.appendChild(card(rec)); });
+        show(ul, H.rangeText(count, total, (state.page - 1) * H.PAGE, list.length, state.sort), true);
+        pagerNode(count);
+        if (scroll) $('list-panel').scrollIntoView({ block: 'start' });
+    }
+
+    // ---- moving about: the address is the state, so a link can be shared and Back works ----
+    // A choice shows at once (the address, the tools, the chips) and the list is asked for after a pause: the choices that come within `wait` ms of each other are one request (the site allows two lists
+    // with a query a second to each address, and a request that is dropped on the page still counts), and they are one step in the history, not one for each. The search has waited already: it passes 0.
+    var askTimer = 0, askScroll = false;
+    function askSoon(scroll, wait) {
+        clearTimeout(askTimer);
+        askTimer = 0;
+        askScroll = askScroll || !!scroll;
+        var run = function () { askTimer = 0; var s = askScroll; askScroll = false; ask(state, s); };
+        if (wait > 0) askTimer = setTimeout(run, wait); else run();
+    }
+    function go(next, push, scroll, wait) {
+        state = next;
+        var url = H.urlOf(state);
+        try { window.history[push && !askTimer ? 'pushState' : 'replaceState'](null, '', url); } catch (e) { /* the address stays as it is */ }
+        if ($('q') !== document.activeElement) $('q').value = state.q;
+        var focused = document.activeElement && document.activeElement.id;      // (the tools are made again: the one that was used keeps the keyboard's place)
+        buildTools();
+        if (focused && /^(s-|who-)/.test(focused) && $(focused)) $(focused).focus();
+        askSoon(scroll, wait === undefined ? ASK_WAIT : wait);
+    }
+    window.addEventListener('popstate', function () { clearTimeout(askTimer); askTimer = 0; askScroll = false; state = H.stateOf(window.location.search); $('q').value = state.q; buildTools(); ask(state, false); });
+    $('q').addEventListener('input', function () { onSearch(false); });
+    $('q').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); onSearch(true); } });
+    $('q').addEventListener('search', function () { onSearch(true); });
+
+    // a button for the matches that run now, only while there are some (one look when the page opens; the live page itself keeps looking)
+    function lookLive() {
+        var request;
+        try { request = fetch('/live', { cache: 'no-store', credentials: 'omit' }); } catch (e) { return; }
+        request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
+            var n = data ? R.liveEntriesOf(data).length : 0;
+            if (n > 0) { $('live-btn').textContent = n + ' live now'; $('live-btn').hidden = false; }
+        }).catch(function () { /* no button */ });
+    }
+
+    // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
+    if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
+    else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
+    else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
+    $('q').value = state.q;
+    buildTools();
+    if (typeof fetch === 'function') { ask(state, false); lookLive(); }
+})();
+</script>
+</body>
+</html>

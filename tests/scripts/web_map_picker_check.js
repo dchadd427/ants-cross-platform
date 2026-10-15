@@ -59,7 +59,7 @@ const RAW = {
     same('the Map Info line of a map of the players', P.infoText(list[5]), 'sand (10 min)');
 }
 
-// ---- the picture of a map that a match record names (watch.html: Live now, Earlier matches) -------------------------------------------------------------------------------------------------------------
+// ---- the picture of a map that a match record names (history_page.js: the cards of the match pages) -------------------------------------------------------------------------------------------------------------
 {
     same('a plain name', P.previewPath('POPcOrN.lvl'), '/maps/previews/POPcOrN.webp');
     same('the ending may be missing or in capitals', [P.previewPath('POPcOrN'), P.previewPath('POPcOrN.LVL')], ['/maps/previews/POPcOrN.webp', '/maps/previews/POPcOrN.webp']);

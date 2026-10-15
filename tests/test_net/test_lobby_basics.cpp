@@ -1,4 +1,4 @@
-// Tests of the room before a match: the lobby messages, joining and refusing, leaving, the start barrier, cancelled starts, kicking, the leader, the flood control and the keys (N4.1 - N4.14)
+// Tests of the room before a match: the lobby messages, joining and refusing, leaving, the start barrier (and the countdown that Begin carries, protocol 21), cancelled starts, kicking, the leader, the flood control and the keys (N4.1 - N4.14)
 #include "lobby_fixtures.hpp"
 
 void run_lobby_basics_tests() {
@@ -430,7 +430,7 @@ void run_lobby_basics_tests() {
         // is refused by a host of 16 by the number: its Hello has no client kind and its Room message no plan, and a lobby room's people could not be told from a game's. Protocol 16 (the first
         // lobby pages) is refused by a host of 17 by the number as well: its Hello is byte for byte a Hello of 17, but its Start, Room and Plan messages lack the game mode, and a match played by
         // a machine that cannot be told its game mode would be played by the original's rules whatever the room chose.
-        ASSERT_EQ(kProtocolVersion, 20);
+        ASSERT_EQ(kProtocolVersion, 21);
         for (const uint16_t version : {uint16_t{8}, uint16_t{9}, uint16_t{11}, uint16_t{12}, uint16_t{13}, uint16_t{14}, uint16_t{15}, uint16_t{16}}) {
             Room r8;
             auto e8 = r8.net.connect({10, 0});
@@ -505,6 +505,133 @@ void run_lobby_basics_tests() {
         Room::Guest& late = room.join("Late");
         room.run(200);
         ASSERT_TRUE(late.lobby->phase() == ClientLobby::Phase::Joining || late.lobby->phase() == ClientLobby::Phase::Connecting);   // the lobby no longer listens
+    } TEST_END();
+
+    TEST_CASE("N4.4c Protocol 21, Begin Carries The Countdown: Two Bytes [Begin][seconds] With 0 .. 60, A Value Above Is Cut On The Way Out And Refused On The Way In, The Host Tells What Its Owner Set For This Start, A Guest Reads It At Begun") {
+        const auto begin_of = [](uint8_t seconds) { return std::vector<uint8_t>{static_cast<uint8_t>(MsgType::Begin), seconds}; };
+        ASSERT_TRUE(encode_begin() == begin_of(0));                                // the plain 5 s dialog
+        ASSERT_TRUE(encode_begin(30) == begin_of(30));
+        ASSERT_EQ(encode_begin(200)[1], kMaxCountdownSeconds);                     // cut to the longest, never wrapped
+        ASSERT_EQ(encode_begin(255)[1], kMaxCountdownSeconds);
+        ASSERT_EQ(peek_type(encode_begin(30)), MsgType::Begin);
+        for (unsigned seconds = 0; seconds <= kMaxCountdownSeconds; ++seconds) {
+            const std::vector<uint8_t> m = encode_begin(static_cast<uint8_t>(seconds));
+            uint8_t got = 99;
+            ASSERT_TRUE(decode_begin(m.data(), m.size(), got) && got == seconds);
+        }
+        uint8_t untouched = 7;
+        for (unsigned seconds = kMaxCountdownSeconds + 1; seconds <= 255; ++seconds) {
+            const std::vector<uint8_t> m = begin_of(static_cast<uint8_t>(seconds));
+            ASSERT_FALSE(decode_begin(m.data(), m.size(), untouched));             // more than a minute is no countdown
+        }
+        const std::vector<uint8_t> old_begin{static_cast<uint8_t>(MsgType::Begin)};                         // protocol 20's Begin: the type byte alone
+        const std::vector<uint8_t> long_begin{static_cast<uint8_t>(MsgType::Begin), 30, 0};
+        const std::vector<uint8_t> wrong_type{static_cast<uint8_t>(MsgType::Start), 30};
+        ASSERT_FALSE(decode_begin(old_begin.data(), old_begin.size(), untouched));
+        ASSERT_FALSE(decode_begin(long_begin.data(), long_begin.size(), untouched));
+        ASSERT_FALSE(decode_begin(wrong_type.data(), wrong_type.size(), untouched));
+        ASSERT_FALSE(decode_begin(nullptr, 2, untouched));
+        ASSERT_FALSE(decode_begin(old_begin.data(), 0, untouched));
+        ASSERT_EQ(untouched, 7);                                                   // a refused message leaves the value as it was
+        {   // the lobby: what the owner set for this start is what the Begin tells everybody; a value above a minute is cut; the next start tells what it is given (0 by default)
+            Room room;
+            room.join("Bob");
+            room.join("Carl");
+            room.run(200);
+            ASSERT_EQ(room.host.countdown_seconds(), 0);                            // (a lobby that is not told says 0: the plain dialog)
+            room.host.set_countdown_seconds(99);
+            ASSERT_EQ(room.host.countdown_seconds(), kMaxCountdownSeconds);
+            room.host.set_countdown_seconds(kMatchCountdownSeconds);
+            ASSERT_TRUE(room.host.start(777, 0xABCDEF, room.now));
+            room.run(200);
+            room.guests[0].lobby->report_loaded(true);
+            room.host.host_loaded(true);
+            room.guests[1].lobby->report_loaded(true);
+            room.run(200);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            for (auto& g : room.guests) {
+                ASSERT_EQ(g.lobby->phase(), ClientLobby::Phase::Begun);
+                ASSERT_EQ(g.lobby->countdown_seconds(), kMatchCountdownSeconds);   // every guest read the 30 from its Begin
+            }
+        }
+        {   // a start that was cancelled and made again with no countdown: the guests read 0 (nothing of the earlier Begin stays)
+            Room room;
+            room.join("Bob");
+            room.join("Carl");
+            room.run(200);
+            room.host.set_countdown_seconds(30);
+            ASSERT_TRUE(room.host.start(1, 1, room.now));
+            room.run(200);
+            room.guests[0].lobby->report_loaded(true);
+            room.guests[1].lobby->report_loaded(false);                            // Carl cannot load the map: the start is cancelled for everybody
+            room.run(200);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
+            for (auto& g : room.guests) ASSERT_EQ(g.lobby->countdown_seconds(), 0);
+            room.host.set_countdown_seconds(0);
+            ASSERT_TRUE(room.host.start(2, 2, room.now));
+            room.run(200);
+            for (auto& g : room.guests) g.lobby->report_loaded(true);
+            room.host.host_loaded(true);
+            room.run(200);
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            for (auto& g : room.guests) ASSERT_TRUE(g.lobby->phase() == ClientLobby::Phase::Begun && g.lobby->countdown_seconds() == 0);
+        }
+        {   // a client that is sent the Begin of protocol 20 (one byte), or one above a minute, does not begin; the real one does, and reads its seconds
+            LoopbackNetwork net(9);
+            auto ends = net.connect({10, 0});
+            ClientLobby::Config cc;
+            cc.name = "Bob";
+            ClientLobby lobby(ends.second, cc);
+            uint32_t now = 0;
+            const auto step = [&](uint32_t ms) {
+                for (uint32_t t = 0; t < ms; t += 10) {
+                    now += 10;
+                    net.set_time(now);
+                    lobby.update(now);
+                }
+            };
+            step(30);
+            std::vector<uint8_t> m;
+            ASSERT_TRUE(ends.first->poll(m));                                      // the Hello
+            WelcomeMsg w;
+            w.player = 1;
+            w.players = 4;
+            ends.first->send(encode(w));
+            step(30);
+            RoomMsg room_msg;
+            room_msg.slots[0] = {SlotState::Client, "Ann", 0};
+            room_msg.slots[1] = {SlotState::Client, "Bob", 0};
+            room_msg.map_name = "TINY.LVL";
+            room_msg.you = 1;
+            ends.first->send(encode(room_msg));
+            step(30);
+            StartMsg start;
+            start.seed = 5;
+            start.map_name = "TINY.LVL";
+            start.roster = 0x03;
+            start.names[0] = "Ann";
+            start.names[1] = "Bob";
+            ends.first->send(encode(start));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loading);
+            lobby.report_loaded(true);
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loaded);
+            lobby.take_events();
+            ends.first->send(old_begin);
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loaded);                  // protocol 20's Begin is no Begin
+            ends.first->send(begin_of(kMaxCountdownSeconds + 1));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Loaded);
+            ASSERT_EQ(lobby.countdown_seconds(), 0);
+            ends.first->send(begin_of(30));
+            step(30);
+            ASSERT_EQ(lobby.phase(), ClientLobby::Phase::Begun);
+            ASSERT_EQ(lobby.countdown_seconds(), 30);
+            const auto events = lobby.take_events();
+            ASSERT_TRUE(events.size() == 1 && events[0].type == ClientLobby::Event::Type::Begun);
+        }
     } TEST_END();
 
     TEST_CASE("N4.5 A Failed Start Is Cancelled For Everybody (load failure, a leaver, host cancel, timeout) And Can Be Tried Again") {

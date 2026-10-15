@@ -1,4 +1,4 @@
-/* The small helpers that the two pages of the replays share (docs/REPLAYS.md "Watching"): the list (watch.html) and the game page in replay mode (play.html?replay=<file>, web/shell.html),
+/* The small helpers that the pages of the replays share (docs/REPLAYS.md "Watching a replay"): the pages of the match history (live.html, matches.html, match.html) and the game page in replay mode (play.html?replay=<file>, web/shell.html),
    which also watches a match that is still being played (play.html?live=<id>). Plain functions with no page in them, so that tests/scripts/web_replay_check.js runs them on a table.
    Everything that comes from a recording or from the server's list of live matches (a name that a player typed, a map, an id) is TEXT: the pages put it in with textContent and never as markup. */
 (function (root) {

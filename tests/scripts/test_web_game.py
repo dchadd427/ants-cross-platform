@@ -340,7 +340,7 @@ class TheLookIsTheFrontPages(PageCase):
 
 
 class TheHeader(PageCase):
-    CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/watch.html", "Watch matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog.html", "Changelog"), ("reset-btn", None, "Reset"),
+    CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/matches.html", "Matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog.html", "Changelog"), ("reset-btn", None, "Reset"),
                 ("fullscreen-btn", None, "Fullscreen"), (None, GITHUB, "GitHub"), (None, GITHUB + "/issues", "Feedback"))
 
     def header(self):
@@ -366,7 +366,7 @@ class TheHeader(PageCase):
             if href:
                 self.assertIn('href="%s"' % href, attrs, label)
                 if href != "/":
-                    self.assertIn('target="_blank" rel="noopener noreferrer"', attrs, label)                      # (only the Menu leaves in this tab, and asks first; Watch matches opens a new tab so that a match that is being played goes on)
+                    self.assertIn('target="_blank" rel="noopener noreferrer"', attrs, label)                      # (only the Menu leaves in this tab, and asks first; Matches opens a new tab so that a match that is being played goes on)
                 else:
                     self.assertNotIn("target=", attrs)
         # the six that "More" holds in a narrow window are the ones that the wide row marks
@@ -377,7 +377,7 @@ class TheHeader(PageCase):
         more = re.search(r'<details class="more">\s*<summary><span class="btn sm">More</span></summary>\s*<div class="more-list">(.*?)</div>\s*</details>', self.header(), re.S)
         self.assertIsNotNone(more)
         found = re.findall(r'<(a|button) ([^>]*)>(.*?)</\1>', more.group(1), re.S)
-        wanted = [c for c in self.CONTROLS if c[2] in ("Watch matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback")]
+        wanted = [c for c in self.CONTROLS if c[2] in ("Matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback")]
         self.assertEqual([text for _, _, text in found], [c[2] for c in wanted])
         row = self.header()[self.header().index('<div class="header-actions">'):self.header().index('<details class="more">')]
         for (tag, attrs, text), (_, href, label) in zip(found, wanted):
@@ -476,20 +476,30 @@ class TheFooter(PageCase):
     def test_the_links_are_the_front_pages_and_the_menu_comes_first(self):
         nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.page, re.S).group(1)
         found = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
-        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/watch.html", "Watch matches"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
+        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/matches.html", "Matches"), ("/live.html", "Live now"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback")])
         self.assertIn('id="menu-link"', found[0][1])
         self.assertNotIn("target=", found[0][1])
         self.assertIn('id="watch-link"', found[1][1])                                                           # (a new tab: a match that is being played here goes on; test_web_replay.py)
         self.assertIn('target="_blank"', found[1][1])
         lobby_nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.lobby, re.S).group(1)
-        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links, one "Watch matches": test_web_replay.py)
+        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links: "Matches" and "Live now", test_web_replay.py)
 
 
-class TheGamePageHasNoFrameMode(PageCase):
+class TheGamePageHasNoFrameModeButTheMatchPages(PageCase):
     def test_nothing_of_the_old_frames_of_the_front_page_is_left(self):
-        self.assertNotIn("body.embed", self.style)                                                                   # (the front page holds no game in a frame: the test room that did is gone)
-        self.assertNotIn("ANTS_EMBED", self.page)
-        self.assertNotIn("classList.add('embed')", self.page)
+        self.assertNotIn("classList.add('embed')", self.page)                                                        # (the front page holds no game in a frame: the test room that did is gone)
+        self.assertNotIn("embed", self.lobby)
+
+    def test_the_one_frame_is_the_replay_in_a_match_page_and_asks_for_nothing_else(self):
+        # play.html?replay=<file>&embed=1, in the frame of web/match.html (docs/REPLAYS.md "The match pages"): only a replay, never a match played, a room or a live match
+        self.assertIn("if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed';", self.page)
+        self.assertIn("var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);", self.page)
+        embed_css = read("web", "replay_stats.css")                                                                  # (its own stylesheet: the game page may not grow, tools/check_hygiene.py)
+        self.assertIn('<link rel="stylesheet" href="replay_stats.css">', self.page)
+        self.assertEqual(embed_css.count("body.embed header, body.embed footer, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }"), 1)
+        self.assertEqual(embed_css.count("body.embed::after { content: none; }"), 1)                               # (the page's own frame line: the match page has its own)
+        self.assertEqual(embed_css.count("body.embed { padding-top: 10px; padding-left: 12px; padding-right: 12px; --side: 12px; }"), 1)
+        self.assertNotIn("body.embed", self.style)                                                                   # (nothing of the frame mode in the page's own style)
 
 
 class TheFullscreenStageIsStillBlack(PageCase):

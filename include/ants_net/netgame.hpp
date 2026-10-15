@@ -136,6 +136,8 @@ public:
         uint8_t seat{255};
         bool rejoin{false};   // StartRequested and Begun: this machine starts from nothing and is given a match that runs (it joined with its key, or took the way back again after a server that had lost
                               // the last turns answered it BadRequest): the screen skips the start dialog and the start sound, the catch-up is its loading
+        uint8_t countdown_seconds{0};   // Begun (protocol 21): the seconds that the host holds the first turn (the Begin said so): the screen counts them down with the chat open; 0 (the plain 5 s dialog) for a
+                                        // LAN host, a room of one person and a machine that is given a match that runs
     };
 
     explicit NetGame(sim::SimulationEngine& sim);

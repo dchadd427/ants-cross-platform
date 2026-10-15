@@ -184,5 +184,6 @@ void test_button_states(const assets::AssetArchive& arc);
 void test_text_sizes(const assets::AssetArchive& arc);
 void test_results_screen(const assets::AssetArchive& arc);
 void test_label_wrap();
+void test_countdown_card(const assets::AssetArchive& arc);
 void test_alliance_dialog_layout(const assets::AssetArchive& arc);
 void test_alliance_answers(const assets::AssetArchive&);
