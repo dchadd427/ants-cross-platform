@@ -487,6 +487,19 @@ class ThePagesOfThePage(unittest.TestCase):
         self.assertLess(style.index("section:target { border-color: var(--gold); }"), style.index("section.first:target"))      # (the first release of a page is the frame of the panels, a release that a link names is gold)
         self.assertNotIn("nav.versions", style)
 
+    def test_the_current_tab_and_a_button_that_leads_nowhere_look_different_from_the_others(self):
+        style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
+        rule = lambda selector: re.search(re.escape(selector) + r" \{([^}]*)\}", style).group(1)
+        face = lambda text: re.search(r"background: ([^;]+);", text).group(1)
+        self.assertNotEqual(face(rule(".pager .tab")), face(rule(".pager .tab.on")))
+        classic = re.sub(r"/\*.*?\*/", "", read_text(os.path.join(REPO, "web", "front", "classic.css")), flags=re.S)
+        pressed = re.search(r"\.btn\.on \{([^}]*)\}", classic).group(1)
+        for prop in ("background", "color", "transform", "box-shadow"):                          # (the chosen page is a pressed button: what .btn.on of the stylesheet is)
+            self.assertEqual(re.search(prop + r": ([^;]+);", rule(".pager .tab.on")).group(1), re.search(r"(?<![-\w])" + prop + r": ([^;]+);", pressed).group(1), prop)
+        self.assertNotEqual(re.search(r"box-shadow: ([^;]+);", rule(".pager .tab")).group(1), re.search(r"box-shadow: ([^;]+);", rule(".pager .tab.on")).group(1))
+        self.assertLess(float(re.search(r"opacity: (\.?\d+(?:\.\d+)?);", rule(".pager .off")).group(1)), 1.0)           # (Newer on the first page and Older on the last are dim, and take no click)
+        self.assertIn("pointer-events: none", rule(".pager .off"))
+
     def test_a_tab_is_at_least_a_finger_wide_and_tall(self):
         style = re.search(r"<style>(.*?)</style>", self.real, re.S).group(1)
         self.assertRegex(style, r"\.pager \.tab \{[^}]*min-height: 52px")

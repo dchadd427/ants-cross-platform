@@ -136,11 +136,11 @@ SCRIPT = r"""(function () {
     main.insertBefore(top, versions || secs[0]);
     foot = make('nav', 'pager foot panel');
     foot.setAttribute('aria-label', 'Newer and older releases');
-    prev = make('a', 'btn sm prev', '« Newer');
+    prev = make('a', 'btn sm prev', '\u00ab Newer');
     prev.setAttribute('rel', 'prev');
     where = make('span', 'where');
     where.setAttribute('role', 'status');
-    next = make('a', 'btn sm next', 'Older »');
+    next = make('a', 'btn sm next', 'Older \u00bb');
     next.setAttribute('rel', 'next');
     foot.appendChild(prev);
     foot.appendChild(where);
@@ -192,7 +192,6 @@ SCRIPT = r"""(function () {
     if (keep) tabs[cur].focus({ preventScroll: true });
   }
   function resized() { apply(top ? firstOf(cur) : 0); }
-  if (!secs.length) return;
   var start = wanted();
   apply(Math.max(0, start));
   if (top) reveal(start);
