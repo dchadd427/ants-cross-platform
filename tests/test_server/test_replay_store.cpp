@@ -1116,7 +1116,7 @@ int main() {
         ASSERT_EQ(store.rescan(), size_t{0});
     } TEST_END();
 
-    TEST_CASE("RS9.4 Opening A Folder That Another Program Writes To (The Bot Arena Once An Hour): A \".tmp\" That Changed Less Than settle_s Ago Is That Program's Write Under Way And Is Left Alone, An Old One Is The Rest Of A Crash And Is Deleted") {
+    TEST_CASE("RS9.4 Opening A Folder That Another Program Writes To (The Bot Arena Tool's --save-replays): A \".tmp\" That Changed Less Than settle_s Ago Is That Program's Write Under Way And Is Left Alone, An Old One Is The Rest Of A Crash And Is Deleted") {
         Fixture f;
         fs::create_directories(f.dir);
         const std::vector<uint8_t> bytes = make_file();

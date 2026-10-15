@@ -241,6 +241,14 @@ class TheLocations(unittest.TestCase):
         self.assertIn("`ANTS_BOT_MATCH_EVERY_MIN`", read("docs", "SERVER.md"))
         self.assertIn('"--bot-match-every-min"', read("src", "ants_server", "main.cpp"))
 
+    def test_the_server_keeps_its_results_and_its_replays_folder_in_the_volume_that_the_stack_mounts(self):
+        # the image's ENTRYPOINT says --results-dir /results (the replays are /results/replays, the restart records /results/restart, the control secret /results/control-secret), and each stack mounts a
+        # volume of its own there: without the one or the other the matches and the records are lost with the container
+        entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", read("Dockerfile.server"))[-1]
+        self.assertIn('"--results-dir", "/results"', entry)
+        self.assertIn("      - ants-server-results:/results\n", read("docker-compose.stack.yml"))
+        self.assertIn("      - ants-staging-results:/results\n", read("docker-compose.staging.yml"))
+
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
         # decided on 2026-10-08: the front page and the game page's name card say that online matches are recorded, kept for N days and public with the players' names. The pages are
         # static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md says so). The two pages word the second sentence differently:
