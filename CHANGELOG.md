@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.42 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
+## v0.12.43 - 2026-10-14 - Auto camera locks on the biggest fight and follows it
 
 **For players:**
 - The Auto camera of a replay, and of a match that you watch live, now locks on the biggest action and follows it: kills, fights of several ants, bombs, fires and thefts draw it (food carried home counts a little), a lone scuffle does not, and the picture goes along with a fight that moves across the map.
