@@ -14,6 +14,7 @@ browser of its own. What it checks, for two players Ann (seat 0) and Bob (seat 1
   * the card    both games say that a countdown runs (ants_probe 60: the seconds left, 27 .. 30 when first seen) with its dialog open, the count goes down, and the server has sealed no turn;
   * the button  the page's Fullscreen button is shown over the card (its place is the game's: ants_probe 61 - 64), at least 120 x 44 px, inside the picture; a real mouse click on it makes the page
                 fullscreen (the browser's, or the page's own where the browser refuses) and hides it; the countdown goes on;
+  * the lock    a real click on the game while the card is up takes no pointer lock (a locked pointer cannot click the page's button), and once the match runs a click on the game takes it;
   * the chat    Ann types a line with the keyboard and sends it with Enter during the count: Bob's game has one line more in its chat log (ants_probe 65) and Ann's too, through the server;
   * the start   the count ends about 30 s after it was first seen (at least 27 s, at most 36 s), the card is gone (ants_probe 60 is -1, no dialog is open), both games run, and their state hashes
                 (the sync lines that every game posts every 100 ticks) agree; the server's status says the room holds the first turn 30 s (countdown_seconds) and ran the match.
@@ -43,6 +44,9 @@ PROBES_JS = """(function () {
   if (!window.isReadyToPlay || typeof Module === 'undefined' || !Module._ants_probe) return null;
   return [Module._ants_probe(60), Module._ants_probe(65), Module._ants_probe(5), Module._ants_probe(3)];
 })()"""
+
+# Does the canvas hold the pointer lock (the lock that a click on the game takes in a match: web/shell.html, "THE POINTER LOCK")
+LOCK_JS = "!!(document.pointerLockElement || document.webkitPointerLockElement)"
 
 # The page's Fullscreen button, the stage and whether the page is fullscreen (the browser's or its own)
 BUTTON_JS = """(function () {
@@ -162,6 +166,10 @@ def main():
         check(bw >= 119.5 and bh >= 43.5, "it is at least 120 x 44 px (%.0f x %.0f)" % (bw, bh))
         gx, gy, gw, gh = (btn.get("box") or [0, 0, 0, 0])
         check(bx >= gx - 1 and by >= gy - 1 and bx + bw <= gx + gw + 1 and by + bh <= gy + gh + 1, "it lies inside the picture (button %s, picture %s)" % ([round(v) for v in (bx, by, bw, bh)], [round(v) for v in (gx, gy, gw, gh)]))
+        # a click on the game while the card is up must not take the pointer lock: a locked pointer cannot click the DOM button (a review found that the click on the button did nothing at all)
+        ann.click(gx + gw * 0.15, gy + gh * 0.15)                               # (the picture's upper left corner: away from the button and the chat)
+        time.sleep(0.6)
+        check(ann.ev(LOCK_JS) is False, "a click on the game during the countdown does not take the pointer lock (it would leave the Fullscreen button dead)")
         ann.click(bx + bw / 2, by + bh / 2)
         went = wait_for(lambda: (ann.button() or {}).get("fullscreen") is True, 5, 0.2)
         check(bool(went), "a real click on it makes the page fullscreen (the browser's, or the page's own where the browser refuses)")
@@ -185,6 +193,10 @@ def main():
         check(bool(ended) and 24 <= took <= 36, "the count ends about 30 s after it was first seen (%.1f s)" % took)
         running = wait_for(lambda: (ann.probes() or [0, 0, 1, 0])[2] == 0 and (bob.probes() or [0, 0, 1, 0])[2] == 0, 10, 0.25)
         check(bool(running), "the card is gone and no dialog is open: both games run the match")
+        bx2, by2, bw2, bh2 = ((bob.button() or {}).get("box") or [0, 0, 0, 0])
+        bob.click(bx2 + bw2 * 0.5, by2 + bh2 * 0.5)                             # (Bob's page is a window still: in a running match a click on the game takes the pointer lock, as it always did)
+        took_lock = wait_for(lambda: bob.ev(LOCK_JS) is True, 5, 0.2)
+        check(bool(took_lock), "once the match runs, a click on the game takes the pointer lock again")
         ann.syncs()
         bob.syncs()
         wait_for(lambda: (ann.syncs() or True) and (bob.syncs() or True) and len([t for t in ann.ticks if t in bob.ticks]) >= 2, 40, 1.0)

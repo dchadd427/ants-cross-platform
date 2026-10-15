@@ -56,6 +56,16 @@ class ThePage(unittest.TestCase):
         call = call[:call.index("\n")]
         self.assertEqual(set(re.findall(r"Module\.(_\w+)", call)), {"_ants_probe"})
 
+    def test_a_click_on_the_game_takes_no_pointer_lock_while_the_card_is_up(self):
+        # a locked pointer cannot click the DOM button: with the card up, the page's pointer lock waits for the match itself (the real-browser proof is test_web_countdown.sh: "does not take the pointer lock")
+        start = self.page.index("canvas.addEventListener('mousedown', function (e) {")
+        handler = self.page[start:self.page.index("}, true);", start)]
+        in_match = re.search(r"var inMatch = false; try \{ inMatch = (.*?); \} catch", handler)
+        self.assertIsNotNone(in_match, "the handler's test for a running match")
+        self.assertIn("Module._ants_match_running() === 1", in_match.group(1))
+        self.assertRegex(in_match.group(1), r"&& !\(Module\._ants_probe && Module\._ants_probe\(60\) >= 0\)$", "a running match whose countdown card is up is not a match to lock the pointer for")
+        self.assertIn("if (!isRealFullscreen() && !inMatch) return;", handler, "the browser's fullscreen takes the lock as ever")
+
     def test_the_image_carries_the_script(self):
         self.assertIn("COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js", read(os.path.join(REPO, "Dockerfile")))
         self.assertIn("countdown_button.js changelog.html", read(os.path.join(REPO, ".github", "workflows", "ci.yml")))
