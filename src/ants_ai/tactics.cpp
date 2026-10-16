@@ -58,7 +58,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
-            p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOTS.md, "Contested food first: the denial order")
+            p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.takes_combat = true;

@@ -12,19 +12,19 @@ A team **competes** for a pile when its hill reaches it at 70 to 130 percent of 
 | `One` | exactly one enemy competes, and no enemy is there first | a pile between two neighbouring hills |
 | `Safe` | no enemy competes and none is there first | the Cheerios next to the own hill: the seat's **reserve** |
 | `Shared` | only the ally competes or is as near | the ally's side |
-| `Hopeless` | an enemy is there first and at most one competes, or (contested piles only) an enemy army holds it | the Cheerios of another hill |
+| `Hopeless` | an enemy is there first and at most one competes (in the denial order: an enemy is there first, whoever else competes), or a contested pile that an enemy **army** holds | the Cheerios of another hill |
 
-A pile that an enemy **army** holds (within four tiles of it an enemy Combat Ant counts 8 and an ant drawn attacking 4, against the own ants within six tiles at 150 percent) reads as `Hopeless`.
+An enemy army holds a pile when the enemy's Combat Ants (8 each) and ants drawn attacking (4 each) within four tiles of it weigh at least 8, and the own ants within six tiles (Combat Ants 8, others 4) weigh less than one and a half times as much.
 
 ## Medium and Hard: the denial order
 
 The rule (`HarvestTask::Params::denial_order`, on in the plans of Medium and Hard; the Economic and Defensive styles keep the plain order, their style is no contest of the middle): **food is finite, and what the seat leaves at a pile that other teams reach as soon is eaten by them; what it leaves at its reserve waits.** So the points per trip of a pile are weighed by who else wants it:
 
-- a `Multi` pile counts **300 percent** of its points per trip (`deny_multi_percent`), a `One` pile **<<ONE>> percent** (`deny_one_percent`); every other pile counts as it is;
+- a `Multi` pile counts **300 percent** of its points per trip (`deny_multi_percent`), a `One` pile **150 percent** (`deny_one_percent`); every other pile counts as it is;
 - a reserve pile (`Safe`) with an enemy ant within **6 tiles** of its anchor (`reserve_threat_tiles`) goes before everything else: it is being taken now;
 - the race (below) is off; the caps of ants per pile are the same as in the plain order.
 
-It is a weight and not a rank. A contested pile goes first while its trip is up to three times the reserve's (TREASURE: the centre, 25 points a unit and a trip of 260 to 321 ticks, before the Cheerios, 30 points and 162 to 265 ticks, at every seat), and the reserve goes first when the contested food lies across the field (a trip of four times the reserve's, or a contested pile that the other teams reach far sooner). When the contested food is gone, the reserve is next, so nothing needs a clock to keep it from being left at the end.
+It is a weight and not a rank. A pile that several enemies want goes first while its points per trip are more than a third of the reserve's: on TREASURE with four seats the centre (25 points a unit, a trip of 260 to 321 ticks) goes before the Cheerios (30 points, 162 to 265 ticks) at every seat. The reserve goes first when the contested food lies across the field, and a pile that another team reaches far sooner is that team's (it eats the pile before the ants arrive). When the contested food is gone the reserve is next, so no clock is needed to keep it from being left at the end. A pile that only one enemy wants counts less than one that several want: with two teams the food rarely runs out (four worker bots eat all of TREASURE in a match, one eats a third of it), so what the seat leaves there is less often lost.
 
 <<MEASURED>>
 
@@ -34,8 +34,15 @@ Easy keeps the race of the contest batch (a report after play, 2026-10-05: the b
 
 ## Tried and left out
 
-<<LEFTOUT>>
+Measured with one bot of the variant against three of v0.12.52 on TREASURE (24 seeds, every seating; 50 percent is a tie):
+
+- **The strict order** (every contested pile before the reserve, the reserve only when the contested food is gone or a clock says so): 43.8 to 46.5 percent of the share. The bot walked across the field to piles that every other team reached sooner (a pile that two enemies reach counted as contested even when a third was far nearer), lost two thirds of its Cheerios to the others while it was away (a reserve of 30 points a unit is worth a trip to everybody), and left up to 32 of its 75 units of reserve uneaten at the end. The `contest_aware` order of v0.3.0 was a strict order too, and every standard bot with it scored 11 percent less ([BOTS.md](BOTS.md#strategy), point 8).
+- **The reserve's clock** (the whole reserve first when the rest of the match only just eats it): no change in four-player games, about 3 points of share less in duels (with two teams every far pile that nobody else wants is a reserve, so the clock made the walk across the field urgent).
+- **Hatching for the economy** (an egg whenever the food in reach is enough for one more ant): 35.8 to 40.7 percent with the strict order, 39.2 with the weight (an egg costs 200 points and the food is finite).
+- **The nearest ants only** (at most three or five ants on a contested pile): 51.3 and 50.1 percent against 50.3 without a cap, within the noise.
 
 ## Limits
 
-<<LIMITS>>
+- The classes come from the start analysis (the walking costs of every hill at the start, as for the race): a wall that comes up later does not change who competes for a pile.
+- The threat to the reserve is any enemy ant within six tiles of it, also one that only passes by on its way to something else.
+- An enemy that is there first owns the pile only by the marks of 70 and 130 percent; a pile that an enemy reaches a little sooner is still contested.

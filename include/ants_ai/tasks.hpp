@@ -218,7 +218,7 @@ public:
         /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
         /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
         uint32_t contest_opening_min_ants{0};
-        /// The denial order (the standard bot at Medium and Hard; docs/BOTS.md, "Contested food first: the denial order"): FOOD IS FINITE, and a pile that other teams reach about as
+        /// The denial order (the standard bot at Medium and Hard; docs/BOT_FOOD.md, "Medium and Hard: the denial order"): FOOD IS FINITE, and a pile that other teams reach about as
         /// soon as this seat is eaten by whoever gets there, while a pile that no enemy reaches as soon waits for the seat. So the piles are ranked by points per trip as before, but a
         /// pile that two or more enemies compete for (Multi, the classes of tier_for) counts deny_multi_percent of that, and one that
         /// one enemy competes for (One) deny_one_percent: what the seat leaves there goes to the others. The piles that nobody competes for (Safe) are the seat's RESERVE and count as

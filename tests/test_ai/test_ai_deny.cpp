@@ -1,6 +1,7 @@
-// The denial order of the standard bot (AI28.x; docs/BOTS.md, "Contested food first: the denial order"): food is finite, and what lies where other teams reach it as soon is eaten
-// by whoever gets there, so a Medium or Hard bot eats contested food before its own reserve, unless the contested food is too far to be worth the walk or an enemy comes for the reserve. Hand-made worlds
-// only (ReserveWorld, contest_helpers.hpp), each drawn in its eight orientations and played from every seat: the rule is about who reaches a pile how soon, never about one map.
+// The denial order of the standard bot (AI28.x; docs/BOT_FOOD.md, "Medium and Hard: the denial order"): food is finite, and what lies where other teams reach it as soon
+// is eaten by whoever gets there, so a Medium or Hard bot eats contested food before its own reserve, unless the contested food is too far to be worth the walk or an enemy
+// comes for the reserve. Hand-made worlds only (ReserveWorld, contest_helpers.hpp), each drawn in its eight orientations and played from every seat: the rule is about who
+// reaches a pile how soon, never about one map.
 // (A hill is not symmetric itself: its entrance is on one side of the mound in every drawing, so the trips, and the ants that a pile has room for, differ a little between the
 // drawings; what must not differ is the decision.)
 //
