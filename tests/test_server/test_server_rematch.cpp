@@ -90,7 +90,7 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
 void run_rematch_tests() {
     using K = net::PlanKind;
 
-    TEST_CASE("S3.194 The Rematch, The Round Trip: The Rules End A Lobby Room's Match And The Server Opens A Lobby With The Same Code At Once (The Match's Map, Colours, Bots, Teams; A Seat Reserved For Each Person's Key; Nobody Leads Yet); The Code's Status Shows The Match For Its Keep Time, Its End Is Reported Once; A Results Screen Holds Its Seat, A Stranger Is Turned Away, The Host's Page Comes Back And Leads, START Waits For The One Who Is Not Back (The Host Is Told), The Host Removes Them And START Is Taken") {
+    TEST_CASE("S3.194 The Rematch, The Round Trip: The Rules End A Lobby Room's Match And The Server Opens A Lobby With The Same Code At Once (The Match's Map, Colours, Bots, Teams; A Seat Reserved For Each Person's Key; Nobody Leads Yet); The Code's Status Is The Lobby's And The Match Is Listed Beside It For Its Keep Time, Its End Is Reported Once; A Results Screen Holds Its Seat, A Stranger Is Turned Away, The Host's Page Comes Back And Leads, START Waits For The One Who Is Not Back (The Host Is Told), The Host Removes Them And START Is Taken") {
         World w(rematch_limits());
         const std::string code = "rmt00001";
         Played p;

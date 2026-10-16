@@ -676,6 +676,7 @@ struct RClient {
     uint16_t listen_port{0};                 // the port that the machine announces for the other guests (a game on the local network does; a server's room never uses it)
     std::optional<net::CreateBlock> create;  // the create block of its Hello (protocol 15): what makes a public room on a server that offers them
     uint8_t platform{0};
+    uint8_t kind{net::kClientGame};          // what its Hello says it is (protocol 16): a game, or a lobby page (which never gets a Start)
 
     void start(net::Connection* client_end, uint32_t seed) {
         end = client_end;
@@ -688,6 +689,7 @@ struct RClient {
         cc.listen_port = listen_port;
         cc.create = create;
         cc.platform = platform;
+        cc.client_kind = kind;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {

@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="replay_stats.css">
+    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="front/rematch.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colours are the front page's, token for token (tests/scripts/test_web_game.py
@@ -1271,6 +1271,7 @@
         </div>
     </div>
 
+    <section class="rematch" id="rematch" aria-label="The match is over" hidden></section>
     <div class="view-bar" id="view-bar">
         <span id="view-bar-label">Picture</span>
         <div class="seg" role="radiogroup" aria-labelledby="view-bar-label">
@@ -1416,7 +1417,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script>
+    <script src="replay_page.js"></script><script src="history_page.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1942,6 +1943,7 @@
             try { window.history.replaceState(null, '', window.location.pathname + changed + window.location.hash); } catch (e) { /* the address stays as it is */ }
         };
         // ANTS_PAGE_END
+        if (window.AntsRematch) AntsRematch.gamePage({ win: window, doc: document, Net: window.AntsLobbyNet, host: document.getElementById('rematch') });      // the rematch: when the match of a lobby room is over (window.antsMatchOver), the strip under the picture (web/front/rematch.js)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
         // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
@@ -2401,6 +2403,7 @@
             var bodyStyle = window.getComputedStyle(document.body);
             var barStyle = bar ? window.getComputedStyle(bar) : null;
             var barHeight = bar ? bar.offsetHeight + (parseFloat(barStyle.marginTop) || 0) + (parseFloat(barStyle.marginBottom) || 0) : 0;
+            var strip = document.getElementById('rematch'); if (strip && !strip.hidden && !ANTS_REPLAY_MODE) barHeight += strip.offsetHeight + (parseFloat(window.getComputedStyle(strip).marginTop) || 0);      // (the rematch's strip under the picture)
             var chrome = stageElement.getBoundingClientRect().top + (window.pageYOffset || 0) + barHeight + (parseFloat(bodyStyle.paddingBottom) || 0);
             if (isFinite(chrome) && chrome > 0) {
                 var old = parseFloat(document.documentElement.style.getPropertyValue('--chrome')) || 0;
@@ -2457,6 +2460,7 @@
             observer.observe(stageElement);
             observer.observe(document.querySelector('header'));
             observer.observe(document.getElementById('view-bar'));
+            observer.observe(document.getElementById('rematch'));
             observer.observe(document.getElementById('rbar'));
         }
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) {

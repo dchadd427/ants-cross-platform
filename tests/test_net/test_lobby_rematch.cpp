@@ -313,7 +313,7 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(!room.host.occupied(0) && room.host.hold_expiries() == 1u && !room.host.any_reserved());
     } TEST_END();
 
-    TEST_CASE("N4.45 Whose Seat Is Kept: A Game In A Browser And A Game That Did Not Say What It Runs On Keep Their Seats, A Game Of The Desktop Or A Phone's App (No \"Back To The Lobby\" There) Keeps None: Its Colour Is Open In The Lobby That Follows And It Joins By The Code Like Anybody Once Somebody Is Back; A Stranger Never Takes A Kept Colour (Asked For, Or The Last Open One: Full), A Key Of Another Room Is A Stranger's; Two Tabs With One Key: The Later Takes The Seat (The Other Is Superseded), The Person Stays Back And Leads; A Reservation Lasts Three Hours On The Room's Clock") {
+    TEST_CASE("N4.45 Whose Seat Is Kept: A Game In A Browser And A Game That Did Not Say What It Runs On Keep Their Seats, A Game Of The Desktop Or A Phone's App (No \"Back To The Lobby\" There) Keeps None: Its Colour Is Open In The Lobby That Follows And It Joins By The Code Like Anybody Once Somebody Is Back; A Stranger Never Takes A Kept Colour (Asked For, Or The Last Open One: Full), A Key Of Another Room Is A Stranger's; Two Tabs With One Key: The Later Takes The Seat (The Other Is Superseded), The Person Stays Back And Leads; A Reservation Lasts Three Hours On The Room's Clock; A Results Screen That Says Leave Gives The Seat Up") {
         {   // the match of Ann (a game in a browser), Bob (a game of the desktop) and Cat (a game that did not say)
             Room room(lobby_room_config(154));
             const auto keys = play_three_to_begun(room, plan_of({K::Open, K::Open, K::Open, K::Hard}), {static_cast<uint8_t>(kPlatformBrowser | kOsOther), kOsWindows, kPlatformUnknown});
@@ -350,6 +350,13 @@ void run_lobby_rematch_tests() {
             next.run(200);
             ASSERT_FALSE(next.host.starting());
             ASSERT_EQ(notices_of(*next.guests[ann].lobby), (std::vector<std::string>{"Cat is not back from the match yet."}));
+            // Ann goes: Bob's game leads, Cat's results screen holds her seat (a game's Hello): every person in the room is a game, and the owner still cannot start (a results screen plays nothing)
+            next.guests[ann].lobby->leave();
+            const size_t cat_results = join_keyed(next, "Cat", keys[2]);
+            next.run(200);
+            ASSERT_TRUE(next.guests[bob].lobby->is_leader() && next.guests[cat_results].lobby->my_seat() == 2 && next.host.reserved(2) && next.host.in_game(1) && next.host.in_game(2));
+            ASSERT_FALSE(next.host.start(5, 6, next.now));
+            ASSERT_EQ(next.host.phase(), HostLobby::Phase::Room);
         }
         {   // the games of a phone's apps and of the desktop: nobody to keep a seat for (the server opens no lobby then)
             Room room(lobby_room_config(156));
@@ -404,6 +411,20 @@ void run_lobby_rematch_tests() {
             run_coarse(room, 10, 10);
             ASSERT_TRUE(!room.host.occupied(1) && room.host.reserve_expiries() == 1u && room.guests[ann].lobby->is_leader());
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+        }
+        {   // a results screen that says Leave (its page went another way: the game's Leave Game, a closed tab, a reload) gives the seat up: the colour is open and START does not wait for it
+            Room room(lobby_room_config(159), false);
+            ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Easy, K::Nobody})));          // (Ann and the Easy bot of the plan can play without Bob)
+            const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+            const size_t bob_results = join_keyed(room, "Bob", key_with(2));
+            room.run(200);
+            ASSERT_TRUE(room.host.reserved(1) && room.host.present() == 2u);
+            room.guests[bob_results].lobby->leave();
+            room.run(200);
+            ASSERT_TRUE(!room.host.occupied(1) && !room.host.any_reserved() && room.host.returns() == 1u);
+            ASSERT_TRUE(room.guests[ann].lobby->request_start());
+            room.run(200);
+            ASSERT_TRUE(room.host.starting());
         }
     } TEST_END();
 }

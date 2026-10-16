@@ -274,6 +274,10 @@ check('a platform is one byte that is a whole number (1.5, a string, NaN, -1, 25
     const key = Uint8Array.from(seq(1));
     check('a key that is no key (15 bytes, 17 bytes, zeros, a string, a list, a number) is a new player\'s Hello; a key of 16 bytes is kept', [key.slice(0, 15), new Uint8Array(17), new Uint8Array(16), 'abcdefghijklmnop', Array.from(key), 5, {}, null].every((k) => hello({ key: k }) === zero)
         && hello({ key }) !== zero && hello({ key }).includes(N.hexOf(key)));
+    // the game page's results screen (the rematch, web/front/rematch.js) says a game's Hello: client kind 0 and never a block, whatever it is given (a block is a page's way to make a lobby)
+    const game = hello({ kind: 'game', key });
+    check('a game\'s Hello has no block, asked for or not, and ends with the client kind 0', game === N.hexOf(N.encodeHello({ name: 'Priya', room: 'k7m2xq', kind: 'game', key })) && game.endsWith('00') && game.length < hello({ key }).length
+        && hello({ kind: 'page', key }) === hello({ key }) && hello({ kind: 'other', key }) === hello({ key }));
 }
 
 // ---- the guard is made from the state and the name of each seat, nothing else ---------------------------------------------------------------------------------------------------------------------------

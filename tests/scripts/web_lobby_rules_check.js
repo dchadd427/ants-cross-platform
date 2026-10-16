@@ -55,7 +55,7 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLOURS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
     'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pickName',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startHeld', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
+    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
 ]);
 
 // The colours: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -772,31 +772,31 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
         notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
         side: side({ plan: 'You, Sam, Juniper and Pip play on Treasure.', planShort: 'You, Sam, Juniper and Pip · Treasure', note: NOTE_R2 })
     });
-    same('picture R2: Juniper is the one who is not back; a press of START says that it waits for her (the page sends nothing: the room would refuse it)', [R.notBack(model(R2), ctx({ back: BACK })), R.startHeld(model(R2), ctx({ back: BACK }))], [[2], 'START waits for Juniper.']);
+    same('picture R2: Juniper is the one who is not back (a press of START goes to the room, which says whom it waits for: the strip "notback")', R.notBack(model(R2), ctx({ back: BACK })), [2]);
     const two = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12 });
-    same('two who are not back: both are named, the note says "their colours"', [R.notBack(model(two), ctx({ back: BACK })), R.startHeld(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
-        [[2, 3], 'START waits for Juniper and Pip.', 'START waits for Juniper and Pip. You can wait, or press Remove on their colours to start without them.']);
+    same('two who are not back: both are named, the note says "their colours"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
+        [[2, 3], 'START waits for Juniper and Pip. You can wait, or press Remove on their colours to start without them.']);
     same('startNote of nobody, one, two and three names', [R.startNote([]), R.startNote(['A']), R.startNote(['A', 'B']), R.startNote(['A', 'B', 'C'])], ['',
         'START waits for A. You can wait, or press Remove on their colour to start without them.', 'START waits for A and B. You can wait, or press Remove on their colours to start without them.',
         'START waits for A, B and C. You can wait, or press Remove on their colours to start without them.']);
     const all = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 0 });
-    same('everybody is back: every other person is "Back in the room", nothing is waited for, START is sent as ever', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.note, R.startHeld(model(all), ctx({ back: BACK })), R.notBack(model(all), ctx({ back: BACK }))],
-        [['Host. You start the match.', 'Back in the room', 'Back in the room', 'Back in the room'], '', '', []]);
+    same('everybody is back: every other person is "Back in the room", nothing is waited for', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.note, R.notBack(model(all), ctx({ back: BACK }))],
+        [['Host. You start the match.', 'Back in the room', 'Back in the room', 'Back in the room'], '', []]);
     // Sam's screen (a player): the host's card is the host's, his own is his; Juniper is still on the results screen; a player is told nothing under START and START is the host's
     const sams = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 1, leader: 0, inGame: 4 });
     same('picture R2 on Sam\'s screen: the host, Sam himself, Juniper on the results screen, Pip back', view(sams, { back: BACK }).cards.map((c) => [c.stat, c.statCls]),
         [['Starts the match.', 'pstat'], ['Waiting for the host to start.', 'pstat'], ['Still on the results screen…', 'pstat away'], ['Back in the room', 'pstat back']]);
-    same('... a player has no note under START and no START to hold', [view(sams, { back: BACK }).side.note, R.startHeld(model(sams), ctx({ back: BACK }))], ['', '']);
+    same('... a player has no note under START (START is the host\'s)', view(sams, { back: BACK }).side.note, '');
     // Sam came back first and leads until Maple, the host of the match, is back (the room's rule: the earliest of the match who is back leads)
     const first = mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 1, inGame: 1 });
-    same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.note, R.startHeld(model(first), ctx({ back: BACK }))],
-        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their colour to start without them.', 'START waits for Maple.']);
+    same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.note],
+        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their colour to start without them.']);
     // what is not the match's: a page that did not come back from it, a person who was not in it, START pressed, no link
-    same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note, START is sent (the room says who it waits for)', [view(R2).cards.map(show), view(R2).side.note, R.startHeld(model(R2), ctx()), R.notBack(model(R2), ctx())],
-        [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), guestOf(2, 'Juniper'), guestOf(3, 'Pip')], '', '', []]);
+    same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note (the room says whom START waits for)', [view(R2).cards.map(show), view(R2).side.note, R.notBack(model(R2), ctx())],
+        [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), guestOf(2, 'Juniper'), guestOf(3, 'Pip')], '', []]);
     const leo = mk([P('Maple'), P('Sam'), P('Juniper'), P('Leo')], { you: 0, leader: 0, inGame: 12 });
     same('a person who was not in the match (Leo, who joined after it) is "In the room" even when the room counts their seat as a game (a game of the desktop): only the match\'s people are waited for',
-        [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), R.startHeld(model(leo), ctx({ back: BACK }))], [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'In the room'], [2], 'START waits for Juniper.']);
+        [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), view(leo, { back: BACK }).side.note], [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'In the room'], [2], NOTE_R2]);
     const pressed = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4, starting: true });
     same('START is pressed (everybody was back): the colours say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.note, R.notBack(model(pressed), ctx({ back: BACK }))],
         [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], '', []]);
@@ -805,8 +805,8 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
     // the server keeps a seat only for a game in a browser (protocol 15's platform byte; a game that did not say is given one too): a game of the desktop of the match (Pip, Windows) joined the room by the
     // code like anybody, so the room counts it as a game and it is back; Juniper's results screen runs in a browser (Linux) and is not back
     const desk = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12, platforms: [0x16, 0x13, 0x13, 0x01] });
-    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), R.startHeld(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.note],
-        [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], 'START waits for Juniper.', NOTE_R2]);
+    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.note],
+        [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], NOTE_R2]);
     same('modelOf: on the results screen is a person whom the room counts as a game before START, in a browser or not told; not a game of the desktop (Windows, macOS, Linux, Android, iOS, other), not while START waits',
         [model(desk).slots.map((x) => !!x.results), [1, 2, 3, 4, 5, 6].map((os) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, os, 0, 0] })).slots[1].results),
             [0, 0x11, 0x14, 0x16].map((p) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, p, 0, 0] })).slots[1].results), !!model(mk([P('A'), P('B'), O, O], { inGame: 2, starting: true })).slots[1].results],

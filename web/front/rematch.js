@@ -16,6 +16,8 @@
     var LOBBY_KEY = 'ants.lobby';                   // sessionStorage: the front page's room { c, k, n, o } (web/lobby.html): the hand-over puts the reserved seat there
     var REJOIN_PREFIX = 'ants.rejoin.';             // localStorage: the game's key of a seat (src/ants_app/rejoin_store.cpp)
     var MAX_AGE_MS = 3 * 60 * 60 * 1000;            // a key lives three hours (the game's kRejoinMaxAgeMs), and so does the server's reservation
+    var ASK_AFTER_MS = 2000;                        // the results screen asks for its seat this long after the game said that the match is over: the server ends the match in a pass of its own, which
+                                                    // a game can be a moment ahead of, and the Hello must find the lobby that follows the match, not the match (where a game's key takes its seat back)
     var COLOURS = ['Green', 'Red', 'Blue', 'Black'];
     var DOTS = ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50'];   // the colour of each seat's dot in the strips
     var ID_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;      // a match's id (web/history_page.js): its replay's file name without .antsrep
@@ -26,6 +28,7 @@
     function validMap(name) { return printable(name, 64) && name.length >= 5 && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.(lvl|LVL)$/.test(name); }
     function groupDigits(n) { var s = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); return n < 0 ? '-' + s : s; }
     function listOf(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+    function storageOf(win, name) { try { return win[name] || null; } catch (e) { return null; } }      // (a browser that blocks storage throws on the property itself)
     function storageGet(storage, key) { try { return storage ? storage.getItem(key) : null; } catch (e) { return null; } }
     function storageSet(storage, key, value) { try { storage.setItem(key, value); return true; } catch (e) { return false; } }
 
@@ -135,37 +138,42 @@
     }
 
     // ---- the game page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // env: { win, doc, Net (AntsLobbyNet), loc (location: search, protocol, host, assign), local (localStorage), session (sessionStorage), now(), host (the strip's element) }. Sets win.antsMatchOver; the strip is
-    // built in `host` when the room of the match is there again and our seat is ours. Returns the state, for the checks.
+    // env: { win, doc, Net (AntsLobbyNet), host (the strip's element); for the checks also loc (location: search, protocol, host, assign; else win.location), local and session (the storages; else the window's),
+    // now() (else Date.now), later(fn, ms) (else setTimeout), clientOptions (more options of the LobbyClient: WebSocket, setTimeout, clearTimeout, now) }. Sets win.antsMatchOver; the strip is built in `host`
+    // when the room of the match is there again and our seat is ours. Returns the state and back(), for the checks.
     function gamePage(env) {
+        var win = env.win, loc = env.loc || win.location;
+        var local = 'local' in env ? env.local : storageOf(win, 'localStorage'), session = 'session' in env ? env.session : storageOf(win, 'sessionStorage');
+        var now = env.now || function () { return Date.now(); };
+        var later = env.later || function (fn, ms) { return setTimeout(fn, ms); };
         var q = null;
-        try { q = new URLSearchParams(env.loc.search); } catch (e) { return null; }
+        try { q = new URLSearchParams(loc.search); } catch (e) { return null; }
         var join = q.get('join');
-        if (!join || !/^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) || join.indexOf('//') !== -1 || join.indexOf('..') !== -1 || !env.host) return null;
+        if (!join || !/^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) || join.indexOf('//') !== -1 || join.indexOf('..') !== -1 || !env.host || !env.Net) return null;
         var name = (q.get('name') || '').replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
-        var url = (env.loc.protocol === 'https:' ? 'wss://' : 'ws://') + env.loc.host + join;
+        var url = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + join;
         var st = { over: null, key: null, client: null, shown: false, removed: false, room: null };
         var nodes = null;
-        function relayout() { try { env.win.dispatchEvent(new env.win.Event('resize')); } catch (e) { /* no layout to tell */ } }
+        function relayout() { try { win.dispatchEvent(new win.Event('resize')); } catch (e) { /* no layout to tell */ } }
         function build() {
             var doc = env.doc;
             env.host.textContent = '';
-            var main = el(doc, 'div', 'rm-main');
-            main.appendChild(el(doc, 'div', 'rm-title', 'The match is over'));
-            var text = el(doc, 'div', 'rm-text');
+            var main = el(doc, 'div', 'rmt-main');
+            main.appendChild(el(doc, 'div', 'rmt-title', 'The match is over'));
+            var text = el(doc, 'div', 'rmt-text');
             text.appendChild(doc.createTextNode('Everybody can go back to the room together: '));
             text.appendChild(el(doc, 'b', '', 'same host, same colours, same map'));
             text.appendChild(doc.createTextNode('. Your seat is kept for you.'));
             main.appendChild(text);
-            var who = el(doc, 'div', 'rm-who');
+            var who = el(doc, 'div', 'rmt-who');
             who.setAttribute('aria-label', 'Who is back in the room');
             main.appendChild(who);
-            var go = el(doc, 'div', 'rm-go');
+            var go = el(doc, 'div', 'rmt-go');
             var button = el(doc, 'button', 'btn big', 'Back to the lobby');
             button.type = 'button';
             button.addEventListener('click', back);
             go.appendChild(button);
-            go.appendChild(el(doc, 'div', 'rm-note', 'The game’s own “Leave Game” still goes to the menu.'));
+            go.appendChild(el(doc, 'div', 'rmt-note', 'The game’s own “Leave Game” still goes to the menu.'));
             env.host.appendChild(main);
             env.host.appendChild(go);
             nodes = { text: text, who: who, button: button, go: go };
@@ -174,7 +182,7 @@
             if (!nodes) return;
             nodes.who.textContent = '';
             chipsOf(st.room).forEach(function (c) {
-                var chip = el(env.doc, 'span', 'rm-chip' + (c.here ? '' : ' away'));
+                var chip = el(env.doc, 'span', 'rmt-chip' + (c.here ? '' : ' away'));
                 var dot = el(env.doc, 'i');
                 dot.style.background = c.dot;
                 chip.appendChild(dot);
@@ -193,10 +201,10 @@
             env.host.hidden = true;
             relayout();
         }
-        function removed() {                                       // the host took this player out of the room: the strip says so, and has no button
+        function removed() {                                       // the host took this player out of the room (or the seat waited three hours): the strip says so, and has no button
             st.removed = true;
             if (!nodes) return;
-            nodes.text.textContent = 'The host took you out of the room. The game’s own “Leave Game” goes to the menu.';
+            nodes.text.textContent = 'Your seat in the room is not kept any more. The game’s own “Leave Game” goes to the menu.';
             nodes.who.textContent = '';
             nodes.go.hidden = true;
             relayout();
@@ -204,27 +212,34 @@
         function back() {
             if (!st.over || !st.key) return;
             if (st.client) st.client.drop();                       // (no Leave: the seat is the front page's in a moment, with the key)
-            handOver(env.session, st.over, st.key, name, env.now());
-            env.loc.assign('/?room=' + encodeURIComponent(st.over.room));
+            var shown = st.room && st.room.you < 4 ? st.room.slots[st.room.you].name : '';           // (the name that the room shows for the seat, else the address's, else the match's)
+            handOver(session, st.over, st.key, shown || name || st.over.names[st.over.seat], now());
+            loc.assign('/?room=' + encodeURIComponent(st.over.room));
         }
-        env.win.antsMatchOver = function (text) {
+        win.antsMatchOver = function (text) {
             if (st.over) return;
-            try { if (env.win.top !== env.win) return; } catch (e) { return; }       // (a game in a frame of another page has no strip)
+            try { if (win.top !== win) return; } catch (e) { return; }               // (a game in a frame of another page has no strip)
             var over = parseOver(text);
             if (!over) return;
-            var key = seatKey(env.local, over.room, over.seat);
+            var key = seatKey(local, over.room, over.seat);
             if (!key) return;
             st.over = over;
             st.key = key;
-            var c = new env.Net.LobbyClient({ url: url, code: over.room, name: name || over.names[over.seat], key: env.Net.bytesOfHex(key), join: true, kind: 'game', keyOnly: true, platform: platformOf(env.win.navigator) });
+            var opts = { url: url, code: over.room, name: name || over.names[over.seat], key: env.Net.bytesOfHex(key), join: true, kind: 'game', keyOnly: true, platform: platformOf(win.navigator) };
+            var extra = env.clientOptions || {};
+            for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) opts[k] = extra[k];
+            var c = new env.Net.LobbyClient(opts);
             st.client = c;
             c.on('welcome', function () { show(); });
             c.on('room', function (room) { st.room = room; if (st.shown) paint(); });
             c.on('removed', removed);
             c.on('refused', hide);
             c.on('superseded', hide);
-            c.connect();
+            later(function () { c.connect(); }, ASK_AFTER_MS);
         };
+        // The page goes some other way (the game's Leave Game, a closed tab, a reload): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
+        // the key when the match ended, and this page's copy goes with the page). After "Back to the lobby", which hands the seat over, the client has let go already and says nothing.
+        if (win.addEventListener) win.addEventListener('pagehide', function () { if (st.client) st.client.leave(); });
         return { state: st, back: back };
     }
 
@@ -272,7 +287,7 @@
     }
 
     return {
-        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, COLOURS: COLOURS, DOTS: DOTS,
+        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, ASK_AFTER_MS: ASK_AFTER_MS, COLOURS: COLOURS, DOTS: DOTS,
         parseOver: parseOver, winnerWords: winnerWords, seatKey: seatKey, handOver: handOver, readBack: readBack, forgetBack: forgetBack,
         chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, platformOf: platformOf,
         gamePage: gamePage, frontStrip: frontStrip

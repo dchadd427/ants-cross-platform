@@ -288,7 +288,7 @@
     @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css">
 </head>
 <body>
 <div class="screen">
@@ -327,6 +327,7 @@
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
                 <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
+                <p class="start-note" id="start-note" role="status" hidden></p>
             </div>
         </aside>
     </div>
@@ -369,7 +370,7 @@
 
 <script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script>
-<script src="front/lobby_chat.js"></script>
+<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="map_files.js"></script>
 <script>
@@ -378,6 +379,7 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
+        var Rematch = window.AntsRematch;
         if (!Rules || !Net || !Chat) {           // the three scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
@@ -634,6 +636,8 @@
         var toastTimer = 0;
         var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
         var lis = {};                                 // the card of each colour (by seat)
+        var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colours, until START
+        var backBar = Rematch.frontStrip({ doc: document, before: document.querySelector('.screen'), fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
         var chat = Chat.mount({ doc: document, host: $('chat'), colours: COLOURS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
@@ -675,6 +679,7 @@
             try { window.sessionStorage.setItem(LOBBY_KEY, JSON.stringify({ c: client.code, k: Net.hexOf(client.key), n: client.name, o: ownRoom ? 1 : 0 })); } catch (e) { /* not kept: a reload makes another room */ }
         }
         function forgetSession() { try { window.sessionStorage.removeItem(LOBBY_KEY); } catch (e) { /* nothing was kept */ } }
+        function leaveBack() { if (back) { back = null; backBar.hide(); } try { Rematch.forgetBack(window.sessionStorage); } catch (e) { /* nothing was kept */ } }      // (START, another room: the rematch is over)
 
         // ---- the strip at the top ----
         function showBanner(kind, args) {
@@ -701,7 +706,7 @@
             for (var i = 0; i < 4; i++) slots.push({ state: 0, name: '', rtt: 0, platform: 0 });
             return Rules.modelOf({ slots: slots, plan: [0, 0, 0, 0], map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false });
         }
-        function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal, community: communityOf }; }
+        function context() { return { sides: localSides, picked: picked, removing: removing, offline: offline, refusal: refusal, community: communityOf, back: back }; }
         function setText(node, text) { if (node.textContent !== text) node.textContent = text; }      // (a live region says its text again whenever it is written: only a line that changed is)
         var painted = {};
         function render() {
@@ -840,6 +845,7 @@
             if (start.textContent !== side.startLabel) start.textContent = side.startLabel;
             setText($('plan'), side.plan);
             setText($('plan-short'), side.planShort);
+            setText($('start-note'), side.note); $('start-note').hidden = !side.note;
         }
         // The colours glow for a moment when a player arrives or changes places
         function glow(seats) {
@@ -894,7 +900,7 @@
             $('rejoin').hidden = true;
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
-            forgetSession();                           // (Back from the match makes a room again: this one is the match's now)
+            forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, aspect), window.location.href).href);
         }
         function shownTeam(seat) {
@@ -939,7 +945,7 @@
         }
         // This page's own room, with a new code (a link that did not take us, a removal): the word says why
         function startOwn(kind) {
-            forgetSession();
+            forgetSession(); leaveBack();
             stripRoom();
             offline = 'none';
             connect({ code: newCode(), name: myName(), own: true });
@@ -957,12 +963,12 @@
             c.on('joined', mine(onJoined));
             c.on('moved', mine(onMoved));
             c.on('swapped', mine(onSwapped));
-            c.on('host', mine(function (e) { showBanner('host', { guest: !e.you, leaver: e.before, host: e.name }); }));
+            c.on('host', mine(function (e) { showBanner('host', { guest: !e.you, leaver: e.before, host: e.name, back: e.back }); }));
             c.on('notice', mine(function (e) { var n = Rules.noticeKind(e.text); if (n.kind !== 'moved') showBanner(n.kind, { server: n.server }); }));      // ('The host moved you to Blue.' is on screen already, in the colour and the toast: no strip)
             c.on('refused', mine(onRefused));
             c.on('removed', mine(function () { startOwn('removed'); }));
             c.on('superseded', mine(function () { offline = 'none'; showBanner('away'); render(); }));
-            c.on('gone', mine(function () { lastStarting = false; }));
+            c.on('gone', mine(function () { lastStarting = false; leaveBack(); }));
         }
         function makeClient(p) {
             return new Net.LobbyClient({
@@ -972,6 +978,7 @@
         // Connect this page to the room of p: { code, name, own, key (a seat to take back), join (a room that must exist), joinFirst (a room that must exist for the first Hello: a link) }
         function connect(p) {
             if (client) { var before = client; client = null; before.leave(); }
+            if (back && p.code !== back.code) leaveBack();
             lastParams = p;
             ownRoom = p.own;
             model = null;
@@ -1356,6 +1363,7 @@
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');
             } else if (stored) {
+                try { back = Rematch.readBack(window.sessionStorage, stored.code, Date.now()); } catch (e) { back = null; } if (back) backBar.show(back);
                 connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });
             } else {
                 connect({ code: newCode(), name: myName(), own: true });

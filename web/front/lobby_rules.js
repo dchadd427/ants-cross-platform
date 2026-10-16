@@ -329,11 +329,6 @@
         };
         return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, notes: notes, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play) };
     }
-    // The rematch: what a press of START says while it waits for people of the match who are not back ('' when it does not wait: the page sends it as ever)
-    function startHeld(model, ctx) {
-        var away = notBack(model, ctx);
-        return away.length && !model.guest ? 'START waits for ' + listOf(away.map(function (s) { return model.slots[s].name; })) + '.' : '';
-    }
     // The map's side: the map, START and the line under it (who plays, and what an open colour does)
     function sideView(model, ctx, play) {
         var g = model.guest, busy = model.starting, away = ctx.offline || false;
@@ -432,6 +427,6 @@
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
         planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
-        notBack: notBack, startNote: startNote, startHeld: startHeld
+        notBack: notBack, startNote: startNote
     };
 });

@@ -1,0 +1,444 @@
+{
+ "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.45, the room manager's rematch against test_server S3.194 - S3.198, the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
+ "mutants": [
+  {
+   "id": "lobby_reserved_seat_leads",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "            if (guests_[s].reserved) continue;                                                   // (the rematch:",
+   "new": "            if (false) continue;                                                   // (the rematch:",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_start_while_reserved",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (any_reserved()) return false;\n    return plan_asks_bots()",
+   "new": "    return plan_asks_bots()",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_newcomer_before_anybody_is_back",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (any_reserved() && !anyone_back()) return reject(RejectReason::MatchRunning);",
+   "new": "",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_page_does_not_bring_back",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (g.reserved && hello.client_kind == kClientPage) {",
+   "new": "    if (g.reserved && hello.client_kind == kClientPage && false) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_results_screen_brings_back",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (g.reserved && hello.client_kind == kClientPage) {",
+   "new": "    if (g.reserved) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_results_screen_gone_holds",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "            if (guests_[s].reserved) unhook_reserved(s);",
+   "new": "            if (false) unhook_reserved(s);",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reservation_never_ends",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        if (guests_[s].reserved && now_ms - guests_[s].reserved_since_ms >= cfg_.reserve_ms) {",
+   "new": "        if (guests_[s].reserved && false) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reservation_ends_early",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        if (guests_[s].reserved && now_ms - guests_[s].reserved_since_ms >= cfg_.reserve_ms) {",
+   "new": "        if (guests_[s].reserved && now_ms - guests_[s].reserved_since_ms >= cfg_.reserve_ms - 10u) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reserved_seat_is_no_game",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "in_game(s) || guests_[s].reserved ? 1u << s : 0u",
+   "new": "in_game(s) ? 1u << s : 0u",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_leader_not_told_who_is_missing",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "                    if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && any_reserved()) notify(seat, not_back_notice());",
+   "new": "",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_desktop_seat_kept",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        if (platform != kPlatformUnknown && (platform & kPlatformBrowser) == 0) continue;",
+   "new": "",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_unknown_platform_not_kept",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        if (platform != kPlatformUnknown && (platform & kPlatformBrowser) == 0) continue;",
+   "new": "        if ((platform & kPlatformBrowser) == 0) continue;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_results_screen_counts_as_a_player",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        if (room_.slots[s].state == SlotState::Client && (!in_game(s) || guests_[s].reserved)) return false;",
+   "new": "        if (room_.slots[s].state == SlotState::Client && !in_game(s)) return false;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_newcomer_before_the_match",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        joins_ = std::max(joins_, p.order);",
+   "new": "",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_reopen_takes_a_key_twice",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "            if (key_matches(r.people[j].key, p.key)) return false;",
+   "new": "            if (false) return false;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_rematch_of_a_room_with_people",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (!cfg_.lobby_room || phase_ != Phase::Room || players() != 0 || !pending_.empty() || r.people.empty()) return false;",
+   "new": "    if (!cfg_.lobby_room || phase_ != Phase::Room || !pending_.empty() || r.people.empty()) return false;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "server_no_rematch",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (it->second->rematch_due()) rematches.push_back(it->first);",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.19 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_match_games_into_the_lobby",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    } else if (keyed && hello.have_turns > 0 && it->second->lobby_waiting()) {",
+   "new": "    } else if (false) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.19 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_rematch_without_a_place",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    if (!lobby_place(now_ms)) return;\n    CreateResult made;",
+   "new": "    CreateResult made;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.19 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_rematch_after_any_end",
+   "file": "include/ants_server/room.hpp",
+   "old": "state_ == RoomState::Finished && ended_by_rules_ && !rematch_given_;",
+   "new": "state_ == RoomState::Finished && !rematch_given_;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.19 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "server_empty_rematch_lobby_lives",
+   "file": "src/ants_server/room.cpp",
+   "old": "    if (lobby_.present() > 0) {",
+   "new": "    if (lobby_.humans() > 0) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.19 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "app_page_told_after_the_key_is_gone",
+   "file": "src/ants_app/application.cpp",
+   "old": "    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }\n    if (net_) net_->freeze();",
+   "new": "    if (net_) net_->freeze();\n    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }",
+   "build": "test_network_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "app_page_never_told",
+   "file": "src/ants_app/application.cpp",
+   "old": "        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));",
+   "new": "",
+   "build": "test_network_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "app_json_one_winner_of_a_tie",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "(result.is_winner(r.first) ? \"true\" : \"false\")",
+   "new": "(i == 0 ? \"true\" : \"false\")",
+   "build": "test_network_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "app_json_names_of_seats_that_did_not_play",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "json_text(((start.roster >> p) & 1u) != 0 ? start.names[p] : std::string())",
+   "new": "json_text(start.names[p])",
+   "build": "test_network_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "app_json_rows_of_the_local_seat",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "result.rows(sim::PLAYER_NEUTRAL)",
+   "new": "result.rows(static_cast<uint8_t>((seat + 1) % 4))",
+   "build": "test_network_app",
+   "test": "timeout 600 env ANTS_TEST_FILTER=N5.9 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "page_desktop_on_the_results_screen",
+   "file": "web/front/rematch.js",
+   "old": "var results = ((room.inGame >> s) & 1) === 1 && !room.starting && (platform === 0 || (platform & 0x10) !== 0);",
+   "new": "var results = ((room.inGame >> s) & 1) === 1 && !room.starting;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_results_screen_while_start_waits",
+   "file": "web/front/rematch.js",
+   "old": "var results = ((room.inGame >> s) & 1) === 1 && !room.starting && (platform === 0 || (platform & 0x10) !== 0);",
+   "new": "var results = ((room.inGame >> s) & 1) === 1 && (platform === 0 || (platform & 0x10) !== 0);",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_key_keeps_its_case",
+   "file": "web/front/rematch.js",
+   "old": "        return v.k.toLowerCase();",
+   "new": "        return v.k;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_zero_key_taken",
+   "file": "web/front/rematch.js",
+   "old": " || /^0+$/.test(v.k)) return null;\n        return v.k",
+   "new": ") return null;\n        return v.k",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_back_never_too_old",
+   "file": "web/front/rematch.js",
+   "old": "nowMs - v.t > MAX_AGE_MS || ",
+   "new": "",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_back_of_any_room",
+   "file": "web/front/rematch.js",
+   "old": "if (!v || typeof v !== 'object' || v.c !== code || ",
+   "new": "if (!v || typeof v !== 'object' || ",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_hand_over_as_the_maker",
+   "file": "web/front/rematch.js",
+   "old": "n: printable(name, 32) ? name : '', o: 0 });",
+   "new": "n: printable(name, 32) ? name : '', o: 1 });",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_back_says_leave",
+   "file": "web/front/rematch.js",
+   "old": "            if (st.client) st.client.drop();",
+   "new": "            if (st.client) st.client.leave();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_strip_in_a_frame",
+   "file": "web/front/rematch.js",
+   "old": "            try { if (win.top !== win) return; } catch (e) { return; }",
+   "new": "",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_tie_is_a_win",
+   "file": "web/front/rematch.js",
+   "old": "var verb = won.length === 1 ? ' won' : ' tied';",
+   "new": "var verb = ' won';",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_187_with_a_score",
+   "file": "web/front/rematch.js",
+   "old": "(over.mode === 1 ? '.' :",
+   "new": "(over.mode === 2 ? '.' :",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_replay_cut_short",
+   "file": "web/front/rematch.js",
+   "old": "e.finished !== true || ",
+   "new": "",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_replay_an_hour_away",
+   "file": "web/front/rematch.js",
+   "old": "Math.abs(e.ended * 1000 - back.t) > 10 * 60 * 1000",
+   "new": "Math.abs(e.ended * 1000 - back.t) > 60 * 60 * 1000",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_mode_2_taken",
+   "file": "web/front/rematch.js",
+   "old": "(v.mode !== 0 && v.mode !== 1)",
+   "new": "(v.mode !== 0 && v.mode !== 1 && v.mode !== 2)",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_late_answer_after_hide",
+   "file": "web/front/rematch.js",
+   "old": "            var done = function (id) {\n                if (mine !== round) return;",
+   "new": "            var done = function (id) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_one_look_only",
+   "file": "web/front/rematch.js",
+   "old": "                look(back, mine, 3);",
+   "new": "                look(back, mine, 1);",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_strip_shown_before_the_seat",
+   "file": "web/front/rematch.js",
+   "old": "            c.on('welcome', function () { show(); });\n",
+   "new": "            show();\n",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "net_key_only_takes_another_seat",
+   "file": "web/front/lobby_net.js",
+   "old": "            if (this.keyOnly && (this.keyBytes === null || hexOf(m.key) !== hexOf(this.keyBytes))) {",
+   "new": "            if (false) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "net_key_only_makes_the_room_again",
+   "file": "web/front/lobby_net.js",
+   "old": "if (reason === REJECT.NoSuchRoom && this.keyBytes !== null && !this.keyOnly) {",
+   "new": "if (reason === REJECT.NoSuchRoom && this.keyBytes !== null) {",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "net_game_hello_says_page",
+   "file": "web/front/lobby_net.js",
+   "old": ".u8(game ? CLIENT_GAME : CLIENT_PAGE);",
+   "new": ".u8(CLIENT_PAGE);",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_game_hello_has_the_block",
+   "file": "web/front/lobby_net.js",
+   "old": "        if (h.create && !game) w.str8(",
+   "new": "        if (h.create) w.str8(",
+   "test": "node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "net_drop_says_leave",
+   "file": "web/front/lobby_net.js",
+   "old": "        if (this.final()) return;\n        this.giveUpSocketQuietly();",
+   "new": "        if (this.final()) return;\n        this.sendBytes(encodeLeave());\n        this.giveUpSocketQuietly();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "net_host_always_back",
+   "file": "web/front/lobby_net.js",
+   "old": "                var back = !prev.starting && !next.starting && personIn(prev, next.leader) && ((prev.inGame >> next.leader) & 1) === 1 && ((next.inGame >> next.leader) & 1) === 0;",
+   "new": "                var back = true;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "rules_desktop_on_the_results_screen",
+   "file": "web/front/lobby_rules.js",
+   "old": "if (person.ingame && !room.starting && (platform === 0 || (platform & PLATFORM_BROWSER) !== 0)) person.results = true;",
+   "new": "if (person.ingame && !room.starting) person.results = true;",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_results_screen_while_start_waits",
+   "file": "web/front/lobby_rules.js",
+   "old": "if (person.ingame && !room.starting && (platform === 0 || (platform & PLATFORM_BROWSER) !== 0)) person.results = true;",
+   "new": "if (person.ingame && (platform === 0 || (platform & PLATFORM_BROWSER) !== 0)) person.results = true;",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_a_newcomer_waited_for",
+   "file": "web/front/lobby_rules.js",
+   "old": "if (x.kind === 'person' && x.results && !x.me && ctx.back.people.indexOf(x.name) !== -1) out.push(s);",
+   "new": "if (x.kind === 'person' && x.results && !x.me) out.push(s);",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_note_for_a_player",
+   "file": "web/front/lobby_rules.js",
+   "old": "            note: g || away ? '' : startNote(",
+   "new": "            note: away ? '' : startNote(",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_note_says_colour_for_two",
+   "file": "web/front/lobby_rules.js",
+   "old": "(names.length > 1 ? 's' : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_not_back_is_a_notice",
+   "file": "web/front/lobby_rules.js",
+   "old": "        if (/^.+ is not back from the match yet\\.$/.test(t) || t.indexOf('These players are not back from the match yet: ') === 0) return { kind: 'notback', server: t };      // (the rematch: START waits for them)\n",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_back_host_says_left",
+   "file": "web/front/lobby_rules.js",
+   "old": "            if (a.guest) return a.back ? a.host + ' is back, and is the host again.' : a.leaver + ' left. ' + a.host + ' is the host now.';",
+   "new": "            if (a.guest) return a.leaver + ' left. ' + a.host + ' is the host now.';",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "rules_back_status_for_the_page_itself",
+   "file": "web/front/lobby_rules.js",
+   "old": "else if (ctx.back && !s.me && !s.leader && ctx.back.people.indexOf(s.name) !== -1) {",
+   "new": "else if (ctx.back && !s.leader && ctx.back.people.indexOf(s.name) !== -1) {",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "page_asks_at_once",
+   "file": "web/front/rematch.js",
+   "old": "            later(function () { c.connect(); }, ASK_AFTER_MS);",
+   "new": "            c.connect();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "page_going_keeps_the_seat",
+   "file": "web/front/rematch.js",
+   "old": "if (st.client) st.client.leave();",
+   "new": "if (false) st.client.leave();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  }
+ ]
+}

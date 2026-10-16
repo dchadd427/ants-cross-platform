@@ -89,7 +89,6 @@ bool continues(const replay::Replay& now, const replay::Replay& later) {
     return std::equal(now.hashes.begin(), now.hashes.end(), later.hashes.begin());
 }
 
-#if defined(__EMSCRIPTEN__)
 /// A text for the page's JSON: printable ASCII, with the backslash and the quote escaped (the names of a file are printable ASCII already: the reader refuses any other)
 std::string json_text(const std::string& raw) {
     std::string out = "\"";
@@ -101,9 +100,22 @@ std::string json_text(const std::string& raw) {
     out.push_back('"');
     return out;
 }
-#endif
 
 }  // namespace
+
+std::string Application::match_over_json(const std::string& room, uint8_t seat, const net::StartMsg& start, const sim::MatchResult& result) {
+    std::string out = "{\"room\":" + json_text(room) + ",\"seat\":" + std::to_string(static_cast<unsigned>(seat)) + ",\"map\":" + json_text(start.map_name) +
+                      ",\"mode\":" + std::to_string(static_cast<unsigned>(start.mode)) + ",\"names\":[";
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) out += std::string(p == 0 ? "" : ",") + json_text(((start.roster >> p) & 1u) != 0 ? start.names[p] : std::string());
+    out += "],\"rows\":[";
+    const std::vector<sim::ResultRow> rows = result.rows(sim::PLAYER_NEUTRAL);
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const sim::ResultRow& r = rows[i];
+        out += std::string(i == 0 ? "" : ",") + "{\"seats\":[" + std::to_string(static_cast<unsigned>(r.first)) + (r.has_second() ? "," + std::to_string(static_cast<unsigned>(r.second)) : std::string()) +
+               "],\"score\":" + std::to_string(r.score) + ",\"won\":" + (result.is_winner(r.first) ? "true" : "false") + "}";
+    }
+    return out + "]}";
+}
 
 // The recording of a match begins (an earlier one that was not finished is dropped, and so is the last file). The web build records nothing: its page has nowhere to keep a file, and the matches it plays in
 // rooms are recorded by the game server (docs/REPLAYS.md).
