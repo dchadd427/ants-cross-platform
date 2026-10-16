@@ -49,9 +49,12 @@
 // that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
 // (7) The rematch (docs/SERVER.md "Lobby rooms"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
 // persons who played in a web browser: the seat keeps its name, colour, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not
-// lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on); a game's Hello with it holds the seat from the results screen
-// and leaves it reserved. Nobody new is taken while nobody of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms. A person whose game said that it is not in a browser
-// (protocol 15's platform: a game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the colour is free in the lobby that follows, for them or anybody to join by the code.
+// lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on), and so does a game's Hello with it that asks for a colour
+// (want_seat 0 - 3: the game page that the front page's "Rejoin" opens with a key that the match left behind: the person is back, as a game); a game's Hello with it that asks for none (255: the game page's
+// results screen) holds the seat and leaves it reserved. While a seat is reserved only a person of the match leads (the order of the match: a newcomer never leads, so never removes or starts), and nobody new
+// is taken while no person of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms. A person whose game said that it is not in a browser (protocol 15's platform: a
+// game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the colour is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
+// for a person whom the match dropped: Room::take_rematch).
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -408,7 +411,8 @@ private:
     bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held || guests_[seat].reserved; }
     void hold_guest(uint8_t seat, uint32_t now_ms);
     void unhook_reserved(uint8_t seat);                                   // the rematch: the connection of a reserved seat ended (the results screen closed): the seat stays reserved
-    bool anyone_back() const noexcept;                                    // the rematch: a guest sits in the room whose seat is not reserved (somebody who is back, or a newcomer that they let in)
+    bool anyone_back() const noexcept;                                    // the rematch: a person of the match sits in the room and is back (a newcomer whom they let in does not count)
+    bool of_match(uint8_t seat) const noexcept;                           // ... the guest of this seat is a person of the match (its place in the order is the match's, match_order_)
     std::string not_back_notice() const;                                  // the rematch: the leader's notice of a START that waits for the persons who are not back
     void forgive(Guest& g, uint32_t now_ms) const noexcept;
     void apply_plan(const PlanMsg& plan);
@@ -433,6 +437,7 @@ private:
     std::vector<Pending> pending_;
     std::vector<Event> events_;
     uint32_t joins_{0};                      // the Welcomes sent so far (Guest::join_order)
+    uint32_t match_order_{0};                // the rematch: the last place in the order of a person of the match (a guest with a later one is a newcomer); 0 for a room that was not opened again
     uint32_t ignored_start_requests_{0};
     uint32_t ignored_seat_moves_{0};
     uint32_t seat_moves_{0};

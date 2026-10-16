@@ -280,10 +280,13 @@ void run_lobby_rematch_tests() {
         const size_t bob_results = join_keyed(room, "Bob", key_with(2));
         room.run(200);
         ASSERT_TRUE(room.host.present() == 2u && room.host.reserved(1));
-        // the results screen goes: the seat stays reserved, with no hold that would run out
+        room.run(2500);                                                                                // (the room measures the results screen's round trip: Ann sees its thumb)
+        ASSERT_TRUE(room.guests[ann].lobby->room().slots[1].rtt_ms != kRttUnknown);
+        // the results screen goes: the seat stays reserved, with no hold that would run out, and everybody is shown that its link is gone (no thumb)
         room.guests[bob_results].client_end->close();
         room.run(200);
         ASSERT_TRUE(room.host.reserved(1) && !room.host.held(1) && room.host.occupied(1) && room.host.present() == 1u);
+        ASSERT_TRUE(room.guests[ann].lobby->room().slots[1].rtt_ms == kRttUnknown && room.guests[ann].lobby->room().slots[1].state == SlotState::Client);
         room.run(20000);                                                                               // (four times the hold)
         ASSERT_TRUE(room.host.reserved(1) && room.host.occupied(1) && room.host.hold_expiries() == 0u);
         // a quiet results screen is closed by the silence, and the seat stays reserved
@@ -350,13 +353,19 @@ void run_lobby_rematch_tests() {
             next.run(200);
             ASSERT_FALSE(next.host.starting());
             ASSERT_EQ(notices_of(*next.guests[ann].lobby), (std::vector<std::string>{"Cat is not back from the match yet."}));
-            // Ann goes: Bob's game leads, Cat's results screen holds her seat (a game's Hello): every person in the room is a game, and the owner still cannot start (a results screen plays nothing)
+            // Ann goes: Bob's game came after the match, so it does not lead while Cat's seat is kept (N4.47); Cat's results screen holds her seat (a game's Hello): every person in the room is a
+            // game, and the owner still cannot start (a results screen plays nothing)
             next.guests[ann].lobby->leave();
             const size_t cat_results = join_keyed(next, "Cat", keys[2]);
             next.run(200);
-            ASSERT_TRUE(next.guests[bob].lobby->is_leader() && next.guests[cat_results].lobby->my_seat() == 2 && next.host.reserved(2) && next.host.in_game(1) && next.host.in_game(2));
+            ASSERT_TRUE(next.host.leader() == kNoLeader && !next.guests[bob].lobby->is_leader());
+            ASSERT_TRUE(next.guests[cat_results].lobby->my_seat() == 2 && next.host.reserved(2) && next.host.in_game(1) && next.host.in_game(2));
             ASSERT_FALSE(next.host.start(5, 6, next.now));
             ASSERT_EQ(next.host.phase(), HostLobby::Phase::Room);
+            // Cat's page comes back: she leads (a person of the match), and with no seat kept any more the room's own rule is back
+            const size_t cat = join_with(next, page_with_key("Cat", keys[2]));
+            next.run(200);
+            ASSERT_TRUE(next.guests[cat].lobby->is_leader() && !next.host.any_reserved());
         }
         {   // the games of a phone's apps and of the desktop: nobody to keep a seat for (the server opens no lobby then)
             Room room(lobby_room_config(156));
@@ -426,5 +435,94 @@ void run_lobby_rematch_tests() {
             room.run(200);
             ASSERT_TRUE(room.host.starting());
         }
+    } TEST_END();
+
+    TEST_CASE("N4.46 A Game That Asks For Its Colour With The Key Is The Person Back, As A Game (The Game Page That The Front Page's \"Rejoin\" Opens With A Key That The Match Left Behind): The Seat Is Not Kept Any More, The Person Leads When First In The Order And The START Takes Them As A Game; A Results Screen Asks For No Colour (255) And Only Holds The Seat") {
+        Room room(lobby_room_config(160), false);
+        ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Nobody, K::Nobody})));
+        // Bob's results screen asks for no colour: it holds his seat, which stays kept
+        const size_t bob_results = join_keyed(room, "Bob", key_with(2));
+        room.run(200);
+        ASSERT_TRUE(room.guests[bob_results].lobby->my_seat() == 1 && room.host.reserved(1) && room.host.leader() == kNoLeader);
+        // Ann's game page asks for her colour with her key: she is back, as a game, and leads (first in the order)
+        const size_t ann_game = join_keyed(room, "Ann", key_with(1), 0);
+        room.run(200);
+        ClientLobby& ag = *room.guests[ann_game].lobby;
+        ASSERT_TRUE(ag.phase() == ClientLobby::Phase::InRoom && ag.my_seat() == 0 && ag.is_leader());
+        ASSERT_TRUE(!room.host.reserved(0) && room.host.in_game(0) && room.host.reserved(1) && room.host.returns() == 1u);
+        ASSERT_EQ(games_text(ag.room()), std::string("1100"));
+        // the START waits for Bob, who is not back
+        ASSERT_TRUE(ag.request_start());
+        room.run(200);
+        ASSERT_FALSE(room.host.starting());
+        ASSERT_EQ(notices_of(ag), (std::vector<std::string>{"Bob is not back from the match yet."}));
+        // Bob's game page too, asking for any colour of the two (here his own): it takes the seat from his results screen and he is back; the START is taken with the two games
+        const size_t bob_game = join_keyed(room, "Bob", key_with(2), 1);
+        room.run(200);
+        ASSERT_TRUE(room.guests[bob_results].lobby->reject_reason() == RejectReason::Superseded && room.guests[bob_game].lobby->my_seat() == 1);
+        ASSERT_TRUE(!room.host.any_reserved() && room.host.returns() == 2u && ag.is_leader());
+        room.host.take_events();
+        ASSERT_TRUE(ag.request_start());
+        room.run(200);
+        const std::vector<uint8_t> asked = leader_starts(room.host);                                   // (every person is a game: the START is the owner's in every pass from now on)
+        ASSERT_TRUE(room.host.starting() && !asked.empty() && std::all_of(asked.begin(), asked.end(), [](uint8_t s) { return s == 0; }));
+    } TEST_END();
+
+    TEST_CASE("N4.47 While A Seat Is Kept Only A Person Of The Match Leads: A Newcomer Never Leads Or Removes (The Person Of The Match Who Led Goes: Nobody Leads, The Newcomer's Removal Of A Kept Seat Is Ignored And Nobody New Comes In); A Person Of The Match Who Comes Back Leads; With No Seat Kept The Room's Own Rule Is Back (The Earliest Of The Order Leads, A Newcomer Too)") {
+        Room room(lobby_room_config(161), false);
+        ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+        const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+        room.run(200);
+        const size_t eve = join_with(room, page_config("Eve"));                                         // a newcomer: somebody of the match is back
+        room.run(200);
+        ClientLobby& e = *room.guests[eve].lobby;
+        ASSERT_TRUE(e.phase() == ClientLobby::Phase::InRoom && e.my_seat() == 2 && room.guests[ann].lobby->is_leader());
+        room.guests[ann].lobby->leave();                                                                // Ann goes: Eve came after the match and Bob's seat is kept: nobody leads
+        room.run(200);
+        ASSERT_TRUE(room.host.leader() == kNoLeader && e.room().leader == kNoLeader && room.host.reserved(1));
+        room.guests[eve].client_end->send(encode(RemoveMsg{1, seating_hash(e.room())}));                // (Eve's Remove of Bob's kept seat, sent as it is: the room does not take it)
+        room.run(200);
+        ASSERT_TRUE(room.host.reserved(1) && room.host.removals() == 0u && e.phase() == ClientLobby::Phase::InRoom);
+        const size_t zed = join_with(room, page_config("Zed"));                                         // nobody of the match is back: nobody new comes in
+        room.run(200);
+        ASSERT_TRUE(room.guests[zed].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[zed].lobby->reject_reason() == RejectReason::MatchRunning);
+        const size_t bob = join_with(room, page_with_key("Bob", key_with(2)));                          // Bob is back: he leads, not Eve (she came after him in the order)
+        room.run(200);
+        ClientLobby& b = *room.guests[bob].lobby;
+        ASSERT_TRUE(b.is_leader() && !e.is_leader() && !room.host.any_reserved());
+        b.leave();                                                                                      // no seat is kept: the room's own rule, Eve leads
+        room.run(200);
+        ASSERT_TRUE(e.is_leader());
+    } TEST_END();
+
+    TEST_CASE("N4.48 The Notice Of Who Is Not Back Fits A Line Of Chat (100 Characters) With Whole Names: When The Names Do Not Fit, As Many As Fit And \"And N More\"") {
+        const std::string n1 = "Bartholomew Montgomery-Fairweath";          // 32 characters each (the longest name)
+        const std::string n2 = "Constance Wilhelmina Featherston";
+        const std::string n3 = "Dmitri Alexandrovich Vasilyevski";
+        ASSERT_TRUE(n1.size() == kMaxNameChars && n2.size() == kMaxNameChars && n3.size() == kMaxNameChars);
+        Room room(lobby_room_config(162), false);
+        Rematch r = rematch_of({K::Open, K::Open, K::Open, K::Open});
+        r.people[1].name = n1;
+        r.people.push_back(Rematch::Person{2, n2, key_with(3), 3, 0});
+        r.people.push_back(Rematch::Person{3, n3, key_with(4), 4, 0});
+        ASSERT_TRUE(reopened(room, r));
+        const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+        room.run(200);
+        ClientLobby& ap = *room.guests[ann].lobby;
+        ASSERT_TRUE(ap.request_start());
+        room.run(200);
+        const std::string three = std::string(kNoticeNotBackMany) + n1 + " and 2 more.";
+        ASSERT_TRUE(three.size() <= kMaxChatChars);
+        ASSERT_EQ(notices_of(ap), (std::vector<std::string>{three}));
+        join_with(room, page_with_key("Dmitri", key_with(4)));                                         // two are left: still too long for both names
+        room.run(200);
+        ASSERT_TRUE(ap.request_start());
+        room.run(200);
+        ASSERT_EQ(notices_of(ap), (std::vector<std::string>{std::string(kNoticeNotBackMany) + n1 + " and 1 more."}));
+        join_with(room, page_with_key("Bart", key_with(2)));                                           // one: the whole name
+        room.run(200);
+        ASSERT_TRUE(ap.request_start());
+        room.run(200);
+        ASSERT_EQ(notices_of(ap), (std::vector<std::string>{n2 + kNoticeNotBack}));
     } TEST_END();
 }

@@ -46,6 +46,13 @@ fs.readFileSync(goldenPath, 'utf8').split('\n').forEach((line) => {
     const blank = line.indexOf(' ');
     golden[line.slice(0, blank)] = line.slice(blank + 1);
 });
+// tests/data/replay_players.txt (beside match_over.txt): the names of a match by seat and the labels that the server's public list of replays gives its players (test_server S3.202 holds them to the server)
+const listed = [];
+fs.readFileSync(path.join(path.dirname(goldenPath), 'replay_players.txt'), 'utf8').split('\n').forEach((line) => {
+    if (!line || line[0] === '#') return;
+    const [names, labels] = line.split(' => ');
+    listed.push({ names: names.split('|'), labels: labels.split('|') });
+});
 
 // ---- a fake storage, a fake DOM -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function storage(items) {
@@ -193,7 +200,8 @@ async function main() {
         check('the hand-over is written', R.handOver(s, two, KEYHEX, 'Sam', T + 0.6) === true);
         same('ants.lobby is the front page\'s own entry: the code, the key of the seat, the name, not the room\'s maker', JSON.parse(s.items['ants.lobby']), { c: 'k7m2xq', k: KEYHEX, n: 'Sam', o: 0 });
         same('ants.back is the match: the code, the time, the map, the four names and the winner in words', JSON.parse(s.items['ants.back']), { c: 'k7m2xq', t: T, m: 'TREASURE.LVL', p: ['Maple', 'Sam', '', ''], w: 'Maple won with 2,040.' });
-        same('the front page reads it back: the people are the names that played', R.readBack(s, 'k7m2xq', T + 5000), { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], winner: 'Maple won with 2,040.' });
+        same('the front page reads it back: the people are the names that played, the names are the four by seat', R.readBack(s, 'k7m2xq', T + 5000),
+            { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], names: ['Maple', 'Sam', '', ''], winner: 'Maple won with 2,040.' });
         same('... for its own room only, for three hours, and not from the future (a minute of clocks that disagree is let through)',
             [R.readBack(s, 'other1', T), R.readBack(s, 'k7m2xq', T + 3 * 3600 * 1000) !== null, R.readBack(s, 'k7m2xq', T + 3 * 3600 * 1000 + 1), R.readBack(s, 'k7m2xq', T - 60000) !== null, R.readBack(s, 'k7m2xq', T - 60001)],
             [null, true, null, true, null]);
@@ -204,6 +212,12 @@ async function main() {
         same('... and so is broken JSON, nothing, or a storage that throws', [R.readBack(storage({ 'ants.back': '{' }), 'k7m2xq', T), R.readBack(storage(), 'k7m2xq', T), R.readBack(broken, 'k7m2xq', T), R.readBack(null, 'k7m2xq', T)], [null, null, null, null]);
         same('a name that the game cannot show is not handed over (the front page asks the room\'s)', (() => { const t = storage(); R.handOver(t, two, KEYHEX, 'José', T); return JSON.parse(t.items['ants.lobby']).n; })(), '');
         check('a storage that refuses: the hand-over says so', R.handOver(broken, two, KEYHEX, 'Sam', T) === false);
+        {
+            const half = storage();
+            half.setItem = (k, v) => { if (k === 'ants.back') throw new Error('full'); half.items[k] = String(v); };
+            check('a storage that takes the room and not the match: the hand-over is made (the front page takes the seat back, it only has no strip)', R.handOver(half, two, KEYHEX, 'Sam', T) === true
+                && JSON.parse(half.items['ants.lobby']).k === KEYHEX && half.items['ants.back'] === undefined && R.readBack(half, 'k7m2xq', T) === null);
+        }
         R.forgetBack(s);
         same('forgetBack takes the match away and leaves the room', [s.items['ants.back'], typeof s.items['ants.lobby']], [undefined, 'string']);
         R.forgetBack(broken);
@@ -229,12 +243,22 @@ async function main() {
         { lead: 'Back from the match.', text: 'Maple won with 2,040. Same room, same colours, same map.' }, { lead: 'Back from the match.', text: 'Same room, same colours, same map.' }]);
     {
         const T = 1760600000000;
-        const back = { t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam', 'Player 3'] };
-        const entry = (o) => Object.assign({ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) - 20, map: 'TREASURE.LVL', players: ['Maple', 'Sam', 'Bot (Hard)'], finished: true }, o);
-        same('the newest finished match of the map, ended within ten minutes of the hand-over, with every named person of it', R.findReplay({ replays: [entry({ file: 'ants-TREASURE-20261016-071322Z-2.antsrep' }), entry()] }, back), 'ants-TREASURE-20261016-071322Z-2');
-        same('not: another map, a match that was cut short, one that ended more than ten minutes before or after, one without Sam, a file of another shape, an entry that is none',
-            [{ map: 'SMALL.LVL' }, { finished: false }, { ended: Math.floor(T / 1000) - 601 }, { ended: Math.floor(T / 1000) + 601 }, { players: ['Maple'] }, { file: '../ants.antsrep' }, { file: 7 }].map((o) => R.findReplay({ replays: [entry(o)] }, back)).concat(R.findReplay({ replays: [null] }, back)),
-            ['', '', '', '', '', '', '', '']);
+        check('the labels of the public list of replays: the golden file has its cases', listed.length >= 3 && listed.every((l) => l.names.length === 4 && l.labels.length >= 1));
+        listed.forEach((l, i) => {
+            const back = { t: T, map: 'TINY.LVL', people: l.names.filter((n) => n !== ''), names: l.names };
+            const entry = (players) => ({ file: 'ants-TINY-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) - 20, map: 'TINY.LVL', players, finished: true });
+            same('the match of line ' + (i + 1) + ' of replay_players.txt is found by the labels that the server gives its players (' + l.labels.join(', ') + ')', R.findReplay({ replays: [entry(l.labels)] }, back), 'ants-TINY-20261016-071320Z');
+            same('... and not when one of its seats is missing from the list, or listed under a bare name', l.labels.map((x, k) => R.findReplay({ replays: [entry(l.labels.filter((_, j) => j !== k))] }, back))
+                .concat(R.findReplay({ replays: [entry(l.names.filter((n) => n !== ''))] }, back)), l.labels.map(() => '').concat(''));
+        });
+        const back = { t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam', 'Player 3'], names: ['Maple', 'Sam', 'Player 3', ''] };
+        const entry = (o) => Object.assign({ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) - 20, map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)', 'Blue', 'Black (Pip (bot, Hard))'], finished: true }, o);
+        same('the newest finished match of the map, ended within ten minutes of the hand-over, with every seat of it', R.findReplay({ replays: [entry({ file: 'ants-TREASURE-20261016-071322Z-2.antsrep' }), entry()] }, back), 'ants-TREASURE-20261016-071322Z-2');
+        same('not: another map, a match that was cut short, one that ended more than ten minutes before or after, one without Sam, Sam in another colour, a file of another shape, an entry that is none',
+            [{ map: 'SMALL.LVL' }, { finished: false }, { ended: Math.floor(T / 1000) - 601 }, { ended: Math.floor(T / 1000) + 601 }, { players: ['Green (Maple)', 'Blue'] }, { players: ['Green (Maple)', 'Blue (Sam)', 'Blue'] },
+                { file: '../ants.antsrep' }, { file: 7 }].map((o) => R.findReplay({ replays: [entry(o)] }, back)).concat(R.findReplay({ replays: [null] }, back)),
+            ['', '', '', '', '', '', '', '', '']);
+        same('a match of nobody named finds nothing', R.findReplay({ replays: [entry()] }, { t: T, map: 'TREASURE.LVL', people: [], names: ['', '', '', ''] }), '');
         same('a list that is none: no match (the link goes to the list of matches)', [R.findReplay(null, back), R.findReplay({}, back), R.findReplay({ replays: 'x' }, back)], ['', '', '']);
         same('the link: the match\'s page, else the list of matches', [R.statsHref('ants-TREASURE-20261016-071320Z'), R.statsHref('')], ['/match.html?id=ants-TREASURE-20261016-071320Z', '/matches.html']);
     }
@@ -285,7 +309,7 @@ async function main() {
         same('the Hello: a game\'s, with the key of the seat, the name of the address, the browser\'s platform, no block', N.hexOf(p.w.last().sent[0]),
             N.hexOf(N.encodeHello({ name: 'Sam', room: 'k7m2xq', key: KEY, kind: 'game', platform: N.PLATFORM_BROWSER | N.OS.Linux })));
         check('nothing shows before the room has taken the seat', p.host.hidden && p.host.children.length === 0);
-        p.w.last().receive(welcome(1, KEY, 1));
+        p.w.last().receive(welcome(1, KEY, 0));
         check('the seat of the key is ours: the strip shows, and the page lays the picture out again', !p.host.hidden && p.win.resized === 1);
         same('the strip\'s words (picture R1)', [byClass(p.host, 'rmt-title').textContent, byClass(p.host, 'rmt-text').textContent, byClass(p.host, 'btn').textContent, byClass(p.host, 'rmt-note').textContent], [
             'The match is over', 'Everybody can go back to the room together: same host, same colours, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” still goes to the menu.']);
@@ -313,7 +337,7 @@ async function main() {
         p.win.antsMatchOver(golden['two-players']);
         p.w.advance(R.ASK_AFTER_MS);
         p.w.last().open();
-        p.w.last().receive(welcome(1, KEY, 1));
+        p.w.last().receive(welcome(1, KEY, 0));
         const socket = p.w.last();
         p.win.fire('pagehide');
         check('the page goes some other way (Leave Game, a closed tab, a reload): the seat is given up with a Leave, and the link closes', socket.closed && N.hexOf(socket.sent[socket.sent.length - 1]) === N.hexOf(N.encodeLeave())
@@ -338,6 +362,49 @@ async function main() {
         const p = page();
         p.win.antsMatchOver(golden['two-players']);
         p.w.advance(R.ASK_AFTER_MS);
+        const first = p.w.last();
+        first.open();
+        first.receive(welcome(1, KEY, 1));                                                          // the match's Welcome (kWelcomeRejoin: only a match that still runs gives it)
+        check('a Welcome of the match (the server had not ended it yet) is let go of without a word, and nothing shows', first.closed && first.sent.length === 1 && p.host.hidden);
+        p.w.advance(R.ASK_AFTER_MS - 1);
+        check('... the seat is asked for again two seconds later, not sooner', p.w.sockets.length === 1);
+        p.w.advance(1);
+        check('... then', p.w.sockets.length === 2);
+        p.w.last().open();
+        same('... with the same Hello', N.hexOf(p.w.last().sent[0]), N.hexOf(first.sent[0]));
+        p.w.last().receive(welcome(1, KEY, 0));
+        check('... and the lobby of the rematch takes it: the strip shows', !p.host.hidden && !p.w.last().closed);
+        const q = page();
+        q.win.antsMatchOver(golden['two-players']);
+        for (let i = 0; i < 4; i++) {
+            q.w.advance(R.ASK_AFTER_MS);
+            if (q.w.sockets.length === i + 1 && !q.w.last().closed) { q.w.last().open(); q.w.last().receive(welcome(1, KEY, 1)); }
+        }
+        q.w.advance(600000);
+        check('the match answers every time: three tries in all, then nothing more, and nothing shows', q.w.sockets.length === 3 && q.w.sockets.every((x) => x.closed && x.sent.length === 1) && q.host.hidden);
+    }
+    {
+        const p = page();
+        p.session.setItem = () => { throw new Error('blocked'); };
+        p.win.antsMatchOver(golden['two-players']);
+        p.w.advance(R.ASK_AFTER_MS);
+        const socket = p.w.last();
+        socket.open();
+        socket.receive(welcome(1, KEY, 0));
+        const sent = socket.sent.length;
+        byClass(p.host, 'btn').fire('click');
+        check('a storage that refuses the hand-over: the tab stays (no key in any address), the link stays (the seat stays held from here)', p.loc.assigned.length === 0 && !socket.closed && socket.sent.length === sent);
+        check('... and the strip says why, with no button', byClass(p.host, 'rmt-go').hidden && p.win.resized === 2
+            && byClass(p.host, 'rmt-text').textContent === 'This browser blocks the storage that the front page needs, so your seat cannot be taken back from here.');
+        byClass(p.host, 'btn').fire('click');
+        check('... a second press does nothing', p.loc.assigned.length === 0 && !socket.closed);
+        p.win.fire('pagehide');
+        check('... and the page that goes gives the seat up (a Leave)', socket.closed && N.hexOf(socket.sent[socket.sent.length - 1]) === N.hexOf(N.encodeLeave()));
+    }
+    {
+        const p = page();
+        p.win.antsMatchOver(golden['two-players']);
+        p.w.advance(R.ASK_AFTER_MS);
         p.w.last().open();
         p.w.last().receive(reject(N.REJECT.NoSuchRoom));
         p.w.advance(600000);
@@ -348,7 +415,7 @@ async function main() {
         p.win.antsMatchOver(golden['two-players']);
         p.w.advance(R.ASK_AFTER_MS);
         p.w.last().open();
-        p.w.last().receive(welcome(1, KEY, 1));
+        p.w.last().receive(welcome(1, KEY, 0));
         p.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 2, platforms: [0x13, 0x13, 0, 0] }));
         p.w.last().receive(reject(N.REJECT.Kicked));
         check('the host took this player out (or the seat waited three hours): the strip says so, with no button and no chips', !p.host.hidden && byClass(p.host, 'rmt-go').hidden && byClass(p.host, 'rmt-who').children.length === 0
@@ -359,7 +426,7 @@ async function main() {
         p.win.antsMatchOver(golden['two-players']);
         p.w.advance(R.ASK_AFTER_MS);
         p.w.last().open();
-        p.w.last().receive(welcome(1, KEY, 1));
+        p.w.last().receive(welcome(1, KEY, 0));
         p.w.last().receive(reject(N.REJECT.Superseded));
         check('another window took the seat (the front page of another tab): the strip goes, and the page is laid out again', p.host.hidden && p.win.resized === 2);
     }
@@ -373,7 +440,7 @@ async function main() {
         q.w.advance(R.ASK_AFTER_MS);
         q.w.last().open();
         same('an address without a name: the Hello says the match\'s name of the seat', N.hexOf(q.w.last().sent[0]), N.hexOf(N.encodeHello({ name: 'Sam', room: 'k7m2xq', key: KEY, kind: 'game', platform: N.PLATFORM_BROWSER | N.OS.Linux })));
-        q.w.last().receive(welcome(1, KEY, 1));
+        q.w.last().receive(welcome(1, KEY, 0));
         q.gp.back();
         same('... and the hand-over names the seat as the match did (no Room message yet)', JSON.parse(q.session.items['ants.lobby']).n, 'Sam');
         const r = page({ noKey: true });
@@ -392,7 +459,7 @@ async function main() {
         const fetched = [];
         let answer = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [] }) });
         const strip = R.frontStrip({ doc, before: screen, fetch: (u, i) => { fetched.push([u, i]); return answer(); }, later: (fn, ms) => later.push([fn, ms]) });
-        const back = { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], winner: 'Maple won with 2,040.' };
+        const back = { code: 'k7m2xq', t: T, map: 'TREASURE.LVL', people: ['Maple', 'Sam'], names: ['Maple', 'Sam', '', ''], winner: 'Maple won with 2,040.' };
         strip.show(back);
         const bar = body.children[0];
         check('the strip goes at the top of the page, above the frame', body.children.length === 2 && bar !== screen && body.children[1] === screen && bar.className === 'backbar' && !bar.hidden);
@@ -403,7 +470,7 @@ async function main() {
         same('the public list of replays is asked, with no cookies and no cache', fetched, [['/replays', { cache: 'no-store', credentials: 'omit' }]]);
         await flush(); await flush();
         same('not in the list yet: asked again in four seconds', later.map((l) => l[1]), [4000]);
-        answer = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) + 10, map: 'TREASURE.LVL', players: ['Maple', 'Sam'], finished: true }] }) });
+        answer = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) + 10, map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)'], finished: true }] }) });
         later.shift()[0]();
         await flush(); await flush();
         same('found: the link opens the match\'s page', link.href, '/match.html?id=ants-TREASURE-20261016-071320Z');
@@ -416,7 +483,7 @@ async function main() {
         later.shift()[0](); await flush(); await flush();
         check('a list that cannot be had is asked three times in all, then the link stays on the matches', fetched.length === 5 && later.length === 0 && find(bar, (x) => x.tag === 'a').href === '/matches.html');
         let release = null;
-        answer = () => new Promise((resolve) => { release = () => resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000), map: 'TREASURE.LVL', players: ['Maple', 'Sam'], finished: true }] }) }); });
+        answer = () => new Promise((resolve) => { release = () => resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000), map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)'], finished: true }] }) }); });
         strip.show(back);
         strip.hide();
         release();

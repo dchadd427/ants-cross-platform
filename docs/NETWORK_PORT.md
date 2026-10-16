@@ -855,7 +855,7 @@ Requests (2026-10-07): the front page should almost be the game lobby: a visitor
 
 * **Nobody in the room.** A lobby room has no ten minutes to fill. It is forgotten a minute (`empty_close_ms`) after the last person has gone (left, or the hold ended), **without a line in the log and with no result file** (no match was begun); a Hello for its code before that finds it, and a Hello with a lobby block after that makes a new lobby. A person who comes meanwhile starts the minute over.
 
-* **A page never takes a seat of a match.** A page's Hello with a key for a match that loads or runs is `MatchRunning`; only a game plays: its Hello with the key takes the seat back as in protocol 10 (the pages that went to the game page do exactly that). When its rules end the match, the server opens a lobby with the same code, a seat kept for each key of a game in a browser ([the rematch](SERVER.md#lobby-rooms)); before, a page's key finds the match.
+* **A page never takes a seat of a match.** A page's Hello with a key for a match that loads or runs is `MatchRunning`; only a game plays: its Hello with the key takes the seat back as in protocol 10 (the pages that went to the game page do exactly that). When its rules end the match, the server opens a lobby with the same code, a seat kept for each browser game still in it ([the rematch](SERVER.md#lobby-rooms)); before, a page's key finds the match.
 
 * **Restarts.** A lobby is not kept in a restart record (nothing in it is a match); a restart ends every lobby, and a page that is answered `NoSuchRoom` to its key makes the room again with a Hello that shows no key. The record of a match that a lobby started is any public room's.
 

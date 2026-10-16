@@ -22,7 +22,8 @@
 //
 // The rematch (docs/SERVER.md "Lobby rooms"). When the rules end the match of a lobby room, the manager opens a lobby room with the same code at once, from that match (Room::take_rematch, Room::reopen): the
 // plan, and a seat reserved for the key of each person. It takes a place of the lobby pool like any new lobby (the same evictions; no place, no rematch). The room of the match gives its code to the lobby
-// (status() of the code is the lobby's) and is RETIRED: it answers its last connections and is in list() until its keep time is over; take_ended() reports its end as ever.
+// (status() of the code is the lobby's) and is RETIRED: it answers its last connections and is in list() until its keep time is over; take_ended() reports its end as ever. A retired room counts against
+// --max-rooms (room_total) and in the control interface's GET /stats, holds its public place (public_places) and is closed by shutdown().
 
 #include <cstdint>
 #include <functional>

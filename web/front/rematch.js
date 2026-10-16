@@ -72,19 +72,23 @@
     }
 
     // ---- the hand-over to the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // "Back to the lobby": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses.
+    // "Back to the lobby": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses
+    // the room (the front page could not take the seat back: nothing may go); a match that is not kept only leaves the front page without its strip.
     function handOver(session, over, key, name, nowMs) {
         var lobby = JSON.stringify({ c: over.room, k: key, n: printable(name, 32) ? name : '', o: 0 });
         var back = JSON.stringify({ c: over.room, t: Math.floor(nowMs), m: over.map, p: over.names, w: winnerWords(over) });
-        return storageSet(session, LOBBY_KEY, lobby) && storageSet(session, BACK_KEY, back);
+        if (!storageSet(session, LOBBY_KEY, lobby)) return false;
+        storageSet(session, BACK_KEY, back);
+        return true;
     }
-    // The match that the room `code` comes back from: { code, t, map, people: the names of the match, winner }, or null (none, another room's, older than three hours or from the future, or not this shape)
+    // The match that the room `code` comes back from: { code, t, map, people: the names of the match, names: the four by seat ('' for a seat that did not play), winner }, or null (none, another room's, older
+    // than three hours or from the future, or not this shape)
     function readBack(session, code, nowMs) {
         var v;
         try { v = JSON.parse(storageGet(session, BACK_KEY)); } catch (e) { return null; }
         if (!v || typeof v !== 'object' || v.c !== code || !validRoom(code) || !isWhole(v.t) || nowMs - v.t > MAX_AGE_MS || v.t - nowMs > 60000) return null;
         if ((v.m !== '' && !validMap(v.m)) || !Array.isArray(v.p) || v.p.length !== 4 || !v.p.every(function (n) { return printable(n, 32); }) || !printable(v.w, 160)) return null;
-        return { code: code, t: v.t, map: v.m, people: v.p.filter(function (n) { return n !== ''; }), winner: v.w };
+        return { code: code, t: v.t, map: v.m, people: v.p.filter(function (n) { return n !== ''; }), names: v.p.slice(), winner: v.w };
     }
     function forgetBack(session) { try { session.removeItem(BACK_KEY); } catch (e) { /* nothing was kept */ } }
 
@@ -106,16 +110,24 @@
     function chipText(chip) { return chip.name + (chip.host ? ' · host' : '') + ' · ' + (chip.here ? 'here' : 'on the results screen'); }
     // The front page's strip: { lead, text } ("Back from the match." and "Maple won with 2,040. Same room, same colours, same map.")
     function backLine(back) { return { lead: 'Back from the match.', text: (back.winner ? back.winner + ' ' : '') + 'Same room, same colours, same map.' }; }
-    // The match's id in the public list of replays (GET /replays: { replays: [{ file, ended (s), map, players, finished }, ...] }, newest first): the newest finished match on the map, ended within ten minutes of the hand-over,
-    // in which every named person of the match played; '' when there is none (the strip links the list of matches then)
+    // How the public list of replays names a seat of the match: the colour, and the name in brackets ("Green (Maple)"); a seat without a name of its own (none, "Player", "Player 2") is its colour. The
+    // server's replay::seat_label of the name that the recording keeps (replay_person_name; tests/data/replay_players.txt holds the two to the server's own output).
+    function replayLabel(seat, name) {
+        var kept = name.replace(/^ +| +$/g, '');
+        if (/^Player( [1-4])?$/.test(kept)) kept = '';
+        return kept ? COLOURS[seat] + ' (' + kept + ')' : COLOURS[seat];
+    }
+    // The match's id in the public list of replays (GET /replays: { replays: [{ file, ended (s), map, players: the labels of the seats, finished }, ...] }, newest first): the newest finished match on the map,
+    // ended within ten minutes of the hand-over, in which every seat of the match played as it did (its label); '' when there is none (the strip links the list of matches then)
     function findReplay(list, back) {
-        var named = back.people.filter(function (n) { return !/^Player( [1-4])?$/.test(n); });
+        var want = [];
+        for (var s = 0; s < 4; s++) if (back.names[s]) want.push(replayLabel(s, back.names[s]));
         var entries = list && Array.isArray(list.replays) ? list.replays : [];
         for (var i = 0; i < entries.length; i++) {
             var e = entries[i];
             if (!e || typeof e.file !== 'string' || e.map !== back.map || e.finished !== true || !isWhole(e.ended) || Math.abs(e.ended * 1000 - back.t) > 10 * 60 * 1000) continue;
             var players = Array.isArray(e.players) ? e.players : [];
-            if (!named.every(function (n) { return players.indexOf(n) !== -1; })) continue;
+            if (want.length === 0 || !want.every(function (l) { return players.indexOf(l) !== -1; })) continue;
             var id = e.file.replace(/\.antsrep$/, '');
             if (ID_RE.test(id)) return id;
         }
@@ -152,7 +164,7 @@
         if (!join || !/^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) || join.indexOf('//') !== -1 || join.indexOf('..') !== -1 || !env.host || !env.Net) return null;
         var name = (q.get('name') || '').replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
         var url = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + join;
-        var st = { over: null, key: null, client: null, shown: false, removed: false, room: null };
+        var st = { over: null, key: null, client: null, shown: false, removed: false, blocked: false, room: null };
         var nodes = null;
         function relayout() { try { win.dispatchEvent(new win.Event('resize')); } catch (e) { /* no layout to tell */ } }
         function build() {
@@ -209,12 +221,38 @@
             nodes.go.hidden = true;
             relayout();
         }
+        function blocked() {                                       // the browser refused this tab's storage: the front page could not take the seat back, so the tab stays (no key goes into an address)
+            st.blocked = true;
+            if (!nodes) return;
+            nodes.text.textContent = 'This browser blocks the storage that the front page needs, so your seat cannot be taken back from here.';
+            nodes.go.hidden = true;
+            relayout();
+        }
         function back() {
-            if (!st.over || !st.key) return;
-            if (st.client) st.client.drop();                       // (no Leave: the seat is the front page's in a moment, with the key)
+            if (!st.over || !st.key || st.removed || st.blocked) return;
             var shown = st.room && st.room.you < 4 ? st.room.slots[st.room.you].name : '';           // (the name that the room shows for the seat, else the address's, else the match's)
-            handOver(session, st.over, st.key, shown || name || st.over.names[st.over.seat], now());
+            if (!handOver(session, st.over, st.key, shown || name || st.over.names[st.over.seat], now())) { blocked(); return; }      // (the link stays: the seat stays held from here)
+            if (st.client) st.client.drop();                       // (no Leave: the seat is the front page's in a moment, with the key)
             loc.assign('/?room=' + encodeURIComponent(st.over.room));
+        }
+        // The results screen's link: a game's Hello with the key of the seat. A Welcome of the MATCH (the rejoin flag: only a match that still runs says it, when the server had not ended it yet) is let go
+        // of without a word, and the seat is asked for again a moment later, `tries` times in all
+        function ask(opts, tries) {
+            var c = new env.Net.LobbyClient(opts);
+            st.client = c;
+            c.on('welcome', function (w) {
+                if (w && w.rejoin) {
+                    c.drop();
+                    if (tries > 1) later(function () { ask(opts, tries - 1); }, ASK_AFTER_MS);
+                    return;
+                }
+                show();
+            });
+            c.on('room', function (room) { st.room = room; if (st.shown) paint(); });
+            c.on('removed', removed);
+            c.on('refused', hide);
+            c.on('superseded', hide);
+            c.connect();
         }
         win.antsMatchOver = function (text) {
             if (st.over) return;
@@ -228,14 +266,7 @@
             var opts = { url: url, code: over.room, name: name || over.names[over.seat], key: env.Net.bytesOfHex(key), join: true, kind: 'game', keyOnly: true, platform: platformOf(win.navigator) };
             var extra = env.clientOptions || {};
             for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) opts[k] = extra[k];
-            var c = new env.Net.LobbyClient(opts);
-            st.client = c;
-            c.on('welcome', function () { show(); });
-            c.on('room', function (room) { st.room = room; if (st.shown) paint(); });
-            c.on('removed', removed);
-            c.on('refused', hide);
-            c.on('superseded', hide);
-            later(function () { c.connect(); }, ASK_AFTER_MS);
+            later(function () { ask(opts, 3); }, ASK_AFTER_MS);
         };
         // The page goes some other way (the game's Leave Game, a closed tab, a reload): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
         // the key when the match ended, and this page's copy goes with the page). After "Back to the lobby", which hands the seat over, the client has let go already and says nothing.

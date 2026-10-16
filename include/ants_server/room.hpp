@@ -47,8 +47,8 @@
 // in the log or a result file, `empty_close_ms` after the last person has gone. The leader's START reaches the room in every pass while every person is a game: the room loads the plan's map (the server
 // offers the maps of --demo-maps), checks that the seats which play can play it, asks the server whether it has a place for another match, and then seats the plan's bots and starts like any room; what it
 // cannot do ends the START with a notice to the leader (HostLobby::end_start) and the room goes on waiting. A failed start never fails the room. A match that a lobby room has begun is a room like the others.
-// The rematch (docs/SERVER.md "Lobby rooms"): when the rules end that match, the room gives its match's plan and persons once (take_rematch) and the manager opens a lobby room with the same code from them
-// (reopen: the persons' seats are reserved for their keys, net::HostLobby (7)); a match that ended otherwise (everybody left, a failure, the owner) gives none.
+// The rematch (docs/SERVER.md "Lobby rooms"): when the rules end that match, the room gives its match's plan and persons once (take_rematch: not a person whom the match dropped) and the manager opens a lobby
+// room with the same code from them (reopen: the persons' seats are reserved for their keys, net::HostLobby (7)); a match that ended otherwise (everybody left, a failure, the owner) gives none.
 //
 // Replays (replay_store.hpp, docs/REPLAYS.md "On the game server"). A room of a server that keeps replays records its match: ants_replay's Recorder watches every turn that the referee's own runner
 // executes (LockstepRunner::set_on_executed), from the first, and when the match is over, or the room fails or is closed while it runs, the recording is written as a .antsrep file and handed to the

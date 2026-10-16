@@ -2,6 +2,8 @@
 // with the match's plan and a seat reserved for the key of each of its people; the room of the match is retired (it answers its last connections and keeps its status for its keep time).
 #include "server_fixtures.hpp"
 
+#include <regex>
+
 namespace {
 
 // The options of a server that offers the front page's lobbies (as test_server_lobby.cpp's)
@@ -421,5 +423,247 @@ void run_rematch_tests() {
             w.run(10);
             ASSERT_TRUE(lobby_of(w, "rmt00015")->reserved == 0 && lobby_of(w, "rmt00015")->names[1].empty() && pia_back.lobby->is_leader());
         }
+    } TEST_END();
+
+    TEST_CASE("S3.200 Who Left The Match Has No Seat Kept: Cid Leaves In The Middle (Leave Game: The Match Drops His Seat) And Bob's Quit Ends It (One Other Side Left: Bob Stays In The Match, So His Seat Is Kept); The Lobby Keeps Pia's And Bob's Seats, Cid's Colour Is Open And START Waits For Bob Only; Cid's Key Is Then A Newcomer's; A Game Page That Asks For Its Colour With The Key (The Front Page's Rejoin) Is The Person Back, As A Game") {
+        World w(rematch_limits());
+        const std::string code = "rmt00016";
+        Client& pia = w.connect_page("Pia", code, lobby_block_of());
+        Client& bob = w.connect_page("Bob", code, lobby_block_of());
+        Client& cid = w.connect_page("Cid", code, lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader() && bob.lobby->my_seat() == 1 && cid.lobby->my_seat() == 2);
+        ASSERT_TRUE(pia.lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Nobody})));
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->request_start());
+        w.run(300);
+        const net::SeatKey kp = pia.lobby->key(), kb = bob.lobby->key(), kc = cid.lobby->key();
+        for (Client* page : {&pia, &bob, &cid}) page->end->close();
+        Client& pia_game = w.connect_game("Pia", code, kp);
+        Client& bob_game = w.connect_game("Bob", code, kb);
+        Client& cid_game = w.connect_game("Cid", code, kc);
+        ASSERT_TRUE(until_running(w, code, 8000));
+        w.run(kPre + 3000);
+        ASSERT_TRUE(cid_game.session != nullptr);
+        cid_game.session->leave();                                                                  // Cid leaves the match: his seat is dropped
+        w.run(1000);
+        ASSERT_TRUE(pia_game.sim.is_player_dropped(2) && !pia_game.sim.is_player_dropped(1));
+        sim::Command q;                                                                             // Bob quits with one other side left: the quit ends the match by its rules
+        q.type = sim::CommandType::Quit;
+        q.issuer = 1;
+        ASSERT_TRUE(bob_game.session->submit(q));
+        for (int i = 0; i < 400 && w.status(code).state == RoomState::Running; ++i) w.run(10);
+        ASSERT_TRUE(w.ended(code).state == RoomState::Finished && w.ended(code).reason == "the match ended" && !pia_game.sim.is_player_dropped(1));
+        std::optional<RoomStatus> lobby = lobby_of(w, code);
+        ASSERT_TRUE(lobby.has_value() && lobby->reopened && lobby->reserved == 0x3);
+        ASSERT_TRUE(lobby->names[0] == "Pia" && lobby->names[1] == "Bob" && lobby->names[2].empty() && lobby->plan == "ooon -");      // (Cid's colour is an open colour of the plan)
+        // Pia's game page, opened again by the front page's Rejoin with her key (it asks for her colour): she is back, as a game, and leads; START waits for Bob only
+        w.next_key = kp;
+        Client& pia_rejoin = w.connect("Pia", code, 0);
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(pia_rejoin.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_rejoin.lobby->my_seat() == 0 && pia_rejoin.lobby->is_leader());
+        ASSERT_TRUE(lobby_of(w, code)->reserved == 0x2 && lobby_of(w, code)->games == 0x1);
+        ASSERT_TRUE(pia_rejoin.lobby->request_start());
+        w.run(300);
+        ASSERT_FALSE(lobby_of(w, code)->starting);
+        ASSERT_EQ(said(pia_rejoin.room_chat), (std::vector<std::string>{std::string("255||Bob") + net::kNoticeNotBack}));
+        // Cid's key fits no kept seat: his page is a newcomer's, and takes the open colour like anybody
+        w.next_key = kc;
+        Client& cid_back = w.connect_page("Cid", code, lobby_block_of());
+        w.next_key = net::SeatKey{};
+        w.run(300);
+        ASSERT_TRUE(cid_back.lobby->phase() == net::ClientLobby::Phase::InRoom && cid_back.lobby->my_seat() == 2 && !net::key_matches(cid_back.lobby->key(), kc));
+        ASSERT_TRUE(lobby_of(w, code)->reserved == 0x2 && pia_rejoin.lobby->is_leader());
+    } TEST_END();
+
+    TEST_CASE("S3.201 The Room Of The Match That Gave Its Code To Its Rematch (Retired): It Counts Against --max-rooms (The Control Interface Makes No Room Until Its Keep Time Is Over) And In The Control Interface's GET /stats; It Keeps Its Public Place (The Rematch's START Finds None While It Holds The Only One); It Is Still Served (Its Games' Links Close After The Grace Period, Before Its Keep Time Is Over); A Stop Of The Server Closes Its Links") {
+        const auto call = [](World& w, const char* method, const std::string& path, const std::string& body = std::string()) {
+            ctl::HttpRequest rq;
+            rq.method = method;
+            rq.path = path;
+            rq.body = body;
+            return handle_control(w.mgr, rq, w.now);
+        };
+        const auto json_of = [](const ctl::HttpResponse& r) {
+            ctl::JsonValue v;
+            std::string why;
+            ctl::parse_json(r.body, v, &why);
+            return v;
+        };
+        {   // --max-rooms counts it, and so does GET /stats
+            ServerLimits l = rematch_limits();
+            l.max_rooms = 2;
+            World w(l);
+            Played p;
+            play_and_quit(w, "rmt00017", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            ASSERT_TRUE(w.mgr.rooms_reopened() == 1u && w.mgr.room_count() == 1u && w.mgr.retired_count() == 1u);
+            ASSERT_EQ(json_of(call(w, "GET", "/stats")).get("rooms").as_int_or(-1), 2);
+            ASSERT_EQ(call(w, "POST", "/rooms", R"({"map":"TINY.LVL","code":"RMT-CTL2"})").status, 503);
+            w.run(31000);                                                                               // the match's keep time is over: it is forgotten
+            ASSERT_EQ(w.mgr.retired_count(), 0u);
+            ASSERT_EQ(json_of(call(w, "GET", "/stats")).get("rooms").as_int_or(-1), 1);
+            ASSERT_EQ(call(w, "POST", "/rooms", R"({"map":"TINY.LVL","code":"RMT-CTL2"})").status, 201);
+        }
+        {   // the only public place: the rematch's START waits for it (the leader is told), and is taken once the match is forgotten
+            ServerLimits l = rematch_limits();
+            l.demo_rooms = 1;
+            World w(l);
+            const std::string code = "rmt00018";
+            Played p;
+            play_and_quit(w, code, plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            ASSERT_EQ(w.mgr.retired_count(), 1u);
+            w.next_key = p.pia;
+            Client& pia = w.connect_page("Pia", code, lobby_block_of());
+            w.next_key = p.bob;
+            Client& bob = w.connect_page("Bob", code, lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia.lobby->is_leader() && lobby_of(w, code)->reserved == 0);
+            ASSERT_TRUE(pia.lobby->request_start());
+            w.run(300);
+            pia.end->close();
+            bob.end->close();
+            Client& pia_game = w.connect_game("Pia", code, p.pia);
+            w.connect_game("Bob", code, p.bob);
+            w.run(1000);
+            ASSERT_TRUE(lobby_of(w, code).has_value() && !lobby_of(w, code)->starting);               // no place: the START ends, the lobby waits
+            ASSERT_EQ(said(pia_game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoPlace}));
+            w.run(30000);                                                                                // the match is forgotten: its place is free
+            ASSERT_EQ(w.mgr.retired_count(), 0u);
+            ASSERT_TRUE(pia_game.lobby->request_start());
+            ASSERT_TRUE(until_running(w, code, 8000));
+        }
+        {   // it is served: its games' links close at the end of the grace period (everybody is level), while it is still listed
+            World w(rematch_limits());
+            Played p;
+            play_and_quit(w, "rmt00019", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            const uint32_t ended = w.now;
+            ASSERT_TRUE(p.pia_game->server_end->is_open() && p.bob_game->server_end->is_open() && w.mgr.retired_count() == 1u);
+            w.run(Room::kGraceMs - 1500 - (w.now - ended));
+            ASSERT_TRUE(p.pia_game->server_end->is_open());
+            w.run(3000);
+            ASSERT_TRUE(!p.pia_game->server_end->is_open() && !p.bob_game->server_end->is_open() && w.mgr.retired_count() == 1u);
+        }
+        {   // a stop of the server closes its links at once
+            World w(rematch_limits());
+            Played p;
+            play_and_quit(w, "rmt00020", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            ASSERT_TRUE(p.pia_game->server_end->is_open() && w.mgr.retired_count() == 1u);
+            w.mgr.shutdown(w.now);
+            ASSERT_TRUE(!p.pia_game->server_end->is_open() && !p.bob_game->server_end->is_open());
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.202 The Link To The Match's Stats: A Lobby Room's Match That Runs 30 Seconds Is Recorded, And The Public List Of Replays Names Its Players As tests/data/replay_players.txt Says (The Colour, And The Name In Brackets; The Front Page Finds The Match By Them: web_rematch_check.js); Every Line Of That File Is What The Server's Own Functions Make Of Its Names; The File's Name Is An Id That The Page Takes") {
+        std::vector<std::pair<std::array<std::string, 4>, std::string>> golden;                    // (the four names, the labels joined by '|')
+        {
+            std::ifstream in(std::string(TEST_DATA_DIR) + "/replay_players.txt");
+            std::string line;
+            while (std::getline(in, line)) {
+                if (line.empty() || line[0] == '#') continue;
+                const size_t arrow = line.find(" => ");
+                ASSERT_TRUE(arrow != std::string::npos);
+                std::array<std::string, 4> names;
+                std::string rest = line.substr(0, arrow);
+                for (size_t s = 0; s < 4; ++s) {
+                    const size_t bar = rest.find('|');
+                    names[s] = s < 3 ? rest.substr(0, bar) : rest;
+                    ASSERT_TRUE(s == 3 || bar != std::string::npos);
+                    if (s < 3) rest = rest.substr(bar + 1);
+                }
+                golden.emplace_back(names, line.substr(arrow + 4));
+            }
+        }
+        ASSERT_TRUE(golden.size() >= 3u);
+        // every line: the labels that a recording of these names gets (a person's name as replay_person_name keeps it, a seat with none is its colour; a seat that did not play has none)
+        for (const auto& g : golden) {
+            replay::Header head;
+            for (uint8_t s = 0; s < 4; ++s) {
+                if (g.first[s].empty()) continue;
+                head.roster = static_cast<uint8_t>(head.roster | (1u << s));
+                head.names[s] = replay_person_name(g.first[s]);
+            }
+            std::string labels;
+            for (uint8_t s = 0; s < 4; ++s) {
+                if ((head.roster & (1u << s)) != 0) labels += (labels.empty() ? "" : "|") + replay::seat_label(head, s);
+            }
+            ASSERT_EQ(labels, g.second);
+        }
+        // the first line is a real match: Pia, Bob and the Medium bot of the plan, in a lobby room of the code rmt00021, recorded and listed by the server
+        World w(rematch_limits());
+        const std::string code = "rmt00021";
+        ASSERT_TRUE(golden[0].first[0] == "Pia" && golden[0].first[1] == "Bob" && golden[0].first[3].empty());
+        ASSERT_EQ(golden[0].first[2], bn(code, 2, "Medium"));                                             // (the bot's name in this room)
+        int64_t clock_s = 1760600000;
+        ReplayConfig rc;
+        rc.dir = (fs::path(temp_dir_for("rematch-replays")) / "replays").string();
+        rc.game_version = "v0.0.0-test";
+        rc.build_id = "abc123";
+        rc.min_free_bytes = 0;
+        rc.clock_s = [&clock_s]() { return clock_s; };
+        std::string why;
+        ASSERT_MSG(w.mgr.enable_replays(rc, true, why), why);
+        Played p;
+        play_and_quit(w, code, plan_of({K::Open, K::Open, K::Medium, K::Nobody}, 0, 2), p, false);    // (Pia and the bot against Bob: his quit ends the match)
+        w.run(28000);                                                                                  // (a match is kept when it ran 30 seconds)
+        sim::Command q;
+        q.type = sim::CommandType::Quit;
+        q.issuer = 1;
+        ASSERT_TRUE(p.bob_game->session->submit(q));
+        for (int i = 0; i < 400 && w.status(code).state == RoomState::Running; ++i) w.run(10);
+        ASSERT_TRUE(w.ended(code).state == RoomState::Finished && w.ended(code).replay_kept && lobby_of(w, code).has_value());
+        ctl::HttpRequest rq;
+        rq.method = "GET";
+        rq.path = "/replays";
+        const ctl::HttpResponse r = handle_public_replays(w.mgr, rq);
+        ctl::JsonValue j;
+        ASSERT_TRUE(r.status == 200 && ctl::parse_json(r.body, j, &why));
+        ASSERT_EQ(j.get("replays").size(), size_t{1});
+        const ctl::JsonValue& e = j.get("replays").at(0);
+        std::string players;
+        for (size_t i = 0; i < e.get("players").size(); ++i) players += (i == 0 ? "" : "|") + e.get("players").at(i).str();
+        ASSERT_EQ(players, golden[0].second);
+        ASSERT_TRUE(e.get("finished").as_bool_or(false) && e.get("map").str() == "TINY.LVL" && e.get("ended").as_int_or(0) == clock_s);
+        const std::string file = e.get("file").str();
+        ASSERT_TRUE(file.size() > 8 && file.compare(file.size() - 8, 8, ".antsrep") == 0);
+        ASSERT_TRUE(std::regex_match(file.substr(0, file.size() - 8), std::regex("ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?")));      // (web/front/rematch.js ID_RE)
+    } TEST_END();
+
+    TEST_CASE("S3.203 A Restart Record Of A Code Whose Earlier Record Could Not Be Deleted (The Rematch's Match Has The Code Of The Match Before It, And The Record's Name Is Made Of The Code): The New Record Replaces The Old File And Is Taken Off The List Of Files To Delete Again, So The Retry Every 10 s Does Not Delete It; A File That Nothing Replaced Is Still Deleted When It Can Be") {
+#ifndef _WIN32
+        RestartConfig cfg = test_restart_config("rematch-stale");
+        std::string why;
+        RestartStore store(cfg);
+        ASSERT_MSG(store.prepare(why), why);
+        const auto make_undeletable = [](const std::string& path) {                                   // (a folder that is not empty takes the file's name: the delete fails)
+            fs::rename(path, path + ".aside");
+            fs::create_directory(path);
+            write_all_bytes(fs::path(path) / "x", {1});
+        };
+        const std::string path = store.path_for("rmt00022");
+        auto first = store.create(sample_head("rmt00022"), why);
+        ASSERT_TRUE(first != nullptr && first->append_turn(sample_turn(0)));
+        make_undeletable(path);
+        first->discard();                                                                              // the match is over: its record is to go, and cannot
+        ASSERT_EQ(store.stale_count(), size_t{1});
+        fs::remove_all(path);                                                                          // the obstacle goes before the next try
+        auto second = store.create(sample_head("rmt00022"), why);                                     // the rematch's match: a record under the same name
+        ASSERT_TRUE(second != nullptr && second->append_turn(sample_turn(0)) && second->sync());
+        ASSERT_EQ(store.stale_count(), size_t{0});
+        ASSERT_EQ(store.retry_stale(), size_t{0});
+        ASSERT_TRUE(fs::is_regular_file(path));                                                        // the record of the match that runs is there
+        // a file that nothing replaced: deleted at the next try once it can be
+        const std::string other = store.path_for("rmt00023");
+        auto third = store.create(sample_head("rmt00023"), why);
+        ASSERT_TRUE(third != nullptr);
+        make_undeletable(other);
+        third->discard();
+        ASSERT_EQ(store.stale_count(), size_t{1});
+        fs::remove(fs::path(other) / "x");
+        ASSERT_EQ(store.retry_stale(), size_t{0});
+        ASSERT_FALSE(fs::exists(other));
+        ASSERT_TRUE(fs::is_regular_file(path));
+#endif
     } TEST_END();
 }

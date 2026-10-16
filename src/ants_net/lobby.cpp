@@ -49,12 +49,20 @@ void swap_team_seats(uint8_t& team_a, uint8_t& team_b, uint8_t a, uint8_t b) {
 
 // What the leader is told about people that the START waits for: the games that did not come in time ("Priya's game did not come in time." / "These games did not come in time: Priya and Sam."), the persons
 // who are not back from the match (the rematch: "Priya is not back from the match yet." / "These players are not back from the match yet: Priya and Sam."); the names are the room's own, printable
+// A notice is a line of chat (kMaxChatChars): when the names do not fit, as many whole names as fit and "and N more" ("These players are not back from the match yet: Priya and 2 more.")
 std::string names_notice(const std::vector<std::string>& names, const char* one, const char* many) {
     if (names.empty()) return std::string();
-    if (names.size() == 1) return names[0] + one;
-    std::string list;
-    for (size_t i = 0; i < names.size(); ++i) list += std::string(i == 0 ? "" : i + 1 == names.size() ? " and " : ", ") + names[i];
-    return std::string(many) + list + ".";
+    if (names.size() == 1) return names[0] + one;                                       // (a name is at most kMaxNameChars: it fits)
+    std::string text;
+    for (size_t shown = names.size(); shown >= 1; --shown) {
+        const size_t more = names.size() - shown;
+        std::string list;
+        for (size_t i = 0; i < shown; ++i) list += std::string(i == 0 ? "" : i + 1 == shown && more == 0 ? " and " : ", ") + names[i];
+        if (more > 0) list += " and " + std::to_string(more) + " more";
+        text = std::string(many) + list + ".";
+        if (text.size() <= kMaxChatChars) break;
+    }
+    return text;
 }
 std::string late_notice(const std::vector<std::string>& names) { return names_notice(names, kNoticeGameLate, kNoticeGamesLate); }
 
@@ -261,10 +269,12 @@ bool HostLobby::notify(uint8_t seat, const std::string& text) {
 
 void HostLobby::elect_leader() {
     uint8_t best = kNoLeader;
+    const bool kept = any_reserved();
     if (leads()) {
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (!person(s) || room_.slots[s].state != SlotState::Client) continue;               // (a guest whose connection ended and whose seat is held leads still: it counts as present)
             if (guests_[s].reserved) continue;                                                   // (the rematch: a person who is not back does not lead; the match's order makes the host lead again on return)
+            if (kept && !of_match(s)) continue;                                                   // (... and while a seat is kept, a newcomer never leads: it would remove the kept seats)
             if (best == kNoLeader || guests_[s].join_order < guests_[best].join_order) best = s;
         }
     }
@@ -448,7 +458,8 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
     g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
-    if (g.reserved && hello.client_kind == kClientPage) {        // (the rematch: the person's page is back, an ordinary guest from now on, who may lead; a game holds the seat from the results screen and changes nothing)
+    if (g.reserved && (hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {        // (the rematch: the person's page is back, or a game that asks for a colour (the front page's Rejoin), an
+                                                                 // ordinary guest from now on, who may lead; the results screen asks for none: it holds the seat and changes nothing)
         g.reserved = false;
         ++returns_;
         elect_leader();
@@ -891,6 +902,7 @@ bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
         room_.slots[p.seat].rtt_ms = kRttUnknown;
         room_.slots[p.seat].platform = valid_platform(p.platform) ? p.platform : kPlatformUnknown;
         joins_ = std::max(joins_, p.order);                                              // (a newcomer comes after every person of the match)
+        match_order_ = std::max(match_order_, p.order);
     }
     elect_leader();                                                                      // (nobody leads before somebody is back)
     sync_room_flags();
@@ -906,9 +918,13 @@ bool HostLobby::any_reserved() const noexcept {
 
 bool HostLobby::anyone_back() const noexcept {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-        if (room_.slots[s].state == SlotState::Client && person(s) && !guests_[s].reserved) return true;
+        if (room_.slots[s].state == SlotState::Client && person(s) && !guests_[s].reserved && of_match(s)) return true;
     }
     return false;
+}
+
+bool HostLobby::of_match(uint8_t seat) const noexcept {
+    return seat < sim::MAX_PLAYERS && match_order_ != 0 && guests_[seat].join_order != 0 && guests_[seat].join_order <= match_order_;
 }
 
 size_t HostLobby::present() const noexcept {

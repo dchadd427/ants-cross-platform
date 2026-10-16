@@ -156,11 +156,16 @@ void Room::forget(uint32_t now_ms) {
     fail("forgotten", now_ms);
 }
 
-// The rematch: what the lobby of this room's match gave each person (the seat, the name, the key, the place in the order) and its plan, once, for the lobby room that the manager opens with this code
+// The rematch: what the lobby of this room's match gave each person (the seat, the name, the key, the place in the order) and its plan, once, for the lobby room that the manager opens with this code. A person
+// whom the match dropped (who left it, whose link was lost for too long, whom a vote took out) is not on any results screen of it: no seat is kept for them, their colour is open in the lobby. A quitter whose
+// quit ended the match (one other side was left) stays in it (sim::SimulationEngine::quit_player) and keeps the seat.
 std::optional<net::Rematch> Room::take_rematch() {
     if (!rematch_due()) return std::nullopt;
     rematch_given_ = true;
     net::Rematch r = lobby_.rematch();
+    if (sim_ != nullptr) {
+        r.people.erase(std::remove_if(r.people.begin(), r.people.end(), [this](const net::Rematch::Person& p) { return sim_->is_player_dropped(p.seat); }), r.people.end());
+    }
     if (r.people.empty()) return std::nullopt;
     return r;
 }
