@@ -13,14 +13,17 @@
 //   AI27.5b  a task that ran out of attempts starts afresh when a source of its ant appears
 //   AI27.6   who plays it: Medium and Hard on a walled map, not Easy, not a map with a free pile; the numbers of the plan are the owner's
 //   AI27.7   a Bomber defuses a bomb that plugs a rock wall's tunnel; the pick-up trips avoid map bombs
+//   AI27.7c  a bomb of the seat's own colour that plugs a tunnel is defused like any other (act_defuse counts a bomb of any colour at the goal cell as armed)
 //   AI27.8   the sealed vault of HELLRAISER and the shore breach of POPcOrN, on the Rig
 //   AI27.9   HELLRAISER through the REAL controller (the arena's play_match, with the filter that refuses a click on a power-up and a plant under an ant): each seat banks food over two walls
 //   AI27.9b  the same with an idle own worker on the plant tile and on the tile to step from (the controller refuses an order onto an ant): they are sent aside and the first attempt banks
 //   AI27.10  which maps are played as gate maps: HELLRAISER and POPcOrN at Medium and Hard, none of the shipped maps (ISLANDS is left to the island play), Bombz Away not
-//   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs)
+//   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs, the idle Swimmer); the contest is judged on a gate map at Hard, skipped at Medium
 //   AI27.12  the plant tile and the tile to step from are cleared of own ants (sent aside, held until the goal is over)
 //   AI27.12b an enemy ant on the tile to step from is waited for, not attacked (a plain move onto it is an attack)
 //   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
+//   AI27.13b the opening puts no Fire Ant on wall duty (a thief power-up that the enemy reaches calls for walls on an open map, not on a gate map before it has banked)
+//   AI27.13c an own worker beside a pile at the first look: the flag is set and the opening is not held back
 #include <algorithm>
 
 #include "ai_test.hpp"
@@ -645,6 +648,29 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), 1u);
             ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
         }
+        {   // (c) a bomb of the SEAT'S OWN colour (every bomb of Dustbin, Ghetto, FKD Deathmatch and !-Midz-! is green, team 0's): the engine refuses a bomb tile as a path step for the owner's team, so for the
+            // owner the bomb is a wall, and the engine defuses a bomb of any colour. A lake (rows 30 to 34) between the hill and the pile, its shore held by own bombs: the shore breach plans a Defuse, and the
+            // Bomber has to defuse the bomb (the task once took a bomb of its own colour for defused and ordered it again for 4,600 ticks)
+            Field f;
+            for (int y = 30; y <= 34; ++y) {
+                for (int x = 0; x < 60; ++x) f.sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            for (int x = 0; x < 60; ++x) f.sim.grid_mut().place_bomb(static_cast<uint32_t>(x), 29, 0);
+            f.powerup(8, 8, sim::AntType::Bomber);
+            GoalRules rules;
+            rules.shore_breach = true;
+            const GateGoal g = f.goal(rules);
+            ASSERT_EQ(g.kind, GoalKind::Defuse);
+            ASSERT_EQ(g.cell.y, 29);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(2500);
+            ASSERT_TRUE(bot.gate_goals().done() >= 1u);                                // the Bomber defused a bomb of its own colour ...
+            ASSERT_TRUE(bot.gate_goals().defuses() < 50u);                             // ... and did not count the same bomb as defused look after look
+            int left = 0;
+            for (int x = 0; x < 60; ++x) left += f.sim.grid().has_bomb_at(TileCoord{x, 29}) ? 1 : 0;
+            ASSERT_TRUE(left < 60);
+        }
     } TEST_END();
 
     TEST_CASE("AI27.8 Sealed Vault Raid And Shore Breach: Hard Bots Bank Food On HELLRAISER And POPcOrN") {
@@ -857,16 +883,29 @@ void run_gate_goal_tests() {
             ASSERT_FALSE(bot.gate_map());
             ASSERT_EQ(bot.powerups().taken(), 0u);
         }
-        {   // (c) the contest: an enemy ant two tiles from the Fire power-up gets there first, so the trip is given up (a gate map goes anyway)
-            Field f;
-            f.powerup(22, 10, sim::AntType::Fire);
-            f.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 10});
-            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
-            auto& bot = rig.as<StandardBot>();
-            rig.run(120);
-            ASSERT_FALSE(bot.gate_map());
-            ASSERT_TRUE(bot.powerups().contested() >= 1u);
-            ASSERT_EQ(bot.powerups().taken(), 0u);
+        {   // (c) the contest: an enemy ant two tiles from the Fire power-up gets there first, so the trip is given up. On an open map at every level, and on a gate map at Hard (the race is judged there as everywhere);
+            // Medium keeps the skip of a gate map and starts the trip: its longer reaction delay loses the estimate to the start ants of the enemy at the central power-ups (Ghetto: about a quarter of its score)
+            struct Case {
+                bool gate;
+                Level level;
+            };
+            for (const Case c : {Case{false, Level::Hard}, Case{false, Level::Medium}, Case{true, Level::Hard}, Case{true, Level::Medium}}) {
+                Field f;
+                if (c.gate) {
+                    f.rock_wall();                                                     // the pile is walled off: a gate map ...
+                    f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 45});      // ... with a worker beside it, so the opening is not held back (AI27.13c)
+                }
+                f.powerup(22, 10, sim::AntType::Fire);
+                f.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 10});
+                Rig rig(f.sim, 0, c.level, std::make_unique<StandardBot>(goal_plan(c.level)));
+                auto& bot = rig.as<StandardBot>();
+                rig.run(120);
+                ASSERT_EQ(bot.gate_map(), c.gate);
+                const bool skipped = c.gate && c.level == Level::Medium;               // the one case that does not give the trip up
+                ASSERT_EQ(bot.powerups().contested() >= 1u, !skipped);
+                ASSERT_EQ(bot.powerups().started() >= 1u, skipped);
+                if (!skipped) ASSERT_EQ(bot.powerups().taken(), 0u);
+            }
         }
         {   // (d) the map bombs: the nearest Fire power-up lies in a box whose only doorway is plugged by a map bomb. A trip on an open map walks into the bomb (a gate map routes round it: AI27.7)
             Field f;
@@ -989,6 +1028,25 @@ void run_gate_goal_tests() {
         ASSERT_EQ(bot.powerups().taken(), 0u);                                         // held back: the Fire Ant of the own side is not secured
         rig.run(1700);
         ASSERT_TRUE(bot.powerups().taken() >= 1u);                                     // and secured when the opening is over
+    } TEST_END();
+    TEST_CASE("AI27.13c A Worker Beside A Pile At The First Look: The Flag Is Set And The Opening Is Not Held Back (The Same World With The Worker On The Hill's Side, Or With Another Kind Of Ant Beside The Pile, Holds The Trip To The Fire Power-Up Back)") {
+        enum class Beside { Nobody, WorkerAtHill, BomberAtPile, WorkerAtPile };
+        for (const Beside who : {Beside::Nobody, Beside::WorkerAtHill, Beside::BomberAtPile, Beside::WorkerAtPile}) {
+            Field f;                                                                   // (eight workers of seat 0 stand near the hill, on the hill's side of the wall)
+            f.rock_wall();                                                             // a gate map with no Bomber power-up and no Swimmer anywhere: no goal can be planned
+            f.powerup(8, 8, sim::AntType::Fire);
+            if (who == Beside::WorkerAtHill) f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 12});
+            if (who == Beside::BomberAtPile) f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{12, 45});      // on the pile's side of the wall, beside the pile at (12, 40), but no harvester
+            if (who == Beside::WorkerAtPile) f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 45});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(300);
+            const bool beside = who == Beside::WorkerAtPile;
+            ASSERT_TRUE(bot.gate_map());                                               // (the pile is still walled off from the hill)
+            ASSERT_EQ(bot.tactics().gate_beside, beside);
+            rig.run(2000);
+            ASSERT_EQ(bot.powerups().taken() >= 1u, beside);                           // the trip is made at once with the worker at the food, held back without it
+        }
     } TEST_END();
     TEST_CASE("AI27.13b The Opening Of A Gate Map Puts No Fire Ant On Wall Duty: A Thief Power-Up That The Enemy Reaches Calls For Walls On An Open Map, Not On A Gate Map Before It Has Banked") {
         for (const bool gate : {false, true}) {

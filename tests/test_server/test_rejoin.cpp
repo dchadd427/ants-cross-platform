@@ -658,7 +658,7 @@ void run_way_back_tests() {
         }
         ASSERT_TRUE(counts_down && last_left < 70);
         ASSERT_EQ(w.status("RJ-7").drops_by_cap, 1u);                                    // the room dropped the seat at the cap, and Ann's machine knows nothing of it
-        ASSERT_TRUE(w.server.refused >= 20);                                             // (an attempt every two seconds)
+        ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= 20; }));              // (an attempt every two seconds, and the door has seen them)
         ASSERT_TRUE(a.keys_forgotten.empty());
         ASSERT_TRUE(w.run_until([&]() { return a.net.phase() == NetGame::Phase::Over; }, 90000));
         const uint32_t waited_ms = w.now - cut_at;
@@ -669,6 +669,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(a.keys_forgotten.size() == 1 && net::key_matches(a.keys_forgotten[0].key, a.keys_given[0].key));
         ASSERT_FALSE(a.net.pause_info().reconnecting);
         w.server.door = Server::Door::Open;
+        w.settle();                                                                      // (the last attempt before the end was counted by the door before these counts are taken)
         const uint32_t seen_accepted = w.server.accepted;
         const uint32_t seen_refused = w.server.refused;
         w.run(10000);
@@ -962,12 +963,16 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.server.cut_newest());
         w.run(3000);
         ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
+        const uint32_t made = b.net.pause_info().attempts;
+        ASSERT_TRUE(b.net.pause_info().reconnecting && made >= 1);                       // it is trying (the game's own count of the links it made)
+        ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= made; }));            // ... and the door has seen every one of them (the door counts what the kernel hands it, not what the game's clock ran)
+        w.settle();                                                                      // ... and the machine has read the door's close of the last one: it is between two attempts (Reconnecting), not at the Hello of one (Rejoining), where the gap below would not make the next attempt due
         const uint32_t tries = w.server.refused;
-        ASSERT_TRUE(tries >= 1);                                                         // it is trying
         b.net.note_gap(10000);                                                           // ten seconds that its clock did not count: an attempt is due at once, nothing is given up
         ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
         w.run(100);
-        ASSERT_TRUE(w.server.refused > tries);
+        ASSERT_TRUE(b.net.pause_info().attempts > made);                                 // the attempt was made
+        ASSERT_TRUE(w.wait_real([&]() { return w.server.refused > tries; }));            // ... and reached the door
         b.net.note_gap(32u * 60u * 1000u);                                               // half an hour that its clock did not count: the way back is over (the cap and a minute)
         ASSERT_EQ(b.net.phase(), NetGame::Phase::Over);
         w.run(10);                                                                       // (the next frame takes its events)
@@ -1017,8 +1022,10 @@ void run_way_back_tests() {
             ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
             w.server.door = Server::Door::Refusing;
             ASSERT_TRUE(w.server.cut_newest());
-            w.run(5000);
-            ASSERT_TRUE(b.net.pause_info().reconnecting && w.server.refused >= 2);
+            ASSERT_TRUE(w.run_until([&]() { return w.server.refused >= 2; }, 8000));     // it tries again and again (every two seconds), and the door sees two of the links
+            ASSERT_TRUE(b.net.pause_info().reconnecting);
+            const uint32_t made = b.net.pause_info().attempts;
+            ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= made; }));        // (the door has seen every link that it made: the counts below start from there)
             b.net.leave();
             ASSERT_EQ(b.net.phase(), NetGame::Phase::Off);
             ASSERT_FALSE(b.net.pause_info().reconnecting);
