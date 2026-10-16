@@ -309,7 +309,7 @@
   {
    "id": "map_bombs_spared_on_open_maps",
    "file": "src/ants_ai/standard_tasks.cpp",
-   "old": "(plan.gate_spare_map_bombs && tactics_.gate_map && b.owner >= sim::MAX_PLAYERS)",
+   "old": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)",
    "new": "(plan.gate_spare_map_bombs && b.owner >= sim::MAX_PLAYERS)",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
    "expect": "AI27.14"
@@ -317,8 +317,16 @@
   {
    "id": "team_bombs_spared_too",
    "file": "src/ants_ai/standard_tasks.cpp",
-   "old": "(plan.gate_spare_map_bombs && tactics_.gate_map && b.owner >= sim::MAX_PLAYERS)",
-   "new": "(plan.gate_spare_map_bombs && tactics_.gate_map)",
+   "old": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)",
+   "new": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live)",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.14"
+  },
+  {
+   "id": "map_bombs_spared_with_goals_out",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.gate_goals_live = tactics_.gate_map && !fallback && !gate_goals_.exhausted();",
+   "new": "tactics_.gate_goals_live = tactics_.gate_map;",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
    "expect": "AI27.14"
   },

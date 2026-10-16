@@ -4,7 +4,7 @@ A Medium or Hard computer player plays the **gate goals** on a map whose food it
 
 ## The map's own bombs are the gate
 
-On a gate map the counters (`BombTask`) leave the bombs of no team (the map's own: owner 4 or 255) alone; the gate goals defuse those that are on their way (`LevelPlan::gate_spare_map_bombs`, `bot_arena --tune gatebombs=0` is the bot before). A team's bomb is countered as on any map, and nothing changes on a map that is not a gate map (the gate play is Medium's and Hard's only: Easy is untouched).
+On a gate map the counters (`BombTask`) leave the bombs of no team (the map's own: no team, 255) alone while the gate goals are live (not in the stall detector's fallback, not exhausted); the gate goals defuse those that are on their way (`LevelPlan::gate_spare_map_bombs`, `bot_arena --tune gatebombs=0` is the bot before). A team's bomb is countered as on any map, and nothing changes on a map that is not a gate map (the gate play is Medium's and Hard's only: Easy is untouched).
 
 Why: on POPcOrN the counters sent workers to set off the map bombs next to the hill (a worker that steps on a bomb is thrown four tiles, into the bomb field: lost) and Bombers to defuse bombs of the field, over and over: most of the bot's orders there were refused, and the ants that the breach needed were walked away or over bombs (the Bomber that had just defused the corridor to the lake was sent to a map bomb on row 10, walked over (16, 10) and was thrown across the field to its death). The rule reads only what every walled map has (whether the bot plays the gate goals there, and the owner of a bomb); there is no map name, size or coordinate in it.
 

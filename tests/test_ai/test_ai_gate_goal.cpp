@@ -24,8 +24,8 @@
 //   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
 //   AI27.13b the opening puts no Fire Ant on wall duty (a thief power-up that the enemy reaches calls for walls on an open map, not on a gate map before it has banked)
 //   AI27.13c an own worker beside a pile at the first look: the flag is set and the opening is not held back
-//   AI27.14  on a gate map the counters leave the map's own bombs (of no team) alone; a team's bomb there, and a map bomb on an open map, are countered as before (every seat, straight
-//            and transposed)
+//   AI27.14  on a gate map the counters leave the map's own bombs (of no team) alone while the gate goals are live; a team's bomb there, a map bomb on an open map and a map bomb once the
+//            goals are exhausted are countered as before (every seat, straight and transposed)
 #include <algorithm>
 
 #include "ai_test.hpp"
@@ -1103,14 +1103,15 @@ void run_gate_goal_tests() {
             ASSERT_EQ(demand, !gate);                                                  // (the open map asks for walls; the opening of a gate map asks for none)
         }
     } TEST_END();
-    TEST_CASE("AI27.14 On A Gate Map The Counters Leave The Map's Own Bombs (Of No Team) Alone: They Are The Gate; A Team's Bomb There, And A Map Bomb On An Open Map, Are Countered As Before (Every Seat, Straight And Transposed)") {
+    TEST_CASE("AI27.14 On A Gate Map The Counters Leave The Map's Own Bombs (Of No Team) Alone: They Are The Gate; A Team's Bomb There, And A Map Bomb On An Open Map, Are Countered As Before, And So Is A Map Bomb Once The Gate Goals Are Exhausted (Every Seat, Straight And Transposed)") {
         enum class Bomb : uint8_t { Map, Enemy };
         struct Case {
             bool gate;
             Bomb bomb;
             bool countered;
+            bool exhausted{false};                                                 // the gate goals are out of attempts: nobody defuses the map's bombs but the counters
         };
-        for (const Case c : {Case{true, Bomb::Map, false}, Case{true, Bomb::Enemy, true}, Case{false, Bomb::Map, true}}) {
+        for (const Case c : {Case{true, Bomb::Map, false}, Case{true, Bomb::Enemy, true}, Case{false, Bomb::Map, true}, Case{true, Bomb::Map, true, true}}) {
             for (uint8_t d = 0; d < 8; ++d) {
                 const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
                 sim::SimulationEngine sim;
@@ -1129,8 +1130,14 @@ void run_gate_goal_tests() {
                 sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(7, 11));
                 Rig rig(sim, w.seat, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
                 auto& bot = rig.as<StandardBot>();
+                if (c.exhausted) {
+                    GateGoalTask::Params gp = bot.gate_goals().params();
+                    gp.goals_max = 0;                                              // (the task is exhausted at its first look)
+                    bot.gate_goals_for_labs().set_params(gp);
+                }
                 rig.run(600);
                 ASSERT_EQ(bot.gate_map(), c.gate);
+                ASSERT_EQ(bot.gate_goals().exhausted(), c.exhausted);
                 const bool acted = bot.bombs().defused() + bot.bombs().set_off() > 0 || bot.bombs().busy() || !sim.grid().has_bomb_at(bomb);
                 ASSERT_EQ(acted, c.countered);
             }
