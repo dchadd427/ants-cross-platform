@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the denial order of the standard bot (docs/BOT_FOOD.md) for tools/mutate.py: python3 tools/mutate.py tests/data/bot_food_mutants.json --keep-going --jobs 1 --timeout 1200. Every mutant must be caught (AI28.x of suite 2.20, the style cases AI11.8 and AI11.10, the legacy orders AI8.x).",
+ "note": "Mutants of the denial order of the standard bot (docs/BOT_FOOD.md) for tools/mutate.py: python3 tools/mutate.py tests/data/bot_food_mutants.json --keep-going --jobs 1 --timeout 1200. Every mutant must be caught (AI28.x of suite 2.20, the style cases AI11.8 and AI11.10).",
  "defaults": {
   "build": "test_ai"
  },
@@ -107,14 +107,6 @@
    "new": "                p.race = false;                                                               // (no contest of the middle)\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI11.10 ./build/tests/test_ai/test_ai",
    "expect": "AI11.10"
-  },
-  {
-   "id": "the_experiments_lose_precedence",
-   "file": "src/ants_ai/tasks.cpp",
-   "old": " && !params_.contest_aware && !params_.contest_reactive;",
-   "new": ";",
-   "test": "timeout 900 env ANTS_TEST_FILTER=AI8. ./build/tests/test_ai/test_ai",
-   "expect": "AI8."
   }
  ]
 }

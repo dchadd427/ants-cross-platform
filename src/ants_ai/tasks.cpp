@@ -264,7 +264,7 @@ void HarvestTask::step(TaskContext& c) {
         start_ants_known_ = true;
     }
     const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
-    const bool deny_on = params_.denial_order && profile.value_aware_piles && !params_.contest_aware && !params_.contest_reactive;    // the denial order (Params::denial_order): it replaces the race
+    const bool deny_on = params_.denial_order && profile.value_aware_piles;                         // the denial order (Params::denial_order): it replaces the race
     const bool race_on = !deny_on && params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
     const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
