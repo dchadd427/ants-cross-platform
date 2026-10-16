@@ -266,6 +266,11 @@ bool loads_same_as(const std::vector<uint8_t>& bytes, const LevelData& level, st
     return same_level(level, back, why);
 }
 
+// Refused by a precondition of the writer, with its own sentence (`words`), and no byte: not by the read-back check, whose refusals say "a fault of the writer"
+bool refused_with(const LevelWriteResult& w, const std::string& words) {
+    return !w.ok && w.bytes.empty() && w.error.find(words) != std::string::npos && w.error.find("a fault of the writer") == std::string::npos;
+}
+
 bool has_kind(const std::vector<RewriteChange>& changes, RewriteChangeKind kind) {
     for (const RewriteChange& c : changes) {
         if (c.kind == kind) return true;
@@ -398,6 +403,8 @@ void w2_refusals() {
             {"dictionary name #2 holds a zero byte", [](LevelData& l) { l.tile_dictionary[2] = std::string("ab\0c", 4); }},
             {"block 1 record #1 (tile 421, row 0, column 0) says team 0, the team of its tile is 255", [](LevelData& l) { l.anthill_spawns[1].team_id = 0; }},
             {"block 1 record #0 (tile 152, row 1, column 2) says team 0, the team of its tile is 3", [](LevelData& l) { l.anthill_spawns[0].team_id = 0; }},
+            {"block 1 record #0 (tile 152, row 1, column 2) says team 255, the team of its tile is 3", [](LevelData& l) { l.anthill_spawns[0].team_id = 255; }},
+            {"block 1 record #1 (tile 421, row 0, column 0) says team 7, the team of its tile is 255", [](LevelData& l) { l.anthill_spawns[1].team_id = 7; }},
             {"block 1 has 65536 records, a file holds at most 65,535", [](LevelData& l) { l.anthill_spawns.assign(65536, AnthillSpawn{0, 0, 0, 255}); }},
             {"food pile #1 (row 0, column 0) has no stages: the original stops reading block 2 at such a pile", [](LevelData& l) { l.food_schedules[1].variants.clear(); }},
             {"food pile #0 has 65536 stages", [](LevelData& l) { l.food_schedules[0].variants.assign(65536, FoodItemVariant{1, 253}); }},
@@ -410,8 +417,7 @@ void w2_refusals() {
             LevelData l = every_field();
             b.make(l);
             const LevelWriteResult w = write_level(l);
-            CHECK_MSG(!w.ok && w.bytes.empty(), b.words);
-            CHECK_MSG(w.error.find(b.words) != std::string::npos, std::string(b.words) + " / " + w.error);
+            CHECK_MSG(refused_with(w, b.words), std::string(b.words) + " / " + w.error);
         }
         CHECK(write_level(every_field()).ok);                                       // (the level they all start from is written)
     });
@@ -438,20 +444,20 @@ void w2_refusals() {
         CHECK_MSG(filled.ok && filled.bytes.size() == 147430u, filled.error);
         full.waypoints.push_back(trigger);
         const LevelWriteResult over = write_level(full, new_map);
-        CHECK(!over.ok && over.error.find("the file would have 147482 bytes, more than the 147456 allowed here") != std::string::npos);
+        CHECK_MSG(refused_with(over, "the file would have 147482 bytes, more than the 147456 allowed here"), over.error);
         CHECK(write_level(full).ok);
         // the grid: Bomb Races's 40 x 129 fits; 131 a side or 10,100 cells do not
         CHECK(write_level(blank_level(40, 129, names), new_map).ok);
         CHECK(write_level(blank_level(130, 76, names), new_map).ok);
         const LevelWriteResult side = write_level(blank_level(131, 1, names), new_map);
-        CHECK(!side.ok && side.error.find("131 rows x 1 columns, more than the 130 x 130 allowed here") != std::string::npos);
+        CHECK_MSG(refused_with(side, "131 rows x 1 columns, more than the 130 x 130 allowed here"), side.error);
         const LevelWriteResult cells = write_level(blank_level(101, 100, names), new_map);
-        CHECK(!cells.ok && cells.error.find("101 rows x 100 columns, 10100 cells, more than the 10000 allowed here") != std::string::npos);
+        CHECK_MSG(refused_with(cells, "101 rows x 100 columns, 10100 cells, more than the 10000 allowed here"), cells.error);
         CHECK(write_level(blank_level(131, 1, names)).ok && write_level(blank_level(101, 100, names)).ok);   // the game's limits take them
         LevelLimits few_names = LevelLimits{};
         few_names.max_dictionary_names = 100;
         const LevelWriteResult dictionary = write_level(blank_level(5, 5, names), few_names);  // (the blank map's dictionary has 486 names)
-        CHECK(!dictionary.ok && dictionary.error.find("the dictionary has 486 names, more than the 100 allowed here") != std::string::npos);
+        CHECK_MSG(refused_with(dictionary, "the dictionary has 486 names, more than the 100 allowed here"), dictionary.error);
     });
 }
 

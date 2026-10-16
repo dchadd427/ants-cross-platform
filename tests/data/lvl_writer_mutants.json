@@ -179,10 +179,10 @@
    "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
   },
   {
-   "id": "chances_compared_as_numbers",
+   "id": "the_sign_of_a_zero_chance_ignored",
    "file": "src/ants_assets/lvl_writer.cpp",
    "old": "chances = chances && same_bits(p.probabilities[k], q.probabilities[k]);",
-   "new": "chances = chances && p.probabilities[k] == q.probabilities[k];",
+   "new": "chances = chances && same_bits(p.probabilities[k] + 0.0, q.probabilities[k] + 0.0);",
    "build": [
     "test_lvl_writer",
     "lvl_tool"
