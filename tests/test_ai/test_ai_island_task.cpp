@@ -324,7 +324,7 @@ void run_island_task_tests() {
         m.ferry = true;
         m.init("SMALL", 3, 0x0F, Level::Hard, 0, [](LevelPlan& p) {
             p.gate_leaver_ticks = 0;                                                                                          // (the gate's wait for the ant that leaves is off and the food is eaten in the plain order,
-            p.reserve_order = false;                                                                                          // not the denial order: the match on which the premise below was counted)
+            p.denial_order = false;                                                                                          // not the denial order: the match on which the premise below was counted)
             without_war_batch(p);
         });
         m.run(7200);

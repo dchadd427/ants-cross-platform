@@ -45,7 +45,7 @@ LevelPlan plan_of(Level level, Style style, uint32_t match_seed, uint8_t seat) {
     StandardBot bot(level, style);
     bot.start(BotContext{seat, profile_for(level), seat_rng.next(), nullptr});
     LevelPlan plan = bot.tactics().plan;
-    plan.reserve_order = false;
+    plan.denial_order = false;
     return plan;
 }
 

@@ -7,15 +7,15 @@
   {
    "id": "denial_order_off",
    "file": "src/ants_ai/tasks.cpp",
-   "old": "const bool deny_on = params_.reserve_order && profile.value_aware_piles",
-   "new": "const bool deny_on = false && params_.reserve_order && profile.value_aware_piles",
+   "old": "const bool deny_on = params_.denial_order && profile.value_aware_piles",
+   "new": "const bool deny_on = false && params_.denial_order && profile.value_aware_piles",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
    "expect": "AI28.1"
   },
   {
    "id": "medium_without_the_order",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "            p.contest_opening_ants = 1;\n            p.reserve_order = true;",
+   "old": "            p.contest_opening_ants = 1;\n            p.denial_order = true;",
    "new": "            p.contest_opening_ants = 1;",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
    "expect": "AI28.1"
@@ -23,7 +23,7 @@
   {
    "id": "hard_without_the_order",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "            p.contest_opening_ants = 2;\n            p.reserve_order = true;",
+   "old": "            p.contest_opening_ants = 2;\n            p.denial_order = true;",
    "new": "            p.contest_opening_ants = 2;",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
    "expect": "AI28.1"
@@ -95,7 +95,7 @@
   {
    "id": "economic_contests",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "                p.race = false;                                                               // (no contest of the middle: that is the style)\n                p.reserve_order = false;\n",
+   "old": "                p.race = false;                                                               // (no contest of the middle: that is the style)\n                p.denial_order = false;\n",
    "new": "                p.race = false;                                                               // (no contest of the middle: that is the style)\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI11.8 ./build/tests/test_ai/test_ai",
    "expect": "AI11.8"
@@ -103,7 +103,7 @@
   {
    "id": "defensive_contests",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "                p.race = false;                                                               // (no contest of the middle)\n                p.reserve_order = false;\n",
+   "old": "                p.race = false;                                                               // (no contest of the middle)\n                p.denial_order = false;\n",
    "new": "                p.race = false;                                                               // (no contest of the middle)\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI11.10 ./build/tests/test_ai/test_ai",
    "expect": "AI11.10"

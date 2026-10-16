@@ -226,7 +226,7 @@ public:
         /// is far nearer to (Hopeless: that enemy eats it before the ants arrive, whoever else competes) counts as it is. A reserve pile with an enemy ant within reserve_threat_tiles of its anchor goes before everything else (it is being taken now).
         /// A weight and not a rank: a contested pile across the field does not go before a reserve next to the hill, so no clock is needed to keep the reserve from being left at the
         /// end. Only with value_aware_piles; the race is off with it.
-        bool reserve_order{false};
+        bool denial_order{false};
         uint32_t deny_multi_percent{300};
         uint32_t deny_one_percent{200};
         int32_t reserve_threat_tiles{6};

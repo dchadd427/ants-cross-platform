@@ -583,7 +583,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "raceslack") { p.race_slack_percent = static_cast<uint32_t>(v); return true; }
     if (key == "racefloor") { p.race_floor = static_cast<uint32_t>(v); return true; }
     if (key == "raceone") return flag(p.race_one);
-    if (key == "reserve") return flag(p.reserve_order);                             // the denial order (Medium, Hard): contested food counts more, the own safe piles are the reserve
+    if (key == "deny") return flag(p.denial_order);                                // the denial order (Medium, Hard): contested food counts more, the own safe piles are the reserve
     if (key == "denymulti") { p.deny_multi_percent = static_cast<uint32_t>(v); return true; }
     if (key == "denyone") { p.deny_one_percent = static_cast<uint32_t>(v); return true; }
     if (key == "reservethreat") { p.reserve_threat_tiles = static_cast<int32_t>(v); return true; }
@@ -780,7 +780,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "rushticks") { p.rush_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "prev") {                                                              // the strategy of v0.5.0: none of the plan rules of the contest batch (the tournaments' comparison; they are the shipped plan now)
         if (v == 0) return true;
-        p.race = p.reserve_order = false;
+        p.race = p.denial_order = false;
         p.health_aware = false;
         p.hunt = p.skirmish = p.sabotage_safe = p.fire_defence = p.catchup = p.endgame = false;
         return true;

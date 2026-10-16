@@ -130,7 +130,7 @@ void run_b41_team_tests() {
                     start_match(sim, "TREASURE", 7, 0x0F);
                     LevelPlan plan = plan_for(level);
                     plan.race = false;                                                                        // (the race of the contest batch has its own tests, AI20.1: this one is about the legacy order of v0.5.0, kept selectable)
-                    plan.reserve_order = false;
+                    plan.denial_order = false;
                     plan.contest_aware = aware;
                     plan.contest_opening_ants = 0;                                                            // (the opening has its own test, AI8.4)
                     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
@@ -299,7 +299,7 @@ void run_b41_team_tests() {
                 start_match(sim, "TREASURE", 7, 0x0F);
                 LevelPlan legacy = plan_for(level);
                 legacy.race = false;                                                                           // (the opening of v0.5.0, kept selectable: the race of the contest batch sends every ant, AI20.1)
-                legacy.reserve_order = false;
+                legacy.denial_order = false;
                 Rig rig(sim, seat, level, std::make_unique<StandardBot>(legacy), 4, 4);
                 rig.run(60);
                 if (seat == 0) ASSERT_EQ(ants_at_centre(rig, sim, 60), want);                                  // (from the other hills the plain order sends ants to the centre too, once the nearer piles are full)
@@ -322,7 +322,7 @@ void run_b41_team_tests() {
             sim.get_unit(ants_of(sim, 0)[0]).hp = 10;
             LevelPlan hard = plan_for(Level::Hard);
             hard.race = false;                                                                                // (the opening of v0.5.0)
-            hard.reserve_order = false;
+            hard.denial_order = false;
             hard.contest_opening_min_ants = 0;                                                                // (a world of four ants: the minimum of six has its own test, AI8.5)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard), 4, 4);
             if (late) {
@@ -351,7 +351,7 @@ void run_b41_team_tests() {
                 for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.race = false;                                                                            // (the opening of v0.5.0)
-                plan.reserve_order = false;
+                plan.denial_order = false;
                 plan.contest_opening_ants = k;
                 plan.contest_opening_min_ants = 0;                                                            // (four ants: the minimum is off, so that the opening itself is what differs)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
@@ -370,7 +370,7 @@ void run_b41_team_tests() {
             start_match(sim, map, 7, 0x0F);
             LevelPlan plan = plan_for(level);
             plan.race = false;                                                                                // (the opening of v0.5.0: this test is about its minimum of six ants; the race of the contest batch has AI20.1)
-            plan.reserve_order = false;
+            plan.denial_order = false;
             plan.contest_opening_ants = k;
             plan.contest_opening_min_ants = min_ants;
             Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
@@ -414,7 +414,7 @@ void run_b41_team_tests() {
                 for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 3, kFightHills[t].y + 6});
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.race = false;                                                                            // (the opening of v0.5.0)
-                plan.reserve_order = false;
+                plan.denial_order = false;
                 if (variant == 1) plan.contest_opening_ants = 0;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(60);
