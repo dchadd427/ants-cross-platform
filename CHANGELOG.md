@@ -26,9 +26,9 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **Medium and Hard computer players eat the food that other teams also reach before the food at their own base**, because what they leave there the others eat. With four bots on TREASURE their first bites go to the centre, not the Cheerios. Food far across the map does not pull them away from their own, and an enemy at their own food makes them eat it at once. Easy is as before.
+- **Medium and Hard computer players eat the food that other teams also reach before the food at their own base**, because what they leave there the others eat. With four bots on TREASURE they now start with the centre and keep most of the Cheerios next to their base for later. Food far across the map does not pull them away from their own, and an enemy at their own food makes them hurry to eat it. Easy is as before.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5466c8c2...LASTCODE), [the food order](docs/BOT_FOOD.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...3138b229), [the food order](docs/BOT_FOOD.md)
 
 ## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
