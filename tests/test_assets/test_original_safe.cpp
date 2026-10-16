@@ -16,6 +16,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -56,6 +57,11 @@ const std::string& maps_dir() {
 }
 
 const char* const kOriginals[] = {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"};
+
+const std::vector<uint8_t>& tiny_bytes() {
+    static const std::vector<uint8_t> bytes = read_map(maps_dir() + "/TINY.LVL");
+    return bytes;
+}
 
 // TINY as it is read: an original map, so original-safe; every case below changes one thing of it
 const LevelData& tiny() {
@@ -151,13 +157,18 @@ void s1_rules() {
         CHECK(!check_original_safe(l).has(Code::ModeNot1));
     });
 
-    run_case("S1.3 A Description Of At Most 29 Characters: 30 Are A Warning (No Zero Byte Is Left To End The Text), 29 Are None", [] {
+    run_case("S1.3 A Description Of At Most 29 Bytes: 30 Are A Warning (No Zero Byte Is Left To End The Text), 29 Are None", [] {
         LevelData l = tiny();
         l.description = std::string(30, 'a');
         CHECK(finds(check_original_safe(l), Code::DescriptionTooLong, Severity::Warning,
-                    "the description has 30 characters: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end"));
+                    "the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)"));
         l.description = std::string(29, 'a');
         CHECK(!check_original_safe(l).has(Code::DescriptionTooLong));
+        // bytes, not letters: 15 letters of 2 bytes each (a browser editor writes UTF-8) are 30 bytes
+        l.description.clear();
+        for (int i = 0; i < 15; ++i) l.description += "\xC3\xA9";
+        CHECK(finds(check_original_safe(l), Code::DescriptionTooLong, Severity::Warning,
+                    "the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)"));
     });
 
     run_case("S1.4 A Grid With Cells, At Most 256 A Side, Whose Layers Hold Its Cells: 0 Rows, 257 Rows Or Layers Of Another Size Are Fatal", [] {
@@ -197,7 +208,7 @@ void s1_rules() {
         const std::vector<Place> places = {
             {[](LevelData& l, uint16_t t) { l.layer1_terrain[at(l, 3, 7)].tile_index = t; }, "one ground cell uses a tile beyond the dictionary of 670 names (row 3, column 7: tile 670): the original reads past its tables there", 3, 7},
             {[](LevelData& l, uint16_t t) { l.layer2_interactive[at(l, 12, 1)].tile_index = t; }, "one object cell uses a tile beyond the dictionary of 670 names (row 12, column 1: tile 670): the original reads past its tables there", 12, 1},
-            {[](LevelData& l, uint16_t t) { l.anthill_spawns.push_back(AnthillSpawn{t, 2, 3, 255}); }, "one block-1 record uses a tile beyond the dictionary of 670 names (row 2, column 3: tile 670): the original reads past its tables there", 2, 3},
+            {[](LevelData& l, uint16_t t) { l.anthill_spawns.push_back(AnthillSpawn{t, 2, 3, 255}); }, "one entry of the list of start markers and plants uses a tile beyond the dictionary of 670 names (row 2, column 3: tile 670): the original reads past its tables there", 2, 3},
             {[](LevelData& l, uint16_t t) { l.food_schedules[1].variants[0].tile_id = t; }, "one food stage uses a tile beyond the dictionary of 670 names (the pile at row 16, column 14: tile 670): the original reads past its tables there", 16, 14},
             {[](LevelData& l, uint16_t t) { l.ambient_tile_or_sound = t; }, "the default ant type is tile 670, beyond the dictionary of 670 names: the original reads past its tables there", -1, -1},
         };
@@ -223,12 +234,12 @@ void s1_rules() {
         CHECK(!check_original_safe(l).has(Code::TileOutsideDictionary));
     });
 
-    run_case("S1.7 Every Ground Cell Has A Ground Tile: The Empty Tile 0x7FFE On Layer 1 Is A Warning (The Original Reads Its Terrain Table Past Its End)", [] {
+    run_case("S1.7 Every Ground Cell Has A Ground Tile: The Empty Tile 0x7FFE On Layer 1 Is Fatal (The Original Reads Its Terrain Table Past Its End)", [] {
         LevelData l = tiny();
         l.layer1_terrain[at(l, 0, 3)].tile_index = LVL_EMPTY_TILE;
         l.layer1_terrain[at(l, 9, 9)].tile_index = LVL_EMPTY_TILE;
-        CHECK(finds(check_original_safe(l), Code::GroundMissing, Severity::Warning,
-                    "2 cells have no ground tile (layer-1 tile 32766; the first at row 0, column 3): the original reads its terrain table past its end there", 0, 3));
+        CHECK(finds(check_original_safe(l), Code::GroundMissing, Severity::Fatal,
+                    "2 cells have no ground tile (the empty tile 32766; the first at row 0, column 3): the original reads its terrain table past its end there", 0, 3));
         CHECK(!check_original_safe(tiny()).has(Code::GroundMissing));
     });
 
@@ -312,22 +323,34 @@ void s1_rules() {
         CHECK(!check_original_safe(tiny()).has(Code::HillsSeveral));
     });
 
-    run_case("S1.14 Each Team Has Starting Ants: A Team Without A Start Marker Is A Warning (\"Black Has No Starting Ants\"), One Marker Is Enough", [] {
-        LevelData l = tiny();
-        std::vector<AnthillSpawn> kept;
-        bool one = false;
-        for (const AnthillSpawn& sp : l.anthill_spawns) {
-            if (sp.team_id != 3) kept.push_back(sp);
-        }
-        l.anthill_spawns.assign(kept.begin(), kept.end());
-        CHECK(finds(check_original_safe(l), Code::StartingAntsMissing, Severity::Warning, "Black has no starting ants (no start marker, block-1 tile 152)", -1, -1, 3));
-        for (const AnthillSpawn& sp : tiny().anthill_spawns) {
-            if (sp.team_id == 3 && !one) {
-                l.anthill_spawns.push_back(sp);
-                one = true;
+    run_case("S1.14 Each Team Has Starting Ants: A Team Without A Start Marker Is A Warning (\"Black Has No Starting Ants\"), One Marker Is Enough; Each Team Has Its Own Tile", [] {
+        const char* const names[4] = {"Green", "Red", "Blue", "Black"};
+        const int tiles[4] = {154, 155, 153, 152};
+        for (int team = 0; team < 4; ++team) {
+            LevelData l = tiny();
+            std::vector<AnthillSpawn> kept;
+            for (const AnthillSpawn& sp : l.anthill_spawns) {
+                if (sp.team_id != team) kept.push_back(sp);
             }
+            l.anthill_spawns.assign(kept.begin(), kept.end());
+            CHECK_MSG(finds(check_original_safe(l), Code::StartingAntsMissing, Severity::Warning,
+                            std::string(names[team]) + " has no starting ants (no start marker, tile " + std::to_string(tiles[team]) + ")", -1, -1, static_cast<int8_t>(team)),
+                      names[team]);
+            bool one = false;
+            for (const AnthillSpawn& sp : tiny().anthill_spawns) {
+                if (sp.team_id == team && !one) {
+                    l.anthill_spawns.push_back(sp);
+                    one = true;
+                }
+            }
+            CHECK_MSG(one && !check_original_safe(l).has(Code::StartingAntsMissing), names[team]);
+            // the marker of another team does not stand in for it
+            LevelData other = tiny();
+            for (AnthillSpawn& sp : other.anthill_spawns) {
+                if (sp.team_id == team) sp.team_id = static_cast<uint8_t>((team + 1) % 4);
+            }
+            CHECK_MSG(check_original_safe(other).has(Code::StartingAntsMissing), names[team]);
         }
-        CHECK(one && !check_original_safe(l).has(Code::StartingAntsMissing));
     });
 
     run_case("S1.15 A Hill That Is Not Whole Is A Note: A Cell Anchored Elsewhere, A Cell Of The Colour Outside Its 4 x 4 Hill; The Map Still Works", [] {
@@ -344,6 +367,39 @@ void s1_rules() {
         CHECK(finds(r, Code::HillNotWhole, Severity::Info,
                     "the hill of Green is not whole: 2 cells (the first at row 0, column 0) differ from the 4 x 4 hill around its entrance (row 5, column 5)", 0, 0, 0));
         CHECK(!check_original_safe(tiny()).has(Code::HillNotWhole));
+        // a stray cell of the colour just beside the 4 x 4 (Red's cover columns 23 .. 26, rows 23 .. 26): column 27, and the column before the first, 22
+        for (const uint32_t column : {27u, 22u}) {
+            l = tiny();
+            l.layer2_interactive[at(l, 24, column)] = MapCell{247, 0, static_cast<uint16_t>(24 | (24 << 8))};
+            CHECK_MSG(finds(check_original_safe(l), Code::HillNotWhole, Severity::Info,
+                            "the hill of Red is not whole: one cell (row 24, column " + std::to_string(column) + ") differs from the 4 x 4 hill around its entrance (row 24, column 24)", 24,
+                            static_cast<int32_t>(column), 1),
+                      std::to_string(column));
+        }
+        // the same just below and above
+        for (const uint32_t row : {27u, 22u}) {
+            l = tiny();
+            l.layer2_interactive[at(l, row, 24)] = MapCell{247, 0, static_cast<uint16_t>(24 | (24 << 8))};
+            CHECK_MSG(check_original_safe(l).has(Code::HillNotWhole), std::to_string(row));
+        }
+    });
+
+    run_case("S1.15b A Hill Whose Missing Cells Are All Off The Map Does Not Name Its Entrance As The Cell That Differs", [] {
+        // Green's entrance in the corner (row 0, column 0): the cells of its 4 x 4 that lie above and left of the map are 7 of the 16
+        LevelData l = tiny();
+        clear_hill(l, kTinyHills[0]);
+        for (uint32_t r = 0; r <= 2; ++r) {
+            for (uint32_t c = 0; c <= 2; ++c) l.layer2_interactive[at(l, r, c)] = MapCell{248, static_cast<uint16_t>(r == 0 && c == 0 ? 1 : 0), 0};
+        }
+        const OriginalSafeReport r = check_original_safe(l);
+        CHECK(finds(r, Code::HillNotWhole, Severity::Info,
+                    "the hill of Green is not whole: 7 cells of the 4 x 4 hill around its entrance (row 0, column 0) lie outside the map", 0, 0, 0));
+        CHECK(all_of(r, Code::HillNotWhole)[0]->count == 7u);
+        CHECK(r.works_in_original_game());
+        // one cell on the map that differs as well: it is the one named
+        l.layer2_interactive[at(l, 2, 1)].properties = 99;
+        CHECK(finds(check_original_safe(l), Code::HillNotWhole, Severity::Info,
+                    "the hill of Green is not whole: 8 cells (the first at row 2, column 1) differ from the 4 x 4 hill around its entrance (row 0, column 0)", 2, 1, 0));
     });
 
     run_case("S1.16 Tiles That The Dictionary Names \".\" Are Not Drawn By The Original (A Note), Unless They Are Among The 62 It Always Loads", [] {
@@ -370,20 +426,21 @@ void s1_rules() {
         CHECK(!check_original_safe(tiny()).has(Code::TileNotDrawn));
     });
 
-    run_case("S1.17 A Food Pile Whose Stage Tile The Original Does Not Load Shows No Pile From That Stage On (A Note); Two Such Piles Are Counted", [] {
+    run_case("S1.17 A Food Pile Whose Stage Tile The Original Does Not Load Shows No Pile From That Stage On (A Warning: Nobody Can See Or Harvest It); Two Such Piles Are Counted", [] {
         LevelData l = tiny();
         l.tile_dictionary[285] = ".";                                              // the one stage of pile 7, at row 17, column 15
         OriginalSafeReport r = check_original_safe(l);
-        CHECK(finds(r, Code::FoodPileNotShown, Severity::Info,
-                    "the food pile at row 17, column 15 does not show in the original from stage 1 on: its tile 285 is named \".\" in the dictionary, and the original "
-                    "places no pile of a tile whose picture it does not load", 17, 15));
-        CHECK(r.works_in_original_game());
+        CHECK(finds(r, Code::FoodPileNotShown, Severity::Warning,
+                    "the food pile at row 17, column 15 does not show in the original from stage 1 on: its tile 285 is named \".\" in the dictionary, the original places no pile "
+                    "of a tile whose picture it does not load, and nobody can see or harvest a pile that is not placed", 17, 15));
+        CHECK(!r.works_in_original_game());
         l = tiny();
         l.tile_dictionary[273] = ".";                                              // stage 2 of piles 12 and 13
         r = check_original_safe(l);
-        CHECK(finds(r, Code::FoodPileNotShown, Severity::Info,
+        CHECK(finds(r, Code::FoodPileNotShown, Severity::Warning,
                     "2 food piles do not show in the original from a stage whose tile the dictionary names \".\" (the first at row 15, column 6, from stage 2 on: tile 273): "
-                    "the original places no pile of a tile whose picture it does not load", 15, 6));
+                    "the original places no pile of a tile whose picture it does not load, and nobody can see or harvest a pile that is not placed", 15, 6));
+        CHECK(!r.works_in_original_game());
         CHECK(!check_original_safe(tiny()).has(Code::FoodPileNotShown));
     });
 
@@ -395,9 +452,34 @@ void s1_rules() {
         w.x = 99;
         l.waypoints.push_back(w);
         const OriginalSafeReport r = check_original_safe(l);
-        CHECK(finds(r, Code::ObjectOutsideMap, Severity::Info, "one block-1 object and one waypoint stand outside the map (the first at row 40, column 2): the original ignores them", 40, 2));
+        CHECK(finds(r, Code::ObjectOutsideMap, Severity::Info, "one plant and one waypoint stand outside the map (the first at row 40, column 2): the original ignores them", 40, 2));
         CHECK(r.works_in_original_game());
         CHECK(!check_original_safe(tiny()).has(Code::ObjectOutsideMap));
+        // the first row and the first column after the grid are outside, the last ones inside (a plant: TINY has 31 rows and 31 columns)
+        l = tiny();
+        l.anthill_spawns.push_back(AnthillSpawn{421, 31, 2, 255});
+        CHECK(finds(check_original_safe(l), Code::ObjectOutsideMap, Severity::Info, "one plant stands outside the map (row 31, column 2): the original ignores it", 31, 2));
+        l = tiny();
+        l.anthill_spawns.push_back(AnthillSpawn{421, 2, 31, 255});
+        CHECK(finds(check_original_safe(l), Code::ObjectOutsideMap, Severity::Info, "one plant stands outside the map (row 2, column 31): the original ignores it", 2, 31));
+        l = tiny();
+        l.anthill_spawns.push_back(AnthillSpawn{421, 30, 30, 255});
+        CHECK(!check_original_safe(l).has(Code::ObjectOutsideMap));
+        // several: counted, the first named
+        l = tiny();
+        l.anthill_spawns.push_back(AnthillSpawn{421, 40, 2, 255});
+        l.anthill_spawns.push_back(AnthillSpawn{421, 3, 50, 255});
+        CHECK(finds(check_original_safe(l), Code::ObjectOutsideMap, Severity::Info, "2 plants stand outside the map (the first at row 40, column 2): the original ignores them", 40, 2));
+    });
+
+    run_case("S1.19 Hills Of Two Teams Over Each Other Are No Rule (The Notes Are Silent): Red's 4 x 4 Over One Cell Of Green's Gives Only The Note On Green's Hill, And The Map Works", [] {
+        LevelData l = tiny();
+        clear_hill(l, kTinyHills[1]);
+        put_hill(l, 1, 8, 8);                                                      // rows 7 .. 10, columns 7 .. 10; Green's 4 x 4 is rows 4 .. 7, columns 4 .. 7: one cell is shared
+        const OriginalSafeReport r = check_original_safe(l);
+        CHECK(finds(r, Code::HillNotWhole, Severity::Info,
+                    "the hill of Green is not whole: one cell (row 7, column 7) differs from the 4 x 4 hill around its entrance (row 5, column 5)", 7, 7, 0));
+        CHECK(r.issues.size() == 1u && r.works_in_original_game());
     });
 }
 
@@ -487,29 +569,106 @@ void s3_files() {
         CHECK(r.issues.size() == 1u && r.has(Code::DictionaryTooLarge));
     });
 
-    run_case("S3.2 What A File Left Out Is A Warning: Block 4 Cut Short, The Egg Word Missing, A Block 2 That Ends At A Pile Without Stages; A Whole File Is The Level's Profile", [&] {
+    run_case("S3.2 What A File Left Out Is A Warning, Or Fatal In Block 4: Block 4 Cut Short, The Egg Word Missing, A Block 2 That Ends At A Pile Without Stages; A Whole File Is The Level's Profile", [&] {
         CHECK(located);
         CHECK(check_original_safe(tiny_file.data(), tiny_file.size()).issues.empty());
         // TINY has no waypoint: a file cut before its egg word, and one cut inside block 4 (a count of 1 and half a record)
         OriginalSafeReport r = check_original_safe(tiny_file.data(), tiny_file.size() - 2);
-        CHECK(finds(r, Code::EggWordMissing, Severity::Warning, "the file ends before its egg word: the original leaves the egg stock of every team to chance"));
+        CHECK(finds(r, Code::EggWordMissing, Severity::Warning, "the file ends before it says how many eggs each team starts with: the original leaves that number to chance"));
         std::vector<uint8_t> m(tiny_file.begin(), tiny_file.begin() + static_cast<std::ptrdiff_t>(t.b4_count));
         put16(m, 1);
         put16(m, 3);
         r = check_original_safe(m.data(), m.size());
-        CHECK(finds(r, Code::FileCutInBlock4, Severity::Warning,
-                    "the file ends inside block 4 (the flower droppers): the original keeps the complete records it read and leaves the egg stock of every team to chance"));
+        CHECK(finds(r, Code::FileCutInBlock4, Severity::Fatal,
+                    "the file ends inside its list of flower droppers: the original keeps the complete records it read, goes on to read the places that were never filled, "
+                    "and leaves the number of eggs each team starts with to chance"));
+        CHECK(!r.works_in_original_game());
         CHECK(!r.has(Code::EggWordMissing));
         m = tiny_file;
         wr16(m, t.food[2] + 8, 0);
         r = check_original_safe(m.data(), m.size());
         CHECK(finds(r, Code::FoodBlockEndedEarly, Severity::Warning,
-                    "block 2 (the food) ends at pile 3 of 14, which has no stages: the original keeps the 2 piles before it and reads the rest of the map from the bytes behind it"));
+                    "the list of food piles ends at pile 3 of 14, which has no stages: the original keeps the 2 piles before it and reads the rest of the map from the bytes behind it"));
         // the same level from the writer has none of them: the rewrite is whole
         LevelData read;
         CHECK(read.load_from_memory(m.data(), m.size()));
         const LevelWriteResult w = write_level(read);
         CHECK(w.ok && !check_original_safe(w.bytes.data(), w.bytes.size()).has(Code::FoodBlockEndedEarly));
+    });
+
+    run_case("S3.3 A Limit Of The Place Is Not A Rule Of The Original: TINY 131 Columns Wide Works In The Original Game, Does Not Fit A New Map, And Says So Apart", [] {
+        LevelData broad = tiny();
+        broad.width.val = 131;
+        broad.layer1_terrain.assign(31u * 131u, tiny().layer1_terrain[0]);
+        broad.layer2_interactive.assign(31u * 131u, MapCell{LVL_EMPTY_TILE, 0, 0});
+        for (uint32_t row = 0; row < 31; ++row) {
+            for (uint32_t column = 0; column < 31; ++column) {
+                broad.layer1_terrain[row * 131 + column] = tiny().layer1_terrain[row * 31 + column];
+                broad.layer2_interactive[row * 131 + column] = tiny().layer2_interactive[row * 31 + column];
+            }
+        }
+        const LevelWriteResult file = write_level(broad);
+        CHECK(file.ok);
+        if (!file.ok) return;
+        OriginalSafeReport r = check_original_safe(file.bytes.data(), file.bytes.size());
+        CHECK(r.works_in_original_game() && r.fits_the_place() && r.issues.empty() && r.judged);
+        r = check_original_safe(file.bytes.data(), file.bytes.size(), LevelLimits::for_new_maps());
+        CHECK(r.works_in_original_game() && !r.fits_the_place() && r.judged);
+        CHECK(r.issues.size() == 1u && r.issues[0].code == Code::GridTooLarge && r.issues[0].place_limit && r.issues[0].severity == Severity::Fatal);
+        CHECK(r.issues.size() == 1u && r.issues[0].message.find("the grid has 31 rows x 131 columns, more than the 130 x 130 allowed here") == 0);
+        CHECK(r.describe().find("limit grid_too_large: ") == 0);
+        // the rules of the original still apply to it: no Blue hill, and it does not work
+        LevelData none = broad;
+        clear_hill(none, kTinyHills[2]);
+        const LevelWriteResult none_file = write_level(none);
+        CHECK(none_file.ok);
+        if (!none_file.ok) return;
+        r = check_original_safe(none_file.bytes.data(), none_file.bytes.size(), LevelLimits::for_new_maps());
+        CHECK(!r.works_in_original_game() && !r.fits_the_place() && r.has(Code::HillMissing) && r.has(Code::GridTooLarge) && r.issues.size() == 2u);
+        CHECK(!r.first(Code::HillMissing)->place_limit && r.first(Code::GridTooLarge)->place_limit);
+        // a grid beyond the original's own 256 is the original's rule, whatever the place allows
+        const std::vector<uint8_t> wide = flat_map(1, 1, 300, 1, 300);
+        r = check_original_safe(wide.data(), wide.size(), LevelLimits::for_new_maps());
+        CHECK(r.issues.size() == 1u && r.issues[0].code == Code::GridTooLarge && !r.issues[0].place_limit && !r.works_in_original_game() && r.fits_the_place());
+        // more cells than a new map has (10,000) with each side within 130: the cell limit, a limit of the place
+        LevelData cells = tiny();
+        cells.width.val = 100;
+        cells.height.val = 101;
+        cells.layer1_terrain.assign(101u * 100u, tiny().layer1_terrain[0]);
+        cells.layer2_interactive.assign(101u * 100u, MapCell{LVL_EMPTY_TILE, 0, 0});
+        const LevelWriteResult cells_file = write_level(cells);
+        CHECK(cells_file.ok);
+        if (cells_file.ok) {
+            r = check_original_safe(cells_file.bytes.data(), cells_file.bytes.size(), LevelLimits::for_new_maps());
+            CHECK(r.has(Code::GridTooLarge) && r.first(Code::GridTooLarge)->place_limit && r.first(Code::GridTooLarge)->message.find("10100 cells, more than the 10000 allowed here") != std::string::npos);
+        }
+        // a dictionary of more names than the place allows (not more than 1,344)
+        r = check_original_safe(tiny_bytes().data(), tiny_bytes().size(), LevelLimits{256, 256, 600, std::numeric_limits<size_t>::max(), 65536, std::numeric_limits<size_t>::max()});
+        CHECK(r.has(Code::DictionaryTooLarge) && r.first(Code::DictionaryTooLarge)->place_limit && !r.fits_the_place() && r.works_in_original_game());
+        // a file that is not read at all: nothing is known of the map
+        r = check_original_safe(tiny_bytes().data(), tiny_bytes().size(), LevelLimits{256, 256, 1344, 1000});
+        CHECK(!r.judged && !r.works_in_original_game() && !r.fits_the_place() && r.issues.size() == 1u && r.issues[0].place_limit);
+        CHECK(r.describe().find("limit file_too_large: ") == 0);
+    });
+
+    run_case("S3.4 A File The Reader Refuses Keeps What Its Reading Noted: 300 Columns With The Egg Word Missing, Cut In Block 4, Or A Mode Other Than 1", [] {
+        const std::vector<uint8_t> wide = flat_map(1, 1, 300, 1, 300);
+        OriginalSafeReport r = check_original_safe(wide.data(), wide.size());
+        CHECK(r.issues.size() == 1u && r.has(Code::GridTooLarge) && !r.issues[0].place_limit);
+        std::vector<uint8_t> m(wide.begin(), wide.end() - 2);
+        r = check_original_safe(m.data(), m.size());
+        CHECK(r.issues.size() == 2u && r.has(Code::GridTooLarge) && r.has(Code::EggWordMissing) && r.first(Code::EggWordMissing)->severity == Severity::Warning);
+        m.assign(wide.begin(), wide.end() - 4);                      // block 4 announces one waypoint and holds half a record
+        put16(m, 1);
+        put16(m, 3);
+        r = check_original_safe(m.data(), m.size());
+        CHECK(r.issues.size() == 2u && r.has(Code::GridTooLarge) && r.has(Code::FileCutInBlock4) && !r.has(Code::EggWordMissing));
+        CHECK(r.first(Code::FileCutInBlock4) != nullptr && r.first(Code::FileCutInBlock4)->severity == Severity::Fatal);
+        m = wide;
+        wr32(m, 4, 4631);
+        r = check_original_safe(m.data(), m.size());
+        CHECK(r.issues.size() == 2u && r.has(Code::GridTooLarge) && r.has(Code::ModeNot1) && r.first(Code::ModeNot1)->severity == Severity::Info);
+        CHECK(r.issues[0].code == Code::GridTooLarge && r.issues[1].code == Code::ModeNot1);
     });
 }
 
@@ -582,11 +741,12 @@ std::vector<std::string> listed_community_maps(const std::string& folder) {
     return names;
 }
 
-// The results of the library (docs/MAP_FORMAT.md, "The original-safe profile"): 516 of the 540 maps work in the original game; per code, how many maps have it
-constexpr int kLibraryWorks = 516;
+// The results of the library (docs/MAP_FORMAT.md, "The original-safe profile"): 485 of the 540 maps work in the original game; per code, how many maps have it
+constexpr int kLibraryWorks = 485;
 const std::map<std::string, int> kLibraryCodes = {
-    {"description_too_long", 8}, {"egg_word_missing", 1}, {"file_cut_in_block_4", 11}, {"food_pile_outside_map", 3}, {"hill_without_entrance", 2},   // the 24 that do not
-    {"food_pile_not_shown", 34}, {"hill_not_whole", 36}, {"mode_not_1", 14}, {"object_outside_map", 36}, {"tile_not_drawn", 93},                        // notes
+    {"description_too_long", 8}, {"egg_word_missing", 1}, {"file_cut_in_block_4", 11}, {"food_pile_not_shown", 34}, {"food_pile_outside_map", 3},   // the 55 that do not
+    {"hill_without_entrance", 2},
+    {"hill_not_whole", 36}, {"mode_not_1", 14}, {"object_outside_map", 36}, {"tile_not_drawn", 93},                                                   // notes
 };
 
 void s5_library() {
@@ -633,7 +793,7 @@ void s5_library() {
         CHECK_MSG(works == kLibraryWorks, std::to_string(works));
         const std::map<std::string, int> expected = kLibraryCodes;
         CHECK_MSG(maps_with == expected, "the counts per code moved");
-        // the 12 files that are cut short work once they are rewritten, but Conquer, whose description has 30 characters
+        // the 12 files that are cut short work once they are rewritten, but Conquer, whose description is 30 bytes long
         const std::vector<std::string> cut = {"1v1TREASURE.LVL", "AnTsCaStLe.lvl", "AntsTournament.lvl", "Ants_Town.lvl", "ArCaDeStYLe.lvl", "Arena101.lvl",
                                               "BetterArcadeStyle.lvl", "Bunker.lvl", "Food Island.lvl", "Food Rules The Ants!!!.lvl", "NW.LVL"};
         CHECK_MSG(rewrite_works == cut, std::to_string(rewrite_works.size()) + " work once rewritten");

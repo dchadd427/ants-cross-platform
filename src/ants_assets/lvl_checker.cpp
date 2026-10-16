@@ -44,7 +44,7 @@ struct Tally {
 class Findings {
 public:
     explicit Findings(OriginalSafeReport& report) : report_(report) {}
-    void add(Code code, Severity severity, std::string message, int32_t row = -1, int32_t column = -1, int team = -1, uint32_t count = 1) {
+    void add(Code code, Severity severity, std::string message, int32_t row = -1, int32_t column = -1, int team = -1, uint32_t count = 1, bool place_limit = false) {
         OriginalSafeIssue i;
         i.code = code;
         i.severity = severity;
@@ -53,6 +53,7 @@ public:
         i.column = column;
         i.team = static_cast<int8_t>(team);
         i.count = count;
+        i.place_limit = place_limit;
         report_.issues.push_back(std::move(i));
     }
 
@@ -81,15 +82,18 @@ void file_findings(const LevelData& level, Findings& f) {
         // FUN_01006d19 (0x1006dc9 .. 0x1006dcf): an object without stages ends block 2; block 3 is read from the bytes right behind its stage count
         const size_t kept = level.food_schedules.size();
         f.add(Code::FoodBlockEndedEarly, Severity::Warning,
-              "block 2 (the food) ends at pile " + num(kept + 1) + " of " + num(kept + unread) + ", which has no stages: the original keeps the " + num(kept) +
+              "the list of food piles ends at pile " + num(kept + 1) + " of " + num(kept + unread) + ", which has no stages: the original keeps the " + num(kept) +
                   (kept == 1 ? " pile" : " piles") + " before it and reads the rest of the map from the bytes behind it");
     }
     if (has_note(level, LevelProblemKind::WaypointBlockTruncated)) {
-        // the loader's one try block holds block 4 and the egg word (0x1006510 .. 0x100655e): a read error there is swallowed, the egg stock (+0x6c) is never set
-        f.add(Code::FileCutInBlock4, Severity::Warning,
-              "the file ends inside block 4 (the flower droppers): the original keeps the complete records it read and leaves the egg stock of every team to chance");
+        // the loader's one try block holds block 4 and the egg word (0x1006510 .. 0x100655e): a read error there is swallowed, the egg stock (+0x6c) is never set.
+        // Fatal: the table of block 4 is sized to the announced count, and the slots that the cut left unfilled are walked by the dropper poll (FUN_0100fc0d ->
+        // FUN_01008d79, no check) and freed by the Map's destructor (RE 4.5)
+        f.add(Code::FileCutInBlock4, Severity::Fatal,
+              "the file ends inside its list of flower droppers: the original keeps the complete records it read, goes on to read the places that were never filled, "
+              "and leaves the number of eggs each team starts with to chance");
     } else if (has_note(level, LevelProblemKind::EggStockMissing)) {
-        f.add(Code::EggWordMissing, Severity::Warning, "the file ends before its egg word: the original leaves the egg stock of every team to chance");
+        f.add(Code::EggWordMissing, Severity::Warning, "the file ends before it says how many eggs each team starts with: the original leaves that number to chance");
     }
 }
 
@@ -170,13 +174,17 @@ void hill_findings(const LevelData& level, Findings& f) {
             if (!in_footprint(static_cast<int64_t>(i / columns), static_cast<int64_t>(i % columns))) note(static_cast<int64_t>(i / columns), static_cast<int64_t>(i % columns));
         }
         if (differ == 0) continue;
+        // the cell it is about: the first that differs on the map; when every one is off the map, the entrance (which is then not said to differ)
         const int64_t fr = first >= 0 ? first / columns : er;
         const int64_t fc = first >= 0 ? first % columns : ec;
-        f.add(Code::HillNotWhole, Severity::Info,
-              "the hill of " + std::string(kTeams[team]) + " is not whole: " +
-                  (differ == 1 ? "one cell (" + place(fr, fc) + ") differs" : num(differ) + " cells (the first at " + place(fr, fc) + ") differ") +
-                  " from the 4 x 4 hill around its entrance (" + place(er, ec) + ")",
-              static_cast<int32_t>(fr), static_cast<int32_t>(fc), team, differ);
+        std::string what;
+        if (first < 0) {
+            what = num(differ) + " cells of the 4 x 4 hill around its entrance (" + place(er, ec) + ") lie outside the map";
+        } else {
+            what = (differ == 1 ? "one cell (" + place(fr, fc) + ") differs" : num(differ) + " cells (the first at " + place(fr, fc) + ") differ") +
+                   " from the 4 x 4 hill around its entrance (" + place(er, ec) + ")";
+        }
+        f.add(Code::HillNotWhole, Severity::Info, "the hill of " + std::string(kTeams[team]) + " is not whole: " + what, static_cast<int32_t>(fr), static_cast<int32_t>(fc), team, differ);
     }
 }
 
@@ -215,8 +223,16 @@ const char* to_string(OriginalSafeCode code) noexcept {
 }
 
 bool OriginalSafeReport::works_in_original_game() const noexcept {
+    if (!judged) return false;
     for (const OriginalSafeIssue& i : issues) {
-        if (i.severity != LevelProblemSeverity::Info) return false;
+        if (i.severity != LevelProblemSeverity::Info && !i.place_limit) return false;
+    }
+    return true;
+}
+
+bool OriginalSafeReport::fits_the_place() const noexcept {
+    for (const OriginalSafeIssue& i : issues) {
+        if (i.place_limit) return false;
     }
     return true;
 }
@@ -232,7 +248,7 @@ const OriginalSafeIssue* OriginalSafeReport::first(OriginalSafeCode code) const 
 
 std::string OriginalSafeReport::describe() const {
     std::string text;
-    for (const OriginalSafeIssue& i : issues) text += std::string(to_string(i.severity)) + " " + to_string(i.code) + ": " + i.message + "\n";
+    for (const OriginalSafeIssue& i : issues) text += std::string(i.place_limit ? "limit" : to_string(i.severity)) + " " + to_string(i.code) + ": " + i.message + "\n";
     return text;
 }
 
@@ -250,7 +266,8 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     }
     if (level.description.size() > kLongestDescription) {
         f.add(Code::DescriptionTooLong, Severity::Warning,
-              "the description has " + num(level.description.size()) + " characters: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end");
+              "the description is " + num(level.description.size()) + " bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end " +
+                  "(a letter outside a to z takes 2 or 3 bytes)");
     }
 
     // the grid (0x10068de: two 16-bit sizes; the remake hosts 256 a side) and the dictionary (0x1006795: one dword per name in a buffer of 0x1500 bytes)
@@ -301,7 +318,7 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     }
     tiles_beyond_dictionary(ground, "ground cell", "ground cells", names, f);
     tiles_beyond_dictionary(objects, "object cell", "object cells", names, f);
-    tiles_beyond_dictionary(records, "block-1 record", "block-1 records", names, f);
+    tiles_beyond_dictionary(records, "entry of the list of start markers and plants", "entries of the list of start markers and plants", names, f);
     tiles_beyond_dictionary(stages, "food stage", "food stages", names, f, true);
     if (beyond(level.ambient_tile_or_sound)) {
         f.add(Code::TileOutsideDictionary, Severity::Fatal,
@@ -309,8 +326,8 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     }
     // the ground (FUN_01008af7: the terrain class is a table of the 1,344 ids, read with the layer-1 tile; 0x7FFE is past its end)
     if (no_ground.count != 0) {
-        f.add(Code::GroundMissing, Severity::Warning,
-              (no_ground.count == 1 ? std::string("one cell has no ground tile") : num(no_ground.count) + " cells have no ground tile") + " (layer-1 tile 32766; " +
+        f.add(Code::GroundMissing, Severity::Fatal,
+              (no_ground.count == 1 ? std::string("one cell has no ground tile") : num(no_ground.count) + " cells have no ground tile") + " (the empty tile 32766; " +
                   (no_ground.count == 1 ? "" : "the first at ") + place(no_ground.row, no_ground.column) + "): the original reads its terrain table past its end there",
               no_ground.row, no_ground.column, -1, no_ground.count);
     }
@@ -363,12 +380,13 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
         for (const AnthillSpawn& sp : level.anthill_spawns) marker = marker || sp.team_id == team;
         if (!marker) {
             f.add(Code::StartingAntsMissing, Severity::Warning,
-                  std::string(kTeams[team]) + " has no starting ants (no start marker, block-1 tile " + num(kMarkerOf[team]) + ")", -1, -1, team);
+                  std::string(kTeams[team]) + " has no starting ants (no start marker, tile " + num(kMarkerOf[team]) + ")", -1, -1, team);
         }
     }
 
-    // notes: what the original does not draw (FUN_0100674e mode 0 keeps the picture of an id whose entry is not "."; FUN_010068be forces 62 ids), the piles that
-    // it does not place (SetTile, FUN_01007352, places nothing of a tile without a picture), and the objects outside the grid that it ignores
+    // what the original does not draw (a note; FUN_0100674e mode 0 keeps the picture of an id whose entry is not "."; FUN_010068be forces 62 ids), the piles that
+    // it does not place (a warning: SetTile, FUN_01007352, places nothing of a tile without a picture, and nobody can see or harvest such a pile), and the objects
+    // outside the grid that it ignores (a note)
     auto not_loaded = [&](uint16_t tile) { return tile != LVL_EMPTY_TILE && tile < names && level.tile_dictionary[tile] == "." && !tile_always_loaded(tile); };
     if (grid) {
         Tally unseen;
@@ -414,14 +432,15 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
             }
         }
         if (hidden.count == 1) {
-            f.add(Code::FoodPileNotShown, Severity::Info,
+            f.add(Code::FoodPileNotShown, Severity::Warning,
                   "the food pile at " + place(hidden.row, hidden.column) + " does not show in the original from stage " + num(hidden.extra) + " on: its tile " + num(hidden.tile) +
-                      " is named \".\" in the dictionary, and the original places no pile of a tile whose picture it does not load",
+                      " is named \".\" in the dictionary, the original places no pile of a tile whose picture it does not load, and nobody can see or harvest a pile that is not placed",
                   hidden.row, hidden.column);
         } else if (hidden.count > 1) {
-            f.add(Code::FoodPileNotShown, Severity::Info,
+            f.add(Code::FoodPileNotShown, Severity::Warning,
                   num(hidden.count) + " food piles do not show in the original from a stage whose tile the dictionary names \".\" (the first at " + place(hidden.row, hidden.column) +
-                      ", from stage " + num(hidden.extra) + " on: tile " + num(hidden.tile) + "): the original places no pile of a tile whose picture it does not load",
+                      ", from stage " + num(hidden.extra) + " on: tile " + num(hidden.tile) +
+                      "): the original places no pile of a tile whose picture it does not load, and nobody can see or harvest a pile that is not placed",
                   hidden.row, hidden.column, -1, hidden.count);
         }
     }
@@ -443,7 +462,7 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
         }
         if (objects_out.count != 0) {
             std::string what;
-            if (plants != 0) what = plants == 1 ? "one block-1 object" : num(plants) + " block-1 objects";
+            if (plants != 0) what = plants == 1 ? "one plant" : num(plants) + " plants";
             if (points != 0) what += std::string(what.empty() ? "" : " and ") + (points == 1 ? "one waypoint" : num(points) + " waypoints");
             f.add(Code::ObjectOutsideMap, Severity::Info,
                   what + (objects_out.count == 1 ? " stands" : " stand") + " outside the map " + objects_out.where() + "): the original ignores " +
@@ -459,26 +478,52 @@ OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const L
     LevelData level;
     LevelValidation read;
     if (level.load_from_memory(data, size, &read, limits)) return check_original_safe(level);
-    // what the reader refuses, with its own sentence (and what it noted on the way)
-    OriginalSafeReport report;
+    // A grid or a dictionary beyond the limits of the place, but not beyond the original's: the map is judged by the original's rules (its profile is the report),
+    // and the limit is a finding of its own, which is no rule of the original (place_limit)
+    const bool place_grid = read.has(LevelProblemKind::GridTooLarge);
+    const bool place_dictionary = read.has(LevelProblemKind::DictionaryTooLarge);
+    LevelData whole;
+    LevelValidation game;
+    bool loads_in_the_game = false;
+    if (place_grid || place_dictionary) loads_in_the_game = whole.load_from_memory(data, size, &game, LevelLimits{});
+    OriginalSafeReport report = loads_in_the_game ? check_original_safe(whole) : OriginalSafeReport{};
     Findings f(report);
-    const bool cut_in_block_4 = read.has(LevelProblemKind::WaypointBlockTruncated);
+    if (!loads_in_the_game) {
+        // what the reader refuses, with its own sentence (and what it noted on the way); a refusal of the original's own limits is the one of the original's reader
+        const LevelValidation& refused = (place_grid || place_dictionary) ? game : read;
+        const bool cut_in_block_4 = refused.has(LevelProblemKind::WaypointBlockTruncated);
+        for (const LevelProblem& p : refused.problems) {
+            switch (p.kind) {
+                case LevelProblemKind::Unreadable: f.add(Code::FileUnreadable, Severity::Fatal, p.message); break;
+                case LevelProblemKind::WrongVersion: f.add(Code::VersionNot8, Severity::Fatal, p.message); break;
+                case LevelProblemKind::Truncated: f.add(Code::FileCutShort, Severity::Fatal, p.message); break;
+                case LevelProblemKind::GridEmpty: f.add(Code::GridEmpty, Severity::Fatal, p.message); break;
+                case LevelProblemKind::GridTooLarge: f.add(Code::GridTooLarge, Severity::Fatal, p.message); break;
+                case LevelProblemKind::DictionaryTooLarge: f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message); break;
+                case LevelProblemKind::ModeIgnored: f.add(Code::ModeNot1, Severity::Info, p.message); break;
+                case LevelProblemKind::FoodBlockEndedEarly: f.add(Code::FoodBlockEndedEarly, Severity::Warning, p.message); break;
+                case LevelProblemKind::WaypointBlockTruncated: f.add(Code::FileCutInBlock4, Severity::Fatal, p.message); break;
+                case LevelProblemKind::EggStockMissing:
+                    if (!cut_in_block_4) f.add(Code::EggWordMissing, Severity::Warning, p.message);
+                    break;
+                default: break;   // (the checks of a whole level: a refused file has no level to check)
+            }
+        }
+    }
     for (const LevelProblem& p : read.problems) {
         switch (p.kind) {
-            case LevelProblemKind::Unreadable: f.add(Code::FileUnreadable, Severity::Fatal, p.message); break;
-            case LevelProblemKind::FileTooLarge: f.add(Code::FileTooLarge, Severity::Fatal, p.message); break;
-            case LevelProblemKind::WrongVersion: f.add(Code::VersionNot8, Severity::Fatal, p.message); break;
-            case LevelProblemKind::Truncated: f.add(Code::FileCutShort, Severity::Fatal, p.message); break;
-            case LevelProblemKind::GridEmpty: f.add(Code::GridEmpty, Severity::Fatal, p.message); break;
-            case LevelProblemKind::GridTooLarge: f.add(Code::GridTooLarge, Severity::Fatal, p.message); break;
-            case LevelProblemKind::DictionaryTooLarge: f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message); break;
-            case LevelProblemKind::ModeIgnored: f.add(Code::ModeNot1, Severity::Info, p.message); break;
-            case LevelProblemKind::FoodBlockEndedEarly: f.add(Code::FoodBlockEndedEarly, Severity::Warning, p.message); break;
-            case LevelProblemKind::WaypointBlockTruncated: f.add(Code::FileCutInBlock4, Severity::Warning, p.message); break;
-            case LevelProblemKind::EggStockMissing:
-                if (!cut_in_block_4) f.add(Code::EggWordMissing, Severity::Warning, p.message);
+            case LevelProblemKind::FileTooLarge:
+                // not read at all: nothing is known of the map
+                f.add(Code::FileTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+                report.judged = false;
                 break;
-            default: break;   // (the checks of a whole level: a refused file has no level to check)
+            case LevelProblemKind::GridTooLarge:
+                if (!game.has(LevelProblemKind::GridTooLarge)) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+                break;
+            case LevelProblemKind::DictionaryTooLarge:
+                if (!game.has(LevelProblemKind::DictionaryTooLarge)) f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+                break;
+            default: break;
         }
     }
     notes_last(report);

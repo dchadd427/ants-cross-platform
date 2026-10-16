@@ -2,7 +2,8 @@
 //
 //   lvl_tool check FILE [--roster MASK] [--new-map]          whether the file loads and plays for the teams of MASK (default 15, all four), and every finding
 //   lvl_tool check FILE --original [--new-map]               whether the map works in the original game (the original-safe profile, lvl_checker.hpp): every finding
-//                                                            with its code, and exit 0 only when there is no fatal finding and no warning
+//                                                            with its code, and exit 0 only when there is no fatal finding and no warning; with --new-map a map that
+//                                                            is too big for a new map is said so on a line of its own (a limit of the map maker, not of the original)
 //   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, whether it works in the
 //                                                            original game, and what a rewrite changes
 //   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT may be IN: the
@@ -230,13 +231,23 @@ std::string codes_of(const OriginalSafeReport& r, bool notes) {
 
 int check_original(const std::string& name, const std::vector<uint8_t>& bytes, const LevelLimits& limits, std::ostream& out) {
     const OriginalSafeReport r = check_original_safe(bytes.data(), bytes.size(), limits);
+    // the verdict on the original game first: the findings that stop it come first (a limit of --new-map is none of them: it has its own line below)
     if (r.works_in_original_game()) {
-        out << name << ": works in the original game" << (r.issues.empty() ? "; no findings" : "; notes:") << "\n";
-    } else {
-        out << name << ": does not work in the original game: " << r.issues.front().message << "\n";       // (the findings that stop it come first)
+        bool notes = false;
+        for (const OriginalSafeIssue& i : r.issues) notes = notes || i.severity == LevelProblemSeverity::Info;
+        out << name << ": works in the original game" << (r.issues.empty() ? "; no findings" : notes ? "; notes:" : "") << "\n";
+    } else if (r.judged) {
+        for (const OriginalSafeIssue& i : r.issues) {
+            if (i.severity == LevelProblemSeverity::Info || i.place_limit) continue;
+            out << name << ": does not work in the original game: " << i.message << "\n";
+            break;
+        }
     }
-    for (const OriginalSafeIssue& i : r.issues) out << "  " << to_string(i.severity) << ' ' << to_string(i.code) << ": " << i.message << "\n";
-    return r.works_in_original_game() ? 0 : 1;
+    for (const OriginalSafeIssue& i : r.issues) {
+        if (i.place_limit) out << name << ": too big for a new map (a limit of the map maker, the original has none): " << i.message << "\n";
+    }
+    for (const OriginalSafeIssue& i : r.issues) out << "  " << (i.place_limit ? "limit" : to_string(i.severity)) << ' ' << to_string(i.code) << ": " << i.message << "\n";
+    return r.works_in_original_game() && r.fits_the_place() ? 0 : 1;
 }
 
 int check(const Options& o, std::ostream& out, std::ostream& err) {
@@ -651,6 +662,28 @@ int selftest() {
         const Run c = run_words({"check", dir.file("cut.lvl"), "--original"});
         t.check(c.status == 1 && has(c.out, "cut.lvl: does not work in the original game: the file ends inside the layers") && has(c.out, "  fatal file_cut_short: "),
                 "check --original: a file cut short does not work, and says where");
+        // TINY made 131 columns wide (the new columns are plain ground): the original plays it, a new map may not be so wide
+        LevelData broad = tiny_level;
+        broad.width.val = 131;
+        broad.layer1_terrain.assign(31u * 131u, tiny_level.layer1_terrain[0]);
+        broad.layer2_interactive.assign(31u * 131u, MapCell{LVL_EMPTY_TILE, 0, 0});
+        for (size_t row = 0; row < 31; ++row) {
+            for (size_t column = 0; column < 31; ++column) {
+                broad.layer1_terrain[row * 131 + column] = tiny_level.layer1_terrain[row * 31 + column];
+                broad.layer2_interactive[row * 131 + column] = tiny_level.layer2_interactive[row * 31 + column];
+            }
+        }
+        const LevelWriteResult broad_file = write_level(broad);
+        t.check(broad_file.ok, "a 31 x 131 map of TINY is written");
+        const std::string broad_path = file_of("broad.lvl", broad_file.bytes);
+        const Run b_game = run_words({"check", broad_path, "--original"});
+        t.check(b_game.status == 0 && has(b_game.out, "broad.lvl: works in the original game") && !has(b_game.out, "too big"),
+                "check --original: 131 columns work in the original game: " + b_game.out);
+        const Run b_new = run_words({"check", broad_path, "--original", "--new-map"});
+        t.check(b_new.status == 1 && has(b_new.out, "broad.lvl: works in the original game") && !has(b_new.out, "does not work") &&
+                    has(b_new.out, "broad.lvl: too big for a new map (a limit of the map maker, the original has none): the grid has 31 rows x 131 columns, more than the 130 x 130 allowed here") &&
+                    has(b_new.out, "  limit grid_too_large: "),
+                "check --original --new-map: 131 columns are a limit of the map maker, not under the heading that the original does not work: " + b_new.out);
         t.check(has(run_words({"info", dir.file("nohill.lvl")}).out, "Original game: does not work: hill_missing\n") &&
                     has(run_words({"info", dir.file("mode.lvl")}).out, "Original game: works; notes: mode_not_1\n"),
                 "info: whether the map works in the original game, by code");
