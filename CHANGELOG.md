@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.52 - 2026-10-15 - Lobby: no rename, map change or colour move lost to a slow moment
+
+**For players:**
+- **A rename, a new map or a colour move in the lobby is never lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or colour moves at once and then about three a second.
+
+**Rules / network:** none. Network protocol 21 and the server are as before; only the pace of the page's requests changed.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60fb1ebc...60fb1ebc), [the page's pace](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
+
 ## v0.12.51 - 2026-10-15 - Match stats: over time and activity
 
 **For players:**
@@ -539,15 +548,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...57fa5e4), [the bots](docs/BOTS.md)
 
-## v0.8.3 - 2026-10-05 - Friend by default, a game for one and a dirtier background
+## Older versions (v0.8.3 and before)
 
-**For players:**
-- **Friend is the default seat:** a first visit to the front page starts with You at Green and a Friend in each of the other three seats (it was a Medium bot), so START! makes a room and the card shows the invitation links; pick Easy, Medium or Hard for a seat to play against the computer. A browser that already saved its choices keeps them.
-- **A game for one:** START! is on with nobody else in the match (it was off: "Pick at least one more seat"). With every other seat on **Nobody** it begins a game for one on this computer: no room, no opponent, and you play Green whatever colour the card showed (the line under START! says so).
-- **A dirtier background:** the orange clay behind the pages has a little noise and dirt (patches a little deeper and lighter, grain, pale grit and small brown specks), so it is not so clean. The text on it stays easy to read.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...af4e0c1)
-
-## Older versions (v0.8.2 and before)
-
-Every release before v0.8.3, and the long notes of v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.9.0, and the long notes of v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

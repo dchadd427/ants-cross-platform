@@ -1073,6 +1073,7 @@ const momentsOf = (kind, spans) => {
     const moments = [];
     for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
         if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && ASKS[kind](d, moments.length); k++) moments.push(ms);
+        if (moments.length >= 400) break;                           // (a page that keeps a pace asks for 70 at the most in 16 s; one that has none is no use to replay further)
         x.advance(1);
     }
     momentsMemo[memo] = moments;

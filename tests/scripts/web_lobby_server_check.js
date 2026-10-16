@@ -131,7 +131,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('(the event names the colour and both names)', JSON.stringify(A.of('renamed')[0]) === JSON.stringify({ type: 'renamed', seat: 0, from: 'Bea', to: 'Beatrice' }), JSON.stringify(A.of('renamed')));
         const renamed = A.count('renamed');
         check('the page itself does not ask for a name that looks like a bot\'s (protocol 20)', B.rename('Bot (Hard)') === false && B.rename('Pip (bot)') === false);
-        check('B sends the bytes of such a name by hand all the same (what no honest page does): the server must refuse it', B.send('rename', N.encodeName('Bot (Hard)')) === true && B.send('rename', N.encodeName('Pip (bot, Hard)')) === true);
+        check('B sends the bytes of such a name by hand all the same (what no honest page does): the server must refuse it', B.sendBytes(N.encodeName('Bot (Hard)')) === true && B.sendBytes(N.encodeName('Pip (bot, Hard)')) === true);
         await sleep(500);
         check('(the room keeps Beatrice and says nothing)', names(A) === 'Beatrice|-|Ada|-' && A.count('renamed') === renamed && B.room.slots[0].name === 'Beatrice', names(A));
         // the leader takes Beatrice out
@@ -397,15 +397,16 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         L.connect();
         await step('Lia makes the room', () => online(L), 5000);
         R.connect();
+        await step('Rex joins it (colour 1)', () => () => online(R)() && names(L) === 'Lia|Rex|-|-', 8000);
         O.connect();
-        await step('Rex and Oda join it (colours 1 and 2; colour 3 is free)', () => () => online(R)() && online(O)() && names(L) === 'Lia|Rex|Oda|-', 8000);
+        await step('Oda joins it (colour 2; colour 3 is free)', () => () => online(O)() && names(L) === 'Lia|Rex|Oda|-', 8000);
         await sleep(1200);                                                                         // (the pages' links are quiet; every budget of the server is whole)
         const planBase = O.count('plan'), renameBase = L.count('renamed');
         const started = Date.now();
         let planSent = 0, renameSent = 0;
         const sentNames = [];
         while (Date.now() - started < 8500) {
-            if (L.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Open, planSent % 5], teamA: N.NO_TEAM, teamB: N.NO_TEAM })) planSent++;       // (colour 3 changes every time: no plan equals the one before it)
+            if (L.setPlan({ map: '', kinds: [N.PLAN.Open, N.PLAN.Open, N.PLAN.Open, (planSent + 1) % 5], teamA: N.NO_TEAM, teamB: N.NO_TEAM })) planSent++;       // (colour 3 changes every time, from Open at the start: no plan equals the one before it)
             if (R.rename('Rex ' + renameSent)) { sentNames.push('Rex ' + renameSent); renameSent++; }
             await sleep(5);
         }
@@ -414,7 +415,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const renamed = () => L.of('renamed').slice(renameBase).map((e) => e.to);
         await until('every plan and every name heard', () => O.count('plan') - planBase === planSent && renamed().length === renameSent, 3000).catch(() => null);
         check('every plan that Lia\'s page sent was applied and shown to the others (the server dropped none)', O.count('plan') - planBase === planSent, 'heard ' + (O.count('plan') - planBase) + ' of ' + planSent);
-        check('(the last plan is the room\'s: colour 3 is ' + ((planSent - 1) % 5) + ')', O.room.plan[3] === (planSent - 1) % 5 && L.room.plan[3] === (planSent - 1) % 5, 'plan ' + O.room.plan.join());
+        check('(the last plan is the room\'s: colour 3 is ' + (planSent % 5) + ')', O.room.plan[3] === planSent % 5 && L.room.plan[3] === planSent % 5, 'plan ' + O.room.plan.join());
         check('every name that Rex\'s page sent was taken, in order (the server dropped none)', renamed().join('|') === sentNames.join('|'), 'heard ' + renamed().length + ' of ' + renameSent + ': ' + renamed().join('|'));
         check('(and nobody was thrown out)', [L, R, O].every((p) => p.status === 'online') && [L, R, O].every((p) => p.count('refused') === 0 && p.count('removed') === 0));
         // the colour moves: Lia puts Oda in colour 3 and back, as fast as the page lets her (and waits for the room to show the move before she asks for the next, as a screen does: a guard of an older seating is no move)
@@ -423,18 +424,17 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('... and the room shows it', () => () => L.room.plan.join() === '0,0,0,0' && O.room.plan.join() === '0,0,0,0');
         const moveBase = L.count('moved');
         const moveStarted = Date.now();
-        let moveSent = 0, expected = 'Lia|Rex|Oda|-';
-        const where = () => names(L);
+        let moveSent = 0, odaAt = 2;                                                                // (Oda sits in colour 2; colour 3 is free)
         while (Date.now() - moveStarted < 6000) {
-            if (where() === expected) {
-                const at = L.seatOf('Oda');
-                if (L.move(at, at === 2 ? 3 : 2)) { moveSent++; expected = at === 2 ? 'Lia|Rex|-|Oda' : 'Lia|Rex|Oda|-'; }
+            if (L.seatOf('Oda') === odaAt) {                                                       // (the room has shown the last move)
+                const to = odaAt === 2 ? 3 : 2;
+                if (L.move(odaAt, to)) { moveSent++; odaAt = to; }
             }
             await sleep(5);
         }
         check('6 seconds of moving Oda back and forth as fast as the page lets Lia: 5 at once and then 3.2 a second at most (10 to 25 moves)', moveSent >= 10 && moveSent <= 25, String(moveSent));
-        await until('the last move shown', () => where() === expected && L.count('moved') - moveBase === moveSent, 3000).catch(() => null);
-        check('every colour move that Lia\'s page sent was made, and shown (the server dropped none)', L.count('moved') - moveBase === moveSent && where() === expected, 'heard ' + (L.count('moved') - moveBase) + ' of ' + moveSent + ', ' + where() + ', wanted ' + expected);
+        await until('the last move shown', () => L.seatOf('Oda') === odaAt && L.count('moved') - moveBase === moveSent, 3000).catch(() => null);
+        check('every colour move that Lia\'s page sent was made, and shown (the server dropped none)', L.count('moved') - moveBase === moveSent && L.seatOf('Oda') === odaAt, 'heard ' + (L.count('moved') - moveBase) + ' of ' + moveSent + ', Oda in colour ' + L.seatOf('Oda') + ', wanted ' + odaAt);
         check('(and nobody was thrown out)', [L, R, O].every((p) => p.status === 'online') && [L, R, O].every((p) => p.count('refused') === 0));
         L.leave();
         R.leave();
