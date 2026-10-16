@@ -232,7 +232,7 @@ int main() {
         HistoryRecord none;
         ASSERT_FALSE(d.store.find(id_at(kT0 + 99999), none));
         ASSERT_FALSE(d.store.find("not an id", none));
-        // the details that a later version keeps are stored as they are
+        // the details are stored as they are
         HistoryRecord with_details = all[0];
         with_details.details = "{\"events\":[{\"t\":1}]}";
         std::string why;
@@ -797,7 +797,10 @@ int main() {
         ASSERT_TRUE(rig.history.find(id1, rec));
         const Played played = play_file(match_file(1));
         ASSERT_TRUE(played.ok);
-        ASSERT_TRUE(same_record(rec, make_history_record(id1, rec.ended_s, played.rep, played.outcome)));
+        HistoryRecord expected = make_history_record(id1, rec.ended_s, played.rep, played.outcome);
+        ASSERT_TRUE(!rec.details.empty() && expected.details.empty());                // (the details of the same play: test_history_details.cpp checks what is in them)
+        expected.details = rec.details;
+        ASSERT_TRUE(same_record(rec, expected));
         ASSERT_TRUE(rec.map == "TINY.LVL" && rec.game == "v0.12.0-test" && rec.mode == "highest-score" && rec.format == "1v1" && rec.seats.size() == 2 && rec.rows.size() == 2);
         ASSERT_TRUE(rec.seats[0].name == "Cy" && rec.seats[1].name == "Di" && rec.finished == played.outcome.match_over && rec.turns == played.outcome.turns);
         ASSERT_TRUE(rec.draw || rec.rows[0].winner);
@@ -876,6 +879,18 @@ int main() {
         missing.keep(match_file(1));
         missing.drain(4);
         ASSERT_TRUE(missing.history.count() == 0 && missing.feeder.left_out() == 1);
+        // a match on a map of the players (the community folder, which the server asks after its maps folder): counted. A name that the maps folder holds is that folder's: the same name there that is
+        // another file is refused, and the community's file does not stand in for it
+        Rig players(empty_maps.path.string(), maps_dir());
+        ASSERT_TRUE(players.open());
+        const std::string played_id = players.keep(match_file(1));
+        players.drain(4);
+        ASSERT_TRUE(players.history.count() == 1 && players.history.knows(played_id) && players.feeder.left_out() == 0);
+        Rig shadowed(other_maps.path.string(), maps_dir());
+        ASSERT_TRUE(shadowed.open());
+        shadowed.keep(match_file(1));
+        shadowed.drain(4);
+        ASSERT_TRUE(shadowed.history.count() == 0 && shadowed.feeder.left_out() == 1);
         // a recording of other rules (sim_rules 99) and a damaged file next to a good one
         Rig mixed;
         ASSERT_TRUE(mixed.open());
@@ -1053,7 +1068,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("HS6.3 GET /history/<id> gives the whole record (the bombs and fires, the layout number, the mode, what a later version keeps in \"details\") and the state of the recording; an id that is not one, a match that is not there and a query are 404; both doors give the same") {
+    TEST_CASE("HS6.3 GET /history/<id> gives the whole record (the bombs and fires, the layout number, the mode, the stats in \"details\") and the state of the recording; an id that is not one, a match that is not there and a query are 404; both doors give the same") {
         Server s;
         ASSERT_TRUE(s.open());
         const std::vector<HistoryRecord> all = eight_records();
@@ -1217,6 +1232,29 @@ int main() {
         const ctl::HttpResponse again = s.door("GET", "/history");
         ASSERT_TRUE(again.status == 200 && parse_text(again.body).get("count").as_int_or(-1) == 3000);
         ASSERT_TRUE(lines_with(s.mgr.take_notices(), "unavailable") == 0);          // (nothing of this was a failure of the database)
+    } TEST_END();
+
+    TEST_CASE("HS6.8 The server hands its community folder to the feeder: a recording on a player's map is counted (with the folder; with the maps folder alone it is not)") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir maps_off, players;                                                      // (no official maps here; the players' folder holds the map the match was played on)
+        fs::copy_file(maps_dir() + "/TINY.LVL", players.path / "TINY.LVL");
+        {
+            Server s(maps_off.path.string(), players.path.string());
+            ASSERT_TRUE(s.open());
+            const std::string id = s.keep(match_file(1));
+            s.run_updates(30);
+            ASSERT_TRUE(s.mgr.history_store() != nullptr && s.mgr.history_store()->count() == 1 && s.mgr.history_store()->knows(id));
+            const ctl::JsonValue got = parse_text(s.control("GET", "/history/" + id).body);
+            ASSERT_TRUE(got.get("id").str() == id && got.get("details").get("v").as_int_or(0) == 1);          // (with its stats: the same play)
+        }
+        Server alone(maps_off.path.string());
+        ASSERT_TRUE(alone.open());
+        alone.keep(match_file(1));
+        alone.run_updates(30);
+        ASSERT_TRUE(alone.mgr.history_store() != nullptr && alone.mgr.history_store()->count() == 0);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

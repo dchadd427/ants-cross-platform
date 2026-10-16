@@ -185,7 +185,10 @@ int main() {
             const Played played = play_file(bytes);
             ASSERT_TRUE(played.ok && played.rep.head.mode == mode);
             ASSERT_EQ(rec.finished, played.outcome.match_over);
-            ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), ctl::to_json(history_record_to_json(make_history_record(id, kT0, played.rep, played.outcome), true)));
+            HistoryRecord expected = make_history_record(id, kT0, played.rep, played.outcome);
+            ASSERT_TRUE(!rec.details.empty() && expected.details.empty());           // (the details of the same play: test_history_details.cpp checks what is in them)
+            expected.details = rec.details;
+            ASSERT_EQ(ctl::to_json(history_record_to_json(rec, true)), ctl::to_json(history_record_to_json(expected, true)));
             // both doors list it
             const ctl::HttpResponse owner = r.call("GET", "/history");
             const ctl::HttpResponse door = r.call("GET", "/history", "", true);

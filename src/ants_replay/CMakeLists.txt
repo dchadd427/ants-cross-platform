@@ -4,6 +4,7 @@ add_library(ants_replay STATIC
     replay.cpp
     recorder.cpp
     player.cpp
+    match_stats.cpp
 )
 
 target_include_directories(ants_replay PUBLIC

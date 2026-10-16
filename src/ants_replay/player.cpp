@@ -41,14 +41,24 @@ std::string find_map_file(const std::string& maps_dir, const std::string& name) 
 }  // namespace
 
 bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error) {
+    return load_map(head, std::vector<std::string>{maps_dir}, level, error);
+}
+
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
     error.clear();
     if (!net::valid_map_name(head.map_name)) {
         error = "the replay's map name cannot name a map file";
         return false;
     }
-    const std::string path = find_map_file(maps_dir, head.map_name);
+    std::string path, where;
+    for (const std::string& dir : dirs) {                         // (the first folder that holds the name is the one: a file of that name there that is another file is refused, as the server's map list does)
+        if (!where.empty()) where += " or ";
+        where += dir;
+        path = find_map_file(dir, head.map_name);
+        if (!path.empty()) break;
+    }
     if (path.empty()) {
-        error = "the map " + head.map_name + " is not in " + maps_dir + " (the replay needs it; --maps-dir says where the maps are)";
+        error = "the map " + head.map_name + " is not in " + where + " (the replay needs it; --maps-dir says where the maps are)";
         return false;
     }
     uint64_t hash = 0;
@@ -112,6 +122,7 @@ Outcome play(const Replay& replay, const assets::LevelData& level, const Hooks& 
     for (uint32_t turn = 0; turn < replay.total_turns; ++turn) {
         for (; next < replay.commands.size() && replay.commands[next].turn == turn; ++next) give(replay.commands[next]);
         engine.tick();
+        if (hooks.after_tick) hooks.after_tick(turn + 1, engine);
         engine.clear_news_events();                                     // (nobody reads them here, and they would pile up for the whole match)
         engine.clear_audio_events();
         out.turns = turn + 1;
