@@ -103,6 +103,7 @@ void GateGoalTask::plan(TaskContext& context) {
     GoalRules rules;
     rules.hop_bombs = params_.hop_bombs;
     rules.shore_breach = true;
+    rules.field_piles = tactics_.field_piles;
     GateGoal goal = plan_gate_goal(gates, view, rules);
     if (!goal.active()) {
         signature_known_ = true;

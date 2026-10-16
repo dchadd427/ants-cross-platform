@@ -32,6 +32,7 @@ add_executable(test_ai
     test_ai_names.cpp
     test_ai_gates.cpp
     test_ai_gate_goal.cpp
+    test_ai_field.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

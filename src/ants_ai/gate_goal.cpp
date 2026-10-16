@@ -96,9 +96,10 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
     bool any_shore_bomb = false;
     for (const PileView& p : view.piles()) {
         if (p.lunchbox || p.index >= piles.size()) continue;
-        any_pile = true;
         const GateTarget& t = piles[p.index];
         if (t.free()) return GateGoal{};                                            // food the hill reaches: normal play
+        if (std::find(rules.field_piles.begin(), rules.field_piles.end(), t.index) != rules.field_piles.end()) continue;
+        any_pile = true;
         if (t.fire_cells > 0 || t.shore_fire_cells > 0) any_fire_barrier = true;
         if (rules.shore_breach && t.gate == GateKind::Sealed && (t.shore_fire_cells >= 0 || t.shore_bombs >= 0)) {
             if (has_swimmer && t.shore_fire_cells == 0 && t.shore_bombs == 0) return GateGoal{};
@@ -114,6 +115,7 @@ GateGoal plan_gate_goal(const GateInfo& gates, const BotView& view, const GoalRu
     for (const PileView& p : view.piles()) {
         if (p.lunchbox || p.index >= piles.size()) continue;
         const GateTarget& t = piles[p.index];
+        if (std::find(rules.field_piles.begin(), rules.field_piles.end(), t.index) != rules.field_piles.end()) continue;
         if (fire_source && t.fire_cells > 0 && t.fire_cell.x >= 0 && (t.gate == GateKind::Fire || t.gate == GateKind::Either)) {
             GateGoal g;
             g.kind = GoalKind::Extinguish;
