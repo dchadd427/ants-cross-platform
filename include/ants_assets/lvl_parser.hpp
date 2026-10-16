@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
 #include <array>
@@ -26,6 +27,33 @@ constexpr int start_marker_team_of_id(uint16_t id) noexcept {
     return id == 152 ? 3 : id == 153 ? 2 : id == 154 ? 0 : id == 155 ? 1 : -1;
 }
 constexpr size_t   LVL_MAX_DICTIONARY_ENTRIES = 0x540;   // the original's tile tables (a 0x1500 byte buffer of dwords is filled with one entry per dictionary name)
+
+/**
+ * @brief The limits that a reader holds a file to and the writer (lvl_writer.hpp) a level to. The defaults are what the game reads: the original loader's tables
+ * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE a side) and no limit on the size of a file, so that they refuse no map of the
+ * library. A limit can only be made tighter: a value above a default counts as the default. A place that takes a map from a stranger or makes a new one passes
+ * for_new_maps() (docs/MAP_FORMAT.md, "Limits").
+ */
+struct LevelLimits {
+    uint32_t max_rows{LVL_MAX_GRID_SIDE};
+    uint32_t max_columns{LVL_MAX_GRID_SIDE};
+    size_t max_dictionary_names{LVL_MAX_DICTIONARY_ENTRIES};
+    size_t max_read_bytes{std::numeric_limits<size_t>::max()};        // a file as it is, before it is read (the reader)
+    uint32_t max_cells{LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE};       // rows x columns
+    size_t max_write_bytes{std::numeric_limits<size_t>::max()};       // the canonical file of a level (the writer)
+
+    /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 10,000 cells and 130 a side,
+    /// so that every map of the library fits (Bomb Races has 129 columns); a file of at most 512 KB is read as it is (every file of the library: BOMBERWORLD's
+    /// 235,594 bytes are mostly bytes after its egg word, which a rewrite drops), and its canonical file may have 144 KB, so that a 100 x 100 map with the largest
+    /// dictionary fits with room for its blocks
+    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u}; }
+
+    // the limits as they are applied (a value above the default is the default)
+    constexpr uint32_t rows() const noexcept { return max_rows < LVL_MAX_GRID_SIDE ? max_rows : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t columns() const noexcept { return max_columns < LVL_MAX_GRID_SIDE ? max_columns : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t cells() const noexcept { return max_cells < LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE ? max_cells : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE; }
+    constexpr size_t dictionary_names() const noexcept { return max_dictionary_names < LVL_MAX_DICTIONARY_ENTRIES ? max_dictionary_names : LVL_MAX_DICTIONARY_ENTRIES; }
+};
 
 /**
  * @brief One finding about a map file: what is wrong (or odd), how the original treats it and what the remake does.
@@ -53,7 +81,9 @@ enum class LevelProblemKind : uint8_t {
     EggStockMissing,         // the file ends before the final word: the egg stock is uninitialised memory in the original
     TileOutsideDictionary,   // tile indexes beyond the dictionary: the original reads its remap table out of bounds (a tile of heap garbage)
     FoodOutsideGrid,         // a food object anchored outside the grid: the original writes beside its tile table
-    ObjectOutsideGrid        // plants and waypoints outside the grid: harmless in the original (bounds checked or never looked up)
+    ObjectOutsideGrid,       // plants and waypoints outside the grid: harmless in the original (bounds checked or never looked up)
+    // a limit of the place that reads the file (LevelLimits), not of the original
+    FileTooLarge             // more bytes than LevelLimits::max_read_bytes: nothing of it is read
 };
 
 const char* to_string(LevelProblemSeverity severity) noexcept;
@@ -271,14 +301,16 @@ public:
     /// Is this level playable by the teams of `roster_mask`, and what is odd about it? The loader's own notes (load_notes) plus the checks that need the whole level:
     /// the shape of the grid, tile indexes outside the dictionary, objects outside the grid, and the start markers of the teams that play (the original indexes
     /// its row table with the record's row and column without a check, so a start marker outside the grid is a crash or a heap overwrite there; the remake
-    /// refuses the map for a roster that contains that team). A team outside the roster is not looked at: its markers are never used.
-    LevelValidation validate(uint8_t roster_mask = 0x0F) const;
+    /// refuses the map for a roster that contains that team). A team outside the roster is not looked at: its markers are never used. `limits`: the grid and
+    /// the dictionary are held to them.
+    LevelValidation validate(uint8_t roster_mask = 0x0F, const LevelLimits& limits = LevelLimits{}) const;
 
     // Loading Convenience. true = the original's loader would read the file to its end (a file that ends inside block 4 or the final word is read as far as it goes,
     // as the original does) and the remake can hold the result; the optional report lists every finding of a file that does not load, and of one that does
-    // (for all four teams). Whether a MATCH can be played is validate(roster) / LVLParser::check_*.
-    bool load_from_file(const std::string& filepath, LevelValidation* report = nullptr);
-    bool load_from_memory(const uint8_t* data, size_t size, LevelValidation* report = nullptr);
+    // (for all four teams). Whether a MATCH can be played is validate(roster) / LVLParser::check_*. A file beyond `limits` is not loaded (FileTooLarge,
+    // GridTooLarge, DictionaryTooLarge).
+    bool load_from_file(const std::string& filepath, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
+    bool load_from_memory(const uint8_t* data, size_t size, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
     bool load_lvl(const std::string& filepath) { return load_from_file(filepath); }
 };
 
@@ -292,12 +324,12 @@ inline uint16_t LevelData::Layer1TerrainProp::operator()(uint32_t x, uint32_t y)
  */
 class LVLParser {
 public:
-    static bool load_from_file(const std::string& filepath, LevelData& out_level, LevelValidation* report = nullptr);
-    static bool load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report = nullptr);
+    static bool load_from_file(const std::string& filepath, LevelData& out_level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
+    static bool load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report = nullptr, const LevelLimits& limits = LevelLimits{});
 
     /// The question of a server: may this file be hosted for the teams of `roster_mask`? One call, a yes or no (`playable`) and the reasons (`problems`).
-    static LevelValidation check_file(const std::string& filepath, uint8_t roster_mask = 0x0F);
-    static LevelValidation check_memory(const uint8_t* data, size_t size, uint8_t roster_mask = 0x0F);
+    static LevelValidation check_file(const std::string& filepath, uint8_t roster_mask = 0x0F, const LevelLimits& limits = LevelLimits{});
+    static LevelValidation check_memory(const uint8_t* data, size_t size, uint8_t roster_mask = 0x0F, const LevelLimits& limits = LevelLimits{});
 };
 
 } // namespace ants::assets

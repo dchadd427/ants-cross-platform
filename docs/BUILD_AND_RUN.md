@@ -128,7 +128,7 @@ build\src\ants_app\Release\ants.exe
 
 What the build makes:
 
-- The default build makes the game (`ants`), the dedicated server (`ants_server`, at `build/src/ants_server/ants_server`; [`SERVER.md`](SERVER.md)) and every test program. The developer tools `map_sweep`, `bot_arena` and `gen_food_footprints` are built only by name (`--target map_sweep`).
+- The default build makes the game (`ants`), the dedicated server (`ants_server`, at `build/src/ants_server/ants_server`; [`SERVER.md`](SERVER.md)) and every test program. The developer tools `map_sweep`, `bot_arena`, `lvl_tool` and `gen_food_footprints` are built only by name (`--target map_sweep`).
 - `cmake --build build --target ants` builds the game alone, as `start_game.sh` does, and `--target ants_server` the server alone.
 
 The options of the build (`-D` when CMake configures; CMake does not read them from the environment, but `build_web.sh` takes `ANTS_BUILD_ID` from it, see [Versioning and the Build Id](#versioning-and-the-build-id)):
