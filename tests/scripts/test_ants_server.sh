@@ -693,6 +693,8 @@ while time.time() < end:
 print(pongs)
 PY
 }
+FLOOD_BURST=1000      # the budget of a connection as docs/NETWORK_PORT.md ("A budget of messages per connection") states it, written here and not read from flood.hpp: a check that follows the source cannot see a budget that was cut
+FLOOD_RATE=1000       # a second
 for KIND in startreq ping; do
     FLOODROOM="E2E-FLOOD-$KIND-$RANDOM"
     curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FLOODROOM\",\"seed\":5}" "$CTL/rooms"
@@ -718,10 +720,12 @@ for KIND in startreq ping; do
         check "startreq flood: it had a seat and was out at its 24th request (16 are free, each of the next eight is a violation): the rest was never read" "$([ "$(field_of "$FLOODROOM" ignored_start_requests)" = "24" ]; echo $?)"
     else
         PONGS="$(cat "$WORK/flood_$KIND.out")"
-        # (the bucket is 1000 a second plus its burst, and it refills while the flood is read: a slow machine reads for longer before the violation, so the upper bound is 1500, not 1300 -
-        # a macOS runner of CI got 1305; the point is "about a second's worth, not millions". The count is what the flooder READ: the server throws it out with its pings unread and the connection is reset, and what the
-        # flooder's side had not taken by then is lost, so a loaded machine reads 450 to 1250 of the 1040 that were sent (measured, 16 busy loops on 4 cores); the lower bound says that the budget was not cut to nothing)
-        check "ping flood: the server answered a second's worth of pings and no more ($PONGS pongs of millions of pings)" "$([ "${PONGS:-0}" -ge 300 ] && [ "${PONGS:-0}" -le 1500 ]; echo $?)"
+        # The server's limit (flood.hpp, docs/NETWORK_PORT.md): a bucket of FLOOD_BURST messages that refills at FLOOD_RATE a second, and a message beyond it is a violation (eight throw the sender
+        # out). The flooder is thrown out when the bucket is spent, so the server answers its burst and what the bucket refills while the flood is read (a slow machine reads for longer, so the upper bound is the burst
+        # and half a second of refill; a macOS runner of CI got 1305, the burst alone is 1000): not millions. The count is what the flooder READ, and the server throws it out with its pings unread, so the connection is reset
+        # and what the flooder's side had not taken by then is lost: a loaded machine reads 450 to 1250 of the 1040 that were sent (measured, 16 busy loops on 4 cores). The lower bound is 3/10 of the burst: it proves that
+        # the budget was not cut to a fraction of what an honest client may say at once (a server that answers none, stops after a hundred, or throws the flooder out early fails it), not the exact count.
+        check "ping flood: the server answered a second's worth of pings and no more ($PONGS pongs of millions of pings; at least $((FLOOD_BURST * 3 / 10)) and at most $((FLOOD_BURST + FLOOD_RATE / 2)))" "$([ "${PONGS:-0}" -ge $((FLOOD_BURST * 3 / 10)) ] && [ "${PONGS:-0}" -le $((FLOOD_BURST + FLOOD_RATE / 2)) ]; echo $?)"
     fi
     check "$KIND flood: the control interface answered within a second all the time (worst: ${WORST} s)" "$(python3 -c "print(0 if $WORST < 1.0 else 1)")"
     check "$KIND flood: the match in the other room kept its clock (ticks a second: $(python3 -c "print(round(($TICKS_B - $TICKS_A) / $FLOOD_SECS, 1))"); it was 8.6 on a loaded machine before)" "$(python3 -c "print(0 if ($TICKS_B - $TICKS_A) / $FLOOD_SECS > 14 else 1)")"
