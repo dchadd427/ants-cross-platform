@@ -479,6 +479,13 @@ void w2_refusals() {
         by_size.max_write_bytes = 147455;
         const LevelWriteResult one_less = write_level(exact, by_size);
         CHECK_MSG(refused_with(one_less, "the file would have 147456 bytes, more than the 147455 allowed here"), one_less.error);
+        // the read limit holds the writer too: what it writes reads back with the same limits
+        LevelLimits by_read;
+        by_read.max_read_bytes = 147456;
+        CHECK(write_level(exact, by_read).ok);
+        by_read.max_read_bytes = 147455;
+        const LevelWriteResult unreadable = write_level(exact, by_read);
+        CHECK_MSG(refused_with(unreadable, "the file would have 147456 bytes, more than the 147455 allowed here"), unreadable.error);
         full.waypoints.push_back(trigger);
         const LevelWriteResult over = write_level(full, new_map);
         CHECK_MSG(refused_with(over, "the file would have 147482 bytes, more than the 147456 allowed here"), over.error);
@@ -939,7 +946,7 @@ void w4_hostile_files() {
         }
     });
 
-    run_case("W4.8 The Reader Holds At Most 7 Times Its File And The Writer 8 Times What It Writes (And 64 KiB): Waypoints Without Trigger, A Half Record, A Block 2 That Ends At Once, 512 KB", [] {
+    run_case("W4.8 The Reader Holds At Most 7 Times Its File (8 From A File) And The Writer 8 Times What It Writes (And 64 KiB): Waypoints Without Trigger, A Half Record, A Block 2 That Ends At Once, 512 KB", [] {
         // a 1 x 1 map whose block 4 announces `announced` records, holds `records` of 8 bytes (no trigger: 56 bytes of level each, the dearest bytes of a file) and
         // then `tail` (the egg word, or the first bytes of a record where the file ends); with `piles` block 2 announces that many food piles and ends at once, at a
         // first pile without stages
@@ -1009,6 +1016,17 @@ void w4_hostile_files() {
         CHECK_MSG(refused_with(w, "the file would have 524288 bytes, more than the 147456 allowed here") && held < 4096u, w.error + " / " + std::to_string(held));
         held = peak_of([&] { w = write_level(level); });
         CHECK_MSG(w.ok && w.bytes == largest && held <= writer_bound(w.bytes.size()), std::to_string(held));
+        // from a file, the reader also holds the file's bytes: 8 times the file and 64 KiB (4.1 MiB under the limits of a new map)
+        const std::string path = scratch_path("test_lvl_writer_largest");
+        {
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(largest.data()), static_cast<std::streamsize>(largest.size()));
+        }
+        LevelValidation from_file;
+        held = peak_of([&] { from_file = LVLParser::check_file(path, 0x0F, new_map); });
+        CHECK_MSG(from_file.parsed && held <= kSlack + 8 * largest.size() && held <= 4259840u && held >= 7 * largest.size(), std::to_string(held));
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
         largest.push_back(0);
         LevelData refused;
         LevelValidation v;
@@ -1232,6 +1250,10 @@ void w6_new_maps() {
             CHECK_MSG(held < little && l.layer1_terrain.empty(), g.words + std::string(": ") + std::to_string(held));
             const LevelWriteResult w = write_level(l, new_map);
             CHECK_MSG(refused_with(w, g.words), w.error);
+            // written with looser limits, the level that has no cell is refused by its grid too
+            const LevelWriteResult loose = write_level(l);
+            const std::string grid = "the grid has " + std::to_string(g.rows) + " rows x " + std::to_string(g.columns) + " columns but the level holds no cell";
+            CHECK_MSG(refused_with(loose, grid), loose.error);
         }
         CHECK(blank_level(100, 100, names, new_map).layer1_terrain.size() == 10000u && blank_level(76, 130, names, new_map).layer2_interactive.size() == 9880u);
         const LevelData largest = blank_level(256, 256, names);

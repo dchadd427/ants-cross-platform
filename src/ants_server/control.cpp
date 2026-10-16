@@ -511,7 +511,7 @@ ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& req
     if (path == "/stats") {
         if (request.method != "GET") return error_response(405, "method not allowed");
         JsonValue o = JsonValue::make_object();
-        o.set("rooms", JsonValue::make_int(static_cast<int64_t>(rooms.room_count())));
+        o.set("rooms", JsonValue::make_int(static_cast<int64_t>(rooms.room_count() + rooms.retired_count())));      // (a match that gave its code to its rematch is a room until its keep time is over: --max-rooms counts it)
         o.set("pending", JsonValue::make_int(static_cast<int64_t>(rooms.pending_count())));
         o.set("created", JsonValue::make_int(static_cast<int64_t>(rooms.rooms_created())));
         o.set("refused", JsonValue::make_int(static_cast<int64_t>(rooms.connections_refused())));

@@ -1,0 +1,40 @@
+/* The rematch (web/front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the game page's strip under the picture when the match of a lobby room is over ("The match is over", who is back,
+   "Back to the lobby"), and the front page's strip at the top of the page when it comes back from the match, with the words of each colour and the note under START. Both pages carry the colours of
+   web/front/classic.css (the tokens); the two that only classic.css names have its value as their fallback. */
+
+/* ---- the game page: the strip between the picture and the Picture row ---- */
+.rematch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 22px; align-items: center; width: 100%; max-width: 1280px; margin: 16px 0 0; padding: 14px 20px; color: var(--cream); background: var(--inset); border: 3px solid var(--gold); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.rematch[hidden] { display: none !important; }
+.rmt-title { font-size: 24px; line-height: 1.2; color: var(--gold); }
+.rmt-text { margin-top: 2px; font-size: 16px; line-height: 1.4; }
+.rmt-text b { font-weight: 500; }
+.rmt-who { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.rmt-who:empty { display: none; }
+.rmt-chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; font-size: 13px; line-height: 1.4; background: #0b1612; border: 1px solid #1d4a3d; border-radius: 13px; overflow-wrap: anywhere; }
+.rmt-chip i { flex: none; width: 11px; height: 11px; border-radius: 50%; }
+.rmt-chip.away { color: var(--muted, #8fb3a6); border-style: dashed; }
+.rmt-go { text-align: right; }
+.rmt-go[hidden] { display: none !important; }
+.rematch .btn.big { min-height: 54px; padding: 10px 26px; font-size: 20px; }
+.rmt-note { margin-top: 8px; font-size: 13px; color: var(--muted, #8fb3a6); }
+@media (max-width: 760px) {
+    .rematch { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
+    .rmt-go { text-align: left; }
+    .rmt-title { font-size: 21px; }
+}
+
+/* ---- the front page: the strip at the top, above the frame ---- */
+.backbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 12px 30px; font-size: 16px; line-height: 1.4; color: #d6ffe8; background: #173b2c; border-bottom: 3px solid #2f9a68; }
+.backbar b { font-weight: 500; color: var(--gold); }
+.backbar a { margin-left: auto; color: var(--mint, #9ff0c4); }
+@media (max-width: 760px) { .backbar { padding: 10px 16px; font-size: 15px; } }
+/* a person of the match on a colour card: back in the room (a green dot), or still on the results screen (a grey one) */
+.pstat.back, .pstat.away { display: flex; align-items: center; }
+.pstat.back::before, .pstat.away::before { content: ""; flex: none; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
+.pstat.back { color: var(--cream); }
+.pstat.back::before { background: #6fe3a4; }
+.pstat.away { color: var(--muted, #8fb3a6); }
+.pstat.away::before { background: var(--muted, #8fb3a6); }
+/* the leader's note under START while somebody of the match is not back: START waits for them */
+.start-note { margin-top: 10px; padding: 7px 10px; font-size: 13px; line-height: 1.35; color: #ffe9a8; background: #0b1612; border: 1px solid var(--gold); border-radius: 6px; }
+.start-note[hidden] { display: none !important; }

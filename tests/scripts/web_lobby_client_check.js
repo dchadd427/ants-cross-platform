@@ -223,7 +223,7 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('but can rename itself', c.rename('Samuel') && hex(w.last().sent[sent]) === hex(N.encodeName('Samuel')));
     // the leader goes: the next one leads, and this page is told that it is the host now
     w.last().receive(room([[E, ''], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 1 }));
-    same('the leader left and this page is the host now', [events(c, 'left'), events(c, 'host')], [[{ type: 'left', seat: 0, name: 'Priya' }], [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya' }]]);
+    same('the leader left and this page is the host now', [events(c, 'left'), events(c, 'host')], [[{ type: 'left', seat: 0, name: 'Priya' }], [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya', back: false }]]);
     check('this page leads now', c.isLeader());
 }
 
@@ -256,9 +256,9 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     ], [['plan'], ['plan'], []]);
     // the host as the page's own seat tells it (every Room message says which seat is the page's: you)
     same('a host who came back after the hold ran out is a player now: another leads, and the page hears of the new host', N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 1, you: 0 })),
-        [{ type: 'host', seat: 1, name: 'Sam', you: false, before: 'Priya' }]);
+        [{ type: 'host', seat: 1, name: 'Sam', you: false, before: 'Priya', back: false }]);
     same('a player who is the host now, though the seat that led is still held by somebody (the page gained the role)', N.diffRooms(r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 0, you: 1 }), r([[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { leader: 1, you: 1 })),
-        [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya' }]);
+        [{ type: 'host', seat: 1, name: 'Sam', you: true, before: 'Priya', back: false }]);
     same('two players of one name swap and the host is one of them: the same host, no event', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 0, you: 0 }), r([[C, 'Player'], [C, 'Player'], [E, ''], [E, '']], { leader: 1, you: 1 })), []);
     same('the same, seen by a third player', N.diffRooms(r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 0, you: 2 }), r([[C, 'Player'], [C, 'Player'], [C, 'Tess'], [E, '']], { leader: 1, you: 2 })), []);
     same('a host who is dragged to another colour and a joiner at once: the host is still the host', N.diffRooms(a, r([[C, 'Juniper'], [C, 'Sam'], [C, 'Priya'], [E, '']], { leader: 2, you: 2 })).map((e) => e.type).filter((t) => t === 'host'), []);

@@ -56,7 +56,8 @@
 // a Hello for a code that is not a room carries a CREATE BLOCK (the map, the seats, the room's own teams, whether the leader's START is what starts the match) and makes the room; without a block
 // it is NoSuchRoom, whatever the code looks like (the choices used to travel in the code, "demo-treasure-4p-t01-k7m2xq": a code is only a name now, 6 random letters and numbers). A room that
 // exists ignores a block (the first Hello decides). The Hello, the Room message's seats and the Start's roster also carry a PLATFORM byte for each player (the operating system, and whether it
-// is a browser): it is told, never checked, and no rule depends on it (a screen may show it as an icon). The Room message names the room's own teams and flags, so every screen shows the truth.
+// is a browser): it is told, never checked (a screen may show it as an icon), and only the rematch of a lobby room reads it, for the player's own seat (kPlatformBrowser below). The Room message names the
+// room's own teams and flags, so every screen shows the truth.
 
 // The lobby room (protocol 16, docs/NETWORK_PORT.md "Protocol 16"). The front page speaks the room protocol itself and waits in a room from its first second. A Hello says what it is (client_kind: a game, which
 // can play a match, or a lobby page, which cannot), and a create block with kCreateLobby makes a LOBBY ROOM: a room that lives while a person is in it (the seat of a connection that drops is held for a minute), whose
@@ -167,8 +168,8 @@ inline constexpr uint8_t kNoTeam = 255;
 
 /// The platform of a player (protocol 15): one byte that a client tells in its Hello and a server repeats in the Room message (each seat) and the Start (each seat of the roster). The operating
 /// system is the low four bits (kOsWindows ... kOsOther; 0, kPlatformUnknown, when it was not told) and bit 4 (kPlatformBrowser) says that the game runs in a web browser. A phone or a tablet is the
-/// operating system's business (Android, iOS). It is told and never checked: nobody can prove it and no rule depends on it, a screen may show it as an icon. A seat that holds no person (an empty
-/// one, a bot) has none.
+/// operating system's business (Android, iOS). It is told and never checked: nobody can prove it, a screen may show it as an icon, and one rule reads it, for the player's own seat only: the rematch of a
+/// lobby room keeps no seat for a game that said it is not in a browser (net::HostLobby (7)). A seat that holds no person (an empty one, a bot) has none.
 inline constexpr uint8_t kPlatformUnknown = 0;
 inline constexpr uint8_t kOsWindows = 1;
 inline constexpr uint8_t kOsMacos = 2;
@@ -353,6 +354,10 @@ inline constexpr const char* kNoticeMapLost = "This map could not be loaded: cho
 inline constexpr const char* kNoticeMapColours = "This map cannot be played with these colours.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
+/// The rematch (docs/SERVER.md "Lobby rooms"): the leader's START of a lobby room that the server opened again after its match is not taken while a person of the match is not back ("Juniper is not back from
+/// the match yet.", for several "These players are not back from the match yet: Juniper and Pip.")
+inline constexpr const char* kNoticeNotBack = " is not back from the match yet.";
+inline constexpr const char* kNoticeNotBackMany = "These players are not back from the match yet: ";
 
 struct RoomMsg {
     struct Slot {
