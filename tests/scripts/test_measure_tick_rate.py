@@ -21,7 +21,7 @@ TOOL = os.path.join(HERE, "measure_tick_rate.py")
 sys.path.insert(0, HERE)
 import measure_tick_rate as mt     # noqa: E402
 
-BAND = (16.0, 24.0)     # the band that tests/scripts/test_ants_server.sh checks the rate against
+BAND = (17.0, 23.0)     # the band that tests/scripts/test_ants_server.sh checks the rate against (the band of the check before the measure was made precise: it is not widened)
 
 
 class Sim:
@@ -94,17 +94,17 @@ class Arithmetic(unittest.TestCase):
         first = sim.read()                                  # (what wait_ticks printed)
         sim.sleep(3.0 + 0.73)                              # `sleep 3`, then a python and a curl that start late on a busy machine
         last = sim.read()
-        self.assertGreater((last - first) / 3.0, 24.0)      # the line of the CI log: "(measured: 25.0)", over the 23 of the old band
+        self.assertGreater((last - first) / 3.0, 24.0)      # the line of the CI log: "(measured: 25.0)", over the 23 of the band
         self.assertTrue(BAND[0] <= self.rate(Sim(steady(20.0), delay=0.4)) <= BAND[1])
 
     def test_a_stall_and_its_catch_up_stay_inside_the_band(self):
-        for length in (0.75, 1.5, 2.5):
+        for length in (0.75, 1.5, 2.0):
             for start in (5.5, 8.0, 11.0, 12.5):
                 sim = Sim(stalls(20.0, 5.0, start, start + length))
                 self.assertTrue(BAND[0] <= self.rate(sim) <= BAND[1], (length, start))
 
     def test_a_wrong_rate_is_outside_the_band(self):
-        for wrong in (30.0, 10.0, 26.0, 14.0, 40.0, 60.0, 5.0):
+        for wrong in (30.0, 10.0, 26.0, 14.0, 24.0, 16.0, 40.0, 60.0, 5.0):
             rate = self.rate(Sim(steady(wrong)))
             self.assertFalse(BAND[0] <= rate <= BAND[1], (wrong, rate))
             self.assertAlmostEqual(rate, wrong, delta=0.06 * wrong)

@@ -966,6 +966,7 @@ void run_way_back_tests() {
         const uint32_t made = b.net.pause_info().attempts;
         ASSERT_TRUE(b.net.pause_info().reconnecting && made >= 1);                       // it is trying (the game's own count of the links it made)
         ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= made; }));            // ... and the door has seen every one of them (the door counts what the kernel hands it, not what the game's clock ran)
+        w.settle();                                                                      // ... and the machine has read the door's close of the last one: it is between two attempts (Reconnecting), not at the Hello of one (Rejoining), where the gap below would not make the next attempt due
         const uint32_t tries = w.server.refused;
         b.net.note_gap(10000);                                                           // ten seconds that its clock did not count: an attempt is due at once, nothing is given up
         ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);

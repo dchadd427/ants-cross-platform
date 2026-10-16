@@ -64,6 +64,7 @@ if ! command -v curl > /dev/null 2>&1; then
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
+HANG_LOG="$WORK/hangs"      # (e2e_deadlines.sh: the hangs are counted in this file, so that one inside a $( ) is counted too)
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
     for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
@@ -77,8 +78,9 @@ free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1
 code_of() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$@"; }
 # Nothing in this script waits for ever (tests/scripts/e2e_deadlines.sh): wait_end, stop_pids and run_limited give every wait for a process a deadline, and the part has a watchdog
 . "$ROOT/tests/scripts/e2e_deadlines.sh"
-stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait_end "$SERVER_PID" 30 "ants_server (stopped with SIGTERM)"; SERVER_PID=""; }
-start_watchdog $((600 * TIME_SCALE))
+stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait_end "$SERVER_PID" "$SERVER_END_WAIT" "ants_server (stopped with SIGTERM)"; SERVER_PID=""; }
+PARTS_RUN="$(echo ${PARTS:-$PART_NAMES} | wc -w | tr -d ' ')"      # (600 s for each part this call runs: CI runs them one by one, a call without --part runs all six)
+start_watchdog $((600 * TIME_SCALE * PARTS_RUN))
 GAME_PORT="$(free_port)"
 CTL_PORT="$(free_port)"
 SECRET="e2e-$RANDOM-$RANDOM-secret"
@@ -102,7 +104,7 @@ wait_ticks() {
 # rate_in_band RATE is 0 for 20 ticks a second as far as a loaded runner can tell: the server seals a turn every 50 ms of its own clock and catches up after a stall, so the rate over a window IS 20; the band holds the stalls and the
 # delay of the readings, and not 30 or 10 (a rate that is wrong).
 tick_rate() { python3 "$ROOT/tests/scripts/measure_tick_rate.py" "${2:-$CTL}" "$1" "$SECRET" "${3:-8}"; }
-rate_in_band() { python3 -c "import sys; r = float('${1:-0}'); sys.exit(0 if 16.0 <= r <= 24.0 else 1)"; }
+rate_in_band() { python3 -c "import sys; r = float('${1:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; }
 rate_text() { echo "${1%% *}, $(echo "$1" | cut -d' ' -f2) ticks in $(echo "$1" | cut -d' ' -f3) s"; }
 
 cd "$ROOT"
@@ -285,7 +287,7 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
     if [ "$up" = "0" ]; then
         kill -TERM "$pid" 2> /dev/null
     elif kill -0 "$pid" 2> /dev/null; then      # it runs and has not said that it is up: it would be waited for for ever
-        echo "  FAIL:${PART_LABEL} db_start: ants_server ($*) did not log its game port within 30 s; it is stopped" >&2
+        fail_note "db_start: ants_server ($*) did not log its game port within 30 s; it is stopped"
         kill -TERM "$pid" 2> /dev/null
     fi
     wait_end "$pid" 30 "ants_server of db_start ($*)"
@@ -354,7 +356,7 @@ fi
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
-env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1
+{ env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1; } 2> /dev/null      # (the shell's "Alarm clock" of the server that the alarm ends is not shown)
 ODD_STATUS=$?
 check "a listed map with a blank in its name starts the server (a create block names a map by its file name, as it is: nothing about a map can be unchoosable) and the startup line lists the choices" "$([ "$ODD_STATUS" = "142" ] && grep -q "unless the block names one of TINY.LVL, A B.LVL" "$WORK/odd.log" && ! grep -q "never be chosen" "$WORK/odd.log"; echo $?)"
 fi
@@ -647,10 +649,11 @@ done
 check "two clients play in a room next to the flood room (the match runs)" "$VICTIM_UP"
 QUIET_RATE="$(tick_rate "$VICTIM" "$CTL" 6)"      # (from its first tick: the dialog's 5 s first; the floods below are measured while it plays)
 check "the referee of that match ticks about 20 times a second without a flood ($(rate_text "$QUIET_RATE"))" "$(rate_in_band "${QUIET_RATE%% *}"; echo $?)"
-flood() {      # flood KIND ROOM SECONDS: a raw client says Hello for ROOM, then writes frames of KIND as fast as it can for SECONDS; prints how many Pongs it got back
-    python3 - "$GAME_PORT" "$2" "$1" "$3" "${PROTOCOL:-0}" <<'PY'
+flood() {      # flood KIND ROOM SECONDS [HONEST]: a raw client says Hello for ROOM, sends HONEST frames of KIND (0: none) and waits for their answers, then writes frames of KIND as fast as it can for SECONDS;
+               # prints how many Pongs it got back for the honest ones and how many for the flood
+    python3 - "$GAME_PORT" "$2" "$1" "$3" "${PROTOCOL:-0}" "${4:-0}" <<'PY'
 import socket, struct, sys, time
-port, room, kind, secs, protocol = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4]), int(sys.argv[5])
+port, room, kind, secs, protocol, honest = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
 def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
@@ -659,10 +662,39 @@ hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))
+received = b''
+def count_pongs():           # the Pongs in `received` (whole frames are taken off it)
+    global received
+    found, pos = 0, 0
+    while len(received) - pos >= 4:
+        n = struct.unpack_from('<I', received, pos)[0]
+        if len(received) - pos - 4 < n:
+            break
+        if n >= 1 and received[pos + 4] == 11:
+            found += 1
+        pos += 4 + n
+    received = received[pos:]
+    return found
+honest_pongs = 0
+if honest:                   # an honest burst, under the budget: nobody is thrown out and nothing is lost, so every one of them is answered (10 s for the answers)
+    try:
+        sock.sendall(frame(message) * honest)
+        sock.settimeout(0.5)
+        give_up = time.time() + 10.0
+        while honest_pongs < honest and time.time() < give_up:
+            try:
+                data = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not data:
+                break
+            received += data
+            honest_pongs += count_pongs()
+    except OSError:
+        pass                 # (thrown out: the pongs that came before are counted)
 sock.setblocking(False)
 blob = frame(message) * 20000
 offset = 0
-received = b''
 pongs = 0
 end = time.time() + secs
 while time.time() < end:
@@ -681,16 +713,8 @@ while time.time() < end:
         pass
     except OSError:
         break
-    pos = 0
-    while len(received) - pos >= 4:
-        n = struct.unpack_from('<I', received, pos)[0]
-        if len(received) - pos - 4 < n:
-            break
-        if n >= 1 and received[pos + 4] == 11:
-            pongs += 1
-        pos += 4 + n
-    received = received[pos:]
-print(pongs)
+    pongs += count_pongs()
+print(honest_pongs, pongs)
 PY
 }
 FLOOD_BURST=1000      # the budget of a connection as docs/NETWORK_PORT.md ("A budget of messages per connection") states it, written here and not read from flood.hpp: a check that follows the source cannot see a budget that was cut
@@ -701,7 +725,9 @@ for KIND in startreq ping; do
     RSS_BEFORE="$(rss_kb)"
     TICKS_A="$(ticks_of "$VICTIM")"
     FLOOD_START="$(python3 -c 'import time; print(time.time())')"
-    flood "$KIND" "$FLOODROOM" 4 > "$WORK/flood_$KIND.out" &
+    HONEST=0
+    [ "$KIND" = "ping" ] && HONEST=$((FLOOD_BURST * 9 / 10))
+    flood "$KIND" "$FLOODROOM" 4 "$HONEST" > "$WORK/flood_$KIND.out" &
     FLOOD_PID=$!
     WORST=0
     JOINED_AT_2S=""
@@ -719,13 +745,17 @@ for KIND in startreq ping; do
     if [ "$KIND" = "startreq" ]; then
         check "startreq flood: it had a seat and was out at its 24th request (16 are free, each of the next eight is a violation): the rest was never read" "$([ "$(field_of "$FLOODROOM" ignored_start_requests)" = "24" ]; echo $?)"
     else
-        PONGS="$(cat "$WORK/flood_$KIND.out")"
-        # The server's limit (flood.hpp, docs/NETWORK_PORT.md): a bucket of FLOOD_BURST messages that refills at FLOOD_RATE a second, and a message beyond it is a violation (eight throw the sender
-        # out). The flooder is thrown out when the bucket is spent, so the server answers its burst and what the bucket refills while the flood is read (a slow machine reads for longer, so the upper bound is the burst
-        # and half a second of refill; a macOS runner of CI got 1305, the burst alone is 1000): not millions. The count is what the flooder READ, and the server throws it out with its pings unread, so the connection is reset
-        # and what the flooder's side had not taken by then is lost: a loaded machine reads 450 to 1250 of the 1040 that were sent (measured, 16 busy loops on 4 cores). The lower bound is 3/10 of the burst: it proves that
-        # the budget was not cut to a fraction of what an honest client may say at once (a server that answers none, stops after a hundred, or throws the flooder out early fails it), not the exact count.
-        check "ping flood: the server answered a second's worth of pings and no more ($PONGS pongs of millions of pings; at least $((FLOOD_BURST * 3 / 10)) and at most $((FLOOD_BURST + FLOOD_RATE / 2)))" "$([ "${PONGS:-0}" -ge $((FLOOD_BURST * 3 / 10)) ] && [ "${PONGS:-0}" -le $((FLOOD_BURST + FLOOD_RATE / 2)) ]; echo $?)"
+        read -r HONEST_PONGS FLOOD_PONGS < "$WORK/flood_$KIND.out"
+        # What this detects. The server's limit is a bucket of FLOOD_BURST messages that refills at FLOOD_RATE a second (flood.hpp; docs/NETWORK_PORT.md, "A budget of messages per connection"; written above and not read from
+        # the source, so that a budget that was cut or raised is seen); a message beyond it is a violation, and eight throw the sender out. (1) AN HONEST BURST IS ANSWERED WHOLE: the flooder first says $HONEST pings, a tenth
+        # under the burst, so nobody is thrown out and the connection stays whole (nothing is lost on the way), and every one must be answered, on any machine: the count is exact (900 of 900 in 80 of 80 floods under 16 and 40
+        # busy loops). A server that answers no ping (0 of 900) or throws a client out early fails it: with the burst cut to 100, 400 or 600 the flooder is out after 105, 424, 626 pongs. A burst cut to 850 or more is not seen.
+        # (2) THE FLOOD IS NOT ANSWERED BEYOND A SECOND'S WORTH: it then floods for 4 s, and the pongs of both together must not pass the burst and half a second of its refill (a slow machine reads for longer before the
+        # violation, and a macOS runner of CI got 1305 pongs of the flood alone): a budget that is raised to 2000, 5000 or off (a million) fails it (2178, 5279 and about 80000 pongs); one raised to 1200 is not seen. Only
+        # an upper bound can be made of the flood's own count: the server throws the flooder out with its pings unread, the connection is reset, and what the flooder had not taken by then is lost (it reads 18 to 360 of the
+        # 140 that are sent, with 16 and 40 busy loops on 4 cores): the old check, which asked for 1000 pongs in all, failed in 2 of 7 runs of the whole part and in 9 of 16 floods under 16 busy loops.
+        check "ping flood: an honest burst of $HONEST pings (under the burst of $FLOOD_BURST) is answered whole ($HONEST_PONGS pongs)" "$([ "${HONEST_PONGS:-0}" -eq "$HONEST" ]; echo $?)"
+        check "ping flood: the flood is not answered beyond a second's worth ($((HONEST_PONGS + FLOOD_PONGS)) pongs of millions of pings; at most $((FLOOD_BURST + FLOOD_RATE / 2)))" "$([ $((${HONEST_PONGS:-0} + ${FLOOD_PONGS:-0})) -le $((FLOOD_BURST + FLOOD_RATE / 2)) ]; echo $?)"
     fi
     check "$KIND flood: the control interface answered within a second all the time (worst: ${WORST} s)" "$(python3 -c "print(0 if $WORST < 1.0 else 1)")"
     check "$KIND flood: the match in the other room kept its clock (ticks a second: $(python3 -c "print(round(($TICKS_B - $TICKS_A) / $FLOOD_SECS, 1))"); it was 8.6 on a loaded machine before)" "$(python3 -c "print(0 if ($TICKS_B - $TICKS_A) / $FLOOD_SECS > 14 else 1)")"
@@ -954,7 +984,7 @@ check "a block with --room-map small --room-seats 2 makes the room on SMALL.LVL 
 for _ in $(seq 1 100); do kill -0 "$PICK_NOBODY_PID" 2> /dev/null || break; sleep 0.2; done
 check "a Hello with no create block makes no room (the code is only a name: the control interface has no such room, 404)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
 check "... and the server refused that game, and no other (the control interface counts one refused connection)" "$([ "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/stats" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("refused", ""))' 2> /dev/null)" = "1" ]; echo $?)"
-for p in $PICK_PIDS $PICK_NOBODY_PID; do kill "$p" 2> /dev/null; done
+for p in $PICK_PIDS $PICK_NOBODY_PID; do disown "$p" 2> /dev/null; kill "$p" 2> /dev/null; done      # (disowned: a Mac's bash prints "Terminated" for a job that dies of a signal)
 stop_server
 
 # lobby rooms (protocol 16) with a real server: a page's Hello with a lobby block makes a lobby room, a game's Hello with a plain block still makes a public room, a page never makes the one and a game never the other, the pool holds
@@ -1146,7 +1176,7 @@ check "the stack passes no reconnect option (the default is what holds the seats
 check "the stack: the log says that rooms hold seats, as the default" "$(grep -q 'rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off)' "$WORK/stack_demo.log"; echo $?)"
 check "the stack: its public rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room stack-n1)" = "true" ] && [ "$(stack_reconnect_of_room stack-islands-n4)" = "true" ]; echo $?)"
 check "the stack: a room that the control interface makes without a setting holds seats, and one that says false does not" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-1"}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":true' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-2","reconnect":false}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":false'; echo $?)"
-for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
+for p in $STACK_PIDS; do disown "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
 stop_server
 
 # the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a public room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
@@ -1168,6 +1198,7 @@ norec_reconnect_of_room() { for _ in $(seq 1 60); do R="$(curl -s -m 2 -H "Autho
 check "--no-reconnect: the log says that rooms hold no seats, and that no record is kept" "$(grep -q 'rooms hold no seats (--no-reconnect)' "$WORK/norec.log" && grep -q 'no room holds seats unless its specification says so (--no-reconnect), so none is kept now' "$WORK/norec.log"; echo $?)"
 check "--no-reconnect: a public room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room norec-nr1)" = "false" ]; echo $?)"
 check "--no-reconnect: a room that the control interface makes without a setting holds none, and one that says true holds seats" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-1"}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":false' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-2","reconnect":true}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":true'; echo $?)"
+disown "$NOREC_PID" 2> /dev/null
 kill "$NOREC_PID" 2> /dev/null
 stop_server
 fi
@@ -1569,7 +1600,7 @@ RR_RESTORE_S="$(python3 -c "import time; print(round(time.time() - $RR_T0, 1))")
 check "all $RR_CLONES records are rooms again (running, restored) within $((3 * TIME_SCALE)) minutes" "$RR_BACK"
 check "the log says that the records wait for their replay and that their rooms were restored" "$(grep -q "restore: $RR_CLONES restart record(s) wait for their replay" "$WORK/rr_server.log" && [ "$(grep -c ' restored: ' "$WORK/rr_server.log")" -ge "$RR_CLONES" ]; echo $?)"
 kill -TERM "$SERVER_PID" 2> /dev/null
-wait_end "$SERVER_PID" 120 "ants_server of the restore section (stopped with SIGTERM, a thousand rooms that make their records durable)"
+wait_end "$SERVER_PID" $((120 * TIME_SCALE)) "ants_server of the restore section (stopped with SIGTERM, a thousand rooms that make their records durable)"
 SERVER_PID=""
 
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
@@ -1726,5 +1757,6 @@ check "... and the control interface and the public door both say 7 days (and th
 stop_server
 fi
 
+FAILS=$((FAILS + $(hang_count)))      # (the hangs, also those of a function that ran inside a $( ): e2e_deadlines.sh)
 echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]

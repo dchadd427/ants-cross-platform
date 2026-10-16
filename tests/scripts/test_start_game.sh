@@ -185,11 +185,11 @@ FAKE
 chmod +x "$WORK/fake_cmake" "$WORK/build/src/ants_app/ants" "$WORK/start_game.sh"
 OLD_GAME_RAN() { [ -f "$WORK/game.ran" ] && wc -l < "$WORK/game.ran" | tr -d ' ' || echo 0; }
 # limited SECONDS COMMAND...: runs the command in a process group of its own and waits for it, SECONDS at the most. At the deadline the whole group is told SIGTERM and, 5 s later, SIGKILL (a window that lives would
-# hold the output of a $( ) open for ever), and the status is 142. (perl is on every machine that runs this test: the e2e script uses it for its alarms.)
+# hold the output of a $( ) open for ever), and the status is 142; a command that dies of a signal of its own gives 128 + the signal, as a shell does. (perl is on every machine that runs this test: the e2e script uses it for its alarms.)
 limited() {
     perl -e 'my $secs = shift; my $late = 0; my $pid = fork; defined $pid or exit 127; if (!$pid) { setpgrp(0, 0); exec @ARGV; exit 127 }
         $SIG{ALRM} = sub { if ($late) { kill "KILL", -$pid } else { $late = 1; kill "TERM", -$pid; alarm 5 } };
-        alarm $secs; my $r; do { $r = waitpid($pid, 0) } while ($r == -1 && $!{EINTR}); exit($late ? 142 : $? >> 8)' "$@"
+        alarm $secs; my $r; do { $r = waitpid($pid, 0) } while ($r == -1 && $!{EINTR}); exit($late ? 142 : ($? & 127) ? 128 + ($? & 127) : $? >> 8)' "$@"
 }
 run_copy() {   # run_copy ARGS...: runs the copy of the script with the fake cmake; prints nothing, sets STATUS and OUTPUT
     : > "$WORK/cmake.log"

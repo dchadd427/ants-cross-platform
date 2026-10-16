@@ -7,11 +7,14 @@ script had no deadline. Every wait for a process has one now, and a hang is a fa
   - the waits: a child that ends is waited for as before (its status comes back); one that ignores SIGTERM, one that was stopped with SIGSTOP and one that never ends are each reported with
     a line that names them, are killed, and the wait returns after its deadline and not before it
   - the watchdog of a part: a script that blocks in the foreground, or in `wait`, is ended with status 1 and a line that names the programs that were still running
+  - the count: a hang that is reported by a function that runs inside a `$( )` (stop_server in a check's substitution, db_start) is counted, and so changes the exit status of the part: the real script, run
+    with a fake server that ignores SIGTERM, ends with as many failures as it printed FAIL lines
   - the script itself: no bare `wait` is left in it (every wait goes through the helpers), the servers that it runs in a pipeline have an alarm, and the checks of the tick rate use the
     measure of tests/scripts/measure_tick_rate.py and not two readings over a nominal 3 s
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,21 +37,21 @@ def run_bash(body, timeout=60):
 
 class Waits(unittest.TestCase):
     def test_a_child_that_ends_gives_its_status_and_is_no_hang(self):
-        status, out, err, seconds = run_bash('(exit 3) & wait_end $! 5 "a child that ends"; echo "status=$? hangs=$HANGS fails=$FAILS"')
+        status, out, err, seconds = run_bash('(exit 3) & wait_end $! 5 "a child that ends"; echo "status=$? hangs=$(hang_count) fails=$FAILS"')
         self.assertEqual(out.strip(), "status=3 hangs=0 fails=0")
         self.assertEqual(err, "")
         self.assertLess(seconds, 3)
 
     def test_a_child_that_ends_after_a_while_is_waited_for(self):
-        status, out, err, seconds = run_bash('(sleep 1; exit 0) & wait_end $! 10 "a child"; echo "status=$? hangs=$HANGS"')
+        status, out, err, seconds = run_bash('(sleep 1; exit 0) & wait_end $! 10 "a child"; echo "status=$? hangs=$(hang_count)"')
         self.assertEqual(out.strip(), "status=0 hangs=0")
         self.assertGreaterEqual(seconds, 0.9)
         self.assertLess(seconds, 5)
 
     def test_a_child_that_ignores_sigterm_is_a_hang_that_names_it_and_is_killed(self):
         status, out, err, seconds = run_bash('(trap "" TERM; while :; do sleep 0.2; done) & pid=$!; wait_end $pid 1 "ants_server (stopped with SIGTERM)"; '
-                                             'echo "status=$? hangs=$HANGS fails=$FAILS"; kill -0 $pid 2>/dev/null && echo ALIVE || echo DEAD')
-        self.assertEqual(out.split(), ["status=124", "hangs=1", "fails=1", "DEAD"])
+                                             'echo "status=$? hangs=$(hang_count) fails=$FAILS"; kill -0 $pid 2>/dev/null && echo ALIVE || echo DEAD')
+        self.assertEqual(out.split(), ["status=124", "hangs=1", "fails=0", "DEAD"])      # (a hang is counted in hang_count, the part adds it to its failures when it ends)
         self.assertIn("FAIL: [t] HUNG: ants_server (stopped with SIGTERM) was still running 1 s after it was told to end (it was killed)", err)
         self.assertNotIn("Killed", err)                     # (the shell's own notice of the death would be a second line for the same hang)
         self.assertGreaterEqual(seconds, 1.0)
@@ -72,10 +75,33 @@ class Waits(unittest.TestCase):
         self.assertEqual(out.split(), ["status=124", "DEAD"])
         self.assertIn("HUNG: a stopped game", err)
 
-    def test_the_hang_of_a_function_in_a_substitution_is_heard_on_stderr_and_its_status_is_not_zero(self):
-        status, out, err, seconds = run_bash('f() { sleep 100 & wait_end $! 1 "a program in a substitution"; echo $?; }; r="$(f)"; echo "got=$r"')
-        self.assertEqual(out.strip(), "got=124")
+    def test_the_hang_of_a_function_in_a_substitution_is_heard_on_stderr_and_counted(self):
+        # (a function inside $( ) is a subshell: a counter that it changes is lost with it, which is why the count is a file)
+        status, out, err, seconds = run_bash('HANG_LOG="$(mktemp)"; f() { sleep 100 & wait_end $! 1 "a program in a substitution"; echo $?; }; r="$(f)"; '
+                                             'echo "got=$r hangs=$(hang_count) fails=$FAILS"; rm -f "$HANG_LOG"')
+        self.assertEqual(out.strip(), "got=124 hangs=1 fails=0")
         self.assertIn("HUNG: a program in a substitution", err)
+
+    def test_without_the_file_the_count_of_a_substitution_is_lost_which_is_the_bug_that_the_file_mends(self):
+        status, out, err, seconds = run_bash('HANG_LOG=""; f() { sleep 100 & wait_end $! 1 "a program in a substitution"; echo $?; }; r="$(f)"; echo "got=$r hangs=$(hang_count)"')
+        self.assertEqual(out.strip(), "got=124 hangs=0")
+
+    def test_a_failure_that_is_no_check_is_counted_too(self):
+        status, out, err, seconds = run_bash('HANG_LOG="$(mktemp)"; r="$(fail_note "db_start: a server did not log its game port"; echo 1)"; echo "got=$r hangs=$(hang_count)"; rm -f "$HANG_LOG"')
+        self.assertEqual(out.strip(), "got=1 hangs=1")
+        self.assertIn("FAIL: [t] db_start: a server did not log its game port", err)
+
+    def test_a_part_whose_check_holds_while_a_program_in_its_substitution_hangs_ends_with_a_failure(self):
+        # the shape of `check "..." "$(start_nosecret ...; r=$?; stop_server; ...; echo $?)"` in the secret part: the condition holds, the stop hangs
+        check = ('check() { CHECKS=$((CHECKS + 1)); if [ "$2" -ne 0 ]; then FAILS=$((FAILS + 1)); echo "  FAIL: $1"; fi; }\n'
+                 'check "a check whose condition holds" "$(sleep 100 & wait_end $! 1 "a program in a substitution"; echo 0)"\n'
+                 'FAILS=$((FAILS + $(hang_count)))\n'
+                 'echo "$CHECKS checks, $FAILS failures"\n'
+                 '[ "$FAILS" -eq 0 ]')
+        status, out, err, seconds = run_bash('HANG_LOG="$(mktemp)"\n' + check)
+        self.assertEqual((status, out.strip()), (1, "8 checks, 1 failures"))      # (run_bash starts the counters at 7 checks and 0 failures)
+        status, out, err, seconds = run_bash('HANG_LOG=""\n' + check)         # (the count that was a variable: the hang is printed and the part ends with status 0)
+        self.assertEqual((status, out.strip()), (0, "8 checks, 0 failures"))
 
     def test_stop_pids_ends_the_ones_that_go_and_names_the_ones_that_do_not(self):
         body = ('sleep 100 & good=$!\n'
@@ -84,7 +110,7 @@ class Waits(unittest.TestCase):
                 'while [ ! -e "$ready" ]; do sleep 0.05; done; rm -f "$ready"\n'          # (SIGTERM must find the trap in place: a child that has not set it yet would die of it)
                 'sleep 100 & frozen=$!; kill -STOP $frozen\n'
                 'stop_pids "the clients of the room" $good $stubborn $frozen\n'
-                'echo "hangs=$HANGS"\n'
+                'echo "hangs=$(hang_count)"\n'
                 'for p in $good $stubborn $frozen; do kill -0 $p 2>/dev/null && echo ALIVE || echo DEAD; done')
         status, out, err, seconds = run_bash(body)
         # the one that was stopped is continued first, so it ends at SIGTERM like the good one: only the one that ignores the signal is a hang
@@ -95,7 +121,7 @@ class Waits(unittest.TestCase):
         self.assertLess(seconds, 15)
 
     def test_stop_pids_with_nothing_running_returns_at_once(self):
-        status, out, err, seconds = run_bash('(exit 0) & a=$!; (exit 0) & b=$!; sleep 0.3; stop_pids "gone" $a $b; echo "hangs=$HANGS"')
+        status, out, err, seconds = run_bash('(exit 0) & a=$!; (exit 0) & b=$!; sleep 0.3; stop_pids "gone" $a $b; echo "hangs=$(hang_count)"')
         self.assertEqual(out.strip(), "hangs=0")
         self.assertLess(seconds, 3)
 
@@ -211,6 +237,98 @@ class Watchdog(unittest.TestCase):
         self.assertEqual(files, [])
 
 
+# A fake ants_server: the few things that the secret part of test_ants_server.sh asks of one. It answers /healthz on --ctl-port, makes the secret file that it is told to, refuses (status 2) what the part asks it to refuse,
+# and the two servers of the part that are stopped inside a `$( )` (their folder is called "elsewhere") ignore SIGTERM: those stops hang.
+FAKE_SERVER = r'''#!/usr/bin/env python3
+import http.server, os, signal, sys
+args = sys.argv[1:]
+text = " ".join(args)
+if "--help" in args:
+    print("fake ants_server")
+    sys.exit(0)
+if "--version" in args:
+    print("fake ants_server 0 (network protocol 21)")
+    sys.exit(0)
+def value(name):
+    return args[args.index(name) + 1] if name in args else ""
+secret_file, results = value("--secret-file"), value("--results-dir")
+if "dangling" in text or "NO-SUCH-MAP" in text:
+    sys.exit(2)
+if secret_file:
+    os.makedirs(os.path.dirname(secret_file), exist_ok=True)
+    if not os.path.exists(secret_file):
+        open(secret_file, "w").write("a" * 64 + "\n")
+elif results:
+    path = os.path.join(results, "control-secret")
+    os.makedirs(results, exist_ok=True)
+    if not os.path.exists(path):
+        open(path, "w").write("a" * 64 + "\n")
+    elif open(path).read().strip() != "a" * 64:
+        sys.exit(2)
+elif not os.environ.get("ANTS_SERVER_SECRET"):
+    sys.exit(2)
+if "--ctl-port" not in args:
+    sys.exit(2)
+if "elsewhere" in text:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{"status":"ok"}')
+    def log_message(self, *args):
+        pass
+http.server.ThreadingHTTPServer(("127.0.0.1", int(value("--ctl-port"))), Handler).serve_forever()
+'''
+
+
+def the_variable_only_count(helpers):
+    """The helpers as they were before the count was a file: hang_note and hang_count keep it in a variable, which a function inside a `$( )` changes for itself only."""
+    helpers = re.sub(r"hang_note\(\) \{.*?\n\}", 'hang_note() {\n    HANGS=$((HANGS + 1))\n}', helpers, count=1, flags=re.S)
+    return re.sub(r"hang_count\(\) \{.*?\n\}", 'hang_count() {\n    echo "$HANGS"\n}', helpers, count=1, flags=re.S)
+
+
+@unittest.skipUnless(shutil.which("curl") and shutil.which("perl"), "the script needs curl and perl")
+class TheScriptCounts(unittest.TestCase):
+    """The real script, its secret part, against a fake server that does not stop where the part stops it inside a `$( )`: every FAIL line is a failure of the part's count."""
+
+    def run_part(self, edit=None):
+        with tempfile.TemporaryDirectory() as root:
+            scripts = os.path.join(root, "tests", "scripts")
+            os.makedirs(scripts)
+            shutil.copy(SCRIPT, scripts)
+            with open(HELPERS, encoding="utf-8") as f:
+                helpers = f.read()
+            with open(os.path.join(scripts, "e2e_deadlines.sh"), "w", encoding="utf-8") as f:
+                f.write(edit(helpers) if edit else helpers)
+            for name, body in (("build/src/ants_server/ants_server", FAKE_SERVER), ("build/src/ants_app/ants", "#!/bin/sh\nexit 0\n")):
+                path = os.path.join(root, name)
+                os.makedirs(os.path.dirname(path))
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(body)
+                os.chmod(path, 0o755)
+            tmp = os.path.join(root, "tmp")
+            os.makedirs(tmp)
+            done = subprocess.run(["bash", os.path.join(scripts, "test_ants_server.sh"), "--part", "secret"], capture_output=True, text=True, timeout=300,
+                                  env=dict(os.environ, BUILD_DIR="build", SERVER_END_WAIT="1", KILL_GRACE="3", TMPDIR=tmp))
+        text = done.stdout + done.stderr
+        failures = int(re.search(r"server e2e \[secret\]: \d+ checks, (\d+) failures", text).group(1))
+        fail_lines = [line for line in text.split("\n") if line.startswith("  FAIL:")]
+        hung_lines = [line for line in fail_lines if "HUNG:" in line]
+        return done.returncode, failures, len(fail_lines), len(hung_lines)
+
+    def test_the_failures_of_the_part_are_its_fail_lines_also_those_of_a_stop_inside_a_substitution(self):
+        status, failures, fail_lines, hung_lines = self.run_part()
+        self.assertGreaterEqual(hung_lines, 1)               # (two: the servers whose folder is "elsewhere", stopped inside the substitution of a check; on a machine so loaded that such a server is not up in 5 s, fewer)
+        self.assertEqual(failures, fail_lines)
+        self.assertEqual(status, 1)
+
+    def test_with_the_count_in_a_variable_the_hangs_are_printed_and_lost(self):
+        status, failures, fail_lines, hung_lines = self.run_part(the_variable_only_count)
+        self.assertGreaterEqual(hung_lines, 1)
+        self.assertEqual(failures, fail_lines - hung_lines)  # (the old count: what the substitutions changed was lost with them; every hang of this part is in one)
+
+
 class TheScript(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -220,7 +338,14 @@ class TheScript(unittest.TestCase):
 
     def test_it_loads_the_helpers_and_starts_its_watchdog(self):
         self.assertIn('. "$ROOT/tests/scripts/e2e_deadlines.sh"', self.text)
-        self.assertRegex(self.text, r"start_watchdog \$\(\(\d+ \* TIME_SCALE\)\)")
+        self.assertRegex(self.text, r"start_watchdog \$\(\(\d+ \* TIME_SCALE \* PARTS_RUN\)\)")      # (a limit for each part that the call runs)
+        self.assertRegex(self.text, r'PARTS_RUN="\$\(echo \$\{PARTS:-\$PART_NAMES\} \| wc -w')
+
+    def test_it_counts_the_hangs_of_functions_that_ran_inside_a_substitution(self):
+        self.assertIn('HANG_LOG="$WORK/hangs"', self.text)
+        self.assertLess(self.text.index('HANG_LOG="$WORK/hangs"'), self.text.index('. "$ROOT/tests/scripts/e2e_deadlines.sh"'))
+        end = self.text.rindex('echo "server e2e${PART_LABEL}:')
+        self.assertIn("FAILS=$((FAILS + $(hang_count)))", self.text[end - 200:end])
 
     def test_no_wait_is_left_that_has_no_deadline(self):
         bare = [line.strip() for line in self.code if re.search(r'(^|[;&|]\s*|\bdo\s+|\bthen\s+)wait(\s|$)', line)]
@@ -230,11 +355,19 @@ class TheScript(unittest.TestCase):
         piped = [line.strip()[:100] for line in self.code if re.search(r'"\$SERVER" [^|]*\|\s*grep', line) and "--help" not in line and "alarm" not in line]
         self.assertEqual(piped, [], "a server that does not stop by itself would hang the pipeline: perl -e 'alarm 5; exec @ARGV'")
 
+    def test_the_ping_flood_asks_for_an_honest_burst_to_be_answered_whole_and_has_a_ceiling(self):
+        self.assertIn("FLOOD_BURST=1000", self.text)                       # (the documented budget, written here)
+        self.assertIn("FLOOD_RATE=1000", self.text)
+        self.assertIn("HONEST=$((FLOOD_BURST * 9 / 10))", self.text)
+        self.assertRegex(self.text, r'\[ "\$\{HONEST_PONGS:-0\}" -eq "\$HONEST" \]')                          # every pong of the honest burst, not a share of them
+        self.assertRegex(self.text, r"-le \$\(\(FLOOD_BURST \+ FLOOD_RATE / 2\)\)")                           # the ceiling on both phases together
+        self.assertNotRegex(self.text, r"kMessageBurst = ")                                              # (not read from the source that the check is about)
+        self.assertNotRegex(self.text, r"FLOOD_BURST \* 3 / 10")                                         # the lowered floor is gone
+
     def test_the_rate_checks_use_the_measure_and_not_two_readings_over_a_nominal_time(self):
         self.assertGreaterEqual(len(re.findall(r'tick_rate "\$\w+"', self.text)), 3)
         self.assertNotRegex(self.text, r"\) / 3\.0\)")
         self.assertNotRegex(self.text, r"rate_of_victim")
-        self.assertNotRegex(self.text, r"17\.0 <= r <= 23\.0")
 
 
 if __name__ == "__main__":

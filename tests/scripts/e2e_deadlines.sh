@@ -4,10 +4,33 @@
 # until the job was cancelled half an hour later, with no log of where. Every wait for a process has a deadline now: when it runs out the part FAILS with a line that names what it waited for, and the process is
 # killed. The waits for an answer are loops of at most N turns of curl -m or of a socket with a timeout, and the part as a whole has a watchdog (start_watchdog) for a wait that nobody thought of.
 #
-# The caller has PART_LABEL (" [rooms]" or empty), FAILS and CHECKS (its counters of checks), and cleans up WATCHDOG_PID at its end. Plain bash 3.2 (a Mac's) and bash 5.
+# The caller has PART_LABEL (" [rooms]" or empty), FAILS and CHECKS (its counters of checks), calls stop_watchdog at its end, and adds hang_count to its failures. Plain bash 3.2 (a Mac's) and bash 5.
+#
+# The failures that these functions report are counted in a FILE, HANG_LOG (one line each), and not in a variable: a function that runs inside $( ) (db_start, and stop_server in the command substitution of a check)
+# is a subshell, and a counter that it changes is lost with it, so a script could print HUNG lines and exit 0. The caller sets HANG_LOG to a file in its scratch folder; without one the count is a variable, which
+# is all a function outside every $( ) needs.
 HANGS=0
+HANG_LOG="${HANG_LOG:-}"
 : "${STOP_WAIT:=15}"        # seconds that stop_pids gives all the processes together (a test shortens it)
-: "${WATCHDOG_GRACE:=10}"  # seconds between the watchdog's SIGUSR2 and its SIGKILL of what the script started (a test shortens it)
+: "${SERVER_END_WAIT:=30}"  # seconds that a server gets to end after SIGTERM (the e2e script's stop_server; a test shortens it)
+: "${KILL_GRACE:=30}"       # tenths of a second between the SIGTERM and the SIGKILL of a process that is a hang (a test shortens it)
+: "${WATCHDOG_GRACE:=10}"   # seconds between the watchdog's SIGUSR2 and its SIGKILL of what the script started (a test shortens it)
+
+# hang_note TEXT: one more failure that is not a check
+hang_note() {
+    if [ -n "$HANG_LOG" ]; then echo "$1" >> "$HANG_LOG"; else HANGS=$((HANGS + 1)); fi
+}
+
+# hang_count: how many were noted, also by functions that ran inside a $( )
+hang_count() {
+    if [ -n "$HANG_LOG" ] && [ -f "$HANG_LOG" ]; then wc -l < "$HANG_LOG" | tr -d ' '; else echo "$HANGS"; fi
+}
+
+# fail_note TEXT: a line "FAIL: TEXT" on stderr (a function inside $( ) has no other way to be heard) that is counted as a failure although no check printed it
+fail_note() {
+    echo "  FAIL:${PART_LABEL} $1" >&2
+    hang_note "$1"
+}
 
 # where: the lines of the calling script (not of this file) that led to the function that asks, "test_ants_server.sh:77 test_ants_server.sh:612" (a stop_server defined on line 77 and called on line 612)
 where() {
@@ -18,11 +41,9 @@ where() {
     echo "${out# }"
 }
 
-# hung WHAT SECONDS: WHAT was still running SECONDS after it was told to end. The line goes to stderr (a function inside $( ) has no other way to be heard; the check that reads its status fails too).
+# hung WHAT SECONDS: WHAT was still running SECONDS after it was told to end (a failure: fail_note)
 hung() {
-    echo "  FAIL:${PART_LABEL} HUNG: $1 was still running $2 s after it was told to end (it was killed) [called from $(where)]" >&2
-    HANGS=$((HANGS + 1))
-    FAILS=$((FAILS + 1))
+    fail_note "HUNG: $1 was still running $2 s after it was told to end (it was killed) [called from $(where)]"
 }
 
 # kill_hung PID SECONDS WHAT: the hang is reported, the process is continued (a stopped one cannot die), told again with SIGTERM and, 3 s later, killed
@@ -32,7 +53,7 @@ kill_hung() {
     disown "$pid" 2> /dev/null      # (the shell then says nothing of its death: "Killed" would be a second line for the same hang)
     kill -CONT "$pid" 2> /dev/null
     kill -TERM "$pid" 2> /dev/null
-    for ((i = 0; i < 30; i++)); do kill -0 "$pid" 2> /dev/null || break; sleep 0.1; done
+    for ((i = 0; i < KILL_GRACE; i++)); do kill -0 "$pid" 2> /dev/null || break; sleep 0.1; done
     kill -KILL "$pid" 2> /dev/null
     for ((i = 0; i < 30; i++)); do kill -0 "$pid" 2> /dev/null || break; sleep 0.1; done
 }
@@ -87,7 +108,7 @@ on_watchdog() {
     running="$(jobs -p | tr '\n' ',' | sed 's/,$//')"
     echo "  FAIL:${PART_LABEL} HUNG: the part has not ended after $WATCHDOG_LIMIT s; the programs it started and did not stop (pid, command): ${running:-none}" >&2
     [ -n "$running" ] && ps -o pid=,command= -p "$running" 2> /dev/null | cut -c1-200 >&2
-    echo "server e2e${PART_LABEL}: $CHECKS checks, $((FAILS + 1)) failures"
+    echo "server e2e${PART_LABEL}: $CHECKS checks, $((FAILS + $(hang_count) + 1)) failures"
     for pid in $(jobs -p); do kill -CONT "$pid" 2> /dev/null; kill -KILL "$pid" 2> /dev/null; done       # (nothing it started outlives it: a program that holds the step's output open would hang the step again)
     exit 1
 }

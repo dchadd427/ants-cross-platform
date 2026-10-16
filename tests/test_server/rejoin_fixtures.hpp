@@ -577,7 +577,8 @@ struct World {
         return true;
     }
     // ... and a count that is taken as "what there was", to show that nothing comes after it, is taken once the door is quiet: no counter has moved for `quiet_ms` of real time (a link that was made before is
-    // counted before it, not after)
+    // counted before it, not after). The same quiet gives the machines real time to read what the door did (the close of a link that it refused): a machine that has not read it yet is still at the Hello of its
+    // attempt, where a gap handed to the session (note_gap) does not make the next attempt due. A window of real time, not a barrier: the session does not say which of the two it is in.
     void settle(uint32_t quiet_ms = 200) {
         const auto total = [this]() { return server.accepted + server.refused + server.scripted; };
         uint32_t seen = total();
