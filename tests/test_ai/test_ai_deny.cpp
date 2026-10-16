@@ -13,7 +13,7 @@
 //   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
 //   AI28.5  the weights fade as the match runs out: late in the match the reserve goes before the middle
 //   AI28.6  a pile that ONE enemy reaches and an enemy army holds counts as it is too (the army rule is for the One class as for Multi)
-//   AI28.7  the threat to the reserve has a radius: an enemy ant 7 tiles from it is none, one 6 tiles from it is
+//   AI28.7  the threat to the reserve has a radius: an enemy ant 8 tiles from it is none, one 5 tiles from it is
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"

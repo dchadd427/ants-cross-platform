@@ -255,6 +255,8 @@ struct LevelPlan {
     uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates
     uint32_t gate_hop_bombs{3};          // the most bombs of a hop chain that the bot plans (each costs 2 hit points)
     uint32_t gate_min_ticks_left{2400};  // no attempt starts with less than this left on the clock
+    bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (no team, 255) alone while the gate goals are live (Tactics::gate_goals_live): they are the gate, and the goals defuse those on the way. A bomb of a
+                                         // team is countered as on any map, and so is a map bomb once the goals are exhausted or the bot is in the fallback
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
     bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
     bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes
@@ -552,6 +554,9 @@ struct Tactics {
     /// An own worker (an ant of the level's default type) stood in a component next to a pile at the first look of a gate map: the food has someone at it, the plain economy can harvest it, and
     /// the opening is not held back for the gate goals (Ghetto: the start workers stand at the central pile). Decided once with gate_map; false on every other map.
     bool gate_beside{false};
+    /// The gate goals are live at this look (set by StandardBot before the counters step): a gate map, not in the stall detector's fallback, and the goal task not exhausted. Only then are the map's own
+    /// bombs the goals' to defuse (LevelPlan::gate_spare_map_bombs); with the goals out of play the counters treat them as on any map.
+    bool gate_goals_live{false};
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that

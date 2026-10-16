@@ -151,6 +151,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if ((plan.islands && plan.island_ferry && island_.active()) || tactics_.gate_map) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
+    tactics_.gate_goals_live = tactics_.gate_map && !fallback && !gate_goals_.exhausted();    // (the counters spare the map's own bombs only while the goals are there to deal with them)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);

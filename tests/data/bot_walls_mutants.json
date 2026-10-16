@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.13c of suite 2.20.",
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.14 of suite 2.20.",
  "defaults": {
   "build": "test_ai"
  },
@@ -297,6 +297,46 @@
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
    "expect": "AI27.11",
    "build": "test_ai"
+  },
+  {
+   "id": "map_bombs_countered_again",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "    bool gate_spare_map_bombs{true};",
+   "new": "    bool gate_spare_map_bombs{false};",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.14"
+  },
+  {
+   "id": "map_bombs_spared_on_open_maps",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)",
+   "new": "(plan.gate_spare_map_bombs && b.owner >= sim::MAX_PLAYERS)",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.14"
+  },
+  {
+   "id": "team_bombs_spared_too",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)",
+   "new": "(plan.gate_spare_map_bombs && tactics_.gate_goals_live)",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.14"
+  },
+  {
+   "id": "map_bombs_spared_with_goals_out",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.gate_goals_live = tactics_.gate_map && !fallback && !gate_goals_.exhausted();",
+   "new": "tactics_.gate_goals_live = tactics_.gate_map;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI27.14 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.14"
+  },
+  {
+   "id": "contest_skip_without_the_hill_side",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||",
+   "new": "(false ||",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11"
   }
  ]
 }
