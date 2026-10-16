@@ -207,7 +207,7 @@ bool HarvestTask::held_by_army(const TaskContext& c, sim::TileCoord anchor) cons
     return static_cast<uint64_t>(own) * 100u < static_cast<uint64_t>(enemy) * params_.race_army_percent;
 }
 
-uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost, bool first_wins) const {
+uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_t own_cost, bool first_wins, bool first_owns) const {
     const BotView& v = c.view;
     const uint8_t ally = v.ally();
     size_t competitors = 0;                                                          // live enemy teams that reach the pile at a comparable cost
@@ -227,6 +227,7 @@ uint8_t HarvestTask::tier_for(const TaskContext& c, const PileInfo& pile, int32_
         if (theirs < mine * params_.contest_low) first = true;
         else if (theirs <= mine * params_.contest_high) ++competitors;
     }
+    if (first && first_owns) return static_cast<uint8_t>(PileClass::Hopeless);
     if (competitors >= 2) return static_cast<uint8_t>(PileClass::Multi);
     if (first && first_wins) return static_cast<uint8_t>(PileClass::Hopeless);          // (the race) one competitor and an enemy that is far nearer: the pile is eaten before the ants get there
     if (competitors == 1 && params_.contest_one_first) return static_cast<uint8_t>(PileClass::One);
@@ -562,7 +563,7 @@ void HarvestTask::step(TaskContext& c) {
         if (deny_on) {
             // the denial order: what the seat leaves at a pile that others reach about as soon goes to them, so such a pile counts more; the piles that nobody competes for are
             // the reserve and count as they are, unless an enemy ant is at one of them (it is being taken now: it goes first)
-            uint8_t cls = tier_for(c, *info, ap.cost, true);
+            uint8_t cls = tier_for(c, *info, ap.cost, true, true);
             if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);
             k.cls = cls;
             k.tier = 1;

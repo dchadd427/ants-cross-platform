@@ -7,7 +7,8 @@
 //   AI28.1  a pile that every enemy reaches as soon as the seat goes before the seat's reserve of the same value with up to 2.3 times its trip (Medium, Hard); a pile that ONE
 //           enemy reaches goes first with up to 1.6 times the trip, not with 2.5 times; Easy keeps its order
 //   AI28.2  a contested pile with 3.7 times the trip of the reserve does not go first: the denial value weighs the points per trip, it does not send the ants across the field
-//   AI28.3  a reserve pile with an enemy ant beside it goes before everything else (it is being taken)
+//   AI28.3  a reserve pile with an enemy ant beside it goes before everything else (it is being taken); an ally's ant there is no threat
+//   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"
@@ -35,7 +36,9 @@ struct Game {
     int orient{0};
     int32_t reserve_at{19};                           // the reserve's anchor is (reserve_at, reserve_at) at team 0 in the first drawing
     std::array<size_t, 4> enemies{{1, 1, 1, 1}};      // the workers of every team but the seat (an enemy needs one ant to be a live team)
-    bool threat{false};                               // an enemy worker stands 4 tiles beside the seat's reserve
+    bool threat{false};                               // a worker of the next team stands 4 tiles beside the seat's reserve ...
+    bool ally{false};                                 // ... and that team is the seat's ally
+    bool army{false};                                 // a Combat Ant of the team across stands 2 tiles beside the middle pile
 };
 
 Outcome play(Level level, uint8_t seat, const Game& g) {
@@ -49,6 +52,8 @@ Outcome play(Level level, uint8_t seat, const Game& g) {
         if (workers[t] == 0) sim.drop_player(t);                    // a team that is not live competes for nothing
     }
     if (g.threat) sim.spawn_unit(static_cast<uint8_t>((seat + 1) % 4), sim::AntType::Worker, w.tile_of(seat, TileCoord{g.reserve_at - 4, g.reserve_at}));
+    if (g.ally) sim.form_alliance(seat, static_cast<uint8_t>((seat + 1) % 4));
+    if (g.army) sim.spawn_unit(static_cast<uint8_t>((seat + 2) % 4), sim::AntType::Combat, w.tile_of(seat, TileCoord{27, 30}));
     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
     rig.run(60);
     const std::vector<int> targets = harvest_targets(rig, sim, seat, kPiles);
@@ -148,10 +153,19 @@ void run_deny_tests() {
         for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 2u && o.middle_class == static_cast<int>(PileClass::Multi); });
     } TEST_END();
 
-    TEST_CASE("AI28.3 A Reserve That An Enemy Comes For Is Eaten Now: With An Enemy Ant Four Tiles From The Own Reserve, The Reserve Goes Before The Contested Middle And Gets Most Ants; In All Eight Drawings And From Every Seat")
+    TEST_CASE("AI28.3 A Reserve That An Enemy Comes For Is Eaten Now: With An Enemy Ant Four Tiles From The Own Reserve, The Reserve Goes Before The Contested Middle And Gets Most Ants (An Ally's Ant There Changes Nothing); In All Eight Drawings And From Every Seat")
     {
         Game g;
         g.threat = true;
         for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 5u && o.reserve > o.middle; });
+        g.ally = true;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 0, [](const Outcome& o) { return o.reserve == 0u; });
+    } TEST_END();
+
+    TEST_CASE("AI28.4 A Contested Pile That An Enemy Army Holds Counts As It Is: With An Enemy Combat Ant Beside The Middle Pile (And None Of The Seat's Own There) The Middle Reads Hopeless And The Nearer Reserve Goes First; In All Eight Drawings And From Every Seat")
+    {
+        Game g;
+        g.army = true;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::Hopeless); });
     } TEST_END();
 }

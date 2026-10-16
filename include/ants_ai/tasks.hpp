@@ -220,10 +220,10 @@ public:
         uint32_t contest_opening_min_ants{0};
         /// The denial order (the standard bot at Medium and Hard; docs/BOTS.md, "Contested food first: the denial order"): FOOD IS FINITE, and a pile that other teams reach about as
         /// soon as this seat is eaten by whoever gets there, while a pile that no enemy reaches as soon waits for the seat. So the piles are ranked by points per trip as before, but a
-        /// pile that two or more enemies compete for (Multi, the classes of tier_for with an enemy that is far nearer "there first") counts deny_multi_percent of that, and one that
+        /// pile that two or more enemies compete for (Multi, the classes of tier_for) counts deny_multi_percent of that, and one that
         /// one enemy competes for (One) deny_one_percent: what the seat leaves there goes to the others. The piles that nobody competes for (Safe) are the seat's RESERVE and count as
-        /// they are: they wait while contested food near enough to be worth the walk is left, and they are next when it is gone. A pile that an enemy army holds or that an enemy is
-        /// far nearer to (Hopeless) counts as it is. A reserve pile with an enemy ant within reserve_threat_tiles of its anchor goes before everything else (it is being taken now).
+        /// they are: they wait while contested food near enough to be worth the walk is left, and they are next when it is gone. A pile that an enemy army holds or that any enemy
+        /// is far nearer to (Hopeless: that enemy eats it before the ants arrive, whoever else competes) counts as it is. A reserve pile with an enemy ant within reserve_threat_tiles of its anchor goes before everything else (it is being taken now).
         /// A weight and not a rank: a contested pile across the field does not go before a reserve next to the hill, so no clock is needed to keep the reserve from being left at the
         /// end. Only with value_aware_piles; the race is off with it.
         bool reserve_order{false};
@@ -325,8 +325,9 @@ private:
     void sync_ledger(AntLedger& ledger) const;
     /// Asks the map as it is now again (see "candidates"): the piles that were shut off at the start and the hill's walking field for the ants that were shut in
     void reask(const TaskContext& context);
-    /// The class of a pile for the seat (the contest-aware option), from the start analysis' cost of every team's hill to it
-    uint8_t tier_for(const TaskContext& context, const PileInfo& pile, int32_t own_cost, bool first_wins = false) const;
+    /// The class of a pile for the seat (the contest-aware option), from the start analysis' cost of every team's hill to it. `first_wins`: an enemy that is there first makes
+    /// a pile with at most one competitor Hopeless (the race); `first_owns`: it makes ANY pile Hopeless, whatever the others (the denial order: the pile is that enemy's)
+    uint8_t tier_for(const TaskContext& context, const PileInfo& pile, int32_t own_cost, bool first_wins = false, bool first_owns = false) const;
     /// The race: enemy fighters near the pile (Params::race_army_weight) that the own strength there does not match
     bool held_by_army(const TaskContext& context, sim::TileCoord anchor) const;
     /// Whether an ant standing on `tile` can walk to the hill now (the field of the last reask)
