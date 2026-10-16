@@ -600,6 +600,7 @@ void s5_library() {
         int originals_work = 0;
         std::map<std::string, int> maps_with;       // per code, the maps that have it
         std::vector<std::string> not_working;
+        std::vector<std::string> rewrite_works;     // of the maps that do not work, those whose rewrite does (the writer completes a file cut short)
         for (const auto& m : maps) {
             const std::vector<uint8_t> bytes = read_map(m.second);
             const OriginalSafeReport r = check_original_safe(bytes.data(), bytes.size());
@@ -616,6 +617,11 @@ void s5_library() {
                     if (i.severity != Severity::Info) why += std::string(why.empty() ? "" : ", ") + to_string(i.code);
                 }
                 not_working.push_back(m.first + ": " + why);
+                LevelData level;
+                if (level.load_from_memory(bytes.data(), bytes.size())) {
+                    const LevelWriteResult w = write_level(level);
+                    if (w.ok && check_original_safe(w.bytes.data(), w.bytes.size()).works_in_original_game()) rewrite_works.push_back(m.first);
+                }
             }
         }
         std::cout << "\n    " << works << " of " << maps.size() << " maps work in the original game; per code, the maps that have it:";
@@ -627,6 +633,10 @@ void s5_library() {
         CHECK_MSG(works == kLibraryWorks, std::to_string(works));
         const std::map<std::string, int> expected = kLibraryCodes;
         CHECK_MSG(maps_with == expected, "the counts per code moved");
+        // the 12 files that are cut short work once they are rewritten, but Conquer, whose description has 30 characters
+        const std::vector<std::string> cut = {"1v1TREASURE.LVL", "AnTsCaStLe.lvl", "AntsTournament.lvl", "Ants_Town.lvl", "ArCaDeStYLe.lvl", "Arena101.lvl",
+                                              "BetterArcadeStyle.lvl", "Bunker.lvl", "Food Island.lvl", "Food Rules The Ants!!!.lvl", "NW.LVL"};
+        CHECK_MSG(rewrite_works == cut, std::to_string(rewrite_works.size()) + " work once rewritten");
     });
 }
 

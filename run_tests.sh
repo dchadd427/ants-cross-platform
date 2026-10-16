@@ -41,7 +41,7 @@ print_usage() {
     echo "                   plus the repository checks (version / changelog consistency, tool and script tests). No E2E, no script suites that start the game, no"
     echo "                   sanitizer, none of the slow suites (the ones --list marks full, for example lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
     echo "  --all            Run all test suites (ants_assets + ants_sim + ants_app + E2E + repository checks, default)"
-    echo "  --assets         Run only asset decoder tests (test_assets, and the map writer: test_lvl_writer)"
+    echo "  --assets         Run only asset decoder tests (test_assets, the map writer test_lvl_writer and the original-safe profile test_original_safe)"
     echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker), replay (test_replay, replay_tool --selftest), map file (test_map_roundtrip, lvl_tool --selftest) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
@@ -243,6 +243,7 @@ define_suites() {
     suite "1.4"    assets 1 "test_challenger_m1_it2"     "Challenger M1_IT2 (test_challenger_m1_it2)"                "CHALLENGER M1_IT2 (asset interface contract)"                                      '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2"'
     suite "1.5"    assets 1 "test_challenger_m1_it2_2"   "Challenger M1_IT2_2 (test_challenger_m1_it2_2)"            "CHALLENGER M1_IT2_2 (asset interface contract, deep)"                              '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"'
     suite "1.6"    assets 1 "test_lvl_writer"            "Map Writer (test_lvl_writer)"                              "MAP WRITER SUITE (the canonical .lvl file, what the writer refuses, random levels, hostile files with a bound on the heap, what a rewrite changes, the blank map)" '"./$BUILD_DIR/tests/test_assets/test_lvl_writer"'
+    suite "1.7"    assets 1 "test_original_safe"         "Original-Safe Profile (test_original_safe)"                "ORIGINAL-SAFE PROFILE SUITE (does a map work in the original game: every rule failing and passing, files, stricter than the remake, the 540 maps of the library)" '"./$BUILD_DIR/tests/test_assets/test_original_safe"'
 
     # 2. simulation rules, network core, bots, server
     suite "2"      sim    1 "test_sim_rules"             "Simulation Rules Tests (test_sim_rules)"                   "SIMULATION RULES SUITES (ants_sim)"                                                '"./$BUILD_DIR/tests/test_sim/test_sim_rules"'

@@ -21,9 +21,10 @@ struct LevelWriteResult {
 
 /// The canonical bytes of `level`: version 8, the parts in the order the original's loader reads them (docs/MAP_FORMAT.md), every field as the level holds it, the
 /// bytes after the end of the description and of each dictionary name zero, nothing after the egg word. Refused (ok false, `error` says why) is a level that the
-/// reader cannot have made, or whose canonical file is larger than `limits.max_write_bytes` (a file cut short grows by a few bytes when its blocks are written
-/// whole), so that what the writer returns always reads back (LVLParser::load_from_memory) as the same level (same_level): another version, a grid without a cell
-/// or beyond `limits`, layers that are not rows x columns, a description of more than 30 bytes or with a zero byte, an empty dictionary or one beyond `limits`, a
+/// reader cannot have made, or whose canonical file is larger than `limits.max_write_bytes` or `limits.max_read_bytes` (a file cut short grows by a few bytes when
+/// its blocks are written whole), so that what the writer returns always reads back (LVLParser::load_from_memory, with the same limits) as the same level
+/// (same_level): another version, a grid without a cell or beyond `limits`, layers that are not rows x columns (or no cell at all: blank_level's map beyond the
+/// limits it was given), a description of more than 30 bytes or with a zero byte, an empty dictionary or one beyond `limits`, a
 /// name of more than 11 bytes or with a zero byte, a tile_type_count that is not the number of names less one, a block with more than 65,535 entries, a start
 /// marker or plant whose team is not that of its tile, a food pile without stages or with more than 65,535, a waypoint without a trigger (flag 0) that holds an
 /// interval or chances, a canonical file beyond `limits`. The writer reads its own bytes back before it answers: a level that does not read back the same is

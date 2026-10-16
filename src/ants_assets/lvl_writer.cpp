@@ -78,6 +78,9 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
     }
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;
     if (cells > limits.cells()) return "the grid has " + grid_text(rows, columns) + ", " + num(cells) + " cells, more than the " + num(limits.cells()) + " allowed here";
+    if (level.layer1_terrain.empty() && level.layer2_interactive.empty()) {
+        return "the grid has " + grid_text(rows, columns) + " but the level holds no cell (blank_level makes none for a grid beyond the limits it is given)";
+    }
     if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
         return "the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " +
                num(columns) + " = " + num(cells);
@@ -129,7 +132,9 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
         }
     }
     const uint64_t size = layout_of(level).size;
-    if (size > limits.max_write_bytes) return "the file would have " + num(size) + " bytes, more than the " + num(limits.max_write_bytes) + " allowed here";
+    // the limit of a written file, and of one that is read: what the writer returns reads back with the same limits
+    const size_t most = std::min(limits.max_write_bytes, limits.max_read_bytes);
+    if (size > most) return "the file would have " + num(size) + " bytes, more than the " + num(most) + " allowed here";
     return std::string();
 }
 
@@ -231,12 +236,10 @@ LevelWriteResult write_level(const LevelData& level, const LevelLimits& limits) 
         if (!result.error.empty()) return result;
         Out out(static_cast<size_t>(layout_of(level).size));
         serialize(level, out);
-        // the writer's promise, checked on every call: the bytes read back as this level (their size is the write limit's, not the read limit's)
-        LevelLimits read_back = limits;
-        read_back.max_read_bytes = std::numeric_limits<size_t>::max();
+        // the writer's promise, checked on every call: the bytes read back, with the same limits, as this level
         LevelData back;
         LevelValidation report;
-        if (!LVLParser::load_from_memory(out.bytes().data(), out.bytes().size(), back, &report, read_back)) {
+        if (!LVLParser::load_from_memory(out.bytes().data(), out.bytes().size(), back, &report, limits)) {
             result.error = "the written bytes do not load (a fault of the writer): " + report.reason();
             return result;
         }
