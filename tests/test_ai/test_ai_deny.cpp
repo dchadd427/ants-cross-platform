@@ -5,7 +5,7 @@
 // drawings; what must not differ is the decision.)
 //
 //   AI28.1  a pile that every enemy reaches as soon as the seat goes before the seat's reserve of the same value with up to 2.3 times its trip (Medium, Hard); a pile that ONE
-//           enemy reaches goes first with up to 1.6 times the trip, not with 2.5 times; Easy keeps its order
+//           enemy reaches (25 points a unit) goes before a reserve of 20 points with up to 1.7 times its trip, not before one of 25 points; Easy keeps its order
 //   AI28.2  a contested pile with 3.7 times the trip of the reserve does not go first: the denial value weighs the points per trip, it does not send the ants across the field
 //   AI28.3  a reserve pile with an enemy ant beside it goes before everything else (it is being taken); an ally's ant there is no threat
 //   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
@@ -35,6 +35,7 @@ struct Outcome {
 struct Game {
     int orient{0};
     int32_t reserve_at{19};                           // the reserve's anchor is (reserve_at, reserve_at) at team 0 in the first drawing
+    uint16_t reserve_value{25};                       // its points per unit (the middle's are 25)
     std::array<size_t, 4> enemies{{1, 1, 1, 1}};      // the workers of every team but the seat (an enemy needs one ant to be a live team)
     bool threat{false};                               // a worker of the next team stands 4 tiles beside the seat's reserve ...
     bool ally{false};                                 // ... and that team is the seat's ally
@@ -47,7 +48,7 @@ Outcome play(Level level, uint8_t seat, const Game& g) {
     w.orient = g.orient;
     std::array<size_t, 4> workers = g.enemies;
     workers[seat] = 6;
-    w.build(sim, g.reserve_at, workers);
+    w.build(sim, g.reserve_at, workers, 25, g.reserve_value);
     for (uint8_t t = 0; t < 4; ++t) {
         if (workers[t] == 0) sim.drop_player(t);                    // a team that is not live competes for nothing
     }
@@ -70,7 +71,7 @@ uint32_t far_percent(const Game& g, uint8_t seat) {
     sim::SimulationEngine sim;
     ReserveWorld w;
     w.orient = g.orient;
-    w.build(sim, g.reserve_at, g.enemies);
+    w.build(sim, g.reserve_at, g.enemies, 25, g.reserve_value);
     const MapInfo map(sim);
     const int32_t to_middle = MapInfo::trip_ticks_for_cost(map.pile(static_cast<uint32_t>(w.middle))->approach[seat].cost);
     const int32_t to_reserve = MapInfo::trip_ticks_for_cost(map.pile(static_cast<uint32_t>(w.reserve[seat]))->approach[seat].cost);
@@ -109,7 +110,7 @@ void alike_everywhere(Level level, Game g, int first, Holds holds) {
 }  // namespace
 
 void run_deny_tests() {
-    TEST_CASE("AI28.1 The Denial Order (Reported After Play: On A Four-Player Map The Bots Eat The Cheerios Next To Their Base First Instead Of The Contested Middle Food): A Pile That Every Enemy Reaches As Soon As The Seat Goes Before The Own Reserve Of The Same Value With Up To 2.3 Times Its Trip (Medium, Hard), One That One Enemy Reaches With Up To 1.6 Times Its Trip And Not With 2.5 Times; In All Eight Drawings And From Every Seat; Easy Keeps Its Order")
+    TEST_CASE("AI28.1 The Denial Order (Reported After Play: On A Four-Player Map The Bots Eat The Cheerios Next To Their Base First Instead Of The Contested Middle Food): A Pile That Every Enemy Reaches As Soon As The Seat Goes Before The Own Reserve Of The Same Value With Up To 2.3 Times Its Trip (Medium, Hard), One That One Enemy Reaches Before A Reserve Of 20 Points With 1.7 Times Its Trip, Not Before One Of 25 Points; In All Eight Drawings And From Every Seat; Easy Keeps Its Order")
     {
         // four live teams: the middle is contested by three enemies; its trip is 1.6 to 1.8 times the reserve's (the reserve 19 tiles from the corner) or 2.0 to 2.3 times (16)
         Game g;
@@ -124,17 +125,19 @@ void run_deny_tests() {
             alike_everywhere(level, g, 0, [](const Outcome& o) { return o.middle == 6u && o.reserve == 0u && o.middle_class == static_cast<int>(PileClass::Multi); });
             alike_everywhere(level, farther, 0, [](const Outcome& o) { return o.middle > o.reserve; });
         }
-        // ONE enemy (teams 2 and 3 are out of the match): the middle is contested by one team and counts less; it goes first with 1.3 to 1.6 times the reserve's trip (21), not with
-        // 2.5 to 3.3 times (13)
+        // ONE enemy (teams 2 and 3 are out of the match): the middle is contested by one team and counts less. Against a reserve of 20 points a unit with 1.5 to 1.7 times
+        // its trip (20) the middle of 25 goes first (the plain order: the reserve); against a reserve of 25 with 1.7 to 2.0 times its trip (18) it does not
         Game one;
         one.enemies = {{1, 1, 0, 0}};
-        one.reserve_at = 21;
+        one.reserve_at = 20;
+        one.reserve_value = 20;
         const auto one_far = far_range(one);
-        ASSERT_TRUE(one_far.first >= 130 && one_far.second <= 165);
-        Game one_farther = one;
-        one_farther.reserve_at = 13;
+        ASSERT_TRUE(one_far.first >= 150 && one_far.second <= 172);
+        Game one_farther;
+        one_farther.enemies = one.enemies;
+        one_farther.reserve_at = 18;
         const auto one_farther_far = far_range(one_farther);
-        ASSERT_TRUE(one_farther_far.first >= 240);
+        ASSERT_TRUE(one_farther_far.first >= 165 && one_farther_far.second <= 200);
         for (const Level level : {Level::Medium, Level::Hard}) {
             alike_everywhere(level, one, 0, [](const Outcome& o) { return o.reserve == 0u && o.middle_class == static_cast<int>(PileClass::One); });
             alike_everywhere(level, one_farther, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::One); });

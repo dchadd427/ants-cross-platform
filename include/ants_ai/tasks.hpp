@@ -228,7 +228,7 @@ public:
         /// end. Only with value_aware_piles; the race is off with it.
         bool denial_order{false};
         uint32_t deny_multi_percent{300};
-        uint32_t deny_one_percent{200};
+        uint32_t deny_one_percent{150};
         int32_t reserve_threat_tiles{6};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
