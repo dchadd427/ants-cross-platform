@@ -12,9 +12,11 @@ script had no deadline. Every wait for a process has one now, and a hang is a fa
   - the script itself: no bare `wait` is left in it (every wait goes through the helpers), the servers that it runs in a pipeline have an alarm, and the checks of the tick rate use the
     measure of tests/scripts/measure_tick_rate.py and not two readings over a nominal 3 s
 """
+import collections
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -238,11 +240,27 @@ class Watchdog(unittest.TestCase):
 
 
 # A fake ants_server: the few things that the secret part of test_ants_server.sh asks of one. It answers /healthz on --ctl-port, makes the secret file that it is told to, refuses (status 2) what the part asks it to refuse,
-# and the two servers of the part that are stopped inside a `$( )` (their folder is called "elsewhere") ignore SIGTERM: those stops hang.
-FAKE_SERVER = r'''#!/usr/bin/env python3
-import http.server, os, signal, sys
+# and the two servers of the part that are stopped inside a `$( )` (their folder is called "elsewhere") ignore SIGTERM: those stops hang. It never asks for the name of the machine (HTTPServer.server_bind does, with
+# socket.getfqdn(): a reverse lookup that took seconds a start on the macOS runner of the CI), and it writes a line to the file that FAKE_SERVER_LOG names for each start, each answer and each end, so that the report
+# of a run that failed or took long shows when every server of the part was up.
+FAKE_SERVER = r"""#!/usr/bin/env python3
+import time
+started = time.time()
+import http.server, os, signal, socket, socketserver, sys
 args = sys.argv[1:]
 text = " ".join(args)
+def note(what):
+    if os.environ.get("FAKE_SERVER_LOG"):
+        with open(os.environ["FAKE_SERVER_LOG"], "a") as f:
+            f.write("%.3f %d %s\n" % (time.time(), os.getpid(), what))
+def leave(code, why):
+    note("exit %d: %s" % (code, why))
+    sys.exit(code)
+def getfqdn(*unused):
+    note("getfqdn was called")
+    raise RuntimeError("the fake server must not ask for the name of the machine")
+socket.getfqdn = getfqdn
+note("start " + text[:100])
 if "--help" in args:
     print("fake ants_server")
     sys.exit(0)
@@ -253,7 +271,7 @@ def value(name):
     return args[args.index(name) + 1] if name in args else ""
 secret_file, results = value("--secret-file"), value("--results-dir")
 if "dangling" in text or "NO-SUCH-MAP" in text:
-    sys.exit(2)
+    leave(2, "a secret file that is a link to nothing, or a map that is not there")
 if secret_file:
     os.makedirs(os.path.dirname(secret_file), exist_ok=True)
     if not os.path.exists(secret_file):
@@ -264,22 +282,31 @@ elif results:
     if not os.path.exists(path):
         open(path, "w").write("a" * 64 + "\n")
     elif open(path).read().strip() != "a" * 64:
-        sys.exit(2)
+        leave(2, "a secret file that is no secret")
 elif not os.environ.get("ANTS_SERVER_SECRET"):
-    sys.exit(2)
+    leave(2, "no secret and nowhere to keep one")
 if "--ctl-port" not in args:
-    sys.exit(2)
+    leave(2, "no control port")
 if "elsewhere" in text:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    note("ignores SIGTERM")
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        note("GET " + self.path)
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b'{"status":"ok"}')
     def log_message(self, *args):
         pass
-http.server.ThreadingHTTPServer(("127.0.0.1", int(value("--ctl-port"))), Handler).serve_forever()
-'''
+class QuickServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
+server = QuickServer(("127.0.0.1", int(value("--ctl-port"))), Handler)
+note("up after %.2f s" % (time.time() - started))
+server.serve_forever()
+"""
 
 
 def the_variable_only_count(helpers):
@@ -288,9 +315,27 @@ def the_variable_only_count(helpers):
     return re.sub(r"hang_count\(\) \{.*?\n\}", 'hang_count() {\n    echo "$HANGS"\n}', helpers, count=1, flags=re.S)
 
 
+Run = collections.namedtuple("Run", "status failures fail_lines hung_lines report")
+
+
 @unittest.skipUnless(shutil.which("curl") and shutil.which("perl"), "the script needs curl and perl")
 class TheScriptCounts(unittest.TestCase):
-    """The real script, its secret part, against a fake server that does not stop where the part stops it inside a `$( )`: every FAIL line is a failure of the part's count."""
+    """The real script, its secret part, against a fake server that does not stop where the part stops it inside a `$( )`: every FAIL line is a failure of the part's count.
+
+    A run takes 5 s on Linux. LIMIT is how long one run may take, 35 times that: a run that is longer is killed, with everything it started, and fails with a report, the output of the part and
+    when each fake server was up. On the macOS runner of the CI a run took 255 s (limit: 300 s) when the fake server asked for the name of the machine before it listened (HTTPServer.server_bind);
+    the polls of a start that wait for a port that is bound and does not listen yet may take their whole second there, and the part polls up to 50 times for each of its servers."""
+    LIMIT = 180
+
+    def report(self, text, fake_log, started, seconds, killed):
+        servers = []
+        for line in fake_log.split("\n"):
+            if line:
+                when, pid, what = line.split(" ", 2)
+                servers.append((float(when), "%7.2f s  pid %s  %s" % (float(when) - started, pid, what)))
+        servers.sort(key=lambda entry: entry[0])
+        return "the part %s after %.1f s\n--- its output ---\n%s\n--- the fake servers (seconds after the start of the part) ---\n%s" % (
+            "was killed" if killed else "ended", seconds, text.rstrip(), "\n".join(line for _, line in servers) or "(none started)")
 
     def run_part(self, edit=None):
         with tempfile.TemporaryDirectory() as root:
@@ -309,24 +354,42 @@ class TheScriptCounts(unittest.TestCase):
                 os.chmod(path, 0o755)
             tmp = os.path.join(root, "tmp")
             os.makedirs(tmp)
-            done = subprocess.run(["bash", os.path.join(scripts, "test_ants_server.sh"), "--part", "secret"], capture_output=True, text=True, timeout=300,
-                                  env=dict(os.environ, BUILD_DIR="build", SERVER_END_WAIT="1", KILL_GRACE="3", TMPDIR=tmp))
-        text = done.stdout + done.stderr
-        failures = int(re.search(r"server e2e \[secret\]: \d+ checks, (\d+) failures", text).group(1))
+            log = os.path.join(tmp, "fake_server.log")
+            env = dict(os.environ, BUILD_DIR="build", SERVER_END_WAIT="1", KILL_GRACE="3", TMPDIR=tmp, FAKE_SERVER_LOG=log)
+            started = time.time()
+            # (a group of its own: at the limit the script and every fake server that it started are killed together; a fake server does not end by itself)
+            part = subprocess.Popen(["bash", os.path.join(scripts, "test_ants_server.sh"), "--part", "secret"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env, start_new_session=True)
+            killed = False
+            try:
+                text = part.communicate(timeout=self.LIMIT)[0]
+            except subprocess.TimeoutExpired:
+                killed = True
+                os.killpg(part.pid, signal.SIGKILL)
+                text = part.communicate()[0]
+            seconds = time.time() - started
+            fake_log = ""
+            if os.path.exists(log):
+                with open(log, encoding="utf-8") as f:
+                    fake_log = f.read()
+        report = self.report(text, fake_log, started, seconds, killed)
+        self.assertFalse(killed, report)
+        self.assertNotIn("getfqdn", fake_log, report)
+        summary = re.search(r"server e2e \[secret\]: \d+ checks, (\d+) failures", text)
+        self.assertIsNotNone(summary, report)
         fail_lines = [line for line in text.split("\n") if line.startswith("  FAIL:")]
         hung_lines = [line for line in fail_lines if "HUNG:" in line]
-        return done.returncode, failures, len(fail_lines), len(hung_lines)
+        return Run(part.returncode, int(summary.group(1)), len(fail_lines), len(hung_lines), report)
 
     def test_the_failures_of_the_part_are_its_fail_lines_also_those_of_a_stop_inside_a_substitution(self):
-        status, failures, fail_lines, hung_lines = self.run_part()
-        self.assertGreaterEqual(hung_lines, 1)               # (two: the servers whose folder is "elsewhere", stopped inside the substitution of a check; on a machine so loaded that such a server is not up in 5 s, fewer)
-        self.assertEqual(failures, fail_lines)
-        self.assertEqual(status, 1)
+        run = self.run_part()
+        self.assertGreaterEqual(run.hung_lines, 1, run.report)               # (two: the servers whose folder is "elsewhere", stopped inside the substitution of a check; on a machine so loaded that such a server is not up in 5 s, fewer)
+        self.assertEqual(run.failures, run.fail_lines, run.report)
+        self.assertEqual(run.status, 1, run.report)
 
     def test_with_the_count_in_a_variable_the_hangs_are_printed_and_lost(self):
-        status, failures, fail_lines, hung_lines = self.run_part(the_variable_only_count)
-        self.assertGreaterEqual(hung_lines, 1)
-        self.assertEqual(failures, fail_lines - hung_lines)  # (the old count: what the substitutions changed was lost with them; every hang of this part is in one)
+        run = self.run_part(the_variable_only_count)
+        self.assertGreaterEqual(run.hung_lines, 1, run.report)
+        self.assertEqual(run.failures, run.fail_lines - run.hung_lines, run.report)  # (the old count: what the substitutions changed was lost with them; every hang of this part is in one)
 
 
 class TheScript(unittest.TestCase):
