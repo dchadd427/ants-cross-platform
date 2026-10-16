@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...d0c7f9a8)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...05109ff0)
 
 ## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
