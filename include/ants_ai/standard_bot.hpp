@@ -253,6 +253,7 @@ private:
         p.deny_multi_percent = plan.deny_multi_percent;
         p.deny_one_percent = plan.deny_one_percent;
         p.reserve_threat_tiles = plan.reserve_threat_tiles;
+        p.deny_fade = plan.deny_fade;
         return p;
     }
 

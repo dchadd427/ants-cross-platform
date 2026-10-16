@@ -10,6 +10,7 @@
 //   AI28.2  a contested pile with 3.7 times the trip of the reserve does not go first: the denial value weighs the points per trip, it does not send the ants across the field
 //   AI28.3  a reserve pile with an enemy ant beside it counts as one that several enemies want (it is being taken) and goes before the middle; an ally's ant there is no threat
 //   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
+//   AI28.5  the weights fade as the match runs out: late in the match the reserve goes before the middle
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"
@@ -41,6 +42,8 @@ struct Game {
     bool threat{false};                               // a worker of the next team stands 4 tiles beside the seat's reserve ...
     bool ally{false};                                 // ... and that team is the seat's ally
     bool army{false};                                 // a Combat Ant of the team across stands 2 tiles beside the middle pile
+    uint32_t ticks{14400};                            // the length of the match
+    uint32_t idle{0};                                 // ticks that pass before the bot starts (nobody moves)
 };
 
 Outcome play(Level level, uint8_t seat, const Game& g) {
@@ -49,20 +52,21 @@ Outcome play(Level level, uint8_t seat, const Game& g) {
     w.orient = g.orient;
     std::array<size_t, 4> workers = g.enemies;
     workers[seat] = 6;
-    w.build(sim, g.reserve_at, workers, 25, g.reserve_value);
+    w.build(sim, g.reserve_at, workers, 25, g.reserve_value, g.ticks);
     for (uint8_t t = 0; t < 4; ++t) {
         if (workers[t] == 0) sim.drop_player(t);                    // a team that is not live competes for nothing
     }
     if (g.threat) sim.spawn_unit(static_cast<uint8_t>((seat + 1) % 4), sim::AntType::Worker, w.tile_of(seat, TileCoord{g.reserve_at - 4, g.reserve_at}));
     if (g.ally) sim.form_alliance(seat, static_cast<uint8_t>((seat + 1) % 4));
     if (g.army) sim.spawn_unit(static_cast<uint8_t>((seat + 2) % 4), sim::AntType::Combat, w.tile_of(seat, TileCoord{27, 30}));
+    for (uint32_t i = 0; i < g.idle; ++i) sim.tick();
     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
     rig.run(60);
     const std::vector<int> targets = harvest_targets(rig, sim, seat, kPiles);
     Outcome out;
     if (!targets.empty()) out.first = targets.front() == w.middle ? 0 : targets.front() == w.reserve[seat] ? 1 : 2;
-    out.middle = ants_to_pile(rig, sim, kPiles, w.middle, 60);
-    out.reserve = ants_to_pile(rig, sim, kPiles, w.reserve[seat], 60);
+    out.middle = ants_to_pile(rig, sim, kPiles, w.middle, g.idle + 60u);
+    out.reserve = ants_to_pile(rig, sim, kPiles, w.reserve[seat], g.idle + 60u);
     out.middle_class = rig.as<StandardBot>().harvest().tier_of(static_cast<uint32_t>(w.middle));
     return out;
 }
@@ -171,5 +175,14 @@ void run_deny_tests() {
         Game g;
         g.army = true;
         for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::Hopeless); });
+    } TEST_END();
+
+    TEST_CASE("AI28.5 The Weights Fade As The Match Runs Out: With A Tenth Of The Match Left (A Bot That Starts At Tick 18,000 Of 20,000), The Own Reserve At 1.6 To 1.8 Times A Shorter Trip Goes Before The Middle That Every Enemy Reaches As Soon (At The Start The Middle Goes First); In All Eight Drawings And From Every Seat")
+    {
+        Game g;
+        g.ticks = 20000;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 0, [](const Outcome& o) { return o.reserve == 0u; });
+        g.idle = 18000;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::Multi); });
     } TEST_END();
 }

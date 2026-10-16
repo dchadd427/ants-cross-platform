@@ -107,6 +107,14 @@
    "new": "                p.race = false;                                                               // (no contest of the middle)\n",
    "test": "timeout 900 env ANTS_TEST_FILTER=AI11.10 ./build/tests/test_ai/test_ai",
    "expect": "AI11.10"
+  },
+  {
+   "id": "no_fade",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            if (params_.deny_fade && weight > 100u) weight =",
+   "new": "            if (false && params_.deny_fade && weight > 100u) weight =",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.5 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.5"
   }
  ]
 }

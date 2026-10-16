@@ -225,12 +225,14 @@ public:
         /// contested food near enough to be worth the walk is left, and they are next when it is gone; a reserve pile with an enemy ant within reserve_threat_tiles of its anchor is
         /// being taken now and counts deny_multi_percent too. A pile that an enemy army holds or that any enemy is far nearer to (Hopeless: that enemy eats it before the ants
         /// arrive, whoever else competes) counts as it is. Weights and not a rank: a contested pile across the field does not go before a reserve next to the hill, and a
-        /// threatened pile of few points does not go before a rich one, so no clock is needed to keep the reserve from being left at the end. Only with value_aware_piles; the
-        /// race is off with it.
+        /// threatened pile of few points does not go before a rich one. With deny_fade the weights fade to nothing as the match runs out (linearly with the share of the
+        /// match that is left): late in the match the others cannot eat what is left either, and the reserve must not stay uneaten at the end (a clock that put the whole
+        /// reserve first cost about 3 points of share in duels). Only with value_aware_piles; the race is off with it.
         bool denial_order{false};
         uint32_t deny_multi_percent{300};
         uint32_t deny_one_percent{150};
         int32_t reserve_threat_tiles{6};
+        bool deny_fade{true};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.

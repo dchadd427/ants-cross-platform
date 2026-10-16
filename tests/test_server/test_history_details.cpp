@@ -421,18 +421,18 @@ int main() {
             ASSERT_EQ(st.raids.size(), oracle.raids.size());
             for (size_t i = 0; i < st.raids.size(); ++i) ASSERT_TRUE(st.raids[i].turn == oracle.raids[i][0] && st.raids[i].thief == oracle.raids[i][1] && st.raids[i].victim == oracle.raids[i][2]);
             for (const MatchStats::Raid& r : st.raids) ASSERT_TRUE(r.points >= 0 && r.points <= 50);
-            if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 5755 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
+            if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 5992 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
             if (k != 4) continue;
-            // the numbers of this recording are fixed (seed 31, 7000 turns, four Hard computer players): the golden values
+            // the numbers of this recording are fixed (seed 57, 7000 turns, four Hard computer players): the golden values
             using A4 = std::array<uint32_t, 4>;
             using L4 = std::array<int64_t, 4>;
             uint32_t drowned = 0;
             for (const MatchStats::Kill& kl : st.kills) drowned += kl.drowned ? 1 : 0;
-            ASSERT_TRUE(st.kills.size() == 14 && drowned == 3 && st.raids.size() == 6);
-            ASSERT_TRUE(st.bombs_off == A4({0, 1, 0, 0}) && st.hatch_cost == L4({200, 0, 200, 200}) && st.banked == L4({315, 200, 225, 335}));
-            ASSERT_TRUE(st.food_trips == A4({10, 8, 8, 14}) && st.food_points == L4({265, 205, 190, 300}));
-            ASSERT_TRUE(st.damage_dealt == A4({43, 41, 56, 39}) && st.damage_taken == A4({63, 18, 33, 65}));
-            const std::array<std::array<uint32_t, 5>, 4> power = {{{0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}}};
+            ASSERT_TRUE(st.kills.size() == 11 && drowned == 3 && st.raids.size() == 7);
+            ASSERT_TRUE(st.bombs_off == A4({0, 0, 1, 0}) && st.hatch_cost == L4({200, 0, 200, 200}) && st.banked == L4({320, 285, 205, 315}));
+            ASSERT_TRUE(st.food_trips == A4({10, 13, 10, 14}) && st.food_points == L4({270, 335, 255, 290}));
+            ASSERT_TRUE(st.damage_dealt == A4({61, 28, 69, 26}) && st.damage_taken == A4({64, 32, 27, 62}));
+            const std::array<std::array<uint32_t, 5>, 4> power = {{{1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}}};
             ASSERT_TRUE(st.powerups == power);
             ASSERT_TRUE(st.wipes == A4({0, 0, 0, 0}) && st.samples.size() == 70 && st.samples.back().turn == 7000);
         }

@@ -587,6 +587,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "denymulti") { p.deny_multi_percent = static_cast<uint32_t>(v); return true; }
     if (key == "denyone") { p.deny_one_percent = static_cast<uint32_t>(v); return true; }
     if (key == "reservethreat") { p.reserve_threat_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "denyfade") return flag(p.deny_fade);
     if (key == "health") return flag(p.health_aware);
     if (key == "skirm") return flag(p.skirmish);
     if (key == "skforce") { p.skirmish_force = static_cast<uint32_t>(v); return true; }

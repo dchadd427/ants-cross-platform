@@ -576,6 +576,7 @@ void HarvestTask::step(TaskContext& c) {
                     }
                 }
             }
+            if (params_.deny_fade && weight > 100u) weight = 100u + static_cast<uint32_t>(static_cast<uint64_t>(weight - 100u) * v.ticks_left() / std::max<uint64_t>(1u, now + v.ticks_left()));
             k.rank = k.rank * static_cast<int64_t>(weight) / 100;
         }
         cands.push_back(k);
