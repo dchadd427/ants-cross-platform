@@ -77,7 +77,10 @@ run_limited() {
 }
 
 # start_watchdog SECONDS: the last line of defence. A part that has not ended after SECONDS fails, with a line that says which of its programs were still running, and exits with status 1. SIGUSR2 is the watchdog's
-# word (a SIGTERM from outside, a cancelled job, is not it); when the script does not act on it (it is busy in a program in the foreground, which the shell runs to its end first) everything that it started is killed WATCHDOG_GRACE s later, which ends that program.
+# word (a SIGTERM from outside, a cancelled job, is not it); when the script does not act on it (it is busy in a program in the foreground, which the shell runs to its end first) everything that it started is killed
+# WATCHDOG_GRACE s later, which ends that program. The watchdog is never killed: it counts seconds for as long as its flag file exists and its parent lives, and ends by itself when stop_watchdog removes the flag
+# (a bash 3.2, a Mac's, prints "Terminated: 15 ( ... )" on the script's stderr for a job that dies of a signal, and did so when the part ended before the watchdog had set up its own handler). It is disowned too:
+# a job that is not in the shell's table cannot be reported.
 on_watchdog() {
     local running pid
     trap - USR2
@@ -90,13 +93,24 @@ on_watchdog() {
 }
 start_watchdog() {
     WATCHDOG_LIMIT="$1"
+    WATCHDOG_FLAG="$(mktemp "${TMPDIR:-/tmp}/ants_watchdog.XXXXXX")"
     trap on_watchdog USR2
-    ( trap 'kill $(jobs -p) 2> /dev/null; exit 0' TERM; sleep "$1" & wait $!; kill -USR2 $$; sleep "$WATCHDOG_GRACE" & wait $!; pkill -KILL -P $$ ) > /dev/null 2>&1 &
+    (
+        n=0
+        while [ -e "$WATCHDOG_FLAG" ] && kill -0 $$ 2> /dev/null && [ "$n" -lt "$1" ]; do sleep 1; n=$((n + 1)); done
+        [ -e "$WATCHDOG_FLAG" ] && kill -0 $$ 2> /dev/null || exit 0
+        kill -USR2 $$
+        n=0
+        while [ -e "$WATCHDOG_FLAG" ] && kill -0 $$ 2> /dev/null && [ "$n" -lt "$WATCHDOG_GRACE" ]; do sleep 1; n=$((n + 1)); done
+        [ -e "$WATCHDOG_FLAG" ] && pkill -KILL -P $$
+        exit 0
+    ) > /dev/null 2>&1 &
     WATCHDOG_PID=$!
-    disown "$WATCHDOG_PID" 2> /dev/null      # (stop_watchdog kills it: no notice of that, which bash 3.2 prints on the stderr of the script)
+    disown "$WATCHDOG_PID" 2> /dev/null
 }
-# stop_watchdog: the part has ended in time (the watchdog's subshell ends on SIGTERM, and its sleep with it)
+# stop_watchdog: the part has ended in time; the watchdog sees that its flag is gone within a second and ends by itself
 stop_watchdog() {
-    [ -n "$WATCHDOG_PID" ] && kill "$WATCHDOG_PID" 2> /dev/null
+    [ -n "$WATCHDOG_FLAG" ] && rm -f "$WATCHDOG_FLAG"
+    WATCHDOG_FLAG=""
     WATCHDOG_PID=""
 }

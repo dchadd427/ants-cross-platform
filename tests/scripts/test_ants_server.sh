@@ -342,7 +342,7 @@ for w in want:
 sys.exit(0 if ok else 1)' "$ROOT"; echo $?)"
 check "... and the same door refuses what is not the plain list (a query and a name below /maps: 404, a POST: 405)" "$([ "$(code_of "http://127.0.0.1:$CM_PORT/maps?x=1")" = "404" ] && [ "$(code_of -X POST "http://127.0.0.1:$CM_PORT/maps")" = "405" ] && [ "$(code_of "http://127.0.0.1:$CM_PORT/maps/TINY.LVL")" = "404" ]; echo $?)"
 check "... and the log says how many maps are listed" "$(grep -q '^\[ants_server [0-9]*\] 540 maps listed (maps folder and community folder' "$WORK/cm.log"; echo $?)"
-kill -TERM "$CM_PID" 2> /dev/null; wait_end "$CM_PID" 30 "ants_server of the community maps (stopped with SIGTERM)"
+stop_pids "ants_server of the community maps (stopped with SIGTERM)" "$CM_PID"
 # the match history lives in the database (docs/REPLAYS.md "The match history"): no folder of its own, --no-history turns it off, --no-db leaves it nothing to live in
 check "--help names --no-history, and there is no --history-dir (the history is in the database: a leftover option is refused, status 2)" "$("$SERVER" --help 2>&1 | grep -q -- '--no-history'; [ "$(exit_of --history-dir "$WORK/hi_none")" = "2" ]; echo $?)"
 check "with a database the server keeps the match history, and the log says where it counts from" "$([ "$(db_start "$WORK/hist_on.log" --results-dir "$WORK/hist_on")" = "0" ] && grep -q 'match history kept for good in the database; the matches of the replay store are counted while no match runs' "$WORK/hist_on.log"; echo $?)"
@@ -1331,8 +1331,7 @@ sleep 0.5
 kill -TERM "$SERVER_PID" 2> /dev/null
 wait_end "$SERVER_PID" 30 "ants_server of the reconnect part (stopped with SIGTERM)"
 SERVER_PID=""
-kill "$PROXY_PID" 2> /dev/null
-wait_end "$PROXY_PID" 15 "the flaky proxy (stopped with SIGTERM)"
+stop_pids "the flaky proxy (stopped with SIGTERM)" "$PROXY_PID"
 PROXY_PID=""
 check "the result file of the room that held a seat keeps the counters (drops_by_cap 1, log) and no secret or key" "$([ -s "$WORK/rc_results/$RC_CODE.json" ] && grep -q '"drops_by_cap":1' "$WORK/rc_results/$RC_CODE.json" && grep -q '"log":{' "$WORK/rc_results/$RC_CODE.json" && ! grep -q "$SECRET" "$WORK/rc_results/$RC_CODE.json"; echo $?)"
 check "the server's log names the rooms' ends with what the pause came to, and never the secret" "$(grep -q "room $RC_CODE" "$WORK/rc_server.log" && grep -q 'by the cap' "$WORK/rc_server.log" && ! grep -q "$SECRET" "$WORK/rc_server.log"; echo $?)"
