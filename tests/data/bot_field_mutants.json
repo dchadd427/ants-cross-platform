@@ -204,7 +204,8 @@
    "file": "src/ants_ai/field_task.cpp",
    "old": "    hints_.piles = tactics_.field_piles;",
    "new": "    hints_.piles.clear();",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.13' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.13"
   },
   {
    "id": "ended_loop_kept",
@@ -251,22 +252,24 @@
    "file": "src/ants_ai/standard_bot.cpp",
    "old": "    if (tactics_.field_map && !fallback) field_.step(context);",
    "new": "    if (tactics_.field_map) field_.step(context);",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.13' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.13"
   },
   {
    "id": "map_bombs_spared_without_goals",
    "file": "src/ants_ai/standard_bot.cpp",
    "old": "(!gate_goals_.exhausted() || (tactics_.field_map && field_.live()))",
    "new": "(!gate_goals_.exhausted() || (tactics_.field_map && false))",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.14' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.14"
   },
   {
    "id": "goals_on_field_piles",
    "file": "src/ants_ai/gate_goal.cpp",
    "old": "        if (std::find(rules.field_piles.begin(), rules.field_piles.end(), t.index) != rules.field_piles.end()) continue;\n        any_pile = true;",
    "new": "        any_pile = true;",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI29.7"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.9"
   },
   {
    "id": "goals_on_field_piles_2",
@@ -281,8 +284,8 @@
    "file": "src/ants_ai/gate_task.cpp",
    "old": "    rules.field_piles = tactics_.field_piles;",
    "new": "    rules.field_piles.clear();",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI29.8"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.9"
   },
   {
    "id": "field_rank_low",
