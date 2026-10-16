@@ -358,7 +358,9 @@ private:
     replay::Recorder& rec_;
 };
 
-BotMatch make_bot_match(uint32_t turns, const char* map = "TREASURE.LVL", uint32_t seed = 5) {
+// (seed 6: the Hard bots eat contested food first since v0.12.54, and in the 4,000 turns of seed 5 nobody died any more; seed 6 has the deaths, blows, thieves, fires and alarms
+// that the cases ask for)
+BotMatch make_bot_match(uint32_t turns, const char* map = "TREASURE.LVL", uint32_t seed = 6) {
     BotMatch out;
     assets::LevelData level;
     const std::string path = maps_dir() + "/" + map;
