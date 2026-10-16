@@ -55,8 +55,8 @@
   {
    "id": "easy_plays_gate",
    "file": "src/ants_ai/standard_bot.cpp",
-   "old": "    if (level_ == Level::Easy) return;\n    if (!GateInfo",
-   "new": "    if (!GateInfo",
+   "old": "    if (level_ == Level::Easy) return;\n    const GateInfo gates",
+   "new": "    const GateInfo gates",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.6 ./build/tests/test_ai/test_ai",
    "expect": "AI27.6"
   },
@@ -113,14 +113,6 @@
    "file": "src/ants_ai/standard_tasks.cpp",
    "old": "const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());",
    "new": "const size_t limit = true ? cands.size() : std::min<size_t>(3, cands.size());",
-   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
-   "expect": "AI27.11"
-  },
-  {
-   "id": "trip_contest_skip_everywhere",
-   "file": "src/ants_ai/standard_tasks.cpp",
-   "old": "const bool skip_contest = tactics_.gate_map && takes_.empty() &&",
-   "new": "const bool skip_contest = takes_.empty() &&",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
    "expect": "AI27.11"
   },
@@ -232,6 +224,51 @@
    "new": "    walls_.step(context);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27 ./build/tests/test_ai/test_ai",
    "expect": "AI27",
+   "build": "test_ai"
+  },
+  {
+   "id": "beside_flag_never_set",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "for (const int32_t pile_comp : pile.comps) tactics_.gate_beside = tactics_.gate_beside || pile_comp == comp;",
+   "new": "for (const int32_t pile_comp : pile.comps) tactics_.gate_beside = tactics_.gate_beside && pile_comp == comp;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13c ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13c",
+   "build": "test_ai"
+  },
+  {
+   "id": "beside_hold_ignores_flag",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback",
+   "new": "const bool gate_breaching = tactics_.gate_map && !fallback",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13c ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13c",
+   "build": "test_ai"
+  },
+  {
+   "id": "beside_any_kind_of_ant",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "        if (a.type != context.view.default_ant_type()) continue;\n        const int32_t comp = gates.component(a.tile);",
+   "new": "        const int32_t comp = gates.component(a.tile);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13c ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13c",
+   "build": "test_ai"
+  },
+  {
+   "id": "beside_any_component",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.gate_beside = tactics_.gate_beside || pile_comp == comp;",
+   "new": "tactics_.gate_beside = tactics_.gate_beside || pile_comp >= 0;",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.13c ./build/tests/test_ai/test_ai",
+   "expect": "AI27.13c",
+   "build": "test_ai"
+  },
+  {
+   "id": "armed_ignores_own_colour",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "armed = armed || b.tile == goal_.cell;",
+   "new": "armed = armed || (b.tile == goal_.cell && b.owner != context.seat);",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.7 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.7",
    "build": "test_ai"
   }
  ]

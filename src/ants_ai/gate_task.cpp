@@ -253,7 +253,7 @@ void GateGoalTask::act_extinguish(TaskContext& context, const AntView& ant) {
 void GateGoalTask::act_defuse(TaskContext& context, const AntView& ant) {
     const uint64_t now = context.view.tick();
     bool armed = false;
-    for (const BombView& b : context.view.bombs()) armed = armed || (b.tile == goal_.cell && b.owner != context.seat);
+    for (const BombView& b : context.view.bombs()) armed = armed || b.tile == goal_.cell;             // (a bomb of any colour: the engine defuses them all, and a bomb of the seat's own colour is a wall for its walkers)
     if (!armed) {
         ++defuses_;
         progress_ = now;

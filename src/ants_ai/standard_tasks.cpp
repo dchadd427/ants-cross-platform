@@ -953,12 +953,9 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         if (walk > params_.max_trip_ticks) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
         // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate)
-        const bool skip_contest = tactics_.gate_map && takes_.empty() &&
-                                  (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
-                                   c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;
         for (const AntView& e : v.others()) {
-            if (skip_contest || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+            if (e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
             if (e.state == sim::UnitState::EnteringBase || e.state == sim::UnitState::PoweringUp) continue;
             const int32_t cost = f[tile_index(grid, e.tile)];
             if (cost < 0) continue;

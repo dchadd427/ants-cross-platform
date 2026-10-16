@@ -20,6 +20,8 @@
 //   AI27.11  an open map is played as it was: the decision is taken once at the first look, a world with no pile is no gate map, and the pick-up trips keep their old rules (three candidates, the contest, the map bombs)
 //   AI27.12  the plant tile and the tile to step from are cleared of own ants (sent aside, held until the goal is over)
 //   AI27.12b an enemy ant on the tile to step from is waited for, not attacked (a plain move onto it is an attack)
+//   AI27.7c  a bomb of the seat's own colour that plugs a tunnel is defused like any other (act_defuse counts a bomb of any colour at the goal cell as armed)
+//   AI27.13c an own worker beside a pile at the first look: the flag is set and the opening is not held back
 //   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
 #include <algorithm>
 
@@ -645,6 +647,29 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), 1u);
             ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
         }
+        {   // (c) a bomb of the SEAT'S OWN colour (every bomb of Dustbin, Ghetto, FKD Deathmatch and !-Midz-! is green, team 0's): the engine refuses a bomb tile as a path step for the owner's team, so for the
+            // owner the bomb is a wall, and the engine defuses a bomb of any colour. A lake (rows 30 to 34) between the hill and the pile, its shore held by own bombs: the shore breach plans a Defuse, and the
+            // Bomber has to defuse the bomb (the task once took a bomb of its own colour for defused and ordered it again for 4,600 ticks)
+            Field f;
+            for (int y = 30; y <= 34; ++y) {
+                for (int x = 0; x < 60; ++x) f.sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            for (int x = 0; x < 60; ++x) f.sim.grid_mut().place_bomb(static_cast<uint32_t>(x), 29, 0);
+            f.powerup(8, 8, sim::AntType::Bomber);
+            GoalRules rules;
+            rules.shore_breach = true;
+            const GateGoal g = f.goal(rules);
+            ASSERT_EQ(g.kind, GoalKind::Defuse);
+            ASSERT_EQ(g.cell.y, 29);
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(2500);
+            ASSERT_TRUE(bot.gate_goals().done() >= 1u);                                // the Bomber defused a bomb of its own colour ...
+            ASSERT_TRUE(bot.gate_goals().defuses() < 50u);                             // ... and did not count the same bomb as defused look after look
+            int left = 0;
+            for (int x = 0; x < 60; ++x) left += f.sim.grid().has_bomb_at(TileCoord{x, 29}) ? 1 : 0;
+            ASSERT_TRUE(left < 60);
+        }
     } TEST_END();
 
     TEST_CASE("AI27.8 Sealed Vault Raid And Shore Breach: Hard Bots Bank Food On HELLRAISER And POPcOrN") {
@@ -857,7 +882,7 @@ void run_gate_goal_tests() {
             ASSERT_FALSE(bot.gate_map());
             ASSERT_EQ(bot.powerups().taken(), 0u);
         }
-        {   // (c) the contest: an enemy ant two tiles from the Fire power-up gets there first, so the trip is given up (a gate map goes anyway)
+        {   // (c) the contest: an enemy ant two tiles from the Fire power-up gets there first, so the trip is given up (a gate map as well: the contest is judged there as everywhere)
             Field f;
             f.powerup(22, 10, sim::AntType::Fire);
             f.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 10});
@@ -989,6 +1014,25 @@ void run_gate_goal_tests() {
         ASSERT_EQ(bot.powerups().taken(), 0u);                                         // held back: the Fire Ant of the own side is not secured
         rig.run(1700);
         ASSERT_TRUE(bot.powerups().taken() >= 1u);                                     // and secured when the opening is over
+    } TEST_END();
+    TEST_CASE("AI27.13c A Worker Beside A Pile At The First Look: The Flag Is Set And The Opening Is Not Held Back (The Same World With The Worker On The Hill's Side, Or With Another Kind Of Ant Beside The Pile, Holds The Trip To The Fire Power-Up Back)") {
+        enum class Beside { Nobody, WorkerAtHill, BomberAtPile, WorkerAtPile };
+        for (const Beside who : {Beside::Nobody, Beside::WorkerAtHill, Beside::BomberAtPile, Beside::WorkerAtPile}) {
+            Field f;                                                                   // (eight workers of seat 0 stand near the hill, on the hill's side of the wall)
+            f.rock_wall();                                                             // a gate map with no Bomber power-up and no Swimmer anywhere: no goal can be planned
+            f.powerup(8, 8, sim::AntType::Fire);
+            if (who == Beside::WorkerAtHill) f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 12});
+            if (who == Beside::BomberAtPile) f.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{12, 45});      // on the pile's side of the wall, beside the pile at (12, 40), but no harvester
+            if (who == Beside::WorkerAtPile) f.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 45});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(300);
+            const bool beside = who == Beside::WorkerAtPile;
+            ASSERT_TRUE(bot.gate_map());                                               // (the pile is still walled off from the hill)
+            ASSERT_EQ(bot.tactics().gate_beside, beside);
+            rig.run(2000);
+            ASSERT_EQ(bot.powerups().taken() >= 1u, beside);                           // the trip is made at once with the worker at the food, held back without it
+        }
     } TEST_END();
     TEST_CASE("AI27.13b The Opening Of A Gate Map Puts No Fire Ant On Wall Duty: A Thief Power-Up That The Enemy Reaches Calls For Walls On An Open Map, Not On A Gate Map Before It Has Banked") {
         for (const bool gate : {false, true}) {
