@@ -45,6 +45,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kIslands, kRankPowerUps);                    // (the Swimmers that dig, and the ants that fetch one: nobody else uses them)
     ledger_.set_rank(kExpedition, kRankPowerUps);                 // (the crew that is flown to the Swimmers and the Bombers that fly it)
     ledger_.set_rank(kGateGoals, kRankGates);                     // (the Fire ant and the Bomber of a gate goal)
+    ledger_.set_rank(kField, kRankGates);                         // (the ant of the field breach)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -151,7 +152,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if ((plan.islands && plan.island_ferry && island_.active()) || tactics_.gate_map) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
-    tactics_.gate_goals_live = tactics_.gate_map && !fallback && !gate_goals_.exhausted();    // (the counters spare the map's own bombs only while the goals are there to deal with them)
+    if (tactics_.field_map && !fallback) field_.step(context);                              // (a pile behind a field: one ant opens it)
+    tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));    // (the counters spare the map's own bombs only while the goals are there to deal with them)
     fight_.step(context);
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
@@ -191,6 +193,8 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     gate_decided_ = true;
     tactics_.gate_map = false;
     tactics_.gate_beside = false;
+    tactics_.field_map = false;
+    tactics_.field_piles.clear();
     if (level_ == Level::Easy) return;
     const GateInfo gates = GateInfo::analyse(context.map, context.view.grid(), seat_);
     if (!gates.walled()) return;
@@ -205,6 +209,13 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     }
     if (tactics_.plan.islands && island_.probe(context)) return;                           // the island play owns the water maps (ISLANDS)
     tactics_.gate_map = true;
+    if (tactics_.plan.gate_field) {
+        const FieldPlan field = plan_field(context.view, context.map, seat_, FieldHints{});
+        tactics_.field_map = field.feasible() && field_startable(field, context.view, context.map, seat_);
+        for (const GateTarget& pile : gates.piles()) {
+            if (tactics_.field_map && (pile.gate == GateKind::Sealed || pile.gate == GateKind::Mixed)) tactics_.field_piles.push_back(pile.index);
+        }
+    }
     for (const AntView& a : context.view.mine()) {
         if (a.type != context.view.default_ant_type()) continue;
         const int32_t comp = gates.component(a.tile);
@@ -285,6 +296,7 @@ void StandardBot::begin_fallback(uint64_t now) {
     progress_tick_ = now;                                                        // the clock of the next stall starts here
     ledger_.release_all(kRaids);                                                 // a thief that was kept for a raid goes back to the economy
     gate_goals_.cancel(ledger_);                                                 // so does the Fire ant or Bomber of a gate goal (its timers would run out unseen while the task sleeps)
+    field_.cancel(ledger_);                                                      // and the ant of the field breach
     HarvestTask::Params plain;                                                   // the worker's harvest: no contested piles, no typed ants, the rescue on
     plain.cantgo_aware = plan.cantgo_aware;                                      // (and still no carrier sent into a hill that no walk joins: the fixes of "The can't-go loop" stay on)
     harvest_.set_params(plain);
@@ -316,6 +328,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     expedition_.on_command(command, fate, tick);
     ferry_.on_command(command, fate, tick);
     gate_goals_.on_command(command, fate, tick);
+    field_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

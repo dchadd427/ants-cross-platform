@@ -34,6 +34,7 @@
 #include <tuple>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/field_task.hpp"
 #include "ants_ai/gate_task.hpp"
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
@@ -77,7 +78,8 @@ private:
           island_(kIslands, tactics_, island_params(plan)),
           expedition_(kExpedition, tactics_, expedition_params(plan)),
           ferry_(kFerry, ferry_params(plan)),
-          gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)) {
+          gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
+          field_(kField, tactics_) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }
@@ -112,6 +114,7 @@ public:
     AntLedger& ledger_for_labs() noexcept { return ledger_; }
     const FerryTask& ferry() const noexcept { return ferry_; }
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
+    const FieldTask& field() const noexcept { return field_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)
@@ -155,6 +158,7 @@ public:
     static constexpr TaskId kMines = 17;
     static constexpr TaskId kRush = 18;
     static constexpr TaskId kGateGoals = 19;
+    static constexpr TaskId kField = 20;
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -286,6 +290,7 @@ private:
     ExpeditionTask expedition_;
     FerryTask ferry_;
     GateGoalTask gate_goals_;
+    FieldTask field_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

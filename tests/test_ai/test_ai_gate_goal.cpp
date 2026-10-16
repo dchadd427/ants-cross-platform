@@ -71,6 +71,12 @@ LevelPlan goal_plan(Level level = Level::Hard) {
     return peace_plan(level);                                                      // (the gate play needs no switch: a walled world is enough)
 }
 
+LevelPlan shore_plan(Level level = Level::Hard) {                                  // the gate goals' own shore breach: the field breach off (AI29: it takes these piles when it is on)
+    LevelPlan p = goal_plan(level);
+    p.gate_field = false;
+    return p;
+}
+
 int fires_in_row(const sim::SimulationEngine& sim, int y) {
     int n = 0;
     for (int x = 0; x < 60; ++x) n += sim.has_fire_at(TileCoord{x, y}) ? 1 : 0;
@@ -664,7 +670,7 @@ void run_gate_goal_tests() {
             const GateGoal g = f.goal(rules);
             ASSERT_EQ(g.kind, GoalKind::Defuse);
             ASSERT_EQ(g.cell.y, 29);
-            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(shore_plan()));
             auto& bot = rig.as<StandardBot>();
             rig.run(2500);
             ASSERT_TRUE(bot.gate_goals().done() >= 1u);                                // the Bomber defused a bomb of its own colour ...
@@ -686,12 +692,13 @@ void run_gate_goal_tests() {
             ASSERT_TRUE(rig.as<StandardBot>().gate_goals().hops_ordered() >= 2u);
             ASSERT_TRUE(sim.get_player_score(0) > 0);
         }
-        {   // (b) POPcOrN: Bomber hops to island Fire hat, bounces back, extinguishes shore fire, converts to Bomber, defuses shore bombs, hops to island Swimmer hat, and banks food
+        {   // (b) POPcOrN with the field breach off (AI29.9 plays it on): Bomber hops to island Fire hat, bounces back, extinguishes shore fire, converts to Bomber, defuses shore bombs,
+            // hops to island Swimmer hat, and banks food
             assets::LevelData level;
             ASSERT_TRUE(level.load_from_file(std::string(ANTS_SOURCE_DIR) + "/Community-Maps/POPcOrN.lvl"));
             sim::SimulationEngine sim;
             sim.init(level, 1, 0x01);
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(shore_plan()));
             auto& bot = rig.as<StandardBot>();
             for (int step = 0; step < 25; ++step) {
                 rig.run(200);
