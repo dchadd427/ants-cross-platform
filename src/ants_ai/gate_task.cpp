@@ -346,6 +346,24 @@ bool GateGoalTask::tile_blocked(TaskContext& context, sim::TileCoord tile) {
     return true;
 }
 
+bool GateGoalTask::walk_reaches(const TaskContext& context, const AntView& ant, sim::TileCoord target) const {
+    if (!tactics_.plan.reach_aware || ant.type == sim::AntType::Swimmer) return true;      // (a Swimmer crosses water: the walkers' fields say nothing about it)
+    const BotView& view = context.view;
+    const sim::Grid& grid = view.grid();
+    const HillInfo& hill = context.map.hill(context.seat);
+    if (hill.present && target == hill.entrance) return context.map.reaches_hill(context.map.field_now(grid, context.seat, view.walk_context()), ant.tile, ant.type);
+    const std::vector<int32_t> field = MapInfo::cost_field_onto(grid, MapInfo::walkable_mask(grid, context.seat, view.walk_context()), context.seat, target, view.walk_context());
+    if (field.empty()) return true;
+    for (int32_t dy = -1; dy <= 1; ++dy) {                                                 // the ant's own tile, or (it stands where nobody else could: a cleared bomb tile, a mound's edge) a tile next to it
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            const sim::TileCoord t{ant.tile.x + dx, ant.tile.y + dy};
+            if (!grid.in_bounds(t)) continue;
+            if (field[static_cast<size_t>(t.y) * grid.width() + static_cast<size_t>(t.x)] >= 0 && (t == ant.tile || MapInfo::walkable(grid, context.seat, t, view.walk_context()))) return true;
+        }
+    }
+    return false;
+}
+
 void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
     const BotView& view = context.view;
     const uint64_t now = view.tick();
@@ -378,6 +396,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                     return;
                 }
                 if (ant.idle() && may_order(now)) {
+                    if (!walk_reaches(context, ant, tile)) {                                 // the chain left the ant where no walk gets to the power-up (amid the seat's own bombs, on a ledge)
+                        fail(context, "stranded");
+                        return;
+                    }
                     context.orders.pick_up(ant_, tile);
                     ++picks_;
                     last_order_ = now;
@@ -502,6 +524,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
                     last_order_ = 0;
                 }
                 if (ant.idle() && may_order(now)) {
+                    if (!walk_reaches(context, ant, tile)) {                                 // the chain left the ant where no walk gets to the power-up (amid the seat's own bombs, on a ledge)
+                        fail(context, "stranded");
+                        return;
+                    }
                     context.orders.pick_up(ant_, tile);
                     ++picks_;
                     last_order_ = now;
@@ -526,6 +552,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             }
             if (ant.hp < 6 && context.map.hill(context.seat).present) {
                 if (ant.idle() && may_order(now)) {
+                    if (!walk_reaches(context, ant, context.map.hill(context.seat).entrance)) {
+                        fail(context, "stranded");
+                        return;
+                    }
                     context.orders.move({ant_}, context.map.hill(context.seat).entrance);
                     last_order_ = now;
                 }
@@ -590,6 +620,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             }
             if ((ant.holding || ant.hp < 6) && context.map.hill(context.seat).present) {
                 if (ant.idle() && may_order(now)) {
+                    if (!walk_reaches(context, ant, context.map.hill(context.seat).entrance)) {
+                        fail(context, "stranded");
+                        return;
+                    }
                     context.orders.move({ant_}, context.map.hill(context.seat).entrance);
                     last_order_ = now;
                 }
@@ -624,6 +658,10 @@ void GateGoalTask::act_hop(TaskContext& context, const AntView& ant) {
             return;
         }
         if (shore_pile && ant.hp < 9 && context.map.hill(context.seat).present) {
+            if (!walk_reaches(context, ant, context.map.hill(context.seat).entrance)) {
+                fail(context, "stranded");
+                return;
+            }
             context.orders.move({ant_}, context.map.hill(context.seat).entrance);
             last_order_ = now;
             return;

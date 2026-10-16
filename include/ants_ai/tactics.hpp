@@ -320,6 +320,8 @@ struct LevelPlan {
     bool water_hunt{false};              // a non-Swimmer enemy near unbridged water (1..4 knockback blows from drowning) is hunted at any hit points, and non-Combat ants finish the chain
     bool vicinity_hunt{false};           // (Medium, Hard) a low-health enemy (1..3 hit points) anywhere within hunt_reach on the same walker component is hunted and chained in succession
     bool smart_counters{false};          // a lone harmless fire wall or a stray off-route bomb in open grass is ignored by the counters, while active thief-hole raiders are defended aggressively
+    bool reach_aware{false};             // (Medium, Hard) no job for a target that no walk of the ant reaches now: a bomb that no walk from the hill reaches is in nobody's way, an ant that no walk joins to the
+                                         // hill is sent nowhere by the counters and the mines (the map as it is now: MapInfo::field_now)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};

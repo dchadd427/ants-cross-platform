@@ -84,6 +84,9 @@ private:
     void fail(TaskContext& context, const char* why);
     bool may_order(uint64_t now) const noexcept { return last_order_ == 0 || now >= last_order_ + params_.order_gap; }
     bool tile_blocked(TaskContext& context, sim::TileCoord tile);
+    /// (LevelPlan::reach_aware) Whether a walk of the ant gets to `target` now: onto the power-up on it, or, for the hill's entrance, to the hill (the map as it is now, the seat's own and its ally's
+    /// bombs closed). A hop chain can end anywhere (a dud, a landing on a bomb that throws the ant on): an order that no walk can carry out is not given, the attempt is given up and planned again
+    bool walk_reaches(const TaskContext& context, const AntView& ant, sim::TileCoord target) const;
     uint64_t signature(const TaskContext& context) const;
     uint64_t sources(const TaskContext& context) const;
 
