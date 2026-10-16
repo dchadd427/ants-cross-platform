@@ -1093,6 +1093,12 @@ const worst = (kind, moments, jitter, most) => {
     }
     return { max, at, lines: n };
 };
+// the largest number of dropped requests when ONE request is held up by `hold` ms (each of the first `most` in turn) and the ones after it come on time, in order (a stall of the link or of the server's loop)
+const holdUp = (kind, moments, hold, most) => {
+    let max = 0;
+    for (let which = 0; which < Math.min(most, moments.length); which++) max = Math.max(max, serverDrops(kind, moments, moments.map((_, i) => (i === which ? hold : 0))));
+    return max;
+};
 // ... and over `tries` delays drawn at random (a fixed seed) from the whole range, for ALL the requests (a long run is more than the combinations above reach)
 const worstRandom = (kind, moments, jitter, tries) => {
     let state = 20251016, max = 0;
@@ -1239,6 +1245,11 @@ const exactMoments = (kind) => {
                 const r = worstRandom(kind, moments, jitter, 300);
                 check(kind + ', ' + name + ', all ' + moments.length + ' requests late by 0 .. ' + jitter + ' ms (300 draws): the server drops none', r === 0, r + ' dropped');
             }
+            // one request held up while the ones after it come on time: the margin absorbs about a third of a second for a colour move and a plan (the burst of 6 less 5, 4 a second against 3.2), about one and a
+            // half seconds for a name, a removal and a line (the burst of 3 less 2, 1 a second against 0.8): the claim of the changelog and of docs/PLAY_IN_BROWSER.md
+            const hold = kind === 'move' || kind === 'plan' ? 333 : 1400;
+            const held = holdUp(kind, moments, hold, 12);
+            check(kind + ', ' + name + ', one request held up by ' + hold + ' ms (each of the first 12 in turn, the others on time): the server drops none', held === 0, held + ' dropped');
         }
         // the replay can tell: a page that kept to the server's own bucket loses a request to a delay of a few ms
         const exact = worst(kind, exactMoments(kind), 15, 14);

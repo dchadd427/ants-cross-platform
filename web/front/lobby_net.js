@@ -314,8 +314,10 @@
     // sent. A page that paced itself at exactly the server's rate lost a request whenever the network (or the server's own loop) delayed one request and not the next: two that were 1000 ms apart arrive 990 ms apart, and
     // the second finds 0.99 of a token (seen once on the macOS CI for the chat, then reproduced for a rename and a plan). So every kind keeps a request in reserve (a burst one smaller than the server's: the server always
     // has a whole request more than the page believes) and a pace of 0.8 of the server's rate (a request every 1.25 s where the server refills 1 a second, every 312.5 ms where it refills 4). A page does not wait for
-    // the room's answer to a request before the next, so each kind has this margin. tests/scripts/web_lobby_client_check.js replays the page's requests of every kind through the server's own bucket (it reads the limits
-    // from flood.hpp) with delays of 0 to 150 ms, tests/scripts/web_lobby_server_check.js sends them through a link that jitters by 150 ms to the real server.
+    // the room's answer to a request before the next, so each kind has this margin. What it absorbs: one request that is held up while the ones after it arrive on time, by about 0.37 s for a colour move or a plan
+    // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
+    // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
+    // through a link that jitters by 150 ms to the real server.
     var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], chat: [4, 0.8] };
     function LobbyClient(opts) {
         this.url = opts.url;
@@ -537,7 +539,7 @@
         if (b === undefined) b = this.budgets[kind] = { tokens: burst * 1000, at: now };
         b.tokens = Math.min(burst * 1000, b.tokens + Math.max(0, now - b.at) * perSecond);
         b.at = now;
-        return b.tokens >= 999.9999;                                 // (a rate that is no whole number leaves a hair of float: 1250 ms at 0.8 a second, 625 ms at 3.2, are a token)
+        return b.tokens >= 999.9999;                                 // (a rate that is no whole number leaves a hair of float: 1250 ms at 0.8 a second are a token, and at 3.2 a second 312.5 ms, which a clock of whole milliseconds reads as 313)
     };
     LobbyClient.prototype.send = function (kind, bytes) {
         if (!this.canSpend(kind) || !this.sendBytes(bytes)) return false;

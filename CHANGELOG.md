@@ -23,10 +23,10 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.52 - 2026-10-15 - Lobby: no rename, map change or colour move lost to a slow moment
+## v0.12.52 - 2026-10-15 - Lobby: far fewer renames, map changes and colour moves lost to a slow moment
 
 **For players:**
-- **A rename, a new map or a colour move in the lobby is never lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or colour moves at once and then about three a second.
+- **A rename, a new map or a colour move in the lobby is far less likely to be lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or colour moves at once and then about three a second. A hiccup of up to about a third of a second for a map change or a colour move, and of up to one and a half seconds for a rename or a removal, no longer loses one; a longer hiccup still can.
 
 **Rules / network:** none. Network protocol 21 and the server are as before; only the pace of the page's requests changed.
 

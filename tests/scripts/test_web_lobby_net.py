@@ -99,7 +99,8 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_budget_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the client check fail
     (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's. The chat's own are in lobby_chat_mutants.json (test_web_lobby_chat.py)."""
 
-    FILES = ("web/front/lobby_net.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp")      # (the check reads the golden messages and, from the header, the server's limits)
+    FILES = ("web/front/lobby_net.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp",      # (the check reads the golden messages and, from the header, the server's limits)
+             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "tests/scripts/web_name_check.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
 
     @classmethod
     def setUpClass(cls):
@@ -129,6 +130,8 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
         for kind in ("move", "plan", "rename", "remove"):
             for needed in ("at_the_servers_own_bucket", "burst_without_reserve", "rate_without_margin", "rate_a_little_fast", "rate_too_slow", "burst_of_one"):
                 self.assertIn("net_%s_%s" % (kind, needed), ids, "every kind needs the proof of its pace and its margin under the server's: " + kind)
+        for needed in ("page_team_press_ignores_the_refusal", "page_team_press_keeps_the_press_that_the_pace_refused"):
+            self.assertIn(needed, ids, "a team press that the page's pace refuses must show the room's teams: " + needed)
 
     def test_every_mutant_is_seen(self):
         missed = []
