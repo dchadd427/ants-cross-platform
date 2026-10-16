@@ -50,7 +50,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`MAP_FORMAT.md`](docs/MAP_FORMAT.md): the map file (`.lvl`): its layout as the remake reads and writes it, the limits, the rules of a map that loads in the original, the round-trip law of the writer, the dictionary and the blank map of a new map, `lvl_tool`
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
 - [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
-- [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the measurements, and why POPcOrN scores nothing in a match yet
+- [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
 - [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20
 
