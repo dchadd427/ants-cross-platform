@@ -1,6 +1,6 @@
 // The rematch on the two pages (docs/PLAY_IN_BROWSER.md "After a match", docs/SERVER.md "Lobby rooms"): when the rules end a match that a lobby room began, the game server opens a lobby room with the same code at
 // once, with the match's plan and a seat reserved for each person's key. This file is the pages' side of it, with no game in it:
-//   * the game page (web/shell.html): the game tells the page that its match is over (window.antsMatchOver, src/ants_app/application_net.cpp); the page reads the key of its seat (the game's own entry, before the game
+//   * the game page (web/shell.html): the game tells the page that its match is over (window.antsMatchOver, src/ants_app/application.cpp); the page reads the key of its seat (the game's own entry, before the game
 //     lets go of it), holds its reserved seat from the results screen with that key (a game's Hello: the seat stays reserved, and the others see "on the results screen"), and shows the strip under the game:
 //     "The match is over", who is back, and "Back to the lobby", which hands the key to the front page (this tab's session storage) and goes there;
 //   * the front page (web/lobby.html): the strip "Back from the match." at the top of the page, with the winner and a link to the match's stats and replay.
