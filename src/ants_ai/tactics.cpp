@@ -18,7 +18,7 @@ constexpr uint8_t kSecureOpening = static_cast<uint8_t>((1u << static_cast<unsig
 LevelPlan plan_for(Level level) noexcept {
     LevelPlan p;
     p.level = level;
-    // The contest batch (docs/BOTS.md, "The race for contested food", "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
+    // The contest batch (docs/BOT_FOOD.md, "Easy: the race"; docs/BOTS.md, "Fights of its own", "Fire play", "Behind the leader and the endgame"): the rules of the report of 2026-10-05, at every level, scaled below; bot_arena's `prev` key
     // switches these flags off again (the strategy of v0.5.0, for the tournaments' comparison; the controller's refusal of special orders onto an ant is no plan field and stays)
     p.race = true;
     p.health_aware = true;
@@ -58,6 +58,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
+            p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.takes_combat = true;
@@ -90,6 +91,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
             p.contest_opening_ants = 2;
+            p.denial_order = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.flower_sides = true;
@@ -287,6 +289,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
             case Style::Economic:
                 p.contest_opening_ants = 0;
                 p.race = false;                                                               // (no contest of the middle: that is the style)
+                p.denial_order = false;
                 p.wall_trigger = WallTrigger::Early;
                 p.raid_min_loot = p.raid_min_loot * 3;                                       // (it defends like the others: the Combat Ant that harvests costs nothing and is its defence)
                 break;
@@ -302,6 +305,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.ally_help = true;
                 p.contest_opening_ants = 0;
                 p.race = false;                                                               // (no contest of the middle)
+                p.denial_order = false;
                 break;
             case Style::Random:
                 break;

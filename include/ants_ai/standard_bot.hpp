@@ -249,6 +249,11 @@ private:
         p.contest_opening_ants = plan.contest_opening_ants;
         p.contest_opening_ticks = plan.contest_opening_ticks;
         p.contest_opening_min_ants = plan.contest_opening_min_ants;
+        p.denial_order = plan.denial_order;
+        p.deny_multi_percent = plan.deny_multi_percent;
+        p.deny_one_percent = plan.deny_one_percent;
+        p.reserve_threat_tiles = plan.reserve_threat_tiles;
+        p.deny_fade = plan.deny_fade;
         return p;
     }
 

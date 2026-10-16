@@ -20,6 +20,7 @@ int main() {
     run_b41_offence_tests();
     run_b41_cost_tests();
     run_race_tests();
+    run_deny_tests();
     run_contest_tests();
     run_island_tests();
     run_island_task_tests();
