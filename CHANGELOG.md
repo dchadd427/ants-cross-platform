@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
+
+**For players:**
+- **Ghetto and ANTS_PARTY:** a Medium or Hard computer player whose worker starts beside the food now harvests from the first tick instead of holding back for two minutes: 2,291 -> 2,741 and 26,952 -> 28,831 a game (Hard, one against one, 96 games).
+- **!-Midz-!:** the bot judges a race for a power-up as on every other map: 343 -> 645.
+- **A bomb of the bot's own colour that closes the way is now defused** instead of being ordered again for minutes (Dustbin and the other maps with green bombs).
+- **Dustbin and FKD Deathmatch** still score a little less than before the walled-in play (docs/BOTS.md); POPcOrN against one computer opponent loses its rare 25 points.
+
+**Rules / network:** none (protocol 21; the computer players are outside the simulation).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60fb1ebc...5d5cdd19)
+
 ## v0.12.52 - 2026-10-15 - Lobby: far fewer renames, map changes and colour moves lost to a slow moment
 
 **For players:**
@@ -540,14 +552,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cf4e71f...4b81a2c)
 
-## v0.9.0 - 2026-10-05 - Computer players that race, hunt and cross the water
+## Older versions (v0.9.0 and before)
 
-**For players:**
-- **Smarter computer players:** a bot races an enemy for the food that both can reach, hunts a wounded enemy ant until it is dead, lights fire walls at an enemy gate only where the enemy cannot simply put them out, never clicks a special order onto an ant (far fewer "Can't go there." from the bots' own orders), and plays harder when it is behind.
-- **Computer players on ISLANDS and the lake of SMALL:** they fly a crew over the water with bomb flights, bring Swimmers across and ferry the food home. On ISLANDS four bots used to score nothing; they now score about 1,000 (Easy) to 1,400 (Hard) points a seat.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/23dc663...57fa5e4), [the bots](docs/BOTS.md)
-
-## Older versions (v0.8.3 and before)
-
-Every release before v0.9.0, and the long notes of v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.9.1, and the long notes of v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
