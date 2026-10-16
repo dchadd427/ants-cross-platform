@@ -28,7 +28,14 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **On walled maps the computer players no longer waste their ants on the map's own bombs:** a Medium or Hard bot working its way to walled-off food (POPcOrN) leaves the map's bombs to its plan instead of sending ants to set them off or to defuse them one by one. Alone on POPcOrN a Hard bot now scores about 620 points a game instead of 415 (Medium 444 instead of 273); in a match on POPcOrN the bots still score nothing ([why](docs/BOT_GATES.md)).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4ac5df8d...c79b1dee), [walled maps](docs/BOT_GATES.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/39cbcd11...c79b1dee), [walled maps](docs/BOT_GATES.md)
+
+## v0.12.58 - 2026-10-16 - Bots go for the contested food first
+
+**For players:**
+- **Medium and Hard computer players eat the food that other teams also reach before the food at their own base**, because what they leave there the others eat. With four bots on TREASURE they now start with the centre and keep most of the Cheerios next to their base for later. Food far across the map does not pull them away from their own, and an enemy at their own food makes them hurry to eat it. Easy is as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4ac5df8d...ecc3f933), [the food order](docs/BOT_FOOD.md)
 
 ## v0.12.57 - 2026-10-16 - Under the hood: a map can be checked for the original game
 

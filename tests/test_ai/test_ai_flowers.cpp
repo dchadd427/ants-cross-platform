@@ -38,12 +38,15 @@ LevelPlan medium_with_rules() {
     return p;
 }
 
-// The plan that a bot of (level, style) plays at `seat` in the match of `match_seed` (what the controller hands it)
+// The plan that a bot of (level, style) plays at `seat` in the match of `match_seed` (what the controller hands it), with the plain order of the food: the scenarios of these
+// tests (who stands where when a droplet lands) were found with it, and the denial order (AI28.x) sends a Hard bot on SMALL to the pile that it shares with a neighbour first
 LevelPlan plan_of(Level level, Style style, uint32_t match_seed, uint8_t seat) {
     BotRng seat_rng(seat_seed(match_seed, seat, "standard"));
     StandardBot bot(level, style);
     bot.start(BotContext{seat, profile_for(level), seat_rng.next(), nullptr});
-    return bot.tactics().plan;
+    LevelPlan plan = bot.tactics().plan;
+    plan.denial_order = false;
+    return plan;
 }
 
 const PowerUpView* powerup_on(const BotView& view, TileCoord tile) {

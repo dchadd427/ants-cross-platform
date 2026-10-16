@@ -1,5 +1,5 @@
 // The race of the standard bot (contest batch, AI20.1): the report that the bots eat their food in a weird order, while the center food in the treasure map is contested on all four sides, so that is usually the starting
-// food, and what followed from it (docs/BOTS.md, "The race for contested food"). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
+// food, and what followed from it (docs/BOT_FOOD.md, "Easy: the race"; Medium and Hard play the denial order, AI28.x, so the cases of the race pin denial_order off). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
 //
 //   AI20.1  the ants that the gate cannot use go to the contested piles first (on TREASURE every level, a contested pile before a safe one of higher value, the gate keeps its own ants, a pile that
 //           an enemy army holds is no race, a pile with two competitors stays one though an enemy is far nearer, the window, where nothing is contested and with fewer than six ants nothing changes)
@@ -53,6 +53,7 @@ void run_race_tests() {
                 start_match(old_sim, "TREASURE", 7, 0x0F);
                 LevelPlan old_plan = plan_for(level);
                 old_plan.race = false;
+                old_plan.denial_order = false;
                 Rig old_rig(old_sim, 2, level, std::make_unique<StandardBot>(old_plan), 4, 4);
                 old_rig.run(60);
                 ASSERT_TRUE(ants_to_pile(old_rig, old_sim, treasure_piles, static_cast<int>(centre), 60) < 3u);
@@ -68,6 +69,7 @@ void run_race_tests() {
                 plan.race = race;
                 plan.contest_opening_ants = 0;
                 plan.race_ants = 3;
+                plan.denial_order = false;                                                               // (the race: at Medium and Hard the denial order replaces it, AI28.x)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(60);
                 const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
@@ -84,6 +86,7 @@ void run_race_tests() {
             LevelPlan plan = plan_for(Level::Hard);
             plan.contest_opening_ants = 0;
             plan.race_slack_percent = 100000;
+            plan.denial_order = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(60);
             const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
@@ -104,6 +107,7 @@ void run_race_tests() {
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.contest_opening_ants = 0;
                 plan.contest_opening_min_ants = 0;
+                plan.denial_order = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(60);
                 const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
@@ -117,6 +121,7 @@ void run_race_tests() {
             start_match(sim, "TREASURE", 7, 0x0F);
             LevelPlan plan = plan_for(Level::Hard);
             plan.contest_low = 77;
+            plan.denial_order = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(30);
             ASSERT_EQ(rig.as<StandardBot>().harvest().tier_of(static_cast<uint32_t>(centre)), static_cast<int>(PileClass::Multi));
@@ -128,6 +133,7 @@ void run_race_tests() {
                 start_match(one_sim, "TREASURE", 7, 0x0F);
                 LevelPlan one = plan_for(Level::Hard);
                 one.race_one = true;
+                one.denial_order = false;
                 one.contest_low = low;
                 Rig one_rig(one_sim, 0, Level::Hard, std::make_unique<StandardBot>(one), 4, 4);
                 one_rig.run(30);
@@ -145,6 +151,7 @@ void run_race_tests() {
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.contest_opening_ants = 0;
                 plan.race_ticks = window;
+                plan.denial_order = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(30);
                 const std::vector<int> targets = harvest_targets(rig, sim, 0, 2);
@@ -164,6 +171,7 @@ void run_race_tests() {
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.race = race;
                 plan.contest_opening_ants = 0;
+                plan.denial_order = false;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
                 rig.run(120);
                 runs.push_back(rig.proposed);
@@ -181,6 +189,7 @@ void run_race_tests() {
                             start_match(sim, map, 7, 0x0F);
                             LevelPlan plan = plan_for(level);
                             plan.race = race;
+                            plan.denial_order = false;
                             Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan), 4, 4);
                             rig.run(120);
                             runs.push_back(rig.proposed);
