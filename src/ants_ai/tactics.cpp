@@ -184,7 +184,6 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
-            p.reach_aware = true;                    // (no counter or mine job for what no walk reaches now: an ant on another side of a wall of fire never gets there)
             break;
         case Level::Hard:
             p.assault = true;
@@ -214,7 +213,6 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
-            p.reach_aware = true;                    // (no counter or mine job for what no walk reaches now: an ant on another side of a wall of fire never gets there)
             break;
     }
     return p;

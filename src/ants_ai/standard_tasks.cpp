@@ -1260,11 +1260,20 @@ void WallTask::step(TaskContext& c) {
     else if (ring_lit_since_ == 0) ring_lit_since_ = now;
     const bool hold_over = ring_lit_since_ != 0 && now >= ring_lit_since_ + plan.fire_defence_hold;
     // 1. the keeper: an own Fire Ant. It is claimed (taken from the economy, in which a Fire Ant harvests) only while it has work, and given back when it has none
-    if (plan.reach_aware && (!reach_.valid() || now >= reach_tick_ + kReachTicks)) {
-        reach_ = c.map.field_now(grid, c.seat, v.walk_context());
+    if (plan.reach_aware && (reach_.empty() || now >= reach_tick_ + kReachTicks)) {          // the walks to the sides of the three tiles in front of the thief hole, from which they are lit
+        reach_.clear();
+        const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        std::vector<sim::TileCoord> sides;
+        for (const sim::TileCoord& t : east_tiles(hill)) {
+            for (const sim::TileCoord d : {sim::TileCoord{0, -1}, sim::TileCoord{0, 1}, sim::TileCoord{-1, 0}, sim::TileCoord{1, 0}}) {
+                const sim::TileCoord n{t.x + d.x, t.y + d.y};
+                if (grid.in_bounds(n) && mask[static_cast<size_t>(n.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(n.x)] != 0) sides.push_back(n);
+            }
+        }
+        if (!sides.empty()) reach_ = MapInfo::cost_field(grid, mask, sides);
         reach_tick_ = now;
     }
-    const auto joined = [&](const AntView& a) { return !plan.reach_aware || !reach_.valid() || c.map.reaches_hill(reach_, a.tile, a.type); };   // (a Fire Ant on an island or behind a wall of bombs walks to no wall of the hill)
+    const auto joined = [&](const AntView& a) { return !plan.reach_aware || walks_into(reach_, grid, a.tile); };   // (a Fire Ant on an island or behind a wall of bombs walks to none of the hole's tiles: no keeper)
     if (keeper_ != 0) {
         const AntView* k = find_ant(v.mine(), keeper_);
         if (k == nullptr || k->type != sim::AntType::Fire || !joined(*k)) {
@@ -1370,14 +1379,6 @@ void WallTask::step(TaskContext& c) {
             const auto b = counter_black_.find(static_cast<int64_t>(w.tile.y) * 4096 + w.tile.x);
             if (ours || (b != counter_black_.end() && b->second > now)) continue;
             if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
-            if (plan.reach_aware && reach_.valid()) {                                       // the keeper puts a wall out from one of its four sides: one of them is walked to from the hill now
-                bool side = false;
-                for (const sim::TileCoord d : {sim::TileCoord{0, -1}, sim::TileCoord{0, 1}, sim::TileCoord{-1, 0}, sim::TileCoord{1, 0}}) {
-                    const sim::TileCoord n{w.tile.x + d.x, w.tile.y + d.y};
-                    side = side || (grid.in_bounds(n) && reach_.cost[static_cast<size_t>(n.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(n.x)] >= 0);
-                }
-                if (!side) continue;
-            }
             const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
             if (harm == 0) continue;
             const int32_t d = keeper->tile.chebyshev_dist(w.tile);
@@ -1429,7 +1430,11 @@ void WallTask::step(TaskContext& c) {
         return;
     }
 
-    // 5b. an enemy wall that is in the way: put it out
+    // 5b. an enemy wall that is in the way: put it out (the keeper puts it out from one of its four sides: a wall that no walk of the keeper gets beside is left alone for a while)
+    if (have_counter && renew < 0 && counter_job_.decided == 0 && plan.reach_aware && !walks_into(field_to_target(v, c.seat, counter_tile, false), grid, keeper->tile)) {
+        counter_black_[static_cast<int64_t>(counter_tile.y) * 4096 + counter_tile.x] = now + 600u;
+        have_counter = false;
+    }
     if (have_counter && renew < 0 && counter_job_.decided == 0) {
         sim::Command probe;
         probe.type = sim::CommandType::GroupSpecial;
@@ -1479,6 +1484,38 @@ void WallTask::step(TaskContext& c) {
         jobs_[renew] = j;
         ++renewals_;
     }
+}
+
+// ---- where a walk gets (LevelPlan::reach_aware) ----------------------------------------------------------------------------------------------------------
+
+std::vector<int32_t> field_to_target(const BotView& view, uint8_t seat, sim::TileCoord target, bool onto) {
+    if (!view.has_grid()) return {};
+    const sim::Grid& grid = view.grid();
+    const WalkContext ctx = view.walk_context();
+    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, ctx);
+    std::vector<sim::TileCoord> sources;
+    if (onto) {
+        sources.push_back(target);
+    } else {
+        for (const sim::TileCoord d : {sim::TileCoord{0, -1}, sim::TileCoord{0, 1}, sim::TileCoord{-1, 0}, sim::TileCoord{1, 0}}) sources.push_back(sim::TileCoord{target.x + d.x, target.y + d.y});
+    }
+    std::vector<sim::TileCoord> open;
+    for (const sim::TileCoord& t : sources) {
+        if (grid.in_bounds(t) && mask[static_cast<size_t>(t.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(t.x)] != 0) open.push_back(t);
+    }
+    if (open.empty()) return {};
+    return MapInfo::cost_field(grid, mask, open);
+}
+
+bool walks_into(const std::vector<int32_t>& field, const sim::Grid& grid, sim::TileCoord tile) {
+    if (field.empty()) return false;
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            const sim::TileCoord t{tile.x + dx, tile.y + dy};
+            if (grid.in_bounds(t) && field[static_cast<size_t>(t.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(t.x)] >= 0) return true;
+        }
+    }
+    return false;
 }
 
 // ---- BombTask -------------------------------------------------------------------------------------------------------------------------------------------
@@ -1556,15 +1593,7 @@ void BombTask::step(TaskContext& c) {
     }
     // the harmful bombs, the nearest to the hill first
     const HillInfo& hill = c.map.hill(c.seat);
-    if (plan.reach_aware && (!reach_.valid() || now >= reach_tick_ + kReachTicks)) {
-        reach_ = c.map.field_now(v.grid(), c.seat, v.walk_context());
-        reach_tick_ = now;
-    }
     const sim::Grid& grid = v.grid();
-    const auto reached = [&](sim::TileCoord t) {                                                       // the hill's walkers can stand on the tile now
-        if (!reach_.valid() || !grid.in_bounds(t)) return false;
-        return reach_.cost[static_cast<size_t>(t.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(t.x)] >= 0;
-    };
     const BombView* pick = nullptr;
     int32_t best = 0;
     int best_harm = 0;
@@ -1572,7 +1601,6 @@ void BombTask::step(TaskContext& c) {
         if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally())) continue;       // an own or an allied bomb is no enemy's
         const auto bl = black_.find(key_of(b.tile));
         if (bl != black_.end() && bl->second > now) continue;
-        if (plan.reach_aware && reach_.valid() && !reached(b.tile)) continue;                            // no walk from the hill gets there: it is in the way of no walk of the bot (a bomb behind a wall of fire)
         const int harm = harm_to(v, c.map, plan, b.tile);                                              // the own economy first, then the ally's (only a Bomber goes there)
         if (harm == 0) continue;
         const int32_t d = hill.present ? b.tile.chebyshev_dist(hill.origin) : 0;
@@ -1583,19 +1611,21 @@ void BombTask::step(TaskContext& c) {
         }
     }
     if (pick == nullptr) return;
-    // a Bomber defuses it; without one a healthy idle worker sets it off. Only an ant that a walk joins to the hill now can get there (the bomb is reached from the hill), and a defuse needs a
-    // side of the bomb to stand on (the Bomber works from one of its four sides)
-    const auto joined = [&](const AntView& a) { return !plan.reach_aware || !reach_.valid() || c.map.reaches_hill(reach_, a.tile, a.type); };
-    bool side_free = !plan.reach_aware || !reach_.valid();
-    for (const sim::TileCoord d : {sim::TileCoord{0, -1}, sim::TileCoord{0, 1}, sim::TileCoord{-1, 0}, sim::TileCoord{1, 0}}) {
-        side_free = side_free || reached(sim::TileCoord{pick->tile.x + d.x, pick->tile.y + d.y});
+    // a Bomber defuses it; without one a healthy idle worker sets it off. Only an ant that a walk takes there now: the Bomber to one of the bomb's four sides (it defuses from there), the worker
+    // onto the bomb (an ant in a pocket of the seat's own bombs, on another island or behind a wall of fire gets nowhere, and is not sent)
+    std::vector<int32_t> to_sides;
+    std::vector<int32_t> onto;
+    if (plan.reach_aware) {
+        to_sides = field_to_target(v, c.seat, pick->tile, false);
+        onto = field_to_target(v, c.seat, pick->tile, true);
     }
+    const auto gets_to = [&](const AntView& a, const std::vector<int32_t>& field) { return !plan.reach_aware || walks_into(field, grid, a.tile); };
     const AntView* actor = nullptr;
     bool defuse = false;
     int32_t actor_d = 0;
     for (const AntView& a : v.mine()) {
         if (a.type != sim::AntType::Bomber || a.hp < 3 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
-        if (!side_free || !joined(a)) continue;
+        if (!gets_to(a, to_sides)) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
         const int32_t d = a.tile.chebyshev_dist(pick->tile);
@@ -1608,7 +1638,7 @@ void BombTask::step(TaskContext& c) {
     if (actor == nullptr && plan.bomb_hit && best_harm == 1) {                                         // (a worker does not walk to the ally's base to set a bomb off)
         for (const AntView& a : v.mine()) {
             if (a.type != v.default_ant_type() || a.hp < 8 || a.holding || a.carried_points > 0 || !a.idle() || v.powerup_at(a.tile) != nullptr) continue;
-            if (!joined(a)) continue;
+            if (!gets_to(a, onto)) continue;
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
             const int32_t d = a.tile.chebyshev_dist(pick->tile);
@@ -1937,30 +1967,22 @@ void MineTask::step(TaskContext& c) {
     if (targets.empty() && free_to_mine) collect_gate_targets(c, targets);
     if (targets.empty()) return;
     std::stable_sort(targets.begin(), targets.end(), [](const Target& x, const Target& y) { return x.score > y.score; });
-    if (plan.reach_aware && (!reach_.valid() || now >= reach_tick_ + kReachTicks)) {
-        reach_ = c.map.field_now(v.grid(), c.seat, v.walk_context());
-        reach_tick_ = now;
-    }
     const sim::Grid& grid = v.grid();
-    const auto side_reached = [&](sim::TileCoord t) {                                    // a Bomber plants from one of the four sides of the tile: one of them is joined to the hill now
-        if (!plan.reach_aware || !reach_.valid()) return true;
-        for (const sim::TileCoord d : {sim::TileCoord{0, -1}, sim::TileCoord{0, 1}, sim::TileCoord{-1, 0}, sim::TileCoord{1, 0}}) {
-            const sim::TileCoord n{t.x + d.x, t.y + d.y};
-            if (grid.in_bounds(n) && reach_.cost[static_cast<size_t>(n.y) * static_cast<size_t>(grid.width()) + static_cast<size_t>(n.x)] >= 0) return true;
-        }
-        return false;
-    };
     for (size_t i = 0; i < targets.size() && i < 3; ++i) {                               // one new job at a look
         const sim::TileCoord tile = targets[i].tile;
-        if (!side_reached(tile)) {
-            cool_[key_of(tile)] = now + 600u;                                            // no walk from the hill gets beside it now
-            continue;
+        std::vector<int32_t> beside;                                                     // (reach_aware) the walks to the four sides of the tile, from which a Bomber plants
+        if (plan.reach_aware) {
+            beside = field_to_target(v, c.seat, tile, false);
+            if (beside.empty()) {
+                cool_[key_of(tile)] = now + 600u;                                        // nobody can stand beside it now
+                continue;
+            }
         }
         const AntView* actor = nullptr;
         int32_t actor_d = 0;
         for (const AntView& a : v.mine()) {
             if (a.type != sim::AntType::Bomber || a.hp < 5 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned || jobs_.count(a.id) != 0) continue;
-            if (plan.reach_aware && reach_.valid() && !c.map.reaches_hill(reach_, a.tile, a.type)) continue;     // (a Bomber on another side of a wall of fire gets nowhere)
+            if (plan.reach_aware && !walks_into(beside, grid, a.tile)) continue;          // (a Bomber that no walk takes beside the tile: on another island, behind a wall of fire)
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && owner != id() && c.ledger.rank(owner) > 1) continue;                  // (only an ant of the economy: the Bombers of the expedition, the power-up trips and the walls are theirs)
             const int32_t d = a.tile.chebyshev_dist(tile);

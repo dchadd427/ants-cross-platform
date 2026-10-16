@@ -269,7 +269,7 @@ private:
     Job counter_job_;                              // the enemy wall that is being put out (tile; decided 0: none)
     std::map<int64_t, uint64_t> counter_black_;    // enemy walls that could not be put out, until when they are left alone
     uint64_t ring_lit_since_{0};                   // since when walls have been lit on the ring round the own gate (0: none are)
-    MapInfo::NowField reach_;                      // (reach_aware) the hill's walking field as the map is now, kept kReachTicks: a Fire Ant that no walk joins to the hill keeps no walls
+    std::vector<int32_t> reach_;                   // (reach_aware) the walks to the sides of the tiles in front of the thief hole as the map is now, kept kReachTicks: a Fire Ant that none reaches keeps no walls
     uint64_t reach_tick_{0};
     static constexpr uint64_t kReachTicks = 100;
     uint32_t walls_ordered_{0};
@@ -306,7 +306,6 @@ public:
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
     static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
-    static constexpr uint64_t kReachTicks = 100;     // the hill's walking field is made again this often (a ring of fire, a wall that burns out, a bomb that goes)
     Tactics& tactics_;
     uint32_t actor_{0};
     sim::TileCoord target_{};
@@ -317,8 +316,6 @@ private:
     uint32_t defused_{0};
     uint32_t set_off_{0};
     uint32_t failures_{0};
-    MapInfo::NowField reach_;                // the hill's walking field as the map is now (kept kReachTicks): a bomb that no walk from the hill reaches is in nobody's way, and an ant that no walk joins to the hill reaches none
-    uint64_t reach_tick_{0};
 };
 
 // ---- rank 4: the mines ------------------------------------------------------------------------------------------------------------------------------------
@@ -381,9 +378,6 @@ private:
     std::map<uint32_t, Job> jobs_;                       // by the Bomber's id
     std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
     std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
-    MapInfo::NowField reach_;                            // the hill's walking field as the map is now (kept kReachTicks): a Bomber that no walk joins to the hill, or a tile whose sides no walk reaches, gets no job
-    uint64_t reach_tick_{0};
-    static constexpr uint64_t kReachTicks = 100;
     uint32_t planted_{0};
     uint32_t gone_{0};
     uint32_t failures_{0};
@@ -396,6 +390,13 @@ bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& pla
 /// Whose economy a bomb or a fire wall on `tile` is in the way of: 1 the own (harms_economy), 2 the ally's (with plan.ally_help: within counter_hill_radius of the ally's hill, or
 /// within counter_pile_radius of a pile that the ally's hill reaches), 0 nobody's
 int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+
+/// (LevelPlan::reach_aware) The walking field of the seat's ants to where an order on `target` is carried out, the map as it is now (the seat's own and its ally's bombs closed, fire walls,
+/// water and the rest of MapInfo::walkable): onto the tile itself for a walk onto it (`onto`: a bomb that is set off), else to its four sides, from which a special order is worked (plant,
+/// defuse, light, put out). Empty when no such tile can be stood on: no ant gets there.
+std::vector<int32_t> field_to_target(const BotView& view, uint8_t seat, sim::TileCoord target, bool onto);
+/// Whether an ant that stands on `tile` walks into that field: its tile or a tile next to it has a cost (it may stand where no walk could, on a tile that a bomb has just left)
+bool walks_into(const std::vector<int32_t>& field, const sim::Grid& grid, sim::TileCoord tile);
 
 // ---- rank 3: the raids -------------------------------------------------------------------------------------------------------------------------------------
 
