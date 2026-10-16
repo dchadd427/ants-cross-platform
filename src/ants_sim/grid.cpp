@@ -7,13 +7,6 @@ namespace ants::sim {
 
 static_assert(TILE_PIXELS == 32, "Tile pixels must be 32");
 
-namespace {
-// The ids whose graphics the original forces to load whatever the dictionary says (FUN_010068be, the 62 words at 0x1001ba8): bridges, effects, power-ups, bombs, fire wall, the
-// placeholder, 162 .. 178, the hills, the lunchbox, the plants and droplets
-constexpr uint16_t kForcedGraphics[62] = {34, 35, 36, 37, 40, 53, 62, 63, 64, 65, 66, 129, 130, 131, 132, 133, 134, 135, 160, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176,
-                                          177, 178, 230, 245, 246, 247, 248, 356, 404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421, 422, 423, 424, 425, 426, 1177};
-}  // namespace
-
 bool Grid::init_from_level(const ants::assets::LevelData& level) {
     width_ = level.width;
     height_ = level.height;
@@ -27,7 +20,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
     // Which templates the original has loaded (FUN_0100674e mode 0: the keep flag of an id is dictionary entry != ".", an entry past the dictionary is not kept; FUN_010068be: the 62 forced ids)
     graphic_kept_.assign(movement::kTileIdCount, 0);
     for (size_t i = 0; i < level.tile_dictionary.size() && i < graphic_kept_.size(); ++i) graphic_kept_[i] = level.tile_dictionary[i] != "." ? 1 : 0;
-    for (const uint16_t id : kForcedGraphics) graphic_kept_[id] = 1;
+    for (const uint16_t id : assets::LVL_ALWAYS_LOADED_TILES) graphic_kept_[id] = 1;      // (the 62 forced ids, lvl_parser.hpp)
 
     // LVL block 3 (FUN_01007025, 0x1007025): the level's default ant type. The word is a tile index and the index is the tile id (the dictionary remap is the
     // identity, 0x10067a5 - 0x10067c8); it is kept only when that tile has the power-up flag (0x1007068), so a level has a default type exactly when block 3 names

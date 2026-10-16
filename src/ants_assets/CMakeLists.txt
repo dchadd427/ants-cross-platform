@@ -3,6 +3,7 @@ add_library(ants_assets STATIC
     chd_parser.cpp
     lvl_parser.cpp
     lvl_writer.cpp
+    lvl_checker.cpp
     asset_archive.cpp
     object_footprint.cpp
 )
