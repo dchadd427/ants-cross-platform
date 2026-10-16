@@ -27,6 +27,18 @@ constexpr int start_marker_team_of_id(uint16_t id) noexcept {
     return id == 152 ? 3 : id == 153 ? 2 : id == 154 ? 0 : id == 155 ? 1 : -1;
 }
 constexpr size_t   LVL_MAX_DICTIONARY_ENTRIES = 0x540;   // the original's tile tables (a 0x1500 byte buffer of dwords is filled with one entry per dictionary name)
+// The tile ids whose pictures the original loads whatever the dictionary calls them (FUN_010068be, the 62 words at 0x1001ba8): the bridges, effects, power-ups,
+// bombs, the fire wall, the placeholder, 162 .. 178, the hills, the lunchbox, the plants and the droplets. Every other id is loaded only when its dictionary entry
+// is not "." (FUN_0100674e mode 0); the grid (ants_sim) and the original-safe profile (lvl_checker.hpp) read this one table.
+constexpr uint16_t LVL_ALWAYS_LOADED_TILES[62] = {34,  35,  36,  37,  40,  53,  62,  63,  64,  65,  66,  129, 130, 131, 132, 133, 134, 135, 160, 162, 163,
+                                                  164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 230, 245, 246, 247, 248, 356,
+                                                  404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421, 422, 423, 424, 425, 426, 1177};
+constexpr bool tile_always_loaded(uint16_t id) noexcept {
+    for (const uint16_t t : LVL_ALWAYS_LOADED_TILES) {
+        if (t == id) return true;
+    }
+    return false;
+}
 
 /**
  * @brief The limits that a reader holds a file to and the writer (lvl_writer.hpp) a level to. The defaults are what the game reads: the original loader's tables

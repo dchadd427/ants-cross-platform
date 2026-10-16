@@ -73,3 +73,12 @@ add_executable(test_lvl_writer
 target_link_libraries(test_lvl_writer PRIVATE ants_assets ants_test_paths)
 
 add_test(NAME test_lvl_writer COMMAND test_lvl_writer)
+
+# The original-safe profile of the map checker (docs/MAP_FORMAT.md): every rule, files, stricter than the remake, the 540 maps of the library
+add_executable(test_original_safe
+    test_original_safe.cpp
+)
+
+target_link_libraries(test_original_safe PRIVATE ants_assets ants_test_paths)
+
+add_test(NAME test_original_safe COMMAND test_original_safe)
