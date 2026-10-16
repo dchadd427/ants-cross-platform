@@ -121,13 +121,15 @@ struct RealWorld : LinkSource {
         links.push_back(net::TcpConnection::connect("127.0.0.1", port));
         return links.back().get();
     }
-    RClient& connect(const std::string& name, const std::string& room, const std::optional<net::CreateBlock>& create = std::nullopt) {
+    RClient& connect(const std::string& name, const std::string& room, const std::optional<net::CreateBlock>& create = std::nullopt, uint8_t kind = net::kClientGame, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
         RClient& c = *clients.back();
         c.name = name;
         c.room = room;
         c.create = create;                                                              // (the block of a Hello that makes a public room, protocol 15)
+        c.kind = kind;                                                                  // (protocol 16: a lobby page, or a game)
+        c.key = key;
         c.record_hashes = true;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
@@ -386,6 +388,86 @@ void container_scenario(const std::string& name, uint16_t game_port, uint16_t ct
               << "), both machines found it by themselves, the match ended in one state" << std::flush;
 }
 
+// The rematch on the real program over real TCP (docs/SERVER.md "Lobby rooms"): two pages make a lobby, START, their games take the seats over with the keys, Bob quits and the rules end the match; the
+// lobby is there again under the same code: Bob's results screen holds his seat, a stranger is turned away, Pia's page comes back with her key and leads, START waits for Bob (Pia is told), Pia removes him
+// and START is taken. The control interface lists the match beside the lobby.
+void rematch_process_scenario() {
+    const fs::path root = temp_dir_for("rematch-199");
+    const uint16_t game_port = free_tcp_port();
+    const uint16_t ctl_port = free_tcp_port();
+    ASSERT_TRUE(game_port != 0 && ctl_port != 0 && game_port != ctl_port);
+    const std::string secret = "test-secret-0123456789abcdef0123456789abcdef";
+    const std::string log_file = (root / "server.log").string();
+    const std::vector<std::string> args = {"--maps", maps_dir(), "--port", std::to_string(game_port), "--ctl-port", std::to_string(ctl_port), "--results-dir", (root / "results").string(), "--reconnect",
+                                           "--demo-rooms", "4", "--demo-lobbies", "2", "--demo-map", "TINY.LVL", "--start-countdown-seconds", "0"};
+    ServerProcess server;
+    ASSERT_TRUE(server.start(args, secret, log_file));
+    ASSERT_TRUE(port_accepts(game_port, 15000));
+    ASSERT_TRUE(port_accepts(ctl_port, 5000));
+    const std::string code = "rematch1";
+    RealWorld w;
+    w.port = game_port;
+    w.maps = maps_dir();
+    RClient& pia_page = w.connect("Pia", code, lobby_block_of(), net::kClientPage);
+    ASSERT_TRUE(w.until([&]() { return pia_page.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 15000));
+    RClient& bob_page = w.connect("Bob", code, lobby_block_of(), net::kClientPage);
+    ASSERT_TRUE(w.until([&]() { return bob_page.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_page.lobby->room().slots[1].state == net::SlotState::Client; }, 15000));
+    ASSERT_TRUE(pia_page.lobby->is_leader() && bob_page.lobby->my_seat() == 1);
+    ASSERT_TRUE(pia_page.lobby->request_start());
+    ASSERT_TRUE(w.until([&]() { return pia_page.lobby->room().starting(); }, 10000));
+    const net::SeatKey pia_key = pia_page.lobby->key();
+    const net::SeatKey bob_key = bob_page.lobby->key();
+    pia_page.end->close();                                                              // (the pages go to the game page)
+    bob_page.end->close();
+    RClient& pia_game = w.connect("Pia", code, std::nullopt, net::kClientGame, pia_key);
+    RClient& bob_game = w.connect("Bob", code, std::nullopt, net::kClientGame, bob_key);
+    ASSERT_TRUE(w.until([&]() { return pia_game.session != nullptr && bob_game.session != nullptr && bob_game.session->runner().next_turn_expected() >= 120; }, 40000));
+    sim::Command quit;                                                                  // Bob quits: with one other side left the rules end the match
+    quit.type = sim::CommandType::Quit;
+    quit.issuer = bob_game.lobby->my_seat();
+    ASSERT_TRUE(bob_game.session->submit(quit));
+    ASSERT_TRUE(w.until([&]() { return pia_game.sim.is_match_over() && bob_game.sim.is_match_over(); }, 20000));
+    // the code is a lobby's again at once, with nobody back: no leader, the match's colours; the match is listed beside it
+    ctl::JsonValue lobby;
+    ASSERT_TRUE(w.until([&]() { lobby = ctl_call(ctl_port, "GET", "/rooms/" + code, secret); return lobby.get("state").str() == "waiting"; }, 10000));
+    ASSERT_TRUE(lobby.get("lobby").as_bool_or(false) && lobby.get("leader").is_null() && !lobby.get("starting").as_bool_or(true) && lobby.get("plan").str() == "oooo -");
+    ASSERT_EQ(lobby.get("players").items().size(), size_t{2});
+    const ctl::JsonValue list = ctl_call(ctl_port, "GET", "/rooms", secret);
+    size_t finished = 0;
+    for (const ctl::JsonValue& r : list.get("rooms").items()) finished += r.get("code").str() == code && r.get("state").str() == "finished" ? 1u : 0u;
+    ASSERT_EQ(finished, size_t{1});
+    // Bob's results screen holds his seat; a stranger is turned away
+    RClient& bob_results = w.connect("Bob", code, std::nullopt, net::kClientGame, bob_key);
+    ASSERT_TRUE(w.until([&]() { return bob_results.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 10000));
+    ASSERT_TRUE(bob_results.lobby->my_seat() == 1 && bob_results.lobby->room().seat_in_game(0) && bob_results.lobby->room().seat_in_game(1) && bob_results.lobby->room().leader == net::kNoLeader);
+    RClient& stranger = w.connect("Sid", code, lobby_block_of(), net::kClientPage);
+    ASSERT_TRUE(w.until([&]() { return stranger.was_rejected; }, 10000));
+    ASSERT_EQ(stranger.rejected, net::RejectReason::MatchRunning);
+    // Pia's page comes back with her key and leads; her START waits for Bob, and she is told
+    RClient& pia_back = w.connect("Pia", code, lobby_block_of(), net::kClientPage, pia_key);
+    ASSERT_TRUE(w.until([&]() { return pia_back.lobby->phase() == net::ClientLobby::Phase::InRoom && pia_back.lobby->is_leader(); }, 10000));
+    ASSERT_TRUE(pia_back.lobby->my_seat() == 0 && !pia_back.lobby->room().seat_in_game(0) && pia_back.lobby->room().seat_in_game(1));
+    net::PlanMsg plan;                                                                  // (a Medium bot in Blue: Pia and the bot can play without Bob)
+    plan.plan = {net::PlanKind::Open, net::PlanKind::Open, net::PlanKind::Medium, net::PlanKind::Nobody};
+    ASSERT_TRUE(pia_back.lobby->request_plan(plan));
+    ASSERT_TRUE(w.until([&]() { return pia_back.lobby->room().plan[2] == net::PlanKind::Medium; }, 10000));
+    ASSERT_TRUE(pia_back.lobby->request_start());
+    ASSERT_TRUE(w.until([&]() { return !pia_back.room_chat.empty(); }, 10000));
+    ASSERT_TRUE(pia_back.room_chat.back().notice() && pia_back.room_chat.back().text == std::string("Bob") + net::kNoticeNotBack);
+    ASSERT_FALSE(ctl_call(ctl_port, "GET", "/rooms/" + code, secret).get("starting").as_bool_or(true));
+    // Pia removes Bob: his results screen is told, and her START is taken
+    ASSERT_TRUE(pia_back.lobby->request_remove(1));
+    ASSERT_TRUE(w.until([&]() { return bob_results.was_rejected; }, 10000));
+    ASSERT_EQ(bob_results.rejected, net::RejectReason::Kicked);
+    ASSERT_TRUE(pia_back.lobby->request_start());
+    ASSERT_TRUE(w.until([&]() { return pia_back.lobby->room().starting(); }, 10000));
+    server.signal_it(SIGTERM);
+    int status = 0;
+    ASSERT_TRUE(server.wait_exit(10000, status) >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    const std::string log = text_of_file(log_file);
+    ASSERT_TRUE(log.find(hex_of(pia_key)) == std::string::npos && log.find(hex_of(bob_key)) == std::string::npos);      // (no key in the log)
+}
+
 }  // namespace
 
 void run_persist_process_tests() {
@@ -395,6 +477,10 @@ void run_persist_process_tests() {
 
     TEST_CASE("S3.96 The Real Program, Killed (SIGKILL: A Crash, The Container's Death) In The Middle Of A Match Of A Room That The Control Interface Made: The Record Holds Every Turn That A Machine Has Been Sent (A Turn Is Written Before It Is Sent: No Turn Is Lost That A Player Has Seen), The Program Started Again Restores The Room, Both Machines Find It By Themselves And Are Not Told That They Are Ahead, The Match Goes On And Ends In One State On The Machines And On The Referee")  {
         real_process_scenario("persist-90", SIGKILL, true);
+    } TEST_END();
+
+    TEST_CASE("S3.199 The Real Program, The Rematch Over Real TCP (--demo-lobbies): Two Pages Make A Lobby, START, Their Games Take The Seats Over With The Keys, One Quits And The Rules End The Match; The Same Code Is A Lobby At Once (Nobody Leads, The Match's Colours; The Control Interface Lists The Match Beside It); A Results Screen Holds Its Seat, A Stranger Is Turned Away (MatchRunning), The Host's Page Comes Back With Its Key And Leads, START Waits And The Host Is Told Who Is Missing, The Host Removes Them (Their Results Screen Is Told) And START Is Taken; No Key Is In The Log") {
+        rematch_process_scenario();
     } TEST_END();
 
     TEST_CASE("S3.101 The Real Container (Opt-In: ANTS_PERSIST_CONTAINER Names A Container That The Operator Made From The Server's Image With A Volume At /results, --reconnect And The Ports ANTS_PERSIST_GAME_PORT / ANTS_PERSIST_CTL_PORT / ANTS_PERSIST_SECRET): A Match Of Two Machines, docker stop (SIGTERM, Exit Code 0 Within The Grace), docker start, The Record On The Volume Is For Its Owner Only, The Machines Find The Room By Themselves, The Match Ends In One State On The Machines And The Referee, The Record Is Gone, No Key Is In The Container's Log") {

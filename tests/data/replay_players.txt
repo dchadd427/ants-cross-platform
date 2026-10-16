@@ -1,0 +1,8 @@
+# The players of a match in the public list of replays (GET /replays, "players": what the game server writes, replay_person_name of src/ants_server/room.cpp and then replay::seat_label of
+# src/ants_replay/player.cpp), beside the names that the game page knows of the same match (window.antsMatchOver "names": the Start's, '' for a seat that did not play). One match a line: the
+# four names by seat with '|' between them, " => ", and the labels of the list with '|' between them. The first line is a real match: test_server S3.202 records a lobby room's match of
+# Pia, Bob and a Medium bot (its name in the room rmt00021) and compares the list's labels; S3.202 also makes every line's labels from its names with the server's own functions.
+# tests/scripts/web_rematch_check.js reads every line: the front page's findReplay finds the match by these labels (the link "Stats and replay").
+Pia|Bob|Pioneer (bot, Medium)| => Green (Pia)|Red (Bob)|Blue (Pioneer (bot, Medium))
+Maple|Player 2|Q"x\y|Player 4 => Green (Maple)|Red|Blue (Q"x\y)|Black
+Player|Sam||Pip (bot, Hard) => Green|Red (Sam)|Black (Pip (bot, Hard))

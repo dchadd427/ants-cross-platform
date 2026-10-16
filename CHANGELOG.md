@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.56 - 2026-10-16 - Rematch: back to the lobby with one button
+
+**For players:**
+- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
+- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...05109ff0)
+
 ## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
 **For players:**
@@ -543,15 +553,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/486a39d...141cd3c), merged earlier without a release: [#16](https://github.com/dchadd427/ants-cross-platform/pull/16) (the bots), [#27](https://github.com/dchadd427/ants-cross-platform/pull/27) (Nobody and the Team switches), [#32](https://github.com/dchadd427/ants-cross-platform/pull/32) (Leave Game), [#36](https://github.com/dchadd427/ants-cross-platform/pull/36) (the bots' gate), [#38](https://github.com/dchadd427/ants-cross-platform/pull/38) (the bots and the flowers), [detailed notes](docs/NETWORK_PORT.md#protocol-15-one-link-makes-a-room-short-room-codes-and-the-leaders-swap-v0110)
 
-## v0.10.0 - 2026-10-05 - The leader of a room can move a player to another colour
+## Older versions (v0.10.0 and before)
 
-**For players:**
-- **The leader of a room can change a player's colour:** press a player's row in the Players' Status box, and that player moves to the next colour that nobody has (Green, Red, Blue, Black, round again). The player is told in the room's chat ("Ann moved you to Red."), nobody is ever moved out of a colour, and the bots of the leader's plan stay where the match needs them. The leader's own row works too. Only the leader's screen has it (the first player who joined), on the classic page and the 16:9 one; when the first friend is in, the status line says how for five seconds.
-
-**Rules / network:** network protocol 14: one new message (SeatMove: the leader puts a player in an empty colour), so a game of an earlier release cannot join (reload the page once after the update). The server's room status shows `seat_moves` and `ignored_seat_moves`.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/71a8199...e93ee44), [detailed notes](docs/NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour)
-
-## Older versions (v0.9.1 and before)
-
-Every release before v0.10.0, and the long notes of v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.11.0, and the long notes of v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

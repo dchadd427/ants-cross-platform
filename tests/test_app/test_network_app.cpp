@@ -22,6 +22,7 @@ int main(int argc, char* argv[]) {
     run_room_chat_ui_tests();
     run_room_chat_box_tests();
     run_one_card_tests();
+    run_rematch_app_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

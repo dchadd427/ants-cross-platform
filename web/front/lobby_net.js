@@ -15,7 +15,7 @@
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS
     var NO_TEAM = 255, NO_LEADER = 255, ROOM_SENDER = 255;
-    var CLIENT_PAGE = 1;                                           // kClientPage
+    var CLIENT_GAME = 0, CLIENT_PAGE = 1;                          // kClientGame (the game page's own Hello on its results screen: the rematch) and kClientPage
     var CREATE_LEADER_STARTS = 1, CREATE_LOBBY = 2;                // CreateBlock.flags
     var WELCOME_REJOIN = 1, WELCOME_CREATED = 2;                   // Welcome.flags
     var ROOM_LEADER_STARTS = 1, ROOM_LOBBY = 2, ROOM_STARTING = 4; // Room.flags
@@ -109,14 +109,16 @@
 
     // ---- messages that a page sends ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    // Hello of a lobby page (client kind 1). h: { name, room, key (16 bytes, none: a new player), platform (0: not told), create: { map ('' keeps the server's) } or none }.
+    // Hello of a lobby page (client kind 1). h: { name, room, key (16 bytes, none: a new player), platform (0: not told), create: { map ('' keeps the server's) } or none, kind: 'game' for the game page's Hello
+    // on its results screen (client kind 0, never a block: it holds the reserved seat of its key in the lobby room of the rematch and leaves it reserved, docs/SERVER.md "Lobby rooms") }.
     // A lobby block is four seats with the leader starting (valid_create_block); its teams are ignored by the server (the plan decides), so they travel as "none".
     // The server refuses a Hello whose name is not printable ASCII (or is longer than 32) and a block whose map is no map name: here the name is made as the game's client makes it (the characters outside
     // the table are left out), a map that is no map name is left out (the room is made with the server's own), a platform that is none is "not told" and a key that is none is a new player's.
     function encodeHello(h) {
         var w = new Writer().u8(MSG.Hello).u16(PROTOCOL).str8(printableOnly(h.name, MAX_NAME)).u16(0).u8(255).str8(typeof h.room === 'string' ? h.room : '').str8('');
-        w.bytes(isKey(h.key) ? h.key : zeroKey()).u32(0).u8(validPlatform(h.platform) ? h.platform : 0).u8(CLIENT_PAGE);
-        if (h.create) w.str8(validMapName(h.create.map) ? h.create.map : '').u8(PLAYERS).u8(NO_TEAM).u8(NO_TEAM).u8(CREATE_LEADER_STARTS | CREATE_LOBBY);
+        var game = h.kind === 'game';
+        w.bytes(isKey(h.key) ? h.key : zeroKey()).u32(0).u8(validPlatform(h.platform) ? h.platform : 0).u8(game ? CLIENT_GAME : CLIENT_PAGE);
+        if (h.create && !game) w.str8(validMapName(h.create.map) ? h.create.map : '').u8(PLAYERS).u8(NO_TEAM).u8(NO_TEAM).u8(CREATE_LEADER_STARTS | CREATE_LOBBY);
         return w.done();
     }
     function encodeLeave() { return new Writer().u8(MSG.Leave).done(); }
@@ -268,7 +270,9 @@
             var leaderLeft = prev.leader !== movedFrom && gone.indexOf(prev.leader) !== -1;
             var before = prev.slots[prev.leader].name;
             if (leaderLeft || next.slots[next.leader].name !== before) {
-                events.push({ type: 'host', seat: next.leader, name: next.slots[next.leader].name, you: next.leader === next.you, before: before });
+                // back: the rematch (docs/SERVER.md "Lobby rooms"): the one who leads now was on the results screen of the match a moment ago (the room counted the seat as a game before any START) and is back
+                var back = !prev.starting && !next.starting && personIn(prev, next.leader) && ((prev.inGame >> next.leader) & 1) === 1 && ((next.inGame >> next.leader) & 1) === 0;
+                events.push({ type: 'host', seat: next.leader, name: next.slots[next.leader].name, you: next.leader === next.you, before: before, back: back });
             }
         }
         var planChanged = prev.map !== next.map || prev.teamA !== next.teamA || prev.teamB !== next.teamB || prev.mode !== next.mode;
@@ -287,9 +291,10 @@
     }
 
     // ---- the client ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, joinFirst, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
+    // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, joinFirst, kind, keyOnly, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
     // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. joinFirst: true is that for the first Hello only, a link
-    // that was sent: once the room has taken us, a room that is lost (a restart) is made again, as a page that came back does.)
+    // that was sent: once the room has taken us, a room that is lost (a restart) is made again, as a page that came back does. kind: 'game' and keyOnly: true are the game page's results screen in the rematch
+    // (web/front/rematch.js): a game's Hello with the key, and the seat of that key or nothing: a room that is gone is 'refused' (never made again), and a Welcome that is not our key's seat is left at once.)
     //   'status' (status)           idle -> connecting -> online; offline (reconnecting); refused, removed, superseded, closed (final)
     //   'welcome' ({ seat, created, rejoin })   the room took us (created: our Hello made it); the key is not in it (rejoinEntry() is how a page hands it to the game)
     //   'room' (room)               every Room message, then the events of diffRooms for it
@@ -328,6 +333,8 @@
         this.keyBytes = isKey(opts.key) ? new Uint8Array(opts.key) : null;      // a copy: the caller's array is the caller's; read it with .key (a copy again)
         this.joinOnly = opts.join === true || opts.joinFirst === true;                          // a Hello with no lobby block: the room of the code is joined and never made (a code that somebody typed: no such room is NoSuchRoom)
         this.joinOnce = opts.joinFirst === true && opts.join !== true;     // ... but only until the room has welcomed us (a link): after that a room that is lost is made again
+        this.kind = opts.kind === 'game' ? 'game' : 'page';
+        this.keyOnly = opts.keyOnly === true;
         this.WS = 'WebSocket' in opts ? opts.WebSocket : (typeof WebSocket !== 'undefined' ? WebSocket : null);
         this.setTimer = opts.setTimeout || function (fn, ms) { return setTimeout(fn, ms); };
         this.clearTimer = opts.clearTimeout || function (id) { clearTimeout(id); };
@@ -411,7 +418,7 @@
             self.heard = self.now();
             self.arm(self.silenceMs);
             try {
-                ws.send(encodeHello({ name: self.name, room: self.code, key: self.keyBytes, platform: self.platform, create: self.joinOnly ? null : { map: self.map } }));
+                ws.send(encodeHello({ name: self.name, room: self.code, key: self.keyBytes, platform: self.platform, kind: self.kind, create: self.joinOnly ? null : { map: self.map } }));
                 self.helloSent = true;
             } catch (e) {
                 self.giveUpSocket();                                // (the link went between its opening and our first word: the way back)
@@ -464,6 +471,13 @@
         if (!m) return;
         if (m.type === 'ping') { this.sendBytes(encodePong(m.nonce, m.sentMs)); return; }
         if (m.type === 'welcome') {
+            if (this.keyOnly && (this.keyBytes === null || hexOf(m.key) !== hexOf(this.keyBytes))) {      // (keyOnly: not the seat of our key, which is gone: the room took us as a newcomer; we leave it at once)
+                this.sendBytes(encodeLeave());
+                this.giveUpSocketQuietly();
+                this.keyBytes = null;
+                this.refuse(REJECT.NoSuchRoom);
+                return;
+            }
             this.seat = m.player;
             this.keyBytes = m.key;
             this.created = m.created;
@@ -491,7 +505,7 @@
         }
     };
     LobbyClient.prototype.onReject = function (reason) {
-        if (reason === REJECT.NoSuchRoom && this.keyBytes !== null) {      // our room is gone: make it again (a Hello without the key and with the block)
+        if (reason === REJECT.NoSuchRoom && this.keyBytes !== null && !this.keyOnly) {      // our room is gone: make it again (a Hello without the key and with the block)
             this.keyBytes = null;
             this.room = null;
             this.seat = -1;
@@ -598,6 +612,13 @@
         this.keyBytes = null;
         this.setStatus('closed');
         return sent;
+    };
+    // The seat is let go of QUIETLY: no Leave (the seat stays the room's for its key: the game page's results screen hands it to the front page of its tab), no way back; nothing more is handed out
+    LobbyClient.prototype.drop = function () {
+        if (this.final()) return;
+        this.giveUpSocketQuietly();
+        if (this.retryTimer !== null) { this.clearTimer(this.retryTimer); this.retryTimer = null; }
+        this.setStatus('closed');
     };
     // The entry for the game page's storage, { name, text } (rejoinEntry), or null before the room has welcomed us. The page writes it when the leader's START is heard (the 'starting' event), under
     // the seat that the last Room message gave, and goes to the game page: the game takes the seat over with the key.

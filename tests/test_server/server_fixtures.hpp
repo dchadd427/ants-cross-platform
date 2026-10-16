@@ -389,6 +389,14 @@ struct World {
         mgr.status(code, s, now);
         return s;
     }
+    // The status of the match of a code that is over: its room, or (a lobby room's match that its rules ended: the rematch) the room of that match, which gave the code to the rematch's lobby and is listed
+    // beside it until its keep time is over
+    RoomStatus ended(const std::string& code) {
+        for (const RoomStatus& s : mgr.list(now)) {
+            if (s.code == code && (s.state == RoomState::Finished || s.state == RoomState::Failed)) return s;
+        }
+        return RoomStatus{};
+    }
 };
 
 // A create block for a room of `seats` on `map` (a file name as the server lists it, "" for the server's own choice), with the teams (255 = free for all) and the leader-starts flag.
@@ -668,6 +676,7 @@ struct RClient {
     uint16_t listen_port{0};                 // the port that the machine announces for the other guests (a game on the local network does; a server's room never uses it)
     std::optional<net::CreateBlock> create;  // the create block of its Hello (protocol 15): what makes a public room on a server that offers them
     uint8_t platform{0};
+    uint8_t kind{net::kClientGame};          // what its Hello says it is (protocol 16): a game, or a lobby page (which never gets a Start)
 
     void start(net::Connection* client_end, uint32_t seed) {
         end = client_end;
@@ -680,6 +689,7 @@ struct RClient {
         cc.listen_port = listen_port;
         cc.create = create;
         cc.platform = platform;
+        cc.client_kind = kind;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -1429,3 +1439,4 @@ void run_persist_review_process_tests();
 void run_persist_review_process_tests_2();
 void run_restore_tests();
 void run_lobby_room_tests();
+void run_rematch_tests();

@@ -1,0 +1,5 @@
+# What the game tells its page when the match of a server's room is over (Application::match_over_json; the page's web/front/rematch.js parseOver reads it): one case per line, its name, a blank and the
+# text. test_network_app N5.99 builds every line from its fields and compares, byte for byte; tests/scripts/web_rematch_check.js reads every line with the page's own code (the two sides hold one contract).
+two-players {"room":"k7m2xq","seat":1,"map":"TREASURE.LVL","mode":0,"names":["Maple","Sam","",""],"rows":[{"seats":[0],"score":2040,"won":true},{"seats":[1],"score":420,"won":false}]}
+alliance-187 {"room":"r2d2c3","seat":3,"map":"Bomb Island.lvl","mode":1,"names":["Maple","Pi\"p","Juniper","a\\b"],"rows":[{"seats":[0,2],"score":1100,"won":true},{"seats":[1],"score":900,"won":false},{"seats":[3],"score":100,"won":false}]}
+tie-with-a-bot {"room":"t1e000","seat":0,"map":"SMALL.LVL","mode":0,"names":["Maple","Sam","","Pip (bot, Hard)"],"rows":[{"seats":[0],"score":1500,"won":true},{"seats":[1],"score":1500,"won":true},{"seats":[3],"score":300,"won":false}]}

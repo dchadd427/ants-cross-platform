@@ -502,6 +502,14 @@ public:
     /// Called once for each game on this computer, when its first tick runs (never for a match of the network, whichever machine it is): the web build tells its page, which has the server count
     /// the game for the front page's numbers (web/shell.html antsReportLocalGame, docs/SERVER.md, "The site statistics, GET /stats and POST /stats/local"). A native game sets nothing and so reports nothing.
     void set_on_local_match_started(std::function<void()> hook) { on_local_match_started_ = std::move(hook); }
+    /// The match of a server's room is over (check_match_over: once for each match, BEFORE the key of the seat is let go of): `fn` is told what the results show, as the text of match_over_json. The web build
+    /// tells its page (window.antsMatchOver, web/front/rematch.js), which holds the seat that the rematch of a lobby room keeps for this player and offers "Back to the lobby" (docs/SERVER.md "Lobby rooms");
+    /// the tests give a function of their own. Never called for a game of one machine, a room of the local network (no room code) or a recording.
+    void set_on_match_over(std::function<void(const std::string&)> fn) { on_match_over_ = std::move(fn); }
+    /// The text that set_on_match_over's function is told: {"room","seat","map","mode","names":[the four seats' names, "" for a seat that did not play],"rows":[{"seats":[one, or two allies],"score","won"}]}.
+    /// The rows are the results screen's as the server orders them (MatchResult::rows(255): no seat's own tie rule), `won` is true when the row's team plays the winner cue on its own screen (a tie: both rows).
+    /// The names and the map are the Start's (printable ASCII: a quote and a backslash are escaped, anything else becomes '?').
+    static std::string match_over_json(const std::string& room, uint8_t seat, const net::StartMsg& start, const sim::MatchResult& result);
     /// The network's clock in ms: what the frames and the wake-ups have given the session so far
     double net_clock_ms() const noexcept { return net_time_ms_; }
     /// How many wake-ups made a step since the application started
@@ -700,6 +708,7 @@ private:
     double net_time_ms_{0.0};
     double start_when_pressed_ms_{-1.0e9};                // --start-when: when the hook last pressed START
     std::function<void(uint8_t)> on_seat_known_;           // (set_on_seat_known)
+    std::function<void(const std::string&)> on_match_over_;   // (set_on_match_over)
     uint8_t seat_told_{255};                               // the seat that on_seat_known_ was last told (255: none, or the session ended)
     bool page_hidden_{false};                              // the browser's page is hidden (set_page_hidden): a network match belongs to the wake-ups, see background_pump
     bool advancing_{false};                                // a frame or a background step is advancing the clocks and the match: no other one may start inside it
