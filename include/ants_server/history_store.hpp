@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "ants_db/database.hpp"
+#include "ants_replay/match_stats.hpp"
 #include "ants_server/history_record.hpp"
 #include "ants_server/replay_store.hpp"
 
@@ -180,7 +181,7 @@ private:
 
 /// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
 /// history in one transaction, with the details that the same play counted (match_stats.hpp, history_details.hpp). When no new file is left the records that were counted before the pass kept details, and whose
-/// recording is still kept and plays here, get theirs the same way, newest first (a recording that cannot be counted gets the marker, so that it is not tried again). The work is never done on the server's loop in a burst: one file at most per call, the gap after it at least kPaceMs and kPaceFactor times what the file took, and only when the caller says the server is idle (no room
+/// recording is still kept and plays here, get theirs the same way, newest first (a recording that is read and cannot be played gets the marker, so that it is not tried again; one that cannot be tried, its map not being here, gets nothing and is tried at the next start). The work is never done on the server's loop in a burst: one file at most per call, the gap after it at least kPaceMs and kPaceFactor times what the file took, and only when the caller says the server is idle (no room
 /// runs or restores a match). The files that the replay store holds when the server starts (up to 30 days of them) are counted the same way, the newest first, and so are the matches that arrive later (the
 /// room's own, and the files that the bot arena puts in the folder). A file that cannot be counted (another simulation's rules, a map that is not here, a file that does not play out the same here) is left out
 /// with one line in the log, and tried again only when the server starts again. While the store is unavailable nothing is played.
@@ -194,6 +195,10 @@ public:
     /// `maps_dir` is the folder that replay::load_map looks for the match's map in, then `community_dir` (the players' maps: a match on one of them is counted too; empty: none). The three objects must outlive
     /// the feeder. `clock_us` is a steady clock in microseconds that times the work of a pass (empty: std::chrono::steady_clock; the tests inject one).
     HistoryFeeder(HistoryStore& history, const ReplayStore& replays, std::string maps_dir, std::function<uint64_t()> clock_us = std::function<uint64_t()>(), std::string community_dir = std::string());
+
+    /// Makes the `details` of a counted match (make_history_details by default); a test hands a maker that throws, to see that the counters of a match are written whatever the pass does
+    using DetailsMaker = std::function<std::string(const replay::MatchStats&, const HistoryRecord&)>;
+    void set_details_maker(DetailsMaker maker) { details_maker_ = std::move(maker); }
 
     /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
@@ -214,6 +219,7 @@ private:
     HistoryStore& history_;
     const ReplayStore& replays_;
     std::vector<std::string> map_dirs_;               // the folders of the maps, asked in order
+    DetailsMaker details_maker_;
     std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)

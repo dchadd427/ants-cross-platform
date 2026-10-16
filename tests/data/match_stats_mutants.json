@@ -365,8 +365,8 @@
   {
    "id": "the_cap_is_not_kept",
    "file": "src/ants_server/history_details.cpp",
-   "old": "if (text.size() <= kDetailsMaxBytes) break;",
-   "new": "break;",
+   "old": "if (text.size() <= kDetailsMaxBytes) return text;",
+   "new": "return text;",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
   },
@@ -445,7 +445,7 @@
   {
    "id": "a_counted_match_has_no_details",
    "file": "src/ants_server/history_store.cpp",
-   "old": "record.details = make_history_details(played.stats, record);",
+   "old": "record.details = details_maker_(played.stats, record);",
    "new": "",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
@@ -465,6 +465,86 @@
    "new": "",
    "build": "test_history_details",
    "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "an_order_is_binned_one_turn_late",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "const size_t minute = turn / MatchStats::kMinuteTurns;",
+   "new": "const size_t minute = (turn + 1) / MatchStats::kMinuteTurns;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "there_is_no_grace_before_the_ants_are_placed",
+   "file": "src/ants_replay/match_stats.cpp",
+   "old": "if (!plays(roster_, s) || turns <= 40) continue;",
+   "new": "if (!plays(roster_, s) || turns <= 0) continue;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_series_may_have_49_points",
+   "file": "include/ants_server/history_details.hpp",
+   "old": "inline constexpr size_t kDetailsMaxPoints = 48;",
+   "new": "inline constexpr size_t kDetailsMaxPoints = 49;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_cap_is_5100_bytes",
+   "file": "include/ants_server/history_details.hpp",
+   "old": "inline constexpr size_t kDetailsMaxBytes = 5000;",
+   "new": "inline constexpr size_t kDetailsMaxBytes = 5100;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "combat_and_economy_are_never_dropped",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    if (shed < 5) {",
+   "new": "    if (true) {",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_text_that_is_too_long_is_given_as_it_is",
+   "file": "src/ants_server/history_details.cpp",
+   "old": "    }\n    return history_details_marker();",
+   "new": "    }\n    return text;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_pass_trusts_the_statement_to_guard_the_details",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    if (!record.details.empty()) return true;                                            // (it has some now)\n",
+   "new": "\n",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "a_missing_map_leaves_a_marker",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "else if (!replay::load_map(rep.head, map_dirs_, level, why)) for_now = true;",
+   "new": "else if (!replay::load_map(rep.head, map_dirs_, level, why)) for_now = false;",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_details_that_throw_take_the_counters_along",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "    } catch (const std::exception& ex) {\n        record.details.clear();",
+   "new": "    } catch (const std::exception& ex) {\n        throw;\n        record.details.clear();",
+   "build": "test_history_details",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HD ./build/tests/test_server/test_history_details"
+  },
+  {
+   "id": "the_server_gives_the_feeder_no_community_folder",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "std::function<uint64_t()>(), store_.community_directory());",
+   "new": "std::function<uint64_t()>(), std::string());",
+   "build": "test_history_store",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HS6.8 ./build/tests/test_server/test_history_store"
   }
  ]
 }

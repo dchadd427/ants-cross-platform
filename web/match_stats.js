@@ -12,7 +12,7 @@
     'use strict';
     var H = root.AntsHistory || (typeof require === 'function' ? require('./history_page.js') : null);
     var SEATS = ['Green', 'Red', 'Blue', 'Black'], SHAPES = ['circle', 'square', 'triangle', 'diamond'], NS = 'http://www.w3.org/2000/svg';
-    var MAX_POINTS = 200, MAX_MINUTES = 120, BASE = [13, 23, 31], FALLBACK = [[121, 191, 147], [212, 112, 127], [143, 143, 214], [179, 175, 185]];
+    var MAX_POINTS = 200, MAX_MINUTES = 120, MAX_TURNS = 2200000, MAX_LEAD = 200, MAX_ROWS = 8, MAX_GRID = 60, BASE = [13, 23, 31], FALLBACK = [[121, 191, 147], [212, 112, 127], [143, 143, 214], [179, 175, 185]];
 
     // ---- reading `details` ----
     function num(x) { return typeof x === 'number' && isFinite(x) ? x : 0; }
@@ -25,6 +25,10 @@
     function seconds(turns) { return Math.round(Math.max(0, num(turns)) / 20) + ' s'; }
     function n0(n) { return H.numberText(n); }
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+    // Details come from a server and are trusted for nothing: a length, a step or a list that is not what a match can have is cut here, so that a damaged record can make a wrong chart but never a hang
+    function turnsOf(x, fallback) { var n = num(x); return Math.min(MAX_TURNS, Math.max(1, n > 0 ? n : fallback)); }
+    function px(v) { return v < -100000 ? -100000 : v > 100000 ? 100000 : v; }      // a coordinate of a chart: finite and short, so that a path never has an exponent in it
 
     // The context of one record: the seats that played (by seat number), its details, and the helpers that read a seat's name
     function contextOf(rec) {
@@ -42,7 +46,7 @@
     // the leaders: [{t, seat, ally}] from details.highlights.lead
     function leadersOf(d) {
         var out = [];
-        list(obj(d.highlights).lead).forEach(function (e) {
+        list(obj(d.highlights).lead).slice(0, MAX_LEAD).forEach(function (e) {
             var s = seatOf(list(e)[1]);
             if (s >= 0) out.push({ t: num(list(e)[0]), seat: s, ally: seatOf(list(e)[2]) });
         });
@@ -68,6 +72,12 @@
         });
         return { busiest: best, peak: peak };
     }
+    // No ant was lost: nothing in the kills and the damage (they are what the pass attributed to a team), and none in the scoreboard's own count of lost ants (an ant that died with no team to blame is in no kill)
+    function noAntLost(ctx, combat) {
+        var c = obj(combat);
+        if (!combat || sum(c.dealt) !== 0 || sum(list(c.kills).map(sum)) !== 0 || list(c.ev).length > 0) return false;
+        return ctx.played.length > 0 && ctx.played.every(function (p) { var l = ctx.by[p] && ctx.by[p].lost; return typeof l === 'number' && l === 0; });
+    }
     // Up to four chips for the band: [{href, label, parts}]. A chip links to the section that has the rest, so none is made for a section that is not on the page.
     function chipsOf(ctx) {
         var d = ctx.d, chips = [];
@@ -75,7 +85,7 @@
         var hl = obj(d.highlights), fb = obj(hl.first_blood), act = obj(d.activity), lead = leadersOf(d), cb = obj(hl.comeback);
         var by = seatOf(fb.by), of = seatOf(fb.of);
         if (fb.t !== undefined && by >= 0 && of >= 0) chips.push({ href: '#overtime', label: 'First blood', parts: [side(by, -1), ' on ', side(of, -1), ', ' + clock(fb.t)] });
-        else if (d.combat && sum(obj(d.combat).dealt) === 0 && sum(list(obj(d.combat).kills).map(sum)) === 0) chips.push({ href: '#overtime', label: 'Fights', parts: ['No ant was lost in this match'] });
+        else if (noAntLost(ctx, d.combat)) chips.push({ href: '#overtime', label: 'Fights', parts: ['No ant was lost in this match'] });
         if (lead.length > 1) chips.push({ href: '#overtime', label: 'Lead', parts: ['Changed hands ' + plural(lead.length - 1, 'time', 'times') + '; ', side(lead[lead.length - 1].seat, lead[lead.length - 1].ally), ' took it at ' + clock(lead[lead.length - 1].t)] });
         else if (lead.length === 1) chips.push({ href: '#overtime', label: 'Lead', parts: [side(lead[0].seat, lead[0].ally), ' led from ' + clock(lead[0].t) + ' to the end'] });
         if (num(cb.behind) >= 100 && seatOf(cb.seat) >= 0) chips.push({ href: '#overtime', label: 'Comeback', parts: [side(cb.seat, cb.ally), ' won from ' + n0(cb.behind) + ' points behind (at ' + clock(cb.t) + ')'] });
@@ -91,8 +101,8 @@
         if (lead) rows.push(['Lead', lead]);
         if (num(cb.behind) > 0 && seatOf(cb.seat) >= 0) rows.push(['Comeback', [side(cb.seat, cb.ally), ' was ' + n0(cb.behind) + ' points behind at ' + clock(cb.t) + ' and won.']]);
         if (num(bu.kills) >= 3 && seatOf(bu.seat) >= 0) rows.push(['Best run', [side(bu.seat, -1), ' killed ' + num(bu.kills) + ' ants in ' + seconds(num(bu.t1) - num(bu.t0)) + ' (from ' + clock(bu.t0) + ').']]);
-        var out = list(hl.out);
-        list(hl.wiped_out).forEach(function (w) {
+        var out = list(hl.out).slice(0, MAX_ROWS);
+        list(hl.wiped_out).slice(0, MAX_ROWS).forEach(function (w) {
             var s = seatOf(list(w)[0]), gone = out.some(function (o) { return seatOf(list(o)[0]) === s; }), times = num(list(w)[2]);
             if (s < 0) return;
             rows.push([gone ? 'Out' : 'Wiped out', [side(s, -1), ' had no ant left at ' + clock(list(w)[1]) + (gone ? ' and was out of the match.' : (times > 1 ? ' (' + times + ' times)' : '') + '; an egg hatched a new one.')]]);
@@ -211,7 +221,7 @@
             var maxV = 0; ctx.played.forEach(function (s) { list(o.series[s]).forEach(function (v) { maxV = Math.max(maxV, num(v)); }); });
             var tstep = niceStep(Math.max(maxV, o.ymax || 0), 5), top = Math.max(tstep, Math.ceil(Math.max(maxV, o.ymax || 0) / tstep) * tstep);
             var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + Ht, width: W, height: Ht, role: 'img', 'aria-label': o.label, 'class': 'chart' });
-            var X = function (t) { return L + w * (t / total); }, Y = function (v) { return T + h - h * (v / top); };
+            var X = function (t) { return px(L + w * (t / total)); }, Y = function (v) { return px(T + h - h * (v / top)); };
             var jit = function (s) { return o.stepped ? (s - 1.5) * 2.6 : 0; };       // seats that tie on a step lie side by side, not on top of each other
             var ticks = Math.round(top / tstep);
             for (var i = 0; i <= ticks; i++) {
@@ -219,7 +229,7 @@
                 sv('line', { x1: L, x2: W - R, y1: y, y2: y, 'class': i ? 'grid' : 'axis' }, svg);
                 sv('text', { x: L - 8, y: y + 4, 'class': 'tick', 'text-anchor': 'end' }, svg).textContent = n0(Math.round(tstep * i));
             }
-            var every = total / 1200 > 18 ? 5 : total / 1200 > 9 ? 2 : 1;
+            var every = Math.max(total / 1200 > 18 ? 5 : total / 1200 > 9 ? 2 : 1, Math.ceil(total / 1200 / MAX_GRID));
             for (var m = 0; m * 1200 <= total; m += every) {
                 var x = X(m * 1200);
                 sv('line', { x1: x, x2: x, y1: T, y2: T + h, 'class': m ? 'vgrid' : 'axis' }, svg);
@@ -269,7 +279,7 @@
             var ctx = contextOf(rec), d = ctx.d, ot = d && obj(d.over_time);
             var series = ot && (ctx.mode187 ? list(ot.kills) : list(ot.score));
             if (!series || !series.some(function (v) { return list(v).length > 0; })) return null;
-            var step = Math.max(1, num(d.step) || 300), turns = Math.max(1, num(d.turns)), hl = obj(d.highlights), first = obj(hl.first_blood);
+            var step = turnsOf(d.step, 300), turns = turnsOf(d.turns, 1), hl = obj(d.highlights), first = obj(hl.first_blood);
             var s = panel('overtime', 'Over time', 'Every ' + seconds(step) + ' · ' + clock(turns) + ' long');
             s.appendChild(legend(ctx));
             var flags = first.t !== undefined && seatOf(first.by) >= 0 ? [{ t: num(first.t), label: 'First blood ' + clock(first.t) }] : [];
@@ -340,7 +350,7 @@
             K.forEach(function (k, i) { cols.push({ label: k[1], val: function (p) { return at(kinds[k[0]], p); }, first: i === 0 }); });
             s.appendChild(seatTable(ctx, cols, 'Orders of every seat by kind'));
             s.appendChild(facts(ctx, activityFacts(ctx, minutes)));
-            s.appendChild(el('p', 'lgd', 'Every order that a player (or a computer player) gave: a move, an attack, a special order (a bomb, a fire, a bridge or a raid, by the type of ant that got it), a stop, a hatch or a team offer.'));
+            s.appendChild(el('p', 'lgd', 'Every order that a player (or a computer player) gave: a move, an attack, a special order (a bomb, a fire, a bridge or a raid, by the type of ant that got it), a stop, a hatch or a team offer. Orders that name no ant of the seat are counted too.'));
             return s;
         }
 

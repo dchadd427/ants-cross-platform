@@ -326,7 +326,7 @@ JsonValue economy(const MatchStats& st) {
     return e;
 }
 
-// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points
+// `shed` makes the text smaller, step by step: 1 no list of kills, 2 no list of raids either, 3 and 4 a series of half and a quarter the points, 5 no combat and no economy
 std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     JsonValue d = JsonValue::make_object();
     d.set("v", num(kDetailsVersion));
@@ -336,8 +336,10 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
     if (!st.samples.empty() && st.turns >= step) d.set("over_time", over_time(st, record, step));
     d.set("highlights", highlights(st, record));
     d.set("activity", activity(st));
-    d.set("combat", combat(st, shed < 1, shed < 2));
-    d.set("economy", economy(st));
+    if (shed < 5) {
+        d.set("combat", combat(st, shed < 1, shed < 2));
+        d.set("economy", economy(st));
+    }
     return ctl::to_json(d);
 }
 
@@ -346,11 +348,11 @@ std::string build(const MatchStats& st, const HistoryRecord& record, int shed) {
 std::string make_history_details(const replay::MatchStats& stats, const HistoryRecord& record) {
     if (!stats.ok) return std::string();
     std::string text;
-    for (int shed = 0; shed <= 4; ++shed) {
+    for (int shed = 0; shed <= 5; ++shed) {
         text = build(stats, record, shed);
-        if (text.size() <= kDetailsMaxBytes) break;
+        if (text.size() <= kDetailsMaxBytes) return text;
     }
-    return text;
+    return history_details_marker();                                  // (a match so long, with numbers so large, that its minutes of orders alone do not fit: told as not counted, the cap is never passed)
 }
 
 std::string history_details_marker() { return "{\"v\":1,\"n\":1}"; }

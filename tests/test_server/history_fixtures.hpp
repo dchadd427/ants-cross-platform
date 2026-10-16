@@ -336,7 +336,7 @@ struct Server {
     RoomManager mgr;
     uint32_t ms{1000};
 
-    Server() : db_ok(open_server_db(database, (temp.path / "ants.db").string())), mgr(MapStore(maps_dir())) {}
+    explicit Server(const std::string& maps = maps_dir(), const std::string& community = std::string()) : db_ok(open_server_db(database, (temp.path / "ants.db").string())), mgr(MapStore(maps, community)) {}
 
     bool open(bool with_history = true, HistoryStore::Config history_config = HistoryStore::Config()) {
         ReplayConfig rc;

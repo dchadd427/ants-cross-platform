@@ -13,7 +13,8 @@
 //                           hp: [[..] x4] (the team of the damage row, the seat that lost the points), raids: [[t, thief, victim, points] ..] (capped likewise; raids_n), stolen, robbed (x4)}
 //   economy                {food: [[trips, points] x4], banked, hatch_cost, bombs_off (x4), taken: [[bomber, fire, thief, combat, swimmer] x4]}
 // A match that the pass could not count has the marker {"v":1,"n":1} (so that it is not tried again at every start); the page shows no stats for it.
-// The text is at most kDetailsMaxBytes: when a very long match with many events is larger, the lists of events go first, then the points of the series get fewer.
+// The text is at most kDetailsMaxBytes, always: when a very long match with many events is larger, the lists of events go first, then the points of the series get fewer, then combat and economy go;
+// a text that is still too long (a match of hours with numbers of ten digits) is the marker.
 
 #include <cstddef>
 #include <cstdint>

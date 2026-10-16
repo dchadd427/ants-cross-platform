@@ -546,6 +546,26 @@ int main() {
             ASSERT_EQ(st.orders_naming[0][static_cast<size_t>(sim::AntType::Worker)], 2u);     // (its own worker is named by the Stop and by the second special order; the other seat's bomber by none)
             ASSERT_EQ(st.orders_naming[0][static_cast<size_t>(sim::AntType::Bomber)], 0u);
         }
+        {
+            Bench b(shell);
+            b.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});                           // (seat 1 plays and has no ant at all)
+            sim::Command go;
+            go.type = sim::CommandType::GroupMove;
+            go.issuer = 0;
+            b.hooks.before_command(1199, go, b.engine);                                        // the last turn of the first minute, and the first of the second
+            b.hooks.before_command(1200, go, b.engine);
+            b.step(40);
+            ASSERT_TRUE(b.collector.take(b.turns).wipes[1] == 0);                              // (the first 40 turns are the ants being placed: nobody is wiped out then)
+            Bench c(shell);
+            c.engine.spawn_unit(0, sim::AntType::Worker, {10, 10});
+            c.hooks.before_command(1199, go, c.engine);
+            c.hooks.before_command(1200, go, c.engine);
+            c.step(41);
+            const MatchStats st = c.collector.take(c.turns);
+            const auto& moves = st.orders[static_cast<size_t>(MatchStats::OrderKind::Move)];
+            ASSERT_TRUE(moves.size() == 2 && moves[0][0] == 1 && moves[1][0] == 1);
+            ASSERT_TRUE(st.wipes[1] == 1 && st.wipe_turn[1] == 41 && st.wipes[0] == 0 && st.wipe_turn[0] == -1);          // (the first look after the 40 turns)
+        }
     } TEST_END();
 
     TEST_CASE("HD2.1 The series: a point every 15 seconds, at the look that ends it; more turns than 48 points of 15 seconds make the step longer; a seat that did not play has no points") {
@@ -566,6 +586,12 @@ int main() {
         const JsonValue e = details_of(longer, record_for({1}));
         ASSERT_TRUE(e.get("step").as_int_or(0) == 800 && e.get("over_time").get("score").at(1).size() == 45);          // (36000 / 800)
         ASSERT_TRUE(at_int(e.get("over_time").get("score"), 1, 0) == 800 && at_int(e.get("over_time").get("score"), 1, 44) == 36000);
+        for (const uint32_t turns : {14700u, 14999u}) {                                              // (49 points of 15 seconds would not fit: the step is 400 turns, 36 or 37 points)
+            MatchStats lg = blank(turns);
+            for (MatchStats::Sample& sm : lg.samples) sm.score[0] = static_cast<int32_t>(sm.turn);
+            const JsonValue g = details_of(lg, record_for({0}));
+            ASSERT_TRUE(g.get("step").as_int_or(0) == 400 && g.get("over_time").get("score").at(0).size() == turns / 400);
+        }
         MatchStats mode187 = blank(3000);
         const JsonValue f = details_of(mode187, record_for({0}, false, kHistoryMode187));
         ASSERT_TRUE(f.get("over_time").has("kills") && !f.get("over_time").has("score"));                                // (in 187 the score is the kills)
@@ -779,7 +805,8 @@ int main() {
             for (size_t t = 0; t < 4; ++t) st.damage_from[s][t] = 9999;
         }
         const std::string text = make_history_details(st, record_for({0, 1}));
-        ASSERT_TRUE(!text.empty() && text.size() <= kDetailsMaxBytes);
+        ASSERT_EQ(kDetailsMaxBytes, size_t{5000});                                                  // (the cap is written out here: a constant that moves must be noticed)
+        ASSERT_TRUE(!text.empty() && text.size() <= 5000);
         const JsonValue d = parse_text(text);
         ASSERT_TRUE(d.get("v").as_int_or(0) == 1 && d.get("combat").get("kills").size() == 4 && d.get("combat").has("dealt") && d.get("activity").get("per_minute").at(0).size() == 30);
         ASSERT_FALSE(d.get("combat").has("ev"));                                                    // (the lists went first)
@@ -797,6 +824,38 @@ int main() {
         // the series of the longest match that a recording can hold (29 hours) has the same number of points as any other
         MatchStats longest = blank(replay::kMaxTurns - replay::kMaxTurns % 100);
         ASSERT_TRUE(parse_text(make_history_details(longest, record_for({0}))).get("over_time").get("kills").at(0).size() <= kDetailsMaxPoints);
+    } TEST_END();
+
+    TEST_CASE("HD3.4 The cap is hard: a match so long that even its minutes of orders do not fit leaves the marker, and one that fits once combat and economy are dropped keeps the rest, a valid text under 5000 bytes") {
+        const auto fill = [](uint32_t minutes) {
+            MatchStats st = blank(minutes * 1200);
+            for (MatchStats::Sample& sm : st.samples) {
+                for (size_t s = 0; s < 4; ++s) {
+                    sm.score[s] = sm.box[s] = 2000000000 - static_cast<int32_t>(sm.turn);
+                    sm.killed[s] = 4000000000u - sm.turn;
+                }
+            }
+            for (auto& kind : st.orders) {
+                kind.resize(minutes);
+                for (auto& minute : kind) {
+                    for (size_t s = 0; s < 4; ++s) minute[s] = 4000000000u;
+                }
+            }
+            for (size_t s = 0; s < 4; ++s) {
+                st.food_points[s] = st.banked[s] = st.hatch_cost[s] = INT64_C(9000000000000000000);
+                for (size_t t = 0; t < 6; ++t) st.orders_naming[s][t] = 4000000000u;
+                for (size_t t = 0; t < 4; ++t) st.damage_from[s][t] = 4000000000u;
+                st.damage_dealt[s] = st.damage_taken[s] = 4000000000u;
+            }
+            return st;
+        };
+        const std::string hour = make_history_details(fill(60), record_for({0}));
+        ASSERT_TRUE(!hour.empty() && hour.size() <= 5000);
+        const JsonValue h = parse_text(hour);
+        ASSERT_TRUE(h.get("v").as_int_or(0) == 1 && h.has("activity") && h.get("activity").get("per_minute").at(0).size() == 60 && !h.has("combat") && !h.has("economy"));   // (the last lists to go)
+        const std::string two_hours = make_history_details(fill(120), record_for({0}));
+        ASSERT_EQ(two_hours, history_details_marker());                                         // (nothing short enough is left to say: the pass is told as not counted)
+        ASSERT_TRUE(two_hours.size() <= 5000);
     } TEST_END();
 
     TEST_CASE("HD3.3 A text that is too long sheds its lists in a fixed order: the list of kills goes first, then the list of raids, then points; the sizes of a sweep of match lengths cross every step and the text stays under the cap") {
@@ -821,7 +880,7 @@ int main() {
                 }
             }
             const std::string text = make_history_details(st, record_for({0}));
-            ASSERT_TRUE(!text.empty() && text.size() <= kDetailsMaxBytes);
+            ASSERT_TRUE(!text.empty() && text.size() <= 5000);
             const JsonValue d = parse_text(text);
             const bool ev = d.get("combat").has("ev"), raids = d.get("combat").has("raids");
             ASSERT_TRUE(!ev || raids);                                                      // (never the list of raids without that of kills gone first)
@@ -908,20 +967,24 @@ int main() {
         ASSERT_EQ(static_cast<size_t>(rig.idle_asked), asked);                       // (nothing left to do: not even asked)
     } TEST_END();
 
-    TEST_CASE("HD4.3 A recording that cannot be counted leaves the marker (so that it is not played again at every start) and a line in the log; a record that has details is never touched; one whose recording is gone is left alone") {
+    TEST_CASE("HD4.3 A recording that cannot be played leaves the marker (so that it is not played again at every start) and a line in the log; a record that has details is never touched; one whose recording is gone is left alone") {
         if (match_file(1).empty() || match_file(2).empty()) {
             std::cout << "SKIPPED (no map)\n";
             return;
         }
-        TempDir nomaps;
-        Rig rig(nomaps.path.string());                                                // (a folder with no map in it: the recordings cannot be played here)
+        Rig rig;
         ASSERT_TRUE(rig.open());
-        const std::string unplayable = rig.keep(match_file(1));
+        const Played pl = play_file(match_file(1));
+        ASSERT_TRUE(pl.ok && !pl.rep.hashes.empty());
+        replay::Replay bad = pl.rep;
+        bad.hashes[0] ^= 1u;                                                           // (the first check of the file is wrong: a recording that is read and never plays out)
+        std::string why;
+        const std::vector<uint8_t> broken = replay::encode(bad, why);
+        ASSERT_FALSE(broken.empty());
+        const std::string unplayable = rig.keep(broken);
+        ASSERT_FALSE(unplayable.empty());
         const std::string has = rig.keep(match_file(2));
         const std::string gone = id_at(kT0 + 777);
-        const Played pl = play_file(match_file(1));
-        ASSERT_TRUE(pl.ok);
-        std::string why;
         HistoryRecord a = make_history_record(unplayable, rig.now, pl.rep, pl.outcome);
         HistoryRecord b = make_history_record(has, rig.now, pl.rep, pl.outcome);
         b.details = "{\"v\":1,\"x\":[1]}";
@@ -998,6 +1061,102 @@ int main() {
         HistoryRecord r;
         ASSERT_TRUE(rig.history.available() && rig.history.find(a, r) && !r.details.empty() && rig.history.find(b, r) && r.details.empty() && rig.feeder.backfilled() == 1);
         ASSERT_TRUE(lines_with(rig.history.take_notes(), "refused by the test") >= 1);
+    } TEST_END();
+
+    TEST_CASE("HD4.6 A record that gets its details while it waits in the queue is not played again: the guard of the pass itself, besides the one of the statement") {
+        if (match_file(1).empty() || match_file(2).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        const std::string older = rig.keep(match_file(1));
+        const std::string newer = rig.keep(match_file(2));
+        std::string why;
+        for (const std::string& id : {older, newer}) {
+            const Played pl = play_file(match_file(id == older ? 1 : 2));
+            ASSERT_TRUE(pl.ok && rig.history.put(make_history_record(id, rig.now, pl.rep, pl.outcome), why));
+        }
+        ASSERT_TRUE(rig.step());                                                      // the newer one is done, the older one waits
+        ASSERT_TRUE(rig.feeder.backfilled() == 1 && rig.feeder.pending() == 1);
+        ASSERT_TRUE(rig.history.set_details(older, "{\"v\":1,\"x\":[2]}", why));      // (another path gave it details meanwhile)
+        rig.drain(6);
+        HistoryRecord got;
+        ASSERT_TRUE(rig.history.find(older, got) && got.details == "{\"v\":1,\"x\":[2]}");
+        ASSERT_EQ(rig.feeder.backfilled(), size_t{1});                                // (it was not played, so it is not counted as played)
+    } TEST_END();
+
+    TEST_CASE("HD4.7 A map that is not here leaves NO marker (the next start, with the folder, plays the recording), and the map is found in the community folder too; the new files and the older records agree on it") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir nomaps;
+        Rig rig(nomaps.path.string());                                                // (the feeder has no map folder: the server started without its maps)
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(match_file(1));
+        const Played pl = play_file(match_file(1));
+        ASSERT_TRUE(pl.ok);
+        std::string why;
+        ASSERT_TRUE(rig.history.put(make_history_record(id, rig.now, pl.rep, pl.outcome), why));
+        rig.drain(8);
+        HistoryRecord got;
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                // no marker, no details
+        ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+        ASSERT_EQ(lines_with(rig.history.take_notes(), id + " has no stats yet"), size_t{1});
+        const int asked = rig.idle_asked;
+        rig.drain(8);
+        ASSERT_EQ(rig.idle_asked, asked);                                             // (not tried again in this run, not told again)
+        // the next start: a feeder with the maps plays it
+        HistoryFeeder later(rig.history, rig.replays, maps_dir());
+        uint32_t ms = 100000;
+        for (int i = 0; i < 8; ++i) later.step([] { return true; }, ms += 300);
+        ASSERT_TRUE(rig.history.find(id, got) && !got.details.empty() && got.details != history_details_marker() && later.backfilled() == 1);
+        // the same recording where the maps folder has no map and the community folder has it
+        Rig players(nomaps.path.string(), maps_dir());
+        ASSERT_TRUE(players.open());
+        const std::string pid = players.keep(match_file(1));
+        ASSERT_TRUE(players.history.put(make_history_record(pid, players.now, pl.rep, pl.outcome), why));
+        players.drain(8);
+        ASSERT_TRUE(players.history.find(pid, got) && !got.details.empty() && got.details != history_details_marker() && players.feeder.backfilled() == 1);
+        // a new file whose map is not here gets no record at all (and no marker): the same rule
+        Rig fresh(nomaps.path.string());
+        ASSERT_TRUE(fresh.open());
+        const std::string fid = fresh.keep(match_file(1));
+        fresh.drain(8);
+        ASSERT_TRUE(fresh.history.count() == 0 && !fresh.history.knows(fid) && fresh.feeder.left_out() == 1);
+    } TEST_END();
+
+    TEST_CASE("HD4.8 The counters of a match are written whatever the pass of the details does: a maker that throws leaves the marker, a line in the log and the record (new file and older record alike)") {
+        if (match_file(1).empty() || match_file(2).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        const auto boom = [](const replay::MatchStats&, const HistoryRecord&) -> std::string { throw std::runtime_error("the details broke"); };
+        Rig rig;
+        ASSERT_TRUE(rig.open());
+        rig.feeder.set_details_maker(boom);
+        const std::string fresh = rig.keep(match_file(1));
+        rig.drain(6);
+        HistoryRecord got, plain;
+        ASSERT_TRUE(rig.history.find(fresh, got) && got.details == history_details_marker() && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
+        const Played pl = play_file(match_file(1));
+        ASSERT_TRUE(pl.ok);
+        plain = make_history_record(fresh, got.ended_s, pl.rep, pl.outcome);
+        ASSERT_TRUE(got.seats.size() == plain.seats.size() && got.turns == plain.turns);
+        for (size_t s = 0; s < got.seats.size(); ++s) ASSERT_TRUE(got.seats[s].score == plain.seats[s].score && got.seats[s].killed == plain.seats[s].killed && got.seats[s].lost == plain.seats[s].lost);
+        const std::vector<std::string> told = rig.history.take_notes();
+        ASSERT_TRUE(lines_with(told, fresh + " has no stats") == 1 && lines_with(told, "the details broke") == 1);
+        // an older record
+        Rig old;
+        ASSERT_TRUE(old.open());
+        old.feeder.set_details_maker(boom);
+        const std::string oid = old.keep(match_file(2));
+        const Played p2 = play_file(match_file(2));
+        std::string why;
+        ASSERT_TRUE(p2.ok && old.history.put(make_history_record(oid, old.now, p2.rep, p2.outcome), why));
+        old.drain(6);
+        ASSERT_TRUE(old.history.find(oid, got) && got.details == history_details_marker() && old.feeder.backfilled() == 1);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

@@ -1234,6 +1234,29 @@ int main() {
         ASSERT_TRUE(lines_with(s.mgr.take_notices(), "unavailable") == 0);          // (nothing of this was a failure of the database)
     } TEST_END();
 
+    TEST_CASE("HS6.8 The server hands its community folder to the feeder: a recording on a player's map is counted (with the folder; with the maps folder alone it is not)") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir maps_off, players;                                                      // (no official maps here; the players' folder holds the map the match was played on)
+        fs::copy_file(maps_dir() + "/TINY.LVL", players.path / "TINY.LVL");
+        {
+            Server s(maps_off.path.string(), players.path.string());
+            ASSERT_TRUE(s.open());
+            const std::string id = s.keep(match_file(1));
+            s.run_updates(30);
+            ASSERT_TRUE(s.mgr.history_store() != nullptr && s.mgr.history_store()->count() == 1 && s.mgr.history_store()->knows(id));
+            const ctl::JsonValue got = parse_text(s.control("GET", "/history/" + id).body);
+            ASSERT_TRUE(got.get("id").str() == id && got.get("details").get("v").as_int_or(0) == 1);          // (with its stats: the same play)
+        }
+        Server alone(maps_off.path.string());
+        ASSERT_TRUE(alone.open());
+        alone.keep(match_file(1));
+        alone.run_updates(30);
+        ASSERT_TRUE(alone.mgr.history_store() != nullptr && alone.mgr.history_store()->count() == 0);
+    } TEST_END();
+
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

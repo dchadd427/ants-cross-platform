@@ -102,6 +102,7 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     same('orders by kind: a column for each kind that the page names', ac.byTag('th').map(text), ['Player', 'Orders', 'Moves', 'Attacks', 'Bombs', 'Fires', 'Bridges', 'Raids']);
     same('... and a row for each seat with its numbers', ac.byTag('tr').slice(1).map((r) => r.byTag('td').map((d) => text(d.byTag('b')[0] || d))), [['Gory', '239', '284', '307', '2', '0', '0', '7'], ['Dethcon', '332', '387', '503', '0', '0', '0', '25'], ['Finn (bot, Hard)', '258', '234', '100', '15', '0', '0', '24'], ['Cocoa (bot, Hard)', '199', '163', '43', '48', '0', '0', '6']]);
     same('... a card for each seat on a phone', ac.byClass('sc-card').length, 4);
+    check('the footnote of the orders says that an order with no ant of the seat is counted too', ac.byClass('lgd').map(text).some((t) => t.endsWith('Orders that name no ant of the seat are counted too.')), ac.byClass('lgd').map(text).join(' | '));
     same('who was busiest', ac.byClass('facts')[0].byTag('dd').map(text), ['Dethcon: 332 orders, 28 a minute', 'Minute 2 (1:00 to 2:00): 301 orders from all seats', 'Finn (bot, Hard) in minute 2: 125 orders']);
 }
 
@@ -127,6 +128,16 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     draw(b.overtime, 600);
     same('... one chart and "No ant was killed"', [b.overtime.byTag('svg').length, text(b.overtime.byClass('quiet')[0])], [1, 'No ant was killed in this match.']);
     same('... and a strip of two tones', b.overtime.byClass('leadbar')[0].children.map((c) => [c.className, c.attrs['data-c'], c.attrs['data-c2']]), [['two', 'Red', 'Blue']]);
+
+    // the pass attributes a death to the team of the last damage: an ant that died with no killer is in no kill and no damage, but the scoreboard has it as lost
+    const lostSome = record(quiet, { seats: [seat(0, 'Gory', '', { lost: 2 }), seat(1, 'Dethcon', '', { lost: 5 }), seat(2, 'Finn', 'Hard', { lost: 6 }), seat(3, 'Cocoa', 'Hard', { lost: 4 })] });
+    same('no kill or damage, but ants lost on the scoreboard: the band does not say that no ant was lost', MS.chipsOf(MS.contextOf(lostSome)).map((c) => c.label), ['Lead', 'Busiest']);
+    const withEvent = JSON.parse(JSON.stringify(quiet));
+    withEvent.combat.ev = [[100, -1, 1, 0, 0]];
+    same('... nor when the list of kills has one (an ant that died with no team to blame)', MS.chipsOf(MS.contextOf(record(withEvent))).map((c) => c.label), ['Lead', 'Busiest']);
+    const lostUnknown = record(quiet, { seats: [seat(0, 'Gory', '', { lost: undefined }), seat(1, 'Dethcon', ''), seat(2, 'Finn', 'Hard'), seat(3, 'Cocoa', 'Hard')] });
+    same('... nor when the scoreboard does not say how many were lost', MS.chipsOf(MS.contextOf(lostUnknown)).map((c) => c.label), ['Lead', 'Busiest']);
+    same('... and one seat that lost one ant is enough', MS.chipsOf(MS.contextOf(record(quiet, { seats: [seat(0, 'Gory', ''), seat(1, 'Dethcon', ''), seat(2, 'Finn', 'Hard', { lost: 1 }), seat(3, 'Cocoa', 'Hard')] }))).map((c) => c.label), ['Lead', 'Busiest']);
 
     const k187 = record(JSON.parse(JSON.stringify(DETAILS)), { mode: '187' });
     delete k187.details.over_time.score;
@@ -172,6 +183,27 @@ same('... nothing when nobody led', MS.leadSentence([]), null);
     const empty = record({ over_time: { score: [[], [], [], []], kills: [[], [], [], []] }, activity: { per_minute: [[], [], [], []] } });
     same('series with no point and a strip with no minute build nothing', none2(empty), [null, null]);
     function none2(rec) { return [S.overtime(rec), S.activity(rec)]; }
+}
+
+// ---- a corrupt record must not hang the page: a length of 30 million turns, a step of 1e300, lists of tens of thousands (the page cuts them; the sizes are chosen so that a page that does not is refused at once, not after a hang) ----
+{
+    const big = JSON.parse(JSON.stringify(DETAILS));
+    big.turns = 3e7; big.step = 1e300;
+    big.highlights.lead = Array.from({ length: 20000 }, (_, i) => [i * 10, i % 4, -1]);
+    big.highlights.wiped_out = Array.from({ length: 5000 }, () => [1, 2, 1]);
+    const t0 = Date.now();
+    let threw = null, b = null;
+    try { b = build(record(big)); draw(b.overtime, 700); } catch (e) { threw = e; }
+    const took = Date.now() - t0;
+    check('huge turns, a step of 1e300 and lists of tens of thousands: no throw, and done in a second or two', threw === null && took < 2000, threw ? threw.stack : took + ' ms');
+    if (b && b.overtime) {
+        const paths = b.overtime.byTag('path').map((n) => n.attrs.d).filter(Boolean);
+        check('every path is plain numbers (no exponent, no Infinity)', paths.length > 0 && paths.every((d) => /^[MLHVhvz0-9. \-]+$/.test(d)), paths.filter((d) => !/^[MLHVhvz0-9. \-]+$/.test(d)).map((d) => d.slice(0, 80)).join(' | '));
+        check('no attribute of the chart is an exponent or not a number', b.overtime.all((n) => n.attrs && Object.keys(n.attrs).some((k) => k !== 'd' && /^-?[0-9.]+e[+-]?[0-9]+$|NaN|Infinity/.test(n.attrs[k]))).length === 0);
+        check('the strip of who led is bounded', b.overtime.byClass('leadbar')[0].children.length <= 200, b.overtime.byClass('leadbar')[0].children.length);
+        check('the lines of the minutes are bounded', b.overtime.byTag('svg')[0].byClass('vgrid').length <= 61, b.overtime.byTag('svg')[0].byClass('vgrid').length);
+        check('the facts under the charts are bounded', b.overtime.byClass('facts')[0].byTag('dd').length <= 12, b.overtime.byClass('facts')[0].byTag('dd').length);
+    }
 }
 
 console.log((failures ? 'FAILED: ' + failures + ' of ' : 'ok: ') + checks + ' checks');
