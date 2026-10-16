@@ -841,6 +841,28 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     same('Sam comes and goes: two small lines of the system', log.children.map((li) => li.textContent), ['Sam joined as Red.', 'Sam left.']);
 }
 
+{   // a team press that the page's pace holds back (the plan budget is empty): the screen must show the ROOM's teams, not a split that the room never got (START sends the room's teams, not the screen's)
+    const env = runLobby('', { 'ants.name': 'Maya' });
+    const s = env.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [C, 'Tess'], [E, '']] });
+    const plans = () => s.sent.filter((b) => b[0] === 32);
+    const button = (seat, side) => env.$('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
+    const lit = (seat, side) => button(seat, side).getAttribute('aria-pressed') === 'true';
+    check('the leader of three has the two team buttons on every colour, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
+    for (let i = 0; i < 8; i++) env.$('next').click();
+    check('the map arrow held down (8 presses) sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
+    env.press(button(0, 1));
+    check('a team button pressed alone is the page\'s own (a pair is what the room holds): lit, nothing sent', lit(0, 1) && plans().length === 5);
+    env.press(button(1, 1));
+    check('the second button makes a pair, which the page\'s pace refuses: no plan goes out', plans().length === 5);
+    check('... and the screen shows the ROOM\'s teams (none), not a pair that the room never got: Sam\'s button is not lit and the line under the colours does not name a team', !lit(1, 1) && !/^Teams:/.test(env.$('teams-note').textContent), 'Sam lit: ' + lit(1, 1) + ', "' + env.$('teams-note').textContent + '"');
+    check('... the button that was pressed alone before stays as it was (the page\'s own)', lit(0, 1));
+    // the room's teams are the truth: a room that has a pair shows it, also after a press that the pace refused (a press that clears the teams)
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [C, 'Tess'], [E, '']], { you: 0, leader: 0, teamA: 0, teamB: 1 }));
+    check('a room with a pair shows it: Green and Red on Team 1', lit(0, 1) && lit(1, 1) && /^Teams: Green \+ Red against Blue/.test(env.$('teams-note').textContent), env.$('teams-note').textContent);
+    env.press(button(1, 1));
+    check('a press that would clear the teams is refused by the pace too: nothing goes out and the screen still shows the room\'s pair', plans().length === 5 && lit(0, 1) && lit(1, 1) && /^Teams: Green \+ Red against Blue/.test(env.$('teams-note').textContent), 'plans ' + plans().length + ', "' + env.$('teams-note').textContent + '"');
+}
+
 // ---- 5.3 the name card of a link that somebody sent (?room=): asked first, every time; nothing connects before the button
 {
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
