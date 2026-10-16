@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.13b of suite 2.20.",
+ "note": "Mutants of the gate play for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_walls_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI26.4 and AI27.6 - AI27.13c of suite 2.20.",
  "defaults": {
   "build": "test_ai"
  },
@@ -269,6 +269,33 @@
    "new": "armed = armed || (b.tile == goal_.cell && b.owner != context.seat);",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.7 ./build/tests/test_ai/test_ai",
    "expect": "AI27.7",
+   "build": "test_ai"
+  },
+  {
+   "id": "contest_skip_back_at_hard",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "const bool skip_contest = tactics_.gate_map && !tactics_.plan.steals && takes_.empty() &&",
+   "new": "const bool skip_contest = tactics_.gate_map && takes_.empty() &&",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11",
+   "build": "test_ai"
+  },
+  {
+   "id": "contest_skip_gone_at_medium",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "const bool skip_contest = tactics_.gate_map && !tactics_.plan.steals && takes_.empty() &&",
+   "new": "const bool skip_contest = tactics_.gate_map && !tactics_.plan.steals && false && takes_.empty() &&",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11",
+   "build": "test_ai"
+  },
+  {
+   "id": "contest_skip_on_open_maps",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "const bool skip_contest = tactics_.gate_map && !tactics_.plan.steals && takes_.empty() &&",
+   "new": "const bool skip_contest = !tactics_.plan.steals && takes_.empty() &&",
+   "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
+   "expect": "AI27.11",
    "build": "test_ai"
   }
  ]

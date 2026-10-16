@@ -952,10 +952,16 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         const uint32_t walk = static_cast<uint32_t>(MapInfo::walking_ticks(best_cost)) + 5u;           // the pick-up comes 8 d + 5 ticks after the order on grass (measured in the engine)
         if (walk > params_.max_trip_ticks) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
-        // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate)
+        // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate).
+        // On a gate map Medium does not give a trip up for an enemy that is as near, when the power-up lies on the hill's side or in the component of the ant (skip_contest): its longer reaction delay
+        // loses the estimate to the start ants of the enemy at the central power-ups (without the skip it gave up many more trips on Ghetto and lost about a quarter of its score there). Hard (the level that
+        // steals) judges the race as everywhere: the skip cost it !-Midz-! and ANTS_PARTY.
+        const bool skip_contest = tactics_.gate_map && !tactics_.plan.steals && takes_.empty() &&
+                                  (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
+                                   c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;
         for (const AntView& e : v.others()) {
-            if (e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+            if (skip_contest || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
             if (e.state == sim::UnitState::EnteringBase || e.state == sim::UnitState::PoweringUp) continue;
             const int32_t cost = f[tile_index(grid, e.tile)];
             if (cost < 0) continue;
