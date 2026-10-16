@@ -47,6 +47,8 @@
 // in the log or a result file, `empty_close_ms` after the last person has gone. The leader's START reaches the room in every pass while every person is a game: the room loads the plan's map (the server
 // offers the maps of --demo-maps), checks that the seats which play can play it, asks the server whether it has a place for another match, and then seats the plan's bots and starts like any room; what it
 // cannot do ends the START with a notice to the leader (HostLobby::end_start) and the room goes on waiting. A failed start never fails the room. A match that a lobby room has begun is a room like the others.
+// The rematch (docs/SERVER.md "Lobby rooms"): when the rules end that match, the room gives its match's plan and persons once (take_rematch) and the manager opens a lobby room with the same code from them
+// (reopen: the persons' seats are reserved for their keys, net::HostLobby (7)); a match that ended otherwise (everybody left, a failure, the owner) gives none.
 //
 // Replays (replay_store.hpp, docs/REPLAYS.md "On the game server"). A room of a server that keeps replays records its match: ants_replay's Recorder watches every turn that the referee's own runner
 // executes (LockstepRunner::set_on_executed), from the first, and when the match is over, or the room fails or is closed while it runs, the recording is written as a .antsrep file and handed to the
@@ -58,6 +60,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -109,6 +112,7 @@ struct RoomSpec {
     uint32_t start_wait_ms{net::kLobbyStartWaitMs};
     uint32_t silence_ms{net::kLobbySilenceMs};
     uint32_t empty_close_ms{60u * 1000u};
+    uint32_t reserve_ms{net::kLobbyReserveMs};      // the rematch: a lobby room that was opened again after its match holds the seat of a person of the match this long at the most (HostLobby::Config::reserve_ms)
     bool has_seed{false};
     uint32_t seed{1};                       // the match's random seed (the server draws one when the spec has none)
     uint32_t wait_ms{120000};               // a room that has not started after this long fails ("nobody came", "somebody is missing")
@@ -188,6 +192,8 @@ struct RoomStatus {
     bool lobby{false};                      // a lobby room (protocol 16): the control interface shows lobby rooms as such
     bool starting{false};                   // ... whose leader's START waits for the games
     uint8_t games{0};                       // ... the seats (bit s) that hold a game: a page, a seat that is held and an empty seat do not
+    bool reopened{false};                   // ... the rematch: the server opened this lobby again with its code when its match was over (for the tests, not shown by the control interface)
+    uint8_t reserved{0};                    // ... and the seats (bit s) that still wait for a person of the match who is not back
     std::string plan;                       // ... the plan: the kind of each colour as a letter (o open, e easy, m medium, h hard, n nobody) and the team pair ("oehn 0+3", "-" for none)
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
@@ -367,6 +373,12 @@ public:
     uint32_t idle_ms(uint32_t now_ms) const noexcept { return lobby_waiting() && !arrived_ ? now_ms - active_ms_ : 0u; }
     /// The owner forgets the room at once, without a word in the log or a result file (the server needs the place of a lobby that nobody is in): its clients are dropped
     void forget(uint32_t now_ms);
+    /// The rematch (see the paragraph "Lobby rooms" above): a lobby room whose match its rules ended has the plan and the persons of that match to give, once (take_rematch). Nothing for any other room, for a
+    /// match that ended otherwise, or once it was given.
+    bool rematch_due() const noexcept { return spec_.lobby && state_ == RoomState::Finished && ended_by_rules_ && !rematch_given_; }
+    std::optional<net::Rematch> take_rematch();
+    /// A lobby room that nobody has come to yet becomes the rematch of a match (net::HostLobby::reopen); false when it cannot (it is no lobby room, somebody is in it, the rematch has nobody)
+    bool reopen(const net::Rematch& rematch, uint32_t now_ms);
     RoomState state() const noexcept { return state_; }
     /// True while a client may still join (Waiting)
     bool accepting() const noexcept { return state_ == RoomState::Waiting; }
@@ -455,6 +467,9 @@ private:
     uint32_t active_ms_{0};
     uint32_t empty_since_ms_{0};
     bool forgotten_{false};                  // the owner forgot the room (forget): it is expired at once
+    bool ended_by_rules_{false};             // the rematch: the match ended by its rules (every machine has its results screen), not by a leaver, a failure or the owner
+    bool rematch_given_{false};              // ... and its plan and persons were given for the lobby that follows it (take_rematch)
+    bool reopened_{false};                   // ... this lobby room is that lobby (reopen)
     std::vector<ai::BotSpec> bot_specs_;     // the bots that sit in the room now, by seat (the specification's and the fill's)
     uint8_t fill_seats_{0};                  // bit s: seat s holds a bot that the leader's START seated (it goes again when the start is cancelled)
     sim::StartTeams start_teams_;            // the teams of the match's Start (protocol 13): every engine of the match made them before its first tick

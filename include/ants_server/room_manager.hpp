@@ -19,6 +19,10 @@
 // time; the Welcome of its first seat says that this very Hello made it), and a game's Hello with a plain block makes a public room as before: a page never makes the one and a game never the other (BadRequest).
 // A page's Hello with a key for a match that runs is MatchRunning (only a game plays: it takes the seat back). A lobby room holds no place among the public rooms while it waits; its leader's START asks the manager for one
 // (LobbyServices::match_place: a place that is free, or one that an abandoned public match gives up) and the manager serves the room its maps (--demo-maps) and loads them for it.
+//
+// The rematch (docs/SERVER.md "Lobby rooms"). When the rules end the match of a lobby room, the manager opens a lobby room with the same code at once, from that match (Room::take_rematch, Room::reopen): the
+// plan, and a seat reserved for the key of each person. It takes a place of the lobby pool like any new lobby (the same evictions; no place, no rematch). The room of the match gives its code to the lobby
+// (status() of the code is the lobby's) and is RETIRED: it answers its last connections and is in list() until its keep time is over; take_ended() reports its end as ever.
 
 #include <cstdint>
 #include <functional>
@@ -69,6 +73,7 @@ struct ServerLimits {
     uint32_t lobby_hold_ms{net::kLobbyHoldMs};
     uint32_t lobby_start_wait_ms{net::kLobbyStartWaitMs};
     uint32_t lobby_silence_ms{net::kLobbySilenceMs};
+    uint32_t lobby_reserve_ms{net::kLobbyReserveMs};                // the rematch: a reserved seat waits this long at most for its person (the room still goes a minute after nobody is in it)
     // How long a public room waits for its players, from the first Hello (the page's link goes to friends on other computers: they need time to arrive)
     uint32_t demo_wait_ms{10u * 60u * 1000u};
     // The maps that a create block may choose (file names of the maps folder, e.g. "SMALL.LVL"; the block's map_name is compared with them in any case)
@@ -229,6 +234,9 @@ public:
     BusyCounts busy(uint32_t now_ms) const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
+    /// The rooms of matches that gave their code to the lobby of their rematch and answer their last connections (see the paragraph at the top), and the lobbies that were opened again so
+    size_t retired_count() const noexcept { return retired_.size(); }
+    uint64_t rooms_reopened() const noexcept { return reopened_; }
     size_t pending_count() const noexcept { return pending_.size(); }
     uint64_t rooms_created() const noexcept { return created_; }
     uint64_t connections_refused() const noexcept { return refused_; }
@@ -284,8 +292,18 @@ private:
     bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
     /// The same for a page's lobby block (protocol 16): the lobby room, when the server offers lobbies and one can be had (the pool has a free place, or the lobby that has been empty the longest gives its place up)
     bool make_lobby_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
+    /// The specification of a lobby room of this code on `map` (the server's own numbers), and a place for one more in the pool: the lobby that has been empty the longest, else the one that has been idle the longest,
+    /// gives its place up; false when no place can be had
+    RoomSpec lobby_spec(const std::string& code, const std::string& map) const;
+    bool lobby_place(uint32_t now_ms);
     bool evict_empty_lobby(uint32_t now_ms);
     bool evict_idle_lobby(uint32_t now_ms);
+    /// The rematch (see the paragraph at the top): the room of `code` has just ended its match by its rules; its lobby is opened again
+    void reopen_lobby(const std::string& code, uint32_t now_ms);
+    /// A room of a checked specification, with the server's stores and services (what create_room makes); null when its map cannot be found or played
+    std::unique_ptr<Room> build_room(RoomSpec spec, uint32_t now_ms, CreateResult& r);
+    /// The rooms that exist: those of a code, the retired ones and the records that wait for their replay (--max-rooms counts them)
+    size_t room_total() const noexcept { return rooms_.size() + retired_.size() + restoring_.size(); }
     /// The places of the public rooms that are taken: public rooms that are not a lobby that waits, and the records that wait for their replay
     size_t public_places() const;
     /// A place for one more public match, for the START of a lobby room: free, or made free by ending the public match that has been abandoned the longest (evict_abandoned_public)
@@ -304,6 +322,8 @@ private:
     LiveBoard live_board_;                       // (and the board of the matches that they record while they run: before the rooms, which take their match off it when they go)
     bool replay_demo_{false};                    // the rooms that a visitor's create block makes are recorded too
     std::map<std::string, std::unique_ptr<Room>> rooms_;
+    std::vector<std::unique_ptr<Room>> retired_;  // the rooms of matches that gave their code to the lobby of their rematch, until their keep time is over
+    uint64_t reopened_{0};
     bool stale_armed_{false};                    // files that could not be deleted wait for a retry (RestartStore::retry_stale): when the next one is due
     uint32_t next_stale_retry_ms_{0};
     std::vector<Restoring> restoring_;           // the records that wait for their replay, newest first (after the rooms: destroyed before them, with the log budget and the store still there)

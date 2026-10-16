@@ -47,14 +47,16 @@ void swap_team_seats(uint8_t& team_a, uint8_t& team_b, uint8_t a, uint8_t b) {
     team_b = std::max(x, y);
 }
 
-// What the leader is told when the games did not come in time ("Priya's game did not come in time." / "These games did not come in time: Priya and Sam."); the names are the room's own, printable
-std::string late_notice(const std::vector<std::string>& names) {
+// What the leader is told about people that the START waits for: the games that did not come in time ("Priya's game did not come in time." / "These games did not come in time: Priya and Sam."), the persons
+// who are not back from the match (the rematch: "Priya is not back from the match yet." / "These players are not back from the match yet: Priya and Sam."); the names are the room's own, printable
+std::string names_notice(const std::vector<std::string>& names, const char* one, const char* many) {
     if (names.empty()) return std::string();
-    if (names.size() == 1) return names[0] + kNoticeGameLate;
+    if (names.size() == 1) return names[0] + one;
     std::string list;
     for (size_t i = 0; i < names.size(); ++i) list += std::string(i == 0 ? "" : i + 1 == names.size() ? " and " : ", ") + names[i];
-    return std::string(kNoticeGamesLate) + list + ".";
+    return std::string(many) + list + ".";
 }
+std::string late_notice(const std::vector<std::string>& names) { return names_notice(names, kNoticeGameLate, kNoticeGamesLate); }
 
 // A bot's name always carries the marker: a name that is not a bot's own ("Pip (bot, Hard)", "Bot (Hard)") is wrapped ("Zed" becomes "Bot (Zed)"), an empty one is "Bot"
 std::string bot_name(const std::string& raw) {
@@ -206,7 +208,7 @@ void HostLobby::broadcast(const std::vector<uint8_t>& msg) {
 void HostLobby::sync_room_flags() {
     if (!cfg_.lobby_room) return;
     uint8_t games = 0;
-    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) games = static_cast<uint8_t>(games | (in_game(s) ? 1u << s : 0u));
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) games = static_cast<uint8_t>(games | (in_game(s) || guests_[s].reserved ? 1u << s : 0u));      // (the rematch: a person who is not back is on the game page)
     room_.in_game = games;
     room_.flags = starting_.active ? static_cast<uint8_t>(room_.flags | kRoomStarting) : static_cast<uint8_t>(room_.flags & static_cast<uint8_t>(~kRoomStarting));
 }
@@ -262,6 +264,7 @@ void HostLobby::elect_leader() {
     if (leads()) {
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (!person(s) || room_.slots[s].state != SlotState::Client) continue;               // (a guest whose connection ended and whose seat is held leads still: it counts as present)
+            if (guests_[s].reserved) continue;                                                   // (the rematch: a person who is not back does not lead; the match's order makes the host lead again on return)
             if (best == kNoLeader || guests_[s].join_order < guests_[best].join_order) best = s;
         }
     }
@@ -445,6 +448,11 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
     g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
+    if (g.reserved && hello.client_kind == kClientPage) {        // (the rematch: the person's page is back, an ordinary guest from now on, who may lead; a game holds the seat from the results screen and changes nothing)
+        g.reserved = false;
+        ++returns_;
+        elect_leader();
+    }
     g.address = p.address;
     g.listen_port = hello.listen_port;
     g.measured = false;
@@ -490,6 +498,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     }
     if (phase_ != Phase::Room) return reject(RejectReason::MatchRunning);                    // (a key in a match that loads or runs is the session's business, not the lobby's)
     if (starting_.active) return reject(RejectReason::MatchRunning);                         // (a lobby room whose START waits for the games takes no newcomer)
+    if (any_reserved() && !anyone_back()) return reject(RejectReason::MatchRunning);         // (the rematch: nobody of the match is back yet, nobody new comes in before them: a newcomer would lead their room)
     uint8_t seat = 255;
     if (cfg_.lobby_room) {
         seat = joiner_seat(hello.want_seat);                                                 // (protocol 16: the colour it asked for or the lowest one that nobody holds and the plan calls Open)
@@ -562,6 +571,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
                 if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && start_possible()) {
                     arm_start(seat, now_ms);
                 } else {
+                    if (phase_ == Phase::Room && !starting_.active && seat == room_.leader && any_reserved()) notify(seat, not_back_notice());      // (the rematch: the START waits for them, and says so)
                     ++ignored_start_requests_;
                     if (++guests_[seat].ignored_start_requests > kIgnoredStartRequestsAllowed) violation(seat);
                 }
@@ -707,6 +717,11 @@ void HostLobby::update(uint32_t now_ms) {
     }
     // the seated guests
     for (uint8_t s = 0; s < sim::MAX_PLAYERS && phase_ != Phase::Begun; ++s) {
+        if (guests_[s].reserved && now_ms - guests_[s].reserved_since_ms >= cfg_.reserve_ms) {             // (the rematch: a reservation runs out, as the key that opens it does; a results screen that still holds it is told)
+            ++reserve_expiries_;
+            remove_guest(s, true, RejectReason::Kicked);
+            continue;
+        }
         if (guests_[s].conn == nullptr) {
             // a held seat (a lobby room): its hold runs out, but not while the leader's START waits (that has its time: the games are on their way, and a page that goes to the game closes its link first)
             if (guests_[s].held && !starting_.active && now_ms - guests_[s].held_since_ms >= cfg_.hold_ms) {
@@ -738,7 +753,8 @@ void HostLobby::update(uint32_t now_ms) {
             guests_[s].conn->close();
         }
         if (guests_[s].conn != nullptr && !guests_[s].conn->is_open()) {
-            if (cfg_.lobby_room && phase_ == Phase::Room && !key_is_zero(guests_[s].key)) hold_guest(s, now_ms);       // (protocol 16: the seat waits for its key, when it has one; a match that loads is cancelled for a leaver as ever)
+            if (guests_[s].reserved) unhook_reserved(s);                                   // (the rematch: the results screen went; the seat still waits for its person, with no hold)
+            else if (cfg_.lobby_room && phase_ == Phase::Room && !key_is_zero(guests_[s].key)) hold_guest(s, now_ms);       // (protocol 16: the seat waits for its key, when it has one; a match that loads is cancelled for a leaver as ever)
             else remove_guest(s, false, RejectReason::Kicked);
         }
     }
@@ -804,17 +820,123 @@ bool HostLobby::plan_asks_bots() const noexcept {
     return false;
 }
 
-// The room could start now with whom it holds (held seats count as players; the plan's bots are counted when they would be seated)
+// The room could start now with whom it holds (held seats count as players; the plan's bots are counted when they would be seated). Never while a seat is reserved for a person who is not back from the match
+// (the rematch: the START waits for them, or for the leader to remove them; neither a bot nor an empty colour takes their place)
 bool HostLobby::start_possible() const noexcept {
+    if (any_reserved()) return false;
     return plan_asks_bots() ? can_start_filled() : can_start();
 }
 
-// Every person is a game (a seat that is held has no machine, a page cannot play): the match can be started
+// Every person is a game (a seat that is held has no machine, a page cannot play, the results screen that holds a reserved seat plays nothing): the match can be started
 bool HostLobby::everyone_in_game() const noexcept {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
-        if (room_.slots[s].state == SlotState::Client && !in_game(s)) return false;
+        if (room_.slots[s].state == SlotState::Client && (!in_game(s) || guests_[s].reserved)) return false;
     }
     return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// The rematch (see (7) at the top of lobby.hpp)
+// ------------------------------------------------------------------------------------------------
+
+Rematch HostLobby::rematch() const {
+    Rematch r;
+    if (!cfg_.lobby_room || phase_ != Phase::Begun) return r;
+    r.map_name = room_.map_name;
+    r.plan = room_.plan;
+    r.team_a = room_.team_a;
+    r.team_b = room_.team_b;
+    r.mode = room_.mode;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {                                     // (the seats as the Start made them: nothing moves in the lobby once its match has begun)
+        if (room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;
+        r.people.push_back(Rematch::Person{s, room_.slots[s].name, guests_[s].key, guests_[s].join_order, room_.slots[s].platform});
+    }
+    return r;
+}
+
+bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
+    if (!cfg_.lobby_room || phase_ != Phase::Room || players() != 0 || !pending_.empty() || r.people.empty()) return false;
+    const bool teams_ok = (r.team_a == kNoTeam && r.team_b == kNoTeam) || (r.team_a < r.team_b && r.team_b < sim::MAX_PLAYERS);
+    if (!teams_ok || !sim::valid_game_mode(r.mode)) return false;
+    for (const PlanKind k : r.plan) {
+        if (static_cast<uint8_t>(k) > kPlanKindLast) return false;
+    }
+    uint8_t seats = 0;
+    for (size_t i = 0; i < r.people.size(); ++i) {
+        const Rematch::Person& p = r.people[i];
+        if (p.seat >= sim::MAX_PLAYERS || (seats & (1u << p.seat)) != 0 || key_is_zero(p.key)) return false;
+        for (size_t j = 0; j < i; ++j) {
+            if (key_matches(r.people[j].key, p.key)) return false;                       // (two seats never share a key)
+        }
+        seats = static_cast<uint8_t>(seats | (1u << p.seat));
+    }
+    if (valid_map_name(r.map_name)) room_.map_name = r.map_name;                         // (the file that the match was played on: the room loads it again at START)
+    room_.plan = r.plan;
+    room_.team_a = r.team_a;
+    room_.team_b = r.team_b;
+    room_.mode = r.mode;
+    for (const Rematch::Person& p : r.people) {
+        Guest& g = guests_[p.seat];
+        g = Guest{};
+        g.key = p.key;
+        g.join_order = p.order;
+        g.reserved = true;
+        g.reserved_since_ms = now_ms;
+        g.heard_ms = now_ms;
+        g.forgive_at_ms = now_ms + cfg_.forgive_ms;
+        room_.slots[p.seat].state = SlotState::Client;
+        room_.slots[p.seat].name = human_name(p.name, "Player " + std::to_string(static_cast<unsigned>(p.seat) + 1u));
+        room_.slots[p.seat].rtt_ms = kRttUnknown;
+        room_.slots[p.seat].platform = valid_platform(p.platform) ? p.platform : kPlatformUnknown;
+        joins_ = std::max(joins_, p.order);                                              // (a newcomer comes after every person of the match)
+    }
+    elect_leader();                                                                      // (nobody leads before somebody is back)
+    sync_room_flags();
+    return true;
+}
+
+bool HostLobby::any_reserved() const noexcept {
+    for (const Guest& g : guests_) {
+        if (g.reserved) return true;
+    }
+    return false;
+}
+
+bool HostLobby::anyone_back() const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Client && person(s) && !guests_[s].reserved) return true;
+    }
+    return false;
+}
+
+size_t HostLobby::present() const noexcept {
+    size_t n = 0;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state == SlotState::Host) ++n;
+        else if (room_.slots[s].state == SlotState::Client && (guests_[s].conn != nullptr || guests_[s].held)) ++n;
+    }
+    return n;
+}
+
+// The results screen that held a reserved seat is gone: the seat waits for its person as before (no hold: a reservation is not a dropped link), and nobody measures it
+void HostLobby::unhook_reserved(uint8_t seat) {
+    Guest& g = guests_[seat];
+    g.conn = nullptr;
+    g.measured = false;
+    g.rtt_ms = 0;
+    g.ping_nonce = 0;
+    g.next_ping_ms = 0;
+    for (uint32_t& sent : g.ping_sent) sent = 0;
+    room_.slots[seat].rtt_ms = kRttUnknown;
+    broadcast_room();
+}
+
+std::string HostLobby::not_back_notice() const {
+    std::vector<std::string> names;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (guests_[s].reserved) names.push_back(room_.slots[s].name);
+    }
+    return names_notice(names, kNoticeNotBack, kNoticeNotBackMany);
 }
 
 // A new name of a person (already heard: an open room, within the budget): the room is shown to everybody when the name changed

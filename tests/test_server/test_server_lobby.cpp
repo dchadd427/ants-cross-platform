@@ -458,7 +458,7 @@ void run_lobby_room_tests() {
                 w.run(250);
                 if (guard % 8 == 0) attack(bob_game, 0);                                   // Red's person sends ants at Green
             }
-            s = w.status("t187l001");
+            s = w.ended("t187l001");                                                       // (the match is over: its code is the rematch's lobby now, the match's room is listed beside it)
             ASSERT_TRUE(s.state == RoomState::Finished);
             w.run(Room::kGraceMs + 500);
             for (Client* c : {&pia_game, &bob_game}) {

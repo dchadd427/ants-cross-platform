@@ -1,0 +1,278 @@
+// The rematch on the two pages (docs/PLAY_IN_BROWSER.md "After a match", docs/SERVER.md "Lobby rooms"): when the rules end a match that a lobby room began, the game server opens a lobby room with the same code at
+// once, with the match's plan and a seat reserved for each person's key. This file is the pages' side of it, with no game in it:
+//   * the game page (web/shell.html): the game tells the page that its match is over (window.antsMatchOver, src/ants_app/application_net.cpp); the page reads the key of its seat (the game's own entry, before the game
+//     lets go of it), holds its reserved seat from the results screen with that key (a game's Hello: the seat stays reserved, and the others see "on the results screen"), and shows the strip under the game:
+//     "The match is over", who is back, and "Back to the lobby", which hands the key to the front page (this tab's session storage) and goes there;
+//   * the front page (web/lobby.html): the strip "Back from the match." at the top of the page, with the winner and a link to the match's stats and replay.
+// ES5 and no module system, as the site's other scripts: a page gets the global AntsRematch, node gets module.exports (tests/scripts/web_rematch_check.js). A name is only ever set as text.
+(function (root, factory) {
+    var api = factory();
+    if (typeof module === 'object' && module.exports) module.exports = api;
+    else root.AntsRematch = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+    'use strict';
+
+    var BACK_KEY = 'ants.back';                     // sessionStorage: the match that this tab comes back from { c: code, t: epoch ms, m: map file, p: [four names], w: the winner's words }
+    var LOBBY_KEY = 'ants.lobby';                   // sessionStorage: the front page's room { c, k, n, o } (web/lobby.html): the hand-over puts the reserved seat there
+    var REJOIN_PREFIX = 'ants.rejoin.';             // localStorage: the game's key of a seat (src/ants_app/rejoin_store.cpp)
+    var MAX_AGE_MS = 3 * 60 * 60 * 1000;            // a key lives three hours (the game's kRejoinMaxAgeMs), and so does the server's reservation
+    var COLOURS = ['Green', 'Red', 'Blue', 'Black'];
+    var DOTS = ['#2e8f56', '#b43a4c', '#5a56c8', '#4a4a50'];   // the colour of each seat's dot in the strips
+    var ID_RE = /^ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;      // a match's id (web/history_page.js): its replay's file name without .antsrep
+
+    function printable(s, max) { return typeof s === 'string' && s.length <= max && /^[\x20-\x7e]*$/.test(s); }
+    function isWhole(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n; }
+    function validRoom(code) { return typeof code === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(code); }
+    function validMap(name) { return printable(name, 64) && name.length >= 5 && !/[\/\\:*?"<>|]/.test(name) && name.charAt(0) !== '.' && /\.(lvl|LVL)$/.test(name); }
+    function groupDigits(n) { var s = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); return n < 0 ? '-' + s : s; }
+    function listOf(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+    function storageGet(storage, key) { try { return storage ? storage.getItem(key) : null; } catch (e) { return null; } }
+    function storageSet(storage, key, value) { try { storage.setItem(key, value); return true; } catch (e) { return false; } }
+
+    // ---- what the game says when its match is over --------------------------------------------------------------------------------------------------------------------------------------------------
+    // The game's words (window.antsMatchOver): { room, seat, map, mode (0 the highest score, 1 "187"), names: the four seats' names ('' for a seat that did not play), rows: the results screen's rows, best first
+    // (as the server orders them: no seat's own tie rule), each { seats: [one or two seats], score, won } }. null for anything else.
+    function parseOver(text) {
+        var v;
+        try { v = JSON.parse(text); } catch (e) { return null; }
+        if (!v || typeof v !== 'object' || !validRoom(v.room) || !isWhole(v.seat) || v.seat < 0 || v.seat > 3 || !validMap(v.map) || (v.mode !== 0 && v.mode !== 1)) return null;
+        if (!Array.isArray(v.names) || v.names.length !== 4 || !v.names.every(function (n) { return printable(n, 32); })) return null;
+        if (!Array.isArray(v.rows) || v.rows.length > 4) return null;
+        var rows = [];
+        for (var i = 0; i < v.rows.length; i++) {
+            var r = v.rows[i];
+            if (!r || !Array.isArray(r.seats) || r.seats.length < 1 || r.seats.length > 2 || !isWhole(r.score) || typeof r.won !== 'boolean') return null;
+            if (!r.seats.every(function (s) { return isWhole(s) && s >= 0 && s < 4; })) return null;
+            rows.push({ seats: r.seats.slice(), score: r.score, won: r.won });
+        }
+        return { room: v.room, seat: v.seat, map: v.map, mode: v.mode, names: v.names.slice(), rows: rows };
+    }
+    // Who won, in words: "Maple won with 2,040.", "Maple and Pip won with 2,040." (an alliance), "Maple and Sam tied with 1,500." (two winning rows), and without the score in 187 ("Maple won."); '' without a winner
+    function winnerWords(over) {
+        var won = over.rows.filter(function (r) { return r.won; });
+        if (won.length === 0) return '';
+        var nameOf = function (seat) { return over.names[seat] || COLOURS[seat]; };
+        var who = [];
+        won.forEach(function (r) { r.seats.forEach(function (s) { who.push(nameOf(s)); }); });
+        var verb = won.length === 1 ? ' won' : ' tied';
+        return listOf(who) + verb + (over.mode === 1 ? '.' : ' with ' + groupDigits(won[0].score) + '.');
+    }
+
+    // ---- the key of the seat ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // The game's own entry of the seat (ants.rejoin.<room>.<seat> = {"k": 32 hex digits, ...}), read when the game says that the match is over and before it lets go of it: the key (32 lower-case hex digits), or null.
+    // THE KEY IS A SECRET: it goes from here to the seat's Hello and to this tab's session storage (the front page's own place for it), nowhere else.
+    function seatKey(storage, room, seat) {
+        var v;
+        try { v = JSON.parse(storageGet(storage, REJOIN_PREFIX + room + '.' + seat)); } catch (e) { return null; }
+        if (!v || typeof v !== 'object' || typeof v.k !== 'string' || !/^[0-9A-Fa-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
+        return v.k.toLowerCase();
+    }
+
+    // ---- the hand-over to the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // "Back to the lobby": the front page of this tab finds its room (the code and the key: it takes the reserved seat back with them) and the match it comes back from. False when the storage refuses.
+    function handOver(session, over, key, name, nowMs) {
+        var lobby = JSON.stringify({ c: over.room, k: key, n: printable(name, 32) ? name : '', o: 0 });
+        var back = JSON.stringify({ c: over.room, t: Math.floor(nowMs), m: over.map, p: over.names, w: winnerWords(over) });
+        return storageSet(session, LOBBY_KEY, lobby) && storageSet(session, BACK_KEY, back);
+    }
+    // The match that the room `code` comes back from: { code, t, map, people: the names of the match, winner }, or null (none, another room's, older than three hours or from the future, or not this shape)
+    function readBack(session, code, nowMs) {
+        var v;
+        try { v = JSON.parse(storageGet(session, BACK_KEY)); } catch (e) { return null; }
+        if (!v || typeof v !== 'object' || v.c !== code || !validRoom(code) || !isWhole(v.t) || nowMs - v.t > MAX_AGE_MS || v.t - nowMs > 60000) return null;
+        if ((v.m !== '' && !validMap(v.m)) || !Array.isArray(v.p) || v.p.length !== 4 || !v.p.every(function (n) { return printable(n, 32); }) || !printable(v.w, 160)) return null;
+        return { code: code, t: v.t, map: v.m, people: v.p.filter(function (n) { return n !== ''; }), winner: v.w };
+    }
+    function forgetBack(session) { try { session.removeItem(BACK_KEY); } catch (e) { /* nothing was kept */ } }
+
+    // ---- what the strips say --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // The people of a lobby room's Room message (web/front/lobby_net.js decode) for the game page's strip, in the order of the colours: { seat, name, dot, host, here } (here: back in the room, a page; not here: still
+    // on the game page, the results screen: the room counts the reserved seat as a game)
+    function chipsOf(room) {
+        var out = [];
+        if (!room || !room.slots) return out;
+        for (var s = 0; s < 4; s++) {
+            var st = room.slots[s].state;
+            if (st !== 1 && st !== 2) continue;
+            out.push({ seat: s, name: room.slots[s].name, dot: DOTS[s], host: room.leader === s, here: ((room.inGame >> s) & 1) === 0 });
+        }
+        return out;
+    }
+    function chipText(chip) { return chip.name + (chip.host ? ' · host' : '') + ' · ' + (chip.here ? 'here' : 'on the results screen'); }
+    // The front page's strip: { lead, text } ("Back from the match." and "Maple won with 2,040. Same room, same colours, same map.")
+    function backLine(back) { return { lead: 'Back from the match.', text: (back.winner ? back.winner + ' ' : '') + 'Same room, same colours, same map.' }; }
+    // The match's id in the public list of replays (GET /replays: { replays: [{ file, ended (s), map, players, finished }, ...] }, newest first): the newest finished match on the map, ended within ten minutes of the hand-over,
+    // in which every named person of the match played; '' when there is none (the strip links the list of matches then)
+    function findReplay(list, back) {
+        var named = back.people.filter(function (n) { return !/^Player( [1-4])?$/.test(n); });
+        var entries = list && Array.isArray(list.replays) ? list.replays : [];
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            if (!e || typeof e.file !== 'string' || e.map !== back.map || e.finished !== true || !isWhole(e.ended) || Math.abs(e.ended * 1000 - back.t) > 10 * 60 * 1000) continue;
+            var players = Array.isArray(e.players) ? e.players : [];
+            if (!named.every(function (n) { return players.indexOf(n) !== -1; })) continue;
+            var id = e.file.replace(/\.antsrep$/, '');
+            if (ID_RE.test(id)) return id;
+        }
+        return '';
+    }
+    function statsHref(id) { return id ? '/match.html?id=' + encodeURIComponent(id) : '/matches.html'; }
+
+    // ---- the browser's platform (what the Hello tells the room: web/lobby.html's rule) ----
+    function platformOf(nav) {
+        var ua = ((nav && nav.userAgent) || '') + ' ' + ((nav && nav.platform) || '');
+        var os = /Android/i.test(ua) ? 4 : /iPhone|iPad|iPod/i.test(ua) ? 5 : /Windows/i.test(ua) ? 1 : /Mac/i.test(ua) ? 2 : /Linux|X11/i.test(ua) ? 3 : 6;
+        return 0x10 | os;
+    }
+
+    function el(doc, tag, cls, text) {
+        var e = doc.createElement(tag);
+        if (cls) e.className = cls;
+        if (text !== undefined) e.textContent = text;
+        return e;
+    }
+
+    // ---- the game page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // env: { win, doc, Net (AntsLobbyNet), loc (location: search, protocol, host, assign), local (localStorage), session (sessionStorage), now(), host (the strip's element) }. Sets win.antsMatchOver; the strip is
+    // built in `host` when the room of the match is there again and our seat is ours. Returns the state, for the checks.
+    function gamePage(env) {
+        var q = null;
+        try { q = new URLSearchParams(env.loc.search); } catch (e) { return null; }
+        var join = q.get('join');
+        if (!join || !/^\/ws(\/[A-Za-z0-9._~\/-]*)?$/.test(join) || join.indexOf('//') !== -1 || join.indexOf('..') !== -1 || !env.host) return null;
+        var name = (q.get('name') || '').replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32);
+        var url = (env.loc.protocol === 'https:' ? 'wss://' : 'ws://') + env.loc.host + join;
+        var st = { over: null, key: null, client: null, shown: false, removed: false, room: null };
+        var nodes = null;
+        function relayout() { try { env.win.dispatchEvent(new env.win.Event('resize')); } catch (e) { /* no layout to tell */ } }
+        function build() {
+            var doc = env.doc;
+            env.host.textContent = '';
+            var main = el(doc, 'div', 'rm-main');
+            main.appendChild(el(doc, 'div', 'rm-title', 'The match is over'));
+            var text = el(doc, 'div', 'rm-text');
+            text.appendChild(doc.createTextNode('Everybody can go back to the room together: '));
+            text.appendChild(el(doc, 'b', '', 'same host, same colours, same map'));
+            text.appendChild(doc.createTextNode('. Your seat is kept for you.'));
+            main.appendChild(text);
+            var who = el(doc, 'div', 'rm-who');
+            who.setAttribute('aria-label', 'Who is back in the room');
+            main.appendChild(who);
+            var go = el(doc, 'div', 'rm-go');
+            var button = el(doc, 'button', 'btn big', 'Back to the lobby');
+            button.type = 'button';
+            button.addEventListener('click', back);
+            go.appendChild(button);
+            go.appendChild(el(doc, 'div', 'rm-note', 'The game’s own “Leave Game” still goes to the menu.'));
+            env.host.appendChild(main);
+            env.host.appendChild(go);
+            nodes = { text: text, who: who, button: button, go: go };
+        }
+        function paint() {
+            if (!nodes) return;
+            nodes.who.textContent = '';
+            chipsOf(st.room).forEach(function (c) {
+                var chip = el(env.doc, 'span', 'rm-chip' + (c.here ? '' : ' away'));
+                var dot = el(env.doc, 'i');
+                dot.style.background = c.dot;
+                chip.appendChild(dot);
+                chip.appendChild(env.doc.createTextNode(chipText(c)));
+                nodes.who.appendChild(chip);
+            });
+        }
+        function show() {
+            if (!nodes) build();
+            if (!st.shown) { st.shown = true; env.host.hidden = false; relayout(); }
+            paint();
+        }
+        function hide() {
+            if (!st.shown) return;
+            st.shown = false;
+            env.host.hidden = true;
+            relayout();
+        }
+        function removed() {                                       // the host took this player out of the room: the strip says so, and has no button
+            st.removed = true;
+            if (!nodes) return;
+            nodes.text.textContent = 'The host took you out of the room. The game’s own “Leave Game” goes to the menu.';
+            nodes.who.textContent = '';
+            nodes.go.hidden = true;
+            relayout();
+        }
+        function back() {
+            if (!st.over || !st.key) return;
+            if (st.client) st.client.drop();                       // (no Leave: the seat is the front page's in a moment, with the key)
+            handOver(env.session, st.over, st.key, name, env.now());
+            env.loc.assign('/?room=' + encodeURIComponent(st.over.room));
+        }
+        env.win.antsMatchOver = function (text) {
+            if (st.over) return;
+            try { if (env.win.top !== env.win) return; } catch (e) { return; }       // (a game in a frame of another page has no strip)
+            var over = parseOver(text);
+            if (!over) return;
+            var key = seatKey(env.local, over.room, over.seat);
+            if (!key) return;
+            st.over = over;
+            st.key = key;
+            var c = new env.Net.LobbyClient({ url: url, code: over.room, name: name || over.names[over.seat], key: env.Net.bytesOfHex(key), join: true, kind: 'game', keyOnly: true, platform: platformOf(env.win.navigator) });
+            st.client = c;
+            c.on('welcome', function () { show(); });
+            c.on('room', function (room) { st.room = room; if (st.shown) paint(); });
+            c.on('removed', removed);
+            c.on('refused', hide);
+            c.on('superseded', hide);
+            c.connect();
+        };
+        return { state: st, back: back };
+    }
+
+    // ---- the front page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // The strip at the top of the page: "Back from the match." The match's stats and replay are looked up in the public list (a moment after the match, twice more if they are not there yet: the list is cached
+    // for five seconds). env: { doc, before (the element that the strip goes in front of), fetch (window.fetch or null), later(fn, ms) }. show(back) and hide().
+    function frontStrip(env) {
+        var bar = null, link = null, round = 0;
+        function look(back, mine, tries) {
+            if (!env.fetch || mine !== round) return;
+            var done = function (id) {
+                if (mine !== round) return;
+                if (id) link.href = statsHref(id);
+                else if (tries > 1) env.later(function () { look(back, mine, tries - 1); }, 4000);
+            };
+            try {
+                env.fetch('/replays', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) { done(findReplay(list, back)); }, function () { done(''); });
+            } catch (e) { /* no list: the link goes to the list of matches */ }
+        }
+        return {
+            show: function (back) {
+                var mine = ++round;
+                if (!bar) {
+                    bar = el(env.doc, 'div', 'backbar');
+                    bar.setAttribute('role', 'status');
+                    bar.id = 'backbar';
+                    env.before.parentNode.insertBefore(bar, env.before);
+                }
+                bar.textContent = '';
+                var words = backLine(back);
+                var span = el(env.doc, 'span', 'backbar-text');
+                span.appendChild(el(env.doc, 'b', '', words.lead));
+                span.appendChild(env.doc.createTextNode(' ' + words.text));
+                bar.appendChild(span);
+                link = el(env.doc, 'a', '', 'Stats and replay');
+                link.href = statsHref('');
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                bar.appendChild(link);
+                bar.hidden = false;
+                look(back, mine, 3);
+            },
+            hide: function () { ++round; if (bar) bar.hidden = true; }
+        };
+    }
+
+    return {
+        BACK_KEY: BACK_KEY, LOBBY_KEY: LOBBY_KEY, COLOURS: COLOURS, DOTS: DOTS,
+        parseOver: parseOver, winnerWords: winnerWords, seatKey: seatKey, handOver: handOver, readBack: readBack, forgetBack: forgetBack,
+        chipsOf: chipsOf, chipText: chipText, backLine: backLine, findReplay: findReplay, statsHref: statsHref, platformOf: platformOf,
+        gamePage: gamePage, frontStrip: frontStrip
+    };
+});

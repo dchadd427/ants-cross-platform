@@ -61,6 +61,7 @@ add_executable(test_lobby
     test_lobby_basics.cpp
     test_lobby_rejoin.cpp
     test_lobby_rooms.cpp
+    test_lobby_rematch.cpp
 )
 
 target_link_libraries(test_lobby PRIVATE

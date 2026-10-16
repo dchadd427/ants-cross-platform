@@ -253,12 +253,29 @@
     // plays it alone (the original's single player).
     function startsAlone(model) { return playing(model).length === 1; }
 
+    // ---- the rematch (web/front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): a lobby room that the server opened again when its match was over ----------------------------------------------
+    // ctx.back is the match that this page came back from ({ people: the names of the match }, null: none). A person of that match whom the room still counts as a game before START is not back yet: their
+    // game page shows the results (the room keeps their seat for them, START waits for them). The seats of those people, in order.
+    function notBack(model, ctx) {
+        var out = [];
+        if (!ctx || !ctx.back || model.starting) return out;
+        for (var s = 0; s < PLAYERS; s++) {
+            var x = model.slots[s];
+            if (x.kind === 'person' && x.ingame && !x.me && ctx.back.people.indexOf(x.name) !== -1) out.push(s);
+        }
+        return out;
+    }
+    // What the leader is told under START while somebody is not back ('' when nobody is missing): START waits for them, or for a Remove
+    function startNote(names) {
+        return names.length ? 'START waits for ' + listOf(names) + '. You can wait, or press Remove on their colour' + (names.length > 1 ? 's' : '') + ' to start without them.' : '';
+    }
+
     // ---- what each card and the side show -------------------------------------------------------------------------------------------------------------------------------------------
-    // ctx: { sides (the leader's own switches), picked (the colour that was tapped to be moved, -1), removing (the colour of the open question, -1), offline (false, 'lost', 'none' or 'join'), refusal }.
+    // ctx: { sides (the leader's own switches), picked (the colour that was tapped to be moved, -1), removing (the colour of the open question, -1), offline (false, 'lost', 'none' or 'join'), refusal, back (the rematch, above) }.
     // The cards come back in seat order; the page builds them in GRID order. A card: { seat, colour, kind, who: [{ text, cls }], mode (the plan word of a colour that the leader can set, else ''), stat, statCls,
     // pencil, remove (a Remove button), ask (the question is open), grip, tab (read-only team tab), teams: [{ side, pressed, disabled }] or null, label, drop (what a tap on it does while a colour is picked) }.
     function viewOf(model, ctx) {
-        var g = model.guest, busy = model.starting, off = ctx.offline || false, ro = g || busy || !!off;
+        var g = model.guest, busy = model.starting, off = ctx.offline || false, ro = g || busy || !!off, away = notBack(model, ctx);
         var play = playing(model), sides = sidesFix(g ? model.sides : ctx.sides, play), shown = shownOf(sides, play), can = play.length >= 3;
         var picked = ctx.picked === undefined ? -1 : ctx.picked, removing = ctx.removing === undefined ? -1 : ctx.removing;
         if (removing >= 0 && (ro || !model.slots[removing] || model.slots[removing].kind !== 'person' || model.slots[removing].me)) removing = -1;
@@ -275,6 +292,10 @@
                 else card.stat = 'In the room';
                 if (!ro && !s.me && !s.leader) { card.remove = removing !== i; card.ask = removing === i; }
                 if (busy) { card.stat = s.ingame ? 'In the game' : 'Opening the game…'; card.statCls += s.ingame ? ' in' : ' wait'; }      // START is pressed: whose game is open already
+                else if (ctx.back && !s.me && !s.leader && ctx.back.people.indexOf(s.name) !== -1) {          // the rematch: a person of the match is back in the room, or still on the results screen
+                    card.stat = away.indexOf(i) !== -1 ? 'Still on the results screen…' : 'Back in the room';
+                    card.statCls += away.indexOf(i) !== -1 ? ' away' : ' back';
+                }
             } else {
                 card.stat = s.kind === 'bot' ? 'Computer player' : s.kind === 'open' ? 'Takes the next player who joins.' : 'Stays out of the match.';
                 var word = s.kind === 'bot' ? s.level : s.kind;
@@ -302,6 +323,11 @@
         };
         return { guest: g, busy: busy, ro: ro, offline: off, heading: off === 'join' ? 'Joining a room' : g ? hostName(model) + '’s room' : 'Your room', cards: cards, notes: notes, removing: removing, sides: sides, play: play, side: sideView(model, ctx, play) };
     }
+    // The rematch: what a press of START says while it waits for people of the match who are not back ('' when it does not wait: the page sends it as ever)
+    function startHeld(model, ctx) {
+        var away = notBack(model, ctx);
+        return away.length && !model.guest ? 'START waits for ' + listOf(away.map(function (s) { return model.slots[s].name; })) + '.' : '';
+    }
     // The map's side: the map, START and the line under it (who plays, and what an open colour does)
     function sideView(model, ctx, play) {
         var g = model.guest, busy = model.starting, away = ctx.offline || false;
@@ -327,7 +353,8 @@
             : g ? host + ' starts the match when everybody is in. ' + (names.length > 1 ? list + ' play on ' + m.name + '.' : '') : text;
         var shortText = busy ? (g ? host + ' pressed START' : 'Opening the game for everybody') : away === 'lost' ? 'Getting you back in' : away === 'join' ? '' : away ? 'No room yet'
             : g ? host + ' starts the match' : listOf(short) + ' · ' + m.name + (open.length ? ' · ' + open.length + ' open' : '');
-        var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away, startBusy: busy, startLabel: label, plan: plan, planShort: shortText };
+        var out = { mapKey: m.key, mapName: m.name, mapInfo: m.info, mapDisabled: g || busy || !!away, startDisabled: g || busy || !!away, startBusy: busy, startLabel: label, plan: plan, planShort: shortText,
+            note: g || away ? '' : startNote(notBack(model, ctx).map(function (s) { return model.slots[s].name; })) };
         if (file) { out.mapFile = file; out.mapThumb = c && c.thumb || ''; }       // (a map of the players: the page paints its picture and name from these)
         return out;
     }
@@ -336,9 +363,11 @@
     // tone: '' green (the page changed something for you), 'warn' gold (something did not work); btn: the button's words ('' none). The sentences that start with the server's own words (`a.server`: the late
     // game, no place, the match that cannot start, the map) print what the server sent, then the page's own.
     var TEXT = {
-        over: function (a) { return 'Welcome back. Your match on ' + a.map + ' is over. Everything is as you left it: change what you like and press START for another.'; },
         old: function (a) { return 'That room is gone, because everybody left, so this one is yours now' + (a && a.sameMap === false ? '' : ', with the same map') + '. Send the link on if you like.'; },
-        host: function (a) { return a.guest ? a.leaver + ' left. ' + a.host + ' is the host now.' : a.leaver + ' left, so you are the host now. The map, the colours and START are yours.'; },
+        host: function (a) {        // (a.back: the one who led is still here, the host of the match came back from the results screen and leads again: the rematch; the page that comes back is never told, it leads from its first Room)
+            if (a.guest) return a.back ? a.host + ' is back, and is the host again.' : a.leaver + ' left. ' + a.host + ' is the host now.';
+            return a.leaver + ' left, so you are the host now. The map, the colours and START are yours.';
+        },
         late: function (a) { return a.server + ' Everybody is back in the room, as you left it. Press START to try again.'; },
         lateplayer: function (a) { return 'The match did not start, so everybody is back in the room. ' + a.host + ' can press START to try again.'; },
         noplace: function (a) { return a.server + ' Everybody is back in the room.'; },
@@ -354,6 +383,7 @@
         away: function () { return 'This room was opened in another window, so it is closed here.'; },
         version: function () { return 'A newer version of Ants is out. Reload the page to update.'; },
         noroom: function () { return 'There is no room with that code. Check it, or ask the host to send the link again.'; },
+        notback: function (a) { return a.server + ' START waits for them: wait, or press Remove on their colour to start without them.'; },
         notice: function (a) { return a.server; }
     };
     // The lines under the "Have a code?" field when the code that was typed does not lead into a room (the first two are the page's own room and one that it is in already)
@@ -364,7 +394,7 @@
         running: 'The match in that room has already started.'
     };
     var META = {
-        host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, over: { tone: '', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
+        host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, notback: { tone: 'warn', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
         startsfailed: { tone: 'warn', btn: 'OK' }, maplost: { tone: 'warn', btn: 'OK' }, mapcolours: { tone: 'warn', btn: 'OK' }, full: { tone: '', btn: 'OK' }, running: { tone: '', btn: 'OK' },
         removed: { tone: '', btn: 'OK' }, lost: { tone: 'warn', btn: '' }, unreachable: { tone: 'warn', btn: '' }, busy: { tone: 'warn', btn: 'Try again' }, away: { tone: 'warn', btn: 'Use this window' },
         version: { tone: 'warn', btn: 'Reload' }, notice: { tone: 'warn', btn: 'OK' }
@@ -380,6 +410,7 @@
         if (t.indexOf('The match could not start a few times in a row') === 0) return { kind: 'startsfailed', server: t };
         if (t === 'This map could not be loaded: choose another map.') return { kind: 'maplost', server: t };
         if (t === 'This map cannot be played with these colours.') return { kind: 'mapcolours', server: t };
+        if (/^.+ is not back from the match yet\.$/.test(t) || t.indexOf('These players are not back from the match yet: ') === 0) return { kind: 'notback', server: t };      // (the rematch: START waits for them)
         if (/^.+ moved you to [A-Za-z]+\.$/.test(t)) return { kind: 'moved', server: t };                                   // the leader moved this player: the colour and the toast say so already, there is no strip
         return { kind: 'notice', server: t };
     }
@@ -394,6 +425,7 @@
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
-        planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner
+        planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
+        notBack: notBack, startNote: startNote, startHeld: startHeld
     };
 });

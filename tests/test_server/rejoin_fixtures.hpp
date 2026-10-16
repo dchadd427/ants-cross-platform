@@ -307,6 +307,16 @@ public:
         if (mgr != nullptr) mgr->status(code, s, now(world_now));
         return s;
     }
+    // The status of the match of a code that is over: its room, or (a lobby room's match that its rules ended: the rematch) the room of that match, which gave the code to the rematch's lobby and is listed
+    // beside it until its keep time is over
+    RoomStatus ended(const std::string& code, uint32_t world_now) const {
+        if (mgr != nullptr) {
+            for (const RoomStatus& s : mgr->list(now(world_now))) {
+                if (s.code == code && (s.state == RoomState::Finished || s.state == RoomState::Failed)) return s;
+            }
+        }
+        return RoomStatus{};
+    }
     // The record of a room (the keys of its seats are in its head: the place that keeps a machine's key gets the same bytes from the NetGame's callback)
     std::string record_path(const std::string& code) const { return RestartStore(restart_).path_for(code); }
     RestartLoaded read_record(const std::string& code) const { return read_restart_record(record_path(code), 1ull << 30); }
@@ -573,7 +583,8 @@ struct World {
         return true;
     }
     // The room's match is over: the machines have the end of it and the referee has finished
-    bool finished(const std::string& code) const { return status(code).state == RoomState::Finished; }
+    RoomStatus ended(const std::string& code) const { return server.ended(code, now); }
+    bool finished(const std::string& code) const { return ended(code).state == RoomState::Finished; }
 };
 
 inline bool all_equal(const std::vector<Machine*>& ms) {

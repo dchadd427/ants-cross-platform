@@ -47,6 +47,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.hold_ms = spec.hold_ms;
     cfg.start_wait_ms = spec.start_wait_ms;
     cfg.silence_ms = spec.silence_ms;
+    cfg.reserve_ms = spec.reserve_ms;
     // A room that holds seats gives every player a key (128 random bits of the operating system's generator: ants_net never reads it itself, the library is built for the web too).
     // A room that does not has none: its Welcomes carry the zero key and a Hello with a key is just a Hello.
     if (spec.reconnect) cfg.make_key = [](net::SeatKey& key) { return random_bytes(key.data(), key.size()); };
@@ -153,6 +154,21 @@ void Room::forget(uint32_t now_ms) {
     forgotten_ = true;
     end_reported_ = true;
     fail("forgotten", now_ms);
+}
+
+// The rematch: what the lobby of this room's match gave each person (the seat, the name, the key, the place in the order) and its plan, once, for the lobby room that the manager opens with this code
+std::optional<net::Rematch> Room::take_rematch() {
+    if (!rematch_due()) return std::nullopt;
+    rematch_given_ = true;
+    net::Rematch r = lobby_.rematch();
+    if (r.people.empty()) return std::nullopt;
+    return r;
+}
+
+bool Room::reopen(const net::Rematch& rematch, uint32_t now_ms) {
+    if (!lobby_waiting() || !lobby_.reopen(rematch, now_ms)) return false;
+    reopened_ = true;
+    return true;
 }
 
 void Room::prune_connections() {
@@ -426,7 +442,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
         active_ms_ = now_ms - kMaxIdleMs;                    // (the idle time stops growing: the 32-bit clock would read a much longer one as a short one)
     }
     if (cancels_ != 0 && now_ms - last_cancel_ms_ >= kCancelsForgottenMs) cancels_ = 0;       // (starts that failed long ago are forgotten)
-    if (lobby_.humans() > 0) {
+    if (lobby_.present() > 0) {                              // (a seat that is reserved for a person of the match and that no results screen holds is nobody: the room still goes when nobody is in it)
         empty_ = false;
     } else if (!empty_) {
         empty_ = true;
@@ -547,6 +563,7 @@ void Room::update(uint32_t now_ms) {
             return fail("the simulation of seat " + std::to_string(static_cast<int>(d.player)) + " diverged at turn " + std::to_string(d.turn), now_ms);
         }
         if (sim_ && sim_->is_match_over()) {
+            ended_by_rules_ = true;                                      // (the rules ended it: every machine shows the results, and a lobby room's people may have their rematch)
             finish("the match ended", now_ms);
             return;
         }
@@ -999,7 +1016,7 @@ RoomBusy Room::busy(uint32_t now_ms) const {
     RoomBusy b;
     if (state_ != RoomState::Waiting && state_ != RoomState::Loading && state_ != RoomState::Running) return b;      // a room that is over holds nobody who plays
     if (state_ != RoomState::Running || session_ == nullptr) {
-        b.players = static_cast<uint32_t>(lobby_.humans());
+        b.players = static_cast<uint32_t>(lobby_.present());                 // (a seat that waits for a person of the match who is not back is nobody online)
         b.match = state_ != RoomState::Waiting && b.players > 0;
         return b;
     }
@@ -1042,8 +1059,10 @@ RoomStatus Room::status(uint32_t now_ms) const {
     if (spec_.lobby) {
         const net::RoomMsg& shown = lobby_.room();
         s.starting = lobby_.starting();
+        s.reopened = reopened_;
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
             if (lobby_.in_game(seat)) s.games = static_cast<uint8_t>(s.games | (1u << seat));
+            if (lobby_.reserved(seat)) s.reserved = static_cast<uint8_t>(s.reserved | (1u << seat));
             s.plan += kPlanLetters[static_cast<size_t>(shown.plan[seat])];
         }
         s.plan += " ";

@@ -47,6 +47,10 @@
 // given the LeaderStart; a request that waits longer than `start_wait_ms`, or whose leader is not the leader any more, is dropped (the leader is told which game did not come in time). A held seat keeps its hold
 // while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
 // that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
+// (7) The rematch (docs/SERVER.md "Lobby rooms"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
+// persons: the seat keeps its name, colour, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not lead, does not keep the
+// room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on); a game's Hello with it holds the seat from the results screen and leaves it reserved.
+// Nobody new is taken while nobody of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms.
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -73,6 +77,27 @@ inline constexpr uint32_t kLobbyStartWaitMs = 90u * 1000u;
 inline constexpr uint32_t kLobbySilenceMs = 30u * 1000u;
 /// ... and a guest of a lobby room is forgiven one violation and one ignored request of each kind this often (HostLobby::Config::forgive_ms): a lobby lives as long as its people stay
 inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
+/// ... and a lobby room that the server opened again after its match (the rematch) holds the seat of a person of the match for their key this long at the most (HostLobby::Config::reserve_ms): the life of a key in
+/// the browser (ants_app's kRejoinMaxAgeMs)
+inline constexpr uint32_t kLobbyReserveMs = 3u * 3600u * 1000u;
+
+/// What a lobby room's match was made of (HostLobby::rematch), for the lobby room that the server opens again with the same code when the match is over (HostLobby::reopen): the plan (the map, what each
+/// colour is, the teams, the game mode) and every person of the match with the seat, name, key, place in the order of the Welcomes and platform that the room gave them.
+struct Rematch {
+    struct Person {
+        uint8_t seat{255};
+        std::string name;
+        SeatKey key{};
+        uint32_t order{0};
+        uint8_t platform{0};
+    };
+    std::string map_name;
+    std::array<PlanKind, sim::MAX_PLAYERS> plan{};
+    uint8_t team_a{kNoTeam};
+    uint8_t team_b{kNoTeam};
+    uint8_t mode{0};
+    std::vector<Person> people;
+};
 
 /// One line of the waiting room's chat (protocol 11). `seat` is the sender's seat, kRoomSender (255) for a line that the room itself said (a notice); `name` is the sender's name as the
 /// room showed it when the line arrived ("" for a notice).
@@ -140,6 +165,8 @@ public:
         /// A lobby room lives as long as its people stay, so what a person got wrong is not held against them for ever: every `forgive_ms` each guest's violations, and each of its counts of ignored requests (START,
         /// colour moves, plans, renames, removals), go down by one. A connection that offends faster than that is thrown out as ever (eight violations are more than one in forgive_ms). Any other room forgives nothing, and so does 0.
         uint32_t forgive_ms{kLobbyForgiveMs};
+        /// A lobby room that was opened again after its match (reopen): a seat that is reserved for a person of the match is given up this long after the reopening, if the person has not come back by then
+        uint32_t reserve_ms{kLobbyReserveMs};
         /// Flood control (flood.hpp): the messages that one guest may send, a token bucket. A message beyond it is not handled and is a violation (eight throw the guest out).
         uint32_t message_burst{kMessageBurst};
         uint32_t messages_per_second{kMessagesPerSecond};
@@ -294,6 +321,20 @@ public:
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
+    /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key (empty `people` for a room that is no lobby room or whose match has not begun).
+    Rematch rematch() const;
+    /// A lobby room that nobody has come to yet takes the match's plan and reserves a seat for each of its persons (in the person's colour, with its name, key, place in the order and platform); the next newcomer's
+    /// place in the order comes after theirs. False, and nothing changes, for a room that is no lobby room, one that has a guest or a connection already, or a person that does not fit (a seat or a key twice, no key).
+    bool reopen(const Rematch& rematch, uint32_t now_ms);
+    /// The seat is reserved for a person of the match who is not back
+    bool reserved(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && guests_[seat].reserved; }
+    bool any_reserved() const noexcept;
+    /// The persons who are in the room now: the host, a guest with a connection and a seat that is held; a reserved seat only while its results screen holds it (what the server's room counts to live and for /busy)
+    size_t present() const noexcept;
+    /// Reserved seats whose person came back (a page with the key), and reservations that ran out (reserve_ms)
+    uint32_t returns() const noexcept { return returns_; }
+    uint32_t reserve_expiries() const noexcept { return reserve_expiries_; }
+
     std::vector<Event> take_events();
 
 private:
@@ -326,6 +367,8 @@ private:
         ChatBudget removes;                      // the RemoveMsgs of this guest that could be done (flood.hpp: a burst of kRemoveBurst, then kRemovesPerSecond a second)
         uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
+        bool reserved{false};                    // a lobby room that was opened again after its match: the seat waits for its person of the match (see (7) above), since reserved_since_ms
+        uint32_t reserved_since_ms{0};
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
         bool active{false};
@@ -359,9 +402,12 @@ private:
     /// who is not the leader (an empty seat and a bot's hold nobody)
     bool can_remove(uint8_t target) const noexcept;
     // The lobby room (protocol 16)
-    /// A guest sits in the seat: connected or held
-    bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held; }
+    /// A guest sits in the seat: connected, held or reserved
+    bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held || guests_[seat].reserved; }
     void hold_guest(uint8_t seat, uint32_t now_ms);
+    void unhook_reserved(uint8_t seat);                                   // the rematch: the connection of a reserved seat ended (the results screen closed): the seat stays reserved
+    bool anyone_back() const noexcept;                                    // the rematch: a guest sits in the room whose seat is not reserved (somebody who is back, or a newcomer that they let in)
+    std::string not_back_notice() const;                                  // the rematch: the leader's notice of a START that waits for the persons who are not back
     void forgive(Guest& g, uint32_t now_ms) const noexcept;
     void apply_plan(const PlanMsg& plan);
     void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
@@ -400,6 +446,8 @@ private:
     uint32_t hold_expiries_{0};
     uint32_t silences_{0};
     uint32_t start_arms_{0};                 // the STARTs that were asked for and stood (arm_start)
+    uint32_t returns_{0};                    // the rematch: reserved seats that their person's page took back
+    uint32_t reserve_expiries_{0};           // ... and reservations that ran out
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
     std::function<std::string(const std::string&)> map_choice_;

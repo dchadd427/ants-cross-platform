@@ -353,6 +353,10 @@ inline constexpr const char* kNoticeMapLost = "This map could not be loaded: cho
 inline constexpr const char* kNoticeMapColours = "This map cannot be played with these colours.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 inline constexpr const char* kNoticeStartsFailed = "The match could not start a few times in a row: try again in a minute.";
+/// The rematch (docs/SERVER.md "Lobby rooms"): the leader's START of a lobby room that the server opened again after its match is not taken while a person of the match is not back ("Juniper is not back from
+/// the match yet.", for several "These players are not back from the match yet: Juniper and Pip.")
+inline constexpr const char* kNoticeNotBack = " is not back from the match yet.";
+inline constexpr const char* kNoticeNotBackMany = "These players are not back from the match yet: ";
 
 struct RoomMsg {
     struct Slot {
