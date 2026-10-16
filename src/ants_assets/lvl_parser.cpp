@@ -3,7 +3,16 @@
 #include <cctype>
 #include <fstream>
 #include <cstring>
+#include <iterator>
+#include <limits>
 #include <utility>
+
+// The five chances of a waypoint are copied as they are between the file and a double: the file holds little-endian IEEE 754 binary64, which is what every target
+// of the game holds (x86-64, ARM64, WebAssembly; MSVC has no big-endian target). A host that is not would read and write other numbers: it must not build.
+static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8, "the .lvl doubles are IEEE 754 binary64");
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "the .lvl reader copies the doubles of a file in the host's byte order: the file's is little-endian"
+#endif
 
 namespace ants::assets {
 
@@ -39,7 +48,7 @@ public:
 
     bool read_double(double& val) noexcept {
         if (pos_ + 8 > size_) return false;
-        std::memcpy(&val, data_ + pos_, 8);
+        std::memcpy(&val, data_ + pos_, 8);                         // the file's little-endian IEEE 754 binary64, as the host holds a double (the checks below)
         pos_ += 8;
         return true;
     }
@@ -135,6 +144,7 @@ const char* to_string(LevelProblemKind kind) noexcept {
         case LevelProblemKind::TileOutsideDictionary: return "tile_outside_dictionary";
         case LevelProblemKind::FoodOutsideGrid: return "food_outside_grid";
         case LevelProblemKind::ObjectOutsideGrid: return "object_outside_grid";
+        case LevelProblemKind::FileTooLarge: return "file_too_large";
     }
     return "?";
 }
@@ -199,8 +209,8 @@ void add_problem(std::vector<LevelProblem>& list, Severity severity, Kind kind, 
 
 std::string num(uint64_t v) { return std::to_string(v); }
 
-// The checks that decide whether the data can be handed to the engine at all, whatever the roster: the shape of the grid and of the dictionary.
-void collect_layout_problems(const LevelData& level, std::vector<LevelProblem>& out) {
+// The checks that decide whether the data can be handed to the engine at all, whatever the roster: the shape of the grid and of the dictionary, within `limits`.
+void collect_layout_problems(const LevelData& level, const LevelLimits& limits, std::vector<LevelProblem>& out) {
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
     if (rows == 0 || columns == 0) {
@@ -211,12 +221,31 @@ void collect_layout_problems(const LevelData& level, std::vector<LevelProblem>& 
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(LVL_MAX_GRID_SIDE) + " the remake hosts (the layer-2 object "
                     "anchors of the format are 8 bit); the map editor cannot make such a map");
+    } else if (rows > limits.rows() || columns > limits.columns()) {
+        add_problem(out, Severity::Fatal, Kind::GridTooLarge,
+                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(limits.rows()) + " x " + num(limits.columns()) +
+                    " allowed here (a new map, or one brought in now, may have at most that)");
+    } else if (static_cast<uint64_t>(rows) * columns > limits.cells()) {
+        add_problem(out, Severity::Fatal, Kind::GridTooLarge,
+                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, " + num(static_cast<uint64_t>(rows) * columns) + " cells, more than the " +
+                    num(limits.cells()) + " allowed here (a new map, or one brought in now, may have at most that)");
     }
     if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
         add_problem(out, Severity::Fatal, Kind::DictionaryTooLarge,
                     "the tile dictionary has " + num(level.tile_dictionary.size()) + " names, the original's tables hold " + num(LVL_MAX_DICTIONARY_ENTRIES) +
                     ": it overruns a 5376 byte buffer while it reads the names, there is no behaviour to copy");
+    } else if (level.tile_dictionary.size() > limits.dictionary_names()) {
+        add_problem(out, Severity::Fatal, Kind::DictionaryTooLarge,
+                    "the tile dictionary has " + num(level.tile_dictionary.size()) + " names, more than the " + num(limits.dictionary_names()) + " allowed here");
     }
+}
+
+// A file larger than the place that reads it allows: refused before a byte of it is read (and, from a file, before it is loaded into memory)
+void fail_file_too_large(LevelValidation* report, uint64_t size, const LevelLimits& limits) {
+    if (!report) return;
+    *report = LevelValidation{};
+    add_problem(report->problems, Severity::Fatal, Kind::FileTooLarge,
+                "the file has " + num(size) + " bytes, more than the " + num(limits.max_read_bytes) + " allowed here: nothing of it is read");
 }
 
 // The checks on the content of a loaded level (the grid has a shape): what lies outside the grid or the dictionary, and the start markers of the teams that play.
@@ -291,26 +320,26 @@ void collect_content_problems(const LevelData& level, uint8_t roster_mask, std::
 
 }  // anonymous namespace
 
-LevelValidation LevelData::validate(uint8_t roster_mask) const {
+LevelValidation LevelData::validate(uint8_t roster_mask, const LevelLimits& limits) const {
     LevelValidation v;
     v.parsed = true;
     v.roster_mask = static_cast<uint8_t>(roster_mask & 0x0Fu);
     v.problems = load_notes;
-    collect_layout_problems(*this, v.problems);
+    collect_layout_problems(*this, limits, v.problems);
     collect_content_problems(*this, v.roster_mask, v.problems);
     v.playable = v.first_fatal() == nullptr;
     return v;
 }
 
-bool LevelData::load_from_file(const std::string& filepath, LevelValidation* report) {
-    return LVLParser::load_from_file(filepath, *this, report);
+bool LevelData::load_from_file(const std::string& filepath, LevelValidation* report, const LevelLimits& limits) {
+    return LVLParser::load_from_file(filepath, *this, report, limits);
 }
 
-bool LevelData::load_from_memory(const uint8_t* data, size_t size, LevelValidation* report) {
-    return LVLParser::load_from_memory(data, size, *this, report);
+bool LevelData::load_from_memory(const uint8_t* data, size_t size, LevelValidation* report, const LevelLimits& limits) {
+    return LVLParser::load_from_memory(data, size, *this, report, limits);
 }
 
-bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level, LevelValidation* report) {
+bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level, LevelValidation* report, const LevelLimits& limits) {
     try {
         std::ifstream file(filepath, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
@@ -324,6 +353,11 @@ bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level
 
         std::streamsize size = static_cast<std::streamsize>(file.tellg());
         if (size < 0) size = 0;
+        if (static_cast<uint64_t>(size) > limits.max_read_bytes) {
+            out_level = LevelData{};
+            fail_file_too_large(report, static_cast<uint64_t>(size), limits);
+            return false;
+        }
         file.seekg(0, std::ios::beg);
 
         std::vector<uint8_t> buffer(static_cast<size_t>(size));
@@ -336,7 +370,7 @@ bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level
             return false;
         }
 
-        return load_from_memory(buffer.data(), buffer.size(), out_level, report);
+        return load_from_memory(buffer.data(), buffer.size(), out_level, report, limits);
     } catch (...) {
         out_level = LevelData{};
         if (report) {
@@ -449,7 +483,7 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
     // the next read, block 3, takes the bytes right behind that object's stage count.
     uint16_t b2_count = 0;
     if (!r.read_u16(b2_count)) { fail_truncated(p, "block 2 (food objects)", r.pos(), size); return; }
-    lvl.food_schedules.reserve(std::min<size_t>(b2_count, r.remaining() / 10));
+    lvl.food_schedules.reserve(std::min<size_t>(b2_count, r.remaining() / 14));        // (an object that is kept takes 14 bytes at least: one stage)
     for (size_t i = 0; i < b2_count; ++i) {
         FoodSchedule fs;
         uint16_t item_count = 0;
@@ -461,6 +495,8 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
                         "block 4 and the egg stock from the bytes behind its stage count (so from bytes that are not those blocks, in most files) and keeps the announced number of slots, "
                         "of which only the objects read are filled; the remake does the same and holds the objects read",
                         static_cast<uint32_t>(b2_count - i));
+            // the room reserved for the objects that are not read goes back before the rest of the file is read (what a file can make the reader hold: docs/MAP_FORMAT.md)
+            std::vector<FoodSchedule>(std::make_move_iterator(lvl.food_schedules.begin()), std::make_move_iterator(lvl.food_schedules.end())).swap(lvl.food_schedules);
             break;
         }
         if (r.remaining() < static_cast<size_t>(item_count) * 4) { fail_truncated(p, "block 2 (food objects)", size, size); return; }
@@ -488,7 +524,7 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
         cut = true;
         cut_text = "the file ends before the count of block 4";
     } else {
-        lvl.waypoints.reserve(std::min<size_t>(b4_count, r.remaining() / 8));
+        lvl.waypoints.reserve(std::min<size_t>(b4_count, r.remaining() / 8 + 1));        // (a complete record takes 8 bytes at least, and a half record follows the last)
         for (size_t i = 0; i < b4_count && !cut; ++i) {
             Waypoint wp;
             if (!r.read_u16(wp.y) || !r.read_u16(wp.x)) {
@@ -535,12 +571,16 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
 
 }  // anonymous namespace
 
-bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report) {
+bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& out_level, LevelValidation* report, const LevelLimits& limits) {
     out_level = LevelData{};
     if (report) *report = LevelValidation{};
     try {
         if (!data || size == 0) {
             if (report) add_problem(report->problems, Severity::Fatal, Kind::Unreadable, "no data");
+            return false;
+        }
+        if (size > limits.max_read_bytes) {
+            fail_file_too_large(report, size, limits);
             return false;
         }
         Parse p;
@@ -550,7 +590,7 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             return false;
         }
         std::vector<LevelProblem> layout;
-        collect_layout_problems(p.lvl, layout);
+        collect_layout_problems(p.lvl, limits, layout);
         bool layout_fatal = false;
         for (const LevelProblem& lp : layout) layout_fatal = layout_fatal || lp.severity == Severity::Fatal;
         if (layout_fatal) {
@@ -562,7 +602,7 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             return false;
         }
         out_level = std::move(p.lvl);
-        if (report) *report = out_level.validate(0x0F);
+        if (report) *report = out_level.validate(0x0F, limits);
         return true;
     } catch (...) {
         out_level = LevelData{};
@@ -574,26 +614,26 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
     }
 }
 
-LevelValidation LVLParser::check_memory(const uint8_t* data, size_t size, uint8_t roster_mask) {
+LevelValidation LVLParser::check_memory(const uint8_t* data, size_t size, uint8_t roster_mask, const LevelLimits& limits) {
     LevelData level;
     LevelValidation report;
-    if (!load_from_memory(data, size, level, &report)) {
+    if (!load_from_memory(data, size, level, &report, limits)) {
         report.roster_mask = static_cast<uint8_t>(roster_mask & 0x0Fu);
         report.playable = false;
         return report;
     }
-    return level.validate(roster_mask);
+    return level.validate(roster_mask, limits);
 }
 
-LevelValidation LVLParser::check_file(const std::string& filepath, uint8_t roster_mask) {
+LevelValidation LVLParser::check_file(const std::string& filepath, uint8_t roster_mask, const LevelLimits& limits) {
     LevelData level;
     LevelValidation report;
-    if (!load_from_file(filepath, level, &report)) {
+    if (!load_from_file(filepath, level, &report, limits)) {
         report.roster_mask = static_cast<uint8_t>(roster_mask & 0x0Fu);
         report.playable = false;
         return report;
     }
-    return level.validate(roster_mask);
+    return level.validate(roster_mask, limits);
 }
 
 } // namespace ants::assets

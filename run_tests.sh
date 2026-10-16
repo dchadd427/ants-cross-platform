@@ -41,8 +41,8 @@ print_usage() {
     echo "                   plus the repository checks (version / changelog consistency, tool and script tests). No E2E, no script suites that start the game, no"
     echo "                   sanitizer, none of the slow suites (the ones --list marks full, for example lock-step soak, server, worker bot, network application): CI runs everything for every pull request"
     echo "  --all            Run all test suites (ants_assets + ants_sim + ants_app + E2E + repository checks, default)"
-    echo "  --assets         Run only asset decoder tests (test_assets)"
-    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker), replay (test_replay, replay_tool --selftest) and server suites)"
+    echo "  --assets         Run only asset decoder tests (test_assets, and the map writer: test_lvl_writer)"
+    echo "  --sim            Run only simulation rules tests (test_sim_rules, and the network, bot (test_ai, bot_arena --selftest, test_ai_worker), replay (test_replay, replay_tool --selftest), map file (test_map_roundtrip, lvl_tool --selftest) and server suites)"
     echo "  --app            Run only application integration tests (test_app_integration)"
     echo "  --e2e            Run only opaque-box E2E test suites (e2e_runner)"
     echo "  --tools          Run only the repository checks (tools/check_version_consistency.py, the python tests of tests/scripts)"
@@ -242,6 +242,7 @@ define_suites() {
     suite "1.3"    assets 1 "test_challenger_m1_2"       "Challenger M1_2 (test_challenger_m1_2)"                    "CHALLENGER M1_2 (asset decoding, second pass)"                                     '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_2"'
     suite "1.4"    assets 1 "test_challenger_m1_it2"     "Challenger M1_IT2 (test_challenger_m1_it2)"                "CHALLENGER M1_IT2 (asset interface contract)"                                      '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2"'
     suite "1.5"    assets 1 "test_challenger_m1_it2_2"   "Challenger M1_IT2_2 (test_challenger_m1_it2_2)"            "CHALLENGER M1_IT2_2 (asset interface contract, deep)"                              '"./$BUILD_DIR/tests/test_assets/test_challenger_m1_it2_2"'
+    suite "1.6"    assets 1 "test_lvl_writer"            "Map Writer (test_lvl_writer)"                              "MAP WRITER SUITE (the canonical .lvl file, what the writer refuses, random levels, hostile files with a bound on the heap, what a rewrite changes, the blank map)" '"./$BUILD_DIR/tests/test_assets/test_lvl_writer"'
 
     # 2. simulation rules, network core, bots, server
     suite "2"      sim    1 "test_sim_rules"             "Simulation Rules Tests (test_sim_rules)"                   "SIMULATION RULES SUITES (ants_sim)"                                                '"./$BUILD_DIR/tests/test_sim/test_sim_rules"'
@@ -258,6 +259,7 @@ define_suites() {
     suite "2.9.3"  sim    1 "test_file_bombs"            "File Bombs (test_file_bombs)"                              "FILE BOMBS SUITE (the original's bomb tiles 129 .. 132 in a map file are the planted bombs of their colours: walkable, set off by a step, the same state as a planted bomb)" '"./$BUILD_DIR/tests/test_sim/test_file_bombs"'
     suite "2.9.4"  sim    1 "test_loader_fidelity"       "Loader Fidelity (test_loader_fidelity)"                    "LOADER FIDELITY SUITE (the level loader decides by tile id, tables and the file's solid bits, as the original's does, not by dictionary names)" '"./$BUILD_DIR/tests/test_sim/test_loader_fidelity"'
     suite "2.9.5"  sim    1 "test_bomb_facts"            "Bomb Facts (test_bomb_facts)"                              "BOMB FACTS SUITE (engine facts that a planner relies on: the bomb throw, the hit knockback, fire walls, defuse, power-up pick-up, the hops of POPcOrN)" '"./$BUILD_DIR/tests/test_sim/test_bomb_facts"'
+    suite "2.9.6"  sim    1 "test_map_roundtrip"         "Map Round Trip (test_map_roundtrip)"                       "MAP ROUND TRIP (every map of the library is read, written and read again as the same map, every byte that differs is accounted for, and the map and its rewrite play the same)" '"./$BUILD_DIR/tests/test_sim/test_map_roundtrip"' "cost=12"
     suite "2.9.2"  sim    1 "test_game_mode"             "Game Mode 187 (test_game_mode)"                            "GAME MODE SUITE (187: no food, kills as the score, the last side standing)" '"./$BUILD_DIR/tests/test_sim/test_game_mode"'
     suite "2.10"   sim    1 "test_commands"              "Commands + State Hash (test_commands)"                     "COMMAND LAYER SUITE (commands, validation, lock-step state hash)"                  '"./$BUILD_DIR/tests/test_sim/test_commands"'
     suite "2.11"   sim    0 "test_lockstep"              "Lock-Step Network Core (test_lockstep)"                    "LOCK-STEP NETWORK CORE SUITE (protocol, sequencer, sessions, matches)"             'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_net/test_lockstep"' "cost=58"
@@ -293,6 +295,7 @@ define_suites() {
     suite "2.29"   sim    1 "test_replay"                "Replays (test_replay)"                                     "REPLAYS SUITE (the file and its strict reader, the recorder, the lock-step runner's tap, the player that checks a file against its hashes, the list of orders)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_replay/test_replay"' 'cost=2'
     suite "2.30"   sim    1 "replay_tool"                "Replay Tool (replay_tool --selftest)"                      "REPLAY TOOL SELF-TEST (the command line, info, verify and orders, the filters, the table for a spreadsheet, damaged, cut and foreign files)" '"./$BUILD_DIR/replay_tool" --selftest'
     suite "2.31"   sim    1 "test_db"                    "Database (test_db)"                                       "DATABASE SUITE (the SQLite wrapper: open, WAL, values, transactions, a file that is no database, the backup; the schema migrations; the server's schema)" 'env -u ANTS_TEST_FILTER "./$BUILD_DIR/tests/test_db/test_db"' 'cost=2'
+    suite "2.32"   sim    1 "lvl_tool"                   "Map File Tool (lvl_tool --selftest)"                       "MAP FILE TOOL SELF-TEST (the command line, check, info, rewrite and blank, their exit codes, cut and refused files, the limits of a new map)" '"./$BUILD_DIR/lvl_tool" --selftest'
 
     # 3. application
     suite "3"      app    1 "test_app_integration"       "Application Integration Tests (test_app)"                  "APPLICATION INTEGRATION SUITES (ants_app)"                                         '"./$BUILD_DIR/tests/test_app/test_app_integration"'
@@ -424,7 +427,7 @@ if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
         fi
     fi
     if [ "$FAST" -eq 1 ]; then
-        # only what the quick suites run (an incremental build of the changed files); map_sweep, bot_arena and replay_tool are optional targets, named here like the rest
+        # only what the quick suites run (an incremental build of the changed files); map_sweep, bot_arena, replay_tool and lvl_tool are optional targets, named here like the rest
         echo -e "${YELLOW}[BUILD] Compiling the targets of the quick suites (-j${NCPU})...${RESET}"
         # shellcheck disable=SC2086
         cmake --build "$BUILD_DIR" -j"$NCPU" --target $FAST_TARGETS
@@ -432,8 +435,8 @@ if [ "$NO_BUILD" -eq 0 ] && [ "$NEED_MAIN" -eq 1 ]; then
         echo -e "${YELLOW}[BUILD] Compiling libraries and test suites (-j${NCPU})...${RESET}"
         cmake --build "$BUILD_DIR" -j"$NCPU"
         if [ "$NEED_SIM" -eq 1 ]; then
-            # the map sweep, the bot arena and the replay tool are optional targets (not in the default build); their --selftest is run with the simulation suites
-            cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena replay_tool
+            # the map sweep, the bot arena, the replay tool and the map file tool are optional targets (not in the default build); their --selftest is run with the simulation suites
+            cmake --build "$BUILD_DIR" -j"$NCPU" --target map_sweep bot_arena replay_tool lvl_tool
         fi
     fi
 fi

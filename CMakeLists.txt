@@ -219,6 +219,11 @@ if(NOT EMSCRIPTEN)
     #   cmake --build build --target replay_tool && ./build/replay_tool orders match.antsrep   (info, verify and orders; ./build/replay_tool --help)
     add_executable(replay_tool EXCLUDE_FROM_ALL tools/replay_tool.cpp)
     target_link_libraries(replay_tool PRIVATE ants_replay ants_net ants_sim ants_assets ants_test_paths)
+
+    # Map file tool (not part of the normal build): checks, describes and rewrites .lvl files, and makes a blank map (docs/MAP_FORMAT.md)
+    #   cmake --build build --target lvl_tool && ./build/lvl_tool check map.lvl   (check, info, rewrite and blank; ./build/lvl_tool --selftest checks the tool itself)
+    add_executable(lvl_tool EXCLUDE_FROM_ALL tools/lvl_tool.cpp)
+    target_link_libraries(lvl_tool PRIVATE ants_assets ants_test_paths)
 endif()
 
 # Testing

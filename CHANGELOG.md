@@ -23,15 +23,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.12.54 - 2026-10-16 - Rematch: back to the lobby with one button
+## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
 **For players:**
-- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
-- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them. Desktop and phone-app players join by the code.
+- Under the hood: the map files can now be written, not only read; nothing changes in the game.
 
-**Rules / network:** none.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...d0c7f9a8)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...ee0d2604)
 
 ## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
 

@@ -263,45 +263,7 @@ struct CHDAnimation {
 
 ## 4. The `.LVL` Map File Specification
 
-All original maps (`TREASURE.LVL`, `GAUNTLET.LVL`, `ISLANDS.LVL`, `MEDIUM.LVL`, `SMALL.LVL`, `TINY.LVL`) follow this binary format:
-
-### 4.1 Header
-
-```c
-struct LVLHeader {
-    uint32_t version;          // 8
-    uint32_t game_mode;        // 1 in the shipped maps; stored by the original and never read, so any value loads (4.5)
-    uint16_t default_minutes;  // Match duration (e.g. 12 min for Treasure, 6 min for Tiny)
-    char     description[30];  // Null-terminated description (e.g. "One person's trash...")
-    uint16_t tile_type_count;  // Number of tile asset references (e.g. 1334)
-    char     tile_names[tile_type_count + 1][11]; // 11-byte asset name strings matching CHD animations
-    uint32_t width;            // Map grid width (e.g. 60, 40, 31)
-    uint32_t height;           // Map grid height (e.g. 60, 40, 31)
-};
-```
-
-### 4.2 Layers (Width × Height × 6 Bytes Each)
-
-Each map contains two full grid layers:
-
-- **Layer 1: Terrain Base Grid:**
-
-  - 6 bytes per tile (`uint16_t terrain_id`, `uint16_t variation`, `uint16_t flags`).
-
-  - Terrain categories:
-    - `0`: Walkable Ground (Grass, Dirt, Clay)
-    - `1`: Wall / Obstacle (Boulders, Rocks, Trees)
-    - `2`: Deep Water (Instantly drowns non-swimmer ants)
-
-- **Layer 2: Interactive Overlay Grid:**
-
-  - Contains bridges (`bridge1`..`bridge4`), fire walls (`wallup04`), dropped bombs (`redbomb`..`bluebomb`), food items (`FOOD`, `fdburgr`, `fdsuckr`), and power-up icons (`FD_COMB`, `FD_SWIM`, `FD_FIRE`, `FD_THIEF`, `FD_BOMB`).
-
-### 4.3 Trailing Spawn & Player Configuration
-
-- Anthill coordinates `(x, y)` for Team 0, 1, 2, 3.
-
-- Food item spawn points and respawn schedules.
+The layout of a map file part by part (header, dictionary, grid size, the two layers, blocks 1 to 4, the egg word), as the remake reads and writes it, with its limits, the rules of a map that loads in the original and the round-trip law of the writer: [`MAP_FORMAT.md`](MAP_FORMAT.md). This section is what the original's loader does with a file, read from the program.
 
 ### 4.4 What the Original's Loader Does With a File (`FUN_01006349`, read in v0.0.64 because three community maps did not load)
 

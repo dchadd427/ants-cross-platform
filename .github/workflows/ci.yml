@@ -5,7 +5,7 @@
 # Integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
-# application), then the self-tests of the three tools (map_sweep, bot_arena, replay_tool; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
+# application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
 # tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
@@ -73,7 +73,7 @@ jobs:
         id: build
         run: |
           cmake --build build -- -k 0
-          cmake --build build --target map_sweep bot_arena replay_tool -- -k 0
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -86,7 +86,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Tool self-tests (map_sweep, bot_arena, replay_tool) and the community maps
+      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
@@ -95,6 +95,7 @@ jobs:
           python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1
+          build/lvl_tool --selftest || status=1
           exit $status
 
       - name: Opaque-box E2E runner
@@ -184,7 +185,7 @@ jobs:
         id: build
         run: |
           cmake --build build -- -k 0
-          cmake --build build --target map_sweep bot_arena replay_tool -- -k 0
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool -- -k 0
           ccache -s
 
       - name: Build the E2E runner
@@ -197,7 +198,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Tool self-tests (map_sweep, bot_arena, replay_tool) and the community maps
+      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
@@ -206,6 +207,7 @@ jobs:
           python3 tools/community_maps.py verify Community-Maps build/community_sweep.json || status=1
           build/bot_arena --selftest || status=1
           build/replay_tool --selftest || status=1
+          build/lvl_tool --selftest || status=1
           exit $status
 
       - name: Opaque-box E2E runner
@@ -297,7 +299,7 @@ jobs:
         id: build
         run: |
           cmake --build build
-          cmake --build build --target map_sweep bot_arena replay_tool
+          cmake --build build --target map_sweep bot_arena replay_tool lvl_tool
 
       - name: Build the E2E runner (Release)
         id: build_e2e
@@ -315,13 +317,14 @@ jobs:
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
 
-      - name: Tool self-tests (map_sweep, bot_arena, replay_tool)
+      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
         run: |
           status=0
           build/map_sweep.exe --selftest || status=1
           build/bot_arena.exe --selftest || status=1
           build/replay_tool.exe --selftest || status=1
+          build/lvl_tool.exe --selftest || status=1
           exit $status
 
       - name: Opaque-box E2E runner

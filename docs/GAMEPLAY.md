@@ -7,7 +7,7 @@ This page describes what happens in a match: the data the game reads, the six ki
 The game reads the original's own data files directly: no conversion tool and no pre-processing. The code is the library `ants_assets` (`src/ants_assets/`).
 
 - `Original-Ants/ants.chd` is the asset archive: a header, a 256-colour palette, 2,794 raw paletted sprite bitmaps, 91 PCM sound clips and 1,344 animation sequences (section 3 of the reverse-engineering document).
-- `Original-Ants/Maps/*.LVL` are the maps: the match length in the header, a tile dictionary, two terrain layers, objects (start markers, plants, food piles, flower-dropper waypoints), the level's default ant type and a final word, every team's egg stock (section 4).
+- `Original-Ants/Maps/*.LVL` are the maps: the match length in the header, a tile dictionary, two terrain layers, objects (start markers, plants, food piles, flower-dropper waypoints), the level's default ant type and a final word, every team's egg stock ([the map file](MAP_FORMAT.md)).
 - The map loader reads a file the way the original's loader does (sections 4.4 and 4.5), so maps made by the community load too:
   - the header lists the rows first, so a map need not be square (`OCEAN` has 81 rows of 100 columns);
   - bytes after the final word are never read;

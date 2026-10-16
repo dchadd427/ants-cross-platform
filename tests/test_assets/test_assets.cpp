@@ -14,6 +14,7 @@
 #include <functional>
 #include "ants_test_paths.hpp"
 #include "../common/test_assert.hpp"
+#include "lvl_bytes.hpp"
 
 namespace fs = std::filesystem;
 
@@ -737,131 +738,7 @@ void test_suite_6b_map_layout() {
 // SUITE 6c: The Loader Takes What Ants.exe Takes And Refuses What It Refuses (FUN_01006349 at 0x1006349, docs/GAME_REVERSE_ENGINEERING.md 4.5)
 // ============================================================================
 
-// Synthetic maps are made by editing bytes of the shipped TINY.LVL and SMALL.LVL: the helpers find the parts of a file the way the loader walks it.
-namespace lvl_edit {
-
-struct Spots {
-    size_t dims{0};                    // the rows dword; the columns dword follows
-    uint32_t rows{0};
-    uint32_t columns{0};
-    size_t layer1{0};
-    size_t layer2{0};
-    size_t b1_count{0};                // block 1: a word count, then (tile, row, column) words
-    size_t b1_records{0};
-    uint16_t b1{0};
-    size_t b2_count{0};                // block 2: a word count, then per object row, column, units, points, stages (words) and `stages` pairs of words
-    uint16_t b2{0};
-    std::vector<size_t> food;          // the offset of each object
-    size_t b3{0};                      // block 3: two words
-    size_t b4_count{0};                // block 4: a word count, then per waypoint row, column (words), a flag dword and, when it is not 0, 44 more bytes
-    uint16_t b4{0};
-    std::vector<size_t> waypoints;     // the offset of each record
-    size_t final_word{0};              // the egg stock
-};
-
-uint16_t rd16(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint16_t>(d[p] | (d[p + 1] << 8)); }
-uint32_t rd32(const std::vector<uint8_t>& d, size_t p) { return static_cast<uint32_t>(rd16(d, p)) | (static_cast<uint32_t>(rd16(d, p + 2)) << 16); }
-void wr16(std::vector<uint8_t>& d, size_t p, uint32_t v) { d[p] = static_cast<uint8_t>(v & 0xFF); d[p + 1] = static_cast<uint8_t>((v >> 8) & 0xFF); }
-void wr32(std::vector<uint8_t>& d, size_t p, uint32_t v) { wr16(d, p, v & 0xFFFF); wr16(d, p + 2, v >> 16); }
-void put16(std::vector<uint8_t>& d, uint32_t v) { d.push_back(static_cast<uint8_t>(v & 0xFF)); d.push_back(static_cast<uint8_t>((v >> 8) & 0xFF)); }
-void put32(std::vector<uint8_t>& d, uint32_t v) { put16(d, v & 0xFFFF); put16(d, v >> 16); }
-
-std::vector<uint8_t> read_map(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f.is_open()) return {};
-    const std::streamsize size = f.tellg();
-    std::vector<uint8_t> bytes(static_cast<size_t>(size));
-    f.seekg(0, std::ios::beg);
-    f.read(reinterpret_cast<char*>(bytes.data()), size);
-    return bytes;
-}
-
-bool locate(const std::vector<uint8_t>& d, Spots& s) {
-    if (d.size() < 44) return false;
-    s = Spots{};
-    size_t p = 42 + (static_cast<size_t>(rd16(d, 40)) + 1) * 11;
-    s.dims = p;
-    s.rows = rd32(d, p);
-    s.columns = rd32(d, p + 4);
-    p += 8;
-    s.layer1 = p;
-    p += static_cast<size_t>(s.rows) * s.columns * 6;
-    s.layer2 = p;
-    p += static_cast<size_t>(s.rows) * s.columns * 6;
-    s.b1_count = p;
-    s.b1 = rd16(d, p);
-    s.b1_records = p + 2;
-    p += 2 + static_cast<size_t>(s.b1) * 6;
-    s.b2_count = p;
-    s.b2 = rd16(d, p);
-    p += 2;
-    for (size_t i = 0; i < s.b2; ++i) {
-        s.food.push_back(p);
-        p += 10 + static_cast<size_t>(rd16(d, p + 8)) * 4;
-    }
-    s.b3 = p;
-    p += 4;
-    s.b4_count = p;
-    s.b4 = rd16(d, p);
-    p += 2;
-    for (size_t i = 0; i < s.b4; ++i) {
-        s.waypoints.push_back(p);
-        p += 8u + (rd32(d, p + 4) != 0 ? 44u : 0u);
-    }
-    s.final_word = p;
-    return p + 2 <= d.size();
-}
-
-// The first Block 1 record of the tile id (152 BSTART, 153 USTART, 154 GSTART, 155 RSTART, 421 flower1): its offset, or 0
-size_t record_of_tile(const std::vector<uint8_t>& d, const Spots& s, uint16_t tile) {
-    for (size_t i = 0; i < s.b1; ++i) {
-        const size_t at = s.b1_records + i * 6;
-        if (rd16(d, at) == tile) return at;
-    }
-    return 0;
-}
-
-std::vector<uint8_t> prefix(const std::vector<uint8_t>& d, size_t n) { return std::vector<uint8_t>(d.begin(), d.begin() + static_cast<std::ptrdiff_t>(n)); }
-
-// A flat map from nothing: the header with a dictionary of `names` names, the two dimension dwords as given, `data_rows` x `data_columns` cells of data in each layer
-// (empty overlay), and the blocks behind the layers (no start marker, no food, no waypoint, an egg stock of 3)
-std::vector<uint8_t> flat_map(uint32_t names, uint32_t rows_dword, uint32_t columns_dword, uint32_t data_rows, uint32_t data_columns) {
-    std::vector<uint8_t> b;
-    put32(b, 8);
-    put32(b, 1);
-    put16(b, 6);
-    for (int i = 0; i < 30; ++i) b.push_back(0);
-    put16(b, names - 1);
-    for (uint32_t i = 0; i < names * 11; ++i) b.push_back(0);
-    put32(b, rows_dword);
-    put32(b, columns_dword);
-    for (uint32_t i = 0; i < data_rows * data_columns; ++i) { put16(b, 0); put16(b, 0); put16(b, 0); }              // layer 1: tile 0
-    for (uint32_t i = 0; i < data_rows * data_columns; ++i) { put16(b, 0x7FFE); put16(b, 0); put16(b, 0); }        // layer 2: empty
-    put16(b, 0);                                                                                                      // block 1
-    put16(b, 0);                                                                                                      // block 2
-    put16(b, 0);
-    put16(b, 0x7FFE);                                                                                                 // block 3
-    put16(b, 0);                                                                                                      // block 4
-    put16(b, 3);                                                                                                      // the final word
-    return b;
-}
-
-bool has_fatal(const LevelValidation& v, LevelProblemKind kind) {
-    for (const LevelProblem& p : v.problems) {
-        if (p.kind == kind && p.severity == LevelProblemSeverity::Fatal) return true;
-    }
-    return false;
-}
-
-bool mentions(const LevelValidation& v, const char* text) { return v.reason().find(text) != std::string::npos; }
-
-bool is_empty_level(const LevelData& m) {
-    return m.width() == 0u && m.height() == 0u && m.layer1_terrain.empty() && m.layer2_interactive.empty() && m.anthill_spawns.empty() && m.food_schedules.empty() &&
-           m.waypoints.empty() && m.load_notes.empty();
-}
-
-}  // namespace lvl_edit
-
+// Synthetic maps are made by editing bytes of the shipped TINY.LVL and SMALL.LVL: the helpers (tests/test_assets/lvl_bytes.hpp) find the parts of a file the way the loader walks it.
 void test_suite_6c_loader_parity(const std::string& map_dir) {
     TEST_SUITE("Suite 6c: The Loader Takes What Ants.exe Takes And Refuses What It Refuses (FUN_01006349, Synthetic Maps Made By Byte Edits Of TINY.LVL And SMALL.LVL)");
     using namespace lvl_edit;
@@ -1282,7 +1159,7 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         ASSERT_FALSE(LVLParser::check_memory(empty.data(), empty.size()).playable);
         // the names of the findings and of their severities are distinct and fixed (they travel in reports)
         std::vector<std::string> names;
-        for (uint8_t k = 0; k <= static_cast<uint8_t>(LevelProblemKind::ObjectOutsideGrid); ++k) {
+        for (uint8_t k = 0; k <= static_cast<uint8_t>(LevelProblemKind::FileTooLarge); ++k) {
             const std::string n = to_string(static_cast<LevelProblemKind>(k));
             ASSERT_FALSE(n.empty());
             ASSERT_NE(n, std::string("?"));
@@ -1319,6 +1196,101 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         move_assigned = std::move(copy);
         ASSERT_TRUE(move_assigned.validate().has(LevelProblemKind::ModeIgnored));
         ASSERT_TRUE(move_assigned.for_roster(0x05).validate().has(LevelProblemKind::ModeIgnored));
+    } TEST_END();
+
+    TEST_CASE("6c.12 The Limits Of The Place That Reads: The Defaults Are The Game's (256 A Side, 1344 Names, Any Size); A New Map's Are 10,000 Cells, 130 A Side, A File Of 512 KB Read And 144 KB Written; A Limit Only Tightens") {
+        const LevelLimits game;
+        const LevelLimits new_map = LevelLimits::for_new_maps();
+        ASSERT_EQ(game.rows(), 256u);
+        ASSERT_EQ(game.columns(), 256u);
+        ASSERT_EQ(game.cells(), 65536u);
+        ASSERT_EQ(game.dictionary_names(), static_cast<size_t>(1344));
+        ASSERT_EQ(new_map.rows(), 130u);
+        ASSERT_EQ(new_map.columns(), 130u);
+        ASSERT_EQ(new_map.cells(), 10000u);
+        ASSERT_EQ(new_map.dictionary_names(), static_cast<size_t>(1344));
+        ASSERT_EQ(new_map.max_read_bytes, static_cast<size_t>(524288));        // a file as it is (the largest of the library, BOMBERWORLD, has 235,594 bytes)
+        ASSERT_EQ(new_map.max_write_bytes, static_cast<size_t>(147456));       // the canonical file of a level (the writer)
+        ASSERT_EQ(game.max_read_bytes, static_cast<size_t>(-1));
+        ASSERT_EQ(game.max_write_bytes, static_cast<size_t>(-1));
+        // the size of the file: refused before a byte is read, from memory and from a file
+        {
+            const LevelLimits small_file{256, 256, 1344, tiny.size() - 1};
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(tiny.data(), tiny.size(), &v, small_file));
+            ASSERT_FALSE(v.parsed);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::FileTooLarge));
+            ASSERT_TRUE(mentions(v, "19312 bytes, more than the 19311 allowed here"));
+            ASSERT_TRUE(is_empty_level(m));
+            ASSERT_FALSE(LVLParser::check_memory(tiny.data(), tiny.size(), 0x0F, small_file).playable);
+            ASSERT_TRUE(has_fatal(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, small_file), LevelProblemKind::FileTooLarge));
+            ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, LevelLimits{256, 256, 1344, tiny.size()}).playable);   // exactly the limit
+            ASSERT_TRUE(m.load_from_memory(tiny.data(), tiny.size(), &v, LevelLimits{256, 256, 1344, tiny.size()}));
+            ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, new_map).clean());
+        }
+        // the grid: 131 rows or columns, or more than 10,000 cells, are the game's map and no new map's
+        struct Grid { uint32_t rows; uint32_t columns; const char* words; };
+        for (const Grid& g : {Grid{131, 1, "131 rows x 1 columns, more than the 130 x 130 allowed here"}, Grid{1, 131, "1 rows x 131 columns, more than the 130 x 130 allowed here"},
+                              Grid{101, 100, "101 rows x 100 columns, 10100 cells, more than the 10000 allowed here"},
+                              Grid{100, 101, "100 rows x 101 columns, 10100 cells, more than the 10000 allowed here"}}) {
+            const std::vector<uint8_t> d = flat_map(4, g.rows, g.columns, g.rows, g.columns);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
+            ASSERT_TRUE(m.validate(0x0F).playable);
+            const LevelValidation tight = m.validate(0x0F, new_map);
+            ASSERT_TRUE(has_fatal(tight, LevelProblemKind::GridTooLarge));
+            ASSERT_TRUE(tight.reason().find(g.words) != std::string::npos);
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v, new_map));
+            ASSERT_TRUE(v.parsed);
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::GridTooLarge));
+            ASSERT_FALSE(LVLParser::check_memory(d.data(), d.size(), 0x0F, new_map).playable);
+        }
+        // 100 x 100, 130 x 76 (9,880 cells), and Bomb Races's 40 x 129 are new maps
+        for (const Grid& g : {Grid{100, 100, ""}, Grid{130, 76, ""}, Grid{76, 130, ""}, Grid{40, 129, ""}}) {
+            const std::vector<uint8_t> d = flat_map(4, g.rows, g.columns, g.rows, g.columns);
+            LevelData m;
+            ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), nullptr, new_map));
+            ASSERT_TRUE(m.validate(0x0F, new_map).playable);
+        }
+        // a limit of cells alone
+        {
+            const std::vector<uint8_t> d = flat_map(4, 10, 10, 10, 10);
+            LevelData m;
+            LevelValidation v;
+            LevelLimits ninety_nine;
+            ninety_nine.max_cells = 99;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v, ninety_nine));
+            ASSERT_TRUE(mentions(v, "100 cells, more than the 99 allowed here"));
+        }
+        // the dictionary: a tighter limit is kept, and so is the original's
+        {
+            const LevelLimits ten_names{256, 256, 10, static_cast<size_t>(-1)};
+            const std::vector<uint8_t> eleven = flat_map(11, 1, 1, 1, 1);
+            const std::vector<uint8_t> ten = flat_map(10, 1, 1, 1, 1);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(eleven.data(), eleven.size(), &v, ten_names));
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::DictionaryTooLarge));
+            ASSERT_TRUE(mentions(v, "more than the 10 allowed here"));
+            ASSERT_TRUE(m.load_from_memory(ten.data(), ten.size(), nullptr, ten_names));
+        }
+        // a limit above the default is the default: 257 rows and 1345 names stay refused
+        {
+            const LevelLimits loose{1000, 1000, 5000, static_cast<size_t>(-1), 1000000};
+            ASSERT_EQ(loose.rows(), 256u);
+            ASSERT_EQ(loose.cells(), 65536u);
+            ASSERT_EQ(loose.dictionary_names(), static_cast<size_t>(1344));
+            const std::vector<uint8_t> rows = flat_map(4, 257, 1, 257, 1);
+            const std::vector<uint8_t> names = flat_map(1345, 1, 1, 1, 1);
+            LevelData m;
+            LevelValidation v;
+            ASSERT_FALSE(m.load_from_memory(rows.data(), rows.size(), &v, loose));
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::GridTooLarge));
+            ASSERT_FALSE(m.load_from_memory(names.data(), names.size(), &v, loose));
+            ASSERT_TRUE(has_fatal(v, LevelProblemKind::DictionaryTooLarge));
+        }
     } TEST_END();
 }
 
