@@ -1,5 +1,5 @@
 // Runs the rules and the words of the lobby page (web/front/lobby_rules.js) without a browser, on tables: what a Room message of network protocol 16 shows on each of the four colour cards and on the
-// map's side (the pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16 and 17, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
+// map's side (the pictures 1, 2, 3, 4, 5, 5b, 6, 12, 13, 13b, 14, 15b, 16, 17 and the rematch's R2, which the words below are compared with), who may press which of the Team 1 / Team 2 buttons and what is said when
 // a press is refused, what the leader asks of the room (the plan, a colour moved or exchanged), the player's name (the same rules as the game page's own NAME block, which is read from web/shell.html and
 // web/lobby.html and must be the same text in both), the room codes (the alphabet, the two groups of three, what a typed or pasted code may be), the maps (against the level files of Original-Ants/Maps),
 // the sentences that the server says (noticeKind) and every message strip of picture 15 (text, tone and button).
@@ -54,8 +54,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLOURS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
-    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'noticeKind', 'pairOf', 'pickName',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
+    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pickName',
+    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
 ]);
 
 // The colours: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -227,11 +227,11 @@ const E = N.SLOT.Empty, C = N.SLOT.Client, B = N.SLOT.Bot;
 const P = (name) => [C, name];
 const O = [E, ''];
 function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
-// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, plan, inGame }
+// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, plan, inGame, platforms (the platform byte of each seat: 0, not told, when none is given) }
 function mk(seats, o) {
     o = o || {};
     const w = [12];
-    for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }
+    seats.forEach((s, i) => { w.push(s[0]); str8(w, s[1]); w.push(20, 0, o.platforms ? o.platforms[i] : 0); });
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
@@ -563,7 +563,7 @@ const NOTE_INVITE = 'Players who open this link take the next free colour.';
 const NOTE_DRAG = 'Drag a player onto another colour to move them. A colour that is taken swaps places.';
 const NOTE_WAIT = 'Waiting for players. Drag a player onto another colour to move them.';
 const TREASURE = { mapKey: 'treasure', mapName: 'Treasure', mapInfo: 'One person\'s trash... (12 min)' };
-const side = (o) => Object.assign({ mapDisabled: false, startDisabled: false, startBusy: false, startLabel: 'START!' }, TREASURE, o);
+const side = (o) => Object.assign({ mapDisabled: false, startDisabled: false, startBusy: false, startLabel: 'START!', note: '' }, TREASURE, o);
 function expectView(label, v, want) {
     same(label + ': the four cards, in seat order', v.cards.map(show), want.cards);
     same(label + ': the notes', v.notes, want.notes);
@@ -759,6 +759,61 @@ same('the map\'s side asked directly is the same as inside viewOf', R.sideView(m
 same('START waits for the host: "Waiting for" and the name of the host', [view(S4).side.startLabel, view(mk([P('Zed'), P('Sam'), O, O], { you: 1 })).side.startLabel], ['Waiting for Juniper', 'Waiting for Zed']);
 same('START of a page that has no room is off (like the map)', [view(S1, { offline: 'none' }).side.startDisabled, view(S1, { offline: 'none' }).side.mapDisabled, view(S1, { offline: 'none' }).side.startBusy], [true, true, false]);
 
+// ---- picture R2: the lobby after the match (the rematch: web/front/rematch.js, docs/SERVER.md "Lobby rooms"). The server opened the room again with a seat reserved for each person of the match; a reserved
+// seat is a person whom the room counts as a game before START (the bit of Room.in_game): their game page shows the results. The page that came back from the match knows its people (ctx.back). ----
+{
+    const BACK = { people: ['Maple', 'Sam', 'Juniper', 'Pip'] };
+    const R2 = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4 });                  // Maple (Green) leads, Sam and Pip are back, Juniper (Blue) is still on the results screen
+    const NOTE_R2 = 'START waits for Juniper. You can wait, or press Remove on their colour to start without them.';
+    const backIn = { stat: 'Back in the room', statCls: 'pstat back' }, onResults = { stat: 'Still on the results screen…', statCls: 'pstat away' };
+    const guestOf = (seat, name, extra) => Object.assign({ seat: seat, colour: seatName[seat], kind: 'person', who: [name + '/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': ' + name, teams: '-1 -2' }, extra || {});
+    expectView('picture R2 (the host is back, Juniper is still on the results screen)', view(R2, { back: BACK }), {
+        cards: [youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam', backIn), guestOf(2, 'Juniper', onResults), guestOf(3, 'Pip', backIn)], play: [0, 1, 2, 3],
+        notes: { invite: NOTE_INVITE, slots: NOTE_DRAG, teams: FREE, teamsWarn: false },
+        side: side({ plan: 'You, Sam, Juniper and Pip play on Treasure.', planShort: 'You, Sam, Juniper and Pip · Treasure', note: NOTE_R2 })
+    });
+    same('picture R2: Juniper is the one who is not back (a press of START goes to the room, which says whom it waits for: the strip "notback")', R.notBack(model(R2), ctx({ back: BACK })), [2]);
+    const two = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12 });
+    same('two who are not back: both are named, the note says "their colours"', [R.notBack(model(two), ctx({ back: BACK })), view(two, { back: BACK }).side.note],
+        [[2, 3], 'START waits for Juniper and Pip. You can wait, or press Remove on their colours to start without them.']);
+    same('startNote of nobody, one, two and three names', [R.startNote([]), R.startNote(['A']), R.startNote(['A', 'B']), R.startNote(['A', 'B', 'C'])], ['',
+        'START waits for A. You can wait, or press Remove on their colour to start without them.', 'START waits for A and B. You can wait, or press Remove on their colours to start without them.',
+        'START waits for A, B and C. You can wait, or press Remove on their colours to start without them.']);
+    const all = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 0 });
+    same('everybody is back: every other person is "Back in the room", nothing is waited for', [view(all, { back: BACK }).cards.map((c) => c.stat), view(all, { back: BACK }).side.note, R.notBack(model(all), ctx({ back: BACK }))],
+        [['Host. You start the match.', 'Back in the room', 'Back in the room', 'Back in the room'], '', []]);
+    // Sam's screen (a player): the host's card is the host's, his own is his; Juniper is still on the results screen; a player is told nothing under START and START is the host's
+    const sams = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 1, leader: 0, inGame: 4 });
+    same('picture R2 on Sam\'s screen: the host, Sam himself, Juniper on the results screen, Pip back', view(sams, { back: BACK }).cards.map((c) => [c.stat, c.statCls]),
+        [['Starts the match.', 'pstat'], ['Waiting for the host to start.', 'pstat'], ['Still on the results screen…', 'pstat away'], ['Back in the room', 'pstat back']]);
+    same('... a player has no note under START (START is the host\'s)', view(sams, { back: BACK }).side.note, '');
+    // Sam came back first and leads until Maple, the host of the match, is back (the room's rule: the earliest of the match who is back leads)
+    const first = mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 1, inGame: 1 });
+    same('the first one back leads: Maple (the host of the match) is still on the results screen, START waits for her', [view(first, { back: BACK }).cards.map((c) => c.stat), view(first, { back: BACK }).side.note],
+        [['Still on the results screen…', 'Host. You start the match.', 'Takes the next player who joins.', 'Takes the next player who joins.'], 'START waits for Maple. You can wait, or press Remove on their colour to start without them.']);
+    // what is not the match's: a page that did not come back from it, a person who was not in it, START pressed, no link
+    same('a page that did not come back from the match (no ctx.back) shows the room as ever: no "back", no note (the room says whom START waits for)', [view(R2).cards.map(show), view(R2).side.note, R.notBack(model(R2), ctx())],
+        [[youHost(0, { teams: '-1 -2' }, 'Maple'), guestOf(1, 'Sam'), guestOf(2, 'Juniper'), guestOf(3, 'Pip')], '', []]);
+    const leo = mk([P('Maple'), P('Sam'), P('Juniper'), P('Leo')], { you: 0, leader: 0, inGame: 12 });
+    same('a person who was not in the match (Leo, who joined after it) is "In the room" even when the room counts their seat as a game (a game of the desktop): only the match\'s people are waited for',
+        [view(leo, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(leo), ctx({ back: BACK })), view(leo, { back: BACK }).side.note], [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'In the room'], [2], NOTE_R2]);
+    const pressed = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 4, starting: true });
+    same('START is pressed (everybody was back): the colours say whose game is open, nothing is waited for', [view(pressed, { back: BACK }).cards.map((c) => c.stat), view(pressed, { back: BACK }).side.note, R.notBack(model(pressed), ctx({ back: BACK }))],
+        [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], '', []]);
+    same('the link is lost or there is no room: no note under START (START is off)', ['lost', 'none'].map((o) => view(R2, { back: BACK, offline: o }).side.note), ['', '']);
+    same('the page\'s own colour is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, 'Waiting for the host to start.');
+    // the server keeps a seat only for a game in a browser (protocol 15's platform byte; a game that did not say is given one too): a game of the desktop of the match (Pip, Windows) joined the room by the
+    // code like anybody, so the room counts it as a game and it is back; Juniper's results screen runs in a browser (Linux) and is not back
+    const desk = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12, platforms: [0x16, 0x13, 0x13, 0x01] });
+    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.note],
+        [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], NOTE_R2]);
+    same('modelOf: on the results screen is a person whom the room counts as a game before START, in a browser or not told; not a game of the desktop (Windows, macOS, Linux, Android, iOS, other), not while START waits',
+        [model(desk).slots.map((x) => !!x.results), [1, 2, 3, 4, 5, 6].map((os) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, os, 0, 0] })).slots[1].results),
+            [0, 0x11, 0x14, 0x16].map((p) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, p, 0, 0] })).slots[1].results), !!model(mk([P('A'), P('B'), O, O], { inGame: 2, starting: true })).slots[1].results],
+        [[false, false, true, false], [false, false, false, false, false, false], [true, true, true, true], false]);
+    same('... and a person whom the room does not count as a game is in the room, whatever it runs on', !!model(mk([P('A'), P('B'), O, O], { inGame: 0, platforms: [0, 0x16, 0, 0] })).slots[1].results, false);
+}
+
 // ---- a name is text and nothing more ----
 {
     const NAME_A = '<b>Juniper</b>', NAME_B = 'a&b "q" \'x\' <i on=1>', NAME_C = 'W'.repeat(32);
@@ -779,10 +834,12 @@ same('a context with nothing in it is the plain host screen', R.viewOf(model(S2)
 const protocolPath = path.join(repoDir, 'include', 'ants_net', 'protocol.hpp');
 const protocolText = fs.existsSync(protocolPath) ? fs.readFileSync(protocolPath, 'utf8') : '';
 const said = (name) => { const m = new RegExp(name + ' = "((?:[^"\\\\]|\\\\.)*)"').exec(protocolText); return m ? m[1] : null; };
-const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams') };
+const SAID = { late: said('kNoticeGameLate'), lates: said('kNoticeGamesLate'), maplost: said('kNoticeMapLost'), mapcolours: said('kNoticeMapColours'), noplace: said('kNoticeNoPlace'), startsfailed: said('kNoticeStartsFailed'), noteams: said('kNoticeNoTeams'),
+    notback: said('kNoticeNotBack'), notbacks: said('kNoticeNotBackMany') };
 same('the sentences of the server\'s START, as protocol.hpp has them', SAID, {
     late: '\'s game did not come in time.', lates: 'These games did not come in time: ', maplost: 'This map could not be loaded: choose another map.', mapcolours: 'This map cannot be played with these colours.',
-    noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: '
+    noplace: 'The server has no place for another match right now: try again in a minute.', startsfailed: 'The match could not start a few times in a row: try again in a minute.', noteams: 'No teams: ',
+    notback: ' is not back from the match yet.', notbacks: 'These players are not back from the match yet: '
 });
 const PRIYA_LATE = 'Priya' + SAID.late;
 [
@@ -796,7 +853,10 @@ const PRIYA_LATE = 'Priya' + SAID.late;
     [SAID.noteams + 'the teams need a pair.', 'notice'], ['Hello', 'notice'], ['', 'notice'],
     // the line that a moved player is sent (HostLobby::move_seat) has no strip: the colour and the toast say it
     ['Sam moved you to Blue.', 'moved'], ['The room moved you to Red.', 'moved'], ['Player 2 moved you to Black.', 'moved'], ['Sam moved you to Blue', 'notice'], [' moved you to Blue.', 'notice'], ['moved you to Blue.', 'notice'],
-    ['Sam moved you to Blue. Later.', 'notice'], ['Sam moved you to blue 2.', 'notice'], ['Sam moved you', 'notice']
+    ['Sam moved you to Blue. Later.', 'notice'], ['Sam moved you to blue 2.', 'notice'], ['Sam moved you', 'notice'],
+    // the rematch: the leader's START while a person of the match is not back from it (HostLobby::not_back_notice); a long list is cut by the room at 100 characters and is still this kind
+    ['Juniper' + SAID.notback, 'notback'], ['x' + SAID.notback, 'notback'], [SAID.notbacks + 'Juniper and Pip.', 'notback'], [SAID.notbacks + 'Juniper, Pip and Sam.', 'notback'], [(SAID.notbacks + 'W'.repeat(32) + ', ' + 'V'.repeat(32) + ' and ').slice(0, 100), 'notback'],
+    [SAID.notback, 'notice'], [SAID.notback.trim(), 'notice'], ['Juniper' + SAID.notback.slice(0, -1), 'notice'], ['Juniper' + SAID.notback + ' Later.', 'notice'], [' ' + SAID.notbacks + 'Pip.', 'notice'], [SAID.notbacks.trim(), 'notice']
 ].forEach(([text, kind]) => same('noticeKind(' + JSON.stringify(text).slice(0, 60) + ') is ' + kind + ', with the text as the room said it', R.noticeKind(text), { kind: kind, server: text }));
 same('noticeKind of what is no text is a notice with no words', [null, undefined, 42, {}].map((t) => R.noticeKind(t)), [{ kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }, { kind: 'notice', server: '' }]);
 
@@ -808,7 +868,9 @@ const BANNERS = [
     ['old', {}, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
     ['old', { sameMap: true }, 'That room is gone, because everybody left, so this one is yours now, with the same map. Send the link on if you like.', '', 'OK'],
     ['old', { sameMap: false }, 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', '', 'OK'],
-    ['over', { map: 'Treasure' }, 'Welcome back. Your match on Treasure is over. Everything is as you left it: change what you like and press START for another.', '', 'OK'],
+    ['host', { guest: true, back: true, leaver: 'Sam', host: 'Maple' }, 'Maple is back, and is the host again.', '', 'OK'],
+    ['notback', { server: 'Juniper' + SAID.notback }, 'Juniper is not back from the match yet. START waits for them: wait, or press Remove on their colour to start without them.', 'warn', 'OK'],
+    ['notback', { server: SAID.notbacks + 'Juniper and Pip.' }, 'These players are not back from the match yet: Juniper and Pip. START waits for them: wait, or press Remove on their colour to start without them.', 'warn', 'OK'],
     ['late', { server: PRIYA_LATE }, 'Priya\'s game did not come in time. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
     ['late', { server: SAID.lates + 'Priya, Sam.' }, 'These games did not come in time: Priya, Sam. Everybody is back in the room, as you left it. Press START to try again.', 'warn', 'OK'],
     ['lateplayer', { host: 'Juniper' }, 'The match did not start, so everybody is back in the room. Juniper can press START to try again.', 'warn', 'OK'],
@@ -827,13 +889,15 @@ const BANNERS = [
     ['notice', { server: 'Some other line of the room.' }, 'Some other line of the room.', 'warn', 'OK']
 ];
 BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));
-same('picture 15 lists seventeen messages: these are their kinds', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
-same('green is the page changing something for you (the host, an old room, a match that is over, a full room, a running match, a removal); gold is something that did not work', [R.META.host, R.META.old, R.META.over, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice].map((m) => m.tone)), ['', '', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn']);
-same('the kinds that have a strip: the seventeen of the picture and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notice', 'old', 'over', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+// (picture 15's "over", the strip of a match that is over, is the rematch's own strip "Back from the match." now: web/front/rematch.js; the rematch adds "notback", the START that waits for a person of the match)
+same('picture 15 lists seventeen messages: these are their kinds, with the rematch\'s "notback" in the place of "over"', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notback', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('green is the page changing something for you (the host, an old room, a full room, a running match, a removal); gold is something that did not work (or waits)', [R.META.host, R.META.old, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice, R.META.notback].map((m) => m.tone)), ['', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn', 'warn']);
+same('the kinds that have a strip: the seventeen and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolours', 'maplost', 'noplace', 'notback', 'notice', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('no strip says "Welcome back" any more: the front page\'s strip of the rematch says it (picture R2)', [('over' in R.META), ('over' in R.TEXT)], [false, false]);
 same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
-same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true]);
+same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolours', 'notback', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true, true]);
 same('... but "moved" is the one kind that says nothing: no strip and no words (the page drops it)', [('moved' in R.META), ('moved' in R.TEXT)], [false, false]);
 same('a button that is not OK or none says what it does, in words (the page does it; here the words are read): Try again, Use this window, Reload', Object.keys(R.META).filter((k) => R.META[k].btn !== '' && R.META[k].btn !== 'OK').sort(), Object.keys(R.ACTS).sort());
 same('what those buttons do', R.ACTS, { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' });

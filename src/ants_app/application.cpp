@@ -78,6 +78,14 @@ EM_JS(void, ants_go_to_front_page, (), {
 });
 }
 
+// The match of a server's room is over: the page is told what the results show (Application::match_over_json), before the game lets go of the key of its seat (web/front/rematch.js reads it then)
+extern "C" {
+EM_JS(void, ants_match_over, (const char* json), {
+    try { if (typeof antsMatchOver === "function") antsMatchOver(UTF8ToString(json)); } catch (e) {}
+});
+}
+EM_JS_DEPS(match_over, "$UTF8ToString");
+
 // The one application of the page (main() keeps it alive for as long as the page lives): the entry for ants_background_pump below
 ants::app::Application* g_web_app = nullptr;       // (also read by the exports in application_touch.cpp)
 #endif
@@ -933,6 +941,7 @@ bool Application::init(const ApplicationConfig& config) {
         const std::string script = "try{if(window.antsSeatKnown)window.antsSeatKnown(" + std::to_string(static_cast<unsigned>(seat)) + ");}catch(e){}";
         emscripten_run_script(script.c_str());
     };
+    on_match_over_ = [](const std::string& json) { ants_match_over(json.c_str()); };      // the page's rematch strip (web/front/rematch.js)
 #endif
     return true;
 }
@@ -2561,7 +2570,11 @@ void Application::check_match_over() {
     if (background_stepping_) pending_music_ = PendingMusic::Closed;     // (a hidden page changes no sound: the music closes when the page is shown)
     else close_music();                                          // FUN_010226da closes the music sequencer at once (0x1022714); nothing restarts it
     music_resume_on_activate_ = false;
-    if (net_) net_->freeze();                                    // the host stops sealing turns
+    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)
+        const std::function<void(const std::string&)> fn = on_match_over_;
+        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));
+    }
+    if (net_) net_->freeze();                                    // the host stops sealing turns (and the key is let go of: the room is over)
 }
 
 // Once per frame: a match that has ended without a tick of this application (a command, a drop-out) opens the results screen too; the screen's clock builds its

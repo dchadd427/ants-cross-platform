@@ -324,6 +324,7 @@ add_executable(test_network_app
     test_network_app_leader.cpp
     test_network_app_rooms.cpp
     test_network_app_chat_box.cpp
+    test_network_app_rematch.cpp
 )
 
 target_include_directories(test_network_app PRIVATE

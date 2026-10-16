@@ -370,7 +370,7 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.index
 const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 {
-    same('the page loads its scripts (the rules, the network client, the chat box, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/map_picker.js', 'map_files.js', 'inline']);
+    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/map_picker.js', 'map_files.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -471,6 +471,7 @@ class El {
     get firstChild() { return this.children[0] || null; }
     getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
     appendChild(c) { c.parent = this; this.children.push(c); return c; }
+    insertBefore(c, ref) { const at = this.children.indexOf(ref); c.parent = this; if (at === -1) this.children.push(c); else this.children.splice(at, 0, c); return c; }
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parent = null; return c; }
     replaceChild(fresh, old) {
         const at = this.children.indexOf(old);
@@ -624,6 +625,7 @@ function runLobby(search, stored, options) {
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
     win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
+    win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
     if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
@@ -1093,6 +1095,49 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     evil.arrive({ key: KEY, seats: [[C, '<b>x</b>&y'], [E, ''], [E, ''], [E, '']] });
     evil.$('start').click();
     check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y&aspect=16:9' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
+}
+
+// ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the
+// tab's session storage); the strip "Back from the match." at the top, the colours' words, the note under START, START that the room answers, the host who comes back
+{
+    const roomChat = (text) => { const w = [9, 255, 0]; str8(w, text); return Uint8Array.from(w); };
+    const statOf = (env, seat) => { const p = env.card(seat).findAll((e) => /\bpstat\b/.test(e.className))[0]; return p ? [p.textContent, p.className] : null; };
+    const barOf = (env) => env.root.children.find((c) => c.className === 'backbar') || null;
+    const handed = (name, w, t) => ({ 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: name, o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: t === undefined ? Date.now() - 5000 : t, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: w }) });
+    const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: handed('Maya', 'Maya won with 2,040.') });
+    const bar = barOf(env);
+    const s = env.last().open();
+    check('the tab comes back from its match: no name card, the seat is taken back with the key', env.$('name-step').hidden && hex(s.sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })));
+    check('... and the strip "Back from the match." is at the top of the page, beside the frame (not in it), with the winner and the link to the matches', !!bar && !bar.hidden && bar.parentNode === env.$('screen').parentNode && bar.getAttribute('role') === 'status'
+          && bar.textContent === 'Back from the match. Maya won with 2,040. Same room, same colours, same map.Stats and replay');
+    s.receive(welcome(0, KEY, 0));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 2 }));
+    same('Sam is still on the results screen: his colour says so (picture R2)', statOf(env, 1), ['Still on the results screen…', 'pstat away']);
+    check('... and the note under START says that START waits for him', !env.$('start-note').hidden && env.$('start-note').textContent === 'START waits for Sam. You can wait, or press Remove on their colour to start without them.');
+    env.$('start').click();
+    check('START goes to the room as ever (the room decides)', s.sent[s.sent.length - 1][0] === NET0.MSG.StartRequest);
+    s.receive(roomChat('Sam is not back from the match yet.'));
+    check('the room\'s answer is the gold strip of a START that waits', !env.$('banner').hidden && /\bwarn\b/.test(env.$('banner').className)
+          && env.$('banner-text').textContent === 'Sam is not back from the match yet. START waits for them: wait, or press Remove on their colour to start without them.');
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, inGame: 0 }));
+    same('Sam is back: "Back in the room", and nothing is waited for', [statOf(env, 1), env.$('start-note').hidden], [['Back in the room', 'pstat back'], true]);
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    check('START: the page goes to the game page, and the match that it came back from is let go of (the strip goes, the entry too)', env.assigned.length === 1 && bar.hidden && env.session.data['ants.back'] === undefined);
+}
+{   // Sam came back first and leads; Maya, the host of the match, comes back: Sam reads that she is the host again
+    const env = runLobby('?room=k7m2xq', { 'ants.name': 'Sam' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: Date.now() - 5000, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: '' }) } });
+    const s = env.last().open();
+    s.receive(welcome(1, KEY, 0));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 1, inGame: 1 }));
+    check('the first one back leads while the host of the match is on the results screen (no winner: the strip says the rest)', env.$('start').disabled === false && env.$('start-note').textContent === 'START waits for Maya. You can wait, or press Remove on their colour to start without them.'
+          && env.root.children.find((c) => c.className === 'backbar').textContent === 'Back from the match. Same room, same colours, same map.Stats and replay');
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 0 }));
+    check('Maya is back and leads again: Sam reads so (not that somebody left)', env.$('banner-text').textContent === 'Maya is back, and is the host again.' && env.$('start').disabled === true);
+}
+{   // a match that is not this room's, or too old, shows nothing; another room that the page goes to lets it go
+    const old = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }), 'ants.back': JSON.stringify({ c: 'k7m2xq', t: Date.now() - 3 * 3600 * 1000 - 60000, m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: '' }) } });
+    const other = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }), 'ants.back': JSON.stringify({ c: 'abc234', t: Date.now(), m: 'TREASURE.LVL', p: ['Maya', 'Sam', '', ''], w: '' }) } });
+    check('a match of more than three hours ago, or of another room, has no strip', [old, other].every((e) => !e.root.children.some((c) => c.className === 'backbar')));
 }
 
 // ---- 5.5b what the review of the page found: a room that waits for the games when the page first hears of it, a team that is left alone twice, the line of a move, a refusal that nothing knows

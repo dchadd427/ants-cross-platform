@@ -28,7 +28,17 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Under the hood: a map can now be checked for whether it works in the original game; nothing changes in the game.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...a92c2a3e)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/3c5e7824...a92c2a3e)
+
+## v0.12.56 - 2026-10-16 - Rematch: back to the lobby with one button
+
+**For players:**
+- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
+- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...05109ff0)
 
 ## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
@@ -533,23 +543,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4a536a9...305ccb9)
 
-## v0.11.0 - 2026-10-08 - Six-character room codes and one link that makes the room (the colour swap is in the game, no page uses it yet)
+## Older versions (v0.11.0 and before)
 
-**For players:**
-- **A room's code is six characters that can be said aloud:** `k7m 2xq`, in two groups of three, from an alphabet without `i`, `l`, `o`, `0` and `1`. The front page and the desktop menu make it, show it so (a few lines of the desktop menu, such as its Rejoin button, still show it in one piece for now), and take it typed or pasted as it is shown. The code is only a name: it finds a room that somebody has opened already, while the match's link also makes the room when there is none yet or the last one is over.
-- **One link makes the room:** every link of a match carries what the room is (its map, its seats and its teams), so the first player who opens it makes the room and the others walk into it. The desktop menu's Host makes its room the same way; a code typed into its Join only finds a room that is there already. A code that no room has makes none, and a link or bookmark of an earlier release (`demo-small-2p-x7k2`) no longer makes a room: it says that there is no such room.
-- **Nobody means nobody in a game for one:** with every other seat on **Nobody**, START! plays on this computer with only your colony on the map. Red, Blue and Black no longer have a hill, ants or eggs there (v0.8.3 gave them all three and left them standing still). The game takes a new option for it, `--alone` ([`docs/COMMAND_LINE.md`](docs/COMMAND_LINE.md)).
-- **A Team 1 and a Team 2 switch on each colour:** with three or four players the front page's card has no Teams drop-down menu of sentences any more; every colour that plays has two switches instead. Two colours on the same team start the match allied (with four players the other two colours are the other team, with three the third colour plays alone), and a line under the colours says the plan in words.
-- **Leave Game takes you back to the front page:** in the browser, Leave Game (on the results and on the setup screen) and the quit dialog's Yes leave the room and go to the site's front page; a match that you left no longer leaves a dead setup screen behind (it used to show the room you had just left, and START did nothing), and a match of an online room that you leave early is no longer counted among the games on this computer. A game in a frame of another page returns to its setup screen, which starts a new game again. The desktop game is unchanged.
-- **Computer players give fewer orders that cannot work, and the Hard ones watch the flowers:** a bot no longer sends an ant with food toward a hill that a ring of fire walls has cut off, no longer sends a thief to a hole that one of its own ants holds shut, and waits when its own ant stands on the way into the hill; a Hard bot also no longer sends the next carrier in while an ant without food is still on the ramp. Hard bots on SMALL have about half as many refused orders ("Can't go there.") as before (2.7 to 1.2 a match and seat), on TREASURE about a third fewer; the Hard bots' click at the gate, which the rule about the ramp changes, was refused 0.71 times a match before that rule and is refused 0.58 times now (over 240 matches of four Hard bots); their scores stay where they were. The Hard bots also watch the flower droppers now (a separate change): they know whose drop a landing is and send an ant to take it, which gets them a Fire Ant, a Bomber or a Thief sooner on MEDIUM, SMALL and GAUNTLET.
-
-**Rules / network:** network protocol 15, so a game of an earlier release cannot join (reload the page once after the update). A player's Hello carries the platform of the game (told, never checked) and, for a join that makes a room, the room's create block; the Room message carries every seat's platform, the room's teams and its rules; the leader's SeatMove carries a 32-bit check of the seating that the room compares with its own seats. **The leader's swap of two players' colours is in the game, but no page or menu uses it yet** (the lobby page will): a room made with the game's `--room-leader-start` lets its leader press a player's row to change places with the next player when every colour is held (never with a bot), and the front page and the desktop menu make no such room, since their rooms start as soon as every colour is held, so there is nothing for a player to try yet. A visitor's room takes only a code with no upper-case letter, so a room that you name by hand through the control interface needs a capital in its code while the server has public rooms (`--demo-rooms`); the codes that the server draws have one. No rule of the simulation changes.
-
-**Fixes:**
-- For developers (tests and tools only): the checks of a pull request take about 11 minutes instead of about 14 (the median of the 14 green runs after [#30](https://github.com/dchadd427/ants-cross-platform/pull/30) against the median of the runs before it); the test runner no longer reports a passing suite as failed by mistake ([#29](https://github.com/dchadd427/ants-cross-platform/pull/29)); and tests that failed at random no longer do, on Windows because of how a runner counts a thread's CPU time ([#33](https://github.com/dchadd427/ants-cross-platform/pull/33)) and on a Mac because its loopback can hand the server two messages a pass apart ([#35](https://github.com/dchadd427/ants-cross-platform/pull/35)) or two players' Hellos in either order (the two server tests that connect two players at once now seat the first before the second connects).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/486a39d...141cd3c), merged earlier without a release: [#16](https://github.com/dchadd427/ants-cross-platform/pull/16) (the bots), [#27](https://github.com/dchadd427/ants-cross-platform/pull/27) (Nobody and the Team switches), [#32](https://github.com/dchadd427/ants-cross-platform/pull/32) (Leave Game), [#36](https://github.com/dchadd427/ants-cross-platform/pull/36) (the bots' gate), [#38](https://github.com/dchadd427/ants-cross-platform/pull/38) (the bots and the flowers), [detailed notes](docs/NETWORK_PORT.md#protocol-15-one-link-makes-a-room-short-room-codes-and-the-leaders-swap-v0110)
-
-## Older versions (v0.10.0 and before)
-
-Every release before v0.11.0, and the long notes of v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.0, and the long notes of v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

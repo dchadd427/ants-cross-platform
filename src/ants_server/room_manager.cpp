@@ -75,6 +75,7 @@ std::string spec_range_error(const RoomSpec& spec) {
         if (spec.start_wait_ms < 1000 || spec.start_wait_ms > 600u * 1000u) return "the wait of a lobby room's START must be 1 to 600 seconds";
         if (spec.silence_ms < 1000 || spec.silence_ms > 3600u * 1000u) return "the silence of a lobby room's link must be 1 to 3600 seconds";
         if (spec.empty_close_ms < 1000 || spec.empty_close_ms > 3600u * 1000u) return "the close of an empty lobby room must be 1 to 3600 seconds";
+        if (spec.reserve_ms < 1000 || spec.reserve_ms > 24u * 3600u * 1000u) return "the reservation of a seat in a lobby room must be 1 to 86400 seconds";
     }
     return std::string();
 }
@@ -89,7 +90,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
         r.error = why;
         return r;
     };
-    if (rooms_.size() + restoring_.size() >= limits_.max_rooms) return fail(503, "the server has no room for another room");
+    if (room_total() >= limits_.max_rooms) return fail(503, "the server has no room for another room");
     if (spec.players < 2 || spec.players > sim::MAX_PLAYERS) return fail(400, "players must be 2 to 4");
     if (!spec.code.empty() && (!net::valid_room_code(spec.code))) return fail(400, "the room code may hold letters, digits, '_' and '-' only (up to 32 characters)");
     if (!spec.code.empty() && (rooms_.find(spec.code) != rooms_.end() || restoring_has(spec.code))) return fail(409, "a room with this code exists");     // (a record that waits for its replay is a room)
@@ -108,18 +109,38 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
             seats = static_cast<uint8_t>(seats | (1u << b.seat));
         }
     }
+    if (spec.code.empty()) spec.code = new_code();
+    const std::string code = spec.code;
+    std::unique_ptr<Room> room = build_room(std::move(spec), now_ms, r);
+    if (room == nullptr) return r;
+    rooms_.emplace(code, std::move(room));
+    ++created_;
+    r.ok = true;
+    r.http_status = 201;
+    r.code = code;
+    return r;
+}
+
+std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, CreateResult& r) {
+    r.ok = false;
     MapEntry entry;
     std::string why;
-    if (!store_.find(spec.map, entry, &why)) return fail(404, "map '" + spec.map + "': " + why);
+    if (!store_.find(spec.map, entry, &why)) {
+        r.http_status = 404;
+        r.error = "map '" + spec.map + "': " + why;
+        return nullptr;
+    }
     assets::LevelData level;
-    if (!level.load_from_file(entry.path)) return fail(422, "the map '" + spec.map + "' cannot be played by this engine");
-    if (spec.code.empty()) spec.code = new_code();
+    if (!level.load_from_file(entry.path)) {
+        r.http_status = 422;
+        r.error = "the map '" + spec.map + "' cannot be played by this engine";
+        return nullptr;
+    }
     uint32_t seed = spec.seed;
     if (!spec.has_seed) {
         std::random_device rd;
         seed = rd();
     }
-    const std::string code = spec.code;
     const bool wants_replay = spec.record_replay;
     const bool visitor_made = spec.public_room;                   // (a room that a visitor's create block made, the games of the front page: the "demo rooms" of --replay-demo)
     auto room = std::make_unique<Room>(std::move(spec), std::move(entry), std::move(level), seed, now_ms, &log_budget_);
@@ -130,12 +151,7 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
     else room->set_replay_store(replays_.get());
     room->set_live_board(&live_board_);                           // (a room that records shows its match here once it has run 30 seconds)
     if (room->lobby()) room->set_lobby_services(lobby_services());
-    rooms_.emplace(code, std::move(room));
-    ++created_;
-    r.ok = true;
-    r.http_status = 201;
-    r.code = code;
-    return r;
+    return room;
 }
 
 namespace {
@@ -216,6 +232,7 @@ bool RoomManager::evict_abandoned_public(uint32_t now_ms) {
 size_t RoomManager::public_places() const {
     size_t places = 0;
     for (const auto& kv : rooms_) places += kv.second->public_room() && !kv.second->lobby_waiting() ? 1u : 0u;      // (a lobby that waits holds no place: its START asks for one)
+    for (const auto& r : retired_) places += r->public_room() ? 1u : 0u;                                            // (a match that gave its code to its rematch keeps its place until it is forgotten, as before)
     for (const Restoring& r : restoring_) places += r.head.public_room ? 1u : 0u;
     return places;
 }
@@ -233,19 +250,28 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     // Lobbies need the server's public rooms (a match that a lobby begins is one of them), a map, and keys (a seat is held for its key). The code is a visitor's, as for a public room.
     if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect) return false;
     if (!net::public_room_code(code) || !net::valid_create_block(block) || !block.lobby()) return false;
+    if (!lobby_place(now_ms)) return false;
+    return create_room(lobby_spec(code, public_choice_of(block, limits_).map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
+}
+
+// The pool is full, or the server has no place for another room: the lobby that nobody is in gives its place up; when there is none, the one in which nothing has been done for a long time (never a lobby that is used)
+bool RoomManager::lobby_place(uint32_t now_ms) {
     const auto waiting = [this]() {
         size_t n = 0;
         for (const auto& kv : rooms_) n += kv.second->lobby_waiting() ? 1u : 0u;
         return n;
     };
-    // The pool is full, or the server has no place for another room: the lobby that nobody is in gives its place up; when there is none, the one in which nothing has been done for a long time (never a lobby that is used)
-    while (waiting() >= limits_.demo_lobbies || rooms_.size() + restoring_.size() >= limits_.max_rooms) {
+    while (waiting() >= limits_.demo_lobbies || room_total() >= limits_.max_rooms) {
         if (!evict_empty_lobby(now_ms) && !evict_idle_lobby(now_ms)) return false;
     }
+    return true;
+}
+
+RoomSpec RoomManager::lobby_spec(const std::string& code, const std::string& map) const {
     RoomSpec spec = default_spec();
     spec.code = code;
     spec.max_pause_ms = std::min(spec.max_pause_ms, kDemoMaxPauseMs);
-    spec.map = public_choice_of(block, limits_).map;                // (the map of the block when the server offers it; the plan changes it)
+    spec.map = map;
     spec.players = sim::MAX_PLAYERS;
     spec.public_room = true;                                        // (the match it begins is a public one: it holds a place among them from its START on)
     spec.early_start = true;
@@ -255,9 +281,31 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     spec.start_wait_ms = limits_.lobby_start_wait_ms;
     spec.silence_ms = limits_.lobby_silence_ms;
     spec.empty_close_ms = limits_.lobby_empty_close_ms;
+    spec.reserve_ms = limits_.lobby_reserve_ms;
     spec.keep_ms = 30000;
     spec.run_ms = 30u * 60u * 1000u;
-    return create_room(std::move(spec), now_ms).ok;
+    return spec;
+}
+
+// The rematch: the match of the lobby room `code` has just ended by its rules. A lobby room with the same code is opened at once with that match's plan and a seat reserved for each of its persons: it is a lobby
+// of the pool like any other (a place is taken as a new page's lobby takes one; when none can be had there is no rematch), it is made on the server's own map and shows the match's map in its plan (the room
+// loads it at START, as for any plan), and the room of the match gives the code up and is retired. Only while the server offers lobbies (and nothing has taken the code meanwhile).
+void RoomManager::reopen_lobby(const std::string& code, uint32_t now_ms) {
+    auto it = rooms_.find(code);
+    if (it == rooms_.end()) return;
+    const std::optional<net::Rematch> rematch = it->second->take_rematch();
+    if (!rematch.has_value()) return;
+    if (limits_.demo_lobbies == 0 || limits_.demo_rooms == 0 || limits_.demo_map.empty() || !limits_.reconnect || !net::public_room_code(code)) return;
+    if (!lobby_place(now_ms)) return;
+    CreateResult made;
+    std::unique_ptr<Room> lobby = build_room(lobby_spec(code, limits_.demo_map), now_ms, made);
+    if (lobby == nullptr || !lobby->reopen(*rematch, now_ms)) return;
+    it = rooms_.find(code);                                          // (the evictions of lobby_place erased other entries: this one is still the match's)
+    if (it == rooms_.end()) return;
+    retired_.push_back(std::move(it->second));
+    it->second = std::move(lobby);
+    ++created_;
+    ++reopened_;
 }
 
 bool RoomManager::evict_empty_lobby(uint32_t now_ms) {
@@ -464,6 +512,9 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
             good = false;
             reason = net::RejectReason::MatchRunning;
         }
+    } else if (keyed && hello.have_turns > 0 && it->second->lobby_waiting()) {
+        good = false;                                              // a game that comes back to the match that it played (it has run turns of it) finds none in a lobby that waits (the rematch: the lobby
+        reason = net::RejectReason::NoSuchRoom;                    // has the code of a match that is over): the match is over, as it was told before the rematch
     } else {
         room = it->second.get();
     }
@@ -558,9 +609,11 @@ void RoomManager::update(uint32_t now_ms) {
         if (start_bot_match(now_ms, code, why)) bot_notes_.push_back("bot match: room " + code + " started");
         else bot_notes_.push_back("bot match: not started (" + why + ")");
     }
-    // 4. the rooms
+    // 4. the rooms (a lobby room whose match the rules have just ended is opened again below, the rematch)
+    std::vector<std::string> rematches;
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
+        if (it->second->rematch_due()) rematches.push_back(it->first);
         if (it->second->expired(now_ms)) {
             if (!it->second->end_reported()) {                     // (a room with no keep time ends and expires in one pass: its end is still reported)
                 it->second->mark_end_reported();
@@ -571,6 +624,20 @@ void RoomManager::update(uint32_t now_ms) {
             ++it;
         }
     }
+    // 5. the rooms of matches that gave their code to their rematch answer their last connections until their keep time is over (the ones retired in this pass were updated above)
+    for (auto it = retired_.begin(); it != retired_.end();) {
+        (*it)->update(now_ms);
+        if ((*it)->expired(now_ms)) {
+            if (!(*it)->end_reported()) {
+                (*it)->mark_end_reported();
+                unreported_.push_back((*it)->status(now_ms));
+            }
+            it = retired_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (const std::string& code : rematches) reopen_lobby(code, now_ms);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -804,14 +871,14 @@ void RoomManager::judge_record(const std::string& path, uint32_t now_ms) {
         const uint64_t age_ms = ec || age.count() < 0 ? 0u : static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(age).count());
         if (age_ms > cfg.max_age_ms) refusal = "ended by a restart of the server: the record was last written " + seconds_text(age_ms) + " ago and its players have given up";
     }
-    if (refusal.empty() && rooms_.size() + restoring_.size() >= limits_.max_rooms) refusal = "ended by a restart of the server: this server has no room for another room";
+    if (refusal.empty() && room_total() >= limits_.max_rooms) refusal = "ended by a restart of the server: this server has no room for another room";
     if (refusal.empty()) {
         MapEntry entry;
         assets::LevelData level;
         refusal = map_refusal(head, entry, level);
     }
     if (!refusal.empty()) {
-        refuse_record(path, head, std::move(item), refusal, rooms_.size() + restoring_.size() < limits_.max_rooms, now_ms);
+        refuse_record(path, head, std::move(item), refusal, room_total() < limits_.max_rooms, now_ms);
         return;
     }
     Restoring job;
@@ -960,6 +1027,7 @@ size_t RoomManager::shutdown(uint32_t now_ms) {
         }
         room.close("closed by the owner", now_ms);                // (a room without a record ends with the server, as it always did)
     }
+    for (auto& r : retired_) r->close("closed by the owner", now_ms);       // (a match that is over: its last connections close)
     if (restart_ != nullptr && !restoring_.empty()) {             // the records that still wait for their replay (or are half replayed) are left on disk as they were: no room of theirs is begun, nothing is written
         restart_->note("the restore was stopped by the server's stop: " + std::to_string(restoring_.size()) + " restart record(s) are left on disk as they were");
         restoring_.clear();
@@ -973,18 +1041,19 @@ size_t RoomManager::shutdown(uint32_t now_ms) {
 std::vector<RoomStatus> RoomManager::take_ended(uint32_t now_ms) {
     std::vector<RoomStatus> out;
     out.swap(unreported_);
-    for (auto& kv : rooms_) {
-        Room& room = *kv.second;
+    const auto report = [&out, now_ms](Room& room) {
         if ((room.state() == RoomState::Finished || room.state() == RoomState::Failed) && !room.end_reported()) {
             room.mark_end_reported();
             out.push_back(room.status(now_ms));
         }
-    }
+    };
+    for (auto& kv : rooms_) report(*kv.second);
+    for (auto& r : retired_) report(*r);
     return out;
 }
 
 bool RoomManager::status(const std::string& code, RoomStatus& out, uint32_t now_ms) const {
-    const auto it = rooms_.find(code);
+    const auto it = rooms_.find(code);                                     // (the room that has the code now: after a rematch its lobby; the retired match is in list() for its keep time)
     if (it == rooms_.end()) return false;
     out = it->second->status(now_ms);
     return true;
@@ -1009,8 +1078,9 @@ BusyCounts RoomManager::busy(uint32_t now_ms) const {
 
 std::vector<RoomStatus> RoomManager::list(uint32_t now_ms) const {
     std::vector<RoomStatus> out;
-    out.reserve(rooms_.size());
+    out.reserve(rooms_.size() + retired_.size());
     for (const auto& kv : rooms_) out.push_back(kv.second->status(now_ms));
+    for (const auto& r : retired_) out.push_back(r->status(now_ms));          // (a match that gave its code to its rematch, beside the lobby of that code)
     return out;
 }
 

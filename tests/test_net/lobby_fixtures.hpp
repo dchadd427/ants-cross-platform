@@ -1,4 +1,4 @@
-// The fixtures of the room tests (test_lobby.cpp holds main(); the cases are in test_lobby_basics.cpp, test_lobby_rejoin.cpp and test_lobby_rooms.cpp).
+// The fixtures of the room tests (test_lobby.cpp holds main(); the cases are in test_lobby_basics.cpp, test_lobby_rejoin.cpp, test_lobby_rooms.cpp and test_lobby_rematch.cpp).
 // Inline or in an anonymous namespace.
 #pragma once
 #include "ants_net/lobby.hpp"
@@ -323,3 +323,4 @@ inline PlanMsg plan_of(const std::array<PlanKind, sim::MAX_PLAYERS>& kinds, uint
 void run_lobby_basics_tests();
 void run_lobby_rejoin_tests();
 void run_lobby_rooms_tests();
+void run_lobby_rematch_tests();
