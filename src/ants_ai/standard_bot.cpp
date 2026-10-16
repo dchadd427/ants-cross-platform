@@ -96,7 +96,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         const PileInfo* info = map->pile(p.index);
         if (info == nullptr || info->approach[seat_].reachable()) any_reachable_pile = true;
     }
-    const bool gate_breaching = tactics_.gate_map && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
+    const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
     uint8_t present = 0;
@@ -183,13 +183,16 @@ void StandardBot::think(const BotView& view, Orders& orders) {
 // The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
 // does not own the map. Medium and Hard play it; Easy never does. The decision is made once: a map that is open at the start stays open for the bot when its free piles are eaten, so an open map is
 // played exactly as it was. A bot that is created in the middle of a match (a server that restores a match after a restart, room.cpp) takes this decision at its first look on the grid of that moment,
-// not of the start: fire walls and bombs that exist then are the map it sees (low impact; not redesigned, docs/BOTS.md "Walled maps").
+// not of the start: fire walls and bombs that exist then are the map it sees (low impact; not redesigned, docs/BOTS.md "Walled maps"). With the decision goes Tactics::gate_beside: an own worker that
+// stands in a component next to a pile at that look (Ghetto: the start workers stand at the central pile). The plain economy has food to harvest there, so the opening is not held back.
 void StandardBot::decide_gate_map(TaskContext& context) {
     if (!context.view.has_grid()) return;                                                   // (no grid, no analysis: asked again at the next look)
     gate_decided_ = true;
     tactics_.gate_map = false;
+    tactics_.gate_beside = false;
     if (level_ == Level::Easy) return;
-    if (!GateInfo::analyse(context.map, context.view.grid(), seat_).walled()) return;
+    const GateInfo gates = GateInfo::analyse(context.map, context.view.grid(), seat_);
+    if (!gates.walled()) return;
     {   // a wall of power-ups (Running Ants: the pile lies in a ring of them) is cleared by the plain economy, which takes them: the map must be walled without them
         sim::Grid bare = context.view.grid();
         for (uint32_t y = 0; y < bare.height(); ++y) {
@@ -201,6 +204,14 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     }
     if (tactics_.plan.islands && island_.probe(context)) return;                           // the island play owns the water maps (ISLANDS)
     tactics_.gate_map = true;
+    for (const AntView& a : context.view.mine()) {
+        if (a.type != context.view.default_ant_type()) continue;
+        const int32_t comp = gates.component(a.tile);
+        if (comp < 0) continue;
+        for (const GateTarget& pile : gates.piles()) {
+            for (const int32_t pile_comp : pile.comps) tactics_.gate_beside = tactics_.gate_beside || pile_comp == comp;
+        }
+    }
 }
 
 bool StandardBot::accepts_invitation(const BotView& view, uint8_t from) {

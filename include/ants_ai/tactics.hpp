@@ -548,6 +548,9 @@ struct Tactics {
     /// The map is walled for this seat (GateInfo::walled at the first look: no pile that the hill reaches with fire walls and bombs closed) and the island play does not own it, and the level is
     /// Medium or Hard: the gate goals play, and the pick-up trips, the ferry and the opening are shaped by them (StandardBot, PowerUpTask). False on every other map: there the bot is as it was.
     bool gate_map{false};
+    /// An own worker (an ant of the level's default type) stood in a component next to a pile at the first look of a gate map: the food has someone at it, the plain economy can harvest it, and
+    /// the opening is not held back for the gate goals (Ghetto: the start workers stand at the central pile). Decided once with gate_map; false on every other map.
+    bool gate_beside{false};
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that

@@ -64,17 +64,23 @@ if ! command -v curl > /dev/null 2>&1; then
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ants_e2e.XXXXXX")"
+HANG_LOG="$WORK/hangs"      # (e2e_deadlines.sh: the hangs are counted in this file, so that one inside a $( ) is counted too)
 cleanup() {
     [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2> /dev/null
     for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
+    stop_watchdog
     rm -rf "$WORK"
 }
 trap cleanup EXIT
 free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
 # (used by several parts)
 code_of() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$@"; }
-stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait "$SERVER_PID" 2> /dev/null; SERVER_PID=""; }
+# Nothing in this script waits for ever (tests/scripts/e2e_deadlines.sh): wait_end, stop_pids and run_limited give every wait for a process a deadline, and the part has a watchdog
+. "$ROOT/tests/scripts/e2e_deadlines.sh"
+stop_server() { kill -TERM "$SERVER_PID" 2> /dev/null; wait_end "$SERVER_PID" "$SERVER_END_WAIT" "ants_server (stopped with SIGTERM)"; SERVER_PID=""; }
+PARTS_RUN="$(echo ${PARTS:-$PART_NAMES} | wc -w | tr -d ' ')"      # (600 s for each part this call runs: CI runs them one by one, a call without --part runs all six)
+start_watchdog $((600 * TIME_SCALE * PARTS_RUN))
 GAME_PORT="$(free_port)"
 CTL_PORT="$(free_port)"
 SECRET="e2e-$RANDOM-$RANDOM-secret"
@@ -93,6 +99,13 @@ wait_ticks() {
     done
     echo 0
 }
+# tick_rate ROOM [CONTROL-URL [SECONDS]] prints "RATE TICKS SECONDS READINGS": the referee's ticks a second, from the room's first tick over SECONDS (8) of the real clock (tests/scripts/measure_tick_rate.py), RATE 0.00 when the
+# room never ticked. The rate used to be the difference of two readings over a nominal 3 s, and a loaded macOS runner measured 25.0 of a referee that sealed 20: the readings are stamped now and the rate is the slope of all of them.
+# rate_in_band RATE is 0 for 20 ticks a second as far as a loaded runner can tell: the server seals a turn every 50 ms of its own clock and catches up after a stall, so the rate over a window IS 20; the band holds the stalls and the
+# delay of the readings, and not 30 or 10 (a rate that is wrong).
+tick_rate() { python3 "$ROOT/tests/scripts/measure_tick_rate.py" "${2:-$CTL}" "$1" "$SECRET" "${3:-8}"; }
+rate_in_band() { python3 -c "import sys; r = float('${1:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; }
+rate_text() { echo "${1%% *}, $(echo "$1" | cut -d' ' -f2) ticks in $(echo "$1" | cut -d' ' -f3) s"; }
 
 cd "$ROOT"
 # ---- part options: the pages' own texts and nginx.conf, and the command-line options of ants_server (a bad option is refused at once, a good one starts it) -------
@@ -262,17 +275,22 @@ check "--db together with --no-db is refused" "$([ "$(exit_of --db "$WORK/x.db" 
 check "--db with an empty file name is refused" "$([ "$(exit_of --db '')" = "2" ]; echo $?)"
 check "--db without a value is refused" "$([ "$(exit_of --db)" = "2" ]; echo $?)"
 check "--help names --db FILE | --no-db" "$("$SERVER" --help 2>&1 | grep -q -- '--db FILE | --no-db'; echo $?)"
-db_start() {      # db_start LOGFILE ARGS...: starts the server in the background, waits for its "TCP game port" line, stops it with SIGTERM; prints the exit status
+db_start() {      # db_start LOGFILE ARGS...: starts the server in the background, waits (30 s at the most) for its "TCP game port" line, stops it with SIGTERM; prints the exit status (not 0 for a server that never said it was up)
     local log="$1"; shift
     ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" "$@" > "$log" 2>&1 &
     local pid=$! up=1
-    for _ in $(seq 1 50); do
+    for _ in $(seq 1 300); do
         if grep -q 'TCP game port' "$log" 2> /dev/null; then up=0; break; fi
         kill -0 "$pid" 2> /dev/null || break
         sleep 0.1
     done
-    if [ "$up" = "0" ]; then kill -TERM "$pid" 2> /dev/null; fi
-    wait "$pid" 2> /dev/null
+    if [ "$up" = "0" ]; then
+        kill -TERM "$pid" 2> /dev/null
+    elif kill -0 "$pid" 2> /dev/null; then      # it runs and has not said that it is up: it would be waited for for ever
+        fail_note "db_start: ants_server ($*) did not log its game port within 30 s; it is stopped"
+        kill -TERM "$pid" 2> /dev/null
+    fi
+    wait_end "$pid" 30 "ants_server of db_start ($*)"
     echo $?
 }
 db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
@@ -290,12 +308,12 @@ check "--no-db keeps no database file, whatever --results-dir says, and the log 
 check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
 printf 'this is not a database, it must be left exactly as it is, byte for byte, by a server that refuses to start on it\n' > "$WORK/db_junk.db"
 cp "$WORK/db_junk.db" "$WORK/db_junk.copy"
-check "a file that is no database stops the server (status 1) with a message that names the file, and the file is not changed" "$([ "$(exit_of --db "$WORK/db_junk.db")" = "1" ] && cmp -s "$WORK/db_junk.db" "$WORK/db_junk.copy" && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_junk.db" 2>&1 | grep -q 'db_junk.db.*not a database'; echo $?)"
+check "a file that is no database stops the server (status 1) with a message that names the file, and the file is not changed" "$([ "$(exit_of --db "$WORK/db_junk.db")" = "1" ] && cmp -s "$WORK/db_junk.db" "$WORK/db_junk.copy" && perl -e 'alarm 5; exec @ARGV' env ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_junk.db" 2>&1 | grep -q 'db_junk.db.*not a database'; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
     python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table schema_version (version integer primary key, name text not null, applied_at text not null)"); c.execute("insert into schema_version values (99, ?, ?)", ("future", "then")); c.commit(); c.close()' "$WORK/db_newer.db"
     python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("create table somebody_elses (x text)"); c.commit(); c.close()' "$WORK/db_foreign.db"
     cp "$WORK/db_newer.db" "$WORK/db_newer.copy"; cp "$WORK/db_foreign.db" "$WORK/db_foreign.copy"
-    check "a database of a NEWER program in the rollback journal (schema version 99) stops the server (status 1) and is byte for byte as it was, with no -wal, -shm or -journal file beside it" "$([ "$(exit_of --db "$WORK/db_newer.db")" = "1" ] && cmp -s "$WORK/db_newer.db" "$WORK/db_newer.copy" && [ ! -e "$WORK/db_newer.db-wal" ] && [ ! -e "$WORK/db_newer.db-shm" ] && [ ! -e "$WORK/db_newer.db-journal" ] && ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_newer.db" 2>&1 | grep -q 'newer'; echo $?)"
+    check "a database of a NEWER program in the rollback journal (schema version 99) stops the server (status 1) and is byte for byte as it was, with no -wal, -shm or -journal file beside it" "$([ "$(exit_of --db "$WORK/db_newer.db")" = "1" ] && cmp -s "$WORK/db_newer.db" "$WORK/db_newer.copy" && [ ! -e "$WORK/db_newer.db-wal" ] && [ ! -e "$WORK/db_newer.db-shm" ] && [ ! -e "$WORK/db_newer.db-journal" ] && perl -e 'alarm 5; exec @ARGV' env ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --db "$WORK/db_newer.db" 2>&1 | grep -q 'newer'; echo $?)"
     check "a foreign SQLite file (tables, no schema_version) stops the server (status 1) and is left byte for byte as it was, with no side files" "$([ "$(exit_of --db "$WORK/db_foreign.db")" = "1" ] && cmp -s "$WORK/db_foreign.db" "$WORK/db_foreign.copy" && [ ! -e "$WORK/db_foreign.db-wal" ] && [ ! -e "$WORK/db_foreign.db-shm" ] && [ ! -e "$WORK/db_foreign.db-journal" ]; echo $?)"
 else
     echo "  SKIP: python3 has no sqlite3 module: the refusal of a newer and of a foreign database file was NOT checked"
@@ -326,7 +344,7 @@ for w in want:
 sys.exit(0 if ok else 1)' "$ROOT"; echo $?)"
 check "... and the same door refuses what is not the plain list (a query and a name below /maps: 404, a POST: 405)" "$([ "$(code_of "http://127.0.0.1:$CM_PORT/maps?x=1")" = "404" ] && [ "$(code_of -X POST "http://127.0.0.1:$CM_PORT/maps")" = "405" ] && [ "$(code_of "http://127.0.0.1:$CM_PORT/maps/TINY.LVL")" = "404" ]; echo $?)"
 check "... and the log says how many maps are listed" "$(grep -q '^\[ants_server [0-9]*\] 540 maps listed (maps folder and community folder' "$WORK/cm.log"; echo $?)"
-kill -TERM "$CM_PID" 2> /dev/null; wait "$CM_PID" 2> /dev/null
+stop_pids "ants_server of the community maps (stopped with SIGTERM)" "$CM_PID"
 # the match history lives in the database (docs/REPLAYS.md "The match history"): no folder of its own, --no-history turns it off, --no-db leaves it nothing to live in
 check "--help names --no-history, and there is no --history-dir (the history is in the database: a leftover option is refused, status 2)" "$("$SERVER" --help 2>&1 | grep -q -- '--no-history'; [ "$(exit_of --history-dir "$WORK/hi_none")" = "2" ]; echo $?)"
 check "with a database the server keeps the match history, and the log says where it counts from" "$([ "$(db_start "$WORK/hist_on.log" --results-dir "$WORK/hist_on")" = "0" ] && grep -q 'match history kept for good in the database; the matches of the replay store are counted while no match runs' "$WORK/hist_on.log"; echo $?)"
@@ -338,7 +356,7 @@ fi
 mkdir -p "$WORK/maps_odd"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/TINY.LVL"
 cp "$ROOT/Original-Ants/Maps/TINY.LVL" "$WORK/maps_odd/A B.LVL"
-env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1
+{ env ANTS_SERVER_SECRET=x perl -e 'alarm 3; exec @ARGV' "$SERVER" --maps "$WORK/maps_odd" --port "$(free_port)" --demo-rooms 2 --demo-map TINY.LVL --demo-maps "TINY.LVL,A B.LVL" > "$WORK/odd.log" 2>&1; } 2> /dev/null      # (the shell's "Alarm clock" of the server that the alarm ends is not shown)
 ODD_STATUS=$?
 check "a listed map with a blank in its name starts the server (a create block names a map by its file name, as it is: nothing about a map can be unchoosable) and the startup line lists the choices" "$([ "$ODD_STATUS" = "142" ] && grep -q "unless the block names one of TINY.LVL, A B.LVL" "$WORK/odd.log" && ! grep -q "never be chosen" "$WORK/odd.log"; echo $?)"
 fi
@@ -428,8 +446,7 @@ check "the referee's clock runs (ticks after the dialog: $TICKS)" "$([ "${TICKS:
 # (the lower bound is the point: nothing ticks during the dialog; the 5 s of it are 4.8 s from the moment this script saw "running", the bound has two seconds of slack for a loaded machine)
 check "the referee's clock waits for the \"Get ready to play!\" dialog: its first tick came $DIALOG_WAIT s after the match began (5 s; never under 3, within 15)" "$(python3 -c "print(0 if 3.0 <= $DIALOG_WAIT <= 15.0 else 1)")"
 sleep 3      # (a few seconds of play: the clients compare their state hashes every second, a desync would be reported within it)
-for p in $CLIENT_PIDS; do kill "$p" 2> /dev/null; done
-for p in $CLIENT_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the two clients of the first room" $CLIENT_PIDS
 check "no client reported an error" "$(grep -qiE 'out of sync|failed|error' "$WORK/c1.log" "$WORK/c2.log"; [ $? -ne 0 ]; echo $?)"
 
 # the leader of a room (protocol 7): a room for four, two headless clients; the first one to join leads the room and presses START itself (--start-when 2: a headless client has
@@ -465,8 +482,7 @@ check "neither client reported an error" "$(grep -qiE 'out of sync|failed|error'
 check "the room did not fail (no desync)" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" | grep -q '"state":"running"'; echo $?)"
 ONLINE_BEFORE="$(stat_of online total)"
 LEAD_TICKS="$(ticks_of "$LEAD")"
-for p in $LEAD_PIDS; do kill "$p" 2> /dev/null; done
-for p in $LEAD_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the two clients of the leader's room" $LEAD_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$LEAD" > /dev/null
 sleep 0.3
 check "the leader's room, whose match ran for seconds only ($LEAD_TICKS ticks, under 600), ended (its players left, then the owner closed it): it counts nothing (a start-and-quit loop cannot pad the number)" "$([ "${LEAD_TICKS:-0}" -gt 0 ] && [ "${LEAD_TICKS:-0}" -lt 600 ] && [ "$(stat_of online total)" = "$ONLINE_BEFORE" ] && [ "$(stat_of online day)" = "$ONLINE_BEFORE" ]; echo $?)"
@@ -522,14 +538,10 @@ ok = len(bots) == 3 and [b["seat"] for b in bots] == [1, 2, 3] and all(b["bot"] 
 ok = ok and r.get("joined") == 4 and r.get("expected") == 4 and r["players"][0]["name"] == "Solo" and sum(1 for p in r["players"] if p["name"] == bn(CODE, p["seat"], "Medium")) == 3
 print(0 if ok else 1)' "$FILL" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
 check "the status lists three bots on seats 1 - 3 (medium, named by the room like Pip (bot, Medium), seated by the fill), four players, the person on seat 0" "${BOTS_OK:-1}"
-FILL_T1="$(wait_ticks "$FILL")"      # (the rate is measured from the first tick: the match's first 5 s are the dialog)
-sleep 3
-FILL_T2="$(ticks_of "$FILL")"
-FILL_RATE="$(python3 -c "print(($FILL_T2 - $FILL_T1) / 3.0)" 2> /dev/null)"
-check "the referee runs the match with the bots at 20 ticks a second (measured: ${FILL_RATE:-?})" "$(python3 -c "import sys; r = float('${FILL_RATE:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; echo $?)"
+FILL_RATE="$(tick_rate "$FILL")"      # (measured from the first tick: the match's first 5 s are the dialog)
+check "the referee runs the match with the bots at 20 ticks a second (measured: $(rate_text "$FILL_RATE"))" "$(rate_in_band "${FILL_RATE%% *}"; echo $?)"
 check "the room did not fail (no desync with the bots) and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/f1.log"; echo $?)"
-for p in $FILL_PIDS; do kill "$p" 2> /dev/null; done
-for p in $FILL_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the client of the room that is filled with bots" $FILL_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$FILL" > /dev/null
 
 # a level for each seat and the teams (protocol 13): the leader (--fill-bots none,easy,none,hard --teams 0+1, --start-when 1) starts a room for four ALONE: the server seats an Easy bot at seat 1 and a
@@ -554,14 +566,10 @@ ok = [b["seat"] for b in bots] == [1, 3] and [b["bot"] for b in bots] == ["easy"
 ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]} == {0: "Solo", 1: bn(CODE, 1, "Easy"), 3: bn(CODE, 3, "Hard")}
 print(0 if ok else 1)' "$PLAN" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
 check "the status lists the bots of the seats 1 (easy) and 3 (hard) by their own names, three players, and seat 2 stays empty" "${PLAN_OK:-1}"
-PLAN_T1="$(wait_ticks "$PLAN")"
-sleep 3
-PLAN_T2="$(ticks_of "$PLAN")"
-PLAN_RATE="$(python3 -c "print(($PLAN_T2 - $PLAN_T1) / 3.0)" 2> /dev/null)"
-check "the referee runs the match with the two bots and the team at 20 ticks a second (measured: ${PLAN_RATE:-?})" "$(python3 -c "import sys; r = float('${PLAN_RATE:-0}'); sys.exit(0 if 17.0 <= r <= 23.0 else 1)"; echo $?)"
+PLAN_RATE="$(tick_rate "$PLAN")"
+check "the referee runs the match with the two bots and the team at 20 ticks a second (measured: $(rate_text "$PLAN_RATE"))" "$(rate_in_band "${PLAN_RATE%% *}"; echo $?)"
 check "the room did not fail (the referee and the leader made the same team: no desync) and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/p1.log"; echo $?)"
-for p in $PLAN_PIDS; do kill "$p" 2> /dev/null; done
-for p in $PLAN_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the client of the room with a plan of bots and teams" $PLAN_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$PLAN" > /dev/null
 
 # the links of the earlier front page's one card, START with bots only: the game page gives the leader the colour that was picked (--seat 2, Blue), the plan of the card (easy,medium,none,none: a bot at Green and one at Red; none
@@ -586,8 +594,7 @@ ok = ok and r.get("joined") == 3 and {p["seat"]: p["name"] for p in r["players"]
 print(0 if ok else 1)' "$CARD" "$ROOT/tools/bot_names.txt" 2> /dev/null)"
 check "the leader holds the seat that it asked for (Blue), the bots of the plan are at Green (easy) and Red (medium) by their own names, and seat 3 stays empty" "${CARD_OK:-1}"
 check "the room did not fail and the client reported no error" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD" | grep -q '"state":"running"' && ! grep -qiE 'out of sync|failed|error' "$WORK/c1.log"; echo $?)"
-for p in $CARD_PIDS; do kill "$p" 2> /dev/null; done
-for p in $CARD_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the client of the one-card room" $CARD_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CARD" > /dev/null
 
 CHAT="E2E-CHAT-$RANDOM"
@@ -606,8 +613,7 @@ check "two clients chat in the waiting room: each hears the other's line from th
 check "each also hears its own line from the room (the room tells the sender that it was heard)" "$(grep -q 'Room chat: Ann: hello from Ann' "$WORK/ch1.log" && grep -q 'Room chat: Bob: hello from Bob' "$WORK/ch2.log"; echo $?)"
 check "nobody started the match by chatting: the room still waits" "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" | grep -q '"state":"waiting"'; echo $?)"
 ONLINE_BEFORE="$(stat_of online total)"
-for p in $CHAT_PIDS; do kill "$p" 2> /dev/null; done
-for p in $CHAT_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the two clients that chat" $CHAT_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$CHAT" > /dev/null
 sleep 0.3
 check "the room in which two players only chatted (no match began) was closed: it counts nothing" "$([ "$(stat_of online total)" = "$ONLINE_BEFORE" ]; echo $?)"
@@ -641,14 +647,13 @@ for _ in $(seq 1 100); do
     sleep 0.2
 done
 check "two clients play in a room next to the flood room (the match runs)" "$VICTIM_UP"
-wait_ticks "$VICTIM" > /dev/null      # (its dialog's 5 s first: the rates below are measured while it plays)
-rate_of_victim() { local a b; a="$(ticks_of "$VICTIM")"; sleep "$1"; b="$(ticks_of "$VICTIM")"; python3 -c "print(($b - $a) / $1)"; }
-QUIET_RATE="$(rate_of_victim 3)"
-check "the referee of that match ticks about 20 times a second without a flood ($QUIET_RATE)" "$(python3 -c "print(0 if 15 < $QUIET_RATE < 25 else 1)")"
-flood() {      # flood KIND ROOM SECONDS: a raw client says Hello for ROOM, then writes frames of KIND as fast as it can for SECONDS; prints how many Pongs it got back
-    python3 - "$GAME_PORT" "$2" "$1" "$3" "${PROTOCOL:-0}" <<'PY'
+QUIET_RATE="$(tick_rate "$VICTIM" "$CTL" 6)"      # (from its first tick: the dialog's 5 s first; the floods below are measured while it plays)
+check "the referee of that match ticks about 20 times a second without a flood ($(rate_text "$QUIET_RATE"))" "$(rate_in_band "${QUIET_RATE%% *}"; echo $?)"
+flood() {      # flood KIND ROOM SECONDS [HONEST]: a raw client says Hello for ROOM, sends HONEST frames of KIND (0: none) and waits for their answers, then writes frames of KIND as fast as it can for SECONDS;
+               # prints how many Pongs it got back for the honest ones and how many for the flood
+    python3 - "$GAME_PORT" "$2" "$1" "$3" "${PROTOCOL:-0}" "${4:-0}" <<'PY'
 import socket, struct, sys, time
-port, room, kind, secs, protocol = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4]), int(sys.argv[5])
+port, room, kind, secs, protocol, honest = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
 def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
@@ -657,10 +662,39 @@ hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
 sock.sendall(frame(hello))
+received = b''
+def count_pongs():           # the Pongs in `received` (whole frames are taken off it)
+    global received
+    found, pos = 0, 0
+    while len(received) - pos >= 4:
+        n = struct.unpack_from('<I', received, pos)[0]
+        if len(received) - pos - 4 < n:
+            break
+        if n >= 1 and received[pos + 4] == 11:
+            found += 1
+        pos += 4 + n
+    received = received[pos:]
+    return found
+honest_pongs = 0
+if honest:                   # an honest burst, under the budget: nobody is thrown out and nothing is lost, so every one of them is answered (10 s for the answers)
+    try:
+        sock.sendall(frame(message) * honest)
+        sock.settimeout(0.5)
+        give_up = time.time() + 10.0
+        while honest_pongs < honest and time.time() < give_up:
+            try:
+                data = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not data:
+                break
+            received += data
+            honest_pongs += count_pongs()
+    except OSError:
+        pass                 # (thrown out: the pongs that came before are counted)
 sock.setblocking(False)
 blob = frame(message) * 20000
 offset = 0
-received = b''
 pongs = 0
 end = time.time() + secs
 while time.time() < end:
@@ -679,25 +713,21 @@ while time.time() < end:
         pass
     except OSError:
         break
-    pos = 0
-    while len(received) - pos >= 4:
-        n = struct.unpack_from('<I', received, pos)[0]
-        if len(received) - pos - 4 < n:
-            break
-        if n >= 1 and received[pos + 4] == 11:
-            pongs += 1
-        pos += 4 + n
-    received = received[pos:]
-print(pongs)
+    pongs += count_pongs()
+print(honest_pongs, pongs)
 PY
 }
+FLOOD_BURST=1000      # the budget of a connection as docs/NETWORK_PORT.md ("A budget of messages per connection") states it, written here and not read from flood.hpp: a check that follows the source cannot see a budget that was cut
+FLOOD_RATE=1000       # a second
 for KIND in startreq ping; do
     FLOODROOM="E2E-FLOOD-$KIND-$RANDOM"
     curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FLOODROOM\",\"seed\":5}" "$CTL/rooms"
     RSS_BEFORE="$(rss_kb)"
     TICKS_A="$(ticks_of "$VICTIM")"
     FLOOD_START="$(python3 -c 'import time; print(time.time())')"
-    flood "$KIND" "$FLOODROOM" 4 > "$WORK/flood_$KIND.out" &
+    HONEST=0
+    [ "$KIND" = "ping" ] && HONEST=$((FLOOD_BURST * 9 / 10))
+    flood "$KIND" "$FLOODROOM" 4 "$HONEST" > "$WORK/flood_$KIND.out" &
     FLOOD_PID=$!
     WORST=0
     JOINED_AT_2S=""
@@ -707,7 +737,7 @@ for KIND in startreq ping; do
         [ "$I" = "6" ] && JOINED_AT_2S="$(field_of "$FLOODROOM" joined)"       # about two seconds into the flood, which still goes on
         sleep 0.4
     done
-    wait "$FLOOD_PID"
+    wait_end "$FLOOD_PID" 30 "the flooding client ($KIND)"
     FLOOD_SECS="$(python3 -c "import time; print(time.time() - $FLOOD_START)")"
     TICKS_B="$(ticks_of "$VICTIM")"
     RSS_AFTER="$(rss_kb)"
@@ -715,10 +745,17 @@ for KIND in startreq ping; do
     if [ "$KIND" = "startreq" ]; then
         check "startreq flood: it had a seat and was out at its 24th request (16 are free, each of the next eight is a violation): the rest was never read" "$([ "$(field_of "$FLOODROOM" ignored_start_requests)" = "24" ]; echo $?)"
     else
-        PONGS="$(cat "$WORK/flood_$KIND.out")"
-        # (the bucket is 1000 a second plus its burst, and it refills while the flood is read: a slow machine reads for longer before the violation, so the upper bound is 1500, not 1300 -
-        # a macOS runner of CI got 1305; the point is "about a second's worth, not millions")
-        check "ping flood: the server answered a second's worth of pings and no more ($PONGS pongs of millions of pings)" "$([ "${PONGS:-0}" -ge 1000 ] && [ "${PONGS:-0}" -le 1500 ]; echo $?)"
+        read -r HONEST_PONGS FLOOD_PONGS < "$WORK/flood_$KIND.out"
+        # What this detects. The server's limit is a bucket of FLOOD_BURST messages that refills at FLOOD_RATE a second (flood.hpp; docs/NETWORK_PORT.md, "A budget of messages per connection"; written above and not read from
+        # the source, so that a budget that was cut or raised is seen); a message beyond it is a violation, and eight throw the sender out. (1) AN HONEST BURST IS ANSWERED WHOLE: the flooder first says $HONEST pings, a tenth
+        # under the burst, so nobody is thrown out and the connection stays whole (nothing is lost on the way), and every one must be answered, on any machine: the count is exact (900 of 900 in 80 of 80 floods under 16 and 40
+        # busy loops). A server that answers no ping (0 of 900) or throws a client out early fails it: with the burst cut to 100, 400 or 600 the flooder is out after 105, 424, 626 pongs. A burst cut to 850 is seen now and then (880 to 900 of 900), one cut to 900 or more not at all.
+        # (2) THE FLOOD IS NOT ANSWERED BEYOND A SECOND'S WORTH: it then floods for 4 s, and the pongs of both together must not pass the burst and half a second of its refill (a slow machine reads for longer before the
+        # violation, and a macOS runner of CI got 1305 pongs of the flood alone): a budget that is raised to 2000, 5000 or off (a million) fails it (2178, 5279 and about 80000 pongs); one raised to 1200 or less is not seen. Only
+        # an upper bound can be made of the flood's own count: the server throws the flooder out with its pings unread, the connection is reset, and what the flooder had not taken by then is lost (it reads 18 to 360 of the
+        # 140 that are sent, with 16 and 40 busy loops on 4 cores): the old check, which asked for 1000 pongs in all, failed in 2 of 7 runs of the whole part and in 9 of 16 floods under 16 busy loops.
+        check "ping flood: an honest burst of $HONEST pings (under the burst of $FLOOD_BURST) is answered whole ($HONEST_PONGS pongs)" "$([ "${HONEST_PONGS:-0}" -eq "$HONEST" ]; echo $?)"
+        check "ping flood: the flood is not answered beyond a second's worth ($((HONEST_PONGS + FLOOD_PONGS)) pongs of millions of pings; at most $((FLOOD_BURST + FLOOD_RATE / 2)))" "$([ $((${HONEST_PONGS:-0} + ${FLOOD_PONGS:-0})) -le $((FLOOD_BURST + FLOOD_RATE / 2)) ]; echo $?)"
     fi
     check "$KIND flood: the control interface answered within a second all the time (worst: ${WORST} s)" "$(python3 -c "print(0 if $WORST < 1.0 else 1)")"
     check "$KIND flood: the match in the other room kept its clock (ticks a second: $(python3 -c "print(round(($TICKS_B - $TICKS_A) / $FLOOD_SECS, 1))"); it was 8.6 on a loaded machine before)" "$(python3 -c "print(0 if ($TICKS_B - $TICKS_A) / $FLOOD_SECS > 14 else 1)")"
@@ -738,8 +775,7 @@ for _ in $(seq 1 400); do
     sleep 0.25
 done
 ONLINE_BEFORE="$(stat_of online total)"
-for p in $VICTIM_PIDS; do kill "$p" 2> /dev/null; done
-for p in $VICTIM_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the two clients next to the floods" $VICTIM_PIDS
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$CTL/rooms/$VICTIM" > /dev/null
 sleep 0.3
 check "the match next to the floods played $VICTIM_TICKS ticks (600 are 30 s) and ended (its players left, then the owner closed it): one online game, counted once (a match that played that long counts, whatever ended it)" "$([ "${VICTIM_TICKS:-0}" -ge 600 ] && [ "$(stat_of online total)" = "$((ONLINE_BEFORE + 1))" ] && [ "$(stat_of online day)" = "$((ONLINE_BEFORE + 1))" ]; echo $?)"
@@ -749,7 +785,7 @@ check "the owner closes the room: 200" "$([ "$(code_of -X DELETE -H "Authorizati
 check "with every room closed /busy says no match and nobody again" "$(busy_json_ok 0 0; echo $?)"
 sleep 0.5
 kill -TERM "$SERVER_PID" 2> /dev/null
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" 30 "ants_server of the rooms part (stopped with SIGTERM)"
 SERVER_EXIT=$?
 SERVER_PID=""
 check "the server stops cleanly on SIGTERM" "$([ "$SERVER_EXIT" -eq 0 ]; echo $?)"
@@ -948,7 +984,7 @@ check "a block with --room-map small --room-seats 2 makes the room on SMALL.LVL 
 for _ in $(seq 1 100); do kill -0 "$PICK_NOBODY_PID" 2> /dev/null || break; sleep 0.2; done
 check "a Hello with no create block makes no room (the code is only a name: the control interface has no such room, 404)" "$([ "$(code_of -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/rooms/pick-nobody")" = "404" ]; echo $?)"
 check "... and the server refused that game, and no other (the control interface counts one refused connection)" "$([ "$(curl -s -m 2 -H "Authorization: Bearer $SECRET" "http://127.0.0.1:$PICK_CTL/stats" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("refused", ""))' 2> /dev/null)" = "1" ]; echo $?)"
-for p in $PICK_PIDS $PICK_NOBODY_PID; do kill "$p" 2> /dev/null; done
+for p in $PICK_PIDS $PICK_NOBODY_PID; do disown "$p" 2> /dev/null; kill "$p" 2> /dev/null; done      # (disowned: a Mac's bash prints "Terminated" for a job that dies of a signal)
 stop_server
 
 # lobby rooms (protocol 16) with a real server: a page's Hello with a lobby block makes a lobby room, a game's Hello with a plain block still makes a public room, a page never makes the one and a game never the other, the pool holds
@@ -1081,8 +1117,9 @@ if command -v node > /dev/null 2>&1; then
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-    PAGE_OUT="$(node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" 2>&1)"
+    run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS"
     PAGE_RC=$?
+    PAGE_OUT="$(cat "$WORK/page_check.out")"
     [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'
     check "the lobby page's client (web/front/lobby_net.js, run with node) against a real server over a WebSocket: two pages in one lobby, a move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a stale key, a second window, START that waits, the chat at the server's pace, GET /busy" "$PAGE_RC"
     stop_server
@@ -1092,8 +1129,9 @@ if command -v node > /dev/null 2>&1; then
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 12 --start-countdown-seconds 8 > "$WORK/lobbyh.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-    HAND_OUT="$(ANTS_E2E_SECRET="$SECRET" ANTS_HANDOFF_WAIT_MS=$((60000 * TIME_SCALE)) node "$ROOT/tests/scripts/web_lobby_handoff_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_CTL" "127.0.0.1:$LOBBY_PORT" "$GAME" "$ROOT" "$WORK" 2>&1)"
+    run_limited $((120 * TIME_SCALE)) "node web_lobby_handoff_check.js (two pages hand their room over to two games)" "$WORK/handoff_check.out" env ANTS_E2E_SECRET="$SECRET" ANTS_HANDOFF_WAIT_MS=$((60000 * TIME_SCALE)) node "$ROOT/tests/scripts/web_lobby_handoff_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_CTL" "127.0.0.1:$LOBBY_PORT" "$GAME" "$ROOT" "$WORK"
     HAND_RC=$?
+    HAND_OUT="$(cat "$WORK/handoff_check.out")"
     [ "$HAND_RC" -ne 0 ] && echo "$HAND_OUT" | sed 's/^/    /'
     check "two lobby pages hand their room over to two real games (web/front/lobby_net.js and the native game): START waits for the games, each game takes the seat of its page with the page's key (the page gone first, or still connected and superseded), and the match starts and runs" "$HAND_RC"
     stop_server
@@ -1138,7 +1176,7 @@ check "the stack passes no reconnect option (the default is what holds the seats
 check "the stack: the log says that rooms hold seats, as the default" "$(grep -q 'rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off)' "$WORK/stack_demo.log"; echo $?)"
 check "the stack: its public rooms hold seats (reconnect true in their status)" "$([ "$(stack_reconnect_of_room stack-n1)" = "true" ] && [ "$(stack_reconnect_of_room stack-islands-n4)" = "true" ]; echo $?)"
 check "the stack: a room that the control interface makes without a setting holds seats, and one that says false does not" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-1"}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":true' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"STACK-CTL-2","reconnect":false}' "http://127.0.0.1:$STACK_CTL/rooms" | grep -q '"reconnect":false'; echo $?)"
-for p in $STACK_PIDS; do kill "$p" 2> /dev/null; done
+for p in $STACK_PIDS; do disown "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
 stop_server
 
 # the off state stays covered: --no-reconnect, after the stack's own options, makes every room hold no seats (a public room too, and the records say that none is kept), and a room's own "reconnect": true still holds them
@@ -1160,6 +1198,7 @@ norec_reconnect_of_room() { for _ in $(seq 1 60); do R="$(curl -s -m 2 -H "Autho
 check "--no-reconnect: the log says that rooms hold no seats, and that no record is kept" "$(grep -q 'rooms hold no seats (--no-reconnect)' "$WORK/norec.log" && grep -q 'no room holds seats unless its specification says so (--no-reconnect), so none is kept now' "$WORK/norec.log"; echo $?)"
 check "--no-reconnect: a public room holds no seats (reconnect false in its status)" "$([ "$(norec_reconnect_of_room norec-nr1)" = "false" ]; echo $?)"
 check "--no-reconnect: a room that the control interface makes without a setting holds none, and one that says true holds seats" "$(curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-1"}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":false' && curl -s -m 3 -X POST -H "Authorization: Bearer $SECRET" -d '{"map":"TINY.LVL","code":"NOREC-CTL-2","reconnect":true}' "http://127.0.0.1:$NOREC_CTL/rooms" | grep -q '"reconnect":true'; echo $?)"
+disown "$NOREC_PID" 2> /dev/null
 kill "$NOREC_PID" 2> /dev/null
 stop_server
 fi
@@ -1316,16 +1355,14 @@ check "the referee's clock runs again (ticks $RC_TC, $RC_TD three seconds later)
 check "the status keeps the counters: the pause lasted about 60 s, nobody came back, one seat dropped by the cap, none by a vote" "$([ "$(rc_field "$RC_CODE" paused_seconds)" -ge 59 ] && [ "$(rc_field "$RC_CODE" paused_seconds)" -le 65 ] && [ "$(rc_field "$RC_CODE" rejoins)" = "0" ] && [ "$(rc_field "$RC_CODE" drops_by_vote)" = "0" ]; echo $?)"
 check "the two clients that stayed saw no error" "$(grep -qiE 'out of sync|failed|error' "$WORK/h1.log" "$WORK/h2.log"; [ $? -ne 0 ]; echo $?)"
 check "the second room's two steady clients saw no error either" "$(grep -qiE 'out of sync|failed|error' "$WORK/s1.log" "$WORK/s2.log"; [ $? -ne 0 ]; echo $?)"
-for p in $RC_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
-for p in $RC_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the clients of the reconnect part (one of them was stopped with SIGSTOP)" $RC_PIDS
 RC_PIDS=""
 code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RC_URL/rooms/$RC_CODE" > /dev/null
 sleep 0.5
 kill -TERM "$SERVER_PID" 2> /dev/null
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" 30 "ants_server of the reconnect part (stopped with SIGTERM)"
 SERVER_PID=""
-kill "$PROXY_PID" 2> /dev/null
-wait "$PROXY_PID" 2> /dev/null
+stop_pids "the flaky proxy (stopped with SIGTERM)" "$PROXY_PID"
 PROXY_PID=""
 check "the result file of the room that held a seat keeps the counters (drops_by_cap 1, log) and no secret or key" "$([ -s "$WORK/rc_results/$RC_CODE.json" ] && grep -q '"drops_by_cap":1' "$WORK/rc_results/$RC_CODE.json" && grep -q '"log":{' "$WORK/rc_results/$RC_CODE.json" && ! grep -q "$SECRET" "$WORK/rc_results/$RC_CODE.json"; echo $?)"
 check "the server's log names the rooms' ends with what the pause came to, and never the secret" "$(grep -q "room $RC_CODE" "$WORK/rc_server.log" && grep -q 'by the cap' "$WORK/rc_server.log" && ! grep -q "$SECRET" "$WORK/rc_server.log"; echo $?)"
@@ -1396,7 +1433,7 @@ RR_SEALED="$(rr_field "$RR_CODE" turns)"
 # SIGTERM in the middle of the match: the server exits at once (well inside the 15 s that the stack gives docker) and leaves the record
 RR_KILL_AT="$(python3 -c 'import time; print(time.time())')"
 kill -TERM "$SERVER_PID"
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" 30 "ants_server of the restart section (stopped with SIGTERM in the middle of a match)"
 RR_STOP_RC=$?
 RR_STOPPED_AFTER="$(python3 -c "import time; print(round(time.time() - $RR_KILL_AT, 2))")"
 SERVER_PID=""
@@ -1418,8 +1455,9 @@ RR_RESTORED_TURNS="$(rr_field "$RR_CODE" restored.turns)"
 sleep 2
 check "nothing advances while the room waits (turns $RR_RESTORED_TURNS)" "$([ "$(rr_field "$RR_CODE" turns)" = "$RR_RESTORED_TURNS" ]; echo $?)"
 # SIGKILL and once more: the record that the restored room went on writing restores again
+disown "$SERVER_PID" 2> /dev/null      # (it dies of our signal: bash would say "Killed")
 kill -KILL "$SERVER_PID"
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" 30 "ants_server of the restart section (killed with SIGKILL)"
 SERVER_PID=""
 rr_start
 check "the server killed with SIGKILL and started again is up" "$?"
@@ -1442,9 +1480,9 @@ check "neither game ended with the lost-connection message, nor reported an erro
 check "closing the room (DELETE) answers 200" "$([ "$(code_of -X DELETE -H "Authorization: Bearer $SECRET" "$RR_URL/rooms/$RR_CODE")" = "200" ]; echo $?)"
 check "... and its record is gone" "$([ "$(ls "$RR_DIR" | grep -c '\.restart$')" = "0" ]; echo $?)"
 check "the status of the closed room says that it is over and keeps no record" "$([ "$(rr_field "$RR_CODE" state)" = "failed" ] && [ "$(rr_field "$RR_CODE" record.kept)" = "false" ]; echo $?)"
-for p in $RR_PIDS; do kill "$p" 2> /dev/null; done
+stop_pids "the two games of the restart section" $RR_PIDS
 kill -TERM "$SERVER_PID" 2> /dev/null
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" 30 "ants_server of the restart section (stopped with SIGTERM)"
 SERVER_PID=""
 check "no key is in the server's log (no run of 32 hex digits in it: a key is 16 bytes), and neither is the secret" "$(! grep -qE '[0-9a-f]{32}' "$WORK/rr_server.log" && ! grep -q "$SECRET" "$WORK/rr_server.log"; echo $?)"
 check "the result file of the closed room has no key either" "$([ -s "$RR_RESULTS/$RR_CODE.json" ] && ! grep -qE '[0-9a-f]{32}' "$RR_RESULTS/$RR_CODE.json"; echo $?)"
@@ -1562,7 +1600,7 @@ RR_RESTORE_S="$(python3 -c "import time; print(round(time.time() - $RR_T0, 1))")
 check "all $RR_CLONES records are rooms again (running, restored) within $((3 * TIME_SCALE)) minutes" "$RR_BACK"
 check "the log says that the records wait for their replay and that their rooms were restored" "$(grep -q "restore: $RR_CLONES restart record(s) wait for their replay" "$WORK/rr_server.log" && [ "$(grep -c ' restored: ' "$WORK/rr_server.log")" -ge "$RR_CLONES" ]; echo $?)"
 kill -TERM "$SERVER_PID" 2> /dev/null
-wait "$SERVER_PID" 2> /dev/null
+wait_end "$SERVER_PID" $((120 * TIME_SCALE)) "ants_server of the restore section (stopped with SIGTERM, a thousand rooms that make their records durable)"
 SERVER_PID=""
 
 echo "  [reconnect e2e] the link cut: the room paused after $RC_PAUSED_AFTER s; the cap dropped the seat $RC_CAPPED_AFTER s after the cut (60 s of pause); a client stopped: the room paused $RC_STOP_PAUSED_AFTER s later"
@@ -1658,8 +1696,7 @@ done
 check "the match ran 640 ticks (32 seconds of play, past the 600 turns, 30 seconds, that a match needs to be kept however it ended): $RP_TICKS" "$([ "${RP_TICKS:-0}" -ge 640 ] 2> /dev/null; echo $?)"
 check "while the match runs nothing is kept yet and the room says so (replay kept false, note empty)" "$(rp_auth "$CTL/rooms/$RP_CODE" | python3 -c 'import sys, json; r = json.load(sys.stdin)["replay"]; sys.exit(0 if r["kept"] is False and r["file"] == "" and r["note"] == "" else 1)'; echo $?)"
 RP_CLOSED="$(rp_auth -X DELETE "$CTL/rooms/$RP_CODE")"
-for p in $RP_PIDS; do kill "$p" 2> /dev/null; done
-for p in $RP_PIDS; do wait "$p" 2> /dev/null; done
+stop_pids "the two games of the replay room" $RP_PIDS
 RP_PIDS=""
 RP_FILE="$(echo "$RP_CLOSED" | python3 -c 'import sys, json; d = json.load(sys.stdin); print(d["replay"]["file"] if d["state"] == "failed" and d["replay"]["kept"] else "")' 2> /dev/null)"
 # (the store does not write a file when the disk would be left with less than 256 MiB free: say so, with the room's own reason, rather than only that the check below failed)
@@ -1675,9 +1712,9 @@ check "both give the file: the same bytes as on disk, application/octet-stream a
 check "the file is a replay file (its first eight bytes are the signature), holds the names that the two games typed, and holds neither the room's code nor an address" "$(python3 -c 'import sys; sys.exit(0 if open(sys.argv[1], "rb").read(8) == bytes([0x89, 0x41, 0x52, 0x50, 0x4C, 0x0D, 0x0A, 0x1A]) else 1)' "$WORK/rp_public.antsrep" && grep -qa 'Typed1' "$WORK/rp_public.antsrep" && grep -qa 'Typed2' "$WORK/rp_public.antsrep" && ! grep -qa "$RP_CODE" "$WORK/rp_public.antsrep" && ! grep -qa '127\.0\.0\.1' "$WORK/rp_public.antsrep"; echo $?)"
 RT="$ROOT/$BUILD/replay_tool"
 if [ -x "$RT" ]; then
-    "$RT" info "$WORK/rp_public.antsrep" > "$WORK/rp_info.log" 2>&1
+    run_limited 60 "replay_tool info" "$WORK/rp_info.log" "$RT" info "$WORK/rp_public.antsrep"
     RP_INFO=$?
-    "$RT" verify "$WORK/rp_public.antsrep" --maps-dir "$ROOT/Original-Ants/Maps" > "$WORK/rp_verify.log" 2>&1
+    run_limited $((120 * TIME_SCALE)) "replay_tool verify (plays the kept match out)" "$WORK/rp_verify.log" "$RT" verify "$WORK/rp_public.antsrep" --maps-dir "$ROOT/Original-Ants/Maps"
     RP_VERIFY=$?
     [ "$RP_VERIFY" -ne 0 ] && sed 's/^/    /' "$WORK/rp_verify.log"
     check "replay_tool info reads the downloaded file (TINY.LVL, the seats with the typed names, no room code) and verify plays the match out to every hash in it (exit 0) and names the players too" "$([ "$RP_INFO" = "0" ] && [ "$RP_VERIFY" = "0" ] && grep -q 'TINY' "$WORK/rp_info.log" && grep -q '^Seats:     Green (Typed[12]), Red (Typed[12])$' "$WORK/rp_info.log" && grep -q 'Typed1' "$WORK/rp_info.log" && grep -q 'Typed2' "$WORK/rp_info.log" && grep -q 'Typed' "$WORK/rp_verify.log" && ! grep -q "$RP_CODE" "$WORK/rp_info.log" "$WORK/rp_verify.log"; echo $?)"
@@ -1720,5 +1757,6 @@ check "... and the control interface and the public door both say 7 days (and th
 stop_server
 fi
 
+FAILS=$((FAILS + $(hang_count)))      # (the hangs, also those of a function that ran inside a $( ): e2e_deadlines.sh)
 echo "server e2e${PART_LABEL}: $CHECKS checks, $FAILS failures"
 [ "$FAILS" -eq 0 ]
