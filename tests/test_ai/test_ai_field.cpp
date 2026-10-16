@@ -9,8 +9,8 @@
 //   AI29.5   the Fire Ant's way leaves its power-up over water where the power-up that the ant leaves behind (on a free land tile beside it, the engine draws which) would shut a way
 //            over land
 //   AI29.6   the bombs of the seat's own colour that lay on the map at the start (many levels give the map's bombs to team 0) are work like any other; one planted since is a wall
-//   AI29.7   who plays it: Medium and Hard on a field world, not Easy, not with the switch off, not without a source of the Fire Ant, not when no ant of the bot can start the work
-//            (the gate goals play then); the piles of the breach are decided at the first look, and the gate goals leave them to it
+//   AI29.7   who plays it: Medium and Hard on a field world, not Easy, not with the switch off, not without a source of the Fire Ant, not when no ant of the bot can get the first work's
+//            kind (the gate goals play then); the piles of the breach are decided at the first look, and the gate goals leave them to it
 //   AI29.8   the breach in the engine: a Hard bot alone on the field world banks food, every seat, straight and transposed; and with the field's bombs in the seat's own colour
 //   AI29.9   POPcOrN: every seat alone banks food at Hard
 //   AI29.10  an ant whose order the world does not carry out is given up and rests; after four ants given up the task waits until the bot's ants or the power-ups change
@@ -49,8 +49,7 @@ struct FieldWorld {
         bool pocket{true};           // the bomb-free ground at (20, 14)
         bool fire_power_up{true};    // the island's Fire power-up
         bool west_fire{false};       // a second Fire power-up on an islet of its own in the field's west (x 2 .. 4, y 17 .. 19 in a ring of water), nearer the fire wall
-        bool away{false};            // the worker stands on an islet beyond the field ((40 .. 41, 41 .. 42) in a lake of x 34 .. 47, y 35 .. 48), with a Bomber power-up there: it gets
-                                     // the Bomber, but no dig and no hop takes it anywhere
+        bool bomber_power_up{true};  // the Bomber power-up at home
         bool dead_end{false};        // a Bomber power-up at the end of a corridor of rock on the hill's side: (21 .. 23, 3), its way in from (20, 3), the power-up on (23, 3)
         bool vault{false};           // a second pile on the hill's side: a crackers pile on (21 .. 22, 4 .. 5) in a ring of rock (x 20 .. 23, y 3 .. 6) whose way in, (21, 6) and
                                      // (21, 7), holds two bombs of another team (a wall of one kind: the gate goals' own)
@@ -84,7 +83,7 @@ struct FieldWorld {
         place(13, 25, sim::AntType::Swimmer);
         if (o.fire_power_up) place(16, 25, sim::AntType::Fire);
         if (o.west_fire) place(3, 18, sim::AntType::Fire);
-        place(12, 8, sim::AntType::Bomber);
+        if (o.bomber_power_up) place(12, 8, sim::AntType::Bomber);
         TileCoord anchor{-1, -1};                                                   // (a crackers pile covers the 2 x 2 up and left of its anchor: the anchor of a drawing is its largest corner)
         for (const TileCoord cell : {TileCoord{14, 23}, TileCoord{15, 23}, TileCoord{14, 24}, TileCoord{15, 24}}) {
             const TileCoord c = w.at(cell.x, cell.y);
@@ -116,18 +115,7 @@ struct FieldWorld {
             }
             place(23, 3, sim::AntType::Bomber);
         }
-        if (o.away) {
-            for (int y = 35; y <= 48; ++y) {
-                for (int x = 34; x <= 47; ++x) {
-                    const TileCoord c = w.at(x, y);
-                    if (!((x == 40 || x == 41) && (y == 41 || y == 42))) sim.set_terrain(c.x, c.y, sim::TERRAIN_WATER);
-                }
-            }
-            place(41, 42, sim::AntType::Bomber);
-            sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(40, 41));
-        } else {
-            sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(8, 10));
-        }
+        sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(8, 10));
     }
     static bool moat(int x, int y) { return ((y == 21 || y == 26) && x >= 12 && x <= 17) || ((x == 12 || x == 17) && y >= 21 && y <= 26); }
     static bool pile_cell(int x, int y) { return (x == 14 || x == 15) && (y == 23 || y == 24); }
@@ -451,7 +439,7 @@ void run_field_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI29.7 Who Plays It: Medium And Hard On A Field World, Not Easy, Not With The Switch Off, Not Without A Source Of The Fire Ant, Not Without An Ant That Can Start The Work (The Gate Goals Play Then); The Gate Goals Leave Its Piles To It (Every Seat, Straight And Transposed)") {
+    TEST_CASE("AI29.7 Who Plays It: Medium And Hard On A Field World, Not Easy, Not With The Switch Off, Not Without A Source Of The Fire Ant, Not Without A Source Of The First Work's Kind (The Gate Goals Play Then); The Gate Goals Leave Its Piles To It (Every Seat, Straight And Transposed)") {
         for (uint8_t d = 0; d < 8; ++d) {
             const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
             const auto decided = [&](Level level, bool field_switch, const FieldWorld::Options& o, bool& gate_map) {
@@ -475,9 +463,9 @@ void run_field_tests() {
             no_fire.fire_power_up = false;
             ASSERT_FALSE(decided(Level::Hard, true, no_fire, gate));
             ASSERT_TRUE(gate);
-            FieldWorld::Options away;                                                        // the bot's one ant gets a Bomber where nothing takes it on: the breach cannot start
-            away.away = true;
-            ASSERT_FALSE(decided(Level::Hard, true, away, gate));
+            FieldWorld::Options no_bomber;                                                   // no ant of the bot can get the first work's kind: the breach cannot start
+            no_bomber.bomber_power_up = false;
+            ASSERT_FALSE(decided(Level::Hard, true, no_bomber, gate));
             ASSERT_TRUE(gate);
             FieldWorld::Options mixed;                                                       // with a wall of one kind before a second pile: the piles of the breach are decided at the first look
             mixed.vault = true;

@@ -1,14 +1,16 @@
 #pragma once
 
 // FieldTask: the field breach (field_plan.hpp, docs/BOT_GATES.md "The field breach") with ONE ant. Medium and Hard, on a gate map whose pile lies behind a field at the start
-// (Tactics::field_map: its route has fire cells or bombs, and no walk with only one kind of them open reaches it).
+// (Tactics::field_map: its route has fire cells or bombs, and no walk with only one kind of them open reaches it), for the piles of Tactics::field_piles.
 //
 //   look       plan_field on the grid as it is; with work to do, next_field_step for the breach ant once it stands, and that step's order
 //   the ant    one ant does the whole breach (it takes power-ups, defuses, bridges, puts fire out): the bot's ant that is nearest to the kind the work needs (an ant of the kind, or one
 //              that walks to a power-up of it), the hill's side first; held at the rank of the gate goals
 //   orders     one at a time, and only to an ant that stands: the next once the one before has left (Bot::on_command) and the ant stands again. A step that changes nothing of the ant
-//              (tile, hit points, kind) for `step_ticks`, or one that is Stuck, gives the ant up: it is not taken again for `rest_ticks`, and after `ants_max` ants given up the task
-//              waits until the bot's ants or the power-ups change
+//              (tile, hit points, kind) for `step_ticks`, the same order `repeats_max` times with nothing of the ant changed, two power-ups taken in turn, or a step that is Stuck
+//              gives the ant up: it is not taken again for `rest_ticks`, and after `ants_max` ants given up the task waits until the bot's ants or the power-ups change
+//   bombs      the bombs of the seat (or its ally) at the task's first look are the map's own: work like any other bomb; one is forgotten once it is gone (a bomb planted on its
+//              tile later is the ant's own, a hop's)
 //   end        the work done (no fire cell or bomb on the route, and a Swimmer for a route that swims): the ant is free again, and the task looks again every `look_every` ticks
 
 #include <cstdint>

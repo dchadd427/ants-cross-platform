@@ -4,14 +4,17 @@
 // the hill crosses fire cells or bombs and a walk with only one kind of them open does not exist (the pile is Sealed or Mixed for GateInfo: POPcOrN and its family). A pure function of
 // the grid as it is and the look: no orders, no clock, no randomness. FieldTask (field_task.hpp) carries the steps out.
 //
-//   route       the carriers' way from the hill to the pile, walking and swimming: its fire cells are put out by a Fire Ant, its bombs defused by a Bomber (the cheapest pile)
+//   route       the carriers' way from the hill to the pile, walking and swimming: its fire cells are put out by a Fire Ant, its bombs defused by a Bomber (the cheapest pile of the
+//               breach: FieldHints::piles, else the piles that are Sealed or Mixed at this look)
 //   fire way    the way of a Fire Ant from its source (one of the bot's Fire Ants, or a Fire power-up) to a side of a fire cell of the route: it walks through fire walls; a bomb
 //               on it is defused first, a water tile on it is bridged first (a Fire Ant can do neither)
 //   swim way    the way of a Swimmer from its source to the land beside the water of the fire way (it swims; a bomb on it is defused first)
-//   the work    the bombs of the three ways (a Bomber's), the water of the fire way (a Swimmer's), the fire cells of the route (a Fire Ant's), in this order: a Swimmer cannot defuse,
-//               a Fire Ant can neither defuse nor swim. A route that swims needs a Swimmer to carry at the end.
+//   the work    the bombs of the three ways and of the carriers' walks between the hill and the pile (a Bomber's: the engine's walk goes over another team's bomb, so every walk
+//               within half a step of the cheapest, and the bombs round the pile), the water of the fire way (a Swimmer's), the fire cells of the route (a Fire Ant's), in this
+//               order: a Swimmer cannot defuse, a Fire Ant can neither defuse nor swim. A route that swims needs a Swimmer to carry at the end.
 //   the step    what the breach ant does next: it takes a power-up of the kind the work needs, steps one tile on its way, or works a target from a side of it (N, S, W or E); a
 //               Bomber that no dig brings to its work hops with a bomb of its own (the fewest bombs first: where a chain over the map's bombs stops at a dud the ant stays).
+//               An ant that took a power-up leaves its own on a free land tile beside the one it takes: it never takes one where that would shut it in.
 //               The engine's paths walk over bombs, and an ability is worked from the first free side of the target nearest the ant (N, S, W, E; a bomb counts as free):
 //               so in the field the ant only ever steps to a tile next to it, and works a target from the side it stands on. A walk of several tiles is ordered only over
 //               ground with no bomb on or next to it.
@@ -100,7 +103,7 @@ FieldStep next_field_step(const FieldPlan& plan, const BotView& view, const MapI
 /// away from the hill's side or hurt. -1: it cannot get one.
 int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant);
 
-/// The breach can start: an ant of the bot gets the kind of the first work (field_ant_cost), and as that kind, where it gets it, it has a step toward the work (not Stuck)
+/// The breach can start: an ant of the bot gets the kind of the first work (field_ant_cost)
 bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat);
 
 }  // namespace ants::ai

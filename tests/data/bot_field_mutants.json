@@ -116,10 +116,10 @@
    "expect": "AI29.12"
   },
   {
-   "id": "start_where_stuck",
+   "id": "start_without_a_source",
    "file": "src/ants_ai/field_plan.cpp",
-   "old": "if (next_field_step(plan, view, map, seat, as, FieldHints{}).action != FieldAction::Stuck) return true;",
-   "new": "if (next_field_step(plan, view, map, seat, as, FieldHints{}).action != FieldAction::None) return true;",
+   "old": "        if (field_ant_cost(plan, view, map, seat, a) >= 0) return true;",
+   "new": "        if (field_ant_cost(plan, view, map, seat, a) >= -1) return true;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.7"
   },
@@ -283,6 +283,14 @@
    "new": "    rules.field_piles.clear();",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.8"
+  },
+  {
+   "id": "field_rank_low",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    ledger_.set_rank(kField, kRankGates);",
+   "new": "    ledger_.set_rank(kField, kRankPowerUps);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI21.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI21.1"
   }
  ]
 }
