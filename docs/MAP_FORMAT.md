@@ -55,7 +55,7 @@ On hostile input the reader never asks for memory for a count before it has the 
 | `food_block_ended_early` | warning | Block 2 ends where its count says. A pile without stages ends it on the spot (0x1006dc9), and blocks 3, 4 and the egg word are read from the bytes behind it. |
 | `version_not_8` | fatal | Version 8: any other is "wrong version", and the match starts without a map (0x1006386). |
 | `description_too_long` | warning | A description of at most 29 characters: the original reads 30 bytes without a check (0x10063c3), and 30 leave no zero byte to end the text. |
-| `grid_empty`, `grid_too_large`, `layers_not_grid` | fatal | 1 to 256 rows and columns (an object's anchor holds its row and its column in a byte each), and, for a level in memory, layers of rows x columns cells. |
+| `grid_empty`, `grid_too_large`, `layers_not_grid` | fatal | 1 to 256 rows and columns, the remake's own limits (the original loads 0 rows into a map without a cell; an object's anchor holds its row and its column in a byte each), and, for a level in memory, layers of rows x columns cells. |
 | `dictionary_too_large` | fatal | At most 1,344 names: more overrun the original's buffer of 0x1500 bytes (0x1006795). |
 | `tile_outside_dictionary` | fatal | Every tile of the layers, of block 1, of the food stages and of block 3 inside the dictionary: the remap table is read with the raw index (0x10067a5, 0x1007057), and 0x100665a indexes an array on the stack with what it read. The empty tile 0x7FFE of a layer-2 cell, a stage and block 3 is no tile. |
 | `ground_missing` | warning | Every ground cell has a tile: the terrain class is a table of the 1,344 ids (FUN_01008af7), and the empty tile 0x7FFE on layer 1 is read past its end. |
@@ -69,7 +69,7 @@ On hostile input the reader never asks for memory for a count before it has the 
 | `food_pile_not_shown` | note | A food pile whose stage tile is such a tile: SetTile (FUN_01007352) places nothing, so there is no pile from that stage on (the remake does the same). |
 | `object_outside_map` | note | Plants and waypoints outside the grid: the original ignores them. |
 
-The profile's choices: the mode is a note, because the original never reads it; the rules from `ground_missing` to `hill_without_entrance` and the notes from `hill_not_whole` on were found in the same notes (a map maker's own maps never break them: its dictionary names every tile it uses, and its hills are whole). Tests: `test_original_safe` (suite 1.7): for every rule a level that breaks it and one that keeps it at its boundary, the files that the reader refuses, 3,000 files with bytes changed at random (fixed seeds), each of which works in the original only when the remake plays it without a warning, and the library.
+The profile's choices: the mode is a note, because the original never reads it; `ground_missing`, `hill_without_entrance` and the notes from `hill_not_whole` on were found in the same notes, besides the rules that every map needs. A new map that takes the dictionary rule (below) and places whole hills never trips a note. Tests: `test_original_safe` (suite 1.7): for every rule a level that breaks it and one that keeps it at its boundary, the files that the reader refuses, 3,000 files with bytes changed at random (fixed seeds), each of which works in the original only when the remake plays it without a warning, and the library.
 
 **The library** (`test_original_safe` S5): **516 of the 540 maps work in the original game**, the six original maps among them, with no finding at all. The 24 others:
 
@@ -81,7 +81,7 @@ The profile's choices: the mode is a note, because the original never reads it; 
 | a food pile outside the map (`food_pile_outside_map`) | KiM Trez, TREZ OF COMBAT, TREZ OF LIFE |
 | two hills without an entrance (`hill_without_entrance`) | IcoN, Mud Wars |
 
-The 12 files that are cut short work once they are rewritten (the rewrite holds the waypoints read and the egg word that the remake plays, 0) unless something else stops them (Conquer's description). Notes: tiles named `.` that the map uses on 93 maps, hills that are not whole on 36, plants or waypoints outside the grid on 36, food piles that do not show on 34, a mode other than 1 on 14.
+11 of the 12 files that are cut short work once they are rewritten (the rewrite holds the waypoints read, whole, and the egg word that the remake plays, 0); Conquer's description still stops it. Notes: tiles named `.` that the map uses on 93 maps, hills that are not whole on 36, plants or waypoints outside the grid on 36, food piles that do not show on 34, a mode other than 1 on 14.
 
 ## The round-trip law
 
