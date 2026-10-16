@@ -23,12 +23,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.59 - 2026-10-16 - Walled maps: the bots leave the map's own bombs to their plan
 
 **For players:**
 - **On walled maps the computer players no longer waste their ants on the map's own bombs:** a Medium or Hard bot working its way to walled-off food (POPcOrN) leaves the map's bombs to its plan instead of sending ants to set them off or to defuse them one by one. Alone on POPcOrN a Hard bot now scores about 620 points a game instead of 415 (Medium 444 instead of 273); in a match on POPcOrN the bots still score nothing ([why](docs/BOT_GATES.md)).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/39cbcd11...c79b1dee), [walled maps](docs/BOT_GATES.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/39cbcd11...21cd9a95), [walled maps](docs/BOT_GATES.md)
 
 ## v0.12.58 - 2026-10-16 - Bots go for the contested food first
 
