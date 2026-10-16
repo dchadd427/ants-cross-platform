@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...4f3d8cbb)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...d0c7f9a8)
 
 ## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
 
