@@ -67,25 +67,6 @@ struct Field {
     }
 };
 
-// A world of seat 0 (its hill at (4, 4) of a 60 x 60 field) drawn for another seat and straight or transposed: transposed first (x and y swapped: seat 0's corner stays), then mirrored to
-// the seat's corner (the hills of empty_field are mirror images of each other over x' = 57 - x and y' = 57 - y). A line across the field (a wall) is all 60 tiles of a row of seat 0's world.
-struct Drawing {
-    uint8_t seat{0};
-    bool transposed{false};
-    TileCoord at(int x, int y) const {
-        if (transposed) std::swap(x, y);
-        if (seat == 1 || seat == 3) x = 57 - x;
-        if (seat == 2 || seat == 3) y = 57 - y;
-        return TileCoord{x, y};
-    }
-    std::vector<TileCoord> row(int y) const {                                        // the tiles of row `y` of seat 0's world across the whole field
-        std::vector<TileCoord> out;
-        const int r = (seat == 2 || seat == 3) ? 57 - y : y;
-        for (int k = 0; k < 60; ++k) out.push_back(transposed ? TileCoord{(seat == 1 || seat == 3) ? 57 - y : y, k} : TileCoord{k, r});
-        return out;
-    }
-};
-
 LevelPlan goal_plan(Level level = Level::Hard) {
     return peace_plan(level);                                                      // (the gate play needs no switch: a walled world is enough)
 }
