@@ -564,6 +564,33 @@ struct World {
         }
         return cond();
     }
+    // The counters of the door (Server::accepted, refused, scripted) are counted when the listener's accept finds a link, and a busy machine (a Mac's loopback is handled by a kernel thread, and a CI runner has
+    // other jobs) can be late with that by far more than the 10 ms of real time in which a test runs 3 s of game time. So a test that asserts a count the game clock has made certain (an attempt of the way back
+    // was made, so the door must have seen it) WAITS for it: in real time, with the game clock standing still, so that nothing times out meanwhile. `real_ms` is a deadline on the steady clock.
+    bool wait_real(const std::function<bool()>& cond, uint32_t real_ms = 20000) {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(real_ms);
+        while (!cond()) {
+            if (std::chrono::steady_clock::now() >= end) return false;
+            pump();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return true;
+    }
+    // ... and a count that is taken as "what there was", to show that nothing comes after it, is taken once the door is quiet: no counter has moved for `quiet_ms` of real time (a link that was made before is
+    // counted before it, not after)
+    void settle(uint32_t quiet_ms = 200) {
+        const auto total = [this]() { return server.accepted + server.refused + server.scripted; };
+        uint32_t seen = total();
+        auto since = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - since < std::chrono::milliseconds(quiet_ms)) {
+            pump();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (total() != seen) {
+                seen = total();
+                since = std::chrono::steady_clock::now();
+            }
+        }
+    }
     RoomStatus status(const std::string& code) const { return server.status(code, now); }
     // The match is under way on every machine given: it plays and has run ticks
     bool running(std::initializer_list<Machine*> ms) const {

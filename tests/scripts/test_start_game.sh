@@ -184,10 +184,19 @@ exit 0
 FAKE
 chmod +x "$WORK/fake_cmake" "$WORK/build/src/ants_app/ants" "$WORK/start_game.sh"
 OLD_GAME_RAN() { [ -f "$WORK/game.ran" ] && wc -l < "$WORK/game.ran" | tr -d ' ' || echo 0; }
+# limited SECONDS COMMAND...: runs the command in a process group of its own and waits for it, SECONDS at the most. At the deadline the whole group is told SIGTERM and, 5 s later, SIGKILL (a window that lives would
+# hold the output of a $( ) open for ever), and the status is 142. (perl is on every machine that runs this test: the e2e script uses it for its alarms.)
+limited() {
+    perl -e 'my $secs = shift; my $late = 0; my $pid = fork; defined $pid or exit 127; if (!$pid) { setpgrp(0, 0); exec @ARGV; exit 127 }
+        $SIG{ALRM} = sub { if ($late) { kill "KILL", -$pid } else { $late = 1; kill "TERM", -$pid; alarm 5 } };
+        alarm $secs; my $r; do { $r = waitpid($pid, 0) } while ($r == -1 && $!{EINTR}); exit($late ? 142 : $? >> 8)' "$@"
+}
 run_copy() {   # run_copy ARGS...: runs the copy of the script with the fake cmake; prints nothing, sets STATUS and OUTPUT
     : > "$WORK/cmake.log"
-    OUTPUT="$(cd "$WORK" && FAKE_CMAKE_LOG="$WORK/cmake.log" ANTS_CMAKE="$WORK/fake_cmake" ANTS_PORT=45899 ./start_game.sh "$@" 2>&1)"
+    # (the rig waits for its windows and for the host's room: the fake windows end at once, but a run that did not end would hang this script and the CI step for ever: it has 60 s)
+    OUTPUT="$(cd "$WORK" && FAKE_CMAKE_LOG="$WORK/cmake.log" ANTS_CMAKE="$WORK/fake_cmake" ANTS_PORT=45899 limited 60 ./start_game.sh "$@" 2>&1)"
     STATUS=$?
+    if [ "$STATUS" -eq 142 ]; then check "HUNG: start_game.sh $* (a copy, with a fake game and a fake cmake) did not end within 60 s: it waits for a window of the rig or for the host's room" 1; fi
 }
 # the game is there already (an old build) and ./build has no cache: the script configures and builds anyway
 run_copy --single
