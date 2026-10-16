@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none. Network protocol 21 and the server are as before; only the pace of the page's requests changed.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60fb1ebc...60fb1ebc), [the page's pace](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/60fb1ebc...a8f66c2d), [the page's pace](docs/PLAY_IN_BROWSER.md#chat-in-the-lobby)
 
 ## v0.12.51 - 2026-10-15 - Match stats: over time and activity
 
