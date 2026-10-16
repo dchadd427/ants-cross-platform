@@ -69,6 +69,7 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
         return "the grid has " + grid_text(rows, columns) + ", more than the " + num(limits.rows()) + " x " + num(limits.columns()) + " allowed here";
     }
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;
+    if (cells > limits.cells()) return "the grid has " + grid_text(rows, columns) + ", " + num(cells) + " cells, more than the " + num(limits.cells()) + " allowed here";
     if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
         return "the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " +
                num(columns) + " = " + num(cells);

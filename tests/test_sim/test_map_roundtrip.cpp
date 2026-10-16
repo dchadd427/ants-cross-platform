@@ -3,7 +3,7 @@
 //   1. the file is read, written by write_level and the bytes are read again: the two levels are the same map (same_level: every field that a file holds);
 //   2. the rewrite differs from the file only where the original never reads a byte or where the file was cut short (describe_rewrite: no unexplained byte), and
 //      those differences are counted by kind (the numbers that the document gives);
-//   3. the rewrite is canonical: written again it is the same bytes, and the same within the limits of a new map (LevelLimits::for_new_maps()) where it fits them;
+//   3. the rewrite is canonical: written again it is the same bytes, and the same within the limits of a new map (LevelLimits::for_new_maps(), which every map fits);
 //   4. the file and its rewrite PLAY the same: two engines, one on each, with the four teams and the scripted players of the map sweep (tests/common/scripted_players.hpp),
 //      have the same full state hash at the start and after every game second, for kPlayTicks ticks.
 // The counts of the library (and of the dictionaries by the rule of the original maps) are those of docs/MAP_FORMAT.md. `test_map_roundtrip --ticks N` plays N ticks
@@ -176,6 +176,7 @@ int main(int argc, char* argv[]) {
     size_t largest = 0;
     std::string largest_name;
     std::vector<std::string> beyond_new_limits;     // the maps whose rewrite LevelLimits::for_new_maps() refuses, with the reason
+    std::vector<std::string> files_beyond;          // the files that a reader with those limits refuses as they are (before a rewrite), with the reason
     const std::vector<uint8_t> archive = read_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
     const std::vector<std::string> tile_names = ants::assets::tile_names_from_chd(archive.data(), archive.size());
     check(tile_names.size() == 1344u, "the tile names of ants.chd");
@@ -229,6 +230,9 @@ int main(int argc, char* argv[]) {
         } else {
             beyond_new_limits.push_back(m.name + ": " + limited.error);
         }
+        LevelData as_file;
+        ants::assets::LevelValidation file_report;
+        if (!as_file.load_from_memory(source.data(), source.size(), &file_report, LevelLimits::for_new_maps())) files_beyond.push_back(m.name + ": " + file_report.reason());
         if (w.bytes.size() > largest) {
             largest = w.bytes.size();
             largest_name = m.name;
@@ -268,11 +272,14 @@ int main(int argc, char* argv[]) {
         check(largest == 113880u, "the largest rewrite is 113,880 bytes (Easy jungle): " + std::to_string(largest));
         // the dictionaries (docs/MAP_FORMAT.md, "The dictionary of a new map"): the six original maps follow the rule, 24 of the 534 players' maps do
         check(originals_rule == 6 && players_rule == 24, "the dictionaries by the originals' rule: " + std::to_string(originals_rule) + " originals, " + std::to_string(players_rule) + " players' maps");
-        // the limits of a new map (100 x 100 cells, 120 KB) hold every rewrite but one: Bomb Races has 129 columns
-        check(beyond_new_limits.size() == 1u && beyond_new_limits[0] == "Bomb Races.lvl: the grid has 40 rows x 129 columns, more than the 100 x 100 allowed here",
-              "one map is beyond the limits of a new map (Bomb Races, 40 x 129): " + std::to_string(beyond_new_limits.size()));
+        // the limits of a new map (10,000 cells, 130 a side, 144 KB) hold every map of the library: any of them can be the start of a new map
+        check(beyond_new_limits.empty(), "every map of the library is within the limits of a new map: " + std::to_string(beyond_new_limits.size()) + " are not");
+        // as it is, one file is not: BOMBERWORLD has 176,741 bytes after its egg word, which its rewrite (58,853 bytes) drops
+        check(files_beyond.size() == 1u && files_beyond[0] == "BOMBERWORLD.lvl: the file has 235594 bytes, more than the 147456 allowed here: nothing of it is read",
+              "one file of the library is larger than a new map as it is (BOMBERWORLD): " + std::to_string(files_beyond.size()));
     }
     for (const std::string& b : beyond_new_limits) std::cout << "  beyond the limits of a new map: " << b << "\n";
+    for (const std::string& b : files_beyond) std::cout << "  as a file beyond the limits of a new map: " << b << "\n";
     std::cout << "\n" << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

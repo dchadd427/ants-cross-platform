@@ -416,18 +416,38 @@ void w2_refusals() {
         CHECK(write_level(every_field()).ok);                                       // (the level they all start from is written)
     });
 
-    run_case("W2.2 The Limits Of A New Map: 100 x 100 Cells, 120 KB; A Blank 100 x 100 Map Is 125,408 Bytes (Over The 120 KB), 98 x 98 Fits; The Game's Limits Take Both", [] {
+    run_case("W2.2 The Limits Of A New Map, 10,000 Cells, 130 A Side, 144 KB: 100 x 100 With The Largest Dictionary And 12,584 Bytes Of Blocks Fits, So Does 40 x 129; 131 A Side, 10,100 Cells Or One More Waypoint Do Not", [] {
         const std::vector<std::string> names(1344, "n");
         const LevelLimits new_map = LevelLimits::for_new_maps();
-        const LevelData big = blank_level(100, 100, names);
-        const LevelWriteResult game = write_level(big);
-        CHECK_MSG(game.ok && game.bytes.size() == 125408u, game.error);
-        const LevelWriteResult limited = write_level(big, new_map);
-        CHECK(!limited.ok && limited.error.find("the file would have 125408 bytes, more than the 122880 allowed here") != std::string::npos);
-        CHECK(write_level(blank_level(98, 98, names), new_map).ok);
-        const LevelWriteResult wide = write_level(blank_level(40, 101, names), new_map);
-        CHECK(!wide.ok && wide.error.find("40 rows x 101 columns, more than the 100 x 100 allowed here") != std::string::npos);
-        CHECK(write_level(blank_level(40, 101, names)).ok);
+        // a blank 100 x 100 map: 42 + 486 x 11 + 8 + 10,000 x 12 + 12 bytes
+        const LevelData blank = blank_level(100, 100, names);
+        const LevelWriteResult written = write_level(blank, new_map);
+        CHECK_MSG(written.ok && written.bytes.size() == 125408u, written.error);
+        // with the largest dictionary, 1,344 names: 134,846 bytes; 242 waypoints with a trigger (52 bytes each) fill the 147,456 bytes to 147,430, one more is over
+        LevelData full = blank;
+        full.tile_dictionary.assign(1344, "n");
+        full.tile_type_count = 1343;
+        const LevelWriteResult largest = write_level(full, new_map);
+        CHECK_MSG(largest.ok && largest.bytes.size() == 134846u, largest.error);
+        Waypoint trigger;
+        trigger.flag = 1;
+        trigger.param = 5;
+        trigger.probabilities = {1.0, 0.0, 0.0, 0.0, 0.0};
+        full.waypoints.assign(242, trigger);
+        const LevelWriteResult filled = write_level(full, new_map);
+        CHECK_MSG(filled.ok && filled.bytes.size() == 147430u, filled.error);
+        full.waypoints.push_back(trigger);
+        const LevelWriteResult over = write_level(full, new_map);
+        CHECK(!over.ok && over.error.find("the file would have 147482 bytes, more than the 147456 allowed here") != std::string::npos);
+        CHECK(write_level(full).ok);
+        // the grid: Bomb Races's 40 x 129 fits; 131 a side or 10,100 cells do not
+        CHECK(write_level(blank_level(40, 129, names), new_map).ok);
+        CHECK(write_level(blank_level(130, 76, names), new_map).ok);
+        const LevelWriteResult side = write_level(blank_level(131, 1, names), new_map);
+        CHECK(!side.ok && side.error.find("131 rows x 1 columns, more than the 130 x 130 allowed here") != std::string::npos);
+        const LevelWriteResult cells = write_level(blank_level(101, 100, names), new_map);
+        CHECK(!cells.ok && cells.error.find("101 rows x 100 columns, 10100 cells, more than the 10000 allowed here") != std::string::npos);
+        CHECK(write_level(blank_level(131, 1, names)).ok && write_level(blank_level(101, 100, names)).ok);   // the game's limits take them
         LevelLimits few_names = LevelLimits{};
         few_names.max_dictionary_names = 100;
         const LevelWriteResult dictionary = write_level(blank_level(5, 5, names), few_names);  // (the blank map's dictionary has 486 names)

@@ -1198,16 +1198,18 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         ASSERT_TRUE(move_assigned.for_roster(0x05).validate().has(LevelProblemKind::ModeIgnored));
     } TEST_END();
 
-    TEST_CASE("6c.12 The Limits Of The Place That Reads: The Defaults Are The Game's (256 x 256, 1344 Names, Any Size); A New Map's Are 100 x 100 And 120 KB; A Limit Only Tightens") {
+    TEST_CASE("6c.12 The Limits Of The Place That Reads: The Defaults Are The Game's (256 A Side, 1344 Names, Any Size); A New Map's Are 10,000 Cells, 130 A Side And 144 KB; A Limit Only Tightens") {
         const LevelLimits game;
         const LevelLimits new_map = LevelLimits::for_new_maps();
         ASSERT_EQ(game.rows(), 256u);
         ASSERT_EQ(game.columns(), 256u);
+        ASSERT_EQ(game.cells(), 65536u);
         ASSERT_EQ(game.dictionary_names(), static_cast<size_t>(1344));
-        ASSERT_EQ(new_map.rows(), 100u);
-        ASSERT_EQ(new_map.columns(), 100u);
+        ASSERT_EQ(new_map.rows(), 130u);
+        ASSERT_EQ(new_map.columns(), 130u);
+        ASSERT_EQ(new_map.cells(), 10000u);
         ASSERT_EQ(new_map.dictionary_names(), static_cast<size_t>(1344));
-        ASSERT_EQ(new_map.max_file_bytes, static_cast<size_t>(122880));
+        ASSERT_EQ(new_map.max_file_bytes, static_cast<size_t>(147456));
         // the size of the file: refused before a byte is read, from memory and from a file
         {
             const LevelLimits small_file{256, 256, 1344, tiny.size() - 1};
@@ -1223,25 +1225,40 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
             ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, LevelLimits{256, 256, 1344, tiny.size()}).playable);   // exactly the limit
             ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, new_map).clean());
         }
-        // the grid: 101 rows or columns are the game's map and no new map's
-        for (const auto& dims : {std::pair<uint32_t, uint32_t>{101, 1}, std::pair<uint32_t, uint32_t>{1, 101}, std::pair<uint32_t, uint32_t>{101, 101}}) {
-            const std::vector<uint8_t> d = flat_map(4, dims.first, dims.second, dims.first, dims.second);
+        // the grid: 131 rows or columns, or more than 10,000 cells, are the game's map and no new map's
+        struct Grid { uint32_t rows; uint32_t columns; const char* words; };
+        for (const Grid& g : {Grid{131, 1, "131 rows x 1 columns, more than the 130 x 130 allowed here"}, Grid{1, 131, "1 rows x 131 columns, more than the 130 x 130 allowed here"},
+                              Grid{101, 100, "101 rows x 100 columns, 10100 cells, more than the 10000 allowed here"},
+                              Grid{100, 101, "100 rows x 101 columns, 10100 cells, more than the 10000 allowed here"}}) {
+            const std::vector<uint8_t> d = flat_map(4, g.rows, g.columns, g.rows, g.columns);
             LevelData m;
             ASSERT_TRUE(m.load_from_memory(d.data(), d.size()));
             ASSERT_TRUE(m.validate(0x0F).playable);
             const LevelValidation tight = m.validate(0x0F, new_map);
             ASSERT_TRUE(has_fatal(tight, LevelProblemKind::GridTooLarge));
-            ASSERT_TRUE(tight.reason().find("more than the 100 x 100 allowed here") != std::string::npos);
+            ASSERT_TRUE(tight.reason().find(g.words) != std::string::npos);
             LevelValidation v;
             ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v, new_map));
             ASSERT_TRUE(v.parsed);
             ASSERT_TRUE(has_fatal(v, LevelProblemKind::GridTooLarge));
             ASSERT_FALSE(LVLParser::check_memory(d.data(), d.size(), 0x0F, new_map).playable);
         }
-        {
-            const std::vector<uint8_t> d = flat_map(4, 100, 100, 100, 100);
+        // 100 x 100, 130 x 76 (9,880 cells), and Bomb Races's 40 x 129 are new maps
+        for (const Grid& g : {Grid{100, 100, ""}, Grid{130, 76, ""}, Grid{76, 130, ""}, Grid{40, 129, ""}}) {
+            const std::vector<uint8_t> d = flat_map(4, g.rows, g.columns, g.rows, g.columns);
             LevelData m;
             ASSERT_TRUE(m.load_from_memory(d.data(), d.size(), nullptr, new_map));
+            ASSERT_TRUE(m.validate(0x0F, new_map).playable);
+        }
+        // a limit of cells alone
+        {
+            const std::vector<uint8_t> d = flat_map(4, 10, 10, 10, 10);
+            LevelData m;
+            LevelValidation v;
+            LevelLimits ninety_nine;
+            ninety_nine.max_cells = 99;
+            ASSERT_FALSE(m.load_from_memory(d.data(), d.size(), &v, ninety_nine));
+            ASSERT_TRUE(mentions(v, "100 cells, more than the 99 allowed here"));
         }
         // the dictionary: a tighter limit is kept, and so is the original's
         {
@@ -1257,8 +1274,9 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         }
         // a limit above the default is the default: 257 rows and 1345 names stay refused
         {
-            const LevelLimits loose{1000, 1000, 5000, static_cast<size_t>(-1)};
+            const LevelLimits loose{1000, 1000, 5000, static_cast<size_t>(-1), 1000000};
             ASSERT_EQ(loose.rows(), 256u);
+            ASSERT_EQ(loose.cells(), 65536u);
             ASSERT_EQ(loose.dictionary_names(), static_cast<size_t>(1344));
             const std::vector<uint8_t> rows = flat_map(4, 257, 1, 257, 1);
             const std::vector<uint8_t> names = flat_map(1345, 1, 1, 1, 1);

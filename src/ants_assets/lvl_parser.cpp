@@ -216,6 +216,10 @@ void collect_layout_problems(const LevelData& level, const LevelLimits& limits, 
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(limits.rows()) + " x " + num(limits.columns()) +
                     " allowed here (a new map, or one brought in now, may have at most that)");
+    } else if (static_cast<uint64_t>(rows) * columns > limits.cells()) {
+        add_problem(out, Severity::Fatal, Kind::GridTooLarge,
+                    "the grid has " + num(rows) + " rows x " + num(columns) + " columns, " + num(static_cast<uint64_t>(rows) * columns) + " cells, more than the " +
+                    num(limits.cells()) + " allowed here (a new map, or one brought in now, may have at most that)");
     }
     if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
         add_problem(out, Severity::Fatal, Kind::DictionaryTooLarge,

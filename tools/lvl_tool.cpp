@@ -6,7 +6,7 @@
 //   lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]
 //                                                            a new map of plain ground, its dictionary by the rule of the original maps (names from ants.chd)
 //       --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15)
-//       --new-map      hold the file to the limits of a new map: at most 100 x 100 cells and 120 KB (LevelLimits::for_new_maps)
+//       --new-map      hold the file to the limits of a new map: at most 10,000 cells, 130 a side and 144 KB (LevelLimits::for_new_maps)
 //       --chd FILE     where the tile names are read (default: the archive of this checkout, Original-Ants/ants.chd)
 //   lvl_tool --selftest                                      checks the tool itself (the command line, the four commands and their exit codes) in a scratch folder
 //
@@ -48,7 +48,7 @@ void usage(std::ostream& out) {
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns, its dictionary by the rule of the original maps\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
-           "  --new-map      the limits of a new map: at most 100 x 100 cells and 120 KB\n"
+           "  --new-map      the limits of a new map: at most 10,000 cells, 130 a side and 144 KB\n"
            "  --chd FILE     the archive with the tile names (default: Original-Ants/ants.chd of this checkout)\n"
            "  --selftest     check the tool itself\n";
 }
@@ -447,12 +447,12 @@ int selftest() {
         const Run three = run_words({"check", marker_path, "--roster", "14"});
         t.check(three.status == 0 && has(three.out, "marker.lvl: plays with red, blue and black; notes:") && has(three.out, "  note start_marker_outside_grid: "),
                 "check --roster 14: red, blue and black play, the marker is a note");
-        // a grid of 101 columns: a map of the game, not a new map
-        LevelData wide = blank_level(4, 101, std::vector<std::string>(1344, "n"));
+        // a grid of 131 columns: a map of the game, not a new map (130 a side at the most)
+        LevelData wide = blank_level(4, 131, std::vector<std::string>(1344, "n"));
         const std::string wide_path = file_of("wide.lvl", write_level(wide).bytes);
-        t.check(run_words({"check", wide_path}).status == 0, "check: 4 x 101 plays");
+        t.check(run_words({"check", wide_path}).status == 0, "check: 4 x 131 plays");
         const Run limited = run_words({"check", wide_path, "--new-map"});
-        t.check(limited.status == 1 && has(limited.out, "more than the 100 x 100 allowed here"), "check --new-map: 101 columns are more than a new map has");
+        t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here"), "check --new-map: 131 columns are more than a new map has");
     }
 
     std::cout << "  info\n";
@@ -496,7 +496,7 @@ int selftest() {
         const Run cut = run_words({"rewrite", dir.file("cut.lvl"), dir.file("cut_out.lvl")});
         t.check(cut.status == 1 && has(cut.out, "does not load") && !fs::exists(dir.file("cut_out.lvl")), "rewrite: a file that does not load is not written");
         const Run limited = run_words({"rewrite", dir.file("wide.lvl"), dir.file("wide_out.lvl"), "--new-map"});
-        t.check(limited.status == 1 && has(limited.out, "more than the 100 x 100 allowed here") && !fs::exists(dir.file("wide_out.lvl")), "rewrite --new-map: 101 columns are not written");
+        t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here") && !fs::exists(dir.file("wide_out.lvl")), "rewrite --new-map: 131 columns are not written");
         t.check(run_words({"rewrite", tiny_path, dir.path.string()}).status == 2, "rewrite: a folder as OUT is exit 2");
     }
 
@@ -511,8 +511,9 @@ int selftest() {
                 "blank: the file reads back with its grid and its dictionary");
         t.check(run_words({"check", out}).status == 0, "blank: the file checks");
         const Run big = run_words({"blank", dir.file("big.lvl"), "--rows", "100", "--columns", "100", "--new-map"});
-        t.check(big.status == 1 && has(big.out, "the file would have 125408 bytes, more than the 122880 allowed here") && !fs::exists(dir.file("big.lvl")),
-                "blank --new-map: 100 x 100 is more than 120 KB");
+        t.check(big.status == 0 && has(big.out, "a blank map of 100 rows x 100 columns, 125408 bytes") && fs::exists(dir.file("big.lvl")), "blank --new-map: 100 x 100 is a new map");
+        const Run more = run_words({"blank", dir.file("more.lvl"), "--rows", "101", "--columns", "100", "--new-map"});
+        t.check(more.status == 1 && has(more.out, "10100 cells, more than the 10000 allowed here") && !fs::exists(dir.file("more.lvl")), "blank --new-map: 101 x 100 has too many cells");
         t.check(run_words({"blank", dir.file("huge.lvl"), "--rows", "300", "--columns", "3"}).status == 1, "blank: 300 rows are more than the game hosts");
         t.check(run_words({"blank", dir.file("x.lvl"), "--rows", "3", "--columns", "3", "--chd", tiny_path}).status == 2, "blank: a --chd that is no archive is exit 2");
     }

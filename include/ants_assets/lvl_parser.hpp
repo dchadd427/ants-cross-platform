@@ -30,8 +30,8 @@ constexpr size_t   LVL_MAX_DICTIONARY_ENTRIES = 0x540;   // the original's tile 
 
 /**
  * @brief The limits that a reader holds a file to and the writer (lvl_writer.hpp) a level to. The defaults are what the game reads: the original loader's tables
- * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE) and no limit on the size of the file, so that they refuse no map of the library.
- * A limit can only be made tighter: a value above a default counts as the default. A place that takes a map from a stranger or makes a new one passes
+ * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE a side) and no limit on the size of the file, so that they refuse no map of the
+ * library. A limit can only be made tighter: a value above a default counts as the default. A place that takes a map from a stranger or makes a new one passes
  * for_new_maps() (docs/MAP_FORMAT.md, "Limits").
  */
 struct LevelLimits {
@@ -39,13 +39,17 @@ struct LevelLimits {
     uint32_t max_columns{LVL_MAX_GRID_SIDE};
     size_t max_dictionary_names{LVL_MAX_DICTIONARY_ENTRIES};
     size_t max_file_bytes{std::numeric_limits<size_t>::max()};
+    uint32_t max_cells{LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE};       // rows x columns
 
-    /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 100 x 100 cells and 120 KB of file
-    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{100, 100, LVL_MAX_DICTIONARY_ENTRIES, 120u * 1024u}; }
+    /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 10,000 cells and 130 a side,
+    /// so that every map of the library fits (Bomb Races has 129 columns), and 144 KB of file, so that a 100 x 100 map with the largest dictionary fits with room
+    /// for its blocks
+    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 144u * 1024u, 10000}; }
 
     // the limits as they are applied (a value above the default is the default)
     constexpr uint32_t rows() const noexcept { return max_rows < LVL_MAX_GRID_SIDE ? max_rows : LVL_MAX_GRID_SIDE; }
     constexpr uint32_t columns() const noexcept { return max_columns < LVL_MAX_GRID_SIDE ? max_columns : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t cells() const noexcept { return max_cells < LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE ? max_cells : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE; }
     constexpr size_t dictionary_names() const noexcept { return max_dictionary_names < LVL_MAX_DICTIONARY_ENTRIES ? max_dictionary_names : LVL_MAX_DICTIONARY_ENTRIES; }
 };
 
