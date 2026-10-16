@@ -2,6 +2,7 @@ add_library(ants_assets STATIC
     mirroring.cpp
     chd_parser.cpp
     lvl_parser.cpp
+    lvl_writer.cpp
     asset_archive.cpp
     object_footprint.cpp
 )
