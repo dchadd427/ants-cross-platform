@@ -1,5 +1,5 @@
 // The race of the standard bot (contest batch, AI20.1): the report that the bots eat their food in a weird order, while the center food in the treasure map is contested on all four sides, so that is usually the starting
-// food, and what followed from it (docs/BOTS.md, "The race for contested food"). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
+// food, and what followed from it (docs/BOT_FOOD.md, "Easy: the race"; Medium and Hard play the denial order, AI28.x, so the cases of the race pin reserve_order off). Hand-made worlds (b41_helpers.hpp) and TREASURE, quick enough for suite 2.20.
 //
 //   AI20.1  the ants that the gate cannot use go to the contested piles first (on TREASURE every level, a contested pile before a safe one of higher value, the gate keeps its own ants, a pile that
 //           an enemy army holds is no race, a pile with two competitors stays one though an enemy is far nearer, the window, where nothing is contested and with fewer than six ants nothing changes)

@@ -1,0 +1,120 @@
+{
+ "note": "Mutants of the denial order of the standard bot (docs/BOT_FOOD.md) for tools/mutate.py: python3 tools/mutate.py tests/data/bot_food_mutants.json --keep-going --jobs 1 --timeout 1200. Every mutant must be caught (AI28.x of suite 2.20, the style cases AI11.8 and AI11.10, the legacy orders AI8.x).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "denial_order_off",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "const bool deny_on = params_.reserve_order && profile.value_aware_piles",
+   "new": "const bool deny_on = false && params_.reserve_order && profile.value_aware_piles",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.1"
+  },
+  {
+   "id": "medium_without_the_order",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.contest_opening_ants = 1;\n            p.reserve_order = true;",
+   "new": "            p.contest_opening_ants = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.1"
+  },
+  {
+   "id": "hard_without_the_order",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.contest_opening_ants = 2;\n            p.reserve_order = true;",
+   "new": "            p.contest_opening_ants = 2;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.1"
+  },
+  {
+   "id": "no_weight_for_multi",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            if (cls == static_cast<uint8_t>(PileClass::Multi)) k.rank = k.rank * static_cast<int64_t>(params_.deny_multi_percent) / 100;\n            else if",
+   "new": "            if (cls == static_cast<uint8_t>(PileClass::Multi)) (void)0;\n            else if",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.1"
+  },
+  {
+   "id": "no_weight_for_one",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "else if (cls == static_cast<uint8_t>(PileClass::One)) k.rank = k.rank * static_cast<int64_t>(params_.deny_one_percent) / 100;",
+   "new": "else if (cls == static_cast<uint8_t>(PileClass::One)) (void)0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.1 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.1"
+  },
+  {
+   "id": "a_rank_not_a_weight",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            k.cls = cls;\n            k.tier = 1;\n",
+   "new": "            k.cls = cls;\n            k.tier = cls == static_cast<uint8_t>(PileClass::Multi) ? 0 : 1;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.2 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.2"
+  },
+  {
+   "id": "no_threat",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "                    if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {\n                        k.tier = 0;",
+   "new": "                    if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {\n                        k.tier = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.3 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.3"
+  },
+  {
+   "id": "an_ally_is_a_threat",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "                for (const AntView& e : v.others()) {\n                    if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;\n                    if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {",
+   "new": "                for (const AntView& e : v.others()) {\n                    if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.3 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.3"
+  },
+  {
+   "id": "an_army_does_not_hold_it",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);\n            k.cls = cls;\n            k.tier = 1;",
+   "new": "            k.cls = cls;\n            k.tier = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.4 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.4"
+  },
+  {
+   "id": "first_does_not_own",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            uint8_t cls = tier_for(c, *info, ap.cost, true, true);",
+   "new": "            uint8_t cls = tier_for(c, *info, ap.cost, true);",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.4 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.4"
+  },
+  {
+   "id": "the_race_with_the_order",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "const bool race_on = !deny_on && params_.race",
+   "new": "const bool race_on = params_.race",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28. ./build/tests/test_ai/test_ai",
+   "expect": "AI28."
+  },
+  {
+   "id": "economic_contests",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "                p.race = false;                                                               // (no contest of the middle: that is the style)\n                p.reserve_order = false;\n",
+   "new": "                p.race = false;                                                               // (no contest of the middle: that is the style)\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI11.8 ./build/tests/test_ai/test_ai",
+   "expect": "AI11.8"
+  },
+  {
+   "id": "defensive_contests",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "                p.race = false;                                                               // (no contest of the middle)\n                p.reserve_order = false;\n",
+   "new": "                p.race = false;                                                               // (no contest of the middle)\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI11.10 ./build/tests/test_ai/test_ai",
+   "expect": "AI11.10"
+  },
+  {
+   "id": "the_experiments_lose_precedence",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": " && !params_.contest_aware && !params_.contest_reactive;",
+   "new": ";",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI8. ./build/tests/test_ai/test_ai",
+   "expect": "AI8."
+  }
+ ]
+}
