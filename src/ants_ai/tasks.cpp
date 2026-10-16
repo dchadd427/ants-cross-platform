@@ -562,22 +562,21 @@ void HarvestTask::step(TaskContext& c) {
         }
         if (deny_on) {
             // the denial order: what the seat leaves at a pile that others reach about as soon goes to them, so such a pile counts more; the piles that nobody competes for are
-            // the reserve and count as they are, unless an enemy ant is at one of them (it is being taken now: it goes first)
+            // the reserve and count as they are, unless an enemy ant is at one of them (it is being taken now: it counts as a pile that several enemies want)
             uint8_t cls = tier_for(c, *info, ap.cost, true, true);
             if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);
             k.cls = cls;
-            k.tier = 1;
-            if (cls == static_cast<uint8_t>(PileClass::Multi)) k.rank = k.rank * static_cast<int64_t>(params_.deny_multi_percent) / 100;
-            else if (cls == static_cast<uint8_t>(PileClass::One)) k.rank = k.rank * static_cast<int64_t>(params_.deny_one_percent) / 100;
-            else if (cls == static_cast<uint8_t>(PileClass::Safe) && params_.reserve_threat_tiles > 0) {
+            uint32_t weight = cls == static_cast<uint8_t>(PileClass::Multi) ? params_.deny_multi_percent : cls == static_cast<uint8_t>(PileClass::One) ? params_.deny_one_percent : 100u;
+            if (cls == static_cast<uint8_t>(PileClass::Safe) && params_.reserve_threat_tiles > 0) {
                 for (const AntView& e : v.others()) {
                     if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
                     if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {
-                        k.tier = 0;
+                        weight = params_.deny_multi_percent;
                         break;
                     }
                 }
             }
+            k.rank = k.rank * static_cast<int64_t>(weight) / 100;
         }
         cands.push_back(k);
     }

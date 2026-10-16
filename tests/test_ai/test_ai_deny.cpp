@@ -8,7 +8,7 @@
 //   AI28.1  a pile that every enemy reaches as soon as the seat goes before the seat's reserve of the same value with up to 2.3 times its trip (Medium, Hard); a pile that ONE
 //           enemy reaches (25 points a unit) goes before a reserve of 20 points with up to 1.7 times its trip, not before one of 25 points; Easy keeps its order
 //   AI28.2  a contested pile with 3.7 times the trip of the reserve does not go first: the denial value weighs the points per trip, it does not send the ants across the field
-//   AI28.3  a reserve pile with an enemy ant beside it goes before everything else (it is being taken); an ally's ant there is no threat
+//   AI28.3  a reserve pile with an enemy ant beside it counts as one that several enemies want (it is being taken) and goes before the middle; an ally's ant there is no threat
 //   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
