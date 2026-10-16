@@ -914,12 +914,16 @@ constexpr int32_t kAwayFromHill = 60;
 constexpr uint8_t kHurtHp = 5;
 constexpr int32_t kHurt = 40;
 
-int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant) {
+namespace {
+
+// field_ant_cost, and where the ant gets the kind (its own tile, or the power-up it takes)
+int32_t ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, sim::TileCoord& where) {
     const FieldWork work = plan.work();
     if (work == FieldWork::None || !view.has_grid()) return -1;
     const sim::AntType need = work == FieldWork::Bombs ? sim::AntType::Bomber : (work == FieldWork::Fire ? sim::AntType::Fire : sim::AntType::Swimmer);
     const Tiles t = read_tiles(view, seat, FieldHints{});
     int32_t cost = 0;
+    where = ant.tile;
     if (ant.type != need) {
         Mover m = mover_of(ant.type);
         m.token = -1;
@@ -927,11 +931,15 @@ int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo
         cost = kFar;
         for (const PowerUpView& p : view.powerups()) {
             if (p.kind != need || p.standing_team != 255 || shuts_in(t, view, ant, p.tile, need)) continue;
-            if (ant.tile.chebyshev_dist(p.tile) <= 1) cost = std::min(cost, kStep);
+            int32_t c = ant.tile.chebyshev_dist(p.tile) <= 1 ? kStep : kFar;
             for (int dir = 0; dir < 8; ++dir) {
                 const sim::TileCoord n{p.tile.x + kDx[dir], p.tile.y + kDy[dir]};
                 const uint8_t k = t.of(n);
-                if (k == kClear || (k == kWater && ant.type == sim::AntType::Swimmer)) cost = std::min(cost, reach.cost(t, n) + kStep);
+                if (k == kClear || (k == kWater && ant.type == sim::AntType::Swimmer)) c = std::min(c, reach.cost(t, n) + kStep);
+            }
+            if (c < cost) {
+                cost = c;
+                where = p.tile;
             }
         }
         if (cost >= kFar) return -1;
@@ -941,11 +949,22 @@ int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo
     return cost;
 }
 
+}  // namespace
+
+int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant) {
+    sim::TileCoord where{-1, -1};
+    return ant_cost(plan, view, map, seat, ant, where);
+}
+
 bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat) {
-    if (!view.has_grid() || !map.hill(seat).present) return false;
-    const Tiles t = read_tiles(view, seat, FieldHints{});
+    const FieldWork work = plan.work();
     for (const AntView& a : view.mine()) {
-        if (hill_walk(t, map, seat, a.tile) && field_ant_cost(plan, view, map, seat, a) >= 0) return true;
+        sim::TileCoord where{-1, -1};
+        if (ant_cost(plan, view, map, seat, a, where) < 0) continue;
+        AntView as = a;                                                                      // the ant as it is once it has the kind, where it gets it
+        as.type = work == FieldWork::Bombs ? sim::AntType::Bomber : (work == FieldWork::Fire ? sim::AntType::Fire : sim::AntType::Swimmer);
+        as.tile = where;
+        if (next_field_step(plan, view, map, seat, as, FieldHints{}).action != FieldAction::Stuck) return true;
     }
     return false;
 }

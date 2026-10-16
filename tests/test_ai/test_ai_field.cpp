@@ -9,11 +9,13 @@
 //   AI29.5   the Fire Ant's way leaves its power-up over water where the power-up that the ant leaves behind (on a free land tile beside it, the engine draws which) would shut a way
 //            over land
 //   AI29.6   the bombs of the seat's own colour that lay on the map at the start (many levels give the map's bombs to team 0) are work like any other; one planted since is a wall
-//   AI29.7   who plays it: Medium and Hard on a field world, not Easy, not with the switch off, not without a source of the Fire Ant (the gate goals play then); the gate goals leave the
-//            pile to it
+//   AI29.7   who plays it: Medium and Hard on a field world, not Easy, not with the switch off, not without a source of the Fire Ant, not when no ant of the bot can start the work
+//            (the gate goals play then); the piles of the breach are decided at the first look, and the gate goals leave them to it
 //   AI29.8   the breach in the engine: a Hard bot alone on the field world banks food, every seat, straight and transposed; and with the field's bombs in the seat's own colour
 //   AI29.9   POPcOrN: every seat alone banks food at Hard
 //   AI29.10  an ant whose order the world does not carry out is given up and rests; after four ants given up the task waits until the bot's ants or the power-ups change
+//   AI29.11  the carriers: a Swimmer of the ferry whose loop ended away from the pile is sent again
+//   AI29.12  an ant that took a power-up never takes one at the end of a corridor (the power-up it leaves would shut it in); an ant of the level's kind does
 #include <algorithm>
 #include <cstdlib>
 #include <string>
@@ -47,6 +49,9 @@ struct FieldWorld {
         bool pocket{true};           // the bomb-free ground at (20, 14)
         bool fire_power_up{true};    // the island's Fire power-up
         bool west_fire{false};       // a second Fire power-up on an islet of its own in the field's west (x 2 .. 4, y 17 .. 19 in a ring of water), nearer the fire wall
+        bool away{false};            // the worker stands on an islet beyond the field ((40 .. 41, 41 .. 42) in a lake of x 34 .. 47, y 35 .. 48), with a Bomber power-up there: it gets
+                                     // the Bomber, but no dig and no hop takes it anywhere
+        bool dead_end{false};        // a Bomber power-up at the end of a corridor of rock on the hill's side: (21 .. 23, 3), its way in from (20, 3), the power-up on (23, 3)
         bool vault{false};           // a second pile on the hill's side: a crackers pile on (21 .. 22, 4 .. 5) in a ring of rock (x 20 .. 23, y 3 .. 6) whose way in, (21, 6) and
                                      // (21, 7), holds two bombs of another team (a wall of one kind: the gate goals' own)
         uint8_t owner{255};          // the bombs' owner
@@ -102,7 +107,27 @@ struct FieldWorld {
             }
             place_crackers(sim, vault_anchor.x, vault_anchor.y, 25);
         }
-        sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(8, 10));
+        if (o.dead_end) {
+            for (int y = 2; y <= 4; ++y) {
+                for (int x = 20; x <= 24; ++x) {
+                    const TileCoord c = w.at(x, y);
+                    if (!(y == 3 && x >= 20 && x <= 23)) sim.set_terrain(c.x, c.y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            place(23, 3, sim::AntType::Bomber);
+        }
+        if (o.away) {
+            for (int y = 35; y <= 48; ++y) {
+                for (int x = 34; x <= 47; ++x) {
+                    const TileCoord c = w.at(x, y);
+                    if (!((x == 40 || x == 41) && (y == 41 || y == 42))) sim.set_terrain(c.x, c.y, sim::TERRAIN_WATER);
+                }
+            }
+            place(41, 42, sim::AntType::Bomber);
+            sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(40, 41));
+        } else {
+            sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(8, 10));
+        }
     }
     static bool moat(int x, int y) { return ((y == 21 || y == 26) && x >= 12 && x <= 17) || ((x == 12 || x == 17) && y >= 21 && y <= 26); }
     static bool pile_cell(int x, int y) { return (x == 14 || x == 15) && (y == 23 || y == 24); }
@@ -426,7 +451,7 @@ void run_field_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI29.7 Who Plays It: Medium And Hard On A Field World, Not Easy, Not With The Switch Off, Not Without A Source Of The Fire Ant (The Gate Goals Play Then); The Gate Goals Leave The Pile To It (Every Seat, Straight And Transposed)") {
+    TEST_CASE("AI29.7 Who Plays It: Medium And Hard On A Field World, Not Easy, Not With The Switch Off, Not Without A Source Of The Fire Ant, Not Without An Ant That Can Start The Work (The Gate Goals Play Then); The Gate Goals Leave Its Piles To It (Every Seat, Straight And Transposed)") {
         for (uint8_t d = 0; d < 8; ++d) {
             const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
             const auto decided = [&](Level level, bool field_switch, const FieldWorld::Options& o, bool& gate_map) {
@@ -450,6 +475,10 @@ void run_field_tests() {
             no_fire.fire_power_up = false;
             ASSERT_FALSE(decided(Level::Hard, true, no_fire, gate));
             ASSERT_TRUE(gate);
+            FieldWorld::Options away;                                                        // the bot's one ant gets a Bomber where nothing takes it on: the breach cannot start
+            away.away = true;
+            ASSERT_FALSE(decided(Level::Hard, true, away, gate));
+            ASSERT_TRUE(gate);
             FieldWorld::Options mixed;                                                       // with a wall of one kind before a second pile: the piles of the breach are decided at the first look
             mixed.vault = true;
             FieldWorld f(w, mixed);
@@ -465,6 +494,9 @@ void run_field_tests() {
             const std::vector<uint32_t> owned = rig.as<StandardBot>().tactics().field_piles;
             ASSERT_EQ(owned.size(), 1u);
             ASSERT_EQ(owned[0], field_pile);
+            FieldHints kept;                                                                 // the breach plays those piles only (the vault's two bombs would be a cheaper route)
+            kept.piles = owned;
+            ASSERT_EQ(f.plan(kept).pile, field_pile);
             const BotView view = BotView::build(f.sim, w.seat, &map);
             const GateInfo gates = GateInfo::analyse(map, f.sim.grid(), w.seat);
             GoalRules rules;
@@ -560,6 +592,59 @@ void run_field_tests() {
             rig.run(400);
             ASSERT_TRUE(bot.field().live());
             ASSERT_TRUE(bot.field().orders() > resting);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.11 The Field Breach's Carriers: A Swimmer Of The Ferry Whose Loop Ended Away From The Pile Is Sent Again (Every Seat, Straight And Transposed)") {
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            FieldWorld f(w, FieldWorld::Options{});
+            Rig rig(f.sim, w.seat, Level::Hard, std::make_unique<StandardBot>(field_plan_of()));
+            auto& bot = rig.as<StandardBot>();
+            uint64_t ticks = 0;
+            while (ticks < 12000 && f.sim.get_player_score(w.seat) == 0) {
+                rig.run(200);
+                ticks += 200;
+            }
+            ASSERT_TRUE(f.sim.get_player_score(w.seat) > 0);
+            uint32_t carrier = 0;                                                            // the ferry's Swimmer, on its way back to the pile (empty)
+            for (int k = 0; k < 400 && carrier == 0; ++k) {
+                rig.run(5);
+                const MapInfo map(f.sim);
+                const BotView view = BotView::build(f.sim, w.seat, &map);
+                for (const AntView& a : view.mine()) {
+                    uint32_t pile = 0;
+                    if (a.type == sim::AntType::Swimmer && !a.holding && bot.ferry().assigned_pile(a.id, pile)) carrier = a.id;
+                }
+            }
+            ASSERT_TRUE(carrier != 0);
+            const int32_t banked = f.sim.get_player_score(w.seat);
+            f.sim.issue_group_move_order({carrier}, w.at(9, 9));                             // an order from outside the bot ends the engine's loop on the hill's side
+            rig.run(1200);
+            ASSERT_TRUE(bot.ferry().ended() >= 1u);
+            rig.run(2400);
+            ASSERT_TRUE(f.sim.get_player_score(w.seat) > banked);                           // it carries again
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.12 An Ant That Took A Power-Up Never Takes One At The End Of A Corridor: The Power-Up It Leaves Would Shut It In; An Ant Of The Level's Kind (It Leaves Nothing) Takes It (Every Seat, Straight And Transposed)") {
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            FieldWorld::Options o;
+            o.dead_end = true;
+            {
+                FieldWorld f(w, o);
+                const FieldStep st = f.step_of(sim::AntType::Swimmer, TileCoord{19, 3}, 10);   // nearer the corridor's Bomber power-up than the one at (12, 8)
+                ASSERT_EQ(st.work, FieldWork::Bombs);
+                ASSERT_TRUE(st.tile.x >= 0);
+                ASSERT_TRUE(st.tile.chebyshev_dist(w.at(12, 8)) < st.tile.chebyshev_dist(w.at(23, 3)));
+            }
+            {
+                FieldWorld f(w, o);
+                const FieldStep st = f.step_of(sim::AntType::Worker, TileCoord{19, 3}, 10);
+                ASSERT_TRUE(st.tile.x >= 0);
+                ASSERT_TRUE(st.tile.chebyshev_dist(w.at(23, 3)) < st.tile.chebyshev_dist(w.at(12, 8)));
+            }
         }
     } TEST_END();
 }

@@ -1,0 +1,288 @@
+{
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "field_pile_of_one_kind",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (hints.piles.empty() ? (g.gate != GateKind::Sealed && g.gate != GateKind::Mixed && !g.free()) : !listed) continue;",
+   "new": "if (hints.piles.empty() ? (!g.free() && false) : !listed) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.1"
+  },
+  {
+   "id": "field_piles_not_kept",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (hints.piles.empty() ? (g.gate != GateKind::Sealed && g.gate != GateKind::Mixed && !g.free()) : !listed) continue;",
+   "new": "if (hints.piles.empty() ? (g.gate != GateKind::Sealed && g.gate != GateKind::Mixed && !g.free()) : (!listed && false)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "work_bridges_before_bombs",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    if (!bombs.empty()) return FieldWork::Bombs;",
+   "new": "    if (!bombs.empty() && waters.empty()) return FieldWork::Bombs;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.1"
+  },
+  {
+   "id": "feasible_without_fire_way",
+   "file": "include/ants_ai/field_plan.hpp",
+   "old": "(fires.empty() || !fire_way.empty())",
+   "new": "(fires.empty() || true)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "carriers_corridor_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "constexpr int32_t kCorridorSlack = 10;",
+   "new": "constexpr int32_t kCorridorSlack = -100000;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.8"
+  },
+  {
+   "id": "bombs_round_the_pile_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "            if (t.of(n) == kBomb && t.own[t.at(n)] == 0) add_once(out, n);",
+   "new": "            if (t.of(n) == kBomb && t.own[t.at(n)] == 0 && false) add_once(out, n);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.1"
+  },
+  {
+   "id": "own_bombs_throw_carriers",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (!((k == kBomb && t.own[t.at(to)] == 0) || k == kClear",
+   "new": "if (!(k == kBomb || k == kClear",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.6"
+  },
+  {
+   "id": "new_region_free",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "int32_t cost = w.cost + kNewRegion * new_regions(work_of(w.tiles, true), seen);",
+   "new": "int32_t cost = w.cost + 0 * new_regions(work_of(w.tiles, true), seen);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.1"
+  },
+  {
+   "id": "drop_risk_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "drop[t.at(n)] = kDropShut / std::max<int32_t>(",
+   "new": "drop[t.at(n)] = 0 * kDropShut / std::max<int32_t>(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.5"
+  },
+  {
+   "id": "hop_bombs_not_first",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    l.cost = kHopBomb * h.bombs + std::max(",
+   "new": "    l.cost = kHopBomb + std::max(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.2"
+  },
+  {
+   "id": "no_heal_before_the_field",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    if (at_home && ant.hp < kLeaveHp && !has_bomb_of(",
+   "new": "    if (at_home && ant.hp < 1 && !has_bomb_of(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.2"
+  },
+  {
+   "id": "walk_next_to_bombs",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "way[i].y + kDy[dir]}) != kBomb;",
+   "new": "way[i].y + kDy[dir]}) != kBomb || true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.3"
+  },
+  {
+   "id": "defuse_from_a_diagonal",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (m.dig < 0 || (m.strict && (diagonal != 0 || t.of(from) == kWater || !stands))) return -1;",
+   "new": "if (m.dig < 0 || (m.strict && (t.of(from) == kWater || !stands))) return -1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.3"
+  },
+  {
+   "id": "dead_end_taken",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    return free_land <= 1 && other == 0;",
+   "new": "    return free_land <= 1 && other == 0 && false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.12' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.12"
+  },
+  {
+   "id": "start_where_stuck",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (next_field_step(plan, view, map, seat, as, FieldHints{}).action != FieldAction::Stuck) return true;",
+   "new": "if (next_field_step(plan, view, map, seat, as, FieldHints{}).action != FieldAction::None) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "swim_way_cost_ignored",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "                cost += swim_cost;",
+   "new": "                cost += 0 * swim_cost;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "route_not_kept",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    if (kept) {",
+   "new": "    if (kept && false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "map_bombs_not_recorded",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "if (b.owner == context.seat || (view.ally() < sim::MAX_PLAYERS && b.owner == view.ally())) hints_.map_bombs.push_back(b.tile);",
+   "new": "if ((b.owner == context.seat || (view.ally() < sim::MAX_PLAYERS && b.owner == view.ally())) && false) hints_.map_bombs.push_back(b.tile);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.8"
+  },
+  {
+   "id": "map_bombs_never_forgotten",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "    hints_.map_bombs.erase(std::remove_if(hints_.map_bombs.begin(), hints_.map_bombs.end(), gone), hints_.map_bombs.end());",
+   "new": "    (void)gone;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.8"
+  },
+  {
+   "id": "same_order_for_ever",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "    if (repeats_ >= params_.repeats_max) {",
+   "new": "    if (repeats_ >= params_.repeats_max && false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.10"
+  },
+  {
+   "id": "no_rest",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "        if (rest != rest_until_.end() && now < rest->second) continue;",
+   "new": "        if (rest != rest_until_.end() && now < rest->second && false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.10"
+  },
+  {
+   "id": "never_waits",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "    if (given_up_ % params_.ants_max == 0) {",
+   "new": "    if (given_up_ % params_.ants_max == 0 && false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.10"
+  },
+  {
+   "id": "waits_for_ever",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "        if (sources(view) == rest_sources_) return;",
+   "new": "        if (sources(view) == rest_sources_ || true) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.10"
+  },
+  {
+   "id": "take_ping_pong",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "            if (takes_[0] == takes_[2] && takes_[1] == takes_[3] && takes_[0] != takes_[1]) {",
+   "new": "            if (takes_[0] == takes_[2] && takes_[1] == takes_[3] && takes_[0] != takes_[1] && false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "no_progress_kept",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "        if (now >= progress_ + params_.step_ticks) give_up(context, now);",
+   "new": "        if (now >= progress_ + params_.step_ticks && false) give_up(context, now);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "piles_of_the_look",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "    hints_.piles = tactics_.field_piles;",
+   "new": "    hints_.piles.clear();",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "ended_loop_kept",
+   "file": "src/ants_ai/island_ferry.cpp",
+   "old": "} else if (params_.reorder_ended && a.idle() && !a.holding && late) {",
+   "new": "} else if (params_.reorder_ended && a.idle() && !a.holding && late && false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.11"
+  },
+  {
+   "id": "switch_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (tactics_.plan.gate_field) {",
+   "new": "    if (true) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "feasible_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "        tactics_.field_map = field.feasible() && field_startable(",
+   "new": "        tactics_.field_map = field.field && field_startable(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "ferry_resend_off",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "        ferry.reorder_ended = tactics_.field_map;",
+   "new": "        ferry.reorder_ended = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.11"
+  },
+  {
+   "id": "field_piles_empty",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "            if (tactics_.field_map && (pile.gate == GateKind::Sealed || pile.gate == GateKind::Mixed)) tactics_.field_piles.push_back(pile.index);",
+   "new": "            if (tactics_.field_map && (pile.gate == GateKind::Sealed || pile.gate == GateKind::Mixed) && false) tactics_.field_piles.push_back(pile.index);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "field_in_the_fallback",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    if (tactics_.field_map && !fallback) field_.step(context);",
+   "new": "    if (tactics_.field_map) field_.step(context);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "map_bombs_spared_without_goals",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "(!gate_goals_.exhausted() || (tactics_.field_map && field_.live()))",
+   "new": "(!gate_goals_.exhausted() || (tactics_.field_map && false))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "goals_on_field_piles",
+   "file": "src/ants_ai/gate_goal.cpp",
+   "old": "        if (std::find(rules.field_piles.begin(), rules.field_piles.end(), t.index) != rules.field_piles.end()) continue;\n        any_pile = true;",
+   "new": "        any_pile = true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "goals_on_field_piles_2",
+   "file": "src/ants_ai/gate_goal.cpp",
+   "old": "        if (std::find(rules.field_piles.begin(), rules.field_piles.end(), t.index) != rules.field_piles.end()) continue;\n        if (fire_source && t.fire_cells > 0",
+   "new": "        if (fire_source && t.fire_cells > 0",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.7"
+  },
+  {
+   "id": "goals_not_told",
+   "file": "src/ants_ai/gate_task.cpp",
+   "old": "    rules.field_piles = tactics_.field_piles;",
+   "new": "    rules.field_piles.clear();",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.8"
+  }
+ ]
+}

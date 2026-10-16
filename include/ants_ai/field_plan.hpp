@@ -100,7 +100,7 @@ FieldStep next_field_step(const FieldPlan& plan, const BotView& view, const MapI
 /// away from the hill's side or hurt. -1: it cannot get one.
 int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant);
 
-/// The breach can start: an ant of the bot stands on the hill's side (it walks to its hill) and gets the kind of the first work (field_ant_cost)
+/// The breach can start: an ant of the bot gets the kind of the first work (field_ant_cost), and as that kind, where it gets it, it has a step toward the work (not Stuck)
 bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat);
 
 }  // namespace ants::ai
