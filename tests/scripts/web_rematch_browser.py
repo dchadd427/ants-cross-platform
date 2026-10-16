@@ -7,7 +7,8 @@ server, everything else to the site), and drives two people, each a browser of t
 game page and the match runs; Bob quits (Ctrl+Q, Yes: with one other side left the rules end the match) and both games show the results.
 
   * the game page: under the picture, the strip "The match is over" with its words, a chip for each player ("on the results screen" while nobody is back) and "Back to the lobby"; the strip lies
-    between the picture and the Picture row, the page keeps the picture's box to the window (no scroll for the strip), and nothing of it is markup;
+    between the picture and the Picture row, the picture makes room for it (the picture, the strip and the Picture row are in the window together; the page's text below them scrolls
+    as before), and nothing of it is markup;
   * Back to the lobby: Ann's button takes her tab to /?room=<code>: the front page is in the same room, with the strip "Back from the match." at the top, Ann leads, Bob's colour says "Still on the
     results screen…" and the note under START says that it waits for him; Bob's chips follow ("Ann · host · here"); Ann's START is answered by the room ("Bob is not back from the match yet.") and
     nothing starts; Bob's button brings him back ("Back in the room" on Ann's screen, the note is gone) and Ann's START takes both pages to the game again: the rematch runs;
@@ -36,7 +37,7 @@ STRIP = ("(function () { var s = document.getElementById('rematch'); if (!s || s
          " var go = s.querySelector('.rmt-go'); return { title: q('.rmt-title'), text: q('.rmt-text'), button: go && !go.hidden ? q('.rmt-go .btn') : null, note: q('.rmt-note'),"
          " chips: Array.prototype.map.call(s.querySelectorAll('.rmt-chip'), function (c) { return [c.textContent, c.className]; }), markup: s.querySelectorAll('script, img, a').length }; })()")
 PLACE = ("(function () { var st = document.getElementById('game-stage').getBoundingClientRect(), s = document.getElementById('rematch').getBoundingClientRect(), v = document.getElementById('view-bar').getBoundingClientRect();"
-         " return { below: s.top >= st.bottom - 1, above: v.top >= s.bottom - 1, fits: v.bottom <= window.innerHeight + 1 && document.scrollingElement.scrollHeight <= window.innerHeight + 1 }; })()")
+         " return { below: s.top >= st.bottom - 1, above: v.top >= s.bottom - 1, fits: st.top >= 0 && v.bottom <= window.innerHeight + 1 }; })()")
 BAR = ("(function () { var b = document.getElementById('backbar'); if (!b || b.hidden) return null; var a = b.querySelector('a');"
        " return { lead: b.querySelector('b').textContent, text: b.textContent, link: a ? [a.textContent, a.getAttribute('href'), a.target] : null, first: document.body.firstElementChild === b }; })()")
 CARDS = ("Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (li) { var p = li.querySelector('.pstat'); return [li.getAttribute('data-i'), p ? p.textContent : '', p ? p.className : '']; })"
@@ -127,7 +128,7 @@ def main():
         check(bool(wait_for(lambda: [c[0] for c in (ann.ev(STRIP) or {}).get("chips", [])] == ["Ann · on the results screen", "Bob · on the results screen"], 10, 0.25)),
               "nobody is back yet: both chips say \"on the results screen\" (%s)" % (ann.ev(STRIP) or {}).get("chips"))
         place = ann.ev(PLACE) or {}
-        check(place == {"below": True, "above": True, "fits": True}, "the strip lies under the picture and above the Picture row, and the page still fits the window (%s)" % place)
+        check(place == {"below": True, "above": True, "fits": True}, "the strip lies under the picture and above the Picture row, and the picture, the strip and the Picture row are in the window together (%s)" % place)
         ann.shot(args.shots, "r1_game_page_match_over")
 
         # ---- Ann goes back to the lobby ----
