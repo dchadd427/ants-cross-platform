@@ -1425,6 +1425,7 @@ RR_RESTORED_TURNS="$(rr_field "$RR_CODE" restored.turns)"
 sleep 2
 check "nothing advances while the room waits (turns $RR_RESTORED_TURNS)" "$([ "$(rr_field "$RR_CODE" turns)" = "$RR_RESTORED_TURNS" ]; echo $?)"
 # SIGKILL and once more: the record that the restored room went on writing restores again
+disown "$SERVER_PID" 2> /dev/null      # (it dies of our signal: bash would say "Killed")
 kill -KILL "$SERVER_PID"
 wait_end "$SERVER_PID" 30 "ants_server of the restart section (killed with SIGKILL)"
 SERVER_PID=""

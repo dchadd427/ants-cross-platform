@@ -52,7 +52,11 @@ wait_end() {
 stop_pids() {
     local what="$1" p i left
     shift
-    for p in "$@"; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
+    for p in "$@"; do
+        disown "$p" 2> /dev/null      # (bash 3.2 and 5 say "Terminated" or "Killed" of a job that died of a signal; these die of ours, and are polled, not waited for)
+        kill -CONT "$p" 2> /dev/null
+        kill "$p" 2> /dev/null
+    done
     for ((i = 0; i < STOP_WAIT * 10; i++)); do
         left=0
         for p in "$@"; do kill -0 "$p" 2> /dev/null && left=1; done
@@ -60,7 +64,7 @@ stop_pids() {
         sleep 0.1
     done
     for p in "$@"; do
-        if kill -0 "$p" 2> /dev/null; then kill_hung "$p" "$STOP_WAIT" "$what (process $p)"; else wait "$p" 2> /dev/null; fi
+        if kill -0 "$p" 2> /dev/null; then kill_hung "$p" "$STOP_WAIT" "$what (process $p)"; fi
     done
 }
 
@@ -87,8 +91,9 @@ on_watchdog() {
 start_watchdog() {
     WATCHDOG_LIMIT="$1"
     trap on_watchdog USR2
-    ( s=""; trap 'kill $s 2> /dev/null; exit 0' TERM; sleep "$1" & s=$!; wait $s; kill -USR2 $$; sleep "$WATCHDOG_GRACE" & s=$!; wait $s; pkill -KILL -P $$ ) > /dev/null 2>&1 &
+    ( trap 'kill $(jobs -p) 2> /dev/null; exit 0' TERM; sleep "$1" & wait $!; kill -USR2 $$; sleep "$WATCHDOG_GRACE" & wait $!; pkill -KILL -P $$ ) > /dev/null 2>&1 &
     WATCHDOG_PID=$!
+    disown "$WATCHDOG_PID" 2> /dev/null      # (stop_watchdog kills it: no notice of that, which bash 3.2 prints on the stderr of the script)
 }
 # stop_watchdog: the part has ended in time (the watchdog's subshell ends on SIGTERM, and its sleep with it)
 stop_watchdog() {
