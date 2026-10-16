@@ -2,16 +2,19 @@
 //
 //   lvl_tool check FILE [--roster MASK] [--new-map]          whether the file loads and plays for the teams of MASK (default 15, all four), and every finding
 //   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, and what a rewrite changes
-//   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT may be IN)
+//   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT may be IN: the
+//                                                            bytes go to a new file beside OUT, which takes OUT's place once it is whole)
 //   lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]
-//                                                            a new map of plain ground, its dictionary by the rule of the original maps (names from ants.chd)
+//                                                            a new map of plain ground, R x C (1 to 256 each), its dictionary by the rule of the original maps (names from ants.chd)
 //       --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15)
-//       --new-map      hold the file to the limits of a new map: at most 10,000 cells, 130 a side and 144 KB (LevelLimits::for_new_maps)
+//       --new-map      hold the file to the limits of a new map (LevelLimits::for_new_maps): at most 10,000 cells and 130 a side, a file of at most 512 KB is read and
+//                      a canonical file of at most 144 KB written
 //       --chd FILE     where the tile names are read (default: the archive of this checkout, Original-Ants/ants.chd)
 //   lvl_tool --selftest                                      checks the tool itself (the command line, the four commands and their exit codes) in a scratch folder
 //
-// Exit status: 0 the file plays (check), is described (info), is written (rewrite, blank); 1 the file does not load, does not play for the roster or cannot be written within
-// the limits (nothing is written then); 2 the command line is wrong, or a file cannot be read or written.
+// A file is read up to 64 MiB (512 KB with --new-map): one that holds more is not read to its end, and it does not load. Exit status: 0 the file plays (check), is
+// described (info), is written (rewrite, blank); 1 the file does not load, does not play for the roster or cannot be written within the limits (nothing is written
+// then); 2 the command line is wrong, a file cannot be read or written, or there is no memory left.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -19,9 +22,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
-#include <iterator>
+#include <new>
+#include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -46,26 +52,78 @@ void usage(std::ostream& out) {
            "  check    whether the file loads and plays for the teams of the roster, and every finding\n"
            "  info     what the file holds, and what a rewrite would change\n"
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
-           "  blank    writes a new map of plain ground, R rows x C columns, its dictionary by the rule of the original maps\n"
+           "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
-           "  --new-map      the limits of a new map: at most 10,000 cells, 130 a side and 144 KB\n"
+           "  --new-map      the limits of a new map: at most 10,000 cells and 130 a side; a file of at most 512 KB is read, 144 KB written\n"
            "  --chd FILE     the archive with the tile names (default: Original-Ants/ants.chd of this checkout)\n"
            "  --selftest     check the tool itself\n";
 }
 
-bool read_file(const std::string& path, std::vector<uint8_t>& bytes) {
+constexpr size_t kMostBytesRead = 64u * 1024u * 1024u;   // the most of a file that the tool reads (a map of the game has a few MB at the most, ants.chd 8 MB)
+
+enum class Reading { Read, Unreadable, TooLarge };
+
+// The bytes of the file at `path`, at most `limit` of them: Read; Unreadable when it cannot be opened or read; TooLarge when it holds more, which are not read (so
+// that `lvl_tool check /dev/zero` ends), with its size in `size` when the system knows it (a file on a disk) and 0 when it does not (a device, a pipe)
+Reading read_file(const std::string& path, size_t limit, std::vector<uint8_t>& bytes, uint64_t& size) {
+    bytes.clear();
+    size = 0;
+    std::error_code ec;
+    if (fs::is_regular_file(path, ec)) {
+        const uintmax_t on_disk = fs::file_size(path, ec);
+        if (!ec && on_disk > limit) {
+            size = static_cast<uint64_t>(on_disk);
+            return Reading::TooLarge;
+        }
+    }
     std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    return !in.bad();
+    if (!in) return Reading::Unreadable;
+    std::vector<char> chunk(64 * 1024);
+    while (in) {
+        in.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+        const size_t got = static_cast<size_t>(in.gcount());
+        if (got > limit - bytes.size()) {
+            bytes.clear();
+            return Reading::TooLarge;
+        }
+        bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(got));
+    }
+    return in.bad() ? Reading::Unreadable : Reading::Read;
 }
 
+// What the tool says of a file larger than it reads: the reader's own sentence (FileTooLarge) when its size is known
+std::string too_large(uint64_t size, size_t limit) {
+    if (size != 0) return "the file has " + std::to_string(size) + " bytes, more than the " + std::to_string(limit) + " allowed here: nothing of it is read";
+    return "the file has more than the " + std::to_string(limit) + " bytes allowed here: nothing more of it is read";
+}
+
+// Writes `bytes` to `path` through a new file beside it, which takes the place of `path` once it is complete: a file that cannot be written whole leaves `path` as
+// it was (`rewrite IN IN` never cuts IN short), and the new file is removed
 bool write_file(const std::string& path, const std::vector<uint8_t>& bytes) {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) return false;
-    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    out.close();
-    return static_cast<bool>(out);
+    const fs::path target(path);
+    std::random_device random;
+    std::error_code ec;
+    fs::path temp;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        temp = target;
+        temp += ".lvl_tool-" + std::to_string(random()) + ".tmp";
+        if (!fs::exists(temp, ec)) break;
+    }
+    bool whole = false;
+    {
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+        if (!out) return false;
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        out.close();
+        whole = static_cast<bool>(out);
+    }
+    if (whole) fs::rename(temp, target, ec);
+    if (!whole || ec) {
+        std::error_code ignored;
+        fs::remove(temp, ignored);
+        return false;
+    }
+    return true;
 }
 
 std::string roster_words(uint8_t roster) {
@@ -112,7 +170,7 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
             if (!has_value || !number(args[++i], 1, 15, v)) { why = "--roster takes a number from 1 to 15"; return false; }
             o.roster = static_cast<uint8_t>(v);
         } else if (a == "--rows" || a == "--columns") {
-            if (!has_value || !number(args[++i], 1, 65535, v)) { why = a + " takes a number from 1 to 65535"; return false; }
+            if (!has_value || !number(args[++i], 1, LVL_MAX_GRID_SIDE, v)) { why = a + " takes a number from 1 to " + std::to_string(LVL_MAX_GRID_SIDE); return false; }
             (a == "--rows" ? o.rows : o.columns) = v;
         } else if (a == "--chd") {
             if (!has_value) { why = "--chd takes a file"; return false; }
@@ -129,14 +187,30 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
     return true;
 }
 
-int check(const Options& o, std::ostream& out, std::ostream& err) {
-    const std::string& path = o.files[0];
-    std::vector<uint8_t> bytes;
-    if (!read_file(path, bytes)) {
+// Reads the map file of a command, as far as `limits` let the reader take it: 0 when its bytes are in `bytes`, else the exit status, with what was said (2: it
+// cannot be read; 1: it holds more bytes than are read, so it does not load; `tail` ends that sentence)
+int read_map_file(const std::string& path, const LevelLimits& limits, std::vector<uint8_t>& bytes, std::ostream& out, std::ostream& err, const char* tail) {
+    const size_t most = std::min(limits.max_read_bytes, kMostBytesRead);
+    uint64_t size = 0;
+    const Reading reading = read_file(path, most, bytes, size);
+    if (reading == Reading::Unreadable) {
         err << "lvl_tool: cannot read " << path << "\n";
         return 2;
     }
+    if (reading == Reading::TooLarge) {
+        const std::string why = too_large(size, most);
+        out << file_name(path) << ": does not load: " << why << tail << "\n  " << to_string(LevelProblemSeverity::Fatal) << ' ' << to_string(LevelProblemKind::FileTooLarge)
+            << ": " << why << "\n";
+        return 1;
+    }
+    return 0;
+}
+
+int check(const Options& o, std::ostream& out, std::ostream& err) {
+    const std::string& path = o.files[0];
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
+    std::vector<uint8_t> bytes;
+    if (const int status = read_map_file(path, limits, bytes, out, err, "")) return status;
     const std::string name = file_name(path);
     LevelData level;
     LevelValidation report;
@@ -174,10 +248,7 @@ std::string default_type(uint16_t tile) {
 int info(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& path = o.files[0];
     std::vector<uint8_t> bytes;
-    if (!read_file(path, bytes)) {
-        err << "lvl_tool: cannot read " << path << "\n";
-        return 2;
-    }
+    if (const int status = read_map_file(path, LevelLimits{}, bytes, out, err, "")) return status;
     LevelData level;
     LevelValidation report;
     if (!level.load_from_memory(bytes.data(), bytes.size(), &report)) {
@@ -233,12 +304,9 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
 int rewrite(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& in_path = o.files[0];
     const std::string& out_path = o.files[1];
-    std::vector<uint8_t> bytes;
-    if (!read_file(in_path, bytes)) {
-        err << "lvl_tool: cannot read " << in_path << "\n";
-        return 2;
-    }
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
+    std::vector<uint8_t> bytes;
+    if (const int status = read_map_file(in_path, limits, bytes, out, err, "; nothing written")) return status;
     const std::string name = file_name(in_path);
     LevelData level;
     LevelValidation report;
@@ -278,7 +346,8 @@ int blank(const Options& o, std::ostream& out, std::ostream& err) {
     }
     const std::string chd = o.chd.empty() ? std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd" : o.chd;
     std::vector<uint8_t> archive;
-    if (!read_file(chd, archive)) {
+    uint64_t size = 0;
+    if (read_file(chd, kMostBytesRead, archive, size) != Reading::Read) {
         err << "lvl_tool: cannot read " << chd << "\n";
         return 2;
     }
@@ -288,7 +357,7 @@ int blank(const Options& o, std::ostream& out, std::ostream& err) {
         return 2;
     }
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
-    const LevelData level = blank_level(static_cast<uint16_t>(o.rows), static_cast<uint16_t>(o.columns), names);
+    const LevelData level = blank_level(static_cast<uint16_t>(o.rows), static_cast<uint16_t>(o.columns), names, limits);   // (a grid beyond the limits gets no cell)
     const LevelWriteResult w = write_level(level, limits);
     if (!w.ok) {
         out << "a blank map of " << o.rows << " rows x " << o.columns << " columns cannot be written: " << w.error << "; nothing written\n";
@@ -325,6 +394,18 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     if (command == "info") return info(o, out, err);
     if (command == "rewrite") return rewrite(o, out, err);
     return blank(o, out, err);
+}
+
+// The tool as main runs it: a failure that it does not foresee (no memory left, an exception of the library) ends it with one line and status 2, not an abort
+int guarded(const std::function<int()>& run, std::ostream& err) {
+    try {
+        return run();
+    } catch (const std::bad_alloc&) {
+        err << "lvl_tool: out of memory\n";
+    } catch (const std::exception& e) {
+        err << "lvl_tool: " << e.what() << "\n";
+    }
+    return 2;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -381,6 +462,11 @@ Run run_words(const std::vector<std::string>& args) {
 
 bool has(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
 
+bool read_whole(const std::string& path, std::vector<uint8_t>& bytes) {
+    uint64_t size = 0;
+    return read_file(path, kMostBytesRead, bytes, size) == Reading::Read;
+}
+
 void put16(std::vector<uint8_t>& d, size_t at, uint16_t v) {
     d[at] = static_cast<uint8_t>(v & 0xFFu);
     d[at + 1] = static_cast<uint8_t>(v >> 8);
@@ -392,7 +478,7 @@ int selftest() {
     const std::string tiny_path = std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL";
     std::vector<uint8_t> tiny;
     LevelData tiny_level;
-    if (!dir.ok() || !read_file(tiny_path, tiny) || !tiny_level.load_from_memory(tiny.data(), tiny.size())) {
+    if (!dir.ok() || !read_whole(tiny_path, tiny) || !tiny_level.load_from_memory(tiny.data(), tiny.size())) {
         std::cerr << "lvl_tool --selftest: the shipped map TINY or a scratch folder is missing\n";
         return 1;
     }
@@ -403,7 +489,7 @@ int selftest() {
     };
     auto level_of = [](const std::string& path, LevelData& level) {
         std::vector<uint8_t> bytes;
-        return read_file(path, bytes) && level.load_from_memory(bytes.data(), bytes.size());
+        return read_whole(path, bytes) && level.load_from_memory(bytes.data(), bytes.size());
     };
 
     std::cout << "  the command line\n";
@@ -412,13 +498,27 @@ int selftest() {
         t.check(help.status == 0 && has(help.out, "usage: lvl_tool") && help.err.empty(), "--help prints the usage and succeeds");
         for (const std::vector<std::string>& bad : std::vector<std::vector<std::string>>{
                  {}, {"nonsense"}, {"check"}, {"check", "a", "b"}, {"rewrite", "a"}, {"info"}, {"check", tiny_path, "--roster", "0"}, {"check", tiny_path, "--roster", "16"},
-                 {"check", tiny_path, "--roster"}, {"check", tiny_path, "--what"}, {"blank", "x.lvl", "--rows", "0", "--columns", "5"}, {"blank", "x.lvl", "--rows", "-3"}}) {
+                 {"check", tiny_path, "--roster"}, {"check", tiny_path, "--what"}, {"blank", "x.lvl", "--rows", "0", "--columns", "5"}, {"blank", "x.lvl", "--rows", "-3"},
+                 {"blank", "x.lvl", "--rows", "5", "--columns", "257"}, {"blank", "x.lvl", "--rows", "65535", "--columns", "65535"}}) {
             const Run r = run_words(bad);
             t.check(r.status == 2 && r.out.empty() && has(r.err, "usage: lvl_tool"), "a wrong command line (" + std::to_string(bad.size()) + " words) is exit 2 with the usage");
         }
         const Run missing = run_words({"check", dir.file("no such map.lvl")});
         t.check(missing.status == 2 && has(missing.err, "cannot read"), "a file that is not there is exit 2 and says so");
         t.check(run_words({"blank", dir.file("b.lvl"), "--rows", "5"}).status == 2, "blank without --columns is exit 2");
+        const Run side = run_words({"blank", dir.file("b.lvl"), "--rows", "65535", "--columns", "65535"});
+        t.check(side.status == 2 && has(side.err, "lvl_tool: --rows takes a number from 1 to 256\n") && !fs::exists(dir.file("b.lvl")),
+                "blank --rows 65535: a grid the game cannot host is a wrong command line, before anything is made");
+    }
+
+    std::cout << "  what the tool does not foresee\n";
+    {
+        std::ostringstream no_memory;
+        t.check(guarded([]() -> int { throw std::bad_alloc(); }, no_memory) == 2 && no_memory.str() == "lvl_tool: out of memory\n",
+                "no memory left is exit 2 with one line, not an abort");
+        std::ostringstream failure;
+        t.check(guarded([]() -> int { throw std::runtime_error("a failure"); }, failure) == 2 && failure.str() == "lvl_tool: a failure\n",
+                "an exception of the library is exit 2 with its words");
     }
 
     std::cout << "  check\n";
@@ -453,6 +553,25 @@ int selftest() {
         t.check(run_words({"check", wide_path}).status == 0, "check: 4 x 131 plays");
         const Run limited = run_words({"check", wide_path, "--new-map"});
         t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here"), "check --new-map: 131 columns are more than a new map has");
+        // the size of a file: with --new-map one of more than 512 KB is not read (TINY and 600,000 bytes after its egg word), one of 512 KB is
+        std::vector<uint8_t> large = tiny;
+        large.insert(large.end(), 600000, 0x55);
+        const std::string large_path = file_of("large.lvl", large);
+        t.check(run_words({"check", large_path}).status == 0, "check: TINY with 600,000 bytes after its egg word plays (they are never read)");
+        const Run too_large = run_words({"check", large_path, "--new-map"});
+        t.check(too_large.status == 1 && too_large.out == "large.lvl: does not load: the file has 619312 bytes, more than the 524288 allowed here: nothing of it is read\n"
+                                                          "  fatal file_too_large: the file has 619312 bytes, more than the 524288 allowed here: nothing of it is read\n",
+                "check --new-map: a file of more than 512 KB does not load: " + too_large.out);
+        large.resize(524288);
+        t.check(run_words({"check", file_of("limit.lvl", large), "--new-map"}).status == 0, "check --new-map: a file of exactly 512 KB is read");
+        // a file without end (a device): read up to the limit, not to its end
+        if (fs::exists("/dev/zero")) {
+            const Run zero = run_words({"check", "/dev/zero", "--new-map"});
+            t.check(zero.status == 1 && has(zero.out, "zero: does not load: the file has more than the 524288 bytes allowed here: nothing more of it is read\n"),
+                    "check /dev/zero --new-map ends: " + zero.out);
+            const Run game = run_words({"check", "/dev/zero"});
+            t.check(game.status == 1 && has(game.out, "the file has more than the 67108864 bytes allowed here"), "check /dev/zero ends at 64 MiB: " + game.out);
+        }
     }
 
     std::cout << "  info\n";
@@ -478,13 +597,13 @@ int selftest() {
         LevelData back;
         t.check(level_of(out1, back) && same_level(back, tiny_level), "rewrite: the file it wrote reads back as TINY");
         std::vector<uint8_t> written;
-        t.check(read_file(out1, written) && written == write_level(tiny_level).bytes, "rewrite: the file is the canonical bytes");
+        t.check(read_whole(out1, written) && written == write_level(tiny_level).bytes, "rewrite: the file is the canonical bytes");
         const std::string out2 = dir.file("tiny_out2.lvl");
         const Run again = run_words({"rewrite", out1, out2});
         std::vector<uint8_t> second;
-        t.check(again.status == 0 && has(again.out, "the file was canonical already: the same bytes") && read_file(out2, second) && second == written,
+        t.check(again.status == 0 && has(again.out, "the file was canonical already: the same bytes") && read_whole(out2, second) && second == written,
                 "rewrite of a canonical file: the same bytes");
-        t.check(run_words({"rewrite", out2, out2}).status == 0 && read_file(out2, second) && second == written, "rewrite: OUT may be IN");
+        t.check(run_words({"rewrite", out2, out2}).status == 0 && read_whole(out2, second) && second == written, "rewrite: OUT may be IN");
         std::vector<uint8_t> filler = tiny;
         filler.insert(filler.end(), 206, 0x55);
         const Run f = run_words({"rewrite", file_of("filler.lvl", filler), dir.file("filler_out.lvl")});
@@ -497,7 +616,22 @@ int selftest() {
         t.check(cut.status == 1 && has(cut.out, "does not load") && !fs::exists(dir.file("cut_out.lvl")), "rewrite: a file that does not load is not written");
         const Run limited = run_words({"rewrite", dir.file("wide.lvl"), dir.file("wide_out.lvl"), "--new-map"});
         t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here") && !fs::exists(dir.file("wide_out.lvl")), "rewrite --new-map: 131 columns are not written");
-        t.check(run_words({"rewrite", tiny_path, dir.path.string()}).status == 2, "rewrite: a folder as OUT is exit 2");
+        const std::string folder = dir.file("folder");
+        std::error_code made;
+        fs::create_directories(folder, made);
+        t.check(run_words({"rewrite", tiny_path, folder}).status == 2 && fs::is_directory(folder), "rewrite: a folder as OUT is exit 2, and the folder stays");
+        const Run nowhere = run_words({"rewrite", tiny_path, dir.file("no such folder/out.lvl")});
+        t.check(nowhere.status == 2 && has(nowhere.err, "cannot write"), "rewrite: OUT in a folder that is not there is exit 2");
+        const Run large = run_words({"rewrite", dir.file("large.lvl"), dir.file("large_out.lvl"), "--new-map"});
+        t.check(large.status == 1 && has(large.out, "more than the 524288 allowed here: nothing of it is read; nothing written") && !fs::exists(dir.file("large_out.lvl")),
+                "rewrite --new-map: a file of more than 512 KB is not read, nothing is written");
+        const Run whole = run_words({"rewrite", dir.file("large.lvl"), dir.file("large_out.lvl")});
+        t.check(whole.status == 0 && has(whole.out, "19312 bytes written"), "rewrite: without --new-map it is read, and its rewrite drops the 600,000 bytes");
+        // every file is written through a new file beside it: none of those is left
+        size_t left = 0;
+        std::error_code ec;
+        for (const fs::directory_entry& e : fs::directory_iterator(dir.path, ec)) left += has(e.path().filename().string(), ".lvl_tool-") ? 1u : 0u;
+        t.check(left == 0 && !ec, "rewrite: no file of its own is left beside OUT");
     }
 
     std::cout << "  blank\n";
@@ -514,7 +648,12 @@ int selftest() {
         t.check(big.status == 0 && has(big.out, "a blank map of 100 rows x 100 columns, 125408 bytes") && fs::exists(dir.file("big.lvl")), "blank --new-map: 100 x 100 is a new map");
         const Run more = run_words({"blank", dir.file("more.lvl"), "--rows", "101", "--columns", "100", "--new-map"});
         t.check(more.status == 1 && has(more.out, "10100 cells, more than the 10000 allowed here") && !fs::exists(dir.file("more.lvl")), "blank --new-map: 101 x 100 has too many cells");
-        t.check(run_words({"blank", dir.file("huge.lvl"), "--rows", "300", "--columns", "3"}).status == 1, "blank: 300 rows are more than the game hosts");
+        const Run huge = run_words({"blank", dir.file("huge.lvl"), "--rows", "300", "--columns", "3"});
+        t.check(huge.status == 2 && has(huge.err, "--rows takes a number from 1 to 256") && !fs::exists(dir.file("huge.lvl")), "blank: 300 rows are more than the game hosts");
+        t.check(run_words({"blank", dir.file("tall.lvl"), "--rows", "256", "--columns", "1"}).status == 0, "blank: 256 rows are the most the game hosts");
+        const Run wide = run_words({"blank", dir.file("wide_new.lvl"), "--rows", "200", "--columns", "200", "--new-map"});
+        t.check(wide.status == 1 && has(wide.out, "the grid has 200 rows x 200 columns, more than the 130 x 130 allowed here") && !fs::exists(dir.file("wide_new.lvl")),
+                "blank --new-map: 200 x 200 is not a new map (and gets no cell)");
         t.check(run_words({"blank", dir.file("x.lvl"), "--rows", "3", "--columns", "3", "--chd", tiny_path}).status == 2, "blank: a --chd that is no archive is exit 2");
     }
 
@@ -525,8 +664,12 @@ int selftest() {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::vector<std::string> args;
-    for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
-    if (args.size() == 1 && args[0] == "--selftest") return selftest();
-    return run_tool(args, std::cout, std::cerr);
+    return guarded(
+        [argc, argv] {
+            std::vector<std::string> args;
+            for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
+            if (args.size() == 1 && args[0] == "--selftest") return selftest();
+            return run_tool(args, std::cout, std::cerr);
+        },
+        std::cerr);
 }

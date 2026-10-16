@@ -21,12 +21,13 @@ struct LevelWriteResult {
 
 /// The canonical bytes of `level`: version 8, the parts in the order the original's loader reads them (docs/MAP_FORMAT.md), every field as the level holds it, the
 /// bytes after the end of the description and of each dictionary name zero, nothing after the egg word. Refused (ok false, `error` says why) is a level that the
-/// reader cannot have made, so that what the writer returns always reads back (LVLParser::load_from_memory with the same limits) as the same level (same_level):
-/// another version, a grid without a cell or beyond `limits`, layers that are not rows x columns, a description of more than 30 bytes or with a zero byte, an
-/// empty dictionary or one beyond `limits`, a name of more than 11 bytes or with a zero byte, a tile_type_count that is not the number of names less one, a block
-/// with more than 65,535 entries, a start marker or plant whose team is not that of its tile, a food pile without stages or with more than 65,535, a waypoint
-/// without a trigger (flag 0) that holds an interval or chances, a file beyond `limits`. The writer reads its own bytes back before it answers: a level that
-/// does not read back the same is refused too (that would be a fault of the writer).
+/// reader cannot have made, or whose canonical file is larger than `limits.max_write_bytes` (a file cut short grows by a few bytes when its blocks are written
+/// whole), so that what the writer returns always reads back (LVLParser::load_from_memory) as the same level (same_level): another version, a grid without a cell
+/// or beyond `limits`, layers that are not rows x columns, a description of more than 30 bytes or with a zero byte, an empty dictionary or one beyond `limits`, a
+/// name of more than 11 bytes or with a zero byte, a tile_type_count that is not the number of names less one, a block with more than 65,535 entries, a start
+/// marker or plant whose team is not that of its tile, a food pile without stages or with more than 65,535, a waypoint without a trigger (flag 0) that holds an
+/// interval or chances, a canonical file beyond `limits`. The writer reads its own bytes back before it answers: a level that does not read back the same is
+/// refused too (that would be a fault of the writer).
 LevelWriteResult write_level(const LevelData& level, const LevelLimits& limits = LevelLimits{});
 
 /// Do two levels hold the same map? Every field that a file holds is compared (the five chances of a waypoint by their bits, so that a NaN equals itself), the
@@ -68,13 +69,14 @@ std::vector<std::string> tile_names_from_chd(const uint8_t* data, size_t size);
 /// uses no tile. A used id without a name in `tile_names` is ".".
 std::vector<std::string> dictionary_of_used_tiles(const LevelData& level, const std::vector<std::string>& tile_names);
 
-/// The ground of a blank map (Table-4 animation 485 "g01a", the commonest layer-1 tile of all six original maps) and the third word of every layer-1 cell of the
-/// six original maps (and of 514 of the 534 players' maps): the defaults of blank_level.
+/// The ground of a blank map (Table-4 animation 485 "g01a", the commonest layer-1 tile of all six original maps) and the third word that every layer-1 cell of
+/// the six original maps holds (so does every cell of 477 of the 534 players' maps, and most cells of 37 more): the defaults of blank_level.
 constexpr uint16_t LVL_BLANK_GROUND_TILE = 485;
 constexpr uint16_t LVL_LAYER1_THIRD_WORD = 0xCDCD;
 
 /// A new map of `rows` x `columns` cells of plain ground, nothing on it, no start marker, no hill: version 8, mode 1, 10 minutes, 6 eggs a team, no default ant
-/// type, an empty description, and the dictionary of its content (dictionary_of_used_tiles). The starting point of the map maker.
-LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names);
+/// type, an empty description, and the dictionary of its content (dictionary_of_used_tiles). The starting point of the map maker. A grid beyond `limits` (or without
+/// a cell) gets no cell: nothing of its size is allocated, and write_level refuses the level with the sentence of its grid.
+LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits = LevelLimits{});
 
 }  // namespace ants::assets

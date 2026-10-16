@@ -1,18 +1,21 @@
 // The writer of the .lvl format (include/ants_assets/lvl_writer.hpp, docs/MAP_FORMAT.md), and the reader and the writer on hostile input:
 //   W1 the canonical file: the bytes of the original maps where the original reads them, every field of a level in its place, the parts where the loader walks
 //   W2 what the writer refuses (a level that no reader can have made), each with its sentence and no byte
-//   W3 random levels: written, read back as the same level, written again as the same bytes
+//   W3 random levels: written, read back as the same level, written again as the same bytes; and same_level against every member of a level and of its
+//      records, changed one at a time (a walk that names every member, so that the compiler stops it when a member is added)
 //   W4 hostile files: cut at every byte, bytes changed at random (fixed seeds), giant counts, objects outside the grid, food without stages, odd waypoints, empty
-//      grids: no crash, a finding that says what is wrong, and every file that loads is written and read back the same; the heap that the reader and the writer
-//      take at once is bounded by the size of their input (a counting operator new below)
+//      grids, the dearest files: no crash, a finding that says what is wrong, and every file that loads is written and read back the same; the heap that the
+//      reader and the writer take at once is at most 7 and 8 times their input and 64 KiB (a counting operator new below)
 //   W5 what a rewrite changes in a file (describe_rewrite), kind by kind
-//   W6 the dictionary of a new map (the rule of the six original maps, checked on them) and the blank map
+//   W6 the dictionary of a new map (the rule of the six original maps, checked on them) and the blank map, which makes no cell of a grid beyond its limits
 // The 540 maps of the library are the round-trip proof's (tests/test_sim/test_map_roundtrip.cpp).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_test_paths.hpp"
 #include "lvl_bytes.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -23,6 +26,7 @@
 #include <iostream>
 #include <limits>
 #include <new>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -119,11 +123,12 @@ size_t peak_of(const std::function<void()>& fn) {
     return heap::peak - base;
 }
 
-// The bounds: what the reader may hold at once for a file of `bytes` bytes (a level in memory is at most 7 times its file: a waypoint without trigger is 8 bytes
-// of file and 56 of memory), and what the writer may hold for a file of `bytes` bytes that it writes (the file, and the level it reads back to check it)
+// The bounds of docs/MAP_FORMAT.md ("Limits"): what the reader may hold at once for a file of `bytes` bytes, 7 times the file (a waypoint without trigger is 8
+// bytes of file and 56 of memory, and nothing of a file costs more), and what the writer may hold for a file of `bytes` bytes that it writes, 8 times (the bytes,
+// and the level that it reads back from them); 64 KiB on top of each for what does not grow with the file (the findings and their sentences)
 constexpr size_t kSlack = 64 * 1024;
-size_t reader_bound(size_t bytes) { return kSlack + 8 * bytes; }
-size_t writer_bound(size_t bytes) { return kSlack + 10 * bytes; }
+size_t reader_bound(size_t bytes) { return kSlack + 7 * bytes; }
+size_t writer_bound(size_t bytes) { return kSlack + 8 * bytes; }
 
 struct Lcg {
     uint32_t s;
@@ -269,6 +274,20 @@ bool loads_same_as(const std::vector<uint8_t>& bytes, const LevelData& level, st
 // Refused by a precondition of the writer, with its own sentence (`words`), and no byte: not by the read-back check, whose refusals say "a fault of the writer"
 bool refused_with(const LevelWriteResult& w, const std::string& words) {
     return !w.ok && w.bytes.empty() && w.error.find(words) != std::string::npos && w.error.find("a fault of the writer") == std::string::npos;
+}
+
+// A file in the system's temporary folder that no other run of this program uses at the same time: the name holds the clock and a random number, and a name
+// that is there already is not taken
+std::string scratch_path(const std::string& stem) {
+    std::random_device random;
+    const auto clock = static_cast<unsigned long long>(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::error_code ec;
+    std::filesystem::path path;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        path = std::filesystem::temp_directory_path(ec) / (stem + "_" + std::to_string(clock) + "_" + std::to_string(random()) + ".lvl");
+        if (!std::filesystem::exists(path, ec)) break;
+    }
+    return path.string();
 }
 
 bool has_kind(const std::vector<RewriteChange>& changes, RewriteChangeKind kind) {
@@ -422,7 +441,7 @@ void w2_refusals() {
         CHECK(write_level(every_field()).ok);                                       // (the level they all start from is written)
     });
 
-    run_case("W2.2 The Limits Of A New Map, 10,000 Cells, 130 A Side, 144 KB: 100 x 100 With The Largest Dictionary And 12,584 Bytes Of Blocks Fits, So Does 40 x 129; 131 A Side, 10,100 Cells Or One More Waypoint Do Not", [] {
+    run_case("W2.2 The Limits Of A New Map, 10,000 Cells, 130 A Side, 144 KB Of Canonical File: Each Is Written At Exactly The Limit (100 x 100 With The Largest Dictionary And 12,610 Bytes Of Blocks, 130 Rows, 130 Columns) And Refused Past It", [] {
         const std::vector<std::string> names(1344, "n");
         const LevelLimits new_map = LevelLimits::for_new_maps();
         // a blank 100 x 100 map: 42 + 486 x 11 + 8 + 10,000 x 12 + 12 bytes
@@ -442,17 +461,40 @@ void w2_refusals() {
         full.waypoints.assign(242, trigger);
         const LevelWriteResult filled = write_level(full, new_map);
         CHECK_MSG(filled.ok && filled.bytes.size() == 147430u, filled.error);
+        // exactly the limit: a food pile of four stages (10 + 4 x 4 bytes) more makes 147,456 bytes, which are written; so are they under a limit of their size,
+        // and one byte less refuses them
+        LevelData exact = full;
+        FoodSchedule pile;
+        pile.y = 50;
+        pile.x = 50;
+        pile.initial_delay = 10;
+        pile.respawn_interval = 1;
+        pile.variants.assign(4, FoodItemVariant{10, 253});
+        exact.food_schedules.push_back(pile);
+        const LevelWriteResult at_limit = write_level(exact, new_map);
+        CHECK_MSG(at_limit.ok && at_limit.bytes.size() == 147456u, at_limit.error);
+        LevelLimits by_size;
+        by_size.max_write_bytes = 147456;
+        CHECK(write_level(exact, by_size).ok);
+        by_size.max_write_bytes = 147455;
+        const LevelWriteResult one_less = write_level(exact, by_size);
+        CHECK_MSG(refused_with(one_less, "the file would have 147456 bytes, more than the 147455 allowed here"), one_less.error);
         full.waypoints.push_back(trigger);
         const LevelWriteResult over = write_level(full, new_map);
         CHECK_MSG(refused_with(over, "the file would have 147482 bytes, more than the 147456 allowed here"), over.error);
         CHECK(write_level(full).ok);
-        // the grid: Bomb Races's 40 x 129 fits; 131 a side or 10,100 cells do not
+        // the grid: Bomb Races's 40 x 129 fits, and so do 130 rows, 130 columns (9,880 cells each) and 100 x 100 (10,000 cells); 131 a side or 10,010 cells do not
         CHECK(write_level(blank_level(40, 129, names), new_map).ok);
         CHECK(write_level(blank_level(130, 76, names), new_map).ok);
+        CHECK(write_level(blank_level(76, 130, names), new_map).ok);
         const LevelWriteResult side = write_level(blank_level(131, 1, names), new_map);
         CHECK_MSG(refused_with(side, "131 rows x 1 columns, more than the 130 x 130 allowed here"), side.error);
+        const LevelWriteResult side_columns = write_level(blank_level(1, 131, names), new_map);
+        CHECK_MSG(refused_with(side_columns, "1 rows x 131 columns, more than the 130 x 130 allowed here"), side_columns.error);
         const LevelWriteResult cells = write_level(blank_level(101, 100, names), new_map);
         CHECK_MSG(refused_with(cells, "101 rows x 100 columns, 10100 cells, more than the 10000 allowed here"), cells.error);
+        const LevelWriteResult cells_wide = write_level(blank_level(77, 130, names), new_map);
+        CHECK_MSG(refused_with(cells_wide, "77 rows x 130 columns, 10010 cells, more than the 10000 allowed here"), cells_wide.error);
         CHECK(write_level(blank_level(131, 1, names)).ok && write_level(blank_level(101, 100, names)).ok);   // the game's limits take them
         LevelLimits few_names = LevelLimits{};
         few_names.max_dictionary_names = 100;
@@ -526,6 +568,133 @@ LevelData random_level(Lcg& r) {
     return l;
 }
 
+// W3.2's walk over every member of a level and of its records. Each structured binding below must name every member of its class, so a member added to LevelData
+// or to one of its records stops this file from building until it is named here, and each name is walked: a number gets its lowest bit flipped, a text one byte
+// more, a chance the lowest bit of its double, a list one element more. OneChange makes the change number `target` of the walk and none other, so a copy of a level
+// differs from it in that one place; the reader's findings (load_notes) are the one member that must make no difference.
+class OneChange {
+public:
+    explicit OneChange(size_t target) : target_(target) {}
+    bool made() const { return made_; }
+    bool part_of_the_map() const { return part_of_the_map_; }
+    const std::string& member() const { return member_; }
+    const std::vector<std::string>& words() const { return words_; }
+
+    template <class T> void number(T& value, const std::string& member, const std::vector<std::string>& words) {
+        if (mine(member, words)) value = static_cast<T>(value ^ 1u);
+    }
+    void chance(double& value, const std::string& member, const std::vector<std::string>& words) {
+        if (!mine(member, words)) return;
+        uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof bits);
+        bits ^= 1u;
+        std::memcpy(&value, &bits, sizeof bits);
+    }
+    void text(std::string& value, const std::string& member, const std::vector<std::string>& words) {
+        if (mine(member, words)) value += "x";
+    }
+    template <class List> void one_more(List& list, const std::string& member, const std::vector<std::string>& words) {
+        if (mine(member, words)) list.push_back(list.empty() ? typename List::value_type{} : list.back());
+    }
+    template <class List> void no_part_of_the_map(List& list, const std::string& member) {
+        if (!mine(member, {})) return;
+        list.push_back(typename List::value_type{});
+        part_of_the_map_ = false;
+    }
+
+private:
+    bool mine(const std::string& member, const std::vector<std::string>& words) {
+        if (index_++ != target_) return false;
+        made_ = true;
+        member_ = member;
+        words_ = words;
+        return true;
+    }
+    size_t target_;
+    size_t index_{0};
+    bool made_{false};
+    bool part_of_the_map_{true};
+    std::string member_;
+    std::vector<std::string> words_;
+};
+
+std::string nth(const std::string& name, size_t i) { return name + "[" + std::to_string(i) + "]"; }
+
+void walk(OneChange& c, MapCell& cell, const std::string& member, const std::string& place) {
+    auto& [tile_index, flags, properties] = cell;
+    c.number(tile_index, member + ".tile_index", {place});
+    c.number(flags, member + ".flags", {place});
+    c.number(properties, member + ".properties", {place});
+}
+
+void walk(OneChange& c, AnthillSpawn& record, const std::string& member, const std::string& place) {
+    auto& [tile_id, row, column, team_id] = record;
+    c.number(tile_id, member + ".tile_id", {place});
+    c.number(row, member + ".y", {place});
+    c.number(column, member + ".x", {place});
+    c.number(team_id, member + ".team_id", {place});
+}
+
+void walk(OneChange& c, FoodItemVariant& stage, const std::string& member, const std::string& place) {
+    auto& [weight, tile_id] = stage;
+    c.number(weight, member + ".weight", {place});
+    c.number(tile_id, member + ".tile_id", {place});
+}
+
+void walk(OneChange& c, FoodSchedule& pile, const std::string& member, const std::string& place) {
+    auto& [row, column, initial_delay, respawn_interval, variants] = pile;
+    c.number(row, member + ".y", {place});
+    c.number(column, member + ".x", {place});
+    c.number(initial_delay, member + ".initial_delay", {place});
+    c.number(respawn_interval, member + ".respawn_interval", {place});
+    c.one_more(variants, member + ".variants", {place, std::to_string(variants.size()) + " stages / "});
+    for (size_t k = 0; k < variants.size(); ++k) walk(c, variants[k], nth(member + ".variants", k), place + ", stage #" + std::to_string(k));
+}
+
+void walk(OneChange& c, Waypoint& point, const std::string& member, const std::string& place) {
+    auto& [row, column, flag, param, probabilities] = point;
+    c.number(row, member + ".y", {place});
+    c.number(column, member + ".x", {place});
+    c.number(flag, member + ".flag", {place});
+    c.number(param, member + ".param", {place});
+    for (size_t k = 0; k < probabilities.size(); ++k) c.chance(probabilities[k], nth(member + ".probabilities", k), {place, "(the chances differ)"});
+}
+
+void walk(OneChange& c, LevelData& level) {
+    auto& [version, game_mode, default_minutes, description, tile_type_count, tile_dictionary, width, height, layer1_terrain, layer2_interactive, anthill_spawns,
+           food_schedules, ambient_flag, ambient_tile_or_sound, waypoints, boundary_param, load_notes] = level;
+    const std::string grid = "grid: " + std::to_string(height.val) + " rows x " + std::to_string(width.val) + " columns / ";
+    c.number(version, "version", {"version: "});
+    c.number(game_mode, "game_mode", {"mode: "});
+    c.number(default_minutes, "default_minutes", {"minutes: "});
+    c.text(description, "description", {"description: "});
+    c.number(tile_type_count, "tile_type_count", {"tile_type_count: "});
+    c.one_more(tile_dictionary, "tile_dictionary", {"dictionary: " + std::to_string(tile_dictionary.size()) + " / "});
+    for (size_t i = 0; i < tile_dictionary.size(); ++i) c.text(tile_dictionary[i], nth("tile_dictionary", i), {"dictionary name #" + std::to_string(i) + ": "});
+    const uint32_t columns = width.val;                                              // (a lambda of C++17 cannot capture a structured binding)
+    c.number(width.val, "width", {grid});
+    c.number(height.val, "height", {grid});
+    const auto cells = [&c, columns](std::vector<MapCell>& layer, const std::string& member, const std::string& name) {
+        c.one_more(layer, member, {name + ": " + std::to_string(layer.size()) + " / "});
+        for (size_t i = 0; i < layer.size(); ++i) {
+            const std::string place = name + ", row " + std::to_string(i / columns) + ", column " + std::to_string(i % columns) + ": ";
+            walk(c, layer[i], nth(member, i), place);
+        }
+    };
+    cells(layer1_terrain, "layer1_terrain", "layer 1");
+    cells(layer2_interactive, "layer2_interactive", "layer 2");
+    c.one_more(anthill_spawns, "anthill_spawns", {"block 1: " + std::to_string(anthill_spawns.size()) + " / "});
+    for (size_t i = 0; i < anthill_spawns.size(); ++i) walk(c, anthill_spawns[i], nth("anthill_spawns", i), "block 1 record #" + std::to_string(i) + ": ");
+    c.one_more(food_schedules, "food_schedules", {"block 2: " + std::to_string(food_schedules.size()) + " / "});
+    for (size_t i = 0; i < food_schedules.size(); ++i) walk(c, food_schedules[i], nth("food_schedules", i), "food pile #" + std::to_string(i));
+    c.number(ambient_flag, "ambient_flag", {"block 3: "});
+    c.number(ambient_tile_or_sound, "ambient_tile_or_sound", {"block 3: "});
+    c.one_more(waypoints, "waypoints", {"block 4: " + std::to_string(waypoints.size()) + " / "});
+    for (size_t i = 0; i < waypoints.size(); ++i) walk(c, waypoints[i], nth("waypoints", i), "waypoint #" + std::to_string(i) + ": ");
+    c.number(boundary_param, "boundary_param", {"eggs: "});
+    c.no_part_of_the_map(load_notes, "load_notes");
+}
+
 void w3_random_levels() {
     run_case("W3.1 2,000 Random Levels (Any Words, Odd Bytes In The Texts, NaN Chances, Records Outside The Grid): Written, Read Back The Same, Written Again The Same Bytes", [] {
         Lcg r(0xC0FFEEu);
@@ -547,7 +716,7 @@ void w3_random_levels() {
         CHECK(written == 2000);
     });
 
-    run_case("W3.2 same_level Sees Every Field: A Copy Is The Same Level, And A Change Of Any One Field (The Bits Of A Chance Included) Is A Difference That It Names", [] {
+    run_case("W3.2 same_level Sees Every Member Of A Level And Of Its Records: A Copy Is The Same Level, Each Of The 106 Changes Of The Walk (One Member, Its Bits) Is A Difference It Names", [] {
         const LevelData base = every_field();
         std::string why;
         CHECK(same_level(base, LevelData(base), &why) && why.empty());
@@ -585,6 +754,23 @@ void w3_random_levels() {
         LevelData noted = base;                                                     // the reader's findings are no part of the map
         noted.load_notes.push_back(LevelProblem{});
         CHECK(same_level(base, noted));
+        // the walk (above): every member of the level and of each of its records, changed alone, in a copy
+        size_t walked = 0;
+        for (size_t target = 0; target < 1000; ++target) {
+            LevelData other = base;
+            OneChange change(target);
+            walk(change, other);
+            if (!change.made()) break;
+            ++walked;
+            const bool same = same_level(base, other, &why);
+            if (!change.part_of_the_map()) {
+                CHECK_MSG(same && why.empty(), change.member() + " is no part of the map: " + why);
+                continue;
+            }
+            CHECK_MSG(!same, change.member() + ": the change is not seen");
+            for (const std::string& words : change.words()) CHECK_MSG(why.find(words) != std::string::npos, change.member() + ": \"" + why + "\" does not say \"" + words + "\"");
+        }
+        CHECK_MSG(walked == 106u, std::to_string(walked) + " changes walked");
     });
 }
 
@@ -753,24 +939,81 @@ void w4_hostile_files() {
         }
     });
 
-    run_case("W4.8 What The Reader And The Writer Hold Is Bounded By Their Input: A File Of 8,000 Waypoints Without Trigger (The Dearest Bytes), The Largest Original", [] {
-        // a 1 x 1 map whose block 4 holds 8,000 records of 8 bytes: the level holds 56 bytes for each
-        std::vector<uint8_t> d = flat_map(2, 1, 1, 1, 1);
-        d.resize(d.size() - 4);                                                      // up to block 4's count
-        put16(d, 8000);
-        for (int i = 0; i < 8000; ++i) { put16(d, 0); put16(d, 0); put32(d, 0); }
-        put16(d, 3);
-        LevelData level;
-        size_t held = peak_of([&] { level.load_from_memory(d.data(), d.size()); });
-        CHECK(level.waypoints.size() == 8000u);
-        CHECK_MSG(held <= reader_bound(d.size()) && held >= 7 * d.size() / 2, std::to_string(held) + " bytes for " + std::to_string(d.size()));
-        LevelWriteResult w;
-        held = peak_of([&] { w = write_level(level); });
-        CHECK_MSG(w.ok && held <= writer_bound(w.bytes.size()), std::to_string(held));
+    run_case("W4.8 The Reader Holds At Most 7 Times Its File And The Writer 8 Times What It Writes (And 64 KiB): Waypoints Without Trigger, A Half Record, A Block 2 That Ends At Once, 512 KB", [] {
+        // a 1 x 1 map whose block 4 announces `announced` records, holds `records` of 8 bytes (no trigger: 56 bytes of level each, the dearest bytes of a file) and
+        // then `tail` (the egg word, or the first bytes of a record where the file ends); with `piles` block 2 announces that many food piles and ends at once, at a
+        // first pile without stages
+        auto file_of = [](uint16_t announced, size_t records, const std::vector<uint8_t>& tail, uint16_t piles) {
+            std::vector<uint8_t> d = flat_map(2, 1, 1, 1, 1);
+            d.resize(d.size() - 10);                                                  // up to block 2's count (then block 3, block 4's count and the egg word)
+            put16(d, piles);
+            if (piles != 0) {
+                for (int k = 0; k < 5; ++k) put16(d, 0);                              // row, column, units, points and 0 stages
+            }
+            put16(d, 0);
+            put16(d, LVL_EMPTY_TILE);                                                 // block 3
+            put16(d, announced);
+            for (size_t i = 0; i < records; ++i) {
+                put16(d, 0);
+                put16(d, 0);
+                put32(d, 0);
+            }
+            d.insert(d.end(), tail.begin(), tail.end());
+            return d;
+        };
+        struct Shape {
+            const char* what;
+            std::vector<uint8_t> file;
+            size_t waypoints;
+        };
+        const std::vector<Shape> shapes = {
+            {"8,000 waypoints without trigger", file_of(8000, 8000, {3, 0}, 0), 8000},
+            {"8,000 and the row and column of one more, where the file ends", file_of(8001, 8000, {0, 0, 0, 0}, 0), 8001},
+            {"8,000 and the first 6 bytes of one more", file_of(8001, 8000, {0, 0, 0, 0, 1, 0}, 0), 8001},
+            {"block 2 announces 65,535 piles and ends at its first, then 8,000 waypoints and a half record", file_of(8001, 8000, {0, 0, 0, 0}, 65535), 8001},
+        };
+        for (const Shape& shape : shapes) {
+            LevelData level;
+            LevelValidation v;
+            const size_t held = peak_of([&] { level.load_from_memory(shape.file.data(), shape.file.size(), &v); });
+            CHECK_MSG(level.waypoints.size() == shape.waypoints && level.food_schedules.empty(), shape.what);
+            CHECK_MSG(held <= reader_bound(shape.file.size()) && held >= 7 * shape.file.size() / 2,
+                      std::string(shape.what) + ": " + std::to_string(held) + " bytes for " + std::to_string(shape.file.size()));
+            LevelWriteResult w;
+            const size_t wrote = peak_of([&] { w = write_level(level); });
+            CHECK_MSG(w.ok && wrote <= writer_bound(w.bytes.size()) && wrote >= 7 * w.bytes.size() / 2, std::string(shape.what) + ": the writer held " + std::to_string(wrote));
+        }
+        CHECK(LVLParser::check_memory(shapes[3].file.data(), shapes[3].file.size()).has(LevelProblemKind::FoodBlockEndedEarly));
+        // block 2's room for 65,535 piles, where the bytes after the egg word are many: the room the file can claim is what the reader holds most
+        std::vector<uint8_t> trailing = file_of(0, 0, {3, 0}, 65535);
+        trailing.insert(trailing.end(), 300000, 0x55);
+        LevelData after_egg_word;
+        size_t held = peak_of([&] { after_egg_word.load_from_memory(trailing.data(), trailing.size()); });
+        CHECK_MSG(after_egg_word.food_schedules.empty() && held <= reader_bound(trailing.size()), std::to_string(held));
+        // the largest original
         const std::vector<uint8_t> treasure = read_map(maps_dir() + "/TREASURE.LVL");
         LevelData big;
         held = peak_of([&] { big.load_from_memory(treasure.data(), treasure.size()); });
         CHECK_MSG(held <= reader_bound(treasure.size()), std::to_string(held));
+        // the largest file that the limits of a new map read, 512 KB of waypoints without trigger: at most 64 KiB + 7 x 512 KiB (3.6 MiB) are held; one byte more is
+        // not read; its canonical file is more than a new map may have, and the writer refuses it without holding anything of its size
+        const LevelLimits new_map = LevelLimits::for_new_maps();
+        std::vector<uint8_t> largest = file_of(65524, 65524, {3, 0}, 0);
+        CHECK(largest.size() == 524288u);
+        LevelData level;
+        bool loaded = false;
+        held = peak_of([&] { loaded = level.load_from_memory(largest.data(), largest.size(), nullptr, new_map); });
+        CHECK_MSG(loaded && held <= reader_bound(largest.size()) && held <= 3735552u, std::to_string(held));
+        LevelWriteResult w;
+        held = peak_of([&] { w = write_level(level, new_map); });
+        CHECK_MSG(refused_with(w, "the file would have 524288 bytes, more than the 147456 allowed here") && held < 4096u, w.error + " / " + std::to_string(held));
+        held = peak_of([&] { w = write_level(level); });
+        CHECK_MSG(w.ok && w.bytes == largest && held <= writer_bound(w.bytes.size()), std::to_string(held));
+        largest.push_back(0);
+        LevelData refused;
+        LevelValidation v;
+        held = peak_of([&] { loaded = refused.load_from_memory(largest.data(), largest.size(), &v, new_map); });
+        CHECK(!loaded && has_fatal(v, LevelProblemKind::FileTooLarge) && mentions(v, "the file has 524289 bytes, more than the 524288 allowed here") && held < 4096u);
     });
 
     run_case("W4.9 With The Limits Of A New Map A 10 MB File Is Refused Before It Is Read (FileTooLarge), And Holds Nothing Of Its Size", [] {
@@ -782,7 +1025,7 @@ void w4_hostile_files() {
         CHECK(!ok && has_fatal(v, LevelProblemKind::FileTooLarge) && !v.parsed);
         CHECK_MSG(held < 4u * 1024u, std::to_string(held));
         // from a file: refused before it is read into memory
-        const std::string path = (std::filesystem::temp_directory_path() / ("test_lvl_writer_huge_" + std::to_string(huge.size()) + ".lvl")).string();
+        const std::string path = scratch_path("test_lvl_writer_huge");
         {
             std::ofstream out(path, std::ios::binary | std::ios::trunc);
             out.write(reinterpret_cast<const char*>(huge.data()), static_cast<std::streamsize>(huge.size()));
@@ -866,8 +1109,10 @@ void w5_describe_rewrite() {
         }
     });
 
-    run_case("W5.3 A Byte That The Original Reads And The Rewrite Changed Is Unexplained (A Fault Of The Writer), And So Is A Rewrite Of Another Level", [&] {
-        for (size_t at : {size_t{2}, size_t{6}, size_t{12}, size_t{40}, size_t{42}, size_t{97}, size_t{150}, size_t{200}, size_t{300}}) {
+    run_case("W5.3 A Byte That The Original Reads And The Rewrite Changed Is Unexplained (A Fault Of The Writer), So Is One That The Rewrite Must Hold As Zero, And So Is A Rewrite Of Another Level", [&] {
+        // the header, the description, the count word, a name, the zeros after a name, every byte of the grid size, the layers, the blocks, the egg word
+        for (size_t at : {size_t{2}, size_t{6}, size_t{12}, size_t{40}, size_t{42}, size_t{45}, size_t{97}, size_t{98}, size_t{99}, size_t{100}, size_t{101}, size_t{102},
+                          size_t{103}, size_t{104}, size_t{150}, size_t{200}, size_t{300}}) {
             std::vector<uint8_t> forged = canonical;
             forged[at] ^= 0x40;
             const std::vector<RewriteChange> c = describe_rewrite(canonical.data(), canonical.size(), base, forged);
@@ -875,6 +1120,15 @@ void w5_describe_rewrite() {
             const RewriteChange* u = change_of(c, RewriteChangeKind::Unexplained);
             CHECK_MSG(u != nullptr && u->offset == at, std::to_string(at));
         }
+        // the zeros after the end of a shorter description
+        LevelData shorter = base;
+        shorter.description = "short";
+        const std::vector<uint8_t> clean = write_level(shorter).bytes;
+        std::vector<uint8_t> padded = clean;
+        padded[17] = 'x';
+        const std::vector<RewriteChange> after_text = describe_rewrite(clean.data(), clean.size(), shorter, padded);
+        const RewriteChange* u = change_of(after_text, RewriteChangeKind::Unexplained);
+        CHECK(after_text.size() == 1u && u != nullptr && u->offset == 17u);
         LevelData other = base;
         other.boundary_param = 3;
         const std::vector<uint8_t> theirs = write_level(other).bytes;
@@ -948,6 +1202,40 @@ void w6_new_maps() {
             CHECK(v.playable && v.clean());
         }
         CHECK(!write_level(blank_level(0, 31, names)).ok);                          // no cell: nothing to write
+    });
+
+    run_case("W6.4 A Blank Map Beyond The Limits Gets No Cell: 65,535 x 65,535 (51 GB Of Cells) And 9,000 x 9,000 Take Nothing Of Their Size, And The Writer Refuses Them By Their Grid", [&] {
+        struct Grid {
+            uint16_t rows;
+            uint16_t columns;
+            const char* words;
+        };
+        // (what is held is the dictionary and used_tile_ids' table of 65,536 ids: 64 KiB and a little, nothing of the grid's size)
+        const size_t little = kSlack + 4096;
+        for (const Grid& g : {Grid{65535, 65535, "the grid has 65535 rows x 65535 columns, more than the 256 x 256 allowed here"},
+                              Grid{9000, 9000, "the grid has 9000 rows x 9000 columns, more than the 256 x 256 allowed here"},
+                              Grid{257, 1, "the grid has 257 rows x 1 columns, more than the 256 x 256 allowed here"}}) {
+            LevelData l;
+            const size_t held = peak_of([&] { l = blank_level(g.rows, g.columns, names); });
+            CHECK_MSG(held < little && l.layer1_terrain.empty() && l.layer2_interactive.empty(), g.words + std::string(": ") + std::to_string(held));
+            CHECK(l.height == static_cast<uint32_t>(g.rows) && l.width == static_cast<uint32_t>(g.columns));
+            LevelWriteResult w;
+            const size_t wrote = peak_of([&] { w = write_level(l); });
+            CHECK_MSG(refused_with(w, g.words) && wrote < 4096u, w.error + " / " + std::to_string(wrote));
+        }
+        // with the limits of a new map: 131 a side or 10,010 cells get no cell either; the largest grids of each limit get theirs
+        const LevelLimits new_map = LevelLimits::for_new_maps();
+        for (const Grid& g : {Grid{200, 200, "the grid has 200 rows x 200 columns, more than the 130 x 130 allowed here"},
+                              Grid{77, 130, "the grid has 77 rows x 130 columns, 10010 cells, more than the 10000 allowed here"}}) {
+            LevelData l;
+            const size_t held = peak_of([&] { l = blank_level(g.rows, g.columns, names, new_map); });
+            CHECK_MSG(held < little && l.layer1_terrain.empty(), g.words + std::string(": ") + std::to_string(held));
+            const LevelWriteResult w = write_level(l, new_map);
+            CHECK_MSG(refused_with(w, g.words), w.error);
+        }
+        CHECK(blank_level(100, 100, names, new_map).layer1_terrain.size() == 10000u && blank_level(76, 130, names, new_map).layer2_interactive.size() == 9880u);
+        const LevelData largest = blank_level(256, 256, names);
+        CHECK(largest.layer1_terrain.size() == 65536u && write_level(largest).ok);
     });
 }
 

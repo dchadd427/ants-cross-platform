@@ -55,40 +55,60 @@ inline std::vector<uint8_t> read_map(const std::string& path) {
     return bytes;
 }
 
+// The parts of the file `d`, walked as the loader walks them (the grid size by the lower word of each dword, as the original keeps it): true when the file holds
+// every part up to and with its egg word. A file that ends before then gives false, with the spots of the parts it holds; nothing past the end of `d` is read.
 inline bool locate(const std::vector<uint8_t>& d, Spots& s) {
-    if (d.size() < 44) return false;
     s = Spots{};
+    auto holds = [&d](size_t at, uint64_t bytes) { return at <= d.size() && bytes <= d.size() - at; };
+    if (!holds(40, 2)) return false;
     size_t p = 42 + (static_cast<size_t>(rd16(d, 40)) + 1) * 11;
     s.dims = p;
+    if (!holds(p, 8)) return false;
     s.rows = rd32(d, p);
     s.columns = rd32(d, p + 4);
     p += 8;
+    const uint64_t layer = static_cast<uint64_t>(s.rows & 0xFFFFu) * (s.columns & 0xFFFFu) * 6u;
     s.layer1 = p;
-    p += static_cast<size_t>(s.rows) * s.columns * 6;
+    if (!holds(p, layer)) return false;
+    p += static_cast<size_t>(layer);
     s.layer2 = p;
-    p += static_cast<size_t>(s.rows) * s.columns * 6;
+    if (!holds(p, layer)) return false;
+    p += static_cast<size_t>(layer);
     s.b1_count = p;
+    if (!holds(p, 2)) return false;
     s.b1 = rd16(d, p);
     s.b1_records = p + 2;
-    p += 2 + static_cast<size_t>(s.b1) * 6;
+    p += 2;
+    if (!holds(p, static_cast<uint64_t>(s.b1) * 6)) return false;
+    p += static_cast<size_t>(s.b1) * 6;
     s.b2_count = p;
+    if (!holds(p, 2)) return false;
     s.b2 = rd16(d, p);
     p += 2;
     for (size_t i = 0; i < s.b2; ++i) {
         s.food.push_back(p);
-        p += 10 + static_cast<size_t>(rd16(d, p + 8)) * 4;
+        if (!holds(p, 10)) return false;
+        const size_t stages = rd16(d, p + 8);
+        p += 10;
+        if (!holds(p, static_cast<uint64_t>(stages) * 4)) return false;
+        p += stages * 4;
     }
     s.b3 = p;
+    if (!holds(p, 4)) return false;
     p += 4;
     s.b4_count = p;
+    if (!holds(p, 2)) return false;
     s.b4 = rd16(d, p);
     p += 2;
     for (size_t i = 0; i < s.b4; ++i) {
         s.waypoints.push_back(p);
-        p += 8u + (rd32(d, p + 4) != 0 ? 44u : 0u);
+        if (!holds(p, 8)) return false;
+        const size_t record = 8u + (rd32(d, p + 4) != 0 ? 44u : 0u);
+        if (!holds(p, record)) return false;
+        p += record;
     }
     s.final_word = p;
-    return p + 2 <= d.size();
+    return holds(p, 2);
 }
 
 // The first Block 1 record of the tile id (152 BSTART, 153 USTART, 154 GSTART, 155 RSTART, 421 flower1): its offset, or 0

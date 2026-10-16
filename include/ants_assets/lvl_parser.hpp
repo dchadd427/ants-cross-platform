@@ -30,7 +30,7 @@ constexpr size_t   LVL_MAX_DICTIONARY_ENTRIES = 0x540;   // the original's tile 
 
 /**
  * @brief The limits that a reader holds a file to and the writer (lvl_writer.hpp) a level to. The defaults are what the game reads: the original loader's tables
- * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE a side) and no limit on the size of the file, so that they refuse no map of the
+ * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE a side) and no limit on the size of a file, so that they refuse no map of the
  * library. A limit can only be made tighter: a value above a default counts as the default. A place that takes a map from a stranger or makes a new one passes
  * for_new_maps() (docs/MAP_FORMAT.md, "Limits").
  */
@@ -38,13 +38,15 @@ struct LevelLimits {
     uint32_t max_rows{LVL_MAX_GRID_SIDE};
     uint32_t max_columns{LVL_MAX_GRID_SIDE};
     size_t max_dictionary_names{LVL_MAX_DICTIONARY_ENTRIES};
-    size_t max_file_bytes{std::numeric_limits<size_t>::max()};
+    size_t max_read_bytes{std::numeric_limits<size_t>::max()};        // a file as it is, before it is read (the reader)
     uint32_t max_cells{LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE};       // rows x columns
+    size_t max_write_bytes{std::numeric_limits<size_t>::max()};       // the canonical file of a level (the writer)
 
     /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 10,000 cells and 130 a side,
-    /// so that every map of the library fits (Bomb Races has 129 columns), and 144 KB of file, so that a 100 x 100 map with the largest dictionary fits with room
-    /// for its blocks
-    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 144u * 1024u, 10000}; }
+    /// so that every map of the library fits (Bomb Races has 129 columns); a file of at most 512 KB is read as it is (every file of the library: BOMBERWORLD's
+    /// 235,594 bytes are mostly bytes after its egg word, which a rewrite drops), and its canonical file may have 144 KB, so that a 100 x 100 map with the largest
+    /// dictionary fits with room for its blocks
+    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u}; }
 
     // the limits as they are applied (a value above the default is the default)
     constexpr uint32_t rows() const noexcept { return max_rows < LVL_MAX_GRID_SIDE ? max_rows : LVL_MAX_GRID_SIDE; }
@@ -81,7 +83,7 @@ enum class LevelProblemKind : uint8_t {
     FoodOutsideGrid,         // a food object anchored outside the grid: the original writes beside its tile table
     ObjectOutsideGrid,       // plants and waypoints outside the grid: harmless in the original (bounds checked or never looked up)
     // a limit of the place that reads the file (LevelLimits), not of the original
-    FileTooLarge             // more bytes than LevelLimits::max_file_bytes: nothing of it is read
+    FileTooLarge             // more bytes than LevelLimits::max_read_bytes: nothing of it is read
 };
 
 const char* to_string(LevelProblemSeverity severity) noexcept;

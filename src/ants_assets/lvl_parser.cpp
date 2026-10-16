@@ -3,7 +3,16 @@
 #include <cctype>
 #include <fstream>
 #include <cstring>
+#include <iterator>
+#include <limits>
 #include <utility>
+
+// The five chances of a waypoint are copied as they are between the file and a double: the file holds little-endian IEEE 754 binary64, which is what every target
+// of the game holds (x86-64, ARM64, WebAssembly; MSVC has no big-endian target). A host that is not would read and write other numbers: it must not build.
+static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8, "the .lvl doubles are IEEE 754 binary64");
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "the .lvl reader copies the doubles of a file in the host's byte order: the file's is little-endian"
+#endif
 
 namespace ants::assets {
 
@@ -39,7 +48,7 @@ public:
 
     bool read_double(double& val) noexcept {
         if (pos_ + 8 > size_) return false;
-        std::memcpy(&val, data_ + pos_, 8);
+        std::memcpy(&val, data_ + pos_, 8);                         // the file's little-endian IEEE 754 binary64, as the host holds a double (the checks below)
         pos_ += 8;
         return true;
     }
@@ -236,7 +245,7 @@ void fail_file_too_large(LevelValidation* report, uint64_t size, const LevelLimi
     if (!report) return;
     *report = LevelValidation{};
     add_problem(report->problems, Severity::Fatal, Kind::FileTooLarge,
-                "the file has " + num(size) + " bytes, more than the " + num(limits.max_file_bytes) + " allowed here: nothing of it is read");
+                "the file has " + num(size) + " bytes, more than the " + num(limits.max_read_bytes) + " allowed here: nothing of it is read");
 }
 
 // The checks on the content of a loaded level (the grid has a shape): what lies outside the grid or the dictionary, and the start markers of the teams that play.
@@ -344,7 +353,7 @@ bool LVLParser::load_from_file(const std::string& filepath, LevelData& out_level
 
         std::streamsize size = static_cast<std::streamsize>(file.tellg());
         if (size < 0) size = 0;
-        if (static_cast<uint64_t>(size) > limits.max_file_bytes) {
+        if (static_cast<uint64_t>(size) > limits.max_read_bytes) {
             out_level = LevelData{};
             fail_file_too_large(report, static_cast<uint64_t>(size), limits);
             return false;
@@ -474,7 +483,7 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
     // the next read, block 3, takes the bytes right behind that object's stage count.
     uint16_t b2_count = 0;
     if (!r.read_u16(b2_count)) { fail_truncated(p, "block 2 (food objects)", r.pos(), size); return; }
-    lvl.food_schedules.reserve(std::min<size_t>(b2_count, r.remaining() / 10));
+    lvl.food_schedules.reserve(std::min<size_t>(b2_count, r.remaining() / 14));        // (an object that is kept takes 14 bytes at least: one stage)
     for (size_t i = 0; i < b2_count; ++i) {
         FoodSchedule fs;
         uint16_t item_count = 0;
@@ -486,6 +495,8 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
                         "block 4 and the egg stock from the bytes behind its stage count (so from bytes that are not those blocks, in most files) and keeps the announced number of slots, "
                         "of which only the objects read are filled; the remake does the same and holds the objects read",
                         static_cast<uint32_t>(b2_count - i));
+            // the room reserved for the objects that are not read goes back before the rest of the file is read (what a file can make the reader hold: docs/MAP_FORMAT.md)
+            std::vector<FoodSchedule>(std::make_move_iterator(lvl.food_schedules.begin()), std::make_move_iterator(lvl.food_schedules.end())).swap(lvl.food_schedules);
             break;
         }
         if (r.remaining() < static_cast<size_t>(item_count) * 4) { fail_truncated(p, "block 2 (food objects)", size, size); return; }
@@ -513,7 +524,7 @@ void parse_level(const uint8_t* data, size_t size, Parse& p) {
         cut = true;
         cut_text = "the file ends before the count of block 4";
     } else {
-        lvl.waypoints.reserve(std::min<size_t>(b4_count, r.remaining() / 8));
+        lvl.waypoints.reserve(std::min<size_t>(b4_count, r.remaining() / 8 + 1));        // (a complete record takes 8 bytes at least, and a half record follows the last)
         for (size_t i = 0; i < b4_count && !cut; ++i) {
             Waypoint wp;
             if (!r.read_u16(wp.y) || !r.read_u16(wp.x)) {
@@ -568,7 +579,7 @@ bool LVLParser::load_from_memory(const uint8_t* data, size_t size, LevelData& ou
             if (report) add_problem(report->problems, Severity::Fatal, Kind::Unreadable, "no data");
             return false;
         }
-        if (size > limits.max_file_bytes) {
+        if (size > limits.max_read_bytes) {
             fail_file_too_large(report, size, limits);
             return false;
         }

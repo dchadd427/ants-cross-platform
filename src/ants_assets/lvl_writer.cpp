@@ -4,7 +4,15 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <utility>
+
+// The five chances of a waypoint are copied as they are from a double to the file, which holds little-endian IEEE 754 binary64: every target of the game holds
+// doubles so (the reader has the same checks, lvl_parser.cpp).
+static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8, "the .lvl doubles are IEEE 754 binary64");
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "the .lvl writer copies the doubles of a level in the host's byte order: the file's is little-endian"
+#endif
 
 namespace ants::assets {
 
@@ -121,7 +129,7 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
         }
     }
     const uint64_t size = layout_of(level).size;
-    if (size > limits.max_file_bytes) return "the file would have " + num(size) + " bytes, more than the " + num(limits.max_file_bytes) + " allowed here";
+    if (size > limits.max_write_bytes) return "the file would have " + num(size) + " bytes, more than the " + num(limits.max_write_bytes) + " allowed here";
     return std::string();
 }
 
@@ -223,10 +231,12 @@ LevelWriteResult write_level(const LevelData& level, const LevelLimits& limits) 
         if (!result.error.empty()) return result;
         Out out(static_cast<size_t>(layout_of(level).size));
         serialize(level, out);
-        // the writer's promise, checked on every call: the bytes read back as this level
+        // the writer's promise, checked on every call: the bytes read back as this level (their size is the write limit's, not the read limit's)
+        LevelLimits read_back = limits;
+        read_back.max_read_bytes = std::numeric_limits<size_t>::max();
         LevelData back;
         LevelValidation report;
-        if (!LVLParser::load_from_memory(out.bytes().data(), out.bytes().size(), back, &report, limits)) {
+        if (!LVLParser::load_from_memory(out.bytes().data(), out.bytes().size(), back, &report, read_back)) {
             result.error = "the written bytes do not load (a fault of the writer): " + report.reason();
             return result;
         }
@@ -363,6 +373,13 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
         }
         return true;
     };
+    // where the rewrite holds zeros (after the end of a text, the upper words of the grid size): the first offset in [from, to) where it does not; `to` when none
+    auto first_canonical_nonzero = [&](size_t from, size_t to) -> size_t {
+        for (size_t i = from; i < to; ++i) {
+            if (canonical[i] != 0) return i;
+        }
+        return to;
+    };
     // From where on is the file laid out otherwise than its rewrite? (the reader's findings say it: a block 2 that ended early, a block 4 or an egg word cut short)
     size_t structural = m;
     std::string restructured;
@@ -390,8 +407,11 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
     const size_t field_end = kDescriptionAt + kDescriptionBytes;
     const size_t kept_end = std::min(kDescriptionAt + read.description.size() + 1, field_end);
     at = first_difference(kDescriptionAt, kept_end);
+    const size_t description_nonzero = first_canonical_nonzero(kept_end, field_end);
     if (at != kept_end) {
         unexplained(at, "description");
+    } else if (description_nonzero != field_end) {
+        unexplained(description_nonzero, "the rewrite's description, after its end");
     } else if (!all_zero(kept_end, field_end)) {
         add(RewriteChangeKind::DescriptionPadding, 1, kept_end,
             "the description has leftover bytes after its end (the original reads it up to its end): the rewrite writes zeros there");
@@ -406,8 +426,11 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
         const size_t end = start + kNameBytes;
         const size_t kept = std::min(start + read.tile_dictionary[i].size() + 1, end);
         at = first_difference(start, kept);
+        const size_t name_nonzero = first_canonical_nonzero(kept, end);
         if (at != kept) {
             unexplained(at, "dictionary name #" + num(i));
+        } else if (name_nonzero != end) {
+            unexplained(name_nonzero, "the rewrite's dictionary name #" + num(i) + ", after its end");
         } else if (!all_zero(kept, end)) {
             if (padded == 0) first_padded = kept;
             ++padded;
@@ -420,9 +443,14 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
     }
     // the grid size: the original keeps the lower word of each dword
     const size_t g = grid_size;
-    const bool low_words_equal = source[g] == canonical[g] && source[g + 1] == canonical[g + 1] && source[g + 4] == canonical[g + 4] && source[g + 5] == canonical[g + 5];
-    if (!low_words_equal) {
-        unexplained(g, "the grid size");
+    const size_t rows_differ = first_difference(g, g + 2);
+    const size_t columns_differ = first_difference(g + 4, g + 6);
+    const size_t rows_high = first_canonical_nonzero(g + 2, g + 4);
+    const size_t columns_high = first_canonical_nonzero(g + 6, g + 8);
+    if (rows_differ != g + 2 || columns_differ != g + 6) {
+        unexplained(rows_differ != g + 2 ? rows_differ : columns_differ, "the grid size");
+    } else if (rows_high != g + 4 || columns_high != g + 8) {
+        unexplained(rows_high != g + 4 ? rows_high : columns_high, "the rewrite's grid size, above the lower word");
     } else if (source[g + 2] != 0 || source[g + 3] != 0 || source[g + 6] != 0 || source[g + 7] != 0) {
         add(RewriteChangeKind::GridSizeHighWords, 1, g + 2,
             "the grid size dwords carry bits above the lower word (the original keeps " + grid_text(read.height, read.width) + "): the rewrite writes these numbers alone");
@@ -481,16 +509,20 @@ std::vector<std::string> dictionary_of_used_tiles(const LevelData& level, const 
     return names;
 }
 
-LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names) {
+LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
     LevelData level;
     level.version = LVL_EXPECTED_VERSION;
     level.game_mode = LVL_GAME_MODE_STANDARD;
     level.default_minutes = 10;                                                       // GAUNTLET and MEDIUM: 10 minutes and 6 eggs (the six originals: 6 to 12 minutes, 2 to 9 eggs)
     level.height.val = rows;
     level.width.val = columns;
-    const size_t cells = static_cast<size_t>(rows) * columns;
-    level.layer1_terrain.assign(cells, MapCell{LVL_BLANK_GROUND_TILE, 0, LVL_LAYER1_THIRD_WORD});
-    level.layer2_interactive.assign(cells, MapCell{LVL_EMPTY_TILE, 0, 0});
+    // the cells of a grid beyond the limits are not made: such a level keeps its size and has no cell, so that nothing of its size is allocated (65,535 x 65,535
+    // would be 51 GB) and write_level refuses it with the sentence of its grid
+    const uint64_t cells = static_cast<uint64_t>(rows) * columns;
+    if (rows <= limits.rows() && columns <= limits.columns() && cells <= limits.cells()) {
+        level.layer1_terrain.assign(static_cast<size_t>(cells), MapCell{LVL_BLANK_GROUND_TILE, 0, LVL_LAYER1_THIRD_WORD});
+        level.layer2_interactive.assign(static_cast<size_t>(cells), MapCell{LVL_EMPTY_TILE, 0, 0});
+    }
     level.ambient_flag = 0;
     level.ambient_tile_or_sound = LVL_EMPTY_TILE;                                     // no default ant type
     level.boundary_param = 6;

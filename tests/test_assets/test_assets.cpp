@@ -1198,7 +1198,7 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         ASSERT_TRUE(move_assigned.for_roster(0x05).validate().has(LevelProblemKind::ModeIgnored));
     } TEST_END();
 
-    TEST_CASE("6c.12 The Limits Of The Place That Reads: The Defaults Are The Game's (256 A Side, 1344 Names, Any Size); A New Map's Are 10,000 Cells, 130 A Side And 144 KB; A Limit Only Tightens") {
+    TEST_CASE("6c.12 The Limits Of The Place That Reads: The Defaults Are The Game's (256 A Side, 1344 Names, Any Size); A New Map's Are 10,000 Cells, 130 A Side, A File Of 512 KB Read And 144 KB Written; A Limit Only Tightens") {
         const LevelLimits game;
         const LevelLimits new_map = LevelLimits::for_new_maps();
         ASSERT_EQ(game.rows(), 256u);
@@ -1209,7 +1209,10 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         ASSERT_EQ(new_map.columns(), 130u);
         ASSERT_EQ(new_map.cells(), 10000u);
         ASSERT_EQ(new_map.dictionary_names(), static_cast<size_t>(1344));
-        ASSERT_EQ(new_map.max_file_bytes, static_cast<size_t>(147456));
+        ASSERT_EQ(new_map.max_read_bytes, static_cast<size_t>(524288));        // a file as it is (the largest of the library, BOMBERWORLD, has 235,594 bytes)
+        ASSERT_EQ(new_map.max_write_bytes, static_cast<size_t>(147456));       // the canonical file of a level (the writer)
+        ASSERT_EQ(game.max_read_bytes, static_cast<size_t>(-1));
+        ASSERT_EQ(game.max_write_bytes, static_cast<size_t>(-1));
         // the size of the file: refused before a byte is read, from memory and from a file
         {
             const LevelLimits small_file{256, 256, 1344, tiny.size() - 1};
@@ -1223,6 +1226,7 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
             ASSERT_FALSE(LVLParser::check_memory(tiny.data(), tiny.size(), 0x0F, small_file).playable);
             ASSERT_TRUE(has_fatal(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, small_file), LevelProblemKind::FileTooLarge));
             ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, LevelLimits{256, 256, 1344, tiny.size()}).playable);   // exactly the limit
+            ASSERT_TRUE(m.load_from_memory(tiny.data(), tiny.size(), &v, LevelLimits{256, 256, 1344, tiny.size()}));
             ASSERT_TRUE(LVLParser::check_file(map_dir + "/TINY.LVL", 0x0F, new_map).clean());
         }
         // the grid: 131 rows or columns, or more than 10,000 cells, are the game's map and no new map's

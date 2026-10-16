@@ -175,6 +175,9 @@ int main(int argc, char* argv[]) {
     uint64_t ticks_played = 0;
     size_t largest = 0;
     std::string largest_name;
+    size_t largest_file = 0;                        // the largest file as it is, and the size of its rewrite
+    std::string largest_file_name;
+    size_t largest_file_rewrite = 0;
     std::vector<std::string> beyond_new_limits;     // the maps whose rewrite LevelLimits::for_new_maps() refuses, with the reason
     std::vector<std::string> files_beyond;          // the files that a reader with those limits refuses as they are (before a rewrite), with the reason
     const std::vector<uint8_t> archive = read_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
@@ -237,6 +240,11 @@ int main(int argc, char* argv[]) {
             largest = w.bytes.size();
             largest_name = m.name;
         }
+        if (source.size() > largest_file) {
+            largest_file = source.size();
+            largest_file_name = m.name;
+            largest_file_rewrite = w.bytes.size();
+        }
         // the dictionary: by the rule of the original maps?
         if (ants::assets::dictionary_of_used_tiles(a, tile_names) == a.tile_dictionary) ++(m.path.find("Community-Maps") == std::string::npos ? originals_rule : players_rule);
         // 4. the same play
@@ -272,11 +280,14 @@ int main(int argc, char* argv[]) {
         check(largest == 113880u, "the largest rewrite is 113,880 bytes (Easy jungle): " + std::to_string(largest));
         // the dictionaries (docs/MAP_FORMAT.md, "The dictionary of a new map"): the six original maps follow the rule, 24 of the 534 players' maps do
         check(originals_rule == 6 && players_rule == 24, "the dictionaries by the originals' rule: " + std::to_string(originals_rule) + " originals, " + std::to_string(players_rule) + " players' maps");
-        // the limits of a new map (10,000 cells, 130 a side, 144 KB) hold every map of the library: any of them can be the start of a new map
+        // the limits of a new map (10,000 cells, 130 a side, a canonical file of 144 KB) hold every map of the library: any of them can be the start of a new map
         check(beyond_new_limits.empty(), "every map of the library is within the limits of a new map: " + std::to_string(beyond_new_limits.size()) + " are not");
-        // as it is, one file is not: BOMBERWORLD has 176,741 bytes after its egg word, which its rewrite (58,853 bytes) drops
-        check(files_beyond.size() == 1u && files_beyond[0] == "BOMBERWORLD.lvl: the file has 235594 bytes, more than the 147456 allowed here: nothing of it is read",
-              "one file of the library is larger than a new map as it is (BOMBERWORLD): " + std::to_string(files_beyond.size()));
+        // and every file of the library is read as it is by a reader with those limits (512 KB): the largest, BOMBERWORLD, has 235,594 bytes, 176,741 of them after
+        // its egg word, which its rewrite (58,853 bytes, within the 144 KB of a new map's canonical file) drops
+        check(files_beyond.empty(), "every file of the library is read with the limits of a new map: " + std::to_string(files_beyond.size()) + " are not");
+        check(largest_file == 235594u && largest_file_name == "BOMBERWORLD.lvl" && largest_file_rewrite == 58853u,
+              "the largest file is BOMBERWORLD's 235,594 bytes, rewritten as 58,853: " + largest_file_name + " " + std::to_string(largest_file) + " / " +
+                  std::to_string(largest_file_rewrite));
     }
     for (const std::string& b : beyond_new_limits) std::cout << "  beyond the limits of a new map: " << b << "\n";
     for (const std::string& b : files_beyond) std::cout << "  as a file beyond the limits of a new map: " << b << "\n";
