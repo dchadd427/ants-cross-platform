@@ -52,7 +52,7 @@
 // lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on), and so does a game's Hello with it that asks for a colour
 // (want_seat 0 - 3: the game page that the front page's "Rejoin" opens with a key that the match left behind: the person is back, as a game); a game's Hello with it that asks for none (255: the game page's
 // results screen) holds the seat and leaves it reserved. While a seat is reserved only a person of the match leads (the order of the match: a newcomer never leads, so never removes or starts), and nobody new
-// is taken while no person of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms. A person whose game said that it is not in a browser (protocol 15's platform: a
+// is taken while no person of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms; and when no person of the match is in the room (nobody back, no results screen that holds a seat) while somebody else is, the seats that no results screen holds end after hold_ms, so that the room's own rule leads again. A person whose game said that it is not in a browser (protocol 15's platform: a
 // game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the colour is free in the lobby that follows, for them or anybody to join by the code (the server keeps no seat either
 // for a person whom the match dropped: Room::take_rematch).
 //
@@ -339,6 +339,8 @@ public:
     /// Reserved seats whose person came back (a page with the key), and reservations that ran out (reserve_ms)
     uint32_t returns() const noexcept { return returns_; }
     uint32_t reserve_expiries() const noexcept { return reserve_expiries_; }
+    /// Kept seats that ended because no person of the match was in the room for hold_ms while somebody else was (expire_orphans)
+    uint32_t orphan_expiries() const noexcept { return orphan_expiries_; }
 
     std::vector<Event> take_events();
 
@@ -410,6 +412,7 @@ private:
     /// A guest sits in the seat: connected, held or reserved
     bool person(uint8_t seat) const noexcept { return guests_[seat].conn != nullptr || guests_[seat].held || guests_[seat].reserved; }
     void hold_guest(uint8_t seat, uint32_t now_ms);
+    void expire_orphans(uint32_t now_ms);                                 // the rematch: kept seats that no results screen holds end after hold_ms when no person of the match is in the room and somebody else is
     void unhook_reserved(uint8_t seat);                                   // the rematch: the connection of a reserved seat ended (the results screen closed): the seat stays reserved
     bool anyone_back() const noexcept;                                    // the rematch: a person of the match sits in the room and is back (a newcomer whom they let in does not count)
     bool of_match(uint8_t seat) const noexcept;                           // ... the guest of this seat is a person of the match (its place in the order is the match's, match_order_)
@@ -455,6 +458,9 @@ private:
     uint32_t start_arms_{0};                 // the STARTs that were asked for and stood (arm_start)
     uint32_t returns_{0};                    // the rematch: reserved seats that their person's page took back
     uint32_t reserve_expiries_{0};           // ... and reservations that ran out
+    uint32_t orphan_expiries_{0};            // ... and kept seats that ended because nobody of the match was in the room (expire_orphans)
+    bool orphaned_{false};                   // since orphaned_since_ms_ seats are kept, no person of the match is in the room and somebody else is
+    uint32_t orphaned_since_ms_{0};
     ChatLog chat_;
     std::function<void(const StartMsg&, uint32_t)> before_start_;
     std::function<std::string(const std::string&)> map_choice_;

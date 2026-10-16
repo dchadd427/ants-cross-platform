@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
-- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them. Desktop and phone-app players join by the code.
+- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
 
 **Rules / network:** none.
 

@@ -780,6 +780,7 @@ void HostLobby::update(uint32_t now_ms) {
         events_.push_back(Event{Event::Type::LoadFailed, slow});
         cancel_with(CancelMsg::Reason::LoadFailed, slow);
     }
+    if (cfg_.lobby_room && phase_ == Phase::Room) expire_orphans(now_ms);
     if (cfg_.lobby_room) pump_start(now_ms);
 }
 
@@ -934,6 +935,35 @@ size_t HostLobby::present() const noexcept {
         else if (room_.slots[s].state == SlotState::Client && (guests_[s].conn != nullptr || guests_[s].held)) ++n;
     }
     return n;
+}
+
+// The rematch: seats are kept, no person of the match is in the room (nobody back, no results screen that holds a seat) and somebody else is: nobody could lead, so nothing could start or be removed and
+// nobody could come in. The kept seats (none has a results screen: that one would be a person of the match) end after the hold that a seat whose link ended gets, and the room's own rule leads again.
+void HostLobby::expire_orphans(uint32_t now_ms) {
+    bool match_here = false;
+    bool others_here = false;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (room_.slots[s].state != SlotState::Client || !person(s)) continue;
+        if (guests_[s].reserved) match_here = match_here || guests_[s].conn != nullptr;          // (a results screen that holds the seat)
+        else if (of_match(s)) match_here = true;                                                 // (a person of the match who is back, held or not)
+        else others_here = true;
+    }
+    if (!any_reserved() || match_here || !others_here) {
+        orphaned_ = false;
+        return;
+    }
+    if (!orphaned_) {
+        orphaned_ = true;
+        orphaned_since_ms_ = now_ms;
+        return;
+    }
+    if (now_ms - orphaned_since_ms_ < cfg_.hold_ms) return;
+    orphaned_ = false;
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (!guests_[s].reserved) continue;
+        ++orphan_expiries_;
+        remove_guest(s, false, RejectReason::Kicked);
+    }
 }
 
 // The results screen that held a reserved seat is gone: the seat waits for its person as before (no hold: a reservation is not a dropped link), and nobody measures it

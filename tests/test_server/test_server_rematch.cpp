@@ -664,6 +664,22 @@ void run_rematch_tests() {
         ASSERT_EQ(store.retry_stale(), size_t{0});
         ASSERT_FALSE(fs::exists(other));
         ASSERT_TRUE(fs::is_regular_file(path));
+        // a record that cannot be made (the old one's obstacle is still there, so the new file cannot take its name): the old file stays on the list, so that the retry deletes it once it can be (a restart would
+        // bring a file back that the server had forgotten); only a record that really replaced it takes it off
+        const std::string held = store.path_for("rmt00024");
+        auto fourth = store.create(sample_head("rmt00024"), why);
+        ASSERT_TRUE(fourth != nullptr);
+        make_undeletable(held);
+        fourth->discard();
+        ASSERT_EQ(store.stale_count(), size_t{1});
+        why.clear();
+        auto fifth = store.create(sample_head("rmt00024"), why);                                       // (the name is a folder that is not empty: the rename fails)
+        ASSERT_TRUE(fifth == nullptr && !why.empty());
+        ASSERT_EQ(store.stale_count(), size_t{1});
+        ASSERT_EQ(store.retry_stale(), size_t{1});                                                     // (the obstacle is still there: the file is still to be deleted)
+        fs::remove_all(held);
+        ASSERT_EQ(store.retry_stale(), size_t{0});
+        ASSERT_FALSE(fs::exists(held));
 #endif
     } TEST_END();
 }

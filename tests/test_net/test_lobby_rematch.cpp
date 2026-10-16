@@ -1,5 +1,5 @@
 // Tests of the room before a match: the rematch of a lobby room (docs/SERVER.md "Lobby rooms", net::HostLobby (7)): what a lobby room's match gives for the lobby that follows it, the reserved seats of
-// that lobby and the way back into them (N4.41 - N4.45)
+// that lobby and the way back into them (N4.41 - N4.49b)
 #include "lobby_fixtures.hpp"
 
 namespace {
@@ -493,6 +493,79 @@ void run_lobby_rematch_tests() {
         b.leave();                                                                                      // no seat is kept: the room's own rule, Eve leads
         room.run(200);
         ASSERT_TRUE(e.is_leader());
+    } TEST_END();
+
+    TEST_CASE("N4.49a A Kept Seat That The Leader Moved: The Person's Game That Asks For The Colour It Had Before The Move (The Rejoin Of The Front Page Does) Is Back, As A Game, In The Seat It Has Now (The Key Finds It; The Colour Asked For Is Not The Seat)") {
+        Room room(lobby_room_config(163), false);
+        ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+        const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+        room.run(200);
+        ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                                   // Bob, who is not back, is moved to the open colour 3
+        room.run(200);
+        ASSERT_TRUE(room.host.reserved(3) && !room.host.occupied(1));
+        const size_t bob = join_keyed(room, "Bob", key_with(2), 1);                                      // his game page asks for colour 1, which it had (and which is open now)
+        room.run(200);
+        ClientLobby& b = *room.guests[bob].lobby;
+        ASSERT_TRUE(b.phase() == ClientLobby::Phase::InRoom && b.my_seat() == 3);                        // (the key finds the seat; the wish for a colour decides nothing)
+        ASSERT_TRUE(!room.host.any_reserved() && room.host.returns() == 2u && room.host.in_game(3) && !room.host.occupied(1));
+        ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@3"));
+    } TEST_END();
+
+    TEST_CASE("N4.49b A Room With People And No Possible Leader Does Not Wait For Hours: When No Person Of The Match Is In The Room (Nobody Back, No Results Screen That Holds A Seat) While Somebody Else Is, The Kept Seats That No Results Screen Holds End After The Hold Of A Seat Whose Link Ended And The Room's Own Rule Leads (The Earliest Present Guest); A Results Screen That Holds A Seat, Or A Person Of The Match Who Is Back, Keeps Them As Before; The Wait Starts Again Every Time") {
+        HostLobby::Config hc = lobby_room_config(164);
+        hc.hold_ms = 20000;
+        Room room(hc, false);
+        ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+        // Ann is back, Bob's results screen holds his seat, Eve comes in by the link; Ann goes, and Bob's tab goes
+        const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+        const size_t bob_results = join_keyed(room, "Bob", key_with(2));
+        room.run(200);
+        const size_t eve = join_with(room, page_config("Eve"));
+        room.run(200);
+        ClientLobby& e = *room.guests[eve].lobby;
+        ASSERT_TRUE(e.phase() == ClientLobby::Phase::InRoom && room.guests[ann].lobby->is_leader());
+        room.guests[ann].lobby->leave();
+        room.run(200);
+        ASSERT_TRUE(room.host.leader() == kNoLeader && room.host.reserved(1));
+        // while Bob's results screen is connected the seat is kept for hours (here: ten times the hold)
+        room.run(10 * hc.hold_ms);
+        ASSERT_TRUE(room.host.leader() == kNoLeader && room.host.reserved(1) && room.host.orphan_expiries() == 0u && room.guests[bob_results].lobby->phase() == ClientLobby::Phase::InRoom);
+        room.guests[bob_results].client_end->close();
+        room.run(200);
+        ASSERT_TRUE(room.host.reserved(1) && room.host.leader() == kNoLeader && room.host.present() == 1u);
+        room.run(hc.hold_ms - 2000u);                                                                    // (just short of the hold)
+        ASSERT_TRUE(room.host.reserved(1) && room.host.leader() == kNoLeader && room.host.orphan_expiries() == 0u);
+        room.run(2000);                                                                                  // (the hold is over)
+        ASSERT_TRUE(!room.host.occupied(1) && !room.host.any_reserved() && room.host.orphan_expiries() == 1u && room.host.reserve_expiries() == 0u);
+        ASSERT_TRUE(room.host.leader() == room.guests[eve].lobby->my_seat() && e.is_leader() && e.room().leader == e.my_seat());
+        const size_t zed = join_with(room, page_config("Zed"));                                          // the room takes people again
+        room.run(200);
+        ASSERT_TRUE(room.guests[zed].lobby->phase() == ClientLobby::Phase::InRoom && e.is_leader());
+        // the wait starts again every time: a person of the match who comes back stops it, and it counts from the next time that the match is gone
+        Room again(hc, false);
+        Rematch three = rematch_of({K::Open, K::Open, K::Open, K::Open});
+        three.people.push_back(Rematch::Person{2, "Cat", key_with(3), 3, static_cast<uint8_t>(kPlatformBrowser | kOsLinux)});
+        ASSERT_TRUE(reopened(again, three));
+        const size_t a1 = join_with(again, page_with_key("Ann", key_with(1)));
+        again.run(200);
+        const size_t dee = join_with(again, page_config("Dee"));                                         // (a game of the desktop that came by the code: not of the match)
+        again.run(200);
+        again.guests[a1].lobby->leave();                                                                 // Bob's and Cat's seats are kept and no results screen holds them
+        again.run(hc.hold_ms - 2000u);
+        ASSERT_TRUE(again.host.reserved(1) && again.host.reserved(2) && again.host.leader() == kNoLeader);
+        const size_t b1 = join_with(again, page_with_key("Bob", key_with(2)));                          // Bob is back: he leads, and Cat's seat is kept
+        again.run(10 * hc.hold_ms);
+        ASSERT_TRUE(again.guests[b1].lobby->is_leader() && again.host.reserved(2) && again.host.orphan_expiries() == 0u);
+        again.guests[b1].lobby->leave();
+        again.run(hc.hold_ms - 2000u);                                                                   // (not counted from the first time)
+        ASSERT_TRUE(again.host.reserved(2) && again.host.leader() == kNoLeader);
+        again.run(2500);
+        ASSERT_TRUE(!again.host.any_reserved() && again.host.orphan_expiries() == 1u && again.guests[dee].lobby->is_leader());
+        // a person of the match who is back keeps the seats, whether or not somebody else is there; with nobody else in the room the wait does not run (the server forgets a room that nobody is in)
+        Room alone(hc, false);
+        ASSERT_TRUE(reopened(alone, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+        alone.run(10 * hc.hold_ms);
+        ASSERT_TRUE(alone.host.reserved(0) && alone.host.reserved(1) && alone.host.orphan_expiries() == 0u && alone.host.present() == 0u);
     } TEST_END();
 
     TEST_CASE("N4.48 The Notice Of Who Is Not Back Fits A Line Of Chat (100 Characters) With Whole Names: When The Names Do Not Fit, As Many As Fit And \"And N More\"") {

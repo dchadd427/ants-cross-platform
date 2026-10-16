@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.48, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
+ "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49b, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
  "mutants": [
   {
    "id": "lobby_reserved_seat_leads",
@@ -619,6 +619,54 @@
    "old": "{ blocked(); return; }",
    "new": "{ blocked(); }",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "lobby_rejoin_wish_must_be_the_seat",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {",
+   "new": "hello.client_kind == kClientPage || hello.want_seat == seat)) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "restart_stale_forgotten_before_the_record_is_made",
+   "file": "src/ants_server/restart_record.cpp",
+   "old": "    const std::string path = path_for(head.code);\n    uint8_t random[8];",
+   "new": "    const std::string path = path_for(head.code);\n    stale_.erase(std::remove(stale_.begin(), stale_.end(), path), stale_.end());\n    uint8_t random[8];",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.203 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "lobby_orphaned_seats_never_end",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (now_ms - orphaned_since_ms_ < cfg_.hold_ms) return;",
+   "new": "    if (true) return;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_results_screen_does_not_keep_the_seats",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "match_here = match_here || guests_[s].conn != nullptr;",
+   "new": "match_here = match_here;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_orphan_wait_is_not_restarted",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (!any_reserved() || match_here || !others_here) {\n        orphaned_ = false;\n        return;\n    }",
+   "new": "    if (!any_reserved() || match_here || !others_here) {\n        return;\n    }",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_orphan_seats_end_with_nobody_else_there",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (!any_reserved() || match_here || !others_here) {",
+   "new": "    if (!any_reserved() || match_here || (others_here && false) || (!others_here && false)) {",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
   }
  ]
 }
