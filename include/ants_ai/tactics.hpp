@@ -249,6 +249,8 @@ struct LevelPlan {
     uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates
     uint32_t gate_hop_bombs{3};          // the most bombs of a hop chain that the bot plans (each costs 2 hit points)
     uint32_t gate_min_ticks_left{2400};  // no attempt starts with less than this left on the clock
+    bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (of no team) alone: they are the gate, and the gate goals defuse those on the way. A bomb of a
+                                         // team is countered as on any map
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
     bool flower_sides{false};            // a landed drop has a side, the nearest team's (MapInfo::flowers: the walking cost of every hill to the drop tile, as for a power-up of the start): the secure_kinds of the own side apply to it
     bool flower_fire{false};             // a bot without a Fire Ant takes a Fire drop that lies within reach, whoever's side it is (the Fire Ant at home: on SMALL, MEDIUM and GAUNTLET Fire only comes from a flower); the contest check decides who goes

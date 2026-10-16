@@ -24,6 +24,8 @@
 //   AI27.13  the opening of a gate map: the trip to the Fire power-up of the own side is held back for 2,400 ticks while nothing is banked, then made; the Fire Ant is not put on wall duty
 //   AI27.13b the opening puts no Fire Ant on wall duty (a thief power-up that the enemy reaches calls for walls on an open map, not on a gate map before it has banked)
 //   AI27.13c an own worker beside a pile at the first look: the flag is set and the opening is not held back
+//   AI27.14  on a gate map the counters leave the map's own bombs (of no team) alone; a team's bomb there, and a map bomb on an open map, are countered as before (every seat, straight
+//            and transposed)
 #include <algorithm>
 
 #include "ai_test.hpp"
@@ -62,6 +64,25 @@ struct Field {
         const BotView view = BotView::build(sim, 0, &map);
         const GateInfo gates = GateInfo::analyse(map, sim.grid(), 0);
         return plan_gate_goal(gates, view, rules);
+    }
+};
+
+// A world of seat 0 (its hill at (4, 4) of a 60 x 60 field) drawn for another seat and straight or transposed: transposed first (x and y swapped: seat 0's corner stays), then mirrored to
+// the seat's corner (the hills of empty_field are mirror images of each other over x' = 57 - x and y' = 57 - y). A line across the field (a wall) is all 60 tiles of a row of seat 0's world.
+struct Drawing {
+    uint8_t seat{0};
+    bool transposed{false};
+    TileCoord at(int x, int y) const {
+        if (transposed) std::swap(x, y);
+        if (seat == 1 || seat == 3) x = 57 - x;
+        if (seat == 2 || seat == 3) y = 57 - y;
+        return TileCoord{x, y};
+    }
+    std::vector<TileCoord> row(int y) const {                                        // the tiles of row `y` of seat 0's world across the whole field
+        std::vector<TileCoord> out;
+        const int r = (seat == 2 || seat == 3) ? 57 - y : y;
+        for (int k = 0; k < 60; ++k) out.push_back(transposed ? TileCoord{(seat == 1 || seat == 3) ? 57 - y : y, k} : TileCoord{k, r});
+        return out;
     }
 };
 
@@ -907,6 +928,24 @@ void run_gate_goal_tests() {
                 if (!skipped) ASSERT_EQ(bot.powerups().taken(), 0u);
             }
         }
+        {   // (c2) the power-up on the hill's side decides the skip by itself: Medium's only free worker stands beyond a fire wall of the start (another component of the start's analysis) when
+            // a cell of the wall burns out, and the Fire power-up on the hill's side with an enemy ant as near is still a trip (the component of the ant alone would not skip the contest)
+            sim::SimulationEngine sim;
+            empty_field(sim, 3, 14400);
+            place_crackers(sim, 12, 40, 25);
+            for (int x = 0; x < 60; ++x) sim.set_terrain(x, 20, sim::TERRAIN_OBSTACLE);    // the pile is walled off: a gate map ...
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 45});                    // ... with a worker beside the pile (the opening is not held back: AI27.13c)
+            for (int x = 0; x < 60; ++x) sim.set_fire_at(TileCoord{x, 14}, x == 12 ? 40u : 1000000u);   // a fire wall across the hill's side; the cell (12, 14) goes out after 40 ticks
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 16});                    // the only worker that can walk to the power-up, once the cell is out
+            sim.grid_mut().place_powerup(22, 10, static_cast<uint8_t>(sim::AntType::Fire));
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{24, 10});                    // an enemy ant two tiles from it
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(goal_plan(Level::Medium)));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(400);
+            ASSERT_TRUE(bot.gate_map());
+            ASSERT_FALSE(sim.has_fire_at(TileCoord{12, 14}));
+            ASSERT_TRUE(bot.powerups().started() >= 1u);                               // the trip is made: the power-up lies on the hill's side
+        }
         {   // (d) the map bombs: the nearest Fire power-up lies in a box whose only doorway is plugged by a map bomb. A trip on an open map walks into the bomb (a gate map routes round it: AI27.7)
             Field f;
             for (int y = 6; y <= 10; ++y) {
@@ -1062,6 +1101,39 @@ void run_gate_goal_tests() {
             }
             ASSERT_EQ(bot.gate_map(), gate);
             ASSERT_EQ(demand, !gate);                                                  // (the open map asks for walls; the opening of a gate map asks for none)
+        }
+    } TEST_END();
+    TEST_CASE("AI27.14 On A Gate Map The Counters Leave The Map's Own Bombs (Of No Team) Alone: They Are The Gate; A Team's Bomb There, And A Map Bomb On An Open Map, Are Countered As Before (Every Seat, Straight And Transposed)") {
+        enum class Bomb : uint8_t { Map, Enemy };
+        struct Case {
+            bool gate;
+            Bomb bomb;
+            bool countered;
+        };
+        for (const Case c : {Case{true, Bomb::Map, false}, Case{true, Bomb::Enemy, true}, Case{false, Bomb::Map, true}}) {
+            for (uint8_t d = 0; d < 8; ++d) {
+                const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+                sim::SimulationEngine sim;
+                empty_field(sim, 3, 14400);
+                const TileCoord pile = w.at(12, 40);
+                place_crackers(sim, pile.x, pile.y, 25);
+                if (c.gate) {
+                    for (int y = 18; y <= 26; ++y) {
+                        for (const TileCoord r : w.row(y)) sim.set_terrain(r.x, r.y, sim::TERRAIN_OBSTACLE);   // a band of rock no throw crosses: the pile is walled off, and there is no goal
+                    }
+                }
+                const TileCoord bomb = w.at(9, 9);                                     // five tiles from the hill: in the way of the hill's own ants
+                const uint8_t owner = c.bomb == Bomb::Map ? uint8_t{255} : static_cast<uint8_t>((w.seat + 1) % 4);
+                sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb.x), static_cast<uint32_t>(bomb.y), owner);
+                sim.spawn_unit(w.seat, sim::AntType::Bomber, w.at(6, 10));
+                sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(7, 11));
+                Rig rig(sim, w.seat, Level::Hard, std::make_unique<StandardBot>(goal_plan()));
+                auto& bot = rig.as<StandardBot>();
+                rig.run(600);
+                ASSERT_EQ(bot.gate_map(), c.gate);
+                const bool acted = bot.bombs().defused() + bot.bombs().set_off() > 0 || bot.bombs().busy() || !sim.grid().has_bomb_at(bomb);
+                ASSERT_EQ(acted, c.countered);
+            }
         }
     } TEST_END();
 }

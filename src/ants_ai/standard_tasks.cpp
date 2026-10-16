@@ -1549,7 +1549,7 @@ void BombTask::step(TaskContext& c) {
     int32_t best = 0;
     int best_harm = 0;
     for (const BombView& b : v.bombs()) {
-        if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally())) continue;       // an own or an allied bomb is no enemy's
+        if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) || (plan.gate_spare_map_bombs && tactics_.gate_map && b.owner >= sim::MAX_PLAYERS)) continue;   // an own or an allied bomb is no enemy's; a gate map's own bombs (of no team) are its gate, which the gate goals defuse on their way
         const auto bl = black_.find(key_of(b.tile));
         if (bl != black_.end() && bl->second > now) continue;
         const int harm = harm_to(v, c.map, plan, b.tile);                                              // the own economy first, then the ally's (only a Bomber goes there)
