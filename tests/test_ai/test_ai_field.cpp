@@ -14,6 +14,7 @@
 //   AI29.8   the breach in the engine: a Hard bot alone on the field world banks food, every seat, straight and transposed; and with the field's bombs in the seat's own colour
 //   AI29.9   POPcOrN: every seat alone banks food at Hard, and the gate goals leave the pile to the breach
 //   AI29.10  an ant whose order the world does not carry out is given up and rests; after four ants given up the task waits until the bot's ants or the power-ups change
+//   AI29.11  the carriers: a Swimmer of the ferry whose loop ended away from the pile is sent again
 //   AI29.12  an ant that took a power-up never takes one at the end of a corridor (the power-up it leaves would shut it in); an ant of the level's kind does
 //   AI29.13  the breach keeps the piles of its first look when the work changes their gates; in the stall detector's fallback it gives its ant back and orders nothing
 //   AI29.14  while the breach is live the counters leave the map's own bombs alone, also once the gate goals are exhausted
@@ -584,6 +585,38 @@ void run_field_tests() {
             rig.run(400);
             ASSERT_TRUE(bot.field().live());
             ASSERT_TRUE(bot.field().orders() > resting);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.11 The Field Breach's Carriers: A Swimmer Of The Ferry Whose Loop Ended Away From The Pile Is Sent Again (Every Seat, Straight And Transposed)") {
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            FieldWorld f(w, FieldWorld::Options{});
+            Rig rig(f.sim, w.seat, Level::Hard, std::make_unique<StandardBot>(field_plan_of()));
+            auto& bot = rig.as<StandardBot>();
+            uint64_t ticks = 0;
+            while (ticks < 12000 && f.sim.get_player_score(w.seat) == 0) {
+                rig.run(200);
+                ticks += 200;
+            }
+            ASSERT_TRUE(f.sim.get_player_score(w.seat) > 0);
+            uint32_t carrier = 0;                                                            // the ferry's Swimmer, on its way back to the pile (empty)
+            for (int k = 0; k < 400 && carrier == 0; ++k) {
+                rig.run(5);
+                const MapInfo map(f.sim);
+                const BotView view = BotView::build(f.sim, w.seat, &map);
+                for (const AntView& a : view.mine()) {
+                    uint32_t pile = 0;
+                    if (a.type == sim::AntType::Swimmer && !a.holding && bot.ferry().assigned_pile(a.id, pile)) carrier = a.id;
+                }
+            }
+            ASSERT_TRUE(carrier != 0);
+            const int32_t banked = f.sim.get_player_score(w.seat);
+            f.sim.issue_group_move_order({carrier}, w.at(9, 9));                             // an order from outside the bot ends the engine's loop on the hill's side
+            rig.run(1200);
+            ASSERT_TRUE(bot.ferry().ended() >= 1u);
+            rig.run(2400);
+            ASSERT_TRUE(f.sim.get_player_score(w.seat) > banked);                           // it carries again
         }
     } TEST_END();
 

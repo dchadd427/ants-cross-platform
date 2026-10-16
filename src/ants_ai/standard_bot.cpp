@@ -212,6 +212,9 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     if (tactics_.plan.gate_field) {
         const FieldPlan field = plan_field(context.view, context.map, seat_, FieldHints{});
         tactics_.field_map = field.feasible() && field_startable(field, context.view, context.map, seat_);
+        FerryTask::Params ferry = ferry_.params();
+        ferry.reorder_ended = tactics_.field_map;
+        ferry_.set_params(ferry);
         for (const GateTarget& pile : gates.piles()) {
             if (tactics_.field_map && (pile.gate == GateKind::Sealed || pile.gate == GateKind::Mixed)) tactics_.field_piles.push_back(pile.index);
         }

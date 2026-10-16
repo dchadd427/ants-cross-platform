@@ -153,7 +153,17 @@ void FerryTask::step(TaskContext& c) {
                 excluded_[std::make_pair(a.id, r.pile)] = now + params_.blacklist_ticks;
                 c.ledger.release(a.id, id());
                 recs_.erase(a.id);
+            } else if (params_.reorder_ended && a.idle() && !a.holding && late) {                // its loop ended away from where it was sent from
+                const auto since = idle_since_.emplace(a.id, now).first;
+                if (now >= since->second + params_.fail_after) {
+                    ++ended_;
+                    idle_since_.erase(a.id);
+                    c.ledger.release(a.id, id());
+                    recs_.erase(a.id);
+                }
+                continue;
             }
+            idle_since_.erase(a.id);
             continue;
         }
         if (!a.takes_orders() || a.holding || a.carried_points > 0) continue;

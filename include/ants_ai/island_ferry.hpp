@@ -23,6 +23,9 @@ public:
         uint32_t blacklist_ticks{900};
         uint32_t rescue_after{900};          // a Swimmer that stands idle with food this long is sent to the hill's entrance (the engine's loop ended without a deposit)
         uint32_t endgame_margin{40};         // a trip needs this many ticks more than it takes before the clock runs out
+        bool reorder_ended{false};           // a Swimmer whose loop ended away from where it was sent from (idle and empty for fail_after ticks: its walk back found no way, another ant
+                                             // stood in a corridor) is free again, and the next look sends it again. On the maps of the field breach (Tactics::field_map), whose
+                                             // carriers share a dug corridor
     };
 
     explicit FerryTask(TaskId id) : FerryTask(id, Params{}) {}
@@ -38,6 +41,8 @@ public:
     uint32_t sent() const noexcept { return sent_; }
     uint32_t failures() const noexcept { return failures_; }
     uint32_t rescues() const noexcept { return rescues_; }
+    /// Swimmers whose loop ended and that were sent again (Params::reorder_ended)
+    uint32_t ended() const noexcept { return ended_; }
     /// The Swimmers that work a pile now
     size_t working() const noexcept { return recs_.size(); }
     /// The pile that the Swimmer works (false: none)
@@ -70,6 +75,7 @@ private:
     std::map<uint32_t, Rec> recs_;           // Swimmer -> its order
     std::map<std::pair<uint32_t, uint32_t>, uint64_t> excluded_;   // (Swimmer, pile) -> until when the Swimmer is kept away from the pile
     std::map<uint32_t, uint64_t> carrying_;  // a Swimmer that stands idle with food: the first look that saw it so
+    std::map<uint32_t, uint64_t> idle_since_;   // a Swimmer of a record that stands idle and empty away from where it was sent from: the first look that saw it so
     std::map<uint32_t, int32_t> trips_;      // pile -> ticks of a round trip
     std::map<uint32_t, sim::TileCoord> clicks_;   // pile -> the cell to click (a cell that is food now)
     std::vector<int32_t> cost_;              // the Swimmer's cost from the hill over land and water (-1: no way); empty before the first search
@@ -77,6 +83,7 @@ private:
     uint32_t sent_{0};
     uint32_t failures_{0};
     uint32_t rescues_{0};
+    uint32_t ended_{0};
 };
 
 }  // namespace ants::ai
