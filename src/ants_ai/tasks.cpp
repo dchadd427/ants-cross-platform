@@ -263,7 +263,8 @@ void HarvestTask::step(TaskContext& c) {
         start_ants_known_ = true;
     }
     const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
-    const bool race_on = params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
+    const bool deny_on = params_.reserve_order && profile.value_aware_piles && !params_.contest_aware && !params_.contest_reactive;    // the denial order (Params::reserve_order): it replaces the race
+    const bool race_on = !deny_on && params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
     const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
     // by a fate (it cannot happen unless a bot is driven without the controller) is dropped after that, so that no ant stays out of the pool for ever.
@@ -532,7 +533,7 @@ void HarvestTask::step(TaskContext& c) {
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
-        if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
+        if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on && !deny_on)) {
             const uint8_t cls = tier_for(c, *info, ap.cost);
             const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
             const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
@@ -558,18 +559,40 @@ void HarvestTask::step(TaskContext& c) {
             k.race = (cls == static_cast<uint8_t>(PileClass::Multi) || (params_.race_one && cls == static_cast<uint8_t>(PileClass::One))) && !held_by_army(c, info->anchor);
             if (k.race && params_.race_ants > 0) k.cap = std::max<uint32_t>(1u, std::min<uint32_t>(k.cap, params_.race_ants));
         }
+        if (deny_on) {
+            // the denial order: what the seat leaves at a pile that others reach about as soon goes to them, so such a pile counts more; the piles that nobody competes for are
+            // the reserve and count as they are, unless an enemy ant is at one of them (it is being taken now: it goes first)
+            uint8_t cls = tier_for(c, *info, ap.cost, true);
+            if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);
+            k.cls = cls;
+            k.tier = 1;
+            if (cls == static_cast<uint8_t>(PileClass::Multi)) k.rank = k.rank * static_cast<int64_t>(params_.deny_multi_percent) / 100;
+            else if (cls == static_cast<uint8_t>(PileClass::One)) k.rank = k.rank * static_cast<int64_t>(params_.deny_one_percent) / 100;
+            else if (cls == static_cast<uint8_t>(PileClass::Safe) && params_.reserve_threat_tiles > 0) {
+                for (const AntView& e : v.others()) {
+                    if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
+                    if (e.tile.chebyshev_dist(info->anchor) <= params_.reserve_threat_tiles) {
+                        k.tier = 0;
+                        break;
+                    }
+                }
+            }
+        }
         cands.push_back(k);
     }
     if (cands.empty()) {
         unplaced_ = pool.size();
         return;
     }
-    if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
+    if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on && !deny_on)) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
     } else if (race_on) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.race ? k.cls : static_cast<uint8_t>(PileClass::Safe);     // (the class of a pile that is a race now; the others read as Safe)
+    } else if (deny_on) {
+        tiers_.clear();
+        for (const Candidate& k : cands) tiers_[k.pile] = k.cls;
     }
     std::stable_sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) { return x.tier != y.tier ? x.tier < y.tier : x.rank > y.rank; });     // ties: the lower pile index (the view's order)
 

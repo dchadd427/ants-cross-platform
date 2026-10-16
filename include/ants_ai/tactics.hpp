@@ -65,6 +65,11 @@ struct LevelPlan {
     uint32_t race_army_percent{150};
     uint32_t contest_opening_ticks{1200};  // the opening of v0.5.0 (race off) lasts this long
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
+    // the denial order (Medium, Hard): a contested pile counts more than its points per trip, the seat's own safe piles are its reserve (HarvestTask::Params::reserve_order; the race is off with it)
+    bool reserve_order{false};
+    uint32_t deny_multi_percent{300};    // a pile that two or more enemies reach about as soon as the seat: its points per trip count this percentage
+    uint32_t deny_one_percent{200};      // ... one enemy
+    int32_t reserve_threat_tiles{6};     // a reserve pile with an enemy ant this near it is eaten before everything else
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)

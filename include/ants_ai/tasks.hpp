@@ -218,6 +218,18 @@ public:
         /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
         /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
         uint32_t contest_opening_min_ants{0};
+        /// The denial order (the standard bot at Medium and Hard; docs/BOTS.md, "Contested food first: the denial order"): FOOD IS FINITE, and a pile that other teams reach about as
+        /// soon as this seat is eaten by whoever gets there, while a pile that no enemy reaches as soon waits for the seat. So the piles are ranked by points per trip as before, but a
+        /// pile that two or more enemies compete for (Multi, the classes of tier_for with an enemy that is far nearer "there first") counts deny_multi_percent of that, and one that
+        /// one enemy competes for (One) deny_one_percent: what the seat leaves there goes to the others. The piles that nobody competes for (Safe) are the seat's RESERVE and count as
+        /// they are: they wait while contested food near enough to be worth the walk is left, and they are next when it is gone. A pile that an enemy army holds or that an enemy is
+        /// far nearer to (Hopeless) counts as it is. A reserve pile with an enemy ant within reserve_threat_tiles of its anchor goes before everything else (it is being taken now).
+        /// A weight and not a rank: a contested pile across the field does not go before a reserve next to the hill, so no clock is needed to keep the reserve from being left at the
+        /// end. Only with value_aware_piles; the race is off with it.
+        bool reserve_order{false};
+        uint32_t deny_multi_percent{300};
+        uint32_t deny_one_percent{200};
+        int32_t reserve_threat_tiles{6};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
@@ -247,7 +259,8 @@ public:
     bool blacklisted(uint32_t pile, uint64_t tick) const noexcept;
     /// Whether the ant is kept away from the pile at `tick` (an order of it failed there lately)
     bool excluded(uint32_t ant, uint32_t pile, uint64_t tick) const noexcept;
-    /// The class (PileClass as a number) of a pile for the seat as of the last look (contest-aware option; -1 when the pile was not a candidate or the option is off): for the tests and the reports
+    /// The class (PileClass as a number) of a pile for the seat as of the last look (the contest-aware option, the race and the denial order; -1 when the pile was not a candidate or
+    /// no such order is on): for the tests and the reports
     int tier_of(uint32_t pile) const noexcept {
         const auto it = tiers_.find(pile);
         return it != tiers_.end() ? it->second : -1;
@@ -299,8 +312,8 @@ private:
         uint32_t bite{0};                    // the object whose units a bite takes
         uint16_t units{0};                   // its units now
         bool shut_at_start{false};           // the analysis of the start could not reach it: the walker components of the start say nothing about it
-        uint8_t tier{0};                     // contest-aware: the PileClass (always 0 when the option is off)
-        uint8_t cls{static_cast<uint8_t>(PileClass::Safe)};   // the race: the pile's class
+        uint8_t tier{0};                     // contest-aware: the PileClass (always 0 when the option is off); the denial order: 0 for a reserve that goes first, else 1
+        uint8_t cls{static_cast<uint8_t>(PileClass::Safe)};   // the race and the denial order: the pile's class
         bool race{false};                    // the race: a race is open at this pile (see Params::race)
     };
     struct Watch {

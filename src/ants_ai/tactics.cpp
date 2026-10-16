@@ -58,6 +58,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
+            p.reserve_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOTS.md, "Contested food first: the denial order")
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.takes_combat = true;
@@ -90,6 +91,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
             p.contest_opening_ants = 2;
+            p.reserve_order = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.flower_sides = true;
@@ -287,6 +289,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
             case Style::Economic:
                 p.contest_opening_ants = 0;
                 p.race = false;                                                               // (no contest of the middle: that is the style)
+                p.reserve_order = false;
                 p.wall_trigger = WallTrigger::Early;
                 p.raid_min_loot = p.raid_min_loot * 3;                                       // (it defends like the others: the Combat Ant that harvests costs nothing and is its defence)
                 break;
@@ -302,6 +305,7 @@ LevelPlan plan_for(Level level, Style style, BotRng& rng) noexcept {
                 p.ally_help = true;
                 p.contest_opening_ants = 0;
                 p.race = false;                                                               // (no contest of the middle)
+                p.reserve_order = false;
                 break;
             case Style::Random:
                 break;
