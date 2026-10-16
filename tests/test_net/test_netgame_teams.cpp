@@ -1146,6 +1146,7 @@ void run_prediction_tests() {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         enable_prediction(t);
+        t.keep_up = true;                                                                        // (the jitter buffer and the lag below are those of a link with no lateness: a late loopback would grow the buffer)
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
