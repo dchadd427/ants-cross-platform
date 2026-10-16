@@ -252,6 +252,24 @@ target_link_libraries(test_loader_fidelity PRIVATE ants_test_paths)
 
 add_test(NAME test_loader_fidelity COMMAND test_loader_fidelity)
 
+# The round-trip law of the map writer (docs/MAP_FORMAT.md): every map of the library is read, written and read again, and the file and its rewrite play the same
+add_executable(test_map_roundtrip
+    test_map_roundtrip.cpp
+)
+
+target_link_libraries(test_map_roundtrip PRIVATE
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_map_roundtrip PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+target_link_libraries(test_map_roundtrip PRIVATE ants_test_paths)
+
+add_test(NAME test_map_roundtrip COMMAND test_map_roundtrip)
+
 add_executable(test_commands
     test_commands.cpp
 )

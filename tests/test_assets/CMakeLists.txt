@@ -64,3 +64,12 @@ target_include_directories(test_movement_tables PRIVATE
 target_link_libraries(test_movement_tables PRIVATE ants_test_paths)
 
 add_test(NAME test_movement_tables COMMAND test_movement_tables)
+
+# The writer of the .lvl format (docs/MAP_FORMAT.md), and the reader and the writer on hostile input (the round-trip proof over the library is tests/test_sim/test_map_roundtrip)
+add_executable(test_lvl_writer
+    test_lvl_writer.cpp
+)
+
+target_link_libraries(test_lvl_writer PRIVATE ants_assets ants_test_paths)
+
+add_test(NAME test_lvl_writer COMMAND test_lvl_writer)

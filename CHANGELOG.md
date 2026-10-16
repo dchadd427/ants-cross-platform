@@ -30,6 +30,13 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5466c8c2...LASTCODE), [the food order](docs/BOT_FOOD.md)
 
+## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
+
+**For players:**
+- Under the hood: the map files can now be written, not only read; nothing changes in the game.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...ee0d2604)
+
 ## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
 
 **For players:**
