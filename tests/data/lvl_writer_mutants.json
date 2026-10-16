@@ -1,0 +1,267 @@
+{
+ "note": "Mutants of the map writer, the reader's limits and lvl_tool (docs/MAP_FORMAT.md) for tools/mutate.py: python3 tools/mutate.py tests/data/lvl_writer_mutants.json --keep-going --jobs 2. Every mutant must be caught by test_lvl_writer, test_assets, test_map_roundtrip or lvl_tool --selftest.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "columns_written_as_rows",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "o.u32(level.width);",
+   "new": "o.u32(level.height);",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "texts_padded_with_blanks",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "bytes_.insert(bytes_.end(), field - s.size(), uint8_t{0});",
+   "new": "bytes_.insert(bytes_.end(), field - s.size(), uint8_t{0x20});",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_waypoint_without_trigger_written_whole",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (w.flag == 0) continue;",
+   "new": "if (w.flag == 0 && w.x == 0xFFFF) continue;",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "one_stage_too_many",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "o.u16(static_cast<uint16_t>(f.variants.size()));",
+   "new": "o.u16(static_cast<uint16_t>(f.variants.size() + 1));",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "no_eggs",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "o.u16(level.boundary_param);",
+   "new": "o.u16(0);",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_waypoint_without_trigger_may_hold_chances",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (w.param != 0 || chances) {",
+   "new": "if (w.param != 0 && chances) {",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_long_name_is_not_refused",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (name.size() > kNameBytes) return",
+   "new": "if (name.size() > kNameBytes + 1) return",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_wrong_team_is_not_refused",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (sp.team_id != expected) {",
+   "new": "if (sp.team_id != expected && sp.team_id < 4) {",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "bytes_after_the_egg_word_not_named",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m,",
+   "new": "add(RewriteChangeKind::TrailingBytes, size - m - 1, m,",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "name_leftovers_not_counted",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "++padded;",
+   "new": "padded += 0;",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_columns_high_word_not_seen",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "source[g + 2] != 0 || source[g + 3] != 0 || source[g + 6] != 0 || source[g + 7] != 0",
+   "new": "source[g + 2] != 0 || source[g + 3] != 0",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_cut_block_4_restructured_from_the_egg_word",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "structural = static_cast<size_t>(full.block4);",
+   "new": "structural = static_cast<size_t>(full.egg_word);",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_rule_names_unused_tiles",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (id < tile_names.size() && !tile_names[id].empty()) names[id] = tile_names[id];",
+   "new": "if (id < tile_names.size() && !tile_names[id].empty()) names[id] = tile_names[id];\n    for (size_t k = 0; k < names.size() && k < tile_names.size(); ++k) if (k % 97 == 0) names[k] = tile_names[k];",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "food_stages_are_not_used_tiles",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "for (const FoodItemVariant& v : f.variants) use(v.tile_id);",
+   "new": "for (const FoodItemVariant& v : f.variants) (void)v;",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "blank_ground_third_word_zero",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "MapCell{LVL_BLANK_GROUND_TILE, 0, LVL_LAYER1_THIRD_WORD}",
+   "new": "MapCell{LVL_BLANK_GROUND_TILE, 0, 0}",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "chances_compared_as_numbers",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "chances = chances && same_bits(p.probabilities[k], q.probabilities[k]);",
+   "new": "chances = chances && p.probabilities[k] == q.probabilities[k];",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "cell_flags_not_compared",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (p.tile_index != q.tile_index || p.flags != q.flags || p.properties != q.properties) {",
+   "new": "if (p.tile_index != q.tile_index || p.properties != q.properties) {",
+   "build": [
+    "test_lvl_writer",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_proof_misses_trailing_bytes",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "add(RewriteChangeKind::TrailingBytes, size - m, m,",
+   "new": "add(RewriteChangeKind::DescriptionPadding, size - m, m,",
+   "build": [
+    "test_map_roundtrip"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "the_columns_limit_forgotten",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "} else if (rows > limits.rows() || columns > limits.columns()) {",
+   "new": "} else if (rows > limits.rows()) {",
+   "build": [
+    "test_assets",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_assets && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "the_dictionary_limit_forgotten",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "} else if (level.tile_dictionary.size() > limits.dictionary_names()) {",
+   "new": "} else if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {",
+   "build": [
+    "test_assets",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_assets && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "the_size_limit_forgotten_in_memory",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "        if (size > limits.max_file_bytes) {",
+   "new": "        if (size > limits.max_file_bytes && size > (1u << 30)) {",
+   "build": [
+    "test_assets",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_assets && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "a_large_file_read_before_it_is_refused",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "        if (static_cast<uint64_t>(size) > limits.max_file_bytes) {",
+   "new": "        if (static_cast<uint64_t>(size) > limits.max_file_bytes && size < 0) {",
+   "build": [
+    "test_assets",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_assets && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "check_ignores_the_roster",
+   "file": "tools/lvl_tool.cpp",
+   "old": "const LevelValidation v = level.validate(o.roster, limits);           // (what LVLParser::check_memory answers)",
+   "new": "const LevelValidation v = level.validate(0x0F, limits);           // (what LVLParser::check_memory answers)",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "rewrite_writes_a_map_that_does_not_play",
+   "file": "tools/lvl_tool.cpp",
+   "old": "<< v.reason() << \"; nothing written\\n\";\n        print_findings(v, out);\n        return 1;",
+   "new": "<< v.reason() << \"; nothing written\\n\";\n        print_findings(v, out);",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  }
+ ]
+}

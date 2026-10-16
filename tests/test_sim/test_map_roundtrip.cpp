@@ -3,10 +3,11 @@
 //   1. the file is read, written by write_level and the bytes are read again: the two levels are the same map (same_level: every field that a file holds);
 //   2. the rewrite differs from the file only where the original never reads a byte or where the file was cut short (describe_rewrite: no unexplained byte), and
 //      those differences are counted by kind (the numbers that the document gives);
-//   3. the rewrite is canonical: written again it is the same bytes, and it is the same with the limits of a new map (LevelLimits::for_new_maps());
+//   3. the rewrite is canonical: written again it is the same bytes, and the same within the limits of a new map (LevelLimits::for_new_maps()) where it fits them;
 //   4. the file and its rewrite PLAY the same: two engines, one on each, with the four teams and the scripted players of the map sweep (tests/common/scripted_players.hpp),
 //      have the same full state hash at the start and after every game second, for kPlayTicks ticks.
-// `test_map_roundtrip --ticks N` plays N ticks instead (the time of a CI run is the reason for the default), `--only TEXT` the maps whose names hold TEXT.
+// The counts of the library (and of the dictionaries by the rule of the original maps) are those of docs/MAP_FORMAT.md. `test_map_roundtrip --ticks N` plays N ticks
+// instead (the time of a CI run is the reason for the default), `--only TEXT` only the maps whose names hold TEXT (and checks no count).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -175,6 +176,11 @@ int main(int argc, char* argv[]) {
     size_t largest = 0;
     std::string largest_name;
     std::vector<std::string> beyond_new_limits;     // the maps whose rewrite LevelLimits::for_new_maps() refuses, with the reason
+    const std::vector<uint8_t> archive = read_bytes(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd");
+    const std::vector<std::string> tile_names = ants::assets::tile_names_from_chd(archive.data(), archive.size());
+    check(tile_names.size() == 1344u, "the tile names of ants.chd");
+    int originals_rule = 0;                         // maps whose dictionary is the one of the original maps' rule (dictionary_of_used_tiles)
+    int players_rule = 0;
     for (const Map& m : maps) {
         if (!only.empty() && m.name.find(only) == std::string::npos) continue;
         ++total;
@@ -227,6 +233,8 @@ int main(int argc, char* argv[]) {
             largest = w.bytes.size();
             largest_name = m.name;
         }
+        // the dictionary: by the rule of the original maps?
+        if (ants::assets::dictionary_of_used_tiles(a, tile_names) == a.tile_dictionary) ++(m.path.find("Community-Maps") == std::string::npos ? originals_rule : players_rule);
         // 4. the same play
         const std::vector<ants::sim::StateHash> pa = play(a, ticks);
         const std::vector<ants::sim::StateHash> pb = play(b, ticks);
@@ -244,8 +252,9 @@ int main(int argc, char* argv[]) {
               << maps_with[RewriteChangeKind::Restructured] << "\n"
               << "  maps with name leftovers " << maps_with[RewriteChangeKind::NamePadding] << ", description leftovers " << maps_with[RewriteChangeKind::DescriptionPadding]
               << ", grid size high words " << maps_with[RewriteChangeKind::GridSizeHighWords] << ", bytes after the egg word " << maps_with[RewriteChangeKind::TrailingBytes] << "\n"
-              << "  the largest rewrite " << largest << " bytes (" << largest_name << "); about " << ticks_played << " ticks played in " << seconds << " s\n";
-    if (only.empty() && ticks == kPlayTicks) {
+              << "  the largest rewrite " << largest << " bytes (" << largest_name << "); dictionaries by the originals' rule: " << originals_rule << " originals, " << players_rule
+              << " players' maps; about " << ticks_played << " ticks played in " << seconds << " s\n";
+    if (only.empty()) {
         // The numbers of docs/MAP_FORMAT.md ("The round-trip law"): a change of the library or of the writer that moves them updates the document with them.
         check(total == 540, "the library has 540 maps (6 originals and the 534 of maps.json): " + std::to_string(total));
         check(same_map == total && same_play == total, "every map reads back and plays the same as its rewrite");
@@ -256,9 +265,11 @@ int main(int argc, char* argv[]) {
         check(maps_with[RewriteChangeKind::TrailingBytes] == 64, "64 maps have bytes after the egg word: " + std::to_string(maps_with[RewriteChangeKind::TrailingBytes]));
         check(maps_with[RewriteChangeKind::Restructured] == 12, "12 maps end inside block 4 or before the egg word: " + std::to_string(maps_with[RewriteChangeKind::Restructured]));
         check(same_where_read == 528, "528 maps are the same bytes where the original reads: " + std::to_string(same_where_read));
-        check(largest == 113880, "the largest rewrite is 113,880 bytes (Easy jungle): " + std::to_string(largest));
+        check(largest == 113880u, "the largest rewrite is 113,880 bytes (Easy jungle): " + std::to_string(largest));
+        // the dictionaries (docs/MAP_FORMAT.md, "The dictionary of a new map"): the six original maps follow the rule, 24 of the 534 players' maps do
+        check(originals_rule == 6 && players_rule == 24, "the dictionaries by the originals' rule: " + std::to_string(originals_rule) + " originals, " + std::to_string(players_rule) + " players' maps");
         // the limits of a new map (100 x 100 cells, 120 KB) hold every rewrite but one: Bomb Races has 129 columns
-        check(beyond_new_limits.size() == 1 && beyond_new_limits[0] == "Bomb Races.lvl: the grid has 40 rows x 129 columns, more than the 100 x 100 allowed here",
+        check(beyond_new_limits.size() == 1u && beyond_new_limits[0] == "Bomb Races.lvl: the grid has 40 rows x 129 columns, more than the 100 x 100 allowed here",
               "one map is beyond the limits of a new map (Bomb Races, 40 x 129): " + std::to_string(beyond_new_limits.size()));
     }
     for (const std::string& b : beyond_new_limits) std::cout << "  beyond the limits of a new map: " << b << "\n";

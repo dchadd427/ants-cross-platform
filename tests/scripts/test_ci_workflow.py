@@ -207,12 +207,12 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     def test_the_other_suites_of_the_runner_are_steps_of_the_linux_and_macos_jobs(self):
         for job in ("linux", "macos"):
             block = "\n".join(job_block(job))
-            for needle in ("build/map_sweep --selftest", "build/map_sweep Community-Maps --ticks 600", "python3 tools/community_maps.py verify Community-Maps", "build/bot_arena --selftest", "build/replay_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
+            for needle in ("build/map_sweep --selftest", "build/map_sweep Community-Maps --ticks 600", "python3 tools/community_maps.py verify Community-Maps", "build/bot_arena --selftest", "build/replay_tool --selftest", "build/lvl_tool --selftest", "e2e_runner --all", "bash tests/scripts/test_start_game.sh",
                            "tests/scripts/test_ants_server.sh --list-parts", "tests/scripts/test_ants_server.sh --part", "python3 tools/check_version_consistency.py",
                            "python3 tests/scripts/run_python_tests.py", "ctest --test-dir build"):
                 self.assertIn(needle, block, "%s: no step runs `%s`" % (job, needle))
         windows = "\n".join(job_block("windows"))
-        for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "e2e_runner.exe --all"):
+        for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "lvl_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
 
     def test_the_commands_of_the_runners_script_and_python_suites_are_what_the_ci_runs(self):
@@ -224,6 +224,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("python3 tools/community_maps.py verify Community-Maps", self.runner)
         self.assertIn("bot_arena\" --selftest", self.runner)
         self.assertIn("replay_tool\" --selftest", self.runner)
+        self.assertIn("lvl_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
 
     def test_the_web_job_builds_both_images_and_checks_the_stacks_and_the_label(self):
@@ -289,6 +290,7 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
             self.write_program("%s/map_sweep" % folder, sweep)
         self.write_program("build/bot_arena", tool % "bot_arena")
         self.write_program("build/replay_tool", tool % "replay_tool")
+        self.write_program("build/lvl_tool", tool % "lvl_tool")
         self.write_program("tools/community_maps.py", "import os, sys\nopen('ran.txt', 'a').write('community_maps ' + ' '.join(sys.argv[1:]) + '\\n')\nsys.exit(int(os.environ.get('FAKE_VERIFY_EXIT', '0')))\n")
 
     def write_program(self, path, text):
@@ -330,7 +332,7 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
         for job, script in self.steps():
             status, out, ran = self.run_script(script)
             self.assertEqual(status, 0, (job, out))
-            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], job)
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool", "lvl_tool"], job)
             self.assertIn("map_sweep Community-Maps --ticks 600 --jobs 2 --out build/community_sweep.json", ran[1])
             self.assertEqual(ran[2], "community_maps verify Community-Maps build/community_sweep.json")
 
@@ -343,7 +345,7 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
                 self.assertIn("Map %d.lvl: does not load" % i, out, (job, i))
             self.assertIn("summary line 24", out, job)
             self.assertNotIn("Table row", out, job)                                       # (the table of every play is not poured into the log)
-            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], "the other tools still run: " + job)
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool", "lvl_tool"], "the other tools still run: " + job)
 
     def test_a_sweep_that_stops_before_its_findings_shows_the_end_of_its_log(self):
         self.with_log("".join("line %d\n" % i for i in range(100)))
@@ -359,7 +361,7 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
         for job, script in self.steps():
             status, out, ran = self.run_script(script, FAKE_VERIFY_EXIT="1")
             self.assertNotEqual(status, 0, job)
-            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool"], job)
+            self.assertEqual([r.split()[0] for r in ran], ["map_sweep", "map_sweep", "community_maps", "bot_arena", "replay_tool", "lvl_tool"], job)
 
     def test_a_tool_that_fails_its_selftest_still_fails_the_step(self):
         self.with_log(sweep_log(0))

@@ -59,6 +59,10 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
 /// The tile ids a level uses, in rising order: every layer cell, block 1 record, food stage and block 3's default type that is not the empty tile 0x7FFE.
 std::vector<uint16_t> used_tile_ids(const LevelData& level);
 
+/// The name of every tile id: the names of the 1,344 animations of Table 4 of ants.chd (the bytes of the file), which every named entry of the six original maps'
+/// dictionaries is; empty when the bytes are no archive of the game.
+std::vector<std::string> tile_names_from_chd(const uint8_t* data, size_t size);
+
 /// The dictionary that each of the six original maps has for its content: one entry per tile id from 0 to the highest id the level uses, the name of a used
 /// id (`tile_names`: the names of ants.chd's Table 4, the animation of each id), "." for every other one ("do not load this graphic"); one "." for a level that
 /// uses no tile. A used id without a name in `tile_names` is ".".

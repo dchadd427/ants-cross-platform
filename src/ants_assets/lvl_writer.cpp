@@ -1,5 +1,7 @@
 #include "ants_assets/lvl_writer.hpp"
 
+#include "ants_assets/chd_parser.hpp"
+
 #include <algorithm>
 #include <cstring>
 #include <utility>
@@ -456,6 +458,16 @@ std::vector<uint16_t> used_tile_ids(const LevelData& level) {
         if (seen[id]) ids.push_back(static_cast<uint16_t>(id));
     }
     return ids;
+}
+
+std::vector<std::string> tile_names_from_chd(const uint8_t* data, size_t size) {
+    CHDHeader header;
+    std::vector<AnimationSequence> animations;
+    if (!CHDParser::parse_header(data, size, header) || !CHDParser::parse_table4_animations(data, size, header.table4_offset, animations)) return {};
+    std::vector<std::string> names;
+    names.reserve(animations.size());
+    for (const AnimationSequence& a : animations) names.push_back(a.name);
+    return names;
 }
 
 std::vector<std::string> dictionary_of_used_tiles(const LevelData& level, const std::vector<std::string>& tile_names) {
