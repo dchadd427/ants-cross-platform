@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.54 - 2026-10-16 - Rematch: back to the lobby with one button
+
+**For players:**
+- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
+- **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them. Desktop and phone-app players join by the code.
+
+**Rules / network:** none.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/469bd142...4f3d8cbb)
+
 ## v0.12.53 - 2026-10-15 - Fewer lost points on walled-in maps
 
 **For players:**
@@ -545,13 +555,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/71a8199...e93ee44), [detailed notes](docs/NETWORK_PORT.md#protocol-14-the-leader-of-a-room-moves-a-player-to-another-colour)
 
-## v0.9.1 - 2026-10-05 - A player who quits during a catch-up no longer pauses the match
+## Older versions (v0.9.1 and before)
 
-**For players:**
-- **A player who quits during a catch-up no longer leaves the match paused:** the server reads the Leave that came before the reset and drops the seat. Quitting while a lot of the server's messages were still unread (the catch-up a rejoining player gets) made the connection reset, the reset lost the Leave, and the server kept the seat, so the others waited for a player who had gone.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cf4e71f...4b81a2c)
-
-## Older versions (v0.9.0 and before)
-
-Every release before v0.9.1, and the long notes of v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.10.0, and the long notes of v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
