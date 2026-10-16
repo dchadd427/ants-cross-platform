@@ -28,7 +28,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Under the hood: a map can now be checked for whether it works in the original game; nothing changes in the game.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...2df8cea2)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bac7e3b0...a92c2a3e)
 
 ## v0.12.55 - 2026-10-16 - Under the hood: the map files can be written
 
