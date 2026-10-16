@@ -439,6 +439,41 @@
    "old": "if (st.client) st.client.leave();",
    "new": "if (false) st.client.leave();",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "lobby_page_no_match_in_its_context",
+   "file": "web/lobby.html",
+   "old": "community: communityOf, back: back }",
+   "new": "community: communityOf }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_page_keeps_the_match_at_start",
+   "file": "web/lobby.html",
+   "old": "            forgetSession(); leaveBack();              // (Back from the match makes a room again",
+   "new": "            forgetSession();              // (Back from the match makes a room again",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_page_host_back_says_left",
+   "file": "web/lobby.html",
+   "old": "host: e.name, back: e.back });",
+   "new": "host: e.name });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_page_no_note_under_start",
+   "file": "web/lobby.html",
+   "old": "            setText($('start-note'), side.note); $('start-note').hidden = !side.note;\n",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_page_no_strip_at_the_top",
+   "file": "web/lobby.html",
+   "old": "if (back) backBar.show(back);",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]
 }

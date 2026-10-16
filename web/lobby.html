@@ -291,7 +291,7 @@
 <link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css">
 </head>
 <body>
-<div class="screen">
+<div class="screen" id="screen">
 <main class="wrap">
     <div class="banner" id="banner" role="status" hidden><span id="banner-text"></span><button class="btn sm" type="button" id="banner-x">OK</button></div>
     <div class="rejoin" id="rejoin" hidden><span id="rejoin-note"></span><button class="btn sm" type="button" id="rejoin-go">Rejoin it</button></div>
@@ -380,7 +380,7 @@
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
         var Rematch = window.AntsRematch;
-        if (!Rules || !Net || !Chat) {           // the three scripts of front/ did not come: the page cannot do anything, and says so
+        if (!Rules || !Net || !Chat || !Rematch) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -637,7 +637,7 @@
         var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
         var lis = {};                                 // the card of each colour (by seat)
         var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colours, until START
-        var backBar = Rematch.frontStrip({ doc: document, before: document.querySelector('.screen'), fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
+        var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
         var chat = Chat.mount({ doc: document, host: $('chat'), colours: COLOURS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
