@@ -23,6 +23,8 @@ namespace ants::replay {
 /// Finds the replay's map in `maps_dir` by the file name that the head holds (the name as written, else the same name in another case), checks that it is the same file (the head's hash)
 /// and loads it. False with `error` otherwise: a missing map is refused by name, a map of the same name that is another file with both hashes.
 bool load_map(const Header& head, const std::string& maps_dir, assets::LevelData& level, std::string& error);
+/// The same with several folders, asked in order (the server's maps folder, then its community folder): the first that holds the name is the map's, as in the server's own list of maps.
+bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
 
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
 std::string rules_refusal(const Header& head);
@@ -31,12 +33,16 @@ std::string rules_refusal(const Header& head);
 /// of the match did), the seed, the seats that play, their names and the teams that the match started with. `level` is the map that load_match found (a viewer may hand the one that has no hill art for the seats that do not play: the match is the same).
 void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog);
 
-/// What play() calls while it plays; both are optional
+/// What play() calls while it plays; every one is optional
 struct Hooks {
     /// Before a command is applied: its turn, the command, and the engine as it stands then (the ants that the command names can be looked up)
     std::function<void(uint32_t turn, const sim::Command& command, sim::SimulationEngine& engine)> before_command;
     /// After it was applied, with what the engine said
     std::function<void(uint32_t turn, const sim::Command& command, const sim::CommandResult& result, sim::SimulationEngine& engine)> after_command;
+    /// After every tick, with the number of turns played so far (1 after the first), before the engine's news and cue queues are cleared (poll_news_events and poll_audio_events still hold what this tick
+    /// posted). The engine is given non-const only because the engine's readers are (get_unit); a hook that changes it spoils the replay, which the hashes then say. This is what the stats pass of a match
+    /// is built on (match_stats.hpp); a play() with no hook pays one test of an empty function for each tick.
+    std::function<void(uint32_t turns, sim::SimulationEngine& engine)> after_tick;
 };
 
 struct Outcome {

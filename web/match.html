@@ -13,6 +13,7 @@
         :root { --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b; }
     </style>
     <link rel="stylesheet" href="matches.css">
+    <link rel="stylesheet" href="match_stats.css">
 </head>
 <body>
 <div class="screen">
@@ -48,6 +49,7 @@
 <script src="replay_page.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="history_page.js"></script>
+<script src="match_stats.js"></script>
 <script>
 (function () {
     'use strict';
@@ -83,8 +85,8 @@
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textToCopy).then(function () { done(true); }, fallback); else fallback();
     }
 
-    // ---- the sections of the page: each builds a panel (or nothing) from the record, in this order. A later section (what a replay pass counts: over time, activity, combat, ants and economy) is one more
-    // entry here that reads H.detailsOf(rec) and builds nothing when its keys are not there, so a match without them looks as it does today; see docs/REPLAYS.md "The match pages". ----
+    // ---- the sections of the page: each builds a panel (or nothing) from the record, in this order. The stats of the replay pass (web/match_stats.js: the band of highlights, over time, activity) read
+    // what a record keeps under `details` (H.detailsOf) and build nothing when its keys are not there, so a match without them looks as it did before; see docs/REPLAYS.md "The match pages". ----
     function resultSection(rec, ctx) {
         var s = panel('result', 'h1'); s.className = 'panel hero';
         var tv = pics.node(rec.map, 'page'); s.appendChild(tv);
@@ -203,7 +205,13 @@
         s.appendChild(f); s.appendChild(el('p', 'idline', 'Match ' + rec.id));
         return s;
     }
-    var SECTIONS = [resultSection, replaySection, boardSection, aboutSection];
+    var stats = window.AntsMatchStats.sections(document, function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name); });
+    function moreSection(rec) {      // a match that has no stats says why, in one line, under the scoreboard
+        var text = window.AntsMatchStats.noStatsNote(rec);
+        if (!text) return null;
+        var s = panel('more', 'more-h', 'More stats'), n = el('div', 'note'); n.appendChild(el('p', '', text)); s.appendChild(n); return s;
+    }
+    var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, stats.activity, moreSection, aboutSection];
 
     // ---- the page ----
     function notice(bold, rest, buttons) {
@@ -222,6 +230,7 @@
         current = rec;
         var ctx = { sides: H.sidesOf(rec) };
         put(SECTIONS.map(function (f) { return f(rec, ctx); }));
+        window.AntsMatchStats.redraw(document);                          // (the charts are drawn for the width of their boxes)
         document.title = document.title.replace(/^Match/, function () { return R.mapTitle(rec.map) + ', ' + H.formatText(rec.format); });      // (a function: a map name with $& or $' in it is text, not a pattern of replace)
         var show = $('show'); if (show) show.addEventListener('click', function () { setReplay(!frame); });
         var full = $('rep-full');
@@ -244,6 +253,7 @@
     $('all-btn').addEventListener('click', function (ev) {
         try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && new URL(document.referrer).pathname === '/matches.html' && window.history.length > 1) { ev.preventDefault(); window.history.back(); } } catch (e) { /* the link works */ }
     });
+    window.addEventListener('resize', function () { window.AntsMatchStats.redraw(document); });
     // the game page in the frame says so when its own Quit is pressed
     window.addEventListener('message', function (ev) { if (ev.origin === window.location.origin && ev.data && ev.data.ants === 'replay-leave' && frame && ev.source === frame.contentWindow) setReplay(false); });
     function lookLive() {

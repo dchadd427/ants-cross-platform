@@ -604,7 +604,7 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
     auto store = std::make_unique<HistoryStore>(database, std::move(config));
     if (!store->prepare(why)) return false;
     history_ = std::move(store);
-    if (replays_ != nullptr) history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory());
+    if (replays_ != nullptr) history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
     return true;
 }
 

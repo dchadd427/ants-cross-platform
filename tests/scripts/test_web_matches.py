@@ -153,10 +153,10 @@ class TheMatchPage(unittest.TestCase):
     page = read("web", "match.html")
 
     def test_the_sections_are_a_list_so_that_a_later_one_is_one_more_entry(self):
-        self.assertIn("var SECTIONS = [resultSection, replaySection, boardSection, aboutSection];", self.page)
+        self.assertIn("var SECTIONS = [resultSection, replaySection, stats.summary, boardSection, stats.overtime, stats.activity, moreSection, aboutSection];", self.page)
         self.assertIn("put(SECTIONS.map(function (f) { return f(rec, ctx); }));", self.page)
         self.assertIn("function put(nodes) { var box = $('sections'); box.textContent = ''; nodes.forEach(function (n) { if (n) box.appendChild(n); }); }", self.page)    # (a section that has nothing to say is null)
-        self.assertIn("H.detailsOf(rec)", self.page)                                                         # (the comment that says how a later section reads what a replay pass adds)
+        self.assertIn("H.detailsOf", self.page)                                                              # (the comment that says how the stats sections read what a replay pass keeps: web/match_stats.js, tests/scripts/test_web_match_stats.py)
         for ident in ("result", "replay", "board", "about"):
             self.assertRegex(self.page, r"panel\('%s'," % ident)
 

@@ -52,12 +52,25 @@ def record(ident, ended, map_, fmt, seats, rows, **kw):
     return r
 
 
+def details_of_people():
+    """The `details` of the match of people as the replay pass keeps them (docs/REPLAYS.md "The stats of a replay pass"): 48 points of 15 seconds, the highlights, 12 minutes of orders"""
+    points = range(1, 49)
+    score = [[min(140, 30 * i) for i in points], [min(1010, 22 * i) for i in points], [min(2040, 45 * i) for i in points], [max(0, 500 - 12 * i) for i in points]]
+    kills = [[i // 7 for i in points], [i // 7 for i in points], [min(3, i // 16) for i in points], [min(2, i // 24) for i in points]]
+    return {"v": 1, "turns": 14405, "step": 300, "over_time": {"score": score, "kills": kills},
+            "highlights": {"first_blood": {"t": 967, "by": 2, "of": 0}, "last_kill": {"t": 14294, "by": 0, "of": 1}, "lead": [[300, 3, -1], [4600, 2, -1]], "comeback": {"seat": 2, "behind": 285, "t": 4000}, "wiped_out": [[3, 12272, 1]]},
+            "activity": {"per_minute": [[68, 59, 70, 42, 63, 30, 40, 34, 74, 26, 76, 47], [91, 69, 101, 71, 68, 70, 66, 35, 125, 56, 119, 66], [52, 125, 57, 24, 18, 18, 21, 20, 10, 19, 13, 16], [79, 48, 63, 9, 3, 8, 9, 8, 14, 8, 8, 13]],
+                         "by_kind": {"move": [284, 387, 234, 163], "attack": [307, 503, 100, 43], "bomb": [2, 0, 15, 48], "raid": [7, 25, 24, 6]}, "ants": [{"Worker": 30}, {}, {}, {}]},
+            "combat": {"kills": [[0, 4, 3, 0], [2, 0, 0, 5], [2, 0, 0, 1], [0, 1, 1, 0]], "dealt": [96, 115, 18, 50], "taken": [67, 87, 57, 68]}}
+
+
 def make_records():
     people = record(ID_PEOPLE, NOW - 100, "TREASURE.LVL", "2v2",
                     [seat(0, "Green", HOSTILE, "", score=140, killed=7, lost=4, bombs_planted=2, fires_lit=16), seat(1, "Red", "Bea", "", score=1010, killed=7, lost=5),
                      seat(2, "Blue", "Pip", "Hard", score=2040, killed=3, lost=4, bombs_defused=11, fires_lit=14, winner=True), seat(3, "Black", "Rex", "Hard", score=70, killed=2, lost=6, hatched=1, bombs_planted=37, fires_lit=9)],
                     [{"seats": [2], "score": 2040, "killed": 3, "lost": 4, "hatched": 0, "winner": True}, {"seats": [1], "score": 1010, "killed": 7, "lost": 5, "hatched": 0, "winner": False},
                      {"seats": [0, 3], "score": 210, "killed": 9, "lost": 10, "hatched": 1, "winner": False}])
+    people["details"] = details_of_people()
     community = record(ID_COMMUNITY, NOW - 900, "Pond.lvl", "1v1", [seat(0, "Green", "Ann", "", score=900, killed=2, lost=1, winner=True), seat(2, "Blue", "Cy", "Easy", score=300, killed=1, lost=2)],
                        [{"seats": [0], "score": 900, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 1, "lost": 2, "hatched": 0, "winner": False}])
     old = record(ID_OLD, NOW - 5 * 86400, "TREASURE.LVL", "1v1", [seat(0, "Green", "Ann", "", score=2945, killed=6, lost=1, winner=True), seat(3, "Black", "", "Hard", score=720, killed=1, lost=6, hatched=1)],
@@ -72,7 +85,7 @@ def make_records():
     left = record(ID_LEFT, NOW - 2 * 86400, "SMALL.LVL", "ffa4", [seat(0, "Green", "Ann", "", score=500, killed=2, lost=1, winner=True), seat(1, "Red", "Quin", "", score=360, killed=1, lost=2, left=True),
                                                                     seat(2, "Blue", "Cy", "Hard", score=300), seat(3, "Black", "Di", "Hard", score=200)],
                   [{"seats": [0], "score": 500, "killed": 2, "lost": 1, "hatched": 0, "winner": True}, {"seats": [2], "score": 300, "killed": 0, "lost": 0, "hatched": 0, "winner": False},
-                   {"seats": [3], "score": 200, "killed": 0, "lost": 0, "hatched": 0, "winner": False}], result="cut", finished=False, seconds=200)
+                   {"seats": [3], "score": 200, "killed": 0, "lost": 0, "hatched": 0, "winner": False}], result="cut", finished=False, seconds=200, details={"v": 1, "n": 1})
     out = [people, community, left]
     for i in range(54):                                   # computer matches, newest first after the first two, the other fixtures among them
         m = MAPS[i % 6]
@@ -396,7 +409,8 @@ def main():
             tab = new_tab()
             open_page(tab, "/match.html?id=" + ID_PEOPLE)
             check(until(tab, "!!document.getElementById('board')") is True, "the match page has its sections")
-            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "board", "about"], "the sections, in order: result, replay, scoreboard, about (%s)" % tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })"))
+            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "summary", "board", "overtime", "activity", "about"],
+                  "the sections, in order: result, replay, the band of highlights, scoreboard, over time, activity, about (%s)" % tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })"))
             check(tab.ev("document.getElementById('replay').hidden") is True and tab.ev("document.getElementById('show').textContent").strip().endswith("Show replay"), "the replay is closed, its button says Show replay")
             check(tab.ev("document.querySelector('#result .verdict').textContent") == "Pip (bot, Hard) won2,040  –  1,010  –  210", "who won, and the sides' scores: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
             rows = tab.ev("[].map.call(document.querySelectorAll('#board .tbl tbody tr'), function (r) { return [].map.call(r.children, function (c) { return c.textContent; }).join('|'); })")
@@ -406,6 +420,18 @@ def main():
             check(tab.ev("document.querySelector('#about').textContent").find("2 people, 2 computer players") != -1 and "60 × 60, 12 minutes" in tab.ev("document.getElementById('fact-map').textContent"), "about: who played and the size of the map (from the server's list)")
             check(tab.ev("document.querySelector('#result a.dl').getAttribute('href')") == "/replays/" + ID_PEOPLE + ".antsrep", "the recording can be downloaded")
             check(until(tab, "document.title.indexOf('Treasure, 2 v 2') === 0") is True, "the title of the tab names the match")
+            chips = tab.ev("[].map.call(document.querySelectorAll('#summary a'), function (a) { return a.getAttribute('href') + ' ' + a.textContent; })")
+            check(chips == ["#overtime First bloodPip (bot, Hard) on <img src=x onerror=window.__pwn=1>, 0:48", "#overtime LeadChanged hands 1 time; Pip (bot, Hard) took it at 3:50",
+                            "#overtime ComebackPip (bot, Hard) won from 285 points behind (at 3:20)", "#activity BusiestBea: 937 orders"], "the band: four chips, each a link to its section, a name that is markup as text: %s" % chips)
+            charts = tab.ev("[].map.call(document.querySelectorAll('#overtime svg.chart'), function (c) { return [c.getAttribute('width'), c.parentNode.clientWidth, c.querySelectorAll('path.ln').length, c.getAttribute('aria-label').slice(0, 24)]; })")
+            check(len(charts) == 2 and all(c[0] == str(c[1]) and c[2] == 4 for c in charts) and charts[0][3] == "Score of every seat over", "over time: two charts as wide as their boxes, a line for each seat (%s)" % charts)
+            check(tab.ev("[].map.call(document.querySelectorAll('#overtime .key li'), function (l) { return l.firstChild.className; })") == ["mk circle", "mk square", "mk triangle", "mk diamond"], "the legend gives each seat its own shape as well as its colour")
+            check(tab.ev("document.querySelector('#overtime .leadbar').children.length") == 2 and "Rex (bot, Hard) had no ant left at 10:13" in tab.ev("document.querySelector('#overtime .facts').textContent"),
+                  "who led (two segments) and the facts under the charts")
+            heat = tab.ev("[].map.call(document.querySelectorAll('#activity .heat .hrow'), function (r) { return r.querySelectorAll('.hc').length; })")
+            check(heat == [0, 12, 12, 12, 12] and tab.ev("document.querySelectorAll('#activity .heat .hc.top').length") == 4 and tab.ev("document.querySelector('#activity .heat .hc').style.background") != "", "activity: a strip of 12 minutes for each seat, the busiest minute of each ringed, the cells painted (%s)" % heat)
+            check(tab.ev("[].map.call(document.querySelectorAll('#activity .tbl thead th'), function (c) { return c.textContent; })") == ["Player", "Orders", "Moves", "Attacks", "Bombs", "Fires", "Bridges", "Raids"], "orders by kind: its columns")
+            check(tab.ev("!window.__pwn && !document.getElementById('more') && document.querySelectorAll('#sections img').length === 1"), "no note of missing stats (and nothing became markup: the map's picture is the one image)")
             shot(tab, "match")
             tab.close()
             tab = new_tab()
@@ -418,6 +444,9 @@ def main():
             until(tab, "!!document.getElementById('board')")
             rows = tab.ev("[].map.call(document.querySelectorAll('#board .tbl tbody tr'), function (r) { return r.children[0].textContent; })")
             check(rows == ["AnnWon", "Cy (bot, Hard)", "Di (bot, Hard)", "QuinLeft early"], "a seat that left has no row in the record: it is last in the scoreboard, marked Left early (%s)" % rows)
+            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "board", "more", "about"] and
+                  tab.ev("document.querySelector('#more').textContent") == "More statsOver time and activity are counted from the recording, and this one could not be counted. Only the totals above were kept.",
+                  "a match that the replay pass could not count (the marker): no stats sections, the line says so")
             check(tab.ev("document.querySelector('#result .verdict').textContent") == "Ann won500  \u2013  300  \u2013  200" and tab.ev("document.querySelectorAll('#board .share li').length") == 3, "... and it is no part of the verdict or of the share: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
             tab.close()
             tab = new_tab()
@@ -433,6 +462,8 @@ def main():
             open_page(tab, "/match.html?id=" + ID_OLD)
             until(tab, "!!document.getElementById('board')")
             check(tab.ev("document.getElementById('show')") is None and tab.ev("document.getElementById('replay')") is None and "older version (v0.12.0)" in tab.ev("document.querySelector('#result .why').textContent"), "a recording of an older version: no button, the words say who made it")
+            check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "board", "more", "about"] and "The totals below are complete." in tab.ev("document.querySelector('#result .why').textContent")
+                  and tab.ev("document.querySelector('#more').textContent").endswith("(v0.12.0), so only the totals above were kept."), "... no stats sections, the line under the scoreboard says why, and the totals are complete")
             check(tab.ev("document.querySelector('#result a.dl').getAttribute('href')") == "/replays/" + ID_OLD + ".antsrep" and "Bot (Hard)" in tab.ev("document.getElementById('board').textContent"), "... the file can be downloaded, and a bot that an old record stored with no name is Bot (Hard)")
             tab.close()
             tab = new_tab()
@@ -440,6 +471,7 @@ def main():
             until(tab, "!!document.getElementById('board')")
             check(tab.ev("document.getElementById('show')") is None and tab.ev("document.querySelector('#result a.dl')") is None and "Replay removed" in tab.ev("document.querySelector('#result .why').textContent") and tab.ev("document.querySelector('#result .verdict').textContent").startswith("A draw"),
                   "a recording that is gone: the stats stay, the words say so, nothing to download; a draw has no winner")
+            check(tab.ev("document.querySelector('#more').textContent") == "More statsOver time and activity are counted from the recording. This one was removed before they were, so only the totals above were kept.", "... and the line says that the details were not counted before it went")
             tab.close()
             tab = new_tab()
             open_page(tab, "/match.html?id=" + ID_UNCOUNTED)
@@ -462,6 +494,9 @@ def main():
             open_page(tab, "/match.html?id=" + ID_PEOPLE)
             until(tab, "!!document.getElementById('board')")
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and tab.ev("getComputedStyle(document.querySelector('#board .tbl')).display") == "none" and tab.ev("document.querySelectorAll('#board .sc-card').length") == 5, "a phone: no sideways scroll, a card for each seat and each side of two instead of the table")
+            check(tab.ev("[].map.call(document.querySelectorAll('#overtime svg.chart'), function (c) { return c.getBoundingClientRect().width <= window.innerWidth - 32 && c.getAttribute('width') === String(c.parentNode.clientWidth); }).join()") == "true,true" and
+                  tab.ev("document.querySelectorAll('#summary li').length") == 4 and tab.ev("getComputedStyle(document.querySelector('#summary .chips')).gridTemplateColumns.split(' ').length") == 1,
+                  "a phone: the charts are drawn for its width, the four chips are one under the other")
             shot(tab, "match-phone")
             tab.close()
 
@@ -472,7 +507,7 @@ def main():
             open_page(tab, "/match.html?id=" + ID_PEOPLE)
             until(tab, "!!document.getElementById('board')")
             time.sleep(1.0)
-            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/history_page.js", "/replay_page.js", "/match.html", "/favicon"))]
+            asked = [h for h in door.hits if not h.startswith(("/history", "/live", "/maps", "/front/", "/matches.css", "/match_stats.css", "/history_page.js", "/match_stats.js", "/replay_page.js", "/match.html", "/favicon"))]
             check(asked == [], "before the button: nothing of the game and no recording is asked for (%s)" % asked)
             check(tab.ev("document.querySelectorAll('iframe').length") == 0, "... and there is no frame")
             tab.ev("document.getElementById('show').click()")

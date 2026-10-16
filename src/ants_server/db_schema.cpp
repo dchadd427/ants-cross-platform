@@ -8,7 +8,7 @@ namespace {
 // Version 2. history_matches: one row per match, with a column for everything that GET /history filters or sorts by, and an index for each of them (the list is "newest first" unless it says otherwise, so
 // every index ends in the end time and the id: the order of a tie). `result` is "decided", "draw" or "cut" (a player left, or the time ran out), `mode` the room's game mode, `best_score` / `best_kills` /
 // `best_hatched` the largest of the seats' numbers (the keys of the sorts "score", "kills" and "hatched"; in mode 187 `best_score` is the kills too), `search` the lower-case words that the list's `q`
-// looks in (the map's name and what each seat shows, one per line), `rows_json` the ranked rows, and `details` is reserved for what a later version keeps of a match (JSON text, NULL now). `turns` has two indexes: the sort "long" reads the first one backwards (longest first, the newer first among equal ones), the
+// looks in (the map's name and what each seat shows, one per line), `rows_json` the ranked rows, and `details` is the stats of a match that the replay pass keeps (JSON text, ants_server/history_details.hpp; NULL until the pass has counted it). `turns` has two indexes: the sort "long" reads the first one backwards (longest first, the newer first among equal ones), the
 // sort "short" the second forwards (shortest first, the newer first among equal ones).
 // history_seats: one row per seat that played. history_markers: a match that the owner deleted while its recording is still kept (so that it is not counted again), until the recording goes.
 const char* const kHistorySql =
