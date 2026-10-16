@@ -849,7 +849,9 @@ Rematch HostLobby::rematch() const {
     r.mode = room_.mode;
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {                                     // (the seats as the Start made them: nothing moves in the lobby once its match has begun)
         if (room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;
-        r.people.push_back(Rematch::Person{s, room_.slots[s].name, guests_[s].key, guests_[s].join_order, room_.slots[s].platform});
+        const uint8_t platform = room_.slots[s].platform;                                // (what the game that took the seat over said in its Hello: a page's game says kPlatformBrowser)
+        if (platform != kPlatformUnknown && (platform & kPlatformBrowser) == 0) continue;   // (a game of the desktop or a phone's app cannot press "Back to the lobby": no seat waits for it)
+        r.people.push_back(Rematch::Person{s, room_.slots[s].name, guests_[s].key, guests_[s].join_order, platform});
     }
     return r;
 }

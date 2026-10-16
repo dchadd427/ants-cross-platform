@@ -48,14 +48,14 @@ std::string games_of(const net::RoomMsg& r) {
 }
 
 // Pia's and Bob's pages make the lobby room `code` (Pia leads), Pia's plan, START, the pages go and their games take the seats over, the match runs a little, and Bob's game quits: with one other side left the
-// quit ends the match by its rules (every machine shows the results). The keys of the two seats, and the two games.
+// quit ends the match by its rules (every machine shows the results). The keys of the two seats, and the two games. Bob's game tells the room that it runs on `bob_platform` (protocol 15; 0: it does not say).
 struct Played {
     net::SeatKey pia{};
     net::SeatKey bob{};
     Client* pia_game{nullptr};
     Client* bob_game{nullptr};
 };
-void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true) {
+void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true, uint8_t bob_platform = 0) {
     Client& pia = w.connect_page("Pia", code, lobby_block_of());
     Client& bob = w.connect_page("Bob", code, lobby_block_of());
     w.run(300);
@@ -70,7 +70,9 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
     pia.end->close();                                                                // (the pages go to the game page)
     bob.end->close();
     out.pia_game = &w.connect_game("Pia", code, out.pia);
+    w.next_platform = bob_platform;
     out.bob_game = &w.connect_game("Bob", code, out.bob);
+    w.next_platform = 0;
     ASSERT_TRUE(until_running(w, code, 8000));
     w.run(kPre + 3000);
     ASSERT_TRUE(out.pia_game->session != nullptr && out.bob_game->session != nullptr && w.status(code).ticks > 20);
@@ -329,6 +331,95 @@ void run_rematch_tests() {
             ASSERT_TRUE(lobby_of(w, "rmt00010")->reserved == 0 && lobby_of(w, "rmt00010")->names[1].empty());
             ASSERT_TRUE(bob_results.lobby->phase() == net::ClientLobby::Phase::Rejected && bob_results.lobby->reject_reason() == net::RejectReason::Kicked);
             ASSERT_TRUE(pia_back.lobby->is_leader());
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.198 Whose Seat Is Kept, And When There Is No Rematch: A Game Of The Desktop Has No Seat Kept (Its Colour Is Open; It Joins By The Code Like Anybody Once Somebody Is Back), A Key Of Another Room's Match Is A Stranger's, Two Tabs With One Key Are The Take-Over Of Any Lobby; A Server With No Room For Another Room (max_rooms) Opens No Lobby; With The Default Limits A Kept Seat Waits Three Hours On The Server's Clock") {
+        {   // Bob played on the desktop (Linux): only Pia's seat is kept; Bob's game joins the lobby by the code like anybody, once Pia is back
+            World w(rematch_limits());
+            const std::string code = "rmt00011";
+            Played p;
+            play_and_quit(w, code, plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p, true, net::kOsLinux);
+            std::optional<RoomStatus> lobby = lobby_of(w, code);
+            ASSERT_TRUE(lobby.has_value() && lobby->reopened && lobby->reserved == 0x1);
+            ASSERT_TRUE(lobby->names[0] == "Pia" && lobby->names[1].empty() && lobby->plan == "oonn -");
+            w.next_platform = net::kOsLinux;
+            Client& bob_early = w.connect("Bob", code);                                                // (a game's Hello with no key: the desktop's join by the code)
+            w.next_platform = 0;
+            ASSERT_EQ(refusal_of(w, bob_early), net::RejectReason::MatchRunning);
+            w.next_key = p.pia;
+            Client& pia_back = w.connect_page("Pia", code, lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia_back.lobby->is_leader() && lobby_of(w, code)->reserved == 0);
+            w.next_platform = net::kOsLinux;
+            Client& bob = w.connect("Bob", code);
+            w.next_platform = 0;
+            w.run(300);
+            ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::InRoom && bob.lobby->my_seat() == 1 && !net::key_matches(bob.lobby->key(), p.bob));
+            ASSERT_EQ(games_of(pia_back.lobby->room()), std::string("0100"));                          // (Bob is a game in the room, and nobody is waited for)
+            ASSERT_TRUE(pia_back.lobby->request_start());
+            w.run(300);
+            ASSERT_TRUE(lobby_of(w, code).has_value() && lobby_of(w, code)->starting);
+        }
+        {   // a key of another room's match is a stranger's; two tabs with one key: the later takes the seat over
+            World w(rematch_limits());
+            Played a;
+            Played b;
+            play_and_quit(w, "rmt00012", plan_of({K::Open, K::Open, K::Open, K::Nobody}), a);
+            play_and_quit(w, "rmt00013", plan_of({K::Open, K::Open, K::Open, K::Nobody}), b);
+            ASSERT_TRUE(lobby_of(w, "rmt00012")->reserved == 0x3 && lobby_of(w, "rmt00013")->reserved == 0x3);
+            w.next_key = a.pia;                                                                         // Pia of the first match at the second one: nobody of it is back
+            Client& lost = w.connect_page("Pia", "rmt00013", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            ASSERT_EQ(refusal_of(w, lost), net::RejectReason::MatchRunning);
+            w.next_key = b.bob;                                                                         // Bob of the second match is back there
+            Client& bob_back = w.connect_page("Bob", "rmt00013", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(bob_back.lobby->is_leader());
+            w.next_key = a.pia;                                                                         // now she is a newcomer there: the open colour 2, a key of her own; her seat at the first stays kept
+            Client& stranger = w.connect_page("Pia", "rmt00013", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(stranger.lobby->phase() == net::ClientLobby::Phase::InRoom && stranger.lobby->my_seat() == 2 && !net::key_matches(stranger.lobby->key(), a.pia));
+            ASSERT_TRUE(lobby_of(w, "rmt00013")->reserved == 0x1 && lobby_of(w, "rmt00012")->reserved == 0x3);
+            w.next_key = b.bob;                                                                         // Bob's second tab: it takes his seat, the first is told so
+            Client& bob_tab2 = w.connect_page("Bob", "rmt00013", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(bob_back.lobby->phase() == net::ClientLobby::Phase::Rejected && bob_back.lobby->reject_reason() == net::RejectReason::Superseded);
+            ASSERT_TRUE(bob_tab2.lobby->my_seat() == 1 && bob_tab2.lobby->is_leader() && lobby_of(w, "rmt00013")->reserved == 0x1);
+        }
+        {   // the server has no room for another room: no lobby, the code keeps the match that is over
+            ServerLimits l = rematch_limits();
+            l.max_rooms = 2;
+            World w(l);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("RMT-FULL", 2), w.now).ok);                       // (a room of the control interface: no lobby, nothing to give up)
+            Played p;
+            play_and_quit(w, "rmt00014", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            w.run(300);
+            ASSERT_TRUE(w.status("rmt00014").state == RoomState::Finished && w.mgr.rooms_reopened() == 0u && w.mgr.retired_count() == 0u && !lobby_of(w, "rmt00014").has_value());
+            Client& back = w.connect_game("Pia", "rmt00014", p.pia);
+            ASSERT_EQ(refusal_of(w, back), net::RejectReason::NoSuchRoom);
+        }
+        {   // the default limits: a kept seat waits three hours on the server's clock (Pia is back and keeps the room; Bob never comes)
+            ASSERT_EQ(ServerLimits{}.lobby_reserve_ms, net::kLobbyReserveMs);
+            World w(rematch_limits());
+            Played p;
+            play_and_quit(w, "rmt00015", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}), p);
+            const uint32_t since = w.now;                                                               // (the lobby is opened in the pass that ends the match)
+            ASSERT_TRUE(lobby_of(w, "rmt00015").has_value() && lobby_of(w, "rmt00015")->reserved == 0x3);
+            w.next_key = p.pia;
+            Client& pia_back = w.connect_page("Pia", "rmt00015", lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            w.run_coarse(net::kLobbyReserveMs - (w.now - since) - 1000u, 1000);
+            ASSERT_TRUE(lobby_of(w, "rmt00015").has_value() && lobby_of(w, "rmt00015")->reserved == 0x2 && pia_back.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            w.run(990);
+            ASSERT_TRUE(w.now - since == net::kLobbyReserveMs - 10u && lobby_of(w, "rmt00015")->reserved == 0x2);
+            w.run(10);
+            ASSERT_TRUE(lobby_of(w, "rmt00015")->reserved == 0 && lobby_of(w, "rmt00015")->names[1].empty() && pia_back.lobby->is_leader());
         }
     } TEST_END();
 }

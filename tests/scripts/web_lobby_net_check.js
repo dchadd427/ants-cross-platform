@@ -64,14 +64,15 @@ const sends = {
     'remove-0': () => N.encodeRemove(0, 0xFFFFFFFF),
     'start-teams': () => N.encodeStartRequest([N.FILL.None, N.FILL.Easy, N.FILL.Medium, N.FILL.Hard], 0, 1),
     'start-ffa-nobody': () => N.encodeStartRequest([0, 0, 0, 0], 255, 255),
-    'chat-plain': () => N.encodeChat(0, false, 'hello there')
+    'chat-plain': () => N.encodeChat(0, false, 'hello there'),
+    'game-joins': () => N.encodeHello({ name: 'Bob', room: 'p_q-9', kind: 'game' })                  // (the rematch: the game page's results screen says a game's Hello, web/front/rematch.js)
 };
 for (const name of Object.keys(sends)) {
     check('golden has ' + name, golden[name] !== undefined);
     if (golden[name]) same('sends ' + name, hex(sends[name]()), golden[name].hex);
 }
-check('no golden message of a page is left unchecked (but a game\'s Hello, which a page never makes)',
-    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === 'game-joins');
+check('no golden message that a page sends is left unchecked (the game\'s Hello too: the game page\'s results screen sends it in the rematch)',
+    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === '');
 
 // fill levels of a plan: Open and Nobody are none
 same('fillOfPlan', N.fillOfPlan([N.PLAN.Open, N.PLAN.Easy, N.PLAN.Medium, N.PLAN.Hard]), [0, 1, 2, 3]);

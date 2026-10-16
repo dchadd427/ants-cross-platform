@@ -48,9 +48,10 @@
 // while the request waits. (6) Any person can change the name they go by (NameMsg), and the leader can take another person out of the room (RemoveMsg: with the guard of a SeatMove, so that it acts on the person
 // that the leader's screen showed; the person is sent the rejection Kicked, their colour is free at once and their key is forgotten; it is heard while the START waits too, for a person whose game never opens).
 // (7) The rematch (docs/SERVER.md "Lobby rooms"): a lobby room that the server opens again when its match is over (reopen(), with the match's rematch()) has the match's plan and a RESERVED seat for each of its
-// persons: the seat keeps its name, colour, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not lead, does not keep the
-// room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on); a game's Hello with it holds the seat from the results screen and leaves it reserved.
-// Nobody new is taken while nobody of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms.
+// persons who played in a web browser: the seat keeps its name, colour, key and place in the order of the Welcomes, counts as a game in the Room message (its person is on the game page's results screen), does not
+// lead, does not keep the room alive and holds the START back. A page's Hello with its key brings the person back (an ordinary guest from then on); a game's Hello with it holds the seat from the results screen
+// and leaves it reserved. Nobody new is taken while nobody of the match is back. A reservation ends when its person comes back, is removed, or after reserve_ms. A person whose game said that it is not in a browser
+// (protocol 15's platform: a game of the desktop or a phone's app, which has no "Back to the lobby") gets no seat: the colour is free in the lobby that follows, for them or anybody to join by the code.
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -321,7 +322,8 @@ public:
     /// the place of such a room up when it needs it.
     uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + chat_.total()); }
 
-    /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key (empty `people` for a room that is no lobby room or whose match has not begun).
+    /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key whose game played in a web browser or did not say what it runs on (empty
+    /// `people` for a room that is no lobby room or whose match has not begun). The colour of a person whose game is not in a browser is left free (its plan is the match's: an open colour).
     Rematch rematch() const;
     /// A lobby room that nobody has come to yet takes the match's plan and reserves a seat for each of its persons (in the person's colour, with its name, key, place in the order and platform); the next newcomer's
     /// place in the order comes after theirs. False, and nothing changes, for a room that is no lobby room, one that has a guest or a connection already, or a person that does not fit (a seat or a key twice, no key).

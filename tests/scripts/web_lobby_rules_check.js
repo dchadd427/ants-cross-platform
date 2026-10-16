@@ -227,11 +227,11 @@ const E = N.SLOT.Empty, C = N.SLOT.Client, B = N.SLOT.Bot;
 const P = (name) => [C, name];
 const O = [E, ''];
 function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
-// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, plan, inGame }
+// seats: four of [state, name]; o: { map, you, leader, teamA, teamB, starting, plan, inGame, platforms (the platform byte of each seat: 0, not told, when none is given) }
 function mk(seats, o) {
     o = o || {};
     const w = [12];
-    for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }
+    seats.forEach((s, i) => { w.push(s[0]); str8(w, s[1]); w.push(20, 0, o.platforms ? o.platforms[i] : 0); });
     str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
     w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.starting ? 7 : 3);
     for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
@@ -802,6 +802,16 @@ same('START of a page that has no room is off (like the map)', [view(S1, { offli
         [['Opening the game…', 'Opening the game…', 'In the game', 'Opening the game…'], '', []]);
     same('the link is lost or there is no room: no note under START (START is off)', ['lost', 'none'].map((o) => view(R2, { back: BACK, offline: o }).side.note), ['', '']);
     same('the page\'s own colour is never "back" or "on the results screen", whatever the bit says (the page\'s own bit never counts)', view(mk([P('Maple'), P('Sam'), O, O], { you: 1, leader: 0, inGame: 2 }), { back: BACK }).cards[1].stat, 'Waiting for the host to start.');
+    // the server keeps a seat only for a game in a browser (protocol 15's platform byte; a game that did not say is given one too): a game of the desktop of the match (Pip, Windows) joined the room by the
+    // code like anybody, so the room counts it as a game and it is back; Juniper's results screen runs in a browser (Linux) and is not back
+    const desk = mk([P('Maple'), P('Sam'), P('Juniper'), P('Pip')], { you: 0, leader: 0, inGame: 12, platforms: [0x16, 0x13, 0x13, 0x01] });
+    same('a game of the desktop is back, a game in a browser before START is on the results screen', [view(desk, { back: BACK }).cards.map((c) => c.stat), R.notBack(model(desk), ctx({ back: BACK })), R.startHeld(model(desk), ctx({ back: BACK })), view(desk, { back: BACK }).side.note],
+        [['Host. You start the match.', 'Back in the room', 'Still on the results screen…', 'Back in the room'], [2], 'START waits for Juniper.', NOTE_R2]);
+    same('modelOf: on the results screen is a person whom the room counts as a game before START, in a browser or not told; not a game of the desktop (Windows, macOS, Linux, Android, iOS, other), not while START waits',
+        [model(desk).slots.map((x) => !!x.results), [1, 2, 3, 4, 5, 6].map((os) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, os, 0, 0] })).slots[1].results),
+            [0, 0x11, 0x14, 0x16].map((p) => !!model(mk([P('A'), P('B'), O, O], { inGame: 2, platforms: [0, p, 0, 0] })).slots[1].results), !!model(mk([P('A'), P('B'), O, O], { inGame: 2, starting: true })).slots[1].results],
+        [[false, false, true, false], [false, false, false, false, false, false], [true, true, true, true], false]);
+    same('... and a person whom the room does not count as a game is in the room, whatever it runs on', !!model(mk([P('A'), P('B'), O, O], { inGame: 0, platforms: [0, 0x16, 0, 0] })).slots[1].results, false);
 }
 
 // ---- a name is text and nothing more ----

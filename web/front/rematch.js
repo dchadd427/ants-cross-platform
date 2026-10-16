@@ -86,15 +86,17 @@
     function forgetBack(session) { try { session.removeItem(BACK_KEY); } catch (e) { /* nothing was kept */ } }
 
     // ---- what the strips say --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // The people of a lobby room's Room message (web/front/lobby_net.js decode) for the game page's strip, in the order of the colours: { seat, name, dot, host, here } (here: back in the room, a page; not here: still
-    // on the game page, the results screen: the room counts the reserved seat as a game)
+    // The people of a lobby room's Room message (web/front/lobby_net.js decode) for the game page's strip, in the order of the colours: { seat, name, dot, host, here }. Not here: still on the results screen
+    // (the room counts the reserved seat as a game before any START, and its game runs in a browser or did not say: web/front/lobby_rules.js modelOf has the same rule); here: everybody else, a game of the
+    // desktop that joined by the code too
     function chipsOf(room) {
         var out = [];
         if (!room || !room.slots) return out;
         for (var s = 0; s < 4; s++) {
-            var st = room.slots[s].state;
+            var st = room.slots[s].state, platform = room.slots[s].platform || 0;
             if (st !== 1 && st !== 2) continue;
-            out.push({ seat: s, name: room.slots[s].name, dot: DOTS[s], host: room.leader === s, here: ((room.inGame >> s) & 1) === 0 });
+            var results = ((room.inGame >> s) & 1) === 1 && !room.starting && (platform === 0 || (platform & 0x10) !== 0);
+            out.push({ seat: s, name: room.slots[s].name, dot: DOTS[s], host: room.leader === s, here: !results });
         }
         return out;
     }

@@ -1,5 +1,5 @@
 // Tests of the room before a match: the rematch of a lobby room (docs/SERVER.md "Lobby rooms", net::HostLobby (7)): what a lobby room's match gives for the lobby that follows it, the reserved seats of
-// that lobby and the way back into them (N4.41 - N4.44)
+// that lobby and the way back into them (N4.41 - N4.45)
 #include "lobby_fixtures.hpp"
 
 namespace {
@@ -38,6 +38,52 @@ std::pair<SeatKey, SeatKey> play_to_begun(Room& room, const PlanMsg& plan) {
     room.host.host_loaded(true);
     room.run(100);
     return {a, b};
+}
+
+// The same with three persons, Ann, Bob and Cat (seats 0, 1 and 2), whose games tell what they run on (`platforms`, in that order: protocol 15): the keys of the three
+std::array<SeatKey, 3> play_three_to_begun(Room& room, const PlanMsg& plan, const std::array<uint8_t, 3>& platforms) {
+    static const char* const kNames[3] = {"Ann", "Bob", "Cat"};
+    std::array<size_t, 3> pages{};
+    for (size_t i = 0; i < 3; ++i) {
+        pages[i] = join_with(room, page_config(kNames[i]));
+        room.run(100);
+    }
+    room.guests[pages[0]].lobby->request_plan(plan);
+    room.run(100);
+    room.guests[pages[0]].lobby->request_start();
+    room.run(100);
+    std::array<SeatKey, 3> keys{};
+    for (size_t i = 0; i < 3; ++i) keys[i] = room.guests[pages[i]].lobby->key();
+    for (size_t i = 0; i < 3; ++i) room.guests[pages[i]].client_end->close();
+    room.run(100);
+    std::array<size_t, 3> games{};
+    for (size_t i = 0; i < 3; ++i) {
+        ClientLobby::Config cc;
+        cc.name = kNames[i];
+        cc.key = keys[i];
+        cc.platform = platforms[i];
+        games[i] = join_with(room, cc);
+    }
+    room.run(200);
+    room.host.take_events();
+    room.host.start(5, 6, room.now);
+    room.run(100);
+    for (size_t i = 0; i < 3; ++i) room.guests[games[i]].lobby->report_loaded(true);
+    room.host.host_loaded(true);
+    room.run(100);
+    return keys;
+}
+
+// The room's clock in steps of `step` ms, for the hours of a reservation (every link speaks within a step: the silence limit is far above it)
+void run_coarse(Room& room, uint64_t ms, uint32_t step) {
+    for (uint64_t elapsed = 0; elapsed < ms; elapsed += step) {
+        room.now += static_cast<uint32_t>(std::min<uint64_t>(step, ms - elapsed));
+        room.net.set_time(room.now);
+        room.host.update(room.now);
+        for (auto& g : room.guests) {
+            if (!g.frozen) g.lobby->update(room.now);
+        }
+    }
 }
 
 // A lobby room that is opened again from `r` (what the server does when the match is over), at the time `now`
@@ -265,5 +311,99 @@ void run_lobby_rematch_tests() {
         ASSERT_TRUE(room.host.held(0) && !room.host.reserved(0));
         room.run(6000);
         ASSERT_TRUE(!room.host.occupied(0) && room.host.hold_expiries() == 1u && !room.host.any_reserved());
+    } TEST_END();
+
+    TEST_CASE("N4.45 Whose Seat Is Kept: A Game In A Browser And A Game That Did Not Say What It Runs On Keep Their Seats, A Game Of The Desktop Or A Phone's App (No \"Back To The Lobby\" There) Keeps None: Its Colour Is Open In The Lobby That Follows And It Joins By The Code Like Anybody Once Somebody Is Back; A Stranger Never Takes A Kept Colour (Asked For, Or The Last Open One: Full), A Key Of Another Room Is A Stranger's; Two Tabs With One Key: The Later Takes The Seat (The Other Is Superseded), The Person Stays Back And Leads; A Reservation Lasts Three Hours On The Room's Clock") {
+        {   // the match of Ann (a game in a browser), Bob (a game of the desktop) and Cat (a game that did not say)
+            Room room(lobby_room_config(154));
+            const auto keys = play_three_to_begun(room, plan_of({K::Open, K::Open, K::Open, K::Hard}), {static_cast<uint8_t>(kPlatformBrowser | kOsOther), kOsWindows, kPlatformUnknown});
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            ASSERT_TRUE(room.host.room().slots[0].platform == (kPlatformBrowser | kOsOther) && room.host.room().slots[1].platform == kOsWindows && room.host.room().slots[2].platform == kPlatformUnknown);
+            const Rematch r = room.host.rematch();
+            ASSERT_EQ(r.people.size(), size_t{2});
+            ASSERT_TRUE(r.people[0].seat == 0 && key_matches(r.people[0].key, keys[0]) && r.people[1].seat == 2 && key_matches(r.people[1].key, keys[2]));
+            ASSERT_TRUE(r.plan == (std::array<K, 4>{K::Open, K::Open, K::Open, K::Hard}));                // (Bob's colour is an open colour of the plan)
+            // the lobby that follows: Ann's and Cat's colours are kept, Bob's is open
+            Room next(lobby_room_config(155), false);
+            ASSERT_TRUE(reopened(next, r));
+            ASSERT_EQ(layout(next.host.room()), std::string("Ann@0 Cat@2"));
+            ASSERT_EQ(games_text(next.host.room()), std::string("1010"));
+            ASSERT_TRUE(next.host.reserved(0) && !next.host.occupied(1) && next.host.reserved(2));
+            // Bob's game of the desktop joins by the code (no key: the match's key is over): turned away while nobody of the match is back, like anybody
+            ClientLobby::Config desktop;
+            desktop.name = "Bob";
+            desktop.platform = kOsWindows;
+            const size_t early = join_with(next, desktop);
+            next.run(200);
+            ASSERT_TRUE(next.guests[early].lobby->phase() == ClientLobby::Phase::Rejected && next.guests[early].lobby->reject_reason() == RejectReason::MatchRunning);
+            // Ann is back: Bob comes in like anybody, at the lowest open colour (his own)
+            const size_t ann = join_with(next, page_with_key("Ann", keys[0]));
+            next.run(200);
+            const size_t bob = join_with(next, desktop);
+            next.run(200);
+            ASSERT_TRUE(next.guests[bob].lobby->phase() == ClientLobby::Phase::InRoom && next.guests[bob].lobby->my_seat() == 1);
+            ASSERT_EQ(layout(next.host.room()), std::string("Ann@0 Bob@1 Cat@2"));
+            ASSERT_EQ(games_text(next.host.room()), std::string("0110"));                              // (a game of the desktop is a game in the room; Cat's colour is kept)
+            ASSERT_TRUE(next.guests[ann].lobby->is_leader() && !next.host.reserved(1) && next.host.reserved(2));
+            // START waits for Cat only
+            ASSERT_TRUE(next.guests[ann].lobby->request_start());
+            next.run(200);
+            ASSERT_FALSE(next.host.starting());
+            ASSERT_EQ(notices_of(*next.guests[ann].lobby), (std::vector<std::string>{"Cat is not back from the match yet."}));
+        }
+        {   // the games of a phone's apps and of the desktop: nobody to keep a seat for (the server opens no lobby then)
+            Room room(lobby_room_config(156));
+            play_three_to_begun(room, plan_of({K::Open, K::Open, K::Open, K::Nobody}), {kOsAndroid, kOsIos, kOsMacos});
+            ASSERT_EQ(room.host.phase(), HostLobby::Phase::Begun);
+            ASSERT_TRUE(room.host.rematch().people.empty());
+        }
+        {   // a stranger never takes a kept colour; a key of another room is a stranger's
+            Room room(lobby_room_config(157), false);
+            ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Nobody})));
+            const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+            room.run(200);
+            ClientLobby::Config sid = page_config("Sid");
+            sid.want_seat = 1;                                                                              // (Bob's colour, which is kept)
+            const size_t s1 = join_with(room, sid);
+            room.run(200);
+            ASSERT_TRUE(room.guests[s1].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[s1].lobby->my_seat() == 2 && room.host.reserved(1));
+            const size_t other = join_with(room, page_with_key("Ola", key_with(77)));                      // (no open colour is left: the kept one is not one)
+            room.run(200);
+            ASSERT_TRUE(room.guests[other].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[other].lobby->reject_reason() == RejectReason::Full);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Sid@2"));
+            ASSERT_TRUE(room.host.reserved(1) && room.guests[ann].lobby->is_leader());
+            // two tabs with Ann's key: the later takes her seat over (the earlier is told Superseded); she is still back, still first in the order, and leads
+            const size_t ann_tab2 = join_with(room, page_with_key("Ann", key_with(1)));
+            room.run(200);
+            ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::Rejected && room.guests[ann].lobby->reject_reason() == RejectReason::Superseded);
+            ASSERT_TRUE(room.guests[ann_tab2].lobby->phase() == ClientLobby::Phase::InRoom && room.guests[ann_tab2].lobby->my_seat() == 0 && room.guests[ann_tab2].lobby->is_leader());
+            ASSERT_TRUE(!room.host.reserved(0) && room.host.reserved(1) && room.host.returns() == 1u && room.host.takeovers() == 2u);
+            // Bob's two tabs: the results screen holds his seat, his page takes it over, and a second page with his key takes it from the first; he stays back
+            const size_t bob_results = join_keyed(room, "Bob", key_with(2));
+            room.run(200);
+            const size_t bob_tab1 = join_with(room, page_with_key("Bob", key_with(2)));
+            room.run(200);
+            const size_t bob_tab2 = join_with(room, page_with_key("Bob", key_with(2)));
+            room.run(200);
+            ASSERT_TRUE(room.guests[bob_results].lobby->reject_reason() == RejectReason::Superseded && room.guests[bob_tab1].lobby->reject_reason() == RejectReason::Superseded);
+            ASSERT_TRUE(room.guests[bob_tab2].lobby->my_seat() == 1 && !room.host.any_reserved() && room.host.returns() == 2u);
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@1 Sid@2"));
+        }
+        {   // three hours on the room's clock (the default reservation): Ann is back and keeps the room, Bob's colour waits for him to the millisecond
+            ASSERT_EQ(kLobbyReserveMs, 3u * 3600u * 1000u);
+            ASSERT_EQ(lobby_room_config(158).reserve_ms, kLobbyReserveMs);
+            Room room(lobby_room_config(158), false);
+            const uint32_t since = room.now;
+            ASSERT_TRUE(reopened(room, rematch_of({K::Open, K::Open, K::Open, K::Open})));
+            const size_t ann = join_with(room, page_with_key("Ann", key_with(1)));
+            room.run(200);
+            run_coarse(room, kLobbyReserveMs - (room.now - since) - 1000u, 1000);
+            ASSERT_TRUE(room.host.reserved(1) && room.guests[ann].lobby->phase() == ClientLobby::Phase::InRoom && room.host.reserve_expiries() == 0u);
+            run_coarse(room, 990, 10);
+            ASSERT_TRUE(room.now - since == kLobbyReserveMs - 10u && room.host.reserved(1));
+            run_coarse(room, 10, 10);
+            ASSERT_TRUE(!room.host.occupied(1) && room.host.reserve_expiries() == 1u && room.guests[ann].lobby->is_leader());
+            ASSERT_EQ(layout(room.host.room()), std::string("Ann@0"));
+        }
     } TEST_END();
 }

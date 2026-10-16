@@ -17,6 +17,7 @@
     var PLAYERS = 4;
     var NO_TEAM = 255;
     var SLOT = { Empty: 0, Host: 1, Client: 2, Bot: 3 };          // lobby_net.js SLOT
+    var PLATFORM_BROWSER = 0x10;                                  // lobby_net.js PLATFORM_BROWSER (protocol 15: the game of a seat runs in a web browser)
     var KINDS = ['open', 'easy', 'medium', 'hard', 'nobody'];     // the plan's values 0 - 4 (PLAN in lobby_net.js)
 
     // The maps of the original game as the server names them (--demo-maps) and the Map Info line of each, as the game's setup screen shows it (tests/scripts/test_web_front.py reads them from Original-Ants/Maps)
@@ -106,12 +107,17 @@
     }
     // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, slots: [{ kind: person | open | bot | nobody, ... }], sides }.
     // A colour that a person holds shows the person; any other shows what the leader's plan says (the plan of a colour that a person holds is what comes back when the person leaves).
+    // A person whom the room counts as a game before any START, whose game runs in a browser (or did not say), is on the results screen of the match: the seat that the server keeps for them in the rematch
+    // (docs/SERVER.md "Lobby rooms"; a game of the desktop gets no seat kept, it joins like anybody): `results: true`, only then.
     function modelOf(room) {
         var leader = room.leader === 255 ? -1 : room.leader, slots = [];
         for (var s = 0; s < PLAYERS; s++) {
             var st = room.slots[s].state, plan = room.plan[s];
             if (st === SLOT.Host || st === SLOT.Client) {
-                slots.push({ kind: 'person', name: room.slots[s].name, leader: s === leader, me: s === room.you, ingame: s !== room.you && ((room.inGame >> s) & 1) === 1 });
+                var person = { kind: 'person', name: room.slots[s].name, leader: s === leader, me: s === room.you, ingame: s !== room.you && ((room.inGame >> s) & 1) === 1 };
+                var platform = room.slots[s].platform || 0;
+                if (person.ingame && !room.starting && (platform === 0 || (platform & PLATFORM_BROWSER) !== 0)) person.results = true;
+                slots.push(person);
             } else if (st === SLOT.Bot || (plan >= 1 && plan <= 3)) {
                 var bot = { kind: 'bot', level: levelOfPlan(plan) || 'medium' };
                 if (/ \(bot, (Easy|Medium|Hard|idle|worker)\)$/.test(room.slots[s].name)) bot.name = room.slots[s].name;      // (protocol 20: the bot's name, "Pip (bot, Hard)"; a room without one, or the legacy "Bot (Hard)", shows the level as before)
@@ -254,14 +260,14 @@
     function startsAlone(model) { return playing(model).length === 1; }
 
     // ---- the rematch (web/front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): a lobby room that the server opened again when its match was over ----------------------------------------------
-    // ctx.back is the match that this page came back from ({ people: the names of the match }, null: none). A person of that match whom the room still counts as a game before START is not back yet: their
-    // game page shows the results (the room keeps their seat for them, START waits for them). The seats of those people, in order.
+    // ctx.back is the match that this page came back from ({ people: the names of the match }, null: none). A person of that match who is on the results screen (modelOf) is not back yet: the room keeps
+    // their seat for them and START waits for them. The seats of those people, in order.
     function notBack(model, ctx) {
         var out = [];
         if (!ctx || !ctx.back || model.starting) return out;
         for (var s = 0; s < PLAYERS; s++) {
             var x = model.slots[s];
-            if (x.kind === 'person' && x.ingame && !x.me && ctx.back.people.indexOf(x.name) !== -1) out.push(s);
+            if (x.kind === 'person' && x.results && !x.me && ctx.back.people.indexOf(x.name) !== -1) out.push(s);
         }
         return out;
     }
