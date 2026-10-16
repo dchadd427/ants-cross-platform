@@ -11,14 +11,20 @@ screen: the codec of every message of the protocol and the client that keeps the
     the entry that the game page reads to take the seat over;
   - the entry that the client writes for the game page (ants.rejoin.<room>.<seat>) is read by the game page's own code (tests/scripts/web_lobby_entry_check.js runs the blocks REJOINKEY and NAMEGATE of
     web/shell.html): the seat is held, so the game asks no name and takes the seat over with the key, on both schemes, and not for another scheme, host, room or seat, or for a key that is too old;
-  - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers; the same script hands a lobby over to two real games
+  - the pace of every kind of request (a colour move, a plan, a rename, a removal, a line of chat) keeps a margin under the server's bucket of that kind (include/ants_net/flood.hpp, which the client check
+    reads): web_lobby_client_check.js replays what a page asks for through the server's own bucket with every combination of 0 and 50 / 100 / 150 ms of delay, and TheBudgetChecksAreNotVacuous below runs
+    the mutants of tests/data/lobby_budget_mutants.json (a pace moved back to the server's own rate, a burst without reserve, ...) on a copy of the files: every one must be seen;
+  - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers (pages that ask as fast as they may for eight seconds, on
+    a link that jitters by up to 150 ms, lose no rename, plan, colour move or line of chat); the same script hands a lobby over to two real games
     (tests/scripts/web_lobby_handoff_check.js: START, the pages go, a game of each name takes its seat with the page's key, the match runs).
 The node checks need node; without it these tests are skipped and say so.
 """
+import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -79,7 +85,6 @@ class TheChecksThatNodeRuns(unittest.TestCase):
             text = f.read()
         changed, count = re.subn(r"(?m)^(seatmove \S+ )1f", r"\g<1>1e", text, count=1)
         self.assertEqual(count, 1)
-        import tempfile
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "lobby_messages.txt")
             with open(path, "w", encoding="utf-8") as f:
@@ -87,6 +92,64 @@ class TheChecksThatNodeRuns(unittest.TestCase):
             status, out = run_node(os.path.join(SCRIPTS, "web_lobby_net_check.js"), MODULE, path)
         self.assertNotEqual(status, 0)
         self.assertIn("FAIL", out)
+
+
+@unittest.skipUnless(NODE, "node is not installed: the lobby page's pace was NOT run (tests/scripts/web_lobby_client_check.js)")
+class TheBudgetChecksAreNotVacuous(unittest.TestCase):
+    """the mutants of tests/data/lobby_budget_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the client check fail
+    (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's. The chat's own are in lobby_chat_mutants.json (test_web_lobby_chat.py)."""
+
+    FILES = ("web/front/lobby_net.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp",      # (the check reads the golden messages and, from the header, the server's limits)
+             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "tests/scripts/web_name_check.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(REPO, "tests", "data", "lobby_budget_mutants.json"), encoding="utf-8") as f:
+            cls.spec = json.load(f)
+        cls.folder = tempfile.mkdtemp(prefix="ants_budget_mutants.")
+        for name in cls.FILES:
+            os.makedirs(os.path.dirname(os.path.join(cls.folder, *name.split("/"))), exist_ok=True)
+            shutil.copy(os.path.join(REPO, *name.split("/")), os.path.join(cls.folder, *name.split("/")))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.folder, ignore_errors=True)
+
+    def run_command(self, command):
+        done = subprocess.run(command, shell=True, cwd=self.folder, capture_output=True, text=True, timeout=120)
+        return done.returncode, done.stdout + done.stderr
+
+    def test_the_copy_with_nothing_changed_passes_every_command(self):
+        for command in sorted({m["test"] for m in self.spec["mutants"]}):
+            status, out = self.run_command(command)
+            self.assertEqual(status, 0, command + "\n" + out[-3000:])
+
+    def test_the_list_is_whole(self):
+        ids = [m["id"] for m in self.spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        for kind in ("move", "plan", "rename", "remove"):
+            for needed in ("at_the_servers_own_bucket", "burst_without_reserve", "rate_without_margin", "rate_a_little_fast", "rate_too_slow", "burst_of_one"):
+                self.assertIn("net_%s_%s" % (kind, needed), ids, "every kind needs the proof of its pace and its margin under the server's: " + kind)
+        for needed in ("page_team_press_ignores_the_refusal", "page_team_press_keeps_the_press_that_the_pace_refused"):
+            self.assertIn(needed, ids, "a team press that the page's pace refuses must show the room's teams: " + needed)
+
+    def test_every_mutant_is_seen(self):
+        missed = []
+        for m in self.spec["mutants"]:
+            path = os.path.join(self.folder, *m["file"].split("/"))
+            with open(path, encoding="utf-8", newline="") as f:
+                text = f.read()
+            self.assertEqual(text.count(m["old"]), 1, "%s: %r is not in %s exactly once" % (m["id"], m["old"][:60], m["file"]))
+            try:
+                with open(path, "w", encoding="utf-8", newline="") as f:
+                    f.write(text.replace(m["old"], m["new"]))
+                status, _ = self.run_command(m["test"])
+            finally:
+                with open(path, "w", encoding="utf-8", newline="") as f:
+                    f.write(text)
+            if status == 0:
+                missed.append(m["id"])
+        self.assertEqual(missed, [], "the checks did not see these changes")
 
 
 if __name__ == "__main__":

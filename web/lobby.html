@@ -1084,11 +1084,11 @@
 
         function pressTeam(seat, side) {
             if (!model || model.guest || model.starting) return;
-            var play = Rules.playing(model), res = Rules.pressSide(localSides, play, seat, side), room = client.room;
+            var play = Rules.playing(model), before = localSides, res = Rules.pressSide(localSides, play, seat, side), room = client.room;
             localSides = res.sides;
             refusal = res.refusal;
             var t = Rules.teamBytes(localSides, play);
-            if (t.teamA !== room.teamA || t.teamB !== room.teamB) sendPlan({ sides: localSides });
+            if ((t.teamA !== room.teamA || t.teamB !== room.teamB) && !sendPlan({ sides: localSides })) localSides = Rules.reconcileSides(before, model);      // (the page's pace held the plan back: the screen shows the room's teams, and START sends those, not a split that the room never got)
             render();
             var again = $('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
             if (again) again.focus();

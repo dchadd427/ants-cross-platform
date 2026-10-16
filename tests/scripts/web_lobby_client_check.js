@@ -180,6 +180,7 @@ const events = (c, name) => c.log.filter((e) => e[0] === name).map((e) => e[1]);
     check('the old guard sends nothing: no removal and no move', c.remove(1, seen) === false && c.move(1, 3, seen) === false && w.last().sent.length === base + 2);
     check('the new guard is sent as it is', c.remove(1, after) && hex(w.last().sent[base + 2]) === hex(N.encodeRemove(1, after)));
     check('a guard that is not the seating\'s sends nothing (0, a number, a string)', c.remove(1, 0) === false && c.remove(1, 12345) === false && c.move(1, 3, '1') === false && w.last().sent.length === base + 3);
+    w.advance(1250);                                                   // (the page's pace for a removal: two at once, then one every 1.25 s)
     check('without a guard the room as it is now counts (as before)', c.remove(2) && hex(w.last().sent[base + 3]) === hex(N.encodeRemove(2, after)));
     check('a guard does not make a request possible that is not: the leader cannot be removed', c.remove(0, after) === false && w.last().sent.length === base + 4);
 }
@@ -968,32 +969,35 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('a platform is a whole number', !N.validPlatform(1.5) && !N.validPlatform('3') && !N.validPlatform(null) && !N.validPlatform(NaN) && !N.validPlatform(-1) && !N.validPlatform(256) && N.validPlatform(0x13));
 }
 
-{   // a page that sends too fast is held back here (the server's budgets: names 3 then 1 a second, plans and colour moves 6 then 4 a second, removals 3 then 1 a second), not thrown out of the room
+{   // a page that sends too fast is held back here, a little under the server's budgets (names and removals 2 at once, then one every 1.25 s, where the server's are 3 and 1 a second; plans and colour moves 5, then
+    // 3.2 a second, where the server's are 6 and 4; the margin itself is held to the server's bucket by the replay at the end of this file), not thrown out of the room
     const w = world();
     const c = client(w, { silenceMs: 0 });                 // (a minute of rest without a ping from the scripted server is the budgets' business here, not the watchdog's)
     online(w, c, [[C, 'Priya'], [C, 'Sam'], [C, 'Tess'], [E, '']]);
     const base = w.last().sent.length;
     const count = (fn, n) => { let ok = 0; for (let i = 0; i < n; i++) { if (fn(i)) ok++; } return ok; };
-    check('rename: a burst of 3, then no more', count((i) => c.rename('N' + i), 6) === 3 && w.last().sent.length === base + 3);
-    w.advance(999);
-    check('... not before the second is over', c.rename('Late') === false);
+    check('rename: a burst of 2 (the server\'s is 3), then no more', count((i) => c.rename('N' + i), 6) === 2 && w.last().sent.length === base + 2);
+    w.advance(1249);
+    check('... not before 1.25 s are over (the server\'s second and 250 ms more)', c.rename('Late') === false);
     w.advance(1);
-    check('... one a second then', c.rename('Late') === true && c.rename('Later') === false);
-    check('the budget of a plan is another one (6 then 4 a second)', count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 6);
-    w.advance(249);
-    check('... a plan every 250 milliseconds', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
+    check('... one every 1.25 s then', c.rename('Late') === true && c.rename('Later') === false);
+    check('the budget of a plan is another one (5, the server\'s is 6)', count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 5);
+    w.advance(312);
+    check('... then 3.2 a second: not after 312 milliseconds (a plan every 312.5 ms, where the server\'s is every 250)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
     w.advance(1);
-    check('... (250)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
-    check('the budget of a colour move is another one (6 then 4 a second)', count(() => c.move(1, 3), 9) === 6);
-    w.advance(250);
-    check('... a move every 250 milliseconds', c.move(1, 3) === true && c.move(1, 3) === false);
-    check('the budget of a removal is another one (3 then 1 a second)', count(() => c.remove(1), 6) === 3);
-    w.advance(999);
-    check('... not before the second is over', c.remove(1) === false);
+    check('... (313)', c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === true && c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }) === false);
+    check('the budget of a colour move is another one (5, the server\'s is 6)', count(() => c.move(1, 3), 9) === 5);
+    w.advance(312);
+    check('... not after 312 milliseconds', c.move(1, 3) === false);
     w.advance(1);
-    check('... one a second then', c.remove(1) === true && c.remove(1) === false);
+    check('... a move every 312.5 milliseconds then', c.move(1, 3) === true && c.move(1, 3) === false);
+    check('the budget of a removal is another one (2, the server\'s is 3)', count(() => c.remove(1), 6) === 2);
+    w.advance(1249);
+    check('... not before 1.25 s are over', c.remove(1) === false);
+    w.advance(1);
+    check('... one every 1.25 s then', c.remove(1) === true && c.remove(1) === false);
     w.advance(60000);
-    check('a long rest fills each budget again, to its burst and no further', count((i) => c.rename('M' + i), 6) === 3 && count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 6);
+    check('a long rest fills each budget again, to its burst and no further', count((i) => c.rename('M' + i), 6) === 2 && count(() => c.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 9) === 5);
     // a request that cannot be made costs nothing; one that could not be written costs nothing
     const w2 = world();
     const d = client(w2);
@@ -1004,7 +1008,7 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     sock.send = function () { throw new Error('closing'); };
     for (let i = 0; i < 10; i++) { d.rename('Zed'); d.remove(1); d.move(1, 2); d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }); }
     sock.send = real;
-    check('requests that cannot be made, and ones whose write failed, spend nothing of the budgets', count((i) => d.rename('R' + i), 4) === 3 && count(() => d.remove(1), 4) === 3 && count(() => d.move(1, 2), 7) === 6 && count(() => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 7) === 6);
+    check('requests that cannot be made, and ones whose write failed, spend nothing of the budgets', count((i) => d.rename('R' + i), 4) === 2 && count(() => d.remove(1), 4) === 2 && count(() => d.move(1, 2), 7) === 5 && count(() => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }), 7) === 5);
 }
 
 {   // a link that does not have a WebSocket at all, a line of chat that no player said
@@ -1021,6 +1025,99 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     w2.last().receive(Uint8Array.from([9, 255, 0, 2, 104, 105]));
     same('a line from a player and a line of the room are heard', [events(d, 'chat'), events(d, 'notice')], [[{ sender: 3, team: true, text: 'hi' }], [{ text: 'hi' }]]);
 }
+
+// ---- the SERVER's buckets, replayed (include/ants_net/flood.hpp) --------------------------------------------------------------------------------------------------------------------------------------
+// The server counts the moment at which it HANDLES a request, not the moment at which the page sent it, and a request that finds less than a whole token is dropped without a word (the sender sees nothing; the
+// room just does not change). So a page that paced a kind of request at exactly the server's rate lost one whenever the network (or the server's loop) delayed a request and not the next: two requests that
+// were 1000 ms apart arrive 990 ms apart and the second finds 0.99 of a token (seen on the macOS CI, for the chat; the same for a rename, a plan, a colour move and a removal). Each kind has a bucket of its own
+// in the server (burst, then so many a second); the numbers are read from the server's own header here, so that a limit that changes there changes what the page is held to.
+const FLOOD = (() => {
+    let text = '';
+    try { text = fs.readFileSync(path.resolve(__dirname, '..', '..', 'include', 'ants_net', 'flood.hpp'), 'utf8'); } catch (e) { /* the check below says so */ }
+    const number = (name) => { const m = new RegExp('inline constexpr uint32_t ' + name + ' = ([0-9]+);').exec(text); return m ? +m[1] : NaN; };
+    return { move: [number('kSeatMoveBurst'), number('kSeatMovesPerSecond')], plan: [number('kPlanBurst'), number('kPlansPerSecond')], rename: [number('kNameBurst'), number('kNamesPerSecond')],
+             remove: [number('kRemoveBurst'), number('kRemovesPerSecond')], chat: [number('kChatBurst'), number('kChatPerSecond')] };
+})();
+const KINDS = ['move', 'plan', 'rename', 'remove', 'chat'];
+check('the server\'s limits can be read from include/ants_net/flood.hpp (a burst and a rate for each of the five kinds)', KINDS.every((k) => FLOOD[k].every((n) => Number.isInteger(n) && n > 0)), JSON.stringify(FLOOD));
+// how many requests the server's bucket drops, for these moments (ms) of the page's requests and these delays (ms) of the link: MessageBudget::take with the kind's burst and rate (thousandths of a request, a
+// bucket that is full at the first request, a request that finds less than a whole one is DROPPED and still sets the clock); the link keeps the order of the requests (one is never handled before the one before it)
+const serverDrops = (kind, moments, delays) => {
+    const [burst, perSecond] = FLOOD[kind];
+    let tokens = burst * 1000, last = null, dropped = 0, before = -Infinity;
+    for (let i = 0; i < moments.length; i++) {
+        const at = Math.max(before, moments[i] + delays[i]);
+        before = at;
+        if (last !== null) tokens = Math.min(burst * 1000, tokens + (at - last) * perSecond);
+        last = at;
+        if (tokens < 1000) dropped++; else tokens -= 1000;
+    }
+    return dropped;
+};
+// what a page asks for, for each kind, in a room of two people where it leads (a plan that keeps everything, a colour move of the guest to an empty colour, a new name, the removal of the guest, a line)
+const ASKS = {
+    move: (d) => d.move(1, 2),
+    plan: (d) => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }),
+    rename: (d, i) => d.rename('Name ' + i),
+    remove: (d) => d.remove(1),
+    chat: (d, i) => d.say('line ' + i)
+};
+// the moments (ms) at which a page asks for `kind` when it asks at every millisecond in the given spans, as the client keeps its pace
+const momentsMemo = {};
+const momentsOf = (kind, spans) => {
+    const memo = kind + JSON.stringify(spans);
+    if (momentsMemo[memo]) return momentsMemo[memo];
+    const x = world();
+    const d = client(x, { silenceMs: 0 });
+    online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+    const moments = [];
+    for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
+        if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && ASKS[kind](d, moments.length); k++) moments.push(ms);
+        if (moments.length >= 400) break;                           // (a page that keeps a pace asks for 70 at the most in 16 s; one that has none is no use to replay further)
+        x.advance(1);
+    }
+    momentsMemo[memo] = moments;
+    return moments;
+};
+// the largest number of dropped requests over every combination of 0 and `jitter` ms of delay for the first `most` requests (the bucket is a minimum of straight lines, so its worst delays are among the ends of
+// the range)
+const worst = (kind, moments, jitter, most) => {
+    const n = Math.min(most, moments.length);
+    const t = moments.slice(0, n);
+    const delays = new Array(n).fill(0);
+    let max = 0, at = '';
+    for (let bits = 0; bits < (jitter === 0 ? 1 : 1 << n); bits++) {            // (with no jitter there is one combination)
+        for (let i = 0; i < n; i++) delays[i] = ((bits >> i) & 1) * jitter;
+        const dropped = serverDrops(kind, t, delays);
+        if (dropped > max) { max = dropped; at = bits.toString(2); }
+    }
+    return { max, at, lines: n };
+};
+// the largest number of dropped requests when ONE request is held up by `hold` ms (each of the first `most` in turn) and the ones after it come on time, in order (a stall of the link or of the server's loop)
+const holdUp = (kind, moments, hold, most) => {
+    let max = 0;
+    for (let which = 0; which < Math.min(most, moments.length); which++) max = Math.max(max, serverDrops(kind, moments, moments.map((_, i) => (i === which ? hold : 0))));
+    return max;
+};
+// ... and over `tries` delays drawn at random (a fixed seed) from the whole range, for ALL the requests (a long run is more than the combinations above reach)
+const worstRandom = (kind, moments, jitter, tries) => {
+    let state = 20251016, max = 0;
+    const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+    for (let k = 0; k < tries; k++) {
+        const ends = k % 2 === 0;                                   // (half of the draws only the two ends, half anywhere in between)
+        const delays = moments.map(() => (ends ? (random() < 0.5 ? 0 : jitter) : Math.floor(random() * (jitter + 1))));
+        max = Math.max(max, serverDrops(kind, moments, delays));
+    }
+    return max;
+};
+// the moments at which a page would ask if it kept to the server's own bucket exactly (a burst, then every refill)
+const exactMoments = (kind) => {
+    const [burst, perSecond] = FLOOD[kind];
+    const out = [];
+    let tokens = burst * 1000, last = 0;
+    for (let ms = 0; ms < 16000; ms++) { tokens = Math.min(burst * 1000, tokens + (ms - last) * perSecond); last = ms; if (tokens >= 1000) { tokens -= 1000; out.push(ms); } }
+    return out;
+};
 
 {   // say(): a line of chat from the page, at a pace a little UNDER the server's own (flood.hpp: a burst of 5, then one a second; a line beyond it is dropped without a word and a connection that goes on is thrown out)
     const w = world();
@@ -1067,62 +1164,24 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         for (let i = 0; i < 6; i++) d.rename('N' + i);
         check('and a person who used the budget of the names has the last line of the burst still (the names took nothing from the chat\'s)', d.say('hi') === true && d.say('and again') === false);
     }
-    // the margin, replayed through the SERVER's own bucket (include/ants_net/flood.hpp MessageBudget::take with kChatBurst 5 and kChatPerSecond 1: thousandths of a line, a bucket that is full at the first line, a
-    // line that finds less than a whole one is DROPPED without a word and still sets the clock). The server counts the moment at which it HANDLES a line, which is later than the moment at which the page said
-    // it by a delay that differs from line to line (the network, the server's own loop: on the macOS CI two lines that the page had said 1000 ms apart were handled 990 ms apart and the second was lost).
-    // The page says lines the moment it may; each line is delayed by 0 or by the jitter, in EVERY combination (the bucket is a minimum of straight lines, so its worst delays are among the ends of the
-    // range; the link keeps the order of the lines: a line is never handled before the one before it).
+    // the margin, replayed through the SERVER's own bucket (FLOOD.chat: kChatBurst 5 and kChatPerSecond 1, see serverDrops above). The page says lines the moment it may; each line is delayed by 0 or by the jitter, in
+    // EVERY combination: the network and the server's own loop delay one line and not the next (on the macOS CI two lines that the page had said 1000 ms apart were handled 990 ms apart and the second was lost).
     {
-        const serverDrops = (moments, delays) => {                   // how many of the lines the server's bucket drops, for these delays
-            let tokens = 5000, last = null, dropped = 0, before = -Infinity;
-            moments.forEach((t, i) => {
-                const at = Math.max(before, t + delays[i]);
-                before = at;
-                if (last !== null) tokens = Math.min(5000, tokens + (at - last));
-                last = at;
-                if (tokens < 1000) dropped++; else tokens -= 1000;
-            });
-            return dropped;
-        };
-        // the moments at which a page says its lines when it asks at every millisecond in the given spans (ms), as the client keeps its pace
-        const momentsOf = (spans) => {
-            const x = world();
-            const d = client(x, { silenceMs: 0 });
-            online(x, d, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
-            const moments = [];
-            for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
-                if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && d.say('line ' + moments.length); k++) moments.push(ms);
-                x.advance(1);
-            }
-            return moments;
-        };
-        const worst = (moments, jitter, most) => {                   // the largest number of dropped lines over every combination of 0 and `jitter` for the first `most` lines
-            const n = Math.min(most, moments.length);
-            const t = moments.slice(0, n);
-            let max = 0, at = '';
-            for (let bits = 0; bits < (1 << n); bits++) {
-                const delays = t.map((_, i) => ((bits >> i) & 1) * jitter);
-                const dropped = serverDrops(t, delays);
-                if (dropped > max) { max = dropped; at = bits.toString(2); }
-            }
-            return { max, at, lines: n };
-        };
         const asking = { 'a page that asks every millisecond for 16 s': [[0, 16000]],
                          'a page that pastes three times (2 s, 2.5 s of quiet, 1.5 s, 7 s of quiet, 3 s)': [[0, 2000], [4500, 6000], [13000, 16000]],
                          'a page that talks after 5 s of quiet': [[5000, 12000]] };
         for (const name of Object.keys(asking)) {
-            const moments = momentsOf(asking[name]);
+            const moments = momentsOf('chat', asking[name]);
             check(name + ': ' + moments.length + ' lines, the first four at once', moments.length >= 8 && moments[3] === moments[0]);
             for (const jitter of [0, 50, 100, 150]) {
-                const w2 = worst(moments, jitter, 14);
-                check(name + ', every line late by 0 or ' + jitter + ' ms (' + (1 << w2.lines) + ' combinations): the server drops none', w2.max === 0, w2.max + ' dropped at ' + w2.at);
+                const w2 = worst('chat', moments, jitter, 14);
+                check(name + ', every line late by 0 or ' + jitter + ' ms (' + (jitter === 0 ? 1 : 1 << w2.lines) + ' combinations): the server drops none', w2.max === 0, w2.max + ' dropped at ' + w2.at);
             }
         }
-        const steady = momentsOf([[0, 16000]]);
+        const steady = momentsOf('chat', [[0, 16000]]);
         check('once the burst is used, a page that asks all the time (and asks at every millisecond: the float of the budget adds up) says a line every 1250 ms, no sooner (the margin: 250 ms of the server\'s 1000)', steady.slice(3).every((t, i, all) => i === 0 || t - all[i - 1] === 1250), steady.slice(3, 9).join());
         // the replay can tell: a page that kept to the server's own rate (5, then 1.00 a second) loses a line to a delay of a few ms
-        const exact = []; { let tokens = 5000, last = 0; for (let ms = 0; ms < 16000; ms++) { tokens = Math.min(5000, tokens + (ms - last)); last = ms; if (tokens >= 1000) { tokens -= 1000; exact.push(ms); } } }
-        check('(the replay can tell: lines at exactly the server\'s own rate are dropped when a line is 15 ms late and the next on time)', worst(exact, 15, 14).max > 0, String(worst(exact, 15, 14).max));
+        check('(the replay can tell: lines at exactly the server\'s own rate are dropped when a line is 15 ms late and the next on time)', worst('chat', exactMoments('chat'), 15, 14).max > 0, String(worst('chat', exactMoments('chat'), 15, 14).max));
     }
     // a START that waits, a room that is no lobby, a link that is down
     {
@@ -1159,6 +1218,42 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         online(x, g, [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
         x.last().receive(Uint8Array.from([9, 0, 0, 2, 104, 105]));
         same('the line comes back as the room\'s: sender, no team, the text', events(g, 'chat'), [{ sender: 0, team: false, text: 'hi' }]);
+    }
+}
+
+{   // EVERY kind of request keeps a margin under the server's bucket of its kind (docs/NETWORK_PORT.md, "Flood control"): a burst one smaller and a pace of 0.8 of the server's rate. The page asks as fast as it may
+    // and the requests are replayed through the server's own bucket with every combination of 0 and 50 / 100 / 150 ms of delay: the server may drop none. The chat has its own block above (the same numbers
+    // are in this one, so that the five kinds are held to one rule); a request that the page refuses is the page's word (false, nothing sent), a request that the server drops is nobody's.
+    const asking = { 'a page that asks every millisecond for 16 s': [[0, 16000]],
+                     'a page that asks in three runs (2 s, 2.5 s of quiet, 1.5 s, 7 s of quiet, 3 s)': [[0, 2000], [4500, 6000], [13000, 16000]],
+                     'a page that asks after 5 s of quiet': [[5000, 12000]] };
+    for (const kind of KINDS) {
+        const [burst, perSecond] = FLOOD[kind];
+        const steady = momentsOf(kind, [[0, 16000]]);
+        const first = steady.filter((t) => t === steady[0]).length;
+        check(kind + ': the burst is one less than the server\'s (' + burst + '): ' + (burst - 1) + ' at once', first === burst - 1, 'the page sent ' + first + ' at once');
+        const after = steady.slice(first);
+        const interval = (after[after.length - 1] - after[0]) / (after.length - 1);
+        const want = 1000 / (0.8 * perSecond);
+        check(kind + ': then 0.8 of the server\'s rate (' + perSecond + ' a second): one every ' + want + ' ms, not sooner and not much later (a page that is not sluggish)', interval >= want - 0.5 && interval <= want + 0.5 && after.slice(1).every((t, i) => t - after[i] >= Math.floor(want)), 'every ' + interval + ' ms, the first ' + after.slice(0, 6).join());
+        for (const name of Object.keys(asking)) {
+            const moments = momentsOf(kind, asking[name]);
+            check(kind + ', ' + name + ': ' + moments.length + ' requests, ' + (burst - 1) + ' at once', moments.length >= 6 && moments[burst - 2] === moments[0], moments.slice(0, 8).join());
+            for (const jitter of [0, 50, 100, 150]) {
+                const w2 = worst(kind, moments, jitter, 14);
+                check(kind + ', ' + name + ', every request late by 0 or ' + jitter + ' ms (' + (jitter === 0 ? 1 : 1 << w2.lines) + ' combinations): the server drops none', w2.max === 0, w2.max + ' dropped at ' + w2.at);
+                const r = worstRandom(kind, moments, jitter, 300);
+                check(kind + ', ' + name + ', all ' + moments.length + ' requests late by 0 .. ' + jitter + ' ms (300 draws): the server drops none', r === 0, r + ' dropped');
+            }
+            // one request held up while the ones after it come on time: the margin absorbs about a third of a second for a colour move and a plan (the burst of 6 less 5, 4 a second against 3.2), about one and a
+            // half seconds for a name, a removal and a line (the burst of 3 less 2, 1 a second against 0.8): the claim of the changelog and of docs/PLAY_IN_BROWSER.md
+            const hold = kind === 'move' || kind === 'plan' ? 333 : 1400;
+            const held = holdUp(kind, moments, hold, 12);
+            check(kind + ', ' + name + ', one request held up by ' + hold + ' ms (each of the first 12 in turn, the others on time): the server drops none', held === 0, held + ' dropped');
+        }
+        // the replay can tell: a page that kept to the server's own bucket loses a request to a delay of a few ms
+        const exact = worst(kind, exactMoments(kind), 15, 14);
+        check(kind + ': (the replay can tell: requests at exactly the server\'s own rate are dropped when one is 15 ms late and the next on time)', exact.max > 0, String(exact.max));
     }
 }
 
