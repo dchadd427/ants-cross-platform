@@ -1221,6 +1221,7 @@ std::unique_ptr<RestartWriter> RestartStore::create(const RestartHead& head, std
         budget_.give(total);
         return nullptr;
     }
+    stale_.erase(std::remove(stale_.begin(), stale_.end(), path), stale_.end());       // (a record of an earlier room of this code that could not be deleted is replaced by this one: the retry must not delete it)
     native_sync_dir(cfg_.dir);
     NativeFile a;
     if (!native_open_append(path, a, why)) {

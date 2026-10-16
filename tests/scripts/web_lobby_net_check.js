@@ -64,14 +64,15 @@ const sends = {
     'remove-0': () => N.encodeRemove(0, 0xFFFFFFFF),
     'start-teams': () => N.encodeStartRequest([N.FILL.None, N.FILL.Easy, N.FILL.Medium, N.FILL.Hard], 0, 1),
     'start-ffa-nobody': () => N.encodeStartRequest([0, 0, 0, 0], 255, 255),
-    'chat-plain': () => N.encodeChat(0, false, 'hello there')
+    'chat-plain': () => N.encodeChat(0, false, 'hello there'),
+    'game-joins': () => N.encodeHello({ name: 'Bob', room: 'p_q-9', kind: 'game' })                  // (the rematch: the game page's results screen says a game's Hello, web/front/rematch.js)
 };
 for (const name of Object.keys(sends)) {
     check('golden has ' + name, golden[name] !== undefined);
     if (golden[name]) same('sends ' + name, hex(sends[name]()), golden[name].hex);
 }
-check('no golden message of a page is left unchecked (but a game\'s Hello, which a page never makes)',
-    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === 'game-joins');
+check('no golden message that a page sends is left unchecked (the game\'s Hello too: the game page\'s results screen sends it in the rematch)',
+    names.filter((n) => ['hello', 'leave', 'pong', 'seatmove', 'plan', 'name', 'remove', 'startrequest'].includes(golden[n].kind) && sends[n] === undefined).join() === '');
 
 // fill levels of a plan: Open and Nobody are none
 same('fillOfPlan', N.fillOfPlan([N.PLAN.Open, N.PLAN.Easy, N.PLAN.Medium, N.PLAN.Hard]), [0, 1, 2, 3]);
@@ -273,6 +274,10 @@ check('a platform is one byte that is a whole number (1.5, a string, NaN, -1, 25
     const key = Uint8Array.from(seq(1));
     check('a key that is no key (15 bytes, 17 bytes, zeros, a string, a list, a number) is a new player\'s Hello; a key of 16 bytes is kept', [key.slice(0, 15), new Uint8Array(17), new Uint8Array(16), 'abcdefghijklmnop', Array.from(key), 5, {}, null].every((k) => hello({ key: k }) === zero)
         && hello({ key }) !== zero && hello({ key }).includes(N.hexOf(key)));
+    // the game page's results screen (the rematch, web/front/rematch.js) says a game's Hello: client kind 0 and never a block, whatever it is given (a block is a page's way to make a lobby)
+    const game = hello({ kind: 'game', key });
+    check('a game\'s Hello has no block, asked for or not, and ends with the client kind 0', game === N.hexOf(N.encodeHello({ name: 'Priya', room: 'k7m2xq', kind: 'game', key })) && game.endsWith('00') && game.length < hello({ key }).length
+        && hello({ kind: 'page', key }) === hello({ key }) && hello({ kind: 'other', key }) === hello({ key }));
 }
 
 // ---- the guard is made from the state and the name of each seat, nothing else ---------------------------------------------------------------------------------------------------------------------------

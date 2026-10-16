@@ -317,7 +317,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(sorted(set(re.findall(r"window\.sessionStorage\.\w+\(LOBBY_KEY", script))), ["window.sessionStorage.getItem(LOBBY_KEY", "window.sessionStorage.removeItem(LOBBY_KEY", "window.sessionStorage.setItem(LOBBY_KEY"])
         self.assertIn("if (!v || typeof v !== 'object' || !Net.publicRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;", script)
         self.assertIn("window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });", script)       # (Back from a match: the room is the match's now, this page makes another)
-        self.assertIn("forgetSession();                           // (Back from the match makes a room again: this one is the match's now)", script)
+        self.assertIn("forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)", script)      # (and the rematch's strip goes: front/rematch.js)
         # which page this is: the lobby, whatever the address (there is no test room to ask for)
         self.assertIn("runLobby();", script)
         for gone in ("runTestRoom", "asksMap", "asksRoom", "wantedBlock", "in-room", "room-panel"):
@@ -446,13 +446,14 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
-        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "map_picker.js"):
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        if (!Rules || !Net || !Chat) {", self.script)
+        self.assertIn("root.AntsRematch = api", read("web", "front", "rematch.js"))
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch;\n        if (!Rules || !Net || !Chat || !Rematch) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 

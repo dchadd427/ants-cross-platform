@@ -406,3 +406,4 @@ void run_room_bot_tests();
 void run_room_chat_ui_tests();
 void run_room_chat_box_tests();
 void run_one_card_tests();
+void run_rematch_app_tests();

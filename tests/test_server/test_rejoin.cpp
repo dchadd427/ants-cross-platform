@@ -1923,7 +1923,7 @@ void run_way_back_tests() {
         gb.quit();
         ASSERT_TRUE(w.run_until([&]() { return w.finished("lob27001") && ga.sim.is_match_over() && gb.sim.is_match_over(); }, 20000));
         w.run(2000);
-        const RoomStatus end = w.status("lob27001");
+        const RoomStatus end = w.ended("lob27001");                                         // (the match is over: its code is the rematch's lobby now, the match's room is listed beside it)
         ASSERT_TRUE(end.state == RoomState::Finished && end.referee_hash != 0 && end.lobby);
         ASSERT_TRUE(all_equal({&ga, &gb}) && ga.sim.state_hash().total == end.referee_hash);              // the referee's state and both machines': one
         ASSERT_TRUE(ga.hash_at.count(end.ticks) == 1 && ga.hash_at[end.ticks] == end.referee_hash && gb.hash_at.count(end.ticks) == 1 && gb.hash_at[end.ticks] == end.referee_hash);

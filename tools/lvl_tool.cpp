@@ -1,7 +1,11 @@
 // lvl_tool: checks, describes and rewrites map files (.lvl), and makes a blank map; the format, the canonical form and the limits are docs/MAP_FORMAT.md.
 //
 //   lvl_tool check FILE [--roster MASK] [--new-map]          whether the file loads and plays for the teams of MASK (default 15, all four), and every finding
-//   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, and what a rewrite changes
+//   lvl_tool check FILE --original [--new-map]               whether the map works in the original game (the original-safe profile, lvl_checker.hpp): every finding
+//                                                            with its code, and exit 0 only when there is no fatal finding and no warning; with --new-map a map that
+//                                                            is too big for a new map is said so on a line of its own (a limit of the map maker, not of the original)
+//   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, whether it works in the
+//                                                            original game, and what a rewrite changes
 //   lvl_tool rewrite IN OUT [--roster MASK] [--new-map]      reads IN, checks it, writes its canonical bytes to OUT and says what differs from IN (OUT may be IN: the
 //                                                            bytes go to a new file beside OUT, which takes OUT's place once it is whole)
 //   lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]
@@ -31,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_assets/lvl_checker.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_test_paths.hpp"
@@ -44,13 +49,14 @@ namespace fs = std::filesystem;
 constexpr const char* kTeams[4] = {"green", "red", "blue", "black"};
 
 void usage(std::ostream& out) {
-    out << "usage: lvl_tool check FILE [--roster MASK] [--new-map]\n"
+    out << "usage: lvl_tool check FILE [--roster MASK | --original] [--new-map]\n"
            "       lvl_tool info FILE\n"
            "       lvl_tool rewrite IN OUT [--roster MASK] [--new-map]\n"
            "       lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]\n"
            "       lvl_tool --selftest\n"
            "  check    whether the file loads and plays for the teams of the roster, and every finding\n"
-           "  info     what the file holds, and what a rewrite would change\n"
+           "           (with --original: whether the map works in the original game, every finding with its code)\n"
+           "  info     what the file holds, whether it works in the original game, and what a rewrite would change\n"
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
@@ -146,6 +152,8 @@ std::string file_name(const std::string& path) { return fs::path(path).filename(
 struct Options {
     std::vector<std::string> files;
     uint8_t roster{0x0F};
+    bool roster_given{false};
+    bool original{false};
     bool new_map{false};
     uint32_t rows{0};
     uint32_t columns{0};
@@ -169,6 +177,9 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
         if (a == "--roster") {
             if (!has_value || !number(args[++i], 1, 15, v)) { why = "--roster takes a number from 1 to 15"; return false; }
             o.roster = static_cast<uint8_t>(v);
+            o.roster_given = true;
+        } else if (a == "--original") {
+            o.original = true;
         } else if (a == "--rows" || a == "--columns") {
             if (!has_value || !number(args[++i], 1, LVL_MAX_GRID_SIDE, v)) { why = a + " takes a number from 1 to " + std::to_string(LVL_MAX_GRID_SIDE); return false; }
             (a == "--rows" ? o.rows : o.columns) = v;
@@ -206,12 +217,46 @@ int read_map_file(const std::string& path, const LevelLimits& limits, std::vecto
     return 0;
 }
 
+// The codes of a report's findings, each once, in order: those that stop "works in the original game" (`notes` false) or the notes
+std::string codes_of(const OriginalSafeReport& r, bool notes) {
+    std::vector<std::string> codes;
+    for (const OriginalSafeIssue& i : r.issues) {
+        const std::string code = to_string(i.code);
+        if ((i.severity == LevelProblemSeverity::Info) == notes && std::find(codes.begin(), codes.end(), code) == codes.end()) codes.push_back(code);
+    }
+    std::string text;
+    for (const std::string& c : codes) text += (text.empty() ? "" : ", ") + c;
+    return text;
+}
+
+int check_original(const std::string& name, const std::vector<uint8_t>& bytes, const LevelLimits& limits, std::ostream& out) {
+    const OriginalSafeReport r = check_original_safe(bytes.data(), bytes.size(), limits);
+    // the verdict on the original game first: the findings that stop it come first (a limit of --new-map is none of them: it has its own line below)
+    if (r.works_in_original_game()) {
+        bool notes = false;
+        for (const OriginalSafeIssue& i : r.issues) notes = notes || i.severity == LevelProblemSeverity::Info;
+        out << name << ": works in the original game" << (r.issues.empty() ? "; no findings" : notes ? "; notes:" : "") << "\n";
+    } else if (r.judged) {
+        for (const OriginalSafeIssue& i : r.issues) {
+            if (i.severity == LevelProblemSeverity::Info || i.place_limit) continue;
+            out << name << ": does not work in the original game: " << i.message << "\n";
+            break;
+        }
+    }
+    for (const OriginalSafeIssue& i : r.issues) {
+        if (i.place_limit) out << name << ": too big for a new map (a limit of the map maker, the original has none): " << i.message << "\n";
+    }
+    for (const OriginalSafeIssue& i : r.issues) out << "  " << (i.place_limit ? "limit" : to_string(i.severity)) << ' ' << to_string(i.code) << ": " << i.message << "\n";
+    return r.works_in_original_game() && r.fits_the_place() ? 0 : 1;
+}
+
 int check(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& path = o.files[0];
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
     std::vector<uint8_t> bytes;
     if (const int status = read_map_file(path, limits, bytes, out, err, "")) return status;
     const std::string name = file_name(path);
+    if (o.original) return check_original(name, bytes, limits, out);
     LevelData level;
     LevelValidation report;
     if (!level.load_from_memory(bytes.data(), bytes.size(), &report, limits)) {
@@ -290,6 +335,10 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
         << "Waypoints:     " << level.waypoints.size() << " (" << triggers << " with a trigger)\n"
         << "Default type:  " << default_type(level.ambient_tile_or_sound) << "\n"
         << "Eggs:          " << level.boundary_param << " a team\n";
+    const OriginalSafeReport original = check_original_safe(level);
+    const std::string notes = codes_of(original, true);
+    out << "Original game: " << (original.works_in_original_game() ? "works" : "does not work: " + codes_of(original, false))
+        << (notes.empty() ? (original.issues.empty() ? ", no findings" : "") : "; notes: " + notes) << "\n";
     const LevelWriteResult w = write_level(level);
     if (!w.ok) {
         out << "Rewrite:       not possible: " << w.error << "\n";
@@ -385,7 +434,15 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     std::string why;
     const std::string& command = args[0];
     const size_t files = command == "rewrite" ? 2u : 1u;
-    if ((command != "check" && command != "info" && command != "rewrite" && command != "blank") || !parse(args, o, why) || o.files.size() != files) {
+    bool ok = (command == "check" || command == "info" || command == "rewrite" || command == "blank") && parse(args, o, why) && o.files.size() == files;
+    if (ok && o.original && command != "check") {
+        why = "--original goes with check only";
+        ok = false;
+    } else if (ok && o.original && o.roster_given) {
+        why = "--original holds the map to all four teams: it takes no --roster";
+        ok = false;
+    }
+    if (!ok) {
         if (!why.empty()) err << "lvl_tool: " << why << "\n";
         usage(err);
         return 2;
@@ -499,7 +556,8 @@ int selftest() {
         for (const std::vector<std::string>& bad : std::vector<std::vector<std::string>>{
                  {}, {"nonsense"}, {"check"}, {"check", "a", "b"}, {"rewrite", "a"}, {"info"}, {"check", tiny_path, "--roster", "0"}, {"check", tiny_path, "--roster", "16"},
                  {"check", tiny_path, "--roster"}, {"check", tiny_path, "--what"}, {"blank", "x.lvl", "--rows", "0", "--columns", "5"}, {"blank", "x.lvl", "--rows", "-3"},
-                 {"blank", "x.lvl", "--rows", "5", "--columns", "257"}, {"blank", "x.lvl", "--rows", "65535", "--columns", "65535"}}) {
+                 {"blank", "x.lvl", "--rows", "5", "--columns", "257"}, {"blank", "x.lvl", "--rows", "65535", "--columns", "65535"},
+                 {"check", tiny_path, "--original", "--roster", "3"}, {"info", tiny_path, "--original"}, {"rewrite", tiny_path, "x.lvl", "--original"}}) {
             const Run r = run_words(bad);
             t.check(r.status == 2 && r.out.empty() && has(r.err, "usage: lvl_tool"), "a wrong command line (" + std::to_string(bad.size()) + " words) is exit 2 with the usage");
         }
@@ -509,6 +567,9 @@ int selftest() {
         const Run side = run_words({"blank", dir.file("b.lvl"), "--rows", "65535", "--columns", "65535"});
         t.check(side.status == 2 && has(side.err, "lvl_tool: --rows takes a number from 1 to 256\n") && !fs::exists(dir.file("b.lvl")),
                 "blank --rows 65535: a grid the game cannot host is a wrong command line, before anything is made");
+        t.check(has(run_words({"check", tiny_path, "--original", "--roster", "3"}).err, "lvl_tool: --original holds the map to all four teams: it takes no --roster\n") &&
+                    has(run_words({"info", tiny_path, "--original"}).err, "lvl_tool: --original goes with check only\n"),
+                "--original: with a roster or another command it says why");
     }
 
     std::cout << "  what the tool does not foresee\n";
@@ -574,6 +635,60 @@ int selftest() {
         }
     }
 
+    std::cout << "  check --original\n";
+    {
+        const Run r = run_words({"check", tiny_path, "--original"});
+        t.check(r.status == 0 && r.out == "TINY.LVL: works in the original game; no findings\n" && r.err.empty(), "check --original: TINY works in the original game: " + r.out);
+        // Blue's hill (rows 4 .. 7, columns 23 .. 26 of TINY's layer 2) taken away
+        std::vector<uint8_t> nohill = tiny;
+        const size_t layer2 = 42 + 670 * 11 + 8 + 31 * 31 * 6;
+        for (size_t row = 4; row <= 7; ++row) {
+            for (size_t column = 23; column <= 26; ++column) {
+                const size_t at = layer2 + (row * 31 + column) * 6;
+                put16(nohill, at, 0x7FFE);
+                put16(nohill, at + 2, 0);
+                put16(nohill, at + 4, 0);
+            }
+        }
+        const Run n = run_words({"check", file_of("nohill.lvl", nohill), "--original"});
+        t.check(n.status == 1 && n.out == "nohill.lvl: does not work in the original game: Blue has no hill\n  warning hill_missing: Blue has no hill\n",
+                "check --original: a map without Blue's hill does not work in the original game: " + n.out);
+        t.check(run_words({"check", dir.file("nohill.lvl")}).status == 0, "check: the remake plays it all the same");
+        std::vector<uint8_t> mode = tiny;
+        put16(mode, 4, 4631);
+        const Run m = run_words({"check", file_of("mode.lvl", mode), "--original"});
+        t.check(m.status == 0 && m.out == "mode.lvl: works in the original game; notes:\n  note mode_not_1: the mode word is 4631, not 1: the original never reads it (the map maker writes 1)\n",
+                "check --original: a note does not stop it: " + m.out);
+        const Run c = run_words({"check", dir.file("cut.lvl"), "--original"});
+        t.check(c.status == 1 && has(c.out, "cut.lvl: does not work in the original game: the file ends inside the layers") && has(c.out, "  fatal file_cut_short: "),
+                "check --original: a file cut short does not work, and says where");
+        // TINY made 131 columns wide (the new columns are plain ground): the original plays it, a new map may not be so wide
+        LevelData broad = tiny_level;
+        broad.width.val = 131;
+        broad.layer1_terrain.assign(31u * 131u, tiny_level.layer1_terrain[0]);
+        broad.layer2_interactive.assign(31u * 131u, MapCell{LVL_EMPTY_TILE, 0, 0});
+        for (size_t row = 0; row < 31; ++row) {
+            for (size_t column = 0; column < 31; ++column) {
+                broad.layer1_terrain[row * 131 + column] = tiny_level.layer1_terrain[row * 31 + column];
+                broad.layer2_interactive[row * 131 + column] = tiny_level.layer2_interactive[row * 31 + column];
+            }
+        }
+        const LevelWriteResult broad_file = write_level(broad);
+        t.check(broad_file.ok, "a 31 x 131 map of TINY is written");
+        const std::string broad_path = file_of("broad.lvl", broad_file.bytes);
+        const Run b_game = run_words({"check", broad_path, "--original"});
+        t.check(b_game.status == 0 && has(b_game.out, "broad.lvl: works in the original game") && !has(b_game.out, "too big"),
+                "check --original: 131 columns work in the original game: " + b_game.out);
+        const Run b_new = run_words({"check", broad_path, "--original", "--new-map"});
+        t.check(b_new.status == 1 && has(b_new.out, "broad.lvl: works in the original game") && !has(b_new.out, "does not work") &&
+                    has(b_new.out, "broad.lvl: too big for a new map (a limit of the map maker, the original has none): the grid has 31 rows x 131 columns, more than the 130 x 130 allowed here") &&
+                    has(b_new.out, "  limit grid_too_large: "),
+                "check --original --new-map: 131 columns are a limit of the map maker, not under the heading that the original does not work: " + b_new.out);
+        t.check(has(run_words({"info", dir.file("nohill.lvl")}).out, "Original game: does not work: hill_missing\n") &&
+                    has(run_words({"info", dir.file("mode.lvl")}).out, "Original game: works; notes: mode_not_1\n"),
+                "info: whether the map works in the original game, by code");
+    }
+
     std::cout << "  info\n";
     {
         const Run r = run_words({"info", tiny_path});
@@ -585,6 +700,7 @@ int selftest() {
                 "info: the start markers and the hills of each team");
         t.check(has(r.out, "Food piles:    14\n") && has(r.out, "Waypoints:     0 (0 with a trigger)\n") && has(r.out, "Default type:  none") && has(r.out, "Eggs:          3 a team\n"),
                 "info: food, waypoints, the default type, the eggs");
+        t.check(has(r.out, "Original game: works, no findings\n"), "info: TINY works in the original game");
         t.check(has(r.out, "Rewrite:       19312 bytes\n  name_padding: 670 of the 670 dictionary names have leftover bytes"), "info: what a rewrite changes");
     }
 

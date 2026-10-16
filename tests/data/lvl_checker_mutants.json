@@ -1,0 +1,518 @@
+{
+ "note": "Mutants of the original-safe profile of the map checker (docs/MAP_FORMAT.md, lvl_checker.hpp), of lvl_tool check --original and of the writer's read limit, for tools/mutate.py: python3 tools/mutate.py tests/data/lvl_checker_mutants.json --keep-going --jobs 2. Every mutant must be caught by test_original_safe, test_lvl_writer or lvl_tool --selftest.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "version_9_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (level.version != LVL_EXPECTED_VERSION) {",
+   "new": "if (level.version > LVL_EXPECTED_VERSION + 1) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "mode_is_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::ModeNot1, Severity::Info, \"the mode word is \"",
+   "new": "f.add(Code::ModeNot1, Severity::Warning, \"the mode word is \"",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_description_of_30_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "constexpr size_t kLongestDescription = 29;",
+   "new": "constexpr size_t kLongestDescription = 30;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "257_rows_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "} else if (rows > kMostSide || columns > kMostSide) {",
+   "new": "} else if (rows > kMostSide + 1 || columns > kMostSide) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "layer_2_not_held_to_the_grid",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "} else if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {",
+   "new": "} else if (level.layer1_terrain.size() != cells) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "1345_names_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (names > LVL_MAX_DICTIONARY_ENTRIES) {",
+   "new": "if (names > LVL_MAX_DICTIONARY_ENTRIES + 1) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_tile_at_the_dictionary_size_inside",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "auto beyond = [names](uint16_t tile) { return tile != LVL_EMPTY_TILE && tile >= names; };",
+   "new": "auto beyond = [names](uint16_t tile) { return tile != LVL_EMPTY_TILE && tile > names; };",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "block_1_records_not_held_to_the_dictionary",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (sp.tile_id >= names) records.see(sp.y, sp.x, sp.tile_id);",
+   "new": "if (sp.tile_id >= names + 1) records.see(sp.y, sp.x, sp.tile_id);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_default_ant_type_not_held_to_the_dictionary",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (beyond(level.ambient_tile_or_sound)) {",
+   "new": "if (beyond(level.ambient_tile_or_sound) && level.ambient_tile_or_sound > 60000) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "ground_missing_seen_at_the_first_cell_only",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (tile == LVL_EMPTY_TILE) no_ground.see(",
+   "new": "if (tile == LVL_EMPTY_TILE && i == 0) no_ground.see(",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_start_marker_on_the_row_after_the_last_inside",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (sp.team_id == team && (sp.y >= rows || sp.x >= columns)) out.see(sp.y, sp.x);",
+   "new": "if (sp.team_id == team && (sp.y > rows || sp.x >= columns)) out.see(sp.y, sp.x);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_food_pile_on_the_column_after_the_last_inside",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (pile.y >= rows || pile.x >= columns) out.see(pile.y, pile.x);",
+   "new": "if (pile.y >= rows || pile.x > columns) out.see(pile.y, pile.x);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_pile_without_stages_seen_on_row_0_only",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (pile.variants.empty()) empty.see(pile.y, pile.x);",
+   "new": "if (pile.variants.empty() && pile.y == 0) empty.see(pile.y, pile.x);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_missing_hill_is_a_note",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::HillMissing, Severity::Warning, std::string(kTeams[team]) + \" has no hill\", -1, -1, team);",
+   "new": "f.add(Code::HillMissing, Severity::Info, std::string(kTeams[team]) + \" has no hill\", -1, -1, team);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "every_hill_cell_an_entrance",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if ((layer[i].flags & 1u) != 0) entrances.push_back(i);",
+   "new": "entrances.push_back(i);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "two_hills_allowed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (entrances.size() > 1) {",
+   "new": "if (entrances.size() > 2) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "any_block_1_record_is_a_start_marker",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "for (const AnthillSpawn& sp : level.anthill_spawns) marker = marker || sp.team_id == team;",
+   "new": "for (const AnthillSpawn& sp : level.anthill_spawns) marker = marker || sp.team_id != 255;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "hill_anchors_not_looked_at",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(!entrance && cell.properties != anchor)",
+   "new": "(!entrance && cell.properties != anchor && cell.tile_index != id)",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "stray_hill_cells_not_looked_at",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "for (const size_t i : cells) {",
+   "new": "for (const size_t i : entrances) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "always_loaded_tiles_counted_as_not_drawn",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "level.tile_dictionary[tile] == \".\" && !tile_always_loaded(tile); };",
+   "new": "level.tile_dictionary[tile] == \".\"; };",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "only_the_first_stage_of_a_pile_looked_at",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "hidden.see(pile.y, pile.x, tile, static_cast<uint32_t>(k + 1));",
+   "new": "if (k == 0) hidden.see(pile.y, pile.x, tile, static_cast<uint32_t>(k + 1));",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "waypoints_outside_by_their_row_only",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (w.y >= rows || w.x >= columns) {",
+   "new": "if (w.y >= rows) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "notes_not_last",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "std::stable_partition(report.issues.begin(), report.issues.end(), [](const OriginalSafeIssue& i) { return i.severity != Severity::Info; });",
+   "new": "(void)report;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_warning_does_not_stop_it",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (i.severity != LevelProblemSeverity::Info && !i.place_limit) return false;",
+   "new": "if (i.severity == LevelProblemSeverity::Fatal && !i.place_limit) return false;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_cut_block_4_taken_for_a_missing_egg_word",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (has_note(level, LevelProblemKind::WaypointBlockTruncated)) {",
+   "new": "if (has_note(level, LevelProblemKind::WaypointBlockTruncated) && level.waypoints.size() > 100) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_food_block_that_ended_early_not_seen",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (has_note(level, LevelProblemKind::FoodBlockEndedEarly, &unread)) {",
+   "new": "if (has_note(level, LevelProblemKind::FoodBlockEndedEarly, &unread) && unread > 100) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_wrong_version_file_named_cut_short",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "case LevelProblemKind::WrongVersion: f.add(Code::VersionNot8, Severity::Fatal, p.message); break;",
+   "new": "case LevelProblemKind::WrongVersion: f.add(Code::FileCutShort, Severity::Fatal, p.message); break;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_always_loaded_blue_hill_forgotten",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "246, 247, 248, 356,",
+   "new": "247, 247, 248, 356,",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "check_original_always_succeeds",
+   "file": "tools/lvl_tool.cpp",
+   "old": "return r.works_in_original_game() && r.fits_the_place() ? 0 : 1;",
+   "new": "return 0;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "info_names_the_notes_as_what_stops_it",
+   "file": "tools/lvl_tool.cpp",
+   "old": "\"does not work: \" + codes_of(original, false))",
+   "new": "\"does not work: \" + codes_of(original, true))",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "the_writer_forgets_the_read_limit",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "const size_t most = std::min(limits.max_write_bytes, limits.max_read_bytes);",
+   "new": "const size_t most = limits.max_write_bytes;",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "a_level_without_cells_named_by_its_layers",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.layer1_terrain.empty() && level.layer2_interactive.empty()) {",
+   "new": "if (level.layer1_terrain.empty() && level.layer2_interactive.empty() && rows == 1) {",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "green_and_red_start_markers_swapped",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "constexpr uint16_t kMarkerOf[4] = {154, 155, 153, 152};",
+   "new": "constexpr uint16_t kMarkerOf[4] = {155, 154, 153, 152};",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_plant_on_the_row_after_the_last_inside",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (sp.team_id == 255 && (sp.y >= rows || sp.x >= columns)) {",
+   "new": "if (sp.team_id == 255 && (sp.y > rows || sp.x >= columns)) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_plant_on_the_column_after_the_last_inside",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (sp.team_id == 255 && (sp.y >= rows || sp.x >= columns)) {",
+   "new": "if (sp.team_id == 255 && (sp.y >= rows || sp.x > columns)) {",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "hill_footprint_one_column_wider",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "return r >= er - 1 && r <= er + 2 && c >= ec - 1 && c <= ec + 2; };",
+   "new": "return r >= er - 1 && r <= er + 2 && c >= ec - 1 && c <= ec + 3; };",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "hill_footprint_one_row_and_column_wider_before",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "return r >= er - 1 && r <= er + 2 && c >= ec - 1 && c <= ec + 2; };",
+   "new": "return r >= er - 2 && r <= er + 2 && c >= ec - 2 && c <= ec + 2; };",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_pile_that_is_not_shown_is_a_note",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::FoodPileNotShown, Severity::Warning,\n                  \"the food pile at \" ",
+   "new": "f.add(Code::FoodPileNotShown, Severity::Info,\n                  \"the food pile at \" ",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "piles_that_are_not_shown_are_a_note",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::FoodPileNotShown, Severity::Warning,\n                  num(hidden.count)",
+   "new": "f.add(Code::FoodPileNotShown, Severity::Info,\n                  num(hidden.count)",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_cut_block_4_is_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::FileCutInBlock4, Severity::Fatal,\n              \"the file ends inside its list",
+   "new": "f.add(Code::FileCutInBlock4, Severity::Warning,\n              \"the file ends inside its list",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_cut_block_4_of_a_refused_file_is_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "case LevelProblemKind::WaypointBlockTruncated: f.add(Code::FileCutInBlock4, Severity::Fatal, p.message); break;",
+   "new": "case LevelProblemKind::WaypointBlockTruncated: f.add(Code::FileCutInBlock4, Severity::Warning, p.message); break;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "missing_ground_is_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::GroundMissing, Severity::Fatal,",
+   "new": "f.add(Code::GroundMissing, Severity::Warning,",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_hill_off_the_map_names_its_entrance_as_differing",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "        if (first < 0) {\n            what =",
+   "new": "        if (false) {\n            what =",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_limit_of_the_place_is_the_originals_rule",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (!game.has(LevelProblemKind::GridTooLarge)) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);",
+   "new": "if (!game.has(LevelProblemKind::GridTooLarge)) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, false);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_dictionary_limit_of_the_place_is_the_originals_rule",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (!game.has(LevelProblemKind::DictionaryTooLarge)) f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);",
+   "new": "if (!game.has(LevelProblemKind::DictionaryTooLarge)) f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, false);",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_file_not_read_is_judged",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "report.judged = false;",
+   "new": "report.judged = true;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_limit_of_the_place_fits_the_place",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "        if (i.place_limit) return false;\n    }\n    return true;",
+   "new": "        if (i.place_limit && false) return false;\n    }\n    return true;",
+   "build": [
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  }
+ ]
+}
