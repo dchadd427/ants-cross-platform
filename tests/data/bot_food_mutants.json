@@ -109,6 +109,22 @@
    "expect": "AI11.10"
   },
   {
+   "id": "army_only_for_multi",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);\n            k.cls = cls;",
+   "new": "if (cls == static_cast<uint8_t>(PileClass::Multi) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);\n            k.cls = cls;",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.6 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.6"
+  },
+  {
+   "id": "threat_radius_twelve",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "int32_t reserve_threat_tiles{6};",
+   "new": "int32_t reserve_threat_tiles{12};",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI28.7 ./build/tests/test_ai/test_ai",
+   "expect": "AI28.7"
+  },
+  {
    "id": "no_fade",
    "file": "src/ants_ai/tasks.cpp",
    "old": "            if (params_.deny_fade && weight > 100u) weight =",

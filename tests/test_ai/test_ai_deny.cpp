@@ -2,6 +2,7 @@
 // is eaten by whoever gets there, so a Medium or Hard bot eats contested food before its own reserve, unless the contested food is too far to be worth the walk or an enemy
 // comes for the reserve. Hand-made worlds only (ReserveWorld, contest_helpers.hpp), each drawn in its eight orientations and played from every seat: the rule is about who
 // reaches a pile how soon, never about one map.
+// (A pile's anchor is the bottom-right cell of its footprint, so an ant's distance to it differs by a tile between the drawings and the teams: the cases keep clear of the radius of six.)
 // (A hill is not symmetric itself: its entrance is on one side of the mound in every drawing, so the trips, and the ants that a pile has room for, differ a little between the
 // drawings; what must not differ is the decision.)
 //
@@ -11,6 +12,8 @@
 //   AI28.3  a reserve pile with an enemy ant beside it counts as one that several enemies want (it is being taken) and goes before the middle; an ally's ant there is no threat
 //   AI28.4  a contested pile that an enemy army holds counts as it is (Hopeless)
 //   AI28.5  the weights fade as the match runs out: late in the match the reserve goes before the middle
+//   AI28.6  a pile that ONE enemy reaches and an enemy army holds counts as it is too (the army rule is for the One class as for Multi)
+//   AI28.7  the threat to the reserve has a radius: an enemy ant 7 tiles from it is none, one 6 tiles from it is
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"
@@ -39,7 +42,8 @@ struct Game {
     int32_t reserve_at{19};                           // the reserve's anchor is (reserve_at, reserve_at) at team 0 in the first drawing
     uint16_t reserve_value{25};                       // its points per unit (the middle's are 25)
     std::array<size_t, 4> enemies{{1, 1, 1, 1}};      // the workers of every team but the seat (an enemy needs one ant to be a live team)
-    bool threat{false};                               // a worker of the next team stands 4 tiles beside the seat's reserve ...
+    bool threat{false};                               // a worker of the next team stands `threat_gap` tiles beside the seat's reserve ...
+    int32_t threat_gap{4};
     bool ally{false};                                 // ... and that team is the seat's ally
     bool army{false};                                 // a Combat Ant of the team across stands 2 tiles beside the middle pile
     uint32_t ticks{14400};                            // the length of the match
@@ -56,9 +60,13 @@ Outcome play(Level level, uint8_t seat, const Game& g) {
     for (uint8_t t = 0; t < 4; ++t) {
         if (workers[t] == 0) sim.drop_player(t);                    // a team that is not live competes for nothing
     }
-    if (g.threat) sim.spawn_unit(static_cast<uint8_t>((seat + 1) % 4), sim::AntType::Worker, w.tile_of(seat, TileCoord{g.reserve_at - 4, g.reserve_at}));
+    if (g.threat) sim.spawn_unit(static_cast<uint8_t>((seat + 1) % 4), sim::AntType::Worker, w.tile_of(seat, TileCoord{g.reserve_at - g.threat_gap, g.reserve_at}));
     if (g.ally) sim.form_alliance(seat, static_cast<uint8_t>((seat + 1) % 4));
-    if (g.army) sim.spawn_unit(static_cast<uint8_t>((seat + 2) % 4), sim::AntType::Combat, w.tile_of(seat, TileCoord{27, 30}));
+    if (g.army) {
+        uint8_t owner = static_cast<uint8_t>((seat + 2) % 4);          // the team across, or the first live enemy when that one is out of the match
+        for (uint8_t i = 0; i < 4 && (workers[owner] == 0 || owner == seat); ++i) owner = static_cast<uint8_t>((owner + 1) % 4);
+        sim.spawn_unit(owner, sim::AntType::Combat, w.tile_of(seat, TileCoord{27, 30}));
+    }
     for (uint32_t i = 0; i < g.idle; ++i) sim.tick();
     Rig rig(sim, seat, level, std::make_unique<StandardBot>(plan_for(level)), 4, 4);
     rig.run(60);
@@ -184,5 +192,28 @@ void run_deny_tests() {
         for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 0, [](const Outcome& o) { return o.reserve == 0u; });
         g.idle = 18000;
         for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::Multi); });
+    } TEST_END();
+
+    TEST_CASE("AI28.6 The Army Rule Holds For A Pile That ONE Enemy Reaches Too: With One Enemy Team Competing For The Middle (25 Points A Unit, 1.5 To 1.7 Times The Trip Of A Reserve Of 20) And Its Combat Ant Beside The Pile, The Middle Reads Hopeless And The Reserve Goes First (Without The Army The Middle Goes First); In All Eight Drawings And From Every Seat Of A Live Team")
+    {
+        Game one;
+        one.enemies = {{1, 1, 0, 0}};
+        one.reserve_at = 20;
+        one.reserve_value = 20;
+        const auto far = far_range(one);
+        ASSERT_TRUE(far.first >= 150 && far.second <= 172);
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, one, 0, [](const Outcome& o) { return o.middle_class == static_cast<int>(PileClass::One); });
+        one.army = true;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, one, 1, [](const Outcome& o) { return o.reserve >= 3u && o.middle_class == static_cast<int>(PileClass::Hopeless); });
+    } TEST_END();
+
+    TEST_CASE("AI28.7 The Threat To The Reserve Has A Radius Of Six Tiles: An Enemy Ant Eight Tiles From The Own Reserve Is No Threat (The Contested Middle Goes First), One Five Tiles From It Is (The Reserve Goes First); In All Eight Drawings And From Every Seat")
+    {
+        Game g;
+        g.threat = true;
+        g.threat_gap = 8;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 0, [](const Outcome& o) { return o.reserve == 0u; });
+        g.threat_gap = 5;
+        for (const Level level : {Level::Medium, Level::Hard}) alike_everywhere(level, g, 1, [](const Outcome& o) { return o.reserve >= 5u && o.reserve > o.middle; });
     } TEST_END();
 }

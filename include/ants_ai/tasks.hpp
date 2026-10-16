@@ -263,7 +263,8 @@ public:
     /// Whether the ant is kept away from the pile at `tick` (an order of it failed there lately)
     bool excluded(uint32_t ant, uint32_t pile, uint64_t tick) const noexcept;
     /// The class (PileClass as a number) of a pile for the seat as of the last look (the contest-aware option, the race and the denial order; -1 when the pile was not a candidate or
-    /// no such order is on): for the tests and the reports
+    /// no such order is on): for the tests and the reports. Which of the three is on decides what the number means: the contest-aware tier (contest_aware), the race class
+    /// (race) or the denial class (denial_order); the denial class is the only one that tells Hopeless and Safe apart.
     int tier_of(uint32_t pile) const noexcept {
         const auto it = tiers_.find(pile);
         return it != tiers_.end() ? it->second : -1;

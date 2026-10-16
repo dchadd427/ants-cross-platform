@@ -427,7 +427,7 @@ A standard bot draws a **style** at the start of a match from its own seat's ran
 
 | Style | Opening and economy | What it adds |
 |---|---|---|
-| Aggressive | the denial order (one more ant for the opening of v0.5.0 when it is played: Medium 2, Hard 3), one more defender | raids for two thirds of the loot; the harassment squad (Medium: only when clearly stronger than what stands near the carrier, 150 percent; Hard: at 100 percent); at Hard also a second Combat Ant, the sabotage of the best opponent's gate with a stolen Fire Ant and the strike when behind |
+| Aggressive | the denial order; when the opening of v0.5.0 is played, it sends one more ant to it (Medium 2, Hard 3); one more defender | raids for two thirds of the loot; the harassment squad (Medium: only when clearly stronger than what stands near the carrier, 150 percent; Hard: at 100 percent); at Hard also a second Combat Ant, the sabotage of the best opponent's gate with a stolen Fire Ant and the strike when behind |
 | Economic | no contest of the middle: the plain order (no race, no denial order) | fire walls before a thief shows, raids only for three times the loot |
 | Raider | Fire and Thief first (no Bomber) | raids for half the loot, a shorter wait (300 ticks) after a hill that could not be reached |
 | Defensive | no contest of the middle (the plain order), one more defender | fire walls before a thief shows, the ally's blows answered (no interception of thieves: it lost) |
