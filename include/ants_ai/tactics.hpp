@@ -64,6 +64,8 @@ struct LevelPlan {
     uint32_t race_army_weight{8};
     uint32_t race_army_percent{150};
     uint32_t contest_opening_ticks{1200};  // the opening of v0.5.0 (race off) lasts this long
+    bool reserve_order{false};            // contested food first for every ant, the seat's own safe piles (its reserve) last, unless the clock says the rest of the match only just eats them (HarvestTask::Params::reserve_order)
+    uint32_t reserve_time_percent{150};
     uint32_t contest_opening_min_ants{6};  // ... only with at least this many ants at the start (TINY has 3, SMALL 4: there the contest of the middle costs and loses; MEDIUM, GAUNTLET and TREASURE have 6 or more)
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116

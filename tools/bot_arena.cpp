@@ -584,6 +584,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "raceslack") { p.race_slack_percent = static_cast<uint32_t>(v); return true; }
     if (key == "racefloor") { p.race_floor = static_cast<uint32_t>(v); return true; }
     if (key == "raceone") return flag(p.race_one);
+    if (key == "reserve") return flag(p.reserve_order);
+    if (key == "reservepct") { p.reserve_time_percent = static_cast<uint32_t>(v); return true; }
     if (key == "health") return flag(p.health_aware);
     if (key == "skirm") return flag(p.skirmish);
     if (key == "skforce") { p.skirmish_force = static_cast<uint32_t>(v); return true; }

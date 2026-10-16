@@ -218,6 +218,14 @@ public:
         /// ... and only when the seat has at least this many ants at its first look: a team of three or four ants cannot spare one for a trip across the map (TINY, 3 ants: the contest
         /// of the middle cost 4 percent of the score against workers and lost the duels, docs/BOTS.md, "Aggression"); 0: no minimum
         uint32_t contest_opening_min_ants{0};
+        /// Contested food first, the reserve last (the standard bot, Medium and Hard): food is finite, and what lies between the bases is eaten by whoever gets there. The piles that an enemy's
+        /// hill walks to about as soon as the seat's (tier_for, an enemy far nearer makes a pile Hopeless) come first for every ant, the piles that several enemies reach (Multi) before those
+        /// that one reaches (One), each by points per trip; a pile that an enemy army holds (race_army_weight) is left to the end. The piles that only the seat reaches soon (Safe: every live
+        /// enemy walks more than contest_high percent of the seat's cost) are its RESERVE: nobody else takes them, so they wait, unless the clock says that the rest of the match only just eats
+        /// the reserve (reserve_time_percent of the ticks it takes: its units times the ticks per deposit, the gate's gap or the trip shared by the ants, whichever is longer). The race is off
+        /// while it plays (it is the same idea for the surplus ants only).
+        bool reserve_order{false};
+        uint32_t reserve_time_percent{150};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
@@ -302,6 +310,7 @@ private:
         uint8_t tier{0};                     // contest-aware: the PileClass (always 0 when the option is off)
         uint8_t cls{static_cast<uint8_t>(PileClass::Safe)};   // the race: the pile's class
         bool race{false};                    // the race: a race is open at this pile (see Params::race)
+        uint8_t reserve_cls{static_cast<uint8_t>(PileClass::Safe)};   // reserve_order: the pile's class
     };
     struct Watch {
         sim::TileCoord tile{};               // where an ordered ant that walks (or waits for a path) stood at the last look ...

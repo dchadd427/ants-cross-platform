@@ -263,7 +263,8 @@ void HarvestTask::step(TaskContext& c) {
         start_ants_known_ = true;
     }
     const uint32_t opening_ants = start_ants_ >= params_.contest_opening_min_ants ? params_.contest_opening_ants : 0u;
-    const bool race_on = params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
+    const bool reserve_on = params_.reserve_order && profile.value_aware_piles;                     // (contested food first, the seat's own safe piles last: Params::reserve_order)
+    const bool race_on = !reserve_on && params_.race && start_ants_ >= params_.contest_opening_min_ants && (params_.race_ticks == 0 || now < params_.race_ticks);         // a team that cannot spare an ant for a trip across the map has no race (TINY has 3 ants, SMALL 4)
     const auto in_pool_type = [&](sim::AntType type, sim::AntType def) { return type == def || ((params_.extra_types >> static_cast<unsigned>(type)) & 1u) != 0; };
     // The longest an order of ours can take to leave: the reaction delay plus its jitter, then the time to live in the controller's queue. A record that was never answered
     // by a fate (it cannot happen unless a bot is driven without the controller) is dropped after that, so that no ant stays out of the pool for ever.
@@ -532,7 +533,7 @@ void HarvestTask::step(TaskContext& c) {
         k.bite = info->bite_index;
         k.units = bite->remaining;
         k.shut_at_start = shut;
-        if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
+        if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on && !reserve_on)) {
             const uint8_t cls = tier_for(c, *info, ap.cost);
             const uint8_t safe = static_cast<uint8_t>(PileClass::Safe);
             const uint8_t multi = static_cast<uint8_t>(PileClass::Multi);
@@ -552,6 +553,12 @@ void HarvestTask::step(TaskContext& c) {
                 k.tier = safe;
             }
         }
+        if (reserve_on) {
+            uint8_t cls = tier_for(c, *info, ap.cost, true);
+            if ((cls == static_cast<uint8_t>(PileClass::Multi) || cls == static_cast<uint8_t>(PileClass::One)) && held_by_army(c, info->anchor)) cls = static_cast<uint8_t>(PileClass::Hopeless);
+            k.reserve_cls = cls;
+            k.tier = cls;
+        }
         if (race_on) {
             const uint8_t cls = tier_for(c, *info, ap.cost, true);
             k.cls = cls;
@@ -564,12 +571,35 @@ void HarvestTask::step(TaskContext& c) {
         unplaced_ = pool.size();
         return;
     }
-    if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on)) {
+    if (params_.contest_aware || params_.contest_reactive || (opening_ants > 0 && !race_on && !reserve_on)) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
     } else if (race_on) {
         tiers_.clear();
         for (const Candidate& k : cands) tiers_[k.pile] = k.race ? k.cls : static_cast<uint8_t>(PileClass::Safe);     // (the class of a pile that is a race now; the others read as Safe)
+    }
+    if (reserve_on) {
+        // the reserve's clock: its units times the ticks per deposit (the gate's gap, or the reserve's mean trip shared by the seat's harvesters, whichever is longer)
+        uint64_t units = 0;
+        uint64_t trip_units = 0;
+        for (const Candidate& k : cands) {
+            if (k.reserve_cls != static_cast<uint8_t>(PileClass::Safe)) continue;
+            units += k.units;
+            trip_units += static_cast<uint64_t>(k.units) * static_cast<uint64_t>(k.trip);
+        }
+        if (units > 0) {
+            uint64_t harvesters = 0;
+            for (const AntView& a : v.mine()) harvesters += in_pool_type(a.type, v.default_ant_type()) ? 1u : 0u;
+            const uint64_t per_unit = std::max<uint64_t>(params_.gate_gap_ticks, trip_units / units / std::max<uint64_t>(harvesters, 1u));
+            const bool reserve_time = static_cast<uint64_t>(v.ticks_left()) * 100u <= units * per_unit * params_.reserve_time_percent;
+            if (reserve_time) {
+                for (Candidate& k : cands) {
+                    if (k.reserve_cls == static_cast<uint8_t>(PileClass::Safe)) k.tier = static_cast<uint8_t>(PileClass::Multi);
+                }
+            }
+        }
+        tiers_.clear();
+        for (const Candidate& k : cands) tiers_[k.pile] = k.tier;
     }
     std::stable_sort(cands.begin(), cands.end(), [](const Candidate& x, const Candidate& y) { return x.tier != y.tier ? x.tier < y.tier : x.rank > y.rank; });     // ties: the lower pile index (the view's order)
 

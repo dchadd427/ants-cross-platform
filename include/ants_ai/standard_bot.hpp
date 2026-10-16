@@ -249,6 +249,8 @@ private:
         p.contest_opening_ants = plan.contest_opening_ants;
         p.contest_opening_ticks = plan.contest_opening_ticks;
         p.contest_opening_min_ants = plan.contest_opening_min_ants;
+        p.reserve_order = plan.reserve_order;
+        p.reserve_time_percent = plan.reserve_time_percent;
         return p;
     }
 
