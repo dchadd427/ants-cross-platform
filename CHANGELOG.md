@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 **Fixes:**
 - A match on a player's map (a community map) had no record, as the server looked for its map in the official folder only; it is counted now.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6cb8abd3...f5ceafa4), [the match pages and the replay pass](docs/REPLAYS.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1bf52364...198d2243), [the match pages and the replay pass](docs/REPLAYS.md)
 
 ## v0.12.50 - 2026-10-15 - Chat in the lobby
 
