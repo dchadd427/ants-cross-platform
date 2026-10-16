@@ -241,7 +241,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
     FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/lobby.html", "tests/scripts/web_lobby_chat_check.js",
-             "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt")
+             "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
+             "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 
     @classmethod
     def setUpClass(cls):

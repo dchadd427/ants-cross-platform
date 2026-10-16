@@ -1,0 +1,229 @@
+{
+ "note": "Mutants of the lobby page's pace for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the budgets of a colour move, a plan, a rename and a removal in web/front/lobby_net.js (BUDGETS) against the replay through the server's own buckets in tests/scripts/web_lobby_client_check.js (the chat's are in lobby_chat_mutants.json). A pace moved back to the server's own rate or burst, a margin that is too small, a pace that is too slow, a budget that is not spent or is shared with another kind. Run from the checkout: python3 tools/mutate.py tests/data/lobby_budget_mutants.json --keep-going --jobs 1 --timeout 120. Every mutant must be caught; tests/scripts/test_web_lobby_net.py runs the same list in the quick tier on a copy of the files.",
+ "mutants": [
+  {
+   "id": "net_move_at_the_servers_own_bucket",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [6, 4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_burst_without_reserve",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [6, 3.2]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [5, 4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_rate_a_little_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [5, 3.6]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_rate_too_slow",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [5, 1.6]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_burst_of_one",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2]",
+   "new": "move: [1, 3.2]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_at_the_servers_own_bucket",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [6, 4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_burst_without_reserve",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [6, 3.2]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [5, 4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_rate_a_little_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [5, 3.6]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_rate_too_slow",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [5, 1.6]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_burst_of_one",
+   "file": "web/front/lobby_net.js",
+   "old": "plan: [5, 3.2]",
+   "new": "plan: [1, 3.2]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_at_the_servers_own_bucket",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [3, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_burst_without_reserve",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [3, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [2, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_rate_a_little_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [2, 0.9]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_rate_too_slow",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [2, 0.4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_burst_of_one",
+   "file": "web/front/lobby_net.js",
+   "old": "rename: [2, 0.8]",
+   "new": "rename: [1, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_at_the_servers_own_bucket",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [3, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_burst_without_reserve",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [3, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_rate_without_margin",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [2, 1]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_rate_a_little_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [2, 0.9]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_rate_too_slow",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [2, 0.4]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_burst_of_one",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8]",
+   "new": "remove: [1, 0.8]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_outside_the_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('move', encodeSeatMove(from, to, now));",
+   "new": "return this.sendBytes(encodeSeatMove(from, to, now));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_outside_the_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('plan', encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));",
+   "new": "return this.sendBytes(encodePlan(map, kinds, plan.teamA, plan.teamB, plan.mode));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_outside_the_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('rename', encodeName(name));",
+   "new": "return this.sendBytes(encodeName(name));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_outside_the_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('remove', encodeRemove(seat, now));",
+   "new": "return this.sendBytes(encodeRemove(seat, now));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_plan_uses_the_moves_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('plan', encodePlan(",
+   "new": "return this.send('move', encodePlan(",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_rename_uses_the_removals_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "return this.send('rename', encodeName(name));",
+   "new": "return this.send('remove', encodeName(name));",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_remove_has_no_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "remove: [2, 0.8], ",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_move_has_no_budget",
+   "file": "web/front/lobby_net.js",
+   "old": "move: [5, 3.2], ",
+   "new": "",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  }
+ ]
+}

@@ -303,19 +303,20 @@
     //   'superseded'                another window of this browser took the seat
     // A handler that throws does not stop the client or the other handlers: the error goes to onError(error, event), else to console.error. After leave() (or any final status) no event is handed out any more.
     // Requests (move, setPlan, rename, remove, say, start, leave) return false when they cannot be made now (not connected, not the leader, a START waits, the arguments do not fit), and send nothing. The numbers
-    // of a request are whole numbers; the client keeps the server's own pace (a name 3, then 1 a second; a plan or a colour move 6, then 4 a second; a removal 3, then 1 a second; a line of chat 4, then one every
-    // 1.25 s: a little under the server's own pace, see BUDGETS) and answers false to a request that is too fast, which spends nothing (a page that sends faster would be put out of its room).
+    // of a request are whole numbers; the client keeps a little under the server's own pace (a name or a removal 2, then one every 1.25 s; a plan or a colour move 5, then 3.2 a second; a line of chat 4, then one every
+    // 1.25 s: see BUDGETS) and answers false to a request that is too fast, which spends nothing (a page that sends faster would be put out of its room).
     // move and remove act on the person that the leader's screen showed in that colour: the page takes guardNow() when the leader picks the row up or opens the question and gives it back as the last
     // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     // Limits: connectMs (20 s) is how long a socket may take to open, silenceMs (8 s) how long a link that is open may say nothing (the server pings every second), stableMs (10 s) how long a link must stay
     // online before its loss counts as a first loss again (else the waits of the way back go on growing); 0 for a limit waits for the browser.
-    // [burst, a second]: include/ants_net/flood.hpp. The chat is the one budget that is kept BELOW the server's (kChatBurst 5, kChatPerSecond 1): the server drops a line beyond its own without a word (the sender
-    // sees nothing; a connection that goes on is thrown out), and the server counts the moment at which a line is HANDLED, not the moment at which it was said. A page that paced itself at exactly the server's rate
-    // lost a line whenever the network (or the server's own loop) delayed one line and not the next: two lines that were 1000 ms apart arrive 990 ms apart, and the second finds 0.99 of a token (seen once on the
-    // macOS CI). So the page keeps a line in reserve (a burst of 4, where the server's bucket holds 5: the server always has a whole line more than the page believes) and says a line every 1.25 s (0.8 a second,
-    // where the server refills 1). A line may be handled a second sooner than the page's pace says and is still heard: tests/scripts/web_lobby_client_check.js replays the page's lines through the server's own bucket
-    // with the worst delays of 150 ms, tests/scripts/web_lobby_server_check.js sends through a link that jitters by 150 ms to the real server.
-    var BUDGETS = { move: [6, 4], plan: [6, 4], rename: [3, 1], remove: [3, 1], chat: [4, 0.8] };
+    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a colour move or a plan 6 and 4, a name or a removal 3 and 1, a line of chat 5 and 1). The server drops a request
+    // beyond its own without a word (the sender sees nothing and the room does not change; a connection that goes on is thrown out), and it counts the moment at which it HANDLES a request, not the moment at which it was
+    // sent. A page that paced itself at exactly the server's rate lost a request whenever the network (or the server's own loop) delayed one request and not the next: two that were 1000 ms apart arrive 990 ms apart, and
+    // the second finds 0.99 of a token (seen once on the macOS CI for the chat, then reproduced for a rename and a plan). So every kind keeps a request in reserve (a burst one smaller than the server's: the server always
+    // has a whole request more than the page believes) and a pace of 0.8 of the server's rate (a request every 1.25 s where the server refills 1 a second, every 312.5 ms where it refills 4). A page does not wait for
+    // the room's answer to a request before the next, so each kind has this margin. tests/scripts/web_lobby_client_check.js replays the page's requests of every kind through the server's own bucket (it reads the limits
+    // from flood.hpp) with delays of 0 to 150 ms, tests/scripts/web_lobby_server_check.js sends them through a link that jitters by 150 ms to the real server.
+    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], chat: [4, 0.8] };
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -528,7 +529,7 @@
     LobbyClient.prototype.canAct = function () { return this.status === 'online' && this.room !== null && this.room.lobby; };
     // The guard of the room as it is shown now (the Room message last heard), 0 before there is one: what the page keeps while the leader decides, and passes to move and remove
     LobbyClient.prototype.guardNow = function () { return this.room === null ? 0 : seatingHash(this.room); };
-    // The server's pace: a request is allowed while the budget of its kind (thousandths of a request, as the server counts) has one; it is spent when the request was written, not before
+    // The page's pace (a margin under the server's, see BUDGETS): a request is allowed while the budget of its kind (thousandths of a request, as the server counts) has one; it is spent when the request was written, not before
     LobbyClient.prototype.canSpend = function (kind) {
         var burst = BUDGETS[kind][0], perSecond = BUDGETS[kind][1];
         var now = this.now();
@@ -536,7 +537,7 @@
         if (b === undefined) b = this.budgets[kind] = { tokens: burst * 1000, at: now };
         b.tokens = Math.min(burst * 1000, b.tokens + Math.max(0, now - b.at) * perSecond);
         b.at = now;
-        return b.tokens >= 999.9999;                                 // (a rate that is no whole number leaves a hair of float: 1250 ms at 0.8 a second are a token)
+        return b.tokens >= 999.9999;                                 // (a rate that is no whole number leaves a hair of float: 1250 ms at 0.8 a second, 625 ms at 3.2, are a token)
     };
     LobbyClient.prototype.send = function (kind, bytes) {
         if (!this.canSpend(kind) || !this.sendBytes(bytes)) return false;
