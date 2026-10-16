@@ -109,6 +109,7 @@ struct Machine {
 struct Table {
     std::vector<std::unique_ptr<Machine>> machines;
     uint32_t now{1000};
+    bool keep_up{false};                    // run() waits for the loopback after every step (see wait_for_turns)
 
     Machine& add(const std::string& name) {
         machines.push_back(std::make_unique<Machine>(name));
@@ -134,9 +135,31 @@ struct Table {
         while (now < end) {
             now += 10;
             pump();
+            if (keep_up) wait_for_turns();
             if (each) each(now);
             ants_test::short_pause();
         }
+    }
+    // True while a guest has not read a turn that the host (the first machine) has sealed; the host's count is 0 until it plays
+    bool turns_unread() const {
+        const uint64_t sealed = machines.front()->net.bot_apply_tick(0);
+        for (size_t i = 1; i < machines.size(); ++i) {
+            const LockstepRunner* r = machines[i]->net.runner();
+            if (r != nullptr && r->next_turn_expected() < sealed) return true;
+        }
+        return false;
+    }
+    // keep_up. The game clock is virtual and the sockets are real: on a loaded Mac the kernel hands loopback bytes over some milliseconds after they were sent, which is tens of milliseconds of game time
+    // at 10 ms for a step of half a millisecond, and a machine's jitter buffer takes that for the lateness of the LINK: it grows at once on a late turn and shrinks only after ten seconds, so a case that holds the
+    // buffer, or the lag that follows from it, to a value fails there and nowhere else. With keep_up the table stands still after every step (the game clock where it is, the machines polling) until every guest
+    // has read every turn that the host has sealed, which is the link of a loopback on Linux: no lateness. A wait that does not end (a guest that was cut off) gives up after about a second and switches keep_up
+    // off, and the case goes on and fails by its own assertions. Turns only: a case that holds an ORDER to the tick that it lands on has the lateness of the order's way to the host (a few orders are allowed to be late).
+    void wait_for_turns() {
+        for (int i = 0; i < 3000 && turns_unread(); ++i) {
+            ants_test::short_pause(std::chrono::microseconds(200));
+            pump();
+        }
+        if (turns_unread()) keep_up = false;
     }
     bool run_until(const std::function<bool()>& cond, uint32_t max_ms) {
         const uint32_t end = now + max_ms;
