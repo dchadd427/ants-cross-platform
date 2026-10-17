@@ -49,6 +49,7 @@
 <script src="replay_page.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="history_page.js"></script>
+<!-- this page and history_page.js ship together (the site serves .html and .js with Cache-Control "no-cache, must-revalidate", docker/nginx.conf, so a load revalidates both) -->
 <script src="match_stats.js"></script>
 <script>
 (function () {

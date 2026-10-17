@@ -285,6 +285,11 @@ class Spelling(Tree):
         self.assertEqual(len(out), 2 + 5 * len(page_forms))
         self.assertTrue(all(o.split(":")[0] != "web/history_page.js" for o in out))
 
+    def test_only_the_lower_case_forms_are_kept(self):
+        uk = self.UK
+        self.put("web/history_page.js", "/history?%s=blue\n/history?%s=blue\nseat.%s\n" % (uk, uk.capitalize(), uk.upper()))
+        self.assertEqual([x.split(":")[1] for x in ch.check_spelling(self.root, self.files())], ["2", "3"])
+
     def test_a_kept_pattern_that_no_line_uses_is_a_finding(self):
         uk = self.UK
         kept = {"web/a.js": [r"\.%s\b" % uk, r"\b%s=" % uk], "web/gone.js": [r"\.%s\b" % uk]}

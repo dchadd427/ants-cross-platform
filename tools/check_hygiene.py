@@ -289,7 +289,7 @@ def check_spelling_table(root, files, kept=None):
             continue
         lines = read_bytes(root, rel).decode("utf-8", "replace").splitlines()
         for pat in patterns:
-            if not any(re.search(pat, line, re.I) for line in lines):
+            if not any(re.search(pat, line) for line in lines):
                 out.append("%s: the kept spelling pattern %s is used by no line (remove it from SPELLING_KEPT)" % (rel, pat))
     return out
 
@@ -305,7 +305,7 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
         data = read_bytes(root, rel)
         if looks_binary(data):
             continue
-        allowed = re.compile("|".join(kept[rel]), re.I) if kept.get(rel) else None
+        allowed = re.compile("|".join(kept[rel])) if kept.get(rel) else None      # (case-sensitive: only the lower-case forms are kept)
         for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
             if SPELLING_WORD.search(allowed.sub("", line) if allowed else line):
                 out.append("%s:%d: British spelling (AGENTS.md, Spelling: American English; write the American spelling of color)" % (rel, n))

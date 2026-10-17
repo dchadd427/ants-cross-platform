@@ -1,7 +1,7 @@
 /* The helpers that the pages of the match history share (docs/REPLAYS.md "The match pages"): the list of every match (matches.html), one match (match.html), the matches that run now (live.html) and the
    "Stats" of the game page in replay mode (shell.html). Plain functions with no page in them, so that tests/scripts/web_history_check.js runs them on a table, and two small parts that touch a document
    (which they are given): the pictures of the maps and the panel of stats on the game page. Everything that comes from the server (a name that a player typed, a map, an id) is TEXT: the pages put it in with textContent and
-   never as markup. A record is read defensively: a key that this file does not know is skipped, a number that is not one is 0, a word that is not one of the server's falls back to a plain default. */
+   never as markup. The pages that load this file (match.html, matches.html) ship together with it, and the site serves .html and .js with Cache-Control "no-cache, must-revalidate" (docker/nginx.conf), so the two are never from different releases. A record is read defensively: a key that this file does not know is skipped, a number that is not one is 0, a word that is not one of the server's falls back to a plain default. */
 (function (root, factory) {
     'use strict';
     var api = factory(root);
