@@ -10,7 +10,6 @@ the band 17 - 23 failed a good server. Two groups of tests:
 """
 import http.server
 import os
-import socketserver
 import subprocess
 import sys
 import threading
@@ -22,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(HERE, "measure_tick_rate.py")
 sys.path.insert(0, HERE)
 import measure_tick_rate as mt     # noqa: E402
+import quick_http     # noqa: E402
 
 BAND = (17.0, 23.0)     # the band that tests/scripts/test_ants_server.sh checks the rate against (the band of the check before the measure was made precise: it is not widened)
 
@@ -139,16 +139,6 @@ class Arithmetic(unittest.TestCase):
         self.assertEqual(mt.slope([(1.0, 7)]), 0.0)
 
 
-class QuickServer(http.server.ThreadingHTTPServer):
-    """A server that is up at once. HTTPServer.server_bind asks socket.getfqdn() for the name of the machine, a reverse lookup that took seconds a start on the macOS runner of the CI (the five tests
-    of Program took 45 s there and 10 s on Linux), for a name that nobody reads."""
-
-    def server_bind(self):
-        socketserver.TCPServer.server_bind(self)
-        self.server_name = "localhost"
-        self.server_port = self.server_address[1]
-
-
 class FakeRoom(http.server.BaseHTTPRequestHandler):
     started = time.monotonic()
     rate = 20.0
@@ -178,7 +168,7 @@ class Program(unittest.TestCase):
         FakeRoom.rate = 20.0
         FakeRoom.first = 0.3
         with mock.patch("socket.getfqdn", side_effect=AssertionError("the fake server asked for the name of the machine: a reverse lookup that takes seconds on a macOS runner")):
-            self.httpd = QuickServer(("127.0.0.1", 0), FakeRoom)
+            self.httpd = quick_http.QuickThreadingHTTPServer(("127.0.0.1", 0), FakeRoom)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.base = "http://127.0.0.1:%d" % self.httpd.server_address[1]
 

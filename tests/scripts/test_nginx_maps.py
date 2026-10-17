@@ -27,9 +27,10 @@ import threading
 import time
 import unittest
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quick_http  # noqa: E402
 import test_nginx_stats as stats  # noqa: E402
 
 read = stats.read
@@ -270,7 +271,7 @@ class Rig:
             f.write("SECRET2")
         self.port = free_port()
         self.stub_port = free_port()
-        self.stub = HTTPServer(("127.0.0.1", self.stub_port), StandIn)
+        self.stub = quick_http.QuickHTTPServer(("127.0.0.1", self.stub_port), StandIn)
         threading.Thread(target=self.stub.serve_forever, daemon=True).start()
         conf = os.path.join(self.work, "nginx.conf")
         with open(conf, "w") as f:

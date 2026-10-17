@@ -311,9 +311,13 @@ class ParallelRunner(StubRunner):
 class ParallelResources(StubRunner):
     """What the table says about resources: jobs, exclusive, lock, weight, cost, and the times that the last run measured."""
     def test_jobs_limits_how_many_suites_run_at_once(self):
-        body = ("""d=$(mktemp -d "$MARK_DIR/run.XXXXXX"); n=$(ls -d "$MARK_DIR"/run.* | wc -l | tr -d "[:space:]"); echo $n >> "$MARK_DIR/count.log"; sleep 0.4; rmdir "$d" """)
-        table = self.suites(*['suite "R%d" sim 1 "-" "Run %d" "R%d" \'%s\'' % (n, n, n, body) for n in range(1, 7)])
+        # Each suite holds its slot until `expected` suites are inside at once (at most 5 s), so that the most that ran at once is reached whatever the load: with sleeps of a fixed length, a machine that was slow to
+        # start the third suite let the first end before it came, and the count read 2. A runner that gives too few slots never reaches `expected` (the wait ends, the count stays under it: the test fails);
+        # one that gives too many shows more, because all six suites start and wait.
         for jobs, expected in (("3", 3), ("1", 1)):
+            body = ("""d=$(mktemp -d "$MARK_DIR/run.XXXXXX"); n=$(ls -d "$MARK_DIR"/run.* | wc -l | tr -d "[:space:]"); echo $n >> "$MARK_DIR/count.log"; """
+                    """for i in $(seq 1 100); do [ "$(ls -d "$MARK_DIR"/run.* | wc -l | tr -d "[:space:]")" -ge %d ] && break; sleep 0.05; done; sleep 0.1; rmdir "$d" """ % expected)
+            table = self.suites(*['suite "R%d" sim 1 "-" "Run %d" "R%d" \'%s\'' % (n, n, n, body) for n in range(1, 7)])
             counts = os.path.join(self.marks, "count.log")
             if os.path.exists(counts):
                 os.remove(counts)
@@ -323,27 +327,32 @@ class ParallelResources(StubRunner):
             self.assertEqual(max(seen), expected, "--jobs %s: the most that ran at once was %d" % (jobs, max(seen)))
 
     def test_an_exclusive_suite_runs_alone(self):
-        x = 'touch "$MARK_DIR/x.up"; sleep 0.6; touch "$MARK_DIR/x.done"'
-        e = 'if [ -e "$MARK_DIR/x.up" ] && [ ! -e "$MARK_DIR/x.done" ]; then exit 1; fi; touch "$MARK_DIR/e.running"; sleep 0.6; rm "$MARK_DIR/e.running"'
-        y = '[ ! -e "$MARK_DIR/e.running" ] || exit 1; touch "$MARK_DIR/y.ok"'
-        table = self.suites('suite "X" sim 1 "-" "Normal first" "X" \'%s\'' % x, 'suite "E" sim 1 "-" "Exclusive" "E" \'%s\' "exclusive"' % e, 'suite "Y" sim 1 "-" "Normal after" "Y" \'%s\'' % y)
+        def make(hold):
+            x = 'touch "$MARK_DIR/x.up"; sleep %s; touch "$MARK_DIR/x.done"' % hold
+            e = 'if [ -e "$MARK_DIR/x.up" ] && [ ! -e "$MARK_DIR/x.done" ]; then exit 1; fi; touch "$MARK_DIR/e.running"; sleep %s; rm "$MARK_DIR/e.running"' % hold
+            y = '[ ! -e "$MARK_DIR/e.running" ] || exit 1; touch "$MARK_DIR/y.ok"'
+            return self.suites('suite "X" sim 1 "-" "Normal first" "X" \'%s\'' % x, 'suite "E" sim 1 "-" "Exclusive" "E" \'%s\' "exclusive"' % e, 'suite "Y" sim 1 "-" "Normal after" "Y" \'%s\'' % y)
+        table = make("0.6")
         result = self.run_script(["--jobs", "3"], table)
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("y.ok", self.ran())
         # the control: without `exclusive` the same suites overlap and E fails (the test can tell the difference)
         for name in os.listdir(self.marks):
             os.remove(os.path.join(self.marks, name))
-        control = table.replace(' "exclusive"', "")
+        # the control holds for 3 s, not 0.6: it has to see the overlap, and on a loaded machine a suite may start a second late (the run ends at the first overlap that is seen, so this costs little)
+        control = make("3").replace(' "exclusive"', "")
         self.assertEqual(self.run_script(["--jobs", "3"], control).returncode, 1)
 
     def test_suites_with_the_same_lock_never_run_together(self):
-        inside = 'mkdir "$MARK_DIR/inside" || exit 1; sleep 0.5; rmdir "$MARK_DIR/inside"'
-        table = self.suites('suite "A" sim 1 "-" "Has the lock" "A" \'%s\' "lock=port"' % inside, 'suite "B" sim 1 "-" "Has it too" "B" \'%s\' "lock=port"' % inside,
-                            'suite "C" sim 1 "-" "Has none" "C" \'touch "$MARK_DIR/c.ran"; sleep 0.3\'')
+        def make(hold):
+            inside = 'mkdir "$MARK_DIR/inside" || exit 1; sleep %s; rmdir "$MARK_DIR/inside"' % hold
+            return self.suites('suite "A" sim 1 "-" "Has the lock" "A" \'%s\' "lock=port"' % inside, 'suite "B" sim 1 "-" "Has it too" "B" \'%s\' "lock=port"' % inside,
+                               'suite "C" sim 1 "-" "Has none" "C" \'touch "$MARK_DIR/c.ran"; sleep 0.3\'')
+        table = make("0.5")
         result = self.run_script(["--jobs", "3"], table)
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("c.ran", self.ran())
-        control = table.replace(' "lock=port"', "")
+        control = make("3").replace(' "lock=port"', "")                                           # (held for 3 s so that a late start on a loaded machine still meets the other)
         self.assertEqual(self.run_script(["--jobs", "3"], control).returncode, 1)               # without the lock they collide in the folder
 
     def test_a_suite_takes_as_many_job_slots_as_its_weight(self):
