@@ -29,6 +29,7 @@ void StandardBot::start(const BotContext& context) {
         expedition_.set_params(expedition_params(tactics_.plan));
         ferry_.set_params(ferry_params(tactics_.plan));
         gate_goals_.set_params(gate_goal_params(tactics_.plan));
+        brawl_.set_params(tactics_.plan.brawl);
     }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);
@@ -69,8 +70,14 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     const MapInfo* map = view.map() != nullptr ? view.map() : map_;
     if (map == nullptr) return;                                  // without the analysis of the map there is nothing to plan with (the controller always hands it over)
     ledger_.forget_missing(view.mine());
-    tactics_.memory.update(view, *map);
     TaskContext context{view, orders, ledger_, profile_, *map, seat_};
+
+    // 0. the game type 187 has no food: the whole fight is the brawl's (docs/BOTS.md, "187: the brawl")
+    if (tactics_.plan.brawl187 && view.game_mode() == sim::GameMode::Kills187) {
+        brawl_.step(context);
+        return;
+    }
+    tactics_.memory.update(view, *map);
 
     // 1a. the gate play (Tactics::gate_map): decided once, from the analysis of the start
     if (!gate_decided_) decide_gate_map(context);
@@ -332,6 +339,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     ferry_.on_command(command, fate, tick);
     gate_goals_.on_command(command, fate, tick);
     field_.on_command(command, fate, tick);
+    brawl_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

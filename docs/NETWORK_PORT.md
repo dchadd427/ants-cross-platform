@@ -905,7 +905,7 @@ A request (2026-10-09): the game gets a second set of rules, **187** ([`GAMEPLAY
 
 * The head field that carries the game mode, and the rules number of a replay, are described in [REPLAYS.md](REPLAYS.md#the-file).
 
-* **Not part of it.** The computer players and the bot arena stay as they are: there is no rule against bots in mode 187, and the arena plays the original's game.
+* **Not part of it.** No rule is against bots in mode 187: the computer players read the mode from their engine and fight ([BOT_187.md](BOT_187.md)); the bot arena plays the original's game unless given `--game-mode 187`.
 
 ## Protocol 18 and 19: the level loader
 

@@ -30,6 +30,7 @@
 #include "ants_ai/bot_controller.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
+#include "ants_sim/game_mode.hpp"
 
 namespace ants::ai {
 
@@ -122,6 +123,7 @@ struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
     std::vector<BotSpec> bots;                 // the seats that play: one bot each, seat 0 to 3, every seat once
+    sim::GameMode game_mode{sim::GameMode::HighestScore};   // the rules of the match (set before init, like a room's Start does): Kills187 plays the game type 187
     uint64_t max_ticks{0};                     // 0 = until the match is over (the map's own length); else at most this many ticks
     uint32_t latency_ticks{3};                 // the sink latency, see the top of this file
     /// The start hold of the bots (BotController::set_start_hold): the opening of a real match, a first look on tick 1 + the seat and a bucket of one token. The default is the product's
@@ -135,6 +137,8 @@ struct ArenaSpec {
     std::vector<std::string> extra_kinds;
     /// Called once with the engine as the match ended (a test hook: the tests compare the result with the engine's own getters). Read-only; the engine is gone after play_match.
     std::function<void(const sim::SimulationEngine&)> inspect;
+    /// Called after every tick, once the bots have looked and the news and audio queues are empty (a test hook, like `inspect`; read-only)
+    std::function<void(const sim::SimulationEngine&)> on_tick;
 };
 
 class ExpeditionTask;

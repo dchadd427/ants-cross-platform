@@ -256,6 +256,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
 
     const uint8_t roster = roster_of(spec.bots);
     sim::SimulationEngine sim;
+    sim.set_game_mode(spec.game_mode);
     sim.init(*spec.level, spec.seed, roster);
     for (const BotSpec& b : spec.bots) {
         if (sim.grid().find_anthill(b.seat) == nullptr) {
@@ -306,6 +307,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
         out.audio_events += audio;
         out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news.size(), audio)));
         if (sim.current_tick() % kArenaHashPeriod == 0) out.checkpoints.push_back(sim.state_hash().total);
+        if (spec.on_tick) spec.on_tick(sim);
         if (sim.is_match_over()) {
             out.match_over = true;
             break;
@@ -368,6 +370,7 @@ ReplayResult replay_commands(const ArenaSpec& spec, const ArenaResult& played) {
         return out;
     }
     sim::SimulationEngine sim;
+    sim.set_game_mode(spec.game_mode);
     sim.init(*spec.level, spec.seed, roster_of(spec.bots));                 // no controller, no bot: the commands alone
     size_t next = 0;
     size_t checkpoint = 0;
