@@ -4,6 +4,10 @@
 //   lvl_tool check FILE --original [--new-map]               whether the map works in the original game (the original-safe profile, lvl_checker.hpp): every finding
 //                                                            with its code, and exit 0 only when there is no fatal finding and no warning; with --new-map a map that
 //                                                            is too big for a new map is said so on a line of its own (a limit of the map maker, not of the original)
+//   lvl_tool check FILE --extended                           the checker per kind (lvl_checker.hpp, check_map): the file's kind by its version (Classic map, version 8; Extended map, version 9),
+//                                                            the headline of the kind ("Works in the original game", "Works in the new version" with the badge "New version
+//                                                            only") and every finding with its code; the place that takes Extended maps (LevelLimits::for_extended_maps). Without
+//                                                            --extended a version 9 file is refused as it always was
 //   lvl_tool info FILE                                       what the file holds: grid, dictionary, start markers, hills, food, waypoints, eggs, whether it works in the
 //                                                            original game, and what a rewrite changes; of an Extended map (version 9) also its kind, format flags, rules and
 //                                                            whether it fits a Classic map (and why not)
@@ -16,7 +20,7 @@
 //   lvl_tool convert FILE --to extended|classic -o OUT       a COPY of the map as an Extended map (always) or a Classic map (when it fits; else the reasons are listed and nothing is
 //                                                            written); FILE is kept, OUT must be another file
 //       --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15)
-//       --new-map      hold the file to the limits of a new map (LevelLimits::for_new_maps): at most 10,000 cells and 130 a side, a file of at most 512 KB is read and
+//       --new-map      hold the file to the limits of a new Classic map (LevelLimits::for_new_maps): at most 90 rows, 130 columns and 10,000 cells, a file of at most 512 KB is read and
 //                      a canonical file of at most 144 KB written
 //       --chd FILE     where the tile names are read (default: the archive of this checkout, Original-Ants/ants.chd)
 //   lvl_tool --selftest                                      checks the tool itself (the command line, the four commands and their exit codes) in a scratch folder
@@ -55,7 +59,7 @@ namespace fs = std::filesystem;
 constexpr const char* kTeams[4] = {"green", "red", "blue", "black"};
 
 void usage(std::ostream& out) {
-    out << "usage: lvl_tool check FILE [--roster MASK | --original] [--new-map]\n"
+    out << "usage: lvl_tool check FILE [--roster MASK | --original | --extended] [--new-map]\n"
            "       lvl_tool info FILE\n"
            "       lvl_tool rewrite IN OUT [--roster MASK] [--new-map]\n"
            "       lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]\n"
@@ -63,14 +67,16 @@ void usage(std::ostream& out) {
            "       lvl_tool convert FILE --to extended|classic -o OUT\n"
            "       lvl_tool --selftest\n"
            "  check    whether the file loads and plays for the teams of the roster, and every finding\n"
-           "           (with --original: whether the map works in the original game, every finding with its code)\n"
+           "           (with --original: whether the map works in the original game, every finding with its code;\n"
+           "           with --extended: the checker per kind, which also takes an Extended map and answers for its kind)\n"
            "  info     what the file holds, whether it works in the original game, and what a rewrite would change\n"
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (OUT may be IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  convert  writes a copy of the map as an Extended map (version 9, always) or a Classic map (version 8, when it fits: else the reasons are listed); FILE is kept\n"
            "  --extended     blank: a new Extended map, at most 1,024 a side and 262,144 cells (rows and columns 1 to 2,048 are read, the limits refuse more)\n"
+           "                 check: the checker per kind, for a Classic or an Extended map (the limits of an Extended map)\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
-           "  --new-map      the limits of a new map: at most 10,000 cells and 130 a side; a file of at most 512 KB is read, 144 KB written\n"
+           "  --new-map      the limits of a new Classic map: at most 90 rows, 130 columns and 10,000 cells; a file of at most 512 KB is read, 144 KB written\n"
            "  --chd FILE     the archive with the tile names (default: Original-Ants/ants.chd of this checkout)\n"
            "  --selftest     check the tool itself\n";
 }
@@ -273,8 +279,37 @@ int check_original(const std::string& name, const std::vector<uint8_t>& bytes, c
     return r.works_in_original_game() && r.fits_the_place() ? 0 : 1;
 }
 
+// The checker per kind (check --extended): the headline of the kind, then every finding with its code
+int check_kind(const std::string& name, const std::vector<uint8_t>& bytes, const LevelLimits& limits, std::ostream& out) {
+    const MapCheckReport m = check_map(bytes.data(), bytes.size(), limits);
+    const std::string kind = m.kind == MapKind::Extended ? "Extended map" : "Classic map";
+    const std::string badge = m.badge.empty() ? "" : ", " + m.badge;
+    const OriginalSafeIssue* blocking = nullptr;
+    bool notes = false;
+    for (const OriginalSafeIssue& i : m.report.issues) {
+        if (i.severity == LevelProblemSeverity::Info) notes = true;
+        else if (!i.place_limit && blocking == nullptr) blocking = &i;
+    }
+    out << name << ": " << m.headline << " (" << kind << badge << ")";
+    if (!m.works && blocking != nullptr) out << ": " << blocking->message;
+    else if (m.works && m.report.issues.empty()) out << "; no findings";
+    else if (m.works && notes) out << "; notes:";
+    out << "\n";
+    for (const OriginalSafeIssue& i : m.report.issues) {
+        if (i.place_limit) out << name << ": beyond the limits of this place (a limit of the place that reads the map, not a rule of the " << (m.kind == MapKind::Extended ? "new version" : "original") << "): " << i.message << "\n";
+    }
+    for (const OriginalSafeIssue& i : m.report.issues) out << "  " << (i.place_limit ? "limit" : to_string(i.severity)) << ' ' << to_string(i.code) << ": " << i.message << "\n";
+    return m.works && m.fits_the_place ? 0 : 1;
+}
+
 int check(const Options& o, std::ostream& out, std::ostream& err) {
     const std::string& path = o.files[0];
+    if (o.extended) {
+        const LevelLimits extended_limits = LevelLimits::for_extended_maps();
+        std::vector<uint8_t> bytes;
+        if (const int status = read_map_file(path, extended_limits, bytes, out, err, "")) return status;
+        return check_kind(file_name(path), bytes, extended_limits, out);
+    }
     const LevelLimits limits = o.new_map ? LevelLimits::for_new_maps() : LevelLimits{};
     std::vector<uint8_t> bytes;
     if (const int status = read_map_file(path, limits, bytes, out, err, "")) return status;
@@ -357,6 +392,7 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
     };
     out << "File:          " << file_name(path) << " (" << bytes.size() << " bytes)\n"
         << "Version:       " << level.version << ", mode " << level.game_mode << "\n";
+    if (!extended) out << "Kind:          Classic map (version " << level.version << ")\n";
     if (extended) {
         char flags[16];
         std::snprintf(flags, sizeof flags, "0x%X", level.format_flags);
@@ -384,6 +420,10 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
             << (notes.empty() ? (original.issues.empty() ? ", no findings" : "") : "; notes: " + notes) << "\n";
     }
     if (extended) {
+        const MapCheckReport kind = check_map(level, ceiling_limits());
+        const std::string kind_notes = codes_of(kind.report, true);
+        out << "New version:   " << (kind.works ? "works" : "does not work: " + codes_of(kind.report, false))
+            << (kind_notes.empty() ? "" : "; notes: " + kind_notes) << "\n";
         const std::vector<std::string> reasons = needs_extended(level);
         if (reasons.empty()) {
             out << "Classic map:   fits (lvl_tool convert FILE --to classic -o OUT)\n";
@@ -538,8 +578,11 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     const std::string& command = args[0];
     const size_t files = command == "rewrite" ? 2u : 1u;
     bool ok = (command == "check" || command == "info" || command == "rewrite" || command == "blank" || command == "convert") && parse(args, o, why) && o.files.size() == files;
-    if (ok && o.extended && command != "blank") {
-        why = "--extended goes with blank only";
+    if (ok && o.extended && command != "blank" && command != "check") {
+        why = "--extended goes with blank and check only";
+        ok = false;
+    } else if (ok && o.extended && command == "check" && (o.original || o.roster_given || o.new_map)) {
+        why = "--extended takes no --original, --roster or --new-map (the checker per kind holds the map to all four teams, with the limits of an Extended map)";
         ok = false;
     } else if (ok && (!o.to.empty() || !o.output.empty()) && command != "convert") {
         why = "--to and -o go with convert only";
@@ -723,7 +766,7 @@ int selftest() {
         const std::string wide_path = file_of("wide.lvl", write_level(wide).bytes);
         t.check(run_words({"check", wide_path}).status == 0, "check: 4 x 131 plays");
         const Run limited = run_words({"check", wide_path, "--new-map"});
-        t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here"), "check --new-map: 131 columns are more than a new map has");
+        t.check(limited.status == 1 && has(limited.out, "more than the 90 x 130 allowed here"), "check --new-map: 131 columns are more than a new map has");
         // the size of a file: with --new-map one of more than 512 KB is not read (TINY and 600,000 bytes after its egg word), one of 512 KB is
         std::vector<uint8_t> large = tiny;
         large.insert(large.end(), 600000, 0x55);
@@ -791,7 +834,7 @@ int selftest() {
                 "check --original: 131 columns work in the original game: " + b_game.out);
         const Run b_new = run_words({"check", broad_path, "--original", "--new-map"});
         t.check(b_new.status == 1 && has(b_new.out, "broad.lvl: works in the original game") && !has(b_new.out, "does not work") &&
-                    has(b_new.out, "broad.lvl: too big for a new map (a limit of the map maker, the original has none): the grid has 31 rows x 131 columns, more than the 130 x 130 allowed here") &&
+                    has(b_new.out, "broad.lvl: too big for a new map (a limit of the map maker, the original has none): the grid has 31 rows x 131 columns, more than the 90 x 130 allowed here") &&
                     has(b_new.out, "  limit grid_too_large: "),
                 "check --original --new-map: 131 columns are a limit of the map maker, not under the heading that the original does not work: " + b_new.out);
         t.check(has(run_words({"info", dir.file("nohill.lvl")}).out, "Original game: does not work: hill_missing\n") &&
@@ -841,7 +884,7 @@ int selftest() {
         const Run cut = run_words({"rewrite", dir.file("cut.lvl"), dir.file("cut_out.lvl")});
         t.check(cut.status == 1 && has(cut.out, "does not load") && !fs::exists(dir.file("cut_out.lvl")), "rewrite: a file that does not load is not written");
         const Run limited = run_words({"rewrite", dir.file("wide.lvl"), dir.file("wide_out.lvl"), "--new-map"});
-        t.check(limited.status == 1 && has(limited.out, "more than the 130 x 130 allowed here") && !fs::exists(dir.file("wide_out.lvl")), "rewrite --new-map: 131 columns are not written");
+        t.check(limited.status == 1 && has(limited.out, "more than the 90 x 130 allowed here") && !fs::exists(dir.file("wide_out.lvl")), "rewrite --new-map: 131 columns are not written");
         const std::string folder = dir.file("folder");
         std::error_code made;
         fs::create_directories(folder, made);
@@ -870,15 +913,19 @@ int selftest() {
         t.check(level_of(out, back) && back.height() == 31u && back.width() == 40u && back.tile_dictionary.size() == 486u && back.tile_dictionary[485] == "g01a",
                 "blank: the file reads back with its grid and its dictionary");
         t.check(run_words({"check", out}).status == 0, "blank: the file checks");
-        const Run big = run_words({"blank", dir.file("big.lvl"), "--rows", "100", "--columns", "100", "--new-map"});
-        t.check(big.status == 0 && has(big.out, "a blank map of 100 rows x 100 columns, 125408 bytes") && fs::exists(dir.file("big.lvl")), "blank --new-map: 100 x 100 is a new map");
-        const Run more = run_words({"blank", dir.file("more.lvl"), "--rows", "101", "--columns", "100", "--new-map"});
-        t.check(more.status == 1 && has(more.out, "10100 cells, more than the 10000 allowed here") && !fs::exists(dir.file("more.lvl")), "blank --new-map: 101 x 100 has too many cells");
+        const Run big = run_words({"blank", dir.file("big.lvl"), "--rows", "90", "--columns", "100", "--new-map"});
+        t.check(big.status == 0 && has(big.out, "a blank map of 90 rows x 100 columns, 113408 bytes") && fs::exists(dir.file("big.lvl")), "blank --new-map: 90 x 100 is a new map");
+        const Run tall = run_words({"blank", dir.file("tall91.lvl"), "--rows", "91", "--columns", "10", "--new-map"});
+        t.check(tall.status == 1 && has(tall.out, "a Classic map made now has at most 90 rows") && has(tall.out, "make it an Extended map?") && !fs::exists(dir.file("tall91.lvl")),
+                "blank --new-map: 91 rows are the wall at row 90, and it says so");
+        t.check(run_words({"blank", dir.file("tall91_game.lvl"), "--rows", "91", "--columns", "10"}).status == 0, "blank: without --new-map 91 rows are the game's own map");
+        const Run more = run_words({"blank", dir.file("more.lvl"), "--rows", "90", "--columns", "112", "--new-map"});
+        t.check(more.status == 1 && has(more.out, "10080 cells, more than the 10000 allowed here") && !fs::exists(dir.file("more.lvl")), "blank --new-map: 90 x 112 has too many cells");
         const Run huge = run_words({"blank", dir.file("huge.lvl"), "--rows", "300", "--columns", "3"});
         t.check(huge.status == 2 && has(huge.err, "--rows takes a number from 1 to 256") && !fs::exists(dir.file("huge.lvl")), "blank: 300 rows are more than the game hosts");
         t.check(run_words({"blank", dir.file("tall.lvl"), "--rows", "256", "--columns", "1"}).status == 0, "blank: 256 rows are the most the game hosts");
         const Run wide = run_words({"blank", dir.file("wide_new.lvl"), "--rows", "200", "--columns", "200", "--new-map"});
-        t.check(wide.status == 1 && has(wide.out, "the grid has 200 rows x 200 columns, more than the 130 x 130 allowed here") && !fs::exists(dir.file("wide_new.lvl")),
+        t.check(wide.status == 1 && has(wide.out, "the grid has 200 rows x 200 columns: a Classic map made now has at most 90 rows") && !fs::exists(dir.file("wide_new.lvl")),
                 "blank --new-map: 200 x 200 is not a new map (and gets no cell)");
         t.check(run_words({"blank", dir.file("x.lvl"), "--rows", "3", "--columns", "3", "--chd", tiny_path}).status == 2, "blank: a --chd that is no archive is exit 2");
     }
@@ -923,6 +970,24 @@ int selftest() {
         const Run no_fit = run_words({"convert", wide, "--to", "classic", "-o", dir.file("no_fit.lvl")});
         t.check(no_fit.status == 1 && has(no_fit.out, "wide_ext.lvl: cannot be a Classic map:\n  this map is 400 columns wide") && has(no_fit.out, "nothing written\n") && !fs::exists(dir.file("no_fit.lvl")),
                 "convert --to classic: a map that does not fit lists why and writes nothing: " + no_fit.out);
+        // the checker per kind: check --extended answers for the kind of the file
+        const Run kind_ext = run_words({"check", ext, "--extended"});
+        t.check(kind_ext.status == 0 && has(kind_ext.out, "tiny_ext.lvl: Works in the new version (Extended map, New version only)") && has(kind_ext.out, "  note not_for_original: ") &&
+                    !has(kind_ext.out, "warning") && !has(kind_ext.out, "version_not_supported"),
+                "check --extended: a complete Extended map works in the new version, with the badge and the note: " + kind_ext.out);
+        t.check(has(info9.out, "New version:   works"), "info of an Extended map: the new version's verdict: " + info9.out);
+        const Run kind_classic = run_words({"check", tiny_path, "--extended"});
+        t.check(kind_classic.status == 0 && has(kind_classic.out, "TINY.LVL: Works in the original game (Classic map)"), "check --extended: a Classic map is answered for its kind: " + kind_classic.out);
+        const Run kind_wide = run_words({"check", wide, "--extended"});
+        t.check(kind_wide.status == 1 && has(kind_wide.out, "wide_ext.lvl: Does not work in the new version (Extended map, New version only): Green has no hill\n") &&
+                    has(kind_wide.out, "  warning hill_missing: Blue has no hill\n") && !has(kind_wide.out, "rows_beyond_wall"),
+                "check --extended: a tall Extended map without hills fails in the new version for the hills, with no wall: " + kind_wide.out);
+        t.check(run_words({"check", ext, "--extended", "--original"}).status == 2 && run_words({"check", ext, "--extended", "--roster", "3"}).status == 2 &&
+                    run_words({"check", ext, "--extended", "--new-map"}).status == 2,
+                "check --extended: with --original, --roster or --new-map it is exit 2");
+        const Run wall = run_words({"check", dir.file("tall91_game.lvl"), "--original"});
+        t.check(wall.status == 1 && has(wall.out, "warning rows_beyond_wall: the map has 91 rows: ants cannot cross the 91st row of a taller map"),
+                "check --original: a Classic map of 91 rows (the game's own limits) has the wall as a warning: " + wall.out);
         const Run too_big = run_words({"blank", dir.file("too_big.lvl"), "--extended", "--rows", "600", "--columns", "600"});
         t.check(too_big.status == 1 && has(too_big.out, "360000 cells, more than the 262144 allowed here") && !fs::exists(dir.file("too_big.lvl")), "blank --extended: 600 x 600 has too many cells: " + too_big.out);
         t.check(run_words({"blank", dir.file("a.lvl"), "--extended", "--rows", "2049", "--columns", "1"}).status == 2 &&

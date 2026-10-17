@@ -113,7 +113,7 @@ void tiles_beyond_dictionary(const Tally& t, const char* one, const char* many, 
 
 // Each team's hill (layer-2 ids 245 .. 248, FUN_0100ecac): the 4 x 4 cells around its entrance, the one cell whose flag bit 0 says that it is the hill's origin
 // (FUN_010076b6), every cell anchored at the entrance; the team's home tiles are made from that origin (FUN_0100ecdf)
-void hill_findings(const LevelData& level, Findings& f) {
+void hill_findings(const LevelData& level, Findings& f, bool original) {
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
     const std::vector<MapCell>& layer = level.layer2_interactive;
@@ -146,7 +146,9 @@ void hill_findings(const LevelData& level, Findings& f) {
                   static_cast<int32_t>(entrances[0] / columns), static_cast<int32_t>(entrances[0] % columns), team, static_cast<uint32_t>(entrances.size()));
             continue;
         }
-        // one entrance: is the hill whole? (a note: the original takes the anchor of each cell for its hill's origin, whatever the anchor says)
+        // one entrance: is the hill whole? (a note: the original takes the anchor of each cell for its hill's origin, whatever the anchor says; a rule of the original only, and
+        // the anchors of an Extended map are relative)
+        if (!original) continue;
         const int64_t er = static_cast<int64_t>(entrances[0] / columns);
         const int64_t ec = static_cast<int64_t>(entrances[0] % columns);
         const uint16_t anchor = static_cast<uint16_t>((er & 0xFF) | ((ec & 0xFF) << 8));
@@ -219,19 +221,26 @@ const char* to_string(OriginalSafeCode code) noexcept {
         case Code::FoodPileNotShown: return "food_pile_not_shown";
         case Code::ObjectOutsideMap: return "object_outside_map";
         case Code::NotForOriginal: return "not_for_original";
+        case Code::RowsBeyondWall: return "rows_beyond_wall";
+        case Code::ExtendedNotAcceptedHere: return "extended_not_accepted_here";
+        case Code::FormatFlagsUnknown: return "format_flags_unknown";
+        case Code::RulesOutOfRange: return "rules_out_of_range";
+        case Code::ObjectAnchorOutsideMap: return "object_anchor_outside_map";
     }
     return "?";
 }
 
 bool OriginalSafeReport::not_for_original() const noexcept { return has(Code::NotForOriginal); }
 
-bool OriginalSafeReport::works_in_original_game() const noexcept {
-    if (!judged || not_for_original()) return false;
+bool OriginalSafeReport::has_no_failure() const noexcept {
+    if (!judged) return false;
     for (const OriginalSafeIssue& i : issues) {
         if (i.severity != LevelProblemSeverity::Info && !i.place_limit) return false;
     }
     return true;
 }
+
+bool OriginalSafeReport::works_in_original_game() const noexcept { return !not_for_original() && has_no_failure(); }
 
 bool OriginalSafeReport::fits_the_place() const noexcept {
     for (const OriginalSafeIssue& i : issues) {
@@ -267,20 +276,31 @@ OriginalSafeReport not_for_original_report() {
 
 }  // namespace
 
-OriginalSafeReport check_original_safe(const LevelData& level) {
-    if (level.version == LVL_EXTENDED_VERSION) return not_for_original_report();
+namespace {
+
+static_assert(LVL_CLASSIC_ROW_WALL == 90, "the sentences below say the 91st row");
+
+// The rules of both profiles, in one place. The original-safe profile (`remake` false) is the rules of the original's loader and play; the remake profile (`remake` true, an
+// Extended map) keeps the rules that both games need, with the same codes and the same words, and leaves out the original's own (its loader's quirks, the 30-byte description,
+// the pictures it does not load, the 256-side grid and the wall at row 90).
+OriginalSafeReport profile_of(const LevelData& level, bool remake) {
+    const bool original = !remake;
     OriginalSafeReport report;
     Findings f(report);
-    file_findings(level, f);
+    if (original) file_findings(level, f);
 
     // the header (0x1006386: the version is the one check of the loader; the mode is stored at +0x74 and never read; the description is 30 bytes read unchecked)
-    if (level.version != LVL_EXPECTED_VERSION) {
+    if (original && level.version != LVL_EXPECTED_VERSION) {
         f.add(Code::VersionNot8, Severity::Fatal, "the map is version " + num(level.version) + ": the original plays version 8 only (it says \"wrong version\" and starts without a map)");
     }
-    if (level.game_mode != LVL_GAME_MODE_STANDARD) {
+    if (original && level.game_mode != LVL_GAME_MODE_STANDARD) {
         f.add(Code::ModeNot1, Severity::Info, "the mode word is " + num(level.game_mode) + ", not 1: the original never reads it (the map maker writes 1)");
     }
-    if (level.description.size() > kLongestDescription) {
+    if (remake && level.description.size() > LVL_EXTENDED_MAX_DESCRIPTION) {
+        f.add(Code::DescriptionTooLong, Severity::Fatal,
+              "the description is " + num(level.description.size()) + " bytes long: an Extended map holds at most " + num(LVL_EXTENDED_MAX_DESCRIPTION));
+    }
+    if (original && level.description.size() > kLongestDescription) {
         f.add(Code::DescriptionTooLong, Severity::Warning,
               "the description is " + num(level.description.size()) + " bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end " +
                   "(a letter outside a to z takes 2 or 3 bytes)");
@@ -294,15 +314,27 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     if (rows == 0 || columns == 0) {
         f.add(Code::GridEmpty, Severity::Fatal, "the map has " + num(rows) + " rows x " + num(columns) + " columns: it needs at least one cell");
         grid = false;
-    } else if (rows > kMostSide || columns > kMostSide) {
+    } else if (original && (rows > kMostSide || columns > kMostSide)) {
         f.add(Code::GridTooLarge, Severity::Fatal,
               "the map has " + num(rows) + " rows x " + num(columns) + " columns: at most 256 a side fit (an object's anchor holds its row and its column in a byte each)");
+        grid = false;
+    } else if (remake && (rows > LVL_FORMAT_CEILING_SIDE || columns > LVL_FORMAT_CEILING_SIDE || static_cast<uint64_t>(rows) * columns > LVL_FORMAT_CEILING_CELLS)) {
+        f.add(Code::GridTooLarge, Severity::Fatal,
+              "the map has " + num(rows) + " rows x " + num(columns) + " columns: an Extended map has at most " + num(LVL_FORMAT_CEILING_SIDE) + " a side and " +
+                  num(LVL_FORMAT_CEILING_CELLS) + " cells");
         grid = false;
     } else if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
         f.add(Code::LayersNotGrid, Severity::Fatal,
               "the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " + num(columns) +
                   " = " + num(cells));
         grid = false;
+    }
+    if (original && grid && rows > LVL_CLASSIC_ROW_WALL) {
+        // the original's path finder never enters tile row 90 (the 91st row): ants cannot cross it, in any Classic map taller than that (docs/MAP_FORMAT.md, "The row-90 wall")
+        f.add(Code::RowsBeyondWall, Severity::Warning,
+              "the map has " + num(rows) + " rows: ants cannot cross the 91st row of a taller map, in the original game too, so it plays otherwise than the map shows (a Classic map made now has "
+              "at most 90 rows; an Extended map has no such wall)",
+              static_cast<int32_t>(LVL_CLASSIC_ROW_WALL), -1, -1, rows - LVL_CLASSIC_ROW_WALL);
     }
     const size_t names = level.tile_dictionary.size();
     if (names > LVL_MAX_DICTIONARY_ENTRIES) {
@@ -390,7 +422,7 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     }
 
     // the four teams: a hill each, and starting ants (FUN_0100ec18: the records of block 1 whose tile is the team's start marker, table 0x1002468)
-    if (grid) hill_findings(level, f);
+    if (grid) hill_findings(level, f, original);
     for (int team = 0; team < 4; ++team) {
         bool marker = false;
         for (const AnthillSpawn& sp : level.anthill_spawns) marker = marker || sp.team_id == team;
@@ -404,7 +436,7 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
     // it does not place (a warning: SetTile, FUN_01007352, places nothing of a tile without a picture, and nobody can see or harvest such a pile), and the objects
     // outside the grid that it ignores (a note)
     auto not_loaded = [&](uint16_t tile) { return tile != LVL_EMPTY_TILE && tile < names && level.tile_dictionary[tile] == "." && !tile_always_loaded(tile); };
-    if (grid) {
+    if (original && grid) {
         Tally unseen;
         for (size_t i = 0; i < level.layer1_terrain.size(); ++i) {
             if (not_loaded(level.layer1_terrain[i].tile_index)) unseen.see(static_cast<int64_t>(i / columns), static_cast<int64_t>(i % columns), level.layer1_terrain[i].tile_index);
@@ -435,7 +467,7 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
                   all.row, all.column, -1, all.count);
         }
     }
-    {
+    if (original) {
         Tally hidden;
         for (const FoodSchedule& pile : level.food_schedules) {
             for (size_t k = 0; k < pile.variants.size(); ++k) {
@@ -481,13 +513,39 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
             if (plants != 0) what = plants == 1 ? "one plant" : num(plants) + " plants";
             if (points != 0) what += std::string(what.empty() ? "" : " and ") + (points == 1 ? "one waypoint" : num(points) + " waypoints");
             f.add(Code::ObjectOutsideMap, Severity::Info,
-                  what + (objects_out.count == 1 ? " stands" : " stand") + " outside the map " + objects_out.where() + "): the original ignores " +
-                      (objects_out.count == 1 ? "it" : "them"),
+                  what + (objects_out.count == 1 ? " stands" : " stand") + " outside the map " + objects_out.where() + "): " +
+                      (original ? std::string("the original ignores ") + (objects_out.count == 1 ? "it" : "them") : std::string(objects_out.count == 1 ? "it is" : "they are") + " ignored"),
                   objects_out.row, objects_out.column, -1, objects_out.count);
+        }
+        if (remake) {
+            // an object whose anchor lies outside the grid (LevelData::object_anchor: relative in an Extended map, the sum modulo 256 up to 256 x 256). A note: the anchor of a
+            // converted Classic map can point outside (13 cells of 8 library maps do), and the object itself is where its cell is.
+            Tally anchors;
+            for (size_t i = 0; i < level.layer2_interactive.size(); ++i) {
+                const uint32_t row = static_cast<uint32_t>(i / columns);
+                const uint32_t column = static_cast<uint32_t>(i % columns);
+                int32_t anchor_row = 0;
+                int32_t anchor_column = 0;
+                if (!level.object_anchor(row, column, anchor_row, anchor_column)) continue;
+                if (anchor_row < 0 || anchor_column < 0 || anchor_row >= static_cast<int64_t>(rows) || anchor_column >= static_cast<int64_t>(columns)) anchors.see(row, column);
+            }
+            if (anchors.count != 0) {
+                f.add(Code::ObjectAnchorOutsideMap, Severity::Info,
+                      (anchors.count == 1 ? std::string("one object has its anchor outside the map ") : num(anchors.count) + " objects have their anchors outside the map ") + anchors.where() +
+                          "): the anchor is the object's first cell, and it is not on the map",
+                      anchors.row, anchors.column, -1, anchors.count);
+            }
         }
     }
     notes_last(report);
     return report;
+}
+
+}  // namespace
+
+OriginalSafeReport check_original_safe(const LevelData& level) {
+    if (level.version == LVL_EXTENDED_VERSION) return not_for_original_report();
+    return profile_of(level, false);
 }
 
 OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const LevelLimits& limits) {
@@ -549,6 +607,162 @@ OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const L
     }
     notes_last(report);
     return report;
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+// The checker per kind
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+const char* to_string(MapKind kind) noexcept { return kind == MapKind::Extended ? "extended" : "classic"; }
+
+MapKind kind_of_version(uint32_t version) noexcept { return version == LVL_EXTENDED_VERSION ? MapKind::Extended : MapKind::Classic; }
+
+namespace {
+
+// The headline and the badge of a kind, and the verdicts: `works` is "works in the original game" (Classic) or "works in the new version" (Extended)
+MapCheckReport finish(MapKind kind, OriginalSafeReport report) {
+    MapCheckReport m;
+    m.kind = kind;
+    m.report = std::move(report);
+    m.fits_the_place = m.report.fits_the_place();
+    m.works = kind == MapKind::Classic ? m.report.works_in_original_game() : m.report.has_no_failure();
+    if (kind == MapKind::Extended) m.badge = kBadgeNewVersionOnly;
+    if (!m.report.judged) {
+        m.headline = kHeadlineNotChecked;
+    } else if (kind == MapKind::Classic) {
+        m.headline = m.works ? kHeadlineWorksInOriginal : kHeadlineFailsInOriginal;
+    } else {
+        m.headline = m.works ? kHeadlineWorksInNewVersion : kHeadlineFailsInNewVersion;
+    }
+    return m;
+}
+
+// An Extended map given to a place that reads Classic maps only: not read, not judged
+MapCheckReport extended_not_accepted() {
+    OriginalSafeReport report;
+    report.judged = false;
+    Findings f(report);
+    f.add(Code::ExtendedNotAcceptedHere, Severity::Fatal,
+          "this is an Extended map (version 9): this place reads Classic maps (version 8) only, so nothing of it is read", -1, -1, -1, 1, true);
+    return finish(MapKind::Extended, std::move(report));
+}
+
+// A Classic map's grid beyond 256 a side, in the words of the kind (the original-safe profile keeps its own sentence)
+void classic_wording(OriginalSafeReport& report) {
+    for (OriginalSafeIssue& i : report.issues) {
+        if (i.code == Code::GridTooLarge && !i.place_limit && i.severity == Severity::Fatal) {
+            i.message = "too big for a Classic map (" + num(LVL_MAX_GRID_SIDE) + " at most a side); make it an Extended map?";
+        }
+    }
+}
+
+// The limits of the place that a level in memory breaks (the reader's own sentences), each as a finding with place_limit; a finding of the same code that the profile made stays alone
+void add_place_limits(const LevelData& level, const LevelLimits& limits, OriginalSafeReport& report) {
+    const LevelValidation v = level.validate(0x0F, limits);
+    Findings f(report);
+    for (const LevelProblem& p : v.problems) {
+        if (p.kind == LevelProblemKind::GridTooLarge && !report.has(Code::GridTooLarge)) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+        if (p.kind == LevelProblemKind::DictionaryTooLarge && !report.has(Code::DictionaryTooLarge)) f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+    }
+}
+
+// The findings of an Extended map: the note that the original cannot load it, after the findings that stop it
+OriginalSafeReport extended_report(const LevelData& level) {
+    OriginalSafeReport report = profile_of(level, true);
+    OriginalSafeIssue note;
+    note.code = Code::NotForOriginal;
+    note.severity = Severity::Info;
+    note.message = "not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads";
+    size_t at = 0;
+    while (at < report.issues.size() && report.issues[at].severity != Severity::Info) ++at;
+    report.issues.insert(report.issues.begin() + static_cast<std::ptrdiff_t>(at), std::move(note));
+    return report;
+}
+
+// What the reader refuses of a version 9 file, in the codes of the profile (the severity is the reader's own: a version 9 file is read strictly)
+void extended_refusals(const LevelValidation& refused, Findings& f, OriginalSafeReport& report) {
+    for (const LevelProblem& p : refused.problems) {
+        switch (p.kind) {
+            case LevelProblemKind::Unreadable: f.add(Code::FileUnreadable, p.severity, p.message); break;
+            case LevelProblemKind::Truncated: f.add(Code::FileCutShort, p.severity, p.message); break;
+            case LevelProblemKind::FoodBlockEndedEarly: f.add(Code::FoodBlockEndedEarly, p.severity, p.message); break;
+            case LevelProblemKind::FormatFlagsUnknown: f.add(Code::FormatFlagsUnknown, p.severity, p.message); break;
+            case LevelProblemKind::RulesOutOfRange: f.add(Code::RulesOutOfRange, p.severity, p.message); break;
+            case LevelProblemKind::DescriptionTooLong: f.add(Code::DescriptionTooLong, p.severity, p.message); break;
+            case LevelProblemKind::GridEmpty: f.add(Code::GridEmpty, p.severity, p.message); break;
+            case LevelProblemKind::GridTooLarge: f.add(Code::GridTooLarge, p.severity, p.message); break;
+            case LevelProblemKind::DictionaryTooLarge: f.add(Code::DictionaryTooLarge, p.severity, p.message); break;
+            case LevelProblemKind::FileTooLarge:
+                f.add(Code::FileTooLarge, p.severity, p.message, -1, -1, -1, 1, true);
+                report.judged = false;
+                break;
+            default: break;
+        }
+    }
+}
+
+MapCheckReport check_extended_bytes(const uint8_t* data, size_t size, const LevelLimits& limits) {
+    LevelData level;
+    LevelValidation read;
+    if (level.load_from_memory(data, size, &read, limits)) return check_map(level, limits);
+    // A grid or a dictionary beyond the limits of the place but within the format's ceiling: judged by the remake profile, and the limit is a finding of its own (place_limit)
+    const bool place = read.has(LevelProblemKind::GridTooLarge) || read.has(LevelProblemKind::DictionaryTooLarge);
+    LevelData whole;
+    LevelValidation ceiling;
+    if (place && whole.load_from_memory(data, size, &ceiling, LevelLimits::format_ceiling())) {
+        OriginalSafeReport report = extended_report(whole);
+        Findings f(report);
+        for (const LevelProblem& p : read.problems) {
+            if (p.kind == LevelProblemKind::GridTooLarge) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+            if (p.kind == LevelProblemKind::DictionaryTooLarge) f.add(Code::DictionaryTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);
+        }
+        notes_last(report);
+        return finish(MapKind::Extended, std::move(report));
+    }
+    OriginalSafeReport report;
+    Findings f(report);
+    extended_refusals(place ? ceiling : read, f, report);
+    if (place) {
+        for (const LevelProblem& p : read.problems) {
+            if (p.kind == LevelProblemKind::FileTooLarge) extended_refusals(read, f, report);
+        }
+    }
+    // (the refused file is a version 9 file all the same: the original cannot load it either)
+    OriginalSafeIssue note;
+    note.code = Code::NotForOriginal;
+    note.severity = Severity::Info;
+    note.message = "not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads";
+    report.issues.push_back(std::move(note));
+    notes_last(report);
+    return finish(MapKind::Extended, std::move(report));
+}
+
+}  // namespace
+
+MapCheckReport check_map(const LevelData& level, const LevelLimits& limits) {
+    if (level.version == LVL_EXTENDED_VERSION) {
+        if (!limits.allow_extended) return extended_not_accepted();
+        OriginalSafeReport report = extended_report(level);
+        add_place_limits(level, limits, report);
+        notes_last(report);
+        return finish(MapKind::Extended, std::move(report));
+    }
+    OriginalSafeReport report = check_original_safe(level);
+    classic_wording(report);
+    add_place_limits(level, limits, report);
+    notes_last(report);
+    return finish(MapKind::Classic, std::move(report));
+}
+
+MapCheckReport check_map(const uint8_t* data, size_t size, const LevelLimits& limits) {
+    if (data != nullptr && size >= 4 && (static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+                                         (static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {
+        if (!limits.allow_extended) return extended_not_accepted();
+        return check_extended_bytes(data, size, limits);
+    }
+    OriginalSafeReport report = check_original_safe(data, size, limits);
+    classic_wording(report);
+    return finish(MapKind::Classic, std::move(report));
 }
 
 }  // namespace ants::assets

@@ -406,10 +406,11 @@ struct BlankCase {
 
 const std::vector<BlankCase>& blank_cases() {
     static const std::vector<BlankCase> cases = {
-        {31, 31, 485, 6, 10}, {40, 40, 485, 6, 10}, {60, 60, 485, 6, 10}, {100, 100, 485, 6, 10},   // a new map's sizes, up to the 10,000 cells
+        {31, 31, 485, 6, 10}, {40, 40, 485, 6, 10}, {60, 60, 485, 6, 10}, {90, 90, 485, 6, 10},     // a new Classic map's sizes, up to its 90 rows
         {31, 31, 486, 9, 12},                                                                          // another ground, eggs and minutes
         {1, 1, 485, 6, 10},                                                                            // the smallest
-        {101, 100, 485, 6, 10}, {131, 10, 485, 6, 10}, {10, 131, 485, 6, 10},                          // beyond the limits of a new map
+        {91, 10, 485, 6, 10}, {100, 100, 485, 6, 10}, {131, 10, 485, 6, 10}, {10, 131, 485, 6, 10},   // beyond the limits of a new map (91 rows: the wall at row 90)
+        {90, 112, 485, 6, 10},                                                                         // 10,080 cells
         {0, 10, 485, 6, 10}, {10, 0, 485, 6, 10}, {70000, 10, 485, 6, 10},                             // no cell, more than a word
         {31, 31, 1344, 6, 10}, {31, 31, 32766, 6, 10},                                                 // a tile without a name, the empty tile
         {31, 31, 485, 70000, 10}, {31, 31, 485, 6, 70000},                                             // more than a word

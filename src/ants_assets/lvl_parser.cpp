@@ -253,6 +253,16 @@ std::string version_not_supported_text(uint32_t version) {
            num(LVL_EXPECTED_VERSION) + ") only; nothing of the file is read (the original game refuses it too: \"the MAP you tried to play is the wrong version\")";
 }
 
+}  // anonymous namespace
+
+std::string rows_beyond_wall_text(uint32_t rows, uint32_t columns) {
+    static_assert(LVL_CLASSIC_ROW_WALL == 90, "the sentence says the 91st row");
+    return "the grid has " + std::to_string(rows) + " rows x " + std::to_string(columns) + " columns: a Classic map made now has at most " + std::to_string(LVL_CLASSIC_ROW_WALL) +
+           " rows (ants cannot cross the 91st row of a taller map, in the original game too); make it an Extended map?";
+}
+
+namespace {
+
 // The checks that decide whether the data can be handed to the engine at all, whatever the roster: the shape of the grid and of the dictionary, within `limits`.
 void collect_layout_problems(const LevelData& level, const LevelLimits& limits, std::vector<LevelProblem>& out) {
     const uint32_t rows = level.height;
@@ -273,6 +283,9 @@ void collect_layout_problems(const LevelData& level, const LevelLimits& limits, 
     } else if (extended && (rows > LVL_FORMAT_CEILING_SIDE || columns > LVL_FORMAT_CEILING_SIDE)) {
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(LVL_FORMAT_CEILING_SIDE) + " a side that version 9 of the format holds");
+    } else if (limits.refuses_for_wall(version, rows)) {
+        // the policy of a Classic map made now: the original's path finder never enters tile row 90, so a taller map has an invisible wall across it (docs/MAP_FORMAT.md)
+        add_problem(out, Severity::Fatal, Kind::GridTooLarge, rows_beyond_wall_text(rows, columns));
     } else if (rows > limits.rows_for(version) || columns > limits.columns_for(version)) {
         add_problem(out, Severity::Fatal, Kind::GridTooLarge,
                     "the grid has " + num(rows) + " rows x " + num(columns) + " columns, more than the " + num(limits.rows_for(version)) + " x " + num(limits.columns_for(version)) +

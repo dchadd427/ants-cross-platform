@@ -8,6 +8,11 @@
 // thing that the disassembly notes say the original tolerates and that has not been tried in the original itself. "Works in the original game" is true when the
 // profile finds no Fatal and no Warning (notes do not count; neither does a limit of the place that reads the map, place_limit: the original has none of them).
 // The rules, the addresses of the original's code that each one comes from, and the results of the library: docs/MAP_FORMAT.md, "The original-safe profile".
+//
+// The checker per kind (check_map, below): a Classic map (version 8) is judged by the original-safe profile; an Extended map (version 9), which the original cannot load,
+// is judged by the remake profile, "plays in the new version", which is the same rules for what both games need (a hill and starting ants for each team, every tile inside
+// the dictionary, every object inside the grid, every food pile with a stage) and none of the original's own quirks. One report answers with the kind, whether it works,
+// the headline and the badge by kind, and the findings with stable codes. docs/MAP_FORMAT.md, "The checker per kind".
 
 #include "ants_assets/lvl_parser.hpp"
 
@@ -50,6 +55,12 @@ enum class OriginalSafeCode : uint8_t {
     ObjectOutsideMap,        // object_outside_map (a note): plants and waypoints outside the grid, which the original ignores
     // an Extended map (version 9)
     NotForOriginal,          // not_for_original (neither a failure nor a warning): the map is an Extended map, which the original game cannot load (it needs a version 8 file)
+    // the checker per kind (check_map)
+    RowsBeyondWall,          // rows_beyond_wall (a warning, Classic maps): more than 90 rows; the original's path finder never enters the 91st row, so ants cannot cross it
+    ExtendedNotAcceptedHere, // extended_not_accepted_here (a place_limit, fatal, not judged): an Extended map given to a place that reads Classic maps only (LevelLimits::allow_extended)
+    FormatFlagsUnknown,      // format_flags_unknown (fatal, Extended maps): a flag bit that this reader does not know, so the file is from a later version of the format
+    RulesOutOfRange,         // rules_out_of_range (fatal, Extended maps): a rules word other than 0 and 1
+    ObjectAnchorOutsideMap,  // object_anchor_outside_map (a note, Extended maps): an object whose anchor lies outside the grid
 };
 
 /// The stable text of a code ("hill_missing", ...)
@@ -76,6 +87,7 @@ struct OriginalSafeReport {
     bool judged{true};     // false when the file was too large to be read at all: nothing is known of the map
 
     bool works_in_original_game() const noexcept;      // judged, and no Fatal and no Warning that is a rule of the original (a limit of the place is not one), and not an Extended map
+    bool has_no_failure() const noexcept;              // judged, and no Fatal and no Warning that is a rule of the profile that made the report (a limit of the place is not one)
     bool not_for_original() const noexcept;            // an Extended map (version 9): not a fault of the map, the original cannot load the kind (NotForOriginal, severity Info, the only finding)
     bool fits_the_place() const noexcept;              // no limit of the place (LevelLimits: a new map's grid, dictionary and file size) is broken
     bool has(OriginalSafeCode code) const noexcept;
@@ -90,5 +102,52 @@ OriginalSafeReport check_original_safe(const LevelData& level);
 /// The profile of a file: what the reader refuses (with the reader's sentence) or, for a file that loads, the profile of its level. A file whose version word is 9 is an
 /// Extended map whatever `limits` allow: it is answered with NotForOriginal alone, without reading it.
 OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const LevelLimits& limits = LevelLimits{});
+
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+// The checker per kind
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/// The two kinds of map: a Classic map is a version 8 file (works in the original game and in this remake), an Extended map a version 9 file (this remake only; the original cannot
+/// load it, which is no fault of the map).
+enum class MapKind : uint8_t { Classic, Extended };
+
+/// "classic" or "extended": stable
+const char* to_string(MapKind kind) noexcept;
+
+/// The words of a kind, stable: the editor and the pages show them
+constexpr const char* kHeadlineWorksInOriginal = "Works in the original game";
+constexpr const char* kHeadlineFailsInOriginal = "Does not work in the original game";
+constexpr const char* kHeadlineWorksInNewVersion = "Works in the new version";
+constexpr const char* kHeadlineFailsInNewVersion = "Does not work in the new version";
+constexpr const char* kHeadlineNotChecked = "Not checked";
+constexpr const char* kBadgeNewVersionOnly = "New version only";       // the badge of an Extended map; a Classic map has none
+
+/// The one answer of the checker for a map of either kind: the kind, whether it works (Classic: in the original game, by the original-safe profile; Extended: in the new version, by
+/// the remake profile), the headline and the badge by kind, and the findings. Classic findings are exactly those of check_original_safe, except that a grid beyond 256 a side says
+/// "too big for a Classic map (256 at most)... make it an Extended map?". An Extended map's findings are `not_for_original` (a note: the original cannot load the kind) and those of the
+/// remake profile, which uses the same codes and the same words as the original-safe profile for the rules both share ("Blue has no hill").
+struct MapCheckReport {
+    MapKind kind{MapKind::Classic};
+    OriginalSafeReport report;       // the findings; `judged` false when the map could not be read at all
+    bool works{false};               // Classic: works in the original game; Extended: works in the new version (no Fatal and no Warning, a note or a limit of the place does not count)
+    bool fits_the_place{true};       // no limit of the place (LevelLimits) is broken
+    std::string headline;            // kHeadline...: by kind and outcome
+    std::string badge;               // kBadgeNewVersionOnly for an Extended map, empty for a Classic map
+
+    bool has(OriginalSafeCode code) const noexcept { return report.has(code); }
+    std::string describe() const { return report.describe(); }
+};
+
+/// The kind of a version word: 9 is an Extended map, anything else is judged as a Classic map (a file that says another version is a Classic map that fails `version_not_8`).
+MapKind kind_of_version(uint32_t version) noexcept;
+
+/// The check of a level in memory (the editor's map, or a level the reader made), by its kind. `limits` are the limits of the place: a grid, a dictionary beyond them is a finding with
+/// place_limit (the map is judged all the same, `fits_the_place` is false); an Extended map in a place without LevelLimits::allow_extended is not judged
+/// (`extended_not_accepted_here`).
+MapCheckReport check_map(const LevelData& level, const LevelLimits& limits = LevelLimits{});
+
+/// The check of a file's bytes, by the kind its version word says. A file that the reader refuses is reported with its own sentence (and not judged when it was not read at all).
+MapCheckReport check_map(const uint8_t* data, size_t size, const LevelLimits& limits = LevelLimits{});
 
 }  // namespace ants::assets

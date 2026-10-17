@@ -1,0 +1,501 @@
+{
+ "note": "Mutants of the checker per kind and of the 90-row rule for a new Classic map (docs/MAP_FORMAT.md, \"The checker per kind\"): the wall at row 90 (the boundary 90 and 91, its severity, its code, the limit of a new map, the sentence of the reader and the writer), the kind by the version word, the headline and the badge by kind, the remake profile (which rules it keeps and which it leaves to the original), the order of the findings, the limits of the place for an Extended map, the refusal of a conversion at 91 rows and the codes of the reasons. Run: python3 tools/mutate.py tests/data/lvl_kinds_mutants.json --keep-going --jobs 1 (do not commit the report).",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "wall_warning_starts_at_90_rows",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && grid && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (original && grid && rows >= LVL_CLASSIC_ROW_WALL) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "wall_warning_starts_at_92_rows",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && grid && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (original && grid && rows > LVL_CLASSIC_ROW_WALL + 1) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "wall_warning_is_a_note",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::RowsBeyondWall, Severity::Warning,",
+   "new": "f.add(Code::RowsBeyondWall, Severity::Info,",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "wall_warning_is_fatal",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::RowsBeyondWall, Severity::Warning,",
+   "new": "f.add(Code::RowsBeyondWall, Severity::Fatal,",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "wall_warning_also_for_extended_maps",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && grid && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (grid && rows > LVL_CLASSIC_ROW_WALL) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "wall_code_text_changed",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "case Code::RowsBeyondWall: return \"rows_beyond_wall\";",
+   "new": "case Code::RowsBeyondWall: return \"rows_over_90\";",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "new_maps_allow_91_rows",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "LevelLimits{LVL_CLASSIC_ROW_WALL, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "new": "LevelLimits{LVL_CLASSIC_ROW_WALL + 1, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "build": [
+    "test_original_safe",
+    "test_lvl_writer",
+    "test_assets"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe && ./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_assets"
+  },
+  {
+   "id": "new_maps_allow_89_rows_only",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "LevelLimits{LVL_CLASSIC_ROW_WALL, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "new": "LevelLimits{LVL_CLASSIC_ROW_WALL - 1, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "build": [
+    "test_lvl_writer",
+    "test_assets"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_assets"
+  },
+  {
+   "id": "new_maps_columns_131",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "LevelLimits{LVL_CLASSIC_ROW_WALL, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "new": "LevelLimits{LVL_CLASSIC_ROW_WALL, 131, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u,",
+   "build": [
+    "test_lvl_writer",
+    "test_assets"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_assets"
+  },
+  {
+   "id": "wall_reason_for_the_reader_dropped",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "} else if (limits.refuses_for_wall(version, rows)) {",
+   "new": "} else if (false && limits.refuses_for_wall(version, rows)) {",
+   "build": [
+    "test_assets"
+   ],
+   "test": "./build/tests/test_assets/test_assets"
+  },
+  {
+   "id": "wall_reason_for_the_writer_dropped",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (limits.refuses_for_wall(level.version, rows)) return rows_beyond_wall_text(rows, columns);",
+   "new": "",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "wall_applies_to_the_games_own_limits",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return version != LVL_EXTENDED_VERSION && rows > rows_for(version) && rows_for(version) <= LVL_CLASSIC_ROW_WALL && rows > LVL_CLASSIC_ROW_WALL;",
+   "new": "return version != LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL;",
+   "build": [
+    "test_lvl_writer",
+    "test_assets"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_assets"
+  },
+  {
+   "id": "kind_of_version_swapped",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "MapKind kind_of_version(uint32_t version) noexcept { return version == LVL_EXTENDED_VERSION ? MapKind::Extended : MapKind::Classic; }",
+   "new": "MapKind kind_of_version(uint32_t version) noexcept { return version == LVL_EXTENDED_VERSION ? MapKind::Classic : MapKind::Extended; }",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "bytes_kind_detected_by_version_8",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {\n        if (!limits.allow_extended) return extended_not_accepted();",
+   "new": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXPECTED_VERSION) {\n        if (!limits.allow_extended) return extended_not_accepted();",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "level_kind_detected_by_version_8",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "MapCheckReport check_map(const LevelData& level, const LevelLimits& limits) {\n    if (level.version == LVL_EXTENDED_VERSION) {",
+   "new": "MapCheckReport check_map(const LevelData& level, const LevelLimits& limits) {\n    if (level.version == LVL_EXPECTED_VERSION) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "extended_in_a_classic_only_place_is_judged",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (!limits.allow_extended) return extended_not_accepted();\n        OriginalSafeReport report = extended_report(level);",
+   "new": "OriginalSafeReport report = extended_report(level);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "extended_works_by_the_original_rules",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "m.works = kind == MapKind::Classic ? m.report.works_in_original_game() : m.report.has_no_failure();",
+   "new": "m.works = m.report.works_in_original_game();",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "classic_works_ignores_the_findings",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "m.works = kind == MapKind::Classic ? m.report.works_in_original_game() : m.report.has_no_failure();",
+   "new": "m.works = kind == MapKind::Classic ? m.report.judged : m.report.has_no_failure();",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "headline_of_a_working_extended_map",
+   "file": "include/ants_assets/lvl_checker.hpp",
+   "old": "kHeadlineWorksInNewVersion = \"Works in the new version\"",
+   "new": "kHeadlineWorksInNewVersion = \"Works in the original game\"",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "headline_of_a_failing_classic_map",
+   "file": "include/ants_assets/lvl_checker.hpp",
+   "old": "kHeadlineFailsInOriginal = \"Does not work in the original game\"",
+   "new": "kHeadlineFailsInOriginal = \"Does not work\"",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "badge_text",
+   "file": "include/ants_assets/lvl_checker.hpp",
+   "old": "kBadgeNewVersionOnly = \"New version only\"",
+   "new": "kBadgeNewVersionOnly = \"New version\"",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "badge_on_classic_maps",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (kind == MapKind::Extended) m.badge = kBadgeNewVersionOnly;",
+   "new": "m.badge = kBadgeNewVersionOnly;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "not_judged_headline_missing",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (!m.report.judged) {\n        m.headline = kHeadlineNotChecked;",
+   "new": "if (false) {\n        m.headline = kHeadlineNotChecked;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_judges_the_mode",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && level.game_mode != LVL_GAME_MODE_STANDARD) {",
+   "new": "if (level.game_mode != LVL_GAME_MODE_STANDARD) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_judges_tiles_the_original_does_not_load",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && grid) {\n        Tally unseen;",
+   "new": "if (grid) {\n        Tally unseen;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_judges_piles_the_original_does_not_place",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original) {\n        Tally hidden;",
+   "new": "if (true) {\n        Tally hidden;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_judges_hills_by_the_originals_anchors",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "        if (!original) continue;\n",
+   "new": "        if (original) continue;\n",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_description_limit_254",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (remake && level.description.size() > LVL_EXTENDED_MAX_DESCRIPTION) {",
+   "new": "if (remake && level.description.size() >= LVL_EXTENDED_MAX_DESCRIPTION) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_description_warns_at_30",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (original && level.description.size() > kLongestDescription) {",
+   "new": "if (level.description.size() > kLongestDescription) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "anchor_outside_needs_one_more",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (anchor_row < 0 || anchor_column < 0 || anchor_row >= static_cast<int64_t>(rows) || anchor_column >= static_cast<int64_t>(columns)) anchors.see(row, column);",
+   "new": "if (anchor_row < 0 || anchor_column < 0 || anchor_row > static_cast<int64_t>(rows) || anchor_column > static_cast<int64_t>(columns)) anchors.see(row, column);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "anchor_outside_ignores_columns",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "anchor_row >= static_cast<int64_t>(rows) || anchor_column >= static_cast<int64_t>(columns)) anchors.see(row, column);",
+   "new": "anchor_row >= static_cast<int64_t>(rows)) anchors.see(row, column);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "anchor_outside_for_classic_maps",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "        if (remake) {\n            // an object whose anchor lies outside the grid",
+   "new": "        if (true) {\n            // an object whose anchor lies outside the grid",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "not_for_original_missing_from_extended",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "    report.issues.insert(report.issues.begin() + static_cast<std::ptrdiff_t>(at), std::move(note));",
+   "new": "",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "not_for_original_after_the_other_notes",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "    while (at < report.issues.size() && report.issues[at].severity != Severity::Info) ++at;",
+   "new": "    at = report.issues.size();",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "place_limit_duplicated_for_a_big_classic_grid",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (p.kind == LevelProblemKind::GridTooLarge && !report.has(Code::GridTooLarge)) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);",
+   "new": "if (p.kind == LevelProblemKind::GridTooLarge) f.add(Code::GridTooLarge, Severity::Fatal, p.message, -1, -1, -1, 1, true);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "classic_big_grid_keeps_the_originals_sentence",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "i.message = \"too big for a Classic map (\" + num(LVL_MAX_GRID_SIDE) + \" at most a side); make it an Extended map?\";",
+   "new": "i.message = i.message;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "extended_place_limit_not_judged",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (place && whole.load_from_memory(data, size, &ceiling, LevelLimits::format_ceiling())) {",
+   "new": "if (false && place && whole.load_from_memory(data, size, &ceiling, LevelLimits::format_ceiling())) {",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "extended_flag_refusal_mislabeled",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "case LevelProblemKind::FormatFlagsUnknown: f.add(Code::FormatFlagsUnknown, p.severity, p.message); break;",
+   "new": "case LevelProblemKind::FormatFlagsUnknown: f.add(Code::RulesOutOfRange, p.severity, p.message); break;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "extended_refusal_made_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "case LevelProblemKind::RulesOutOfRange: f.add(Code::RulesOutOfRange, p.severity, p.message); break;",
+   "new": "case LevelProblemKind::RulesOutOfRange: f.add(Code::RulesOutOfRange, Severity::Warning, p.message); break;",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "conversion_wall_at_91",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL + 1) {",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_wall_at_90",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (level.version == LVL_EXTENDED_VERSION && rows >= LVL_CLASSIC_ROW_WALL) {",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_wall_also_for_a_classic_copy",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL) {",
+   "new": "if (rows > LVL_CLASSIC_ROW_WALL) {",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_wall_code_changed",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "why.push_back({\"rows_beyond_wall\",",
+   "new": "why.push_back({\"rows_beyond_classic\",",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_codes_not_kept",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        put(reasons, result.reasons, result.reason_codes);",
+   "new": "        for (const Reason& r : reasons) result.reasons.push_back(r.text);",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_30_byte_note_code",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "notes->push_back({\"description_30_bytes\",",
+   "new": "notes->push_back({\"description_too_long\",",
+   "build": [
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "tool_check_extended_exit_status",
+   "file": "tools/lvl_tool.cpp",
+   "old": "return m.works && m.fits_the_place ? 0 : 1;",
+   "new": "return 0;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_check_extended_without_the_flag",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    if (o.extended) {\n        const LevelLimits extended_limits",
+   "new": "    if (false) {\n        const LevelLimits extended_limits",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_headline_dropped",
+   "file": "tools/lvl_tool.cpp",
+   "old": "out << name << \": \" << m.headline << \" (\" << kind << badge << \")\";",
+   "new": "out << name << \": \" << kind << badge;",
+   "build": [
+    "lvl_tool"
+   ],
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "classic_sentence_changed_for_the_golden",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "\" has no hill\", -1, -1, team);",
+   "new": "\" has no hill here\", -1, -1, team);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  }
+ ]
+}

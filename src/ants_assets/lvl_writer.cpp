@@ -96,6 +96,7 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
     if (rows == 0 || columns == 0) return "the grid has " + grid_text(rows, columns) + ": a map needs at least one cell";
+    if (limits.refuses_for_wall(level.version, rows)) return rows_beyond_wall_text(rows, columns);
     if (rows > limits.rows_for(level.version) || columns > limits.columns_for(level.version)) {
         return "the grid has " + grid_text(rows, columns) + ", more than the " + num(limits.rows_for(level.version)) + " x " + num(limits.columns_for(level.version)) + " allowed here";
     }
@@ -532,39 +533,60 @@ namespace {
 
 constexpr size_t kClassicMostDescription = kDescriptionBytes;      // the file's field (29 characters and a zero byte end it for the original; the checker says so)
 
+// A reason, or a note, of a conversion: a stable code (the editor keys on it) and the sentence
+struct Reason {
+    const char* code;
+    std::string text;
+};
+
+// Puts the reasons in the two parallel lists of a LevelConversion
+void put(const std::vector<Reason>& from, std::vector<std::string>& texts, std::vector<std::string>& codes) {
+    for (const Reason& r : from) {
+        texts.push_back(r.text);
+        codes.push_back(r.code);
+    }
+}
+
 // Why a level cannot be a Classic map; `notes` get what does not stop it (null: not wanted). Every sentence names the number and the limit.
-std::vector<std::string> classic_reasons(const LevelData& level, std::vector<std::string>* notes) {
-    std::vector<std::string> why;
+std::vector<Reason> classic_reasons(const LevelData& level, std::vector<Reason>* notes) {
+    std::vector<Reason> why;
     if (level.version != LVL_EXPECTED_VERSION && level.version != LVL_EXTENDED_VERSION) {
-        why.push_back("the level says version " + num(level.version) + ": a map is version 8 (Classic) or 9 (Extended)");
+        why.push_back({"level_version_unknown", "the level says version " + num(level.version) + ": a map is version 8 (Classic) or 9 (Extended)"});
         return why;
     }
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
-    if (rows == 0 || columns == 0) why.push_back("the grid has " + grid_text(rows, columns) + ": a map needs at least one cell");
-    if (columns > LVL_MAX_GRID_SIDE) why.push_back("this map is " + num(columns) + " columns wide; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " columns");
-    if (rows > LVL_MAX_GRID_SIDE) why.push_back("this map is " + num(rows) + " rows tall; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " rows");
+    if (rows == 0 || columns == 0) why.push_back({"grid_empty", "the grid has " + grid_text(rows, columns) + ": a map needs at least one cell"});
+    if (columns > LVL_MAX_GRID_SIDE) why.push_back({"columns_beyond_classic", "this map is " + num(columns) + " columns wide; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " columns"});
+    if (rows > LVL_MAX_GRID_SIDE) why.push_back({"rows_beyond_classic", "this map is " + num(rows) + " rows tall; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " rows"});
+    if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL) {
+        // the conversion makes a NEW Classic map, and a new Classic map has at most 90 rows (the wall at row 90); a Classic map that is Classic already is copied as it is
+        why.push_back({"rows_beyond_wall", "this map has " + num(rows) + " rows; a Classic map made now has at most " + num(LVL_CLASSIC_ROW_WALL) +
+                                               " (ants cannot cross the 91st row of a taller map, in the original game too): crop it to " + num(LVL_CLASSIC_ROW_WALL) +
+                                               " rows first, or keep it an Extended map"});
+    }
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;
     if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
-        why.push_back("the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " + num(columns) +
-                      " = " + num(cells));
+        why.push_back({"layers_not_grid", "the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) +
+                                              " x " + num(columns) + " = " + num(cells)});
         return why;                                                                     // (the anchors cannot be looked at)
     }
     if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
-        why.push_back("the dictionary has " + num(level.tile_dictionary.size()) + " names; a Classic map holds at most " + num(LVL_MAX_DICTIONARY_ENTRIES));
+        why.push_back({"dictionary_too_large", "the dictionary has " + num(level.tile_dictionary.size()) + " names; a Classic map holds at most " + num(LVL_MAX_DICTIONARY_ENTRIES)});
     }
     if (level.description.size() == kClassicMostDescription && notes != nullptr) {
-        notes->push_back("the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns");
+        notes->push_back({"description_30_bytes", "the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns"});
     }
     if (level.description.size() > kClassicMostDescription) {
-        why.push_back("the description is " + num(level.description.size()) + " bytes; a Classic map holds " + num(kClassicMostDescription) + " (29 characters end with the zero byte that the original needs)");
+        why.push_back({"description_too_long", "the description is " + num(level.description.size()) + " bytes; a Classic map holds " + num(kClassicMostDescription) +
+                                                   " (29 characters end with the zero byte that the original needs)"});
     }
-    if (level.format_flags != 0) why.push_back("the map has format flags (0x" + hex(level.format_flags) + "); a Classic map has none");
+    if (level.format_flags != 0) why.push_back({"format_flags_set", "the map has format flags (0x" + hex(level.format_flags) + "); a Classic map has none"});
     if (level.rules > LVL_RULES_EXTENDED) {
-        why.push_back("the rules word is " + num(level.rules) + ": only 0 and 1 are known");
+        why.push_back({"rules_unknown", "the rules word is " + num(level.rules) + ": only 0 and 1 are known"});
     } else if (level.rules == LVL_RULES_EXTENDED && notes != nullptr) {
-        notes->push_back("the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
-                         "and a long path order can fail)");
+        notes->push_back({"rules_extended_dropped", "the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
+                                                    "and a long path order can fail)"});
     }
     // every object anchor must fit the byte of a Classic map. This loop (O(cells)) can never fire for a version 9 map of 256 x 256 or less, whose anchors are bytes modulo 256
     // (LevelData::object_anchor), and for a larger map it only adds a reason on top of the size reasons above; it stays so that the list is complete, and tells an editor
@@ -587,8 +609,8 @@ std::vector<std::string> classic_reasons(const LevelData& level, std::vector<std
             }
         }
         if (beyond != 0) {
-            why.push_back(num(beyond) + " object cells are anchored outside the 0 to 255 that a Classic anchor byte holds (the first at row " + num(first_row) + ", column " +
-                          num(first_column) + ")");
+            why.push_back({"anchor_beyond_byte", num(beyond) + " object cells are anchored outside the 0 to 255 that a Classic anchor byte holds (the first at row " + num(first_row) + ", column " +
+                                                     num(first_column) + ")"});
         }
     }
     return why;
@@ -598,19 +620,22 @@ LevelLimits conversion_limits(bool extended) { return extended ? LevelLimits::fo
 
 }  // namespace
 
-std::vector<std::string> needs_extended(const LevelData& level) { return convert_to_classic(level).reasons; }     // (the one code path: the reasons of the conversion, so that they cannot drift)
+std::vector<std::string> needs_extended(const LevelData& level) { return convert_to_classic(level).reasons; }
+std::vector<std::string> needs_extended_codes(const LevelData& level) { return convert_to_classic(level).reason_codes; }     // (the one code path: the reasons of the conversion, so that they cannot drift)
 
 LevelConversion convert_to_extended(const LevelData& level) {
     LevelConversion result;
     try {
         if (level.version != LVL_EXPECTED_VERSION && level.version != LVL_EXTENDED_VERSION) {
             result.reasons.push_back("the level says version " + num(level.version) + ": a map is version 8 (Classic) or 9 (Extended)");
+            result.reason_codes.push_back("level_version_unknown");
             return result;
         }
         const uint64_t cells = static_cast<uint64_t>(level.height) * level.width;
         if (level.height == 0 || level.width == 0 || level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
             result.reasons.push_back("the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " +
                                      grid_text(level.height, level.width) + ": a map needs rows x columns cells in each layer");
+            result.reason_codes.push_back("layers_not_grid");
             return result;
         }
         LevelData copy(level);
@@ -635,6 +660,7 @@ LevelConversion convert_to_extended(const LevelData& level) {
         const LevelWriteResult check = write_level(copy, conversion_limits(true));
         if (!check.ok) {
             result.reasons.push_back("the map cannot be written as an Extended map: " + check.error);
+            result.reason_codes.push_back("not_writable_as_extended");
             return result;
         }
         result.level = std::move(copy);
@@ -642,6 +668,7 @@ LevelConversion convert_to_extended(const LevelData& level) {
     } catch (...) {
         result = LevelConversion{};
         result.reasons.push_back("the map cannot be converted (out of memory)");
+        result.reason_codes.push_back("out_of_memory");
     }
     return result;
 }
@@ -649,11 +676,11 @@ LevelConversion convert_to_extended(const LevelData& level) {
 LevelConversion convert_to_classic(const LevelData& level) {
     LevelConversion result;
     try {
-        result.reasons = classic_reasons(level, &result.notes);
-        if (!result.reasons.empty()) {
-            result.notes.clear();
-            return result;
-        }
+        std::vector<Reason> notes;
+        const std::vector<Reason> reasons = classic_reasons(level, &notes);
+        put(reasons, result.reasons, result.reason_codes);
+        if (!result.reasons.empty()) return result;
+        put(notes, result.notes, result.note_codes);
         LevelData copy(level);
         copy.load_notes.clear();
         if (level.version == LVL_EXTENDED_VERSION) {
@@ -673,7 +700,9 @@ LevelConversion convert_to_classic(const LevelData& level) {
         const LevelWriteResult check = write_level(copy, conversion_limits(false));
         if (!check.ok) {
             result.reasons.push_back("the map cannot be written as a Classic map: " + check.error);
+            result.reason_codes.push_back("not_writable_as_classic");
             result.notes.clear();
+            result.note_codes.clear();
             return result;
         }
         result.level = std::move(copy);
@@ -681,6 +710,7 @@ LevelConversion convert_to_classic(const LevelData& level) {
     } catch (...) {
         result = LevelConversion{};
         result.reasons.push_back("the map cannot be converted (out of memory)");
+        result.reason_codes.push_back("out_of_memory");
     }
     return result;
 }
