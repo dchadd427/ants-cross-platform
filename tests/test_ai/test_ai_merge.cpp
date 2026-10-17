@@ -18,7 +18,7 @@ using namespace ants::ai;
 }  // namespace
 
 void run_merge_tests() {
-    TEST_CASE("AI21.1 The Ranks Of The Tasks, Pinned (A Higher Rank May Take An Ant From A Lower One): The Economy 1, The Guard And The Ferry 2, The Power-Ups, The Raids, The Sabotage, The Island Task And The Expedition 3, The Walls, The Bombs, The Strike And The Harassment 4, The Fights 5, At Every Level")
+    TEST_CASE("AI21.1 The Ranks Of The Tasks, Pinned (A Higher Rank May Take An Ant From A Lower One): The Economy 1, The Guard And The Ferry 2, The Power-Ups, The Raids, The Sabotage, The Island Task And The Expedition 3, The Walls, The Bombs, The Strike And The Harassment 4, The Fights 5, The Gate Goal And The Field Breach 6, At Every Level")
     {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             Match m;
@@ -41,6 +41,7 @@ void run_merge_tests() {
             ASSERT_EQ(rank(B::kHarass), 4u);
             ASSERT_EQ(rank(B::kFight), 5u);
             ASSERT_EQ(rank(B::kGateGoals), 6u);                                  // the gate goal (off in every plan): above the fights, since it exists only while the bot banks nothing
+            ASSERT_EQ(rank(B::kField), 6u);                                      // the field breach: its one ant, as the gate goal's
         }
     } TEST_END();
 

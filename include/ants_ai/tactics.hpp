@@ -255,6 +255,8 @@ struct LevelPlan {
     uint32_t gate_retries{2};            // attempts after the first one that was given up; then the bot plays on as if there were no gates
     uint32_t gate_hop_bombs{3};          // the most bombs of a hop chain that the bot plans (each costs 2 hit points)
     uint32_t gate_min_ticks_left{2400};  // no attempt starts with less than this left on the clock
+    bool gate_field{true};               // the field breach (FieldTask, docs/BOT_GATES.md "The field breach"): one ant opens a pile that lies behind a field of bombs, fire walls and water (POPcOrN), where the
+                                         // gate goals' shore breach played before (`--tune field=0`: as before)
     bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (no team, 255) alone while the gate goals are live (Tactics::gate_goals_live): they are the gate, and the goals defuse those on the way. A bomb of a
                                          // team is countered as on any map, and so is a map bomb once the goals are exhausted or the bot is in the fallback
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)
@@ -557,6 +559,11 @@ struct Tactics {
     /// The gate goals are live at this look (set by StandardBot before the counters step): a gate map, not in the stall detector's fallback, and the goal task not exhausted. Only then are the map's own
     /// bombs the goals' to defuse (LevelPlan::gate_spare_map_bombs); with the goals out of play the counters treat them as on any map.
     bool gate_goals_live{false};
+    /// A pile lies behind a field at the first look of a gate map (plan_field: its route has fire cells or bombs, and no walk with one kind of them open reaches it), the breach can
+    /// start (field_startable) and the plan plays it (LevelPlan::gate_field): FieldTask works the piles that were Sealed or Mixed at that look (`field_piles`, MapInfo::piles()
+    /// indices), and the gate goals leave them to it, also once the work has changed their gates. Decided once with gate_map.
+    bool field_map{false};
+    std::vector<uint32_t> field_piles;
 };
 
 /// Whether the fire walls in front of the own thief hole are wanted at this look, by the level's trigger: an enemy Thief ant has been seen lately (Easy, Medium, Hard), an enemy that
