@@ -3,7 +3,7 @@
 //   S2 the report: "works in the original game" is no Fatal and no Warning, a note does not count; the codes' texts are stable and distinct; the order
 //   S3 files: what the reader refuses, with its sentence; a file that loads is the profile of its level and of what its file left out
 //   S4 stricter than the remake: a file that the profile calls original-safe has no Fatal and no Warning in the remake's own check (hostile files, fixed seeds)
-//   S5 the library: the six original maps and the 534 players' maps, the numbers of docs/MAP_FORMAT.md
+//   S5 the library: the six original maps and the 534 players' maps, the numbers of docs/MAP_FORMAT.md, and a hash of every finding (a golden taken before the two kinds)
 #include "ants_assets/lvl_checker.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
@@ -800,6 +800,37 @@ void s5_library() {
     });
 }
 
+// The whole library's findings must not move: FNV-1a 64 of every map's report (check_original_safe(...).describe(), once with the game's limits and once with the limits
+// of a new map), in library order. The values were taken on the profile as it was before the checker learned the two kinds and the 90-row rule (a map of the library has at
+// most 81 rows), so a change that alters a sentence, a severity or the order of a finding for a Classic map within the new-map limits fails here.
+constexpr uint64_t kGoldenGameLimits = 217177084291266274ull;
+constexpr uint64_t kGoldenNewMapLimits = 217177084291266274ull;     // (the same: every map of the library is within the limits of a new map)
+
+uint64_t fnv1a(uint64_t h, const std::string& text) {
+    for (const char c : text) h = (h ^ static_cast<uint8_t>(c)) * 1099511628211ull;
+    return (h ^ 0xFFu) * 1099511628211ull;      // (a separator: the end of one report)
+}
+
+void s5_golden() {
+    run_case("S5.2 The Findings Of The 540 Library Maps Are Byte For Byte What They Were (Game Limits And New-Map Limits)", [] {
+        std::vector<std::string> paths;
+        for (const char* name : kOriginals) paths.push_back(maps_dir() + "/" + name);
+        const std::string folder = std::string(ANTS_SOURCE_DIR) + "/Community-Maps";
+        for (const std::string& name : listed_community_maps(folder)) paths.push_back(folder + "/" + name);
+        uint64_t game = 14695981039346656037ull;
+        uint64_t fresh = 14695981039346656037ull;
+        for (const std::string& path : paths) {
+            const std::vector<uint8_t> bytes = read_map(path);
+            game = fnv1a(game, check_original_safe(bytes.data(), bytes.size()).describe());
+            fresh = fnv1a(fresh, check_original_safe(bytes.data(), bytes.size(), LevelLimits::for_new_maps()).describe());
+        }
+        std::cout << "\n    golden game " << game << " new-map " << fresh << "\n";
+        CHECK(paths.size() == 540u);
+        CHECK_MSG(game == kGoldenGameLimits, std::to_string(game));
+        CHECK_MSG(fresh == kGoldenNewMapLimits, std::to_string(fresh));
+    });
+}
+
 }  // namespace
 
 int main() {
@@ -811,6 +842,7 @@ int main() {
     s3_files();
     s4_stricter();
     s5_library();
+    s5_golden();
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
