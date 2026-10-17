@@ -67,7 +67,7 @@ bool decode_query_value(const std::string& raw, std::string& out) {
 
 }  // namespace
 
-// The query of GET /history: limit (1 - 100, default 50), offset, sort, format, result, who, rec, colour, mode, q. Every key once, every value one of its words; anything else is an error that names the key.
+// The query of GET /history: limit (1 - 100, default 50), offset, sort, format, result, who, rec, color, mode, q. Every key once, every value one of its words; anything else is an error that names the key. `colour` is the older spelling of `color` (same meaning, same words); the two together are refused like a key twice.
 bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& error) {
     q = HistoryQuery();
     std::set<std::string> seen;
@@ -78,14 +78,15 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
         at = amp == std::string::npos ? raw.size() : amp + 1;
         if (pair.empty()) continue;
         const size_t eq = pair.find('=');
-        const std::string key = pair.substr(0, eq);
+        const bool older = pair.compare(0, eq, "colour") == 0;                   // (the older spelling of color: the same key, named by its American spelling in every message)
+        const std::string key = older ? std::string("color") : pair.substr(0, eq);
         std::string value;
         if (eq == std::string::npos || !decode_query_value(pair.substr(eq + 1), value)) {
             error = "\"" + key + "\" must be written key=value, with the value as a browser writes it";
             return false;
         }
         if (!seen.insert(key).second) {
-            error = "\"" + key + "\" is given twice";
+            error = "\"" + key + "\" is given twice" + (key == "color" ? " (colour= is the older spelling of color=: give only one of them, once)" : "");
             return false;
         }
         const auto bad = [&](const std::string& what) {
@@ -135,7 +136,7 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
             else if (value == kHistoryModeScore) q.mode = HistoryQuery::Mode::HighestScore;
             else if (value == kHistoryMode187) q.mode = HistoryQuery::Mode::Kills187;
             else return bad("all, highest-score or 187");
-        } else if (key == "colour") {
+        } else if (key == "color") {
             if (value == "all") q.color = -1;                              // (lower case, like every other word of the query)
             else if (value == "green") q.color = 0;
             else if (value == "red") q.color = 1;
@@ -146,7 +147,7 @@ bool parse_history_query(const std::string& raw, HistoryQuery& q, std::string& e
             if (value.size() > kMaxHistoryText) return bad("at most " + std::to_string(kMaxHistoryText) + " characters");
             q.text = value;
         } else {
-            error = "unknown parameter \"" + key + "\"; they are limit, offset, sort, format, result, who, rec, colour, mode and q";
+            error = "unknown parameter \"" + key + "\"; they are limit, offset, sort, format, result, who, rec, color, mode and q";
             return false;
         }
     }

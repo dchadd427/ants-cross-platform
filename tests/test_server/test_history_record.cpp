@@ -410,7 +410,8 @@ int main() {
         HistoryRecord r = record_of(f);
         ctl::JsonValue lean = history_record_to_json(r, false);
         ASSERT_TRUE(lean.get("v").is_null() && lean.get("mode").str() == "187" && lean.get("result").str() == "decided" && lean.get("id").str() == kId);
-        ASSERT_TRUE(lean.get("seats").at(0).get("bombs_planted").is_null() && lean.get("seats").at(0).get("colour").str() == "Green" && lean.get("seats").at(1).get("colour").str() == "Red");
+        ASSERT_TRUE(lean.get("seats").at(0).get("bombs_planted").is_null() && lean.get("seats").at(0).get("color").str() == "Green" && lean.get("seats").at(1).get("color").str() == "Red");
+        for (size_t i = 0; i < 2; ++i) ASSERT_EQ(lean.get("seats").at(i).get("colour").str(), lean.get("seats").at(i).get("color").str());     // (the older key, deprecated: the same value)
         ASSERT_TRUE(lean.get("details").is_null() && lean.get("quitter").is_null() && lean.get("draw").as_bool_or(true) == false);
         r.details = "{\"events\":[1,2,3]}";
         ctl::JsonValue full = history_record_to_json(r, true);

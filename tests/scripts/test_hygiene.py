@@ -270,31 +270,42 @@ class Spelling(Tree):
             f.write(b"\0\0" + self.UK.encode())
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
 
-    def test_a_kept_name_passes_only_in_its_own_files(self):
+    def test_the_older_spelling_passes_only_in_the_places_that_still_have_it(self):
         uk = self.UK
-        forms = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk, "{ %s: 'all' }" % uk]
-        for rel in ("web/history_page.js", "web/match.html", "src/ants_server/history_record.cpp", "docs/REPLAYS.md"):
-            self.put(rel, "\n".join(forms) + "\n")
+        page_forms = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk]
+        self.put("web/history_page.js", "\n".join(page_forms) + "\n")                    # the pages' fallback: the key, the parameter, the property
+        self.put("src/ants_server/history_record.cpp", 'o.set("%s", x);\n' % uk)           # the deprecated key, written
+        self.put("docs/REPLAYS.md", "`%s=black` and `\"%s\"`\n" % (uk, uk))
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
-        for rel in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp"):        # the same text anywhere else is found, line by line
-            self.put(rel, "\n".join(forms) + "\n")
+        self.put("src/ants_server/control_history.cpp", "bool x = q.%s == 1;\n" % uk)       # a property is not kept here (only the quoted name and the parameter)
+        self.put("src/ants_server/history_record.cpp", 'o.set("%s", x);\n// and %s=blue\n' % (uk, uk))   # nor is the parameter in the record's writer
+        for rel in ("web/match.html", "web/matches.html", "web/live.html", "web/replay_page.js", "src/ants_net/x.cpp"):    # the readers that now say color
+            self.put(rel, "\n".join(page_forms) + "\n")
         out = ch.check_spelling(self.root, self.files())
-        self.assertEqual(len(out), 3 * len(forms))
-        self.assertTrue(all(o.split(":")[0] in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp") for o in out))
+        self.assertEqual(len(out), 2 + 5 * len(page_forms))
+        self.assertTrue(all(o.split(":")[0] != "web/history_page.js" for o in out))
 
-    def test_the_wire_notice_and_the_filter_list_have_their_own_places(self):
+    def test_only_the_lower_case_forms_are_kept(self):
+        uk = self.UK
+        self.put("web/history_page.js", "/history?%s=blue\n/history?%s=blue\nseat.%s\n" % (uk, uk.capitalize(), uk.upper()))
+        self.assertEqual([x.split(":")[1] for x in ch.check_spelling(self.root, self.files())], ["2", "3"])
+
+    def test_a_kept_pattern_that_no_line_uses_is_a_finding(self):
+        uk = self.UK
+        kept = {"web/a.js": [r"\.%s\b" % uk, r"\b%s=" % uk], "web/gone.js": [r"\.%s\b" % uk]}
+        self.put("web/a.js", "x = s.%s;\n" % uk)
+        out = ch.check_spelling_table(self.root, self.files(), kept)
+        self.assertEqual(len(out), 2)
+        self.assertTrue(out[0].startswith("web/a.js: the kept spelling pattern") and out[1].startswith("web/gone.js: in the spelling table but not tracked"))
+
+    def test_the_wire_notice_has_its_own_places(self):
         uk = self.UK
         notice = "This map cannot be played with these %ss." % uk
-        listing = "limit, offset, who, rec, %s, mode" % uk
         for rel in ("include/ants_net/protocol.hpp", "web/front/lobby_rules.js"):
             self.put(rel, notice + "\n")
-        for rel in ("docker/nginx.conf", "include/ants_server/control.hpp", "src/ants_server/control_history.cpp"):
-            self.put(rel, listing + "\n")
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
         self.put("web/lobby.html", notice + "\n")                                         # the notice is not allowed in a page that does not compare with it
-        self.put("docs/OTHER.md", listing + "\n")
-        self.put("web/history_page.js", listing + "\n")                                   # the list form is for the three places only
-        self.assertEqual(sorted(x.split(":")[0] for x in ch.check_spelling(self.root, self.files())), ["docs/OTHER.md", "web/history_page.js", "web/lobby.html"])
+        self.assertEqual([x.split(":")[0] for x in ch.check_spelling(self.root, self.files())], ["web/lobby.html"])
 
     def test_a_page_that_reads_a_parsed_player_does_not_read_the_records_key(self):
         # parsePlayer("Green (Mika)") gives { color, name }; the history record's seat key is another thing (the live page slipped once)

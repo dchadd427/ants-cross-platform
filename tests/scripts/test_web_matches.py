@@ -274,7 +274,9 @@ class TheSharedCode(unittest.TestCase):
     MUTANTS = {
         "a bot with a name is not shown as Name (bot, Level)": ("' (bot, ' + bot + ')' : 'Bot (' + bot + ')'", "' (' + bot + ')' : 'Bot (' + bot + ')'"),
         "a bot with no name is not Bot (Level)": ("'Bot (' + bot + ')'", "bot"),
-        "a seat with an unknown color is a seat": ("if (s && typeof s === 'object' && COLORS.indexOf(s.colour) !== -1) out.push(s);", "if (s && typeof s === 'object') out.push(s);"),
+        "a seat with an unknown color is a seat": ("if (s && typeof s === 'object' && colorOf(s)) out.push(s);", "if (s && typeof s === 'object') out.push(s);"),
+        "an older server's seat (the older key alone) has no color": ("COLORS.indexOf(s.colour) !== -1 ? s.colour : ''", "''"),
+        "an old bookmark's older parameter is ignored": ("if (v === null && f.key === 'color') v = q.get('colour');", ""),
         "the winner of a side is not its row's": ("winner: r.winner === true, left: false }); members", "winner: false, left: false }); members"),
         "a seat with no row is a side that left": ("winner: false, left: true }); });\n        return out;", "winner: false, left: false }); });\n        return out;"),
         "a card of mode 187 calls its kills a score": ("if (k && sort === 'score' && rec && rec.mode === '187') k = SORT_KEYS.kills;", ""),
