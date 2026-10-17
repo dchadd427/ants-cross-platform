@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Under the hood: the map checker now answers for each of the two kinds of map (a Classic map, and an Extended map that only the new version loads), and a new Classic map is limited to 90 rows, because the original game's ants cannot enter or cross the 91st row of a taller map; a taller map is an Extended map. No map of the library is taller than 81 rows. Nothing changes in the game or on the site; the map maker's limits and checks are prepared.
 
+## v0.12.67 - 2026-10-16 - 187 mode: the out-of-ants line, the start line and the results page on screen
+
+**For players:**
+- **187 on screen.** In a 187 game (food-free, kills decide; the room leader picks it under Game type) the chat log begins with "Game started! Most kills wins." and says "<Name> (<Color>) is out of ants!" once, to every player, when a team has no ant, egg or hatch left. The results page has its own look: the headings Kills, Ants lost and Ants left, and a line at the top that says how the match ended ("<Name> is the last colony standing!", "Time is up. The most kills wins!" or "Nobody is left. The most kills wins!"), also on the 4:3 page, where it takes two lines. Games of the original's rules look as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1a5da9ba...348e8741), [187 in the rules](docs/GAMEPLAY.md)
+
 ## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
 
 **For players:**

@@ -601,6 +601,41 @@ void screen_scenarios(const assets::AssetArchive& arc) {
         three.update(0.3f);
         frame("screen.results.3teams.gap", [&](FrameRecorder& r) { three.render(r, arc); });
     }
+    // The results page of the game mode 187 (new fingerprints; none of the screens above changes): the classic page (the headline on two lines), the three endings, a pair of allies
+    {
+        const auto make187 = [](uint8_t standing, bool allied) {
+            sim::MatchResult result;
+            result.is_over = true;
+            result.present_mask = 0x0F;
+            result.standing = standing;
+            if (allied) result.ally = {1, 0, sim::ALLIANCE_NONE, sim::ALLIANCE_NONE};
+            const int32_t kills[4] = {14, 3, 15, 11};
+            for (size_t p = 0; p < 4; ++p) {
+                result.stats[p].score = kills[p];
+                result.stats[p].enemy_killed = static_cast<uint32_t>(kills[p]);
+                result.stats[p].friendly_lost = static_cast<uint32_t>(7 + p);
+                result.ants_left[p] = p == 0 ? 5u : 0u;
+            }
+            result.decide_winners();
+            return result;
+        };
+        const auto page187 = [&](const std::string& name, const sim::MatchResult& result, bool wide) {
+            ScorecardModal card;
+            card.set_wide_layout(wide);
+            card.set_player_names({"Juniper", "Odile", "Marta", "Theo"});
+            card.show(result, 0, sim::GameMode::Kills187);
+            card.update(0.3f);
+            frame(name, [&](FrameRecorder& r) { card.render(r, arc); });
+        };
+        page187("screen.results187.standing", make187(0, false), false);
+        page187("screen.results187.clock", make187(sim::PLAYER_NEUTRAL, false), false);
+        page187("screen.results187.allies_standing", make187(0, true), false);
+        sim::MatchResult nobody = make187(sim::PLAYER_NEUTRAL, false);
+        nobody.ants_left = {};
+        page187("screen.results187.nobody", nobody, false);
+        page187("screen.results187.wide.standing", make187(0, false), true);
+        page187("screen.results187.wide.clock", make187(sim::PLAYER_NEUTRAL, false), true);
+    }
 }
 
 // The desktop start menu (include/ants_app/start_menu.hpp; remake only, so these fingerprints are new: none of the classic screens above changes): every panel, a selection, the
