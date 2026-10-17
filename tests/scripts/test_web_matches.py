@@ -255,7 +255,8 @@ class TheGamePagesStats(unittest.TestCase):
     def test_fullscreen_of_the_match_page_is_the_games_own_not_the_frames(self):
         # the frame holds the game page, whose own Fullscreen button makes the game's stage fullscreen (the picture as large as the screen allows, the bar over it); the frame itself goes only where the page cannot be reached
         match = read("web", "match.html")
-        self.assertIn("own = d.getElementById('fullscreen-btn'); if (own) { if (finger) d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); own.click(); return; }", match)
+        self.assertIn("var touched = finger; finger = false;", match)                                        # (a finger is told once: a later key press on the button is none)
+        self.assertIn("if (touched) { try { d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); } catch (e) { /* no PointerEvent there: the page just is not told of the finger */ } } own.click(); return;", match)
         self.assertLess(match.index("own.click(); return;"), match.index("var go = f.requestFullscreen"))
         # (a finger that pressed the button outside the frame is told to the frame: the strip that calls the bar back is there from the start)
 
