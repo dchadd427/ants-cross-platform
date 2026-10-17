@@ -14,6 +14,7 @@
 //      the eraser takes it whole, and the layers are the same bytes as before; undo and redo are byte for byte; the same on the same maps as Extended maps (version 9)
 //   D  what is in the way: a hill, starting ants or a food pile are never taken away by a tap (a sentence says so); an object under the new one goes whole; the same place twice is nothing
 //   F  the solid bit for the objects of the Objects tool too (a rock, a power-up), set where they stand and cleared when they go, other flags kept, a hill's bits left alone
+//   G  every object of the 540 maps taken away cell by cell: no cell keeps the solid bit without an object (row 0 and hills apart)
 //   E  the edge of the map, a version 9 map wider than 256 (relative anchors), a dictionary that is too short, the box that the canvas marks
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
@@ -344,6 +345,11 @@ function caseD() {
         check(!again.error && again.cells.length === 0 && again.solid.length === 0, tag + 'the same object on the same place changes nothing');
         const steps = eo.history.size().strokes;
         check(eo.act(again) === null && eo.history.size().strokes === steps, tag + 'and it is no step of the history');
+        // an object whose tile is not in the table of solid tiles (a plant) that goes whole with the cell under the new object: the solid bit of its other cell goes too
+        const fq = open(version, 30, 30), eq = editorOn(fq);
+        for (const c of [10, 11]) { putCell(eq.file, 2, 10, c, 410, c === 10 ? 1 : 0, version === 8 ? (10 | (10 << 8)) : (((10 - 10) & 255) | (((10 - c) & 255) << 8))); putCell(eq.file, 1, 10, c, 485, 1, 0xCDCD); }
+        eq.act(Objects.place(eq.file, g1, 11, 10));
+        check(tileAt(eq.file, 10, 11) === EMPTY2 && (Edit.flags(eq.file, 1, 10 * 30 + 11) & 1) === 0, tag + 'a plant (not in the table of solid tiles) that goes under a new object loses the solid bit of its other cell too');
         // a small object put on a bigger one takes it away whole (the Objects tool, as before) and its solid bit stays
         const st = eo.begin('objects', 302);
         st.stamp(15, 15, 1);
@@ -413,6 +419,37 @@ function caseE() {
     equal(View.cursorRect(f, { row: 5, column: 5 }, 1), { r0: 5, r1: 5, c0: 5, c1: 5 }, 'and one cell');
 }
 
+// ---- G ----
+// every object of every map taken away cell by cell: no cell is left that has the solid bit and no object (the original clears the bit whenever it clears a cell: tiles that are not in the table of
+// solid tiles, such as bombs and plants, stand on cells that carry it); row 0 keeps its bit; a hill's cells are not touched
+function caseG(maps) {
+    let cells = 0, left = 0, row0 = 0, hills = 0, n = 0;
+    for (const m of maps) {
+        for (const bytes of (++n % 9 === 0 ? [m.bytes, toV9(m.bytes)] : [m.bytes])) {
+            const f0 = File.parse(bytes.slice()), ed = editorOn(f0), list = [];
+            for (let i = 0; i < f0.cells; i++) {
+                const t = Edit.tile(f0, 2, i);
+                if (t === EMPTY2) continue;
+                if (t >= 245 && t <= 248) { hills++; continue; }
+                list.push(i);
+            }
+            const er = ed.begin('erase', null);
+            for (const i of list) er.stamp(Math.floor(i / f0.columns), i % f0.columns, 1);
+            er.end();
+            const f = ed.file;
+            for (const i of list) {
+                cells++;
+                const t = Edit.tile(f, 2, i), bit = Edit.flags(f, 1, i) & 1, row = Math.floor(i / f.columns);
+                if (t !== EMPTY2) continue;
+                if (row === 0) { row0++; continue; }
+                if (bit) left++;
+            }
+        }
+    }
+    check(cells > 200000, cells + ' object cells of the library were taken away (' + hills + ' hill cells left alone, ' + row0 + ' in row 0)');
+    check(left === 0, left + ' cells are left with the solid bit and no object');
+}
+
 // ---- F ----
 function caseF() {
     for (const version of [8, 9]) {
@@ -456,7 +493,7 @@ const maps = readAll();
 // (a list is printed and the script ends by itself: process.exit would cut a long output to a pipe short)
 if (argv.includes('--list-objects')) listObjects(maps);
 else {
-    const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['C put and taken away on the library', caseC], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF]];
+    const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['C put and taken away on the library', caseC], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF], ['G the solid bit goes with every object', caseG]];
     for (const [name, fn] of cases) {
         const before = failures;
         try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

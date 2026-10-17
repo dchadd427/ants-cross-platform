@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var doc = document, win = window;
-    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapEdit', 'MapBlocks', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapCanvas', 'MapTools'];
+    var NEEDED = ['LvlCore', 'createLvlCore', 'MapFile', 'MapTiles', 'MapSolid', 'MapEdit', 'MapBlocks', 'MapObjects', 'MapPalette', 'MapView', 'MapSizes', 'MapChecks', 'MapDialog', 'MapCanvas', 'MapTools'];
     var GROUND = 485, EGGS = 6, MINUTES = 10;          // a new map: plain grass (docs/MAP_FORMAT.md, "The blank map"), 6 eggs a team, 10 minutes
     var NEW_NAME = 'My map';
 

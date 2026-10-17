@@ -34,7 +34,7 @@
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
         var state = { tool: 'ground', ground: 485, objects: 302, big: Palette.BIGGER[0][0], brush: 1, fill: false, team: 0, ants: 4, stages: 4 };
-        var editor = null, current = null, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
+        var editor = null, current = null, told = false, fits = '';                     // `fits`: a note when fewer ants than asked for found room, until the next choice
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function paints() { return Palette.paints(state.tool); }
@@ -45,7 +45,25 @@
         function bigNow() { return Palette.itemOf('bigger', state.big); }
         function bigText(item) { return item.label + ' \u00b7 ' + plural(item.cells.length, 'cell', 'cells'); }
         // the name and, under it, the cells, in a node (a button or a pick): two lines, so that a long name does not break in the middle
-        function bigLines(node, item) { node.textContent = ''; node.appendChild(el('b', 'pkn', item.label)); node.appendChild(el('small', 'pkc', plural(item.cells.length, 'cell', 'cells'))); }
+        function bigLines(node, item) {
+            var b = item.box;
+            node.textContent = '';
+            node.appendChild(el('b', 'pkn', plural(item.cells.length, 'cell', 'cells') + ', ' + (b.c1 - b.c0 + 1) + ' x ' + (b.r1 - b.r0 + 1)));
+            node.appendChild(el('small', 'pkc', item.label));
+        }
+        // (the squares are <em>, not <span>: the text of the palette button is the first <span> in it)
+        // the shape of a bigger object in its chip: a small square for each cell of its box, filled where the object stands, the anchor outlined
+        function footprint(chip, item) {
+            var b = item.box, rows = b.r1 - b.r0 + 1, cols = b.c1 - b.c0 + 1, size = Math.max(3, Math.min(9, Math.floor(26 / Math.max(rows, cols))));
+            chip.textContent = ''; chip.className = 'fp';
+            chip.style.background = 'none';
+            chip.style.gridTemplateColumns = 'repeat(' + cols + ', ' + size + 'px)'; chip.style.gridAutoRows = size + 'px';
+            for (var r = b.r0; r <= b.r1; r++) for (var c = b.c0; c <= b.c1; c++) {
+                var cell = el('em', r === 0 && c === 0 ? 'org' : '');
+                if (item.cells.some(function (rc) { return rc[0] === r && rc[1] === c; })) cell.style.background = item.color;
+                chip.appendChild(cell);
+            }
+        }
         function heading(tool) { return tool === 'bigger' ? 'Bigger objects' : Palette.tool(tool).label; }
 
         // ---- the buttons ----
@@ -123,6 +141,7 @@
             host.swatches.hidden = tool === 'food' || tool === 'bigger';
             host.swatches.className = hasTeams() ? 'swatches teams' : 'swatches';
             var chip = host.tile.querySelector('i'), text = host.tile.querySelector('span');
+            chip.textContent = '';
             if (hasTeams()) {
                 host.swatches.setAttribute('aria-label', 'Team of the ' + (tool === 'hills' ? 'hill' : 'ants'));
                 Palette.teams().forEach(function (team) {
@@ -135,7 +154,7 @@
                 host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
             } else if (tool === 'bigger') {
                 var big = bigNow();
-                chip.className = ''; chip.style.background = big.color;
+                footprint(chip, big);
                 bigLines(text, big);
                 host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
@@ -198,7 +217,8 @@
                         list.forEach(function (item) {
                             var b = el('button', 'pick'), chip = el('i');
                             b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(item.id === chosen)); b.setAttribute('data-tile', String(item.id));
-                            chip.style.background = item.color; b.appendChild(chip);
+                            if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;
+                            b.appendChild(chip);
                             var who = el('span', '', ''); if (tool === 'bigger') { bigLines(who, item); b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;
                             b.appendChild(who);
                             b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });
@@ -284,6 +304,7 @@
                 if (places()) { place(cell); return false; }
                 if (!paints()) return false;
                 current = startStroke();
+                told = false;
                 if (!current) return false;
                 if (state.fill && state.tool !== 'erase') {
                     current.fill(cell.row, cell.column);
@@ -293,14 +314,22 @@
                     showButtons();
                     return false;
                 }
-                current.stamp(cell.row, cell.column, state.brush);
+                var changed = current.stamp(cell.row, cell.column, state.brush);
                 canvas.markDirty(current.takeDirty());
+                var why = current.refusal();
+                if (why) {
+                    told = true;
+                    if (env.say) env.say('It cannot be put there', why);
+                    if (!changed) { current.end(); current = null; return false; }
+                }
                 return true;
             },
             extend: function (from, to) {
                 if (!current) return;
                 current.segment(from.row, from.column, to.row, to.column, state.brush);
                 canvas.markDirty(current.takeDirty());
+                var why = current.refusal();
+                if (why && !told) { told = true; if (env.say) env.say('It cannot be put there', why); }
             },
             end: function () {
                 if (!current) return;
@@ -373,7 +402,7 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt }); current = null; showButtons(); showInfo(); },
+            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             isClean: function () { return !editor || editor.history.isClean(); },
             isSaved: function () { return !editor || editor.history.isSaved(); },

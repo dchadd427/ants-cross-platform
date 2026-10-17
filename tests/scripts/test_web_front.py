@@ -49,7 +49,9 @@ MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapm
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
-BUDGET = 1000 * 1000        # bytes: the whole folder (about 0.66 MB: the pictures, the font and the scripts); a picture that grows past this is a decision, not an accident
+BUDGET = 1300 * 1000        # bytes: the whole folder (about 0.98 MB: some 427 KB of pictures, the font, the lobby's scripts and the map maker's); a picture that grows past this is a decision, not an accident
+EDITOR_BUDGET = 260 * 1000        # bytes: the map maker's own scripts and style (mapmaker_*.js, mapmaker.css), measured apart from the pictures so that the editor's growth is seen
+EDITOR_GZIP_BUDGET = 80 * 1000      # bytes: the same, gzipped (what a player downloads)
 
 
 def read(*parts):
@@ -228,6 +230,16 @@ class TheFolder(unittest.TestCase):
     def test_the_whole_folder_stays_small(self):
         total = sum(os.path.getsize(os.path.join(FRONT, name)) for name in os.listdir(FRONT))
         self.assertLess(total, BUDGET, "web/front/ is %d bytes" % total)
+
+    def test_the_map_maker_stays_small_apart_from_the_pictures(self):
+        import gzip
+        raw = zipped = 0
+        for name in MAPMAKER_FILES:
+            data = read_bytes("web", "front", name)
+            raw += len(data)
+            zipped += len(gzip.compress(data, 9))
+        self.assertLess(raw, EDITOR_BUDGET, "the map maker's scripts and style are %d bytes" % raw)
+        self.assertLess(zipped, EDITOR_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
     def test_the_font_is_a_byte_copy_of_the_games_own_with_its_licence_beside_it(self):
         for name in FONT_FILES:

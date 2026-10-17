@@ -24,5 +24,9 @@
     // hills, whose solid bits are the home's (a few cells of a library hill have the bit, and the eraser and a hill put again leave the bits of layer 1 as they were)
     function sets(id) { return is(id) && !(id >= 245 && id <= 248); }
 
-    return { COUNT: COUNT, BITS: BITS, is: is, sets: sets };
+    // does taking an object of this tile away clear the solid bit of its cells: every object but the hills (the original clears the bit whenever it clears a cell, whatever the tile: the library has
+    // bombs, plants and other tiles that are not in the table and stand on cells that carry the bit); an empty cell is not an object
+    function clears(id) { return id !== 0x7FFE && !(id >= 245 && id <= 248); }
+
+    return { COUNT: COUNT, BITS: BITS, is: is, sets: sets, clears: clears };
 });

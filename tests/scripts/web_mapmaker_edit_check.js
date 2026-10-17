@@ -1037,7 +1037,7 @@ function caseL() {
     p.doc.key('k');
     check(p.tools.state().tool === 'bigger' && p.button('bigger').getAttribute('aria-pressed') === 'true', 'the letter K chooses Bigger');
     check(p.host.title.textContent === 'Bigger objects' && !p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.hidden && p.host.stepper.hidden, 'its palette is the one button (no swatches, no stepper, on a desktop too)');
-    check(p.host.tile.querySelector('.pkn').textContent === 'grass4' && p.host.tile.querySelector('.pkc').textContent === '4 cells' && p.host.tile.querySelector('i').style.background === list[0].color && p.host.name.textContent === 'grass4 · 4 cells', 'the button says the game\'s name and, under it, the number of cells: ' + p.host.tile.querySelector('span').textContent);
+    check(p.host.tile.querySelector('.pkn').textContent === '4 cells, 2 x 2' && p.host.tile.querySelector('.pkc').textContent === 'grass4' && p.host.tile.querySelector('i').className === 'fp' && p.host.tile.querySelector('i').children.length === 4 && p.host.tile.querySelector('i').children.filter((c) => c.className === 'org').length === 1 && p.host.tile.querySelector('i').children.filter((c) => c.style.background === list[0].color).length === 4 && p.host.name.textContent === 'grass4 · 4 cells', 'the button says the game\'s name and, under it, the number of cells: ' + p.host.tile.querySelector('span').textContent);
     check(pt.tapOnly() && pt.door() && pt.size() === 1 && p.host.fill.disabled && p.brush(3).disabled, 'a tap puts it whole (the cell that is tapped has the dot), no brush and no Fill');
     equal(pt.shape(), list[0].box, 'the canvas marks the box of the object');
     check(/Erase takes it away whole/.test(p.host.hint.children[0].textContent) && p.host.hint.children[1].textContent.length > 0, 'the notes say so');
@@ -1045,11 +1045,12 @@ function caseL() {
     p.host.tile.click();
     const sheet = p.sheets[p.sheets.length - 1], picks = sheet.body.children[0].children;
     check(sheet.spec.title === 'Bigger objects' && picks.length === 29 && picks.every((b) => b.className === 'pick') && sheet.body.children[1].className === 'pickinfo', 'the sheet has the 29 objects and a line');
-    equal(picks.map((b) => b.querySelector('.pkn').textContent + ' ' + b.querySelector('.pkc').textContent).slice(0, 3), ['grass4 4 cells', 'grassmed1 10 cells', 'grass2 6 cells'], 'named as the game names them, with their cells');
+    equal(picks.map((b) => b.querySelector('.pkn').textContent + ' ' + b.querySelector('.pkc').textContent).slice(0, 3), ['4 cells, 2 x 2 grass4', '10 cells, 5 x 2 grassmed1', '6 cells, 2 x 3 grass2'], 'named as the game names them, with their cells');
+    equal(picks.map((b) => b.querySelector('i').children.filter((c) => c.style.background).length), list.map((i) => i.cells.length), 'every chip draws as many filled squares as the object has cells');
     equal(picks.slice(0, 2).map((b) => b.getAttribute('aria-label')), ['grass4 · 4 cells', 'grassmed1 · 10 cells'], 'and a screen reader hears both in one');
     check(picks[0].getAttribute('aria-checked') === 'true' && picks.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1, 'the one that is chosen is marked');
     picks[1].click();
-    check(p.tools.state().big === 1324 && sheet.ctl.closed && p.host.tile.querySelector('.pkn').textContent === 'grassmed1' && p.host.tile.querySelector('.pkc').textContent === '10 cells', 'a pick is chosen, the sheet closes and the button follows');
+    check(p.tools.state().big === 1324 && sheet.ctl.closed && p.host.tile.querySelector('.pkn').textContent === '10 cells, 5 x 2' && p.host.tile.querySelector('.pkc').textContent === 'grassmed1', 'a pick is chosen, the sheet closes and the button follows');
     equal(pt.shape(), list[1].box, 'and the marked box follows');
     check(p.tools.state().ground === 485 && p.tools.state().objects === 302, 'the ground and the objects that were chosen are as they were');
     // a tap puts it whole
@@ -1088,6 +1089,33 @@ function caseL() {
     q.button('erase').click();
     qt.begin({ row: 4, column: 4 }); qt.end();
     check(Edit.tile(q.file(), 2, 4 * 24 + 4) === EMPTY2 && (Edit.flags(q.file(), 1, 4 * 24 + 4) & 1) === 0, 'and it is not when the rock is taken away');
+    // the Objects tool never takes a hill, a team's ants or a food pile away: the brush is refused as a whole, in plain words, and nothing changes
+    const layers = (f) => JSON.stringify(Array.from(f.bytes.subarray(f.layer1, f.blocksAt)));
+    const r = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), rt = r.painter();
+    r.button('hills').click(); r.host.swatches.children[2].click(); rt.begin({ row: 8, column: 8 });
+    r.button('ants').click(); r.host.swatches.children[0].click(); rt.begin({ row: 18, column: 3 });
+    r.button('food').click(); rt.begin({ row: 3, column: 18 });
+    r.button('objects').click();
+    const before = layers(r.file()), editsBefore = r.log.edits;
+    r.said.length = 0;
+    check(rt.begin({ row: 9, column: 9 }) === false && /^It cannot be put there: Blue\u2019s hill is here\. Move it first, or take it away with Erase\./.test(r.said[0] || '') && layers(r.file()) === before, 'a rock put where a hill is: ' + r.said[0] + ', and nothing changed');
+    r.brush(9).click(); r.said.length = 0;
+    check(rt.begin({ row: 12, column: 12 }) === false && /Blue\u2019s hill is here/.test(r.said[0] || '') && layers(r.file()) === before, 'a brush of 9 that touches the hill is refused as a whole, not only on the hill\'s cells');
+    r.said.length = 0;
+    check(rt.begin({ row: 18, column: 3 }) === false && /Starting ants are in the way/.test(r.said[0] || '') && layers(r.file()) === before, 'over a team\'s starting ants: ' + r.said[0]);
+    r.said.length = 0;
+    check(rt.begin({ row: 3, column: 18 }) === false && /food pile is in the way/.test(r.said[0] || '') && layers(r.file()) === before, 'over a food pile: ' + r.said[0]);
+    r.brush(1).click(); r.said.length = 0;
+    check(rt.begin({ row: 20, column: 20 }) === true && r.said.length === 0, 'a free place is as it was');
+    rt.end();
+    check(r.log.edits > editsBefore && Edit.tile(r.file(), 2, 20 * 24 + 20) === 302, 'and the rock is put');
+    // a drag that runs into the hill says so once and goes on where it can
+    r.said.length = 0;
+    r.button('objects').click();
+    check(rt.begin({ row: 8, column: 2 }) === true, 'a drag starts beside the hill');
+    rt.extend({ row: 8, column: 2 }, { row: 8, column: 12 });
+    rt.end();
+    check(r.said.length === 1 && Edit.tile(r.file(), 2, 8 * 24 + 2) === 302 && Edit.tile(r.file(), 2, 8 * 24 + 8) === 246 && hillFootprint(r.file(), 246).length === 16, 'a drag over the hill says it once and leaves the hill whole');
 }
 
 const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL]];

@@ -177,7 +177,7 @@
 
         function begin(kind, tileId) {
             if (!seen || seen.length !== 2 * self.file.cells) seen = new Uint8Array(2 * self.file.cells);
-            var f = self.file, keys = [], before = [], dirty = [], splices = [], closed = false;
+            var f = self.file, keys = [], before = [], dirty = [], splices = [], closed = false, refused = '';
 
             function touch(layer, idx) {
                 var key = idx * 2 + layer - 1;
@@ -197,15 +197,17 @@
                 for (var i = 0; i < cells.length; i++) {
                     var gone = tile(f, 2, cells[i]);
                     touch(2, cells[i]); setCell(f, 2, cells[i], EMPTY2, 0, 0); dirty.push(cells[i]); n++;
-                    if (Solid.sets(gone)) setSolid(cells[i], false);
+                    if (Solid.clears(gone)) setSolid(cells[i], false);
                 }
                 return n;
             }
             function putObject(idx) {
+                var why = hooks.guard ? hooks.guard(f, idx) : '';                  // (a hill, a team's ants or a food pile is never taken away by a tap or a brush)
+                if (why) { refused = why; return 0; }
                 if (tile(f, 2, idx) === tileId && flags(f, 2, idx) === 1 && third(f, 2, idx) === ownAnchor(f, idx)) return 0;
                 var n = 0, old = tile(f, 2, idx);
                 if (old !== EMPTY2 && objectCells(f, idx).length > 1) n += removeObject(idx);       // (a bigger object goes whole: never half a hill)
-                else if (Solid.sets(old) && !Solid.sets(tileId)) setSolid(idx, false);
+                else if (Solid.clears(old) && !Solid.sets(tileId)) setSolid(idx, false);
                 touch(2, idx); setCell(f, 2, idx, tileId, 1, ownAnchor(f, idx)); dirty.push(idx);
                 if (Solid.sets(tileId)) setSolid(idx, true);
                 return n + 1;
@@ -222,7 +224,7 @@
                     var made = ensureTile(f, ch.names[i][0], ch.names[i][1]);
                     if (made.grew) f = self.file = hooks.rebase(made.bytes);
                 }
-                for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i]; touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; }
+                for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i], was = tile(f, 2, c[0]); touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false); }
                 for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);                 // (the solid bits of layer 1 that go with the cells)
                 for (i = 0; i < ch.splices.length; i++) {
                     var s = ch.splices[i];
@@ -243,6 +245,9 @@
                 // the brush put on a cell; returns the number of cells that changed
                 stamp: function (row, column, size) {
                     var rect = brushRect(f, row, column, size || 1), n = 0;
+                    if (kind === 'objects' && hooks.guard) {                      // (the whole brush is refused, not the cells that are free)
+                        for (var gr = rect.r0; gr <= rect.r1; gr++) for (var gc = rect.c0; gc <= rect.c1; gc++) { var why = hooks.guard(f, gr * f.columns + gc); if (why) { refused = why; return 0; } }
+                    }
                     for (var r = rect.r0; r <= rect.r1; r++) for (var c = rect.c0; c <= rect.c1; c++) n += put(r * f.columns + c);
                     return n;
                 },
@@ -270,6 +275,8 @@
                     }
                     return n;
                 },
+                // the sentence for what was in the way since the last call ('' when nothing was)
+                refusal: function () { var r = refused; refused = ''; return r; },
                 // the cells changed since the last call (a cell can be named twice), for the part of the screen to paint again
                 takeDirty: function () { var d = dirty; dirty = []; return d; },
                 // The patch of the stroke, ready for the history: only the cells whose words really differ from before

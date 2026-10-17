@@ -41,16 +41,13 @@
         }
         var words = {}, order = [];
         function put(idx, t, f, a) { if (!(idx in words)) order.push(idx); words[idx] = [t, f, a]; }
-        var mine = {};
-        for (i = 0; i < cells.length; i++) mine[cells[i].idx] = true;
         for (i = 0; i < cells.length; i++) {
             var idx = cells[i].idx, old = Edit.tile(file, 2, idx);
             if (old === EMPTY2 || (idx in words)) continue;
             var gone = Edit.objectCells(file, idx);                            // (an object under the new one goes whole)
             for (j = 0; j < gone.length; j++) {
                 if (gone[j] in words) continue;
-                put(gone[j], EMPTY2, 0, 0);
-                if (!mine[gone[j]] && Solid.sets(Edit.tile(file, 2, gone[j]))) change.solid.push([gone[j], false]);
+                put(gone[j], EMPTY2, 0, 0);                                    // (the solid bit of a cell that is emptied goes with it: mapmaker_edit.js)
             }
         }
         for (i = 0; i < cells.length; i++) {

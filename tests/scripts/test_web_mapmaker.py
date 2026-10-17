@@ -258,22 +258,28 @@ class TheCodeRuns(unittest.TestCase):
             "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && places(); },", "tapOnly: function () { return false; },"),
             "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
             "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && (state.tool === 'hills' || state.tool === 'bigger'); },", "door: function () { return false; },"),
+            "a brush that takes a hill away": ("mapmaker_edit.js", "if (kind === 'objects' && hooks.guard) {", "if (false) {"),
+            "a brush that is refused only on the cells that are in the way": ("mapmaker_edit.js", "if (why) { refused = why; return 0; } }\n                    }", "if (why) { refused = why; } }\n                    }"),
+            "a refusal that is said to nobody": ("mapmaker_tools.js", "told = true;\n                    if (env.say) env.say('It cannot be put there', why);", "told = true;"),
+            "an editor that is not given the guard": ("mapmaker_tools.js", "erase: Blocks.eraseAt, guard: Blocks.blockedText }", "erase: Blocks.eraseAt }"),
+            "a hill refused in the words of nobody": ("mapmaker_blocks.js", "TEAMS[teamOfHill(Edit.tile(file, 2, idx))].label + '\\u2019s hill is here. Move it first, or take it away with Erase.'", "'Something is here.'"),
             "a bigger object put by the path of a food pile": ("mapmaker_tools.js", "else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);", "void 0;"),
             "a sheet of bigger objects that marks no one as chosen": ("mapmaker_tools.js", "chosen = tool === 'bigger' ? state.big : tileOf();", "chosen = tileOf();"),
             "a bigger object picked that is not kept": ("mapmaker_tools.js", "else if (state.tool === 'bigger') state.big = id; else state.objects = id;", "else state.objects = id;"),
             "a bigger object whose box the canvas is not told": ("mapmaker_tools.js", "shape: function () { return editor && state.tool === 'bigger' ? bigNow().box : null; },", "shape: function () { return null; },"),
             "a palette of bigger objects that shows swatches beside the map": ("mapmaker_tools.js", "host.swatches.hidden = tool === 'food' || tool === 'bigger';", "host.swatches.hidden = tool === 'food';"),
-            "a button that does not say how many cells": ("mapmaker_tools.js", "node.appendChild(el('small', 'pkc', plural(item.cells.length, 'cell', 'cells')));", "void 0;"),
+            "a button that does not say how many cells": ("mapmaker_tools.js", "plural(item.cells.length, 'cell', 'cells') + ', ' + (b.c1 - b.c0 + 1)", "'' + (b.c1 - b.c0 + 1)"),
+            "a chip whose squares are all filled": ("mapmaker_tools.js", "if (item.cells.some(function (rc) { return rc[0] === r && rc[1] === c; })) cell.style.background = item.color;", "cell.style.background = item.color;"),
+            "a chip of a bigger object that is only a color": ("mapmaker_tools.js", "if (tool === 'bigger') footprint(chip, item); else chip.style.background = item.color;", "chip.style.background = item.color;"),
             "a sheet that does not say the whole name to a screen reader": ("mapmaker_tools.js", "b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;", "} else who.textContent = item.label;"),
             "a rock put without its solid bit": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
-            "an eraser that leaves the solid bits": ("mapmaker_edit.js", "if (Solid.sets(gone)) setSolid(cells[i], false);", "void 0;"),
             "a change whose solid bits are not applied": ("mapmaker_edit.js", "for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);", "void 0;"),
             "a pile of one stage": ("mapmaker_tools.js", "[Blocks.MIN_STAGES, Blocks.MAX_STAGES]", "[1, Blocks.MAX_STAGES]"),
             "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }", "function chooseTeam(id) { fits = ''; showPalette(); }"),
             "a place with no room that is refused in silence": ("mapmaker_tools.js", "if (change.error) { if (env.say) env.say(", "if (change.error) { if (false) env.say("),
             "a thing put that the canvas is not told of": ("mapmaker_tools.js", "if (dirty) changed(dirty);\n            else {", "if (false) changed(dirty);\n            else {"),
             "a change that only gave the dictionary a name that the page is not told of": ("mapmaker_tools.js", "if (env.file() !== was) env.onEdit();", "void 0;"),
-            "an eraser that does not take ants and piles": ("mapmaker_tools.js", "Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt })", "Edit.create(file, { rebase: env.rebase })"),
+            "an eraser that does not take ants and piles": ("mapmaker_tools.js", "Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText })", "Edit.create(file, { rebase: env.rebase })"),
             "a stepper that goes past the most ants": ("mapmaker_tools.js", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS]", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, 99]"),
             "a sheet whose stepper does not change the page's number": ("mapmaker_tools.js", "more.addEventListener('click', function () { stepBy(1); show(); onChange(); });", "more.addEventListener('click', function () { show(); onChange(); });"),
             "a line under the palette that does not say what the map has": ("mapmaker_tools.js", "if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team]", "if (state.tool === 'ants') return who + ': ' + (false"),
@@ -342,7 +348,9 @@ class TheCodeRuns(unittest.TestCase):
             "a tile that the dictionary is not told of": ("mapmaker_objects.js", "names: [[item.id, item.name]],", "names: [],"),
             "an object without its solid bits": ("mapmaker_objects.js", "if (Solid.sets(item.id)) change.solid.push([cell.idx, true]);", "void 0;"),
             "an object that is not cut by the edge of the map": ("mapmaker_objects.js", "if (r >= 0 && c >= 0 && r < file.rows && c < file.columns) out.push(", "out.push("),
-            "an object that leaves the solid bits of the object it took away": ("mapmaker_objects.js", "if (!mine[gone[j]] && Solid.sets(Edit.tile(file, 2, gone[j]))) change.solid.push([gone[j], false]);", "void 0;"),
+            "an eraser that leaves the solid bit of a tile that is not in the table": ("mapmaker_edit.js", "if (Solid.clears(gone)) setSolid(cells[i], false);", "if (Solid.sets(gone)) setSolid(cells[i], false);"),
+            "a pile taken away that leaves the solid bits of its cells": ("mapmaker_edit.js", "if (c[1] === EMPTY2 && Solid.clears(was)) setSolid(c[0], false);", "void 0;"),
+            "a solid bit cleared under a hill": ("mapmaker_solid.js", "function clears(id) { return id !== 0x7FFE && !(id >= 245 && id <= 248); }", "function clears(id) { return id !== 0x7FFE; }"),
             "the same object on the same place that is a new step": ("mapmaker_objects.js", "w[2]) continue;      // (already so)", "w[2] && false) continue;      // (already so)"),
             "a box that the canvas does not take from the object": ("mapmaker_view.js", "if (shape) return {", "if (false) return {"),
             "an eraser that takes one cell of a bigger object": ("mapmaker_edit.js", "var cells = objectCells(f, idx), n = 0;", "var cells = [idx], n = 0;"),
@@ -536,6 +544,14 @@ class ThePage(unittest.TestCase):
         self.assertIn('<input class="nm" id="map-name" type="text" maxlength="40"', self.page)
         self.assertRegex(self.page, r'<label class="sr" for="map-name">Name of the map</label>')
         self.assertRegex(self.page, r'<input type="file" id="file-in" accept="\.lvl,\.LVL" hidden>')
+
+    def test_a_script_that_did_not_load_is_told_for_every_script_of_the_page(self):
+        needed = re.search(r"var NEEDED = \[([^\]]*)\]", self.app).group(1)
+        for name, text in self.code.items():
+            if name == "mapmaker_app.js":
+                continue
+            for global_name in re.findall(r"root\.(Map[A-Za-z]+) = factory", text):
+                self.assertIn("'%s'" % global_name, needed, "%s makes %s, which the app must list in NEEDED" % (name, global_name))
 
     def test_the_page_refuses_a_module_of_another_interface_version_before_it_asks_it_anything(self):
         self.assertIn("var found = LvlCore.moduleVersion(module);", self.app)
