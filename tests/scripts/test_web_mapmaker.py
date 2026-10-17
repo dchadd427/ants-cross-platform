@@ -2,7 +2,8 @@
 """The map maker's page (run by ./run_tests.sh --fast, with the other python tests of tests/scripts, and by the CI; docs/MAP_EDITOR.md): web/mapmaker.html and its scripts and style in web/front/.
 
   - the code is RUN (node, when it is installed): the reader of a file, the view (pan and zoom, that a frame draws only the tiles on the screen), the sizes and their sentences, the checks
-    card and the colors of the tiles (tests/scripts/web_mapmaker_check.js), and the check is shown able to fail: broken copies of the scripts are refused by it;
+    card and the colors of the tiles (tests/scripts/web_mapmaker_check.js), the drawing (the brush, a stroke, fill, undo and redo as small patches, the dictionary, the palette and the tools
+    on a fake page: tests/scripts/web_mapmaker_edit_check.js), and the checks are shown able to fail: broken copies of the scripts are refused by them;
   - the reader's view of all 540 maps of the library is compared with a second reading of the same files here, in Python, with struct (rows, columns and a digest of every tile);
   - the page and the real map core together (tests/scripts/web_mapmaker_core_check.js) when a built module is there ($ANTS_LVL_CORE_DIR, or build_web/lvl_core); without one it says so, and
     the web job of the CI runs it from the image;
@@ -24,9 +25,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
 DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
+EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_app.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -102,6 +104,53 @@ class TheCodeRuns(unittest.TestCase):
                     with open(os.path.join(tmp, "mapmaker_dialog.js"), "w", encoding="utf-8") as f:
                         f.write(text.replace(old, new))
                     done = run_check(tmp, DIALOG_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_the_drawing_passes_its_checks(self):
+        done = run_check(script=EDIT_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_drawing_check_can_fail_on_broken_copies_of_the_scripts(self):
+        mutants = {
+            "an object in a version 9 file that is its own anchor by a number that only version 8 means": ("mapmaker_edit.js", "if (file.version !== 8) return 0;", "if (file.version === 0) return 0;"),
+            "an eraser that takes one cell of a hill and leaves the rest": ("mapmaker_edit.js", "var cells = objectCells(f, idx), n = 0;", "var cells = [idx], n = 0;"),
+            "an object put on a hill that leaves the rest of the hill": ("mapmaker_edit.js", "n += removeObject(idx);       // (a bigger object goes whole: never half a hill)", "void 0;"),
+            "a history that has no end": ("mapmaker_edit.js", "while (undo.length > 1 && (undo.length > MAX_STROKES || records > MAX_RECORDS))", "while (false)"),
+            "a history bounded by strokes only": ("mapmaker_edit.js", "undo.length > MAX_STROKES || records > MAX_RECORDS", "undo.length > MAX_STROKES"),
+            "an undo that puts the new words back": ("mapmaker_edit.js", "var words = forward ? patch.after : patch.before", "var words = forward ? patch.before : patch.after"),
+            "a new stroke that keeps the redo line": ("mapmaker_edit.js", "                redo = [];\n                undo.push(patch);", "                undo.push(patch);"),
+            "a fill that leaks through a wall to the east": ("mapmaker_edit.js", "if (c < f.columns - 1 && !mark[i + 1] && tile(f, layer, i + 1) === want)", "if (c < f.columns - 1 && !mark[i + 1])"),
+            "a brush that is not cut by the map's edge": ("mapmaker_edit.js", "return { r0: Math.max(0, row - lo), r1: Math.min(file.rows - 1, row + hi), c0: Math.max(0, column - lo), c1: Math.min(file.columns - 1, column + hi) };", "return { r0: row - lo, r1: row + hi, c0: column - lo, c1: column + hi };"),
+            "a line that has gaps": ("mapmaker_edit.js", "            out.push([r, c]);\n        }\n        return out;", "            if ((r + c) % 2) out.push([r, c]);\n        }\n        return out;"),
+            "a stroke that forgets the first words of a cell it touches twice": ("mapmaker_edit.js", "if (seen[key]) return;\n                seen[key] = 1;", "seen[key] = 1;"),
+            "a dictionary that grows without telling its length": ("mapmaker_edit.js", "wr(out, file.dictAt, id);", "void 0;"),
+            "a name written over a name that is there": ("mapmaker_edit.js", "if (b[slot] === 0x2E && b[slot + 1] === 0 && name)", "if (name)"),
+            "a patch that holds a copy of the map": ("mapmaker_edit.js", "return { keys: Uint32Array.from(k), before: Uint16Array.from(b), after: Uint16Array.from(a) };", "return { keys: Uint32Array.from(k), before: Uint16Array.from(b.concat(new Array(1000).fill(0))), after: Uint16Array.from(a) };"),
+            "a name of the palette that is not the game's": ("mapmaker_palette.js", "[302, 'smlrock1', 'Rock 1']", "[302, 'smlrock0', 'Rock 1']"),
+            "a power-up of the wrong tile": ("mapmaker_palette.js", "[64, 'pu_bomb', 'Bomber ant power-up']", "[65, 'pu_bomb', 'Bomber ant power-up']"),
+            "Hills that can be chosen before they exist": ("mapmaker_palette.js", "{ id: 'hills', label: 'Hills', key: 'h', draws: false }", "{ id: 'hills', label: 'Hills', key: 'h', draws: true }"),
+            "undo that the keys do not reach": ("mapmaker_tools.js", "if (k === 'z') {", "if (k === 'q') {"),
+            "a letter that is a tool while typing in a box": ("mapmaker_tools.js", "|| typing(e.target)) return;", ") return;"),
+            "a letter that is a tool while a dialog is open": ("mapmaker_tools.js", "if (e.defaultPrevented || !editor || env.busy() ||", "if (e.defaultPrevented || !editor ||"),
+            "a fill for the eraser": ("mapmaker_tools.js", "host.fill.disabled = !on || state.tool === 'erase';", "host.fill.disabled = !on;"),
+            "an undo in the middle of a stroke": ("mapmaker_tools.js", "function undo() { if (editor && !canvas.isStroking())", "function undo() { if (editor)"),
+            "a stroke that does not tell the canvas what changed": ("mapmaker_tools.js", "                current.segment(from.row, from.column, to.row, to.column, state.brush);\n                canvas.markDirty(current.takeDirty());", "                current.segment(from.row, from.column, to.row, to.column, state.brush);"),
+            "a tile that is not named in the dictionary before it is used": ("mapmaker_tools.js", "if (made.grew) editor.rebase(env.rebase(made.bytes));", "void 0;"),
+            "a brush that does not reach the painter": ("mapmaker_tools.js", "size: function () { return editor && paints() ? state.brush : 0; },", "size: function () { return editor && paints() ? 1 : 0; },"),
+        }
+        for what, (name, old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", name)
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, EDIT_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
 
     def test_the_reader_sees_every_map_of_the_library_as_a_second_reading_does(self):
@@ -211,8 +260,7 @@ class ThePage(unittest.TestCase):
         self.assertEqual(sorted(set(acts)), ["check", "download", "menu", "new", "open", "zoom-in", "zoom-out"])
         for button in re.findall(r"<button[^>]*data-act[^>]*>", self.page):
             self.assertIn(" disabled", button, button)
-        self.assertIn("'new': newMap, open:", self.app)
-        self.assertIn("download: download, check: showChecks", self.app)
+        self.assertIn("'new': function () { leave(newMap); }, open: function () { leave(function () { $('file-in').click(); }); }, download: download, check: showChecks,", self.app)
         self.assertIn("menu: function () { dialogs.menu([{ text: 'New'", self.app)
         self.assertIn('<input class="nm" id="map-name" type="text" maxlength="40"', self.page)
         self.assertRegex(self.page, r'<label class="sr" for="map-name">Name of the map</label>')
@@ -240,6 +288,43 @@ class ThePage(unittest.TestCase):
                 self.assertNotIn(word, text, "%s has %s" % (name, word))
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
+
+    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_only_three_of_them_wait(self):
+        tools = re.findall(r'<button class="tool" type="button" data-tool="([a-z]+)"[^>]*>', self.page)
+        self.assertEqual(tools, ["ground", "objects", "hills", "ants", "food", "erase", "move"])
+        for button in re.findall(r'<button class="tool"[^>]*>', self.page):
+            self.assertIn(" disabled", button, "every button starts off until the core is there: " + button)
+        for waiting in ("hills", "ants", "food"):
+            self.assertRegex(self.page, r'data-tool="%s"[^>]*title="Comes in the next update"' % waiting)
+        self.assertRegex(self.page, r'data-tool="ground" aria-pressed="true"', "Ground is the tool at the start, as in the picture")
+        for part in ('id="undo-btn"', 'id="redo-btn"', 'id="fill-btn"', 'id="palette"', 'role="radiogroup"', 'aria-keyshortcuts="Control+Z Meta+Z"', 'data-brush="9"'):
+            self.assertIn(part, self.page, part)
+        self.assertEqual(re.findall(r'data-brush="(\d+)"', self.page), ["1", "3", "5", "9"])
+        palette = self.code["mapmaker_palette.js"]
+        self.assertEqual(re.findall(r"key: '([a-z])'", palette), ["g", "o", "h", "a", "f", "e", "m"])
+
+    def test_a_map_that_was_drawn_on_is_asked_about_and_handed_over_as_the_core_writes_it(self):
+        app = self.app
+        self.assertIn("core.rewrite(map.bytes, 'extended')", app)
+        self.assertLess(app.index("if (!tools.isClean()) {\n            var written = core.rewrite("), app.index("a.download = win.MapFile.downloadName(map.name);"))
+        self.assertIn("function leave(then) {", app)
+        self.assertIn("'new': function () { leave(newMap); }", app)
+        self.assertIn("open: function () { leave(function () { $('file-in').click(); }); }", app)
+        self.assertIn("'beforeunload'", app)
+        self.assertIn("if (tools.isSaved()) return then();", app, "a map that was downloaded as it is can be left without a question")
+        self.assertIn("        tools.markSaved();", app)
+        self.assertIn("canvas.setFile(file);\n        tools.setMap(file);", app, "a map that is opened starts its own history")
+        self.assertIn("canvas.swapFile(file);", app, "the view stays where it is when the dictionary grows")
+        self.assertNotIn("showMap()", app, "a check never puts the view back at its start")
+        self.assertIn("win.setTimeout(function () {\n            if (canvas.isStroking()) return checkSoon();", app, "the check waits for a hand that is still painting")
+
+    def test_a_stroke_paints_only_the_cells_it_changed(self):
+        canvas = self.code["mapmaker_canvas.js"]
+        for part in ("View.redrawCell(", "View.redrawPixelCell(", "View.blitPixels(", "var MANY = 3000;", "function sameAsFull()", "canvas.setAttribute('data-paint'"):
+            self.assertIn(part, canvas, part)
+        self.assertIn("full = null;", canvas.split("function measure()")[1].split("function chrome()")[0], "a canvas that changed size is painted whole")
+        for part in ("setPointerCapture", "pointercancel", "e.button !== 1", "spaceHeld", "pending"):
+            self.assertIn(part, canvas, part)
 
     def test_the_page_names_nothing_private(self):
         for name in ("mapmaker.html",) + tuple("front/" + n for n in SCRIPTS) + ("front/mapmaker.css",):

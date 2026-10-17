@@ -10,7 +10,12 @@ Parts:
              512 x 512 (the most) and refuses 513 x 513; the 512 x 512 map is panned with the mouse (the point under the pointer moves with it), zoomed with the wheel (the point under the pointer
              stays, and a whole map at 512 x 512 paints in a moment), moved by the keyboard (a marked square, plus, minus, zero), and its small map shows while only a part is on the screen;
              Check map shows the card of the kind (the neutral badge for an Extended map) and Escape closes it with the focus back where it was; Download hands over the map's bytes;
-  * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans;
+  * draw     1280 x 800, the tools: a click and a drag of the mouse paint ground and objects (the canvas is read pixel by pixel), only the cells that changed are painted again, a brush of 3, Fill, Erase,
+             undo and redo (the buttons and the keys), the Move tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
+             a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
+             processor slowed down six times every frame of a stroke is only a few cells (its time is measured);
+  * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
+             paints (a tool), a tap paints a cell, two fingers do not paint;
   * older    a map core of another interface version (the page is given a module that says it is version 1): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
@@ -20,6 +25,7 @@ import argparse
 import base64
 import json
 import os
+import struct
 import sys
 import tempfile
 import time
@@ -29,7 +35,21 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "phone", "older")
+PARTS = ("desktop", "draw", "phone", "older")
+DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
+
+
+def tiny_hill():
+    """(row, column) of a cell of a hill in TINY.LVL, read here with struct (the layers hold six bytes a cell; a hill is tile 245 to 248 on layer 2)"""
+    with open(os.path.join(REPO, "Original-Ants", "Maps", "TINY.LVL"), "rb") as f:
+        data = f.read()
+    at = 42 + 11 * (struct.unpack_from("<H", data, 40)[0] + 1)
+    rows, columns = struct.unpack_from("<II", data, at)
+    layer2 = at + 8 + 6 * rows * columns
+    for i in range(rows * columns):
+        if 245 <= struct.unpack_from("<H", data, layer2 + 6 * i)[0] <= 248:
+            return i // columns, i % columns
+    raise RuntimeError("TINY has no hill")
 
 
 def wait_for(condition, timeout=8.0, step=0.1):
@@ -108,6 +128,42 @@ class Page:
     def shot(self, directory, name):
         self.tab.save_shot(directory, name)
 
+    def pixel(self, x, y):
+        """the color [r, g, b] of the canvas under the page point (x, y)"""
+        return json.loads(self.ev("JSON.stringify((function (x, y) { var c = document.getElementById('map'), b = c.getBoundingClientRect(), k = c.width / b.width, "
+                                  "d = c.getContext('2d').getImageData(Math.round((x - b.left) * k), Math.round((y - b.top) * k), 1, 1).data; return [d[0], d[1], d[2]]; })(%s, %s))" % (x, y)))
+
+    def color_of(self, tile1, tile2=0x7FFE):
+        """the color that the page's own table gives a tile, as [r, g, b]"""
+        h = self.ev("MapTiles.css(%d, %d)" % (tile1, tile2))
+        return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
+
+    def paint_info(self):
+        """the last frame of the canvas: (way, cells, milliseconds)"""
+        way, cells, ms = self.ev("document.getElementById('map').getAttribute('data-paint')").split(":")
+        return way, int(cells), float(ms)
+
+    def button_off(self, selector):
+        return bool(self.ev("document.querySelector(%s).disabled" % json.dumps(selector)))
+
+    def tool(self, name):
+        self.ev("document.querySelector('[data-tool=%s]').click()" % name)
+
+    def tile(self, tile):
+        self.ev("document.querySelector('[data-tile=\"%d\"]').click()" % tile)
+
+    def cell_point(self, row, column):
+        """where the middle of a cell is on the page, when the whole map is shown (the middle of the canvas is the middle of the map)"""
+        box = self.box("#map")
+        rows, columns = int(self.ev("document.getElementById('s-rows').textContent")), int(self.ev("document.getElementById('s-cols').textContent"))
+        scale = float(self.ev("document.getElementById('map').getAttribute('data-scale')"))
+        return box["x"] + box["w"] / 2 + (column + 0.5 - columns / 2) * scale, box["y"] + box["h"] / 2 + (row + 0.5 - rows / 2) * scale
+
+    def ctrl_key(self, key, code, vk, shift=False):
+        params = {"key": key, "code": code, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk, "modifiers": 2 | (8 if shift else 0)}
+        self.tab.call("Input.dispatchKeyEvent", dict(params, type="keyDown"))
+        self.tab.call("Input.dispatchKeyEvent", dict(params, type="keyUp"))
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -143,6 +199,18 @@ def main():
             if args.only and args.only != part:
                 continue
             tab = Tab(browser)
+            DIALOGS[:] = []
+
+            def on_dialog(msg, tab=tab):
+                # a page that holds a map that was drawn on asks before it is left (a "beforeunload" question): the check answers yes, and notes it
+                if msg.get("method") == "Page.javascriptDialogOpening" and msg.get("sessionId") == tab.session:
+                    DIALOGS.append(msg["params"].get("type", ""))
+                    try:
+                        tab.call("Page.handleJavaScriptDialog", {"accept": True})
+                    except (RuntimeError, TimeoutError):
+                        pass
+
+            tab.dt.handlers.append(on_dialog)
             try:
                 run_part(part, tab, args, check, tiny, junk)
             finally:
@@ -209,6 +277,8 @@ def run_part(part, tab, args, check, tiny, junk):
         s = page.state()
         check(s["tags"] == ["Extended map", "New version only"] and s["mini"], "with the two tags and its small map: %s" % s)
         # the canvas
+        page.tool("move")
+        check(page.ev("document.querySelector('[data-tool=move]').getAttribute('aria-pressed')") == "true", "the Move tool is chosen: a drag looks around")
         box = page.box("#map")
         cx, cy = box["x"] + box["w"] / 2 + 7, box["y"] + box["h"] / 2 + 7           # (not on the edge between two tiles)
         page.tab.mouse("mouseMoved", cx, cy, button="none")
@@ -262,6 +332,177 @@ def run_part(part, tab, args, check, tiny, junk):
         check(wait_for(lambda: page.ev("window.__blobs.length === 1")), "Download makes a file")
         size = page.ev("window.__blobs[0].size")
         check(size > 3000000 and size < 3300000, "of the 512 x 512 map's bytes (%s)" % size)
+    elif part == "draw":
+        print("[web map maker] drawing, desktop, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts with its map core")
+        tools = json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('[data-tool]'), function (b) { return [b.getAttribute('data-tool'), b.disabled, b.getAttribute('aria-pressed')]; }))"))
+        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["hills", True, "false"], ["ants", True, "false"], ["food", True, "false"], ["erase", False, "false"], ["move", False, "false"]],
+              "Ground is chosen, Hills, Ants and Food wait: %s" % tools)
+        check(page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo and Redo are off with nothing drawn")
+        grass, dirt, water, rock, sand = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
+        page.tile(487)
+        check(page.ev("document.getElementById('palette-name').textContent") == "Dirt", "the palette names the tile that is chosen")
+        a, b = page.cell_point(3, 3), page.cell_point(3, 20)
+        check(page.pixel(*a) == grass, "the map starts as grass")
+        page.drag(a[0], a[1], b[0], b[1], steps=14)
+        time.sleep(0.2)
+        mid = page.cell_point(3, 12)
+        check(page.pixel(*a) == dirt and page.pixel(*mid) == dirt and page.pixel(*b) == dirt, "a drag of the mouse paints a line of dirt, with no gap")
+        check(page.pixel(*page.cell_point(4, 12)) == grass and page.pixel(*page.cell_point(2, 12)) == grass, "and only the cells it went over")
+        way, cells, ms = page.paint_info()
+        check(way == "cells" and 0 < cells < 80, "only the cells that changed were painted again (%s: %d cells, %.1f ms)" % (way, cells, ms))
+        check(not page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo is on, Redo is off")
+        page.shot(args.shots, "mapmaker-draw-ground")
+        page.ev("document.getElementById('undo-btn').click()")
+        time.sleep(0.2)
+        check(page.pixel(*a) == grass and page.pixel(*mid) == grass and page.pixel(*b) == grass, "Undo takes the whole stroke back at once")
+        check(page.button_off("#undo-btn") and not page.button_off("#redo-btn"), "Undo is off again and Redo is on")
+        page.ev("document.getElementById('redo-btn').click()")
+        time.sleep(0.2)
+        check(page.pixel(*mid) == dirt, "Redo puts it back")
+        page.ev("document.getElementById('map').focus()")
+        page.ctrl_key("z", "KeyZ", 90)
+        time.sleep(0.2)
+        check(page.pixel(*mid) == grass, "Control+Z undoes")
+        page.ctrl_key("z", "KeyZ", 90, shift=True)
+        time.sleep(0.2)
+        check(page.pixel(*mid) == dirt, "Control+Shift+Z redoes")
+        # a brush of 3 and water
+        page.tile(476)
+        page.ev("document.querySelector('[data-brush=\"3\"]').click()")
+        c = page.cell_point(10, 10)
+        page.tab.click(*c)
+        time.sleep(0.2)
+        check(all(page.pixel(*page.cell_point(10 + dr, 10 + dc)) == water for dr in (-1, 0, 1) for dc in (-1, 0, 1)), "a click with a brush of 3 paints 3 x 3 cells")
+        check(page.pixel(*page.cell_point(12, 10)) == grass and page.pixel(*page.cell_point(10, 8)) == grass, "and not the cells beside them")
+        # the keys choose the tools
+        page.ev("document.getElementById('map').focus()")
+        page.key("o")
+        check(page.ev("document.querySelector('[data-tool=objects]').getAttribute('aria-pressed')") == "true", "the letter O chooses Objects")
+        page.ev("document.querySelector('[data-brush=\"1\"]').click()")
+        page.tile(302)
+        r = page.cell_point(20, 5)
+        page.tab.click(*r)
+        time.sleep(0.2)
+        check(page.pixel(*r) == rock, "a rock is put on the map")
+        page.key("e")
+        page.tab.click(*r)
+        time.sleep(0.2)
+        check(page.pixel(*r) == grass, "the eraser takes it away (the letter E)")
+        # fill
+        page.key("g")
+        page.tile(571)
+        page.key("b")
+        check(page.ev("document.getElementById('fill-btn').getAttribute('aria-pressed')") == "true", "the letter B turns Fill on")
+        f = page.cell_point(25, 25)
+        page.tab.click(*f)
+        time.sleep(0.3)
+        check(page.pixel(*f) == sand and page.pixel(*page.cell_point(30, 0)) == sand and page.pixel(*page.cell_point(10, 10)) == water and page.pixel(*mid) == dirt,
+              "Fill paints the field of grass round the click and stops at the water and the dirt")
+        page.shot(args.shots, "mapmaker-draw-fill")
+        page.ctrl_key("z", "KeyZ", 90)
+        time.sleep(0.2)
+        check(page.pixel(*f) == grass, "and one Undo takes the whole fill back")
+        page.key("b")
+        # looking around instead of painting
+        page.ev("document.querySelector('[data-tile=\"487\"]').click()")
+        box = page.box("#map")
+        mx, my = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+        for _ in range(6):
+            page.wheel(mx, my, -300)
+        time.sleep(0.4)
+        before_center = page.state()["center"]
+        strokes = page.ev("document.getElementById('undo-btn').disabled")
+        page.tool("move")
+        page.drag(mx, my, mx - 150, my - 90)
+        time.sleep(0.2)
+        check(page.state()["center"] != before_center and page.ev("document.getElementById('undo-btn').disabled") == strokes, "the Move tool pans and paints nothing (%s to %s)" % (before_center, page.state()["center"]))
+        page.tool("ground")
+        center = page.state()["center"]
+        page.ev("document.getElementById('map').focus()")
+        space = {"key": " ", "code": "Space", "windowsVirtualKeyCode": 32, "nativeVirtualKeyCode": 32}
+        page.tab.call("Input.dispatchKeyEvent", dict(space, type="keyDown", text=" "))
+        page.drag(mx, my, mx + 150, my + 90)
+        page.tab.call("Input.dispatchKeyEvent", dict(space, type="keyUp"))
+        time.sleep(0.2)
+        check(page.state()["center"] != center and page.ev("document.getElementById('undo-btn').disabled") == strokes, "a drag with the space key held down pans and paints nothing")
+        center = page.state()["center"]
+        page.tab.mouse("mouseMoved", mx, my, button="none")
+        page.tab.mouse("mousePressed", mx, my, button="middle", buttons=4)
+        for i in range(1, 9):
+            page.tab.mouse("mouseMoved", mx - i * 15, my - i * 8, button="middle", buttons=4)
+        page.tab.mouse("mouseReleased", mx - 120, my - 64, button="middle")
+        time.sleep(0.2)
+        check(page.state()["center"] != center and page.ev("document.getElementById('undo-btn').disabled") == strokes, "the middle button pans and paints nothing")
+        # the position line while the mouse is over the map
+        page.tab.mouse("mouseMoved", mx + 30, my + 30, button="none")
+        time.sleep(0.2)
+        check(page.ev("document.getElementById('where').textContent").startswith("Row "), "the position line says Row and column under the mouse: %s" % page.ev("document.getElementById('where').textContent"))
+        # a map that is left after it was drawn on: the page asks first
+        page.press_act("new")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'")), "New map asks before it leaves a map that was drawn on")
+        page.shot(args.shots, "mapmaker-draw-leave")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Stay here'; })[0].click()")
+        check(not page.ev("!!document.querySelector('.dlg')") and not page.button_off("#undo-btn"), "and Stay here keeps it")
+        # an opened map: the eraser takes a hill away whole, and the check says so; undo gives it back
+        page.choose_file(tiny)                      # (the file box is used directly here: the question above is asked by the Open button)
+        wait_for(lambda: page.state()["name"] == "TINY")
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game"), "TINY works in the original game")
+        hill = tiny_hill()
+        page.tool("erase")
+        h = page.cell_point(hill[0], hill[1])
+        page.tab.click(*h)
+        check(wait_for(lambda: page.state()["check"] == "Does not work in the original game", 4), "the eraser takes a hill away: the check is run again by itself (%s)" % page.state()["check"])
+        page.click_selector(".chkbtn [data-act=check]")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.ccard')")) and "no hill" in page.ev("document.querySelector('.ccard').textContent"), "and the card says which team has no hill")
+        page.shot(args.shots, "mapmaker-draw-checks")
+        page.key("Escape")
+        page.ev("window.__blobs = []; var make = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__blobs.push(b); return make(b); }")
+        page.press_act("download")
+        check(wait_for(lambda: page.ev("window.__blobs.length === 1")), "Download hands over the map that was drawn on")
+        head = page.ev("new Promise(function (ok) { window.__blobs[0].slice(0, 8).arrayBuffer().then(function (b) { ok(Array.prototype.join.call(new Uint8Array(b), ',')); }); })")
+        check(head.startswith("8,0,0,0,1,0,0,0") and page.ev("window.__blobs[0].size") > 1000, "written by the core: version 8, mode 1 (%s)" % head)
+        page.ev("document.getElementById('map').focus()")
+        page.ctrl_key("z", "KeyZ", 90)
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 4), "Undo gives the hill back and the check says it works again")
+        # 512 x 512 with the processor slowed down: a stroke is a few cells a frame
+        page.press_act("new")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "a map that was undone back to the start is left without a question")
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "512")
+        page.type_into("#size-columns", "512")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "512", 15), "an Extended map of 512 x 512 is made")
+        page.ev("document.getElementById('map').focus()")
+        page.key("0")
+        page.tool("ground")
+        page.tile(487)
+        time.sleep(0.4)
+        page.tab.call("Emulation.setCPUThrottlingRate", {"rate": 6})
+        page.ev("window.__frames = []; new MutationObserver(function () { window.__frames.push(document.getElementById('map').getAttribute('data-paint')); }).observe(document.getElementById('map'), {attributes: true, attributeFilter: ['data-paint']})")
+        box = page.box("#map")
+        mx, my = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+        page.tab.mouse("mouseMoved", mx - 250, my - 150, button="none")
+        page.tab.mouse("mousePressed", mx - 250, my - 150)
+        for i in range(1, 61):
+            page.tab.mouse("mouseMoved", mx - 250 + i * 8, my - 150 + i * 4 + (i % 7) * 3, buttons=1)
+        page.tab.mouse("mouseReleased", mx + 230, my + 90)
+        time.sleep(0.5)
+        frames = page.ev("window.__frames")
+        page.tab.call("Emulation.setCPUThrottlingRate", {"rate": 1})
+        parsed = [(f.split(":")[0], int(f.split(":")[1]), float(f.split(":")[2])) for f in frames]
+        cells = [ms for way, n, ms in parsed if way == "cells"]
+        check(len(parsed) >= 20 and len(cells) >= len(parsed) - 2, "the frames of a stroke on the whole 512 x 512 map are cells, not whole frames (%d frames, %d of cells)" % (len(parsed), len(cells)))
+        check(cells and sum(cells) / len(cells) < 12 and max(cells) < 80, "with the processor 6 times slower a frame takes %.1f ms on average and %.1f ms at the most" % (sum(cells) / max(1, len(cells)), max(cells or [0])))
+        page.shot(args.shots, "mapmaker-draw-512")
+        DIALOGS[:] = []
+        page.open()
+        check(DIALOGS == ["beforeunload"], "the page asks before it is closed or reloaded with a map that was drawn on (%s)" % DIALOGS)
+        DIALOGS[:] = []
+        page.open()
+        check(DIALOGS == [], "and does not ask when nothing was drawn")
     elif part == "phone":
         for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390), ("narrow", 340, 700)):
             print("[web map maker] phone, %s, %d x %d" % (label, w, h))
@@ -274,8 +515,10 @@ def run_part(part, tab, args, check, tiny, junk):
             page.shot(args.shots, "mapmaker-%s-classic" % label)
             small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button:not([disabled]), input:not([hidden])'), function (n) { if (n.offsetParent === null || n.type === 'file') return false; var b = n.getBoundingClientRect(); return b.width < 43.5 || b.height < 43.5; }).map(function (n) { return (n.textContent || n.id || n.getAttribute('data-act')) + ' ' + Math.round(n.getBoundingClientRect().width) + 'x' + Math.round(n.getBoundingClientRect().height); }))")
             check(small == "[]", "every control that works is at least 44 pixels each way (%s)" % small)
-            check(page.ev("document.querySelector('.toolnote').offsetParent !== null"), "the note about the tools that are not there yet shows")
-            bad = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button, input, a'), function (n) { if (n.offsetParent === null) return false; var b = n.getBoundingClientRect(); return b.right > window.innerWidth + 1 || b.bottom > window.innerHeight + 1 || b.left < -1; }).map(function (n) { return n.textContent || n.id; }))")
+            check(page.ev("document.querySelector('.toolnote').offsetParent !== null"), "the note about the tool that is chosen shows")
+            check(page.ev("(function () { var b = document.querySelector('.swatches').getBoundingClientRect(); return b.left >= -1 && b.right <= window.innerWidth + 1; })()"), "the row of swatches is inside the screen (it scrolls sideways inside itself)")
+            check(page.ev("[].every.call(document.querySelectorAll('.swatch'), function (n) { var b = n.getBoundingClientRect(); return b.width >= 43.5 && b.height >= 43.5; })"), "every swatch is at least 44 pixels each way")
+            bad = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button, input, a'), function (n) { if (n.offsetParent === null || n.closest('.swatches')) return false; var b = n.getBoundingClientRect(); return b.right > window.innerWidth + 1 || b.bottom > window.innerHeight + 1 || b.left < -1; }).map(function (n) { return n.textContent || n.id; }))")
             check(bad == "[]", "every visible control is inside the screen (%s)" % bad)
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "the Menu button opens the menu")
@@ -302,6 +545,7 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchEnd", {})
             time.sleep(0.3)
             check(page.state()["scale"] > scale * 1.5, "two fingers moving apart zoom in (%s to %s)" % (scale, page.state()["scale"]))
+            page.tool("move")
             center = page.state()["center"]
             touch("touchStart", {1: (cx, cy)})
             for i in range(1, 9):
@@ -313,6 +557,36 @@ def run_part(part, tab, args, check, tiny, junk):
             touch("touchEnd", {})
             time.sleep(0.3)
             check(page.state()["where"].startswith("Row"), "a tap marks a cell (%s)" % page.state()["where"])
+            check(page.button_off("#undo-btn"), "two fingers, and one finger with the Move tool, painted nothing")
+            # one finger paints with a tool, and a tap paints a cell
+            page.tool("ground")
+            page.tile(487)
+            dirt, water = page.color_of(487), page.color_of(476)
+            bx, by, bw, bh = box["x"], box["y"], box["w"], box["h"]                # (the canvas can be small on a narrow phone: the points are fractions of it, not near the small map)
+            x0, y0, x1, y1 = bx + 0.12 * bw, by + 0.3 * bh, bx + 0.5 * bw, by + 0.5 * bh
+            touch("touchStart", {1: (x0, y0)})
+            for i in range(1, 11):
+                touch("touchMove", {1: (x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10)})
+            touch("touchEnd", {})
+            time.sleep(0.3)
+            check(page.pixel(x0, y0) == dirt and page.pixel((x0 + x1) / 2, (y0 + y1) / 2) == dirt and page.pixel(x1, y1) == dirt, "one finger with the Ground tool paints a line of dirt")
+            check(not page.button_off("#undo-btn") and page.paint_info()[0] == "cells", "and Undo is on; only cells were painted again")
+            page.tile(476)
+            tx, ty = bx + 0.3 * bw, by + 0.8 * bh
+            touch("touchStart", {1: (tx, ty)})
+            touch("touchEnd", {})
+            time.sleep(0.3)
+            check(page.pixel(tx, ty) == water, "a tap paints a cell with the tile that is chosen")
+            page.ev("document.getElementById('undo-btn').click()")
+            time.sleep(0.2)
+            check(page.pixel(tx, ty) != water and page.pixel(x1, y1) == dirt, "Undo takes the tap back and keeps the line")
+            zx, zy = bx + 0.5 * bw, by + 0.8 * bh
+            touch("touchStart", {1: (zx - 20, zy), 2: (zx + 20, zy)})
+            for i in range(1, 6):
+                touch("touchMove", {1: (zx - 20 - i * 6, zy), 2: (zx + 20 + i * 6, zy)})
+            touch("touchEnd", {})
+            time.sleep(0.2)
+            check(page.pixel(zx - 20, zy) != dirt and page.pixel(zx + 20, zy) != dirt and page.pixel(zx, zy) != dirt, "two fingers with a tool zoom and do not paint")
             page.press_act("check")
             check(wait_for(lambda: page.ev("!!document.querySelector('.ccard')")), "the checks open")
             page.shot(args.shots, "mapmaker-%s-checks" % label)

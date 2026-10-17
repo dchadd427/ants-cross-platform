@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) can draw now: paint ground and put rocks and power-ups with a click, a tap or a drag, take things away with the eraser, fill a field, choose a brush of 1, 3, 5 or 9 cells, and undo and redo as often as you like (Control or Command with Z; a letter chooses a tool).
+- The position of the mouse or finger shows under the map, and the check of the map runs again by itself after a change. Hills, starting ants and food come next.
+- A map that you drew on is handed over as a new, valid file when you press Download, and the page asks before it lets you leave a map that you have not downloaded.
+
 ## v0.12.72 - 2026-10-17 - Map maker: the editor starts (E1)
 
 **For players:**
