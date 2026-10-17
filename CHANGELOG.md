@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Under the hood: the tests are faster and steadier on slow or busy machines (the flood-control checks follow the time that really went by, the match history's timing test counts work instead of milliseconds, and the test servers no longer look up host names); nothing changes in the game or on the site.
+
 ## v0.12.68 - 2026-10-17 - Extended maps: the checker per kind and the 90-row limit for new Classic maps
 
 **For players:**

@@ -423,7 +423,13 @@ class TheScript(unittest.TestCase):
         self.assertIn("FLOOD_RATE=1000", self.text)
         self.assertIn("HONEST=$((FLOOD_BURST * 9 / 10))", self.text)
         self.assertRegex(self.text, r'\[ "\$\{HONEST_PONGS:-0\}" -eq "\$HONEST" \]')                          # every pong of the honest burst, not a share of them
-        self.assertRegex(self.text, r"-le \$\(\(FLOOD_BURST \+ FLOOD_RATE / 2\)\)")                           # the ceiling on both phases together
+        self.assertRegex(self.text, r"PONG_CEILING=\$\(\(FLOOD_BURST \+ FLOOD_RATE \* \(\$\{FLOOD_SPAN_MS:-0\} \+ FLOOD_LAG_MS\) / 1000 \+ FLOOD_SLACK\)\)")       # the ceiling: the burst plus the refill of the MEASURED time (a fixed one fails on a slow runner)
+        self.assertRegex(self.text, r'-le "\$PONG_CEILING"')                                                 # on both phases together
+        self.assertNotRegex(self.text, r"FLOOD_RATE / 2")                                                   # the fixed half second is gone
+        self.assertRegex(self.text, r"last_pong = time\.time\(\)")                                             # the span ends at the last Pong taken off the socket ...
+        self.assertRegex(self.text, r"began = time\.time\(\)\s.*\n\s*sock\.sendall\(frame\(hello\)\)")       # ... and begins before the first byte, so it is never shorter than the server's refill
+        self.assertRegex(self.text, r"FLOOD_LAG_MS=[1-3]\d\d\b")                                                 # (a few hundred milliseconds of stamping lag: not a margin that hides a raised budget)
+        self.assertRegex(self.text, r"FLOOD_SLACK=\d\b")
         self.assertNotRegex(self.text, r"kMessageBurst = ")                                              # (not read from the source that the check is about)
         self.assertNotRegex(self.text, r"FLOOD_BURST \* 3 / 10")                                         # the lowered floor is gone
 

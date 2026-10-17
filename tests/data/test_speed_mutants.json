@@ -1,0 +1,112 @@
+{
+ "note": "Mutants for the test cleanup of round 2 (the time-aware ping flood ceiling of the server script, the box of HS2.10, the name-lookup-free HTTP servers) for tools/mutate.py: python3 tools/mutate.py tests/data/test_speed_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the test that the 'expect' names.",
+ "mutants": [
+  {
+   "id": "ping_flood_burst_2000",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kMessageBurst = 1000;",
+   "new": "inline constexpr uint32_t kMessageBurst = 2000;",
+   "build": [
+    "ants",
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part rooms",
+   "expect": "ping flood: the flood is not answered beyond"
+  },
+  {
+   "id": "ping_flood_burst_5000",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kMessageBurst = 1000;",
+   "new": "inline constexpr uint32_t kMessageBurst = 5000;",
+   "build": [
+    "ants",
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part rooms",
+   "expect": "ping flood: the flood is not answered beyond"
+  },
+  {
+   "id": "ping_flood_burst_1000000",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kMessageBurst = 1000;",
+   "new": "inline constexpr uint32_t kMessageBurst = 1000000;",
+   "build": [
+    "ants",
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part rooms",
+   "expect": "ping flood: the flood is not answered beyond"
+  },
+  {
+   "id": "ping_flood_refill_10x",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kMessagesPerSecond = 1000;",
+   "new": "inline constexpr uint32_t kMessagesPerSecond = 10000;",
+   "build": [
+    "ants",
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part rooms",
+   "expect": "ping flood: the flood is not answered beyond"
+  },
+  {
+   "id": "quick_http_looks_up_the_name",
+   "file": "tests/scripts/quick_http.py",
+   "old": "socketserver.TCPServer.server_bind(self)",
+   "new": "http.server.HTTPServer.server_bind(self)",
+   "test": "python3 -m unittest tests.scripts.test_quick_http",
+   "expect": "binds_without_asking"
+  },
+  {
+   "id": "a_test_builds_the_stdlib_server",
+   "file": "tests/scripts/test_deploy_wait.py",
+   "old": "quick_http.QuickThreadingHTTPServer((",
+   "new": "http.server.ThreadingHTTPServer((",
+   "test": "python3 -m unittest tests.scripts.test_quick_http",
+   "expect": "test_every_test_file_uses_the_quick_classes"
+  },
+  {
+   "id": "history_box_5000_ms",
+   "file": "include/ants_server/history_store.hpp",
+   "old": "static constexpr uint32_t kPublicBoxMs = 15;",
+   "new": "static constexpr uint32_t kPublicBoxMs = 5000;",
+   "build": "test_history_store",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HS2.10 ./build/tests/test_server/test_history_store",
+   "expect": "HS2.10"
+  },
+  {
+   "id": "history_box_not_armed",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "db_.set_progress_handler(&HistoryStore::time_box_expired, const_cast<HistoryStore*>(this), kProgressOps);",
+   "new": "(void)kProgressOps;",
+   "build": "test_history_store",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HS2.10 ./build/tests/test_server/test_history_store",
+   "expect": "HS2.10"
+  },
+  {
+   "id": "history_looks_20000_steps_apart",
+   "file": "include/ants_server/history_store.hpp",
+   "old": "static constexpr int kProgressOps = 200;",
+   "new": "static constexpr int kProgressOps = 20000;",
+   "build": "test_history_store",
+   "test": "timeout 300 env ANTS_TEST_FILTER=HS2.10 ./build/tests/test_server/test_history_store",
+   "expect": "HS2.10"
+  },
+  {
+   "id": "runner_gives_one_slot_too_many",
+   "file": "run_tests.sh",
+   "old": "[ $((USED + w)) -le \"$EFFECTIVE_JOBS\" ] || return 1",
+   "new": "[ $((USED + w)) -le \"$((EFFECTIVE_JOBS + 1))\" ] || return 1",
+   "test": "python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
+   "expect": "test_jobs_limits_how_many_suites_run_at_once"
+  },
+  {
+   "id": "runner_gives_one_slot_too_few",
+   "file": "run_tests.sh",
+   "old": "[ $((USED + w)) -le \"$EFFECTIVE_JOBS\" ] || return 1",
+   "new": "[ $((USED + w)) -lt \"$EFFECTIVE_JOBS\" ] || [ \"$USED\" -eq 0 ] || return 1",
+   "test": "python3 -m unittest tests.scripts.test_run_tests.ParallelResources",
+   "expect": "test_jobs_limits_how_many_suites_run_at_once"
+  }
+ ]
+}
