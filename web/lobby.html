@@ -188,8 +188,8 @@
     .how h3 { font-weight: 500; font-size: 18px; margin: 12px 0 4px; }
     .how p { margin: 0 0 8px; max-width: 70ch; }
     .how .sheets { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; } .how .sheets img { max-width: 100%; height: auto; border: 3px solid var(--edge); }
-    body.offline .slots, body.offline .maprow { filter: saturate(.4) brightness(.72); }
-    body.joining .maprow { visibility: hidden; }      /* the map is not known until the player is in the room */
+    body.offline .slots, body.offline .maprow, body.offline .gtype { filter: saturate(.4) brightness(.72); }
+    body.joining .maprow, body.joining .gtype { visibility: hidden; }      /* the map is not known until the player is in the room */
     /* ---- the name step of a link that somebody else shared: the same card as the game page's own ---- */
     .name-modal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(12, 8, 5, .78); }
     .name-step { padding: 18px 20px 16px; width: min(420px, 100%); max-height: 100%; overflow-y: auto; text-align: left; background: var(--clay) var(--tile); border: 3px solid var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
@@ -288,7 +288,7 @@
     @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
-<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css">
+<link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css">
 </head>
 <body>
 <div class="screen" id="screen">
@@ -300,7 +300,7 @@
 
     <div class="grid" id="lobby">
         <section class="panel" aria-labelledby="room-h">
-            <div class="head"><h2 id="room-h">Your room</h2><span class="code">Room code <b id="code"></b></span></div>
+            <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>
             <div class="invite">
                 <input id="link" type="text" readonly value="" aria-label="Invitation link">
                 <button class="btn" type="button" id="copy">Copy link</button>
@@ -323,6 +323,7 @@
                 <p class="info" id="info" aria-live="polite"></p>
                 <button class="btn sm browse" type="button" id="browse" aria-haspopup="dialog" hidden>Browse all maps</button>
             </div>
+            <div id="gtype"></div>
             <div class="shape" id="shape-row"><span class="shape-label" id="shape-label">Picture</span> <span class="seg" role="radiogroup" aria-labelledby="shape-label"><span class="opt"><input type="radio" name="aspect" id="aspect-4-3" value="4:3"><label for="aspect-4-3" title="Classic 4:3: the original's picture (640 x 480)">Classic 4:3</label><span class="fit-tag" id="fit-4-3" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-10" value="16:10"><label for="aspect-16-10" title="16:10: laptops and 16:10 monitors (960 x 600)">16:10</label><span class="fit-tag" id="fit-16-10" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-16-9" value="16:9" checked><label for="aspect-16-9" title="16:9: the wide picture (960 x 540)">16:9</label><span class="fit-tag" id="fit-16-9" hidden>fills your screen</span></span><span class="opt"><input type="radio" name="aspect" id="aspect-21-9" value="21:9"><label for="aspect-21-9" title="21:9: ultrawide monitors (1260 x 540)">21:9</label><span class="fit-tag" id="fit-21-9" hidden>fills your screen</span></span></span></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
@@ -370,7 +371,7 @@
 
 <script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script>
-<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script>
+<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="map_files.js"></script>
 <script>
@@ -379,8 +380,9 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
-        var Rematch = window.AntsRematch;
-        if (!Rules || !Net || !Chat || !Rematch) {           // the scripts of front/ did not come: the page cannot do anything, and says so
+        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false;
+        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
+        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -730,6 +732,7 @@
             $('teams-note').className = 'slots-note teams-note' + (v.notes.teamsWarn ? ' warn' : '');
             refusal = '';
             paintSide(v.side);
+            gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro }); setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode);
         }
         function paintCard(card, m) {
             var li = lis[card.seat], seat = card.seat, c = card.color;
@@ -865,6 +868,7 @@
                 if (bannerKind === 'lost' || bannerKind === 'unreachable' || bannerKind === 'busy') hideBanner();
                 if (wasLost) say('You are back in the room.');
             }
+            if (e.created) newRoom = true;                   // (a room that this page made starts with the leader's last game type: onRoom)
             if (e.created && !ownRoom) showBanner('old', { sameMap: false });
             saveSession();
             render();
@@ -876,6 +880,7 @@
                 return;
             }
             model = Rules.modelOf(room);
+            if (newRoom) { newRoom = false; var want = !room.starting && room.leader === room.you ? Modes.wanted(storage, room.mode) : -1; if (want >= 0) client.setPlan(Rules.planWith(room, model, { mode: want })); }
             localSides = Rules.reconcileSides(localSides, model);
             if (model.guest) {
                 if (lastStarting && !room.starting) showBanner('lateplayer', { host: Rules.hostName(model) });      // the start was given up: everybody is back in the room
@@ -1035,6 +1040,7 @@
             if (!client || !client.room) return false;
             return client.setPlan(Rules.planWith(client.room, Rules.modelOf(client.room), change));
         }
+        var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (!sendPlan({ mode: id })) render(); } });      // (front/game_type.js)
         function setMap(step) {                          // the next or the previous original; from a map of the players the first or the last
             var list = Rules.MAPS, at = mapIndex();
             var key = list[at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length].key;

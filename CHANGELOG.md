@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser. The computer players are not good at 187 yet (they still play their food game); that is being worked on.
+
+**Details:** [Game type in the lobby](docs/PLAY_IN_BROWSER.md#game-type)
+
 ## v0.12.64 - 2026-10-16 - Spelling follow-up: the history address and record say color
 
 **For players:**

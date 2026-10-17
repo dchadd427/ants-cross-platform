@@ -72,7 +72,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
         self.not_found(self.page, r"(?i)\bfriends?\b", "on-screen text says player, never friend (docs/VIEW_AND_HUD.md, Wording)")
         # the room: its heading and code, the invitation, the colors; the match: the map, the line about it and START
-        self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><h2 id="room-h">Your room</h2><span class="code">Room code <b id="code"></b></span></div>', self.markup)
+        self.assertIn('<section class="panel" aria-labelledby="room-h">\n            <div class="head"><span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span><span class="code">Room code <b id="code"></b></span></div>', self.markup)
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colors"></ul>', self.markup)
         self.assertIn('<p class="slots-note" id="slots-note" role="status"></p>\n            <p class="slots-note teams-note" id="teams-note" role="status"></p>', self.markup)
         self.assertIn('<aside class="side" aria-label="The match">', self.markup)
@@ -329,7 +329,7 @@ class TheFrontPageMarkup(PageCase):
         for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
             self.assertNotIn(gone, self.page, gone)
         written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
-        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY"})                                  # (the definition, the name, the picture's shape: no other key is written to the local storage by name)
+        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY", "storage"})                       # (the definition, the name, the picture's shape and, through Modes.remember(storage, id), the leader's last game type under the key of front/game_modes.js: no other key is written to the local storage by name)
         self.assertEqual(sorted(re.findall(r"localStorage\.setItem\(([^,]+),", self.page)), ["entry.name", "key"])       # (the one definition of remember, and the entry of a seat that the game page reads: ants.rejoin.<room>.<seat>)
         self.assertIn("var NAME_KEY = 'ants.name';", self.page)
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
@@ -446,14 +446,14 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
-        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "map_picker.js"):
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="map_files.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
         self.assertIn("root.AntsRematch = api", read("web", "front", "rematch.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch;\n        if (!Rules || !Net || !Chat || !Rematch) {", self.script)
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 
