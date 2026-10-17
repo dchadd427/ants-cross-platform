@@ -121,7 +121,7 @@ class TheCodeRuns(unittest.TestCase):
             "a history that has no end": ("mapmaker_edit.js", "while (undo.length > 1 && (undo.length > MAX_STROKES || records > MAX_RECORDS))", "while (false)"),
             "a history bounded by strokes only": ("mapmaker_edit.js", "undo.length > MAX_STROKES || records > MAX_RECORDS", "undo.length > MAX_STROKES"),
             "an undo that puts the new words back": ("mapmaker_edit.js", "var words = forward ? patch.after : patch.before", "var words = forward ? patch.before : patch.after"),
-            "a new stroke that keeps the redo line": ("mapmaker_edit.js", "                redo = [];\n                undo.push(patch);", "                undo.push(patch);"),
+            "a new stroke that keeps the redo line": ("mapmaker_edit.js", "                redo = [];\n                patch.id = ++serial;", "                patch.id = ++serial;"),
             "a fill that leaks through a wall to the east": ("mapmaker_edit.js", "if (c < f.columns - 1 && !mark[i + 1] && tile(f, layer, i + 1) === want)", "if (c < f.columns - 1 && !mark[i + 1])"),
             "a brush that is not cut by the map's edge": ("mapmaker_edit.js", "return { r0: Math.max(0, row - lo), r1: Math.min(file.rows - 1, row + hi), c0: Math.max(0, column - lo), c1: Math.min(file.columns - 1, column + hi) };", "return { r0: row - lo, r1: row + hi, c0: column - lo, c1: column + hi };"),
             "a line that has gaps": ("mapmaker_edit.js", "            out.push([r, c]);\n        }\n        return out;", "            if ((r + c) % 2) out.push([r, c]);\n        }\n        return out;"),
