@@ -79,8 +79,8 @@
         var sides = el('ul', 'sides'); sides.setAttribute('aria-label', 'Who is playing');
         e.players.forEach(function (p) {
             var q = R.parsePlayer(p), x = el('li', 'side'), sq = el('span', 'sq'), i = el('i');
-            i.setAttribute('data-c', R.SEATS.indexOf(q.colour) !== -1 ? q.colour : ''); sq.appendChild(i); x.appendChild(sq);
-            x.appendChild(el('span', 'nm', q.name || q.colour)); x.title = q.name ? q.colour + ': ' + q.name : q.colour; sides.appendChild(x);
+            i.setAttribute('data-c', R.SEATS.indexOf(q.color) !== -1 ? q.color : ''); sq.appendChild(i); x.appendChild(sq);
+            x.appendChild(el('span', 'nm', q.name || q.color)); x.title = q.name ? q.color + ': ' + q.name : q.color; sides.appendChild(x);
         });
         li.appendChild(sides);
         var col = el('div', 'side-col'), len = el('div', 'len'); len.appendChild(el('span', 'lab', 'So far')); len.appendChild(el('b', '', length)); col.appendChild(len);

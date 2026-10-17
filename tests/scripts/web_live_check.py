@@ -356,6 +356,8 @@ def main():
             check(tab.ev("document.querySelector('.mast .tag').textContent") == "Matches being played right now.", "the title says what the page has")
             check(tab.ev("!window.__pwn && document.querySelectorAll('#body img[src=x]').length === 0 && document.getElementById('body').textContent.indexOf('<img src=x') !== -1"),
                   "a name that is markup is shown as text: nothing of it ran, nothing of it became an element")
+            check(tab.ev("(function () { var c = [].map.call(document.querySelectorAll('#body .liveentry .side i'), function (i) { return i.getAttribute('data-c'); }); var t = [].map.call(document.querySelectorAll('#body .liveentry .side'), function (l) { return l.title; }); return c.length >= 8 && c.every(function (v) { return ['Green', 'Red', 'Blue', 'Black'].indexOf(v) !== -1; }) && t.join().indexOf('undefined') === -1 && document.getElementById('body').textContent.indexOf('undefined') === -1; })()"),
+                  "the player chips carry their color (data-c is a color word) and no chip or title says undefined")
             check(tab.ev("document.body.textContent.indexOf('Earlier matches') === -1 && document.querySelector('.mast a[href=\"/matches.html\"]') !== null"), "the earlier matches are not here: the list of all matches is one button away")
             shot(tab, "list-live")
             door.set(live=[ID, OTHER, "SMALL-20261009-090000Z"])

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -269,16 +270,42 @@ class Spelling(Tree):
             f.write(b"\0\0" + self.UK.encode())
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
 
-    def test_each_kept_name_passes_and_the_word_next_to_it_fails(self):
+    def test_a_kept_name_passes_only_in_its_own_files(self):
         uk = self.UK
-        kept = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk, "{ %s: 'all' }" % uk,
-                "limit, offset, who, rec, %s, mode" % uk, "This map cannot be played with these %ss." % uk]
-        for i, line in enumerate(kept):
-            self.put("web/k%d.js" % i, line + "\n")
+        forms = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk, "{ %s: 'all' }" % uk]
+        for rel in ("web/history_page.js", "web/match.html", "src/ants_server/history_record.cpp", "docs/REPLAYS.md"):
+            self.put(rel, "\n".join(forms) + "\n")
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
-        self.put("web/bad.js", "seat.%s = 'the %s of a seat';\n" % (uk, uk))
-        self.put("web/bad2.js", "var %ss = 1; // the key \"%s\" stays\n" % (uk, uk))
-        self.assertEqual([x.split(":")[0] for x in ch.check_spelling(self.root, self.files())], ["web/bad.js", "web/bad2.js"])
+        for rel in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp"):        # the same text anywhere else is found, line by line
+            self.put(rel, "\n".join(forms) + "\n")
+        out = ch.check_spelling(self.root, self.files())
+        self.assertEqual(len(out), 3 * len(forms))
+        self.assertTrue(all(o.split(":")[0] in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp") for o in out))
+
+    def test_the_wire_notice_and_the_filter_list_have_their_own_places(self):
+        uk = self.UK
+        notice = "This map cannot be played with these %ss." % uk
+        listing = "limit, offset, who, rec, %s, mode" % uk
+        for rel in ("include/ants_net/protocol.hpp", "web/front/lobby_rules.js"):
+            self.put(rel, notice + "\n")
+        for rel in ("docker/nginx.conf", "include/ants_server/control.hpp", "src/ants_server/control_history.cpp"):
+            self.put(rel, listing + "\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+        self.put("web/lobby.html", notice + "\n")                                         # the notice is not allowed in a page that does not compare with it
+        self.put("docs/OTHER.md", listing + "\n")
+        self.put("web/history_page.js", listing + "\n")                                   # the list form is for the three places only
+        self.assertEqual(sorted(x.split(":")[0] for x in ch.check_spelling(self.root, self.files())), ["docs/OTHER.md", "web/history_page.js", "web/lobby.html"])
+
+    def test_a_page_that_reads_a_parsed_player_does_not_read_the_records_key(self):
+        # parsePlayer("Green (Mika)") gives { color, name }; the history record's seat key is another thing (the live page slipped once)
+        bad = []
+        web = os.path.join(ROOT, "web")
+        for name in sorted(os.listdir(web)):
+            if name.endswith((".html", ".js")):
+                text = open(os.path.join(web, name), encoding="utf-8").read()
+                if "parsePlayer" in text and re.search(r"\.%s\b" % self.UK, text):
+                    bad.append(name)
+        self.assertEqual(bad, [])
 
 
 class RealRepository(unittest.TestCase):
