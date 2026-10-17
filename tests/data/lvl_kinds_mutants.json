@@ -526,6 +526,36 @@
     "test_original_safe"
    ],
    "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_ground_sentence_talks_about_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(original ? \"): the original reads its terrain table past its end there\" : \"): every cell needs a ground tile\")",
+   "new": "(original ? \"): the original reads its terrain table past its end there\" : \"): the original reads its terrain table past its end there\")",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_pile_sentence_talks_about_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "\" has no stages\" + (original ? \": the original stops reading the food there and reads the rest of the map from the wrong place\" : \": a food pile needs at least one stage\")",
+   "new": "\" has no stages\" + (original ? \": the original stops reading the food there and reads the rest of the map from the wrong place\" : \": the original stops reading the food there and reads the rest of the map from the wrong place\")",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_piles_sentence_talks_about_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(original ? \"): the original stops reading the food at the first and reads the rest of the map from the wrong place\" : \"): a food pile needs at least one stage\")",
+   "new": "(original ? \"): the original stops reading the food at the first and reads the rest of the map from the wrong place\" : \"): the original stops reading the food at the first and reads the rest of the map from the wrong place\")",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
   }
  ]
 }
