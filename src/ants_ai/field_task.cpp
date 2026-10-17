@@ -51,7 +51,7 @@ void FieldTask::give_up(TaskContext& context, uint64_t now) {
     pending_ = false;
     hints_.hop = BombHop{};
     ++given_up_;
-    if (given_up_ % params_.ants_max == 0) {                                              // (ants_max ants in a row could do nothing: wait for a change)
+    if (params_.ants_max == 0 || given_up_ % params_.ants_max == 0) {                                              // (ants_max ants in a row could do nothing: wait for a change)
         resting_ = true;
         active_ = false;
         rest_sources_ = sources(context.view);
@@ -196,6 +196,7 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             takes_[2] = takes_[1];
             takes_[1] = takes_[0];
             takes_[0] = step.tile;
+            // (the only guard against a swap livelock: every Take changes the ant's kind, which renews progress_ and resets repeats_, so no other give-up rule fires)
             if (takes_[0] == takes_[2] && takes_[1] == takes_[3] && takes_[0] != takes_[1]) {   // two power-ups taken in turn: each leaves the other where the ant must pass (the engine's drop is fixed by its state)
                 takes_[0] = takes_[1] = takes_[2] = takes_[3] = sim::TileCoord{-1, -1};
                 give_up(context, now);

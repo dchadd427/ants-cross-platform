@@ -172,8 +172,8 @@
   {
    "id": "never_waits",
    "file": "src/ants_ai/field_task.cpp",
-   "old": "    if (given_up_ % params_.ants_max == 0) {",
-   "new": "    if (given_up_ % params_.ants_max == 0 && false) {",
+   "old": "    if (params_.ants_max == 0 || given_up_ % params_.ants_max == 0) {",
+   "new": "    if (params_.ants_max == 0 || (given_up_ % params_.ants_max == 0 && false)) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
    "expect": "AI29.10"
   },

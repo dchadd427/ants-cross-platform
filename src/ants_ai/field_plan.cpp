@@ -65,7 +65,7 @@ Tiles read_tiles(const BotView& view, uint8_t seat, const FieldHints& hints) {
             } else if (grid.has_bomb_at(c)) {
                 const uint8_t owner = grid.get_cell(c).interactive_owner;
                 const bool own = owner == seat || (view.ally() < sim::MAX_PLAYERS && owner == view.ally());
-                const bool start = !hints.map_bombs_known || std::find(hints.map_bombs.begin(), hints.map_bombs.end(), c) != hints.map_bombs.end();
+                const bool start = own && (!hints.map_bombs_known || std::find(hints.map_bombs.begin(), hints.map_bombs.end(), c) != hints.map_bombs.end());   // (looked up for the seat's own bombs only: the other bombs are no work of the list)
                 k = (water || (own && !start)) ? kBlocked : kBomb;
                 t.own[t.at(c)] = own ? 1 : 0;
             } else if (water) {
@@ -145,7 +145,7 @@ struct Search {
 
 using Node = std::pair<int32_t, size_t>;
 
-// Dijkstra from `sources` (tile, cost at the start): integer costs, ties by the tile index, the neighbours in the engine's order
+// Dijkstra from `sources` (tile, cost at the start): integer costs (one double, the engine's 1.4 of a diagonal step in carrier_step, copied from MapInfo::step_cost: a prediction only), ties by the tile index, the neighbours in the engine's order
 Search search(const Tiles& t, const Mover& m, const std::vector<std::pair<sim::TileCoord, int32_t>>& sources, const Extra& extra = Extra{}) {
     Search s;
     s.dist.assign(t.kind.size(), kFar);
