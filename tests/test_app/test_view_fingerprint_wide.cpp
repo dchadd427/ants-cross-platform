@@ -877,7 +877,7 @@ void app_pixel_wide_scenarios() {
             mr.decide_winners();
             rig.app.scorecard().show(mr, 0, sim::GameMode::Kills187);
             rig.app.scorecard().update(0.25f);
-            const std::vector<MaskRect> lettering = {{330, 60, 930, 120}, {730, 135, 925, 240}};   // the headline and the three headings (the arrows stay unmasked)
+            const std::vector<MaskRect> lettering = {{330, 60, 930, 120}, {730, 135, 925, 240}, {95, 450, 930, 478}};   // the headline, the three headings (the arrows stay unmasked) and the fourth row's text
             rig.shot("px.wide.app.results187", wide_masks({&kWMaskResults, &lettering}));
         }
     }

@@ -629,7 +629,7 @@ const Golden kGoldens[] = {
     {"px.wide.app.quickhelp.rest", 0x169fb94096dad790, 518400},
     {"px.wide.app.quickhelp.hover_start", 0x2fa88736e7f1b0af, 518400},
     {"px.wide.app.results", 0x8d6ae83a6750f4d7, 518400},
-    {"px.wide.app.results187", 0x231e2fe28651372e, 518400},
+    {"px.wide.app.results187", 0xc0568d8d52796ace, 518400},
     {"px.wide.app.match.modal", 0x3ddb897f72c9d3d6, 518400},
     {"px.wide.app.match.start_view", 0x595d3def1a48bb8b, 518400},
     {"px.wide.app.match.cam_tl", 0xf19b355a5395c138, 518400},
