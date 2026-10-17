@@ -6,6 +6,7 @@
 //      same level and is what write_level makes
 //   C4 hostile files (empty, one byte, cut, 513 KB, huge counts, random bytes): an error report, never a throw
 //   C5 the blank map: sizes, refusals, the findings of a map with no hill
+//   C6 no memory left: every allocation made to fail in turn, in every call: a status 2, never an exception out of a call
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
@@ -16,11 +17,13 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <new>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -38,6 +41,19 @@ uint32_t lvl_result_size(const uint8_t* result);
 const uint8_t* lvl_result_data(const uint8_t* result);
 uint32_t lvl_interface_version();
 }
+
+// Fault injection (C6): every allocation after the first `g_allow` ones fails with std::bad_alloc (the memory has run out and stays out) while g_allow is not negative
+static long g_allow = -1;
+static void (*volatile g_release)(void*) = std::free;     // (called through a pointer: a compiler that sees free() beside new warns of a mismatch)
+
+void* operator new(std::size_t n) {
+    if (g_allow == 0) throw std::bad_alloc();
+    if (g_allow > 0) --g_allow;
+    if (void* p = std::malloc(n == 0 ? 1 : n)) return p;
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { g_release(p); }
+void operator delete(void* p, std::size_t) noexcept { g_release(p); }
 
 namespace {
 
@@ -354,6 +370,35 @@ void c4_hostile() {
     }
 }
 
+// ---- C6 ----
+// No memory left: whichever allocation fails, in whichever call, the answer is a status (2 when the memory ran out, else the answer), never an exception that escapes
+// (guarded() is noexcept: a throw out of its handler would end the program, which this test would show as a crash)
+void c6_no_memory() {
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    int faults = 0;
+    for (long allow = 0; allow < 400; allow += (allow < 60 ? 1 : 7)) {
+        for (int call = 0; call < 5; ++call) {
+            g_allow = allow;
+            lvl_core::Result r;
+            switch (call) {
+                case 0: r = lvl_core::read_report(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
+                case 1: r = lvl_core::check_original(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
+                case 2: r = lvl_core::rewrite(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
+                case 3: r = lvl_core::blank(31, 31, 485, 6, 10, lvl_core::Profile::NewMap); break;
+                default: r = lvl_core::same_level(tiny.data(), tiny.size(), tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
+            }
+            g_allow = -1;
+            CHECK(r.status == 0 || r.status == 1 || r.status == 2);
+            if (r.status == 2) {
+                ++faults;
+                CHECK_MSG(r.payload.empty() || r.payload == "out of memory", r.payload);
+            }
+        }
+    }
+    g_allow = -1;
+    CHECK_MSG(faults > 100, "the injected failures were met: " + std::to_string(faults));
+}
+
 // ---- C5 ----
 struct BlankCase {
     uint32_t rows, columns, ground, eggs, minutes;
@@ -435,6 +480,7 @@ int main(int argc, char* argv[]) {
     run_case("C3 the library files", c3_library);
     run_case("C4 hostile files", c4_hostile);
     run_case("C5 the blank map", c5_blank);
+    run_case("C6 no memory left", c6_no_memory);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

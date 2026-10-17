@@ -6,6 +6,8 @@
 //
 // Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal and sameLevel, `bytes` is the file for
 // rewrite and blank, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
+// wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
+// status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
 // `profile`: "new_map" (the default: the limits of a new map, at most 10,000 cells and 130 a side, 512 KB read) or "game" (the game's own limits).
 (function (root, factory) {
     'use strict';
@@ -15,6 +17,7 @@
     'use strict';
 
     var PROFILES = { new_map: 0, game: 1 };
+    var EXPECTED_INTERFACE = 1;     // lvl_interface_version() of the module this wrapper was written for
 
     function profileOf(profile) {
         if (profile === undefined || profile === null) return 0;
@@ -22,12 +25,23 @@
     }
 
     function wrap(module) {
+        var found = module._lvl_interface_version ? module._lvl_interface_version() : 0;
+        if (found !== EXPECTED_INTERFACE) {
+            throw new Error('lvl_core.js is interface version ' + found + ' and lvl_core_api.js needs ' + EXPECTED_INTERFACE + ' (an old copy of one of them is cached: reload the page)');
+        }
         var decoder = new TextDecoder('utf-8');
+        var dead = false;      // set when the module threw (a wasm trap): its memory is in an unknown state, so every later call fails until the module is created again
 
         function fault(status, message) { return { status: status, error: message, text: message }; }
+        function stopped() { return fault(2, 'the map core stopped after an error: create the module again'); }
+        function trapped(e) {
+            dead = true;
+            return fault(2, 'the map core failed: ' + (e && e.message ? e.message : String(e)));
+        }
 
         // Gives `bytes` to the module as a buffer of its own, calls fn(pointer, size), and always frees the buffer
         function withBuffers(list, fn) {
+            if (dead) return stopped();
             var pointers = [];
             try {
                 for (var i = 0; i < list.length; i++) {
@@ -40,9 +54,9 @@
                 }
                 return fn(pointers);
             } catch (e) {
-                return fault(2, 'the map core failed: ' + (e && e.message ? e.message : String(e)));
+                return trapped(e);
             } finally {
-                for (var j = 0; j < pointers.length; j++) module._lvl_free(pointers[j]);
+                if (!dead) for (var j = 0; j < pointers.length; j++) module._lvl_free(pointers[j]);
             }
         }
 
@@ -55,7 +69,7 @@
                 var data = module._lvl_result_data(block);
                 var bytes = module.HEAPU8.slice(data, data + size);
                 if (status !== 0) {
-                    var sentence = decoder.decode(bytes);
+                    var sentence = bytes.length === 0 && status === 2 ? 'out of memory' : decoder.decode(bytes);
                     return { status: status, error: sentence, text: sentence };
                 }
                 if (kind === 'bytes') return { status: 0, bytes: bytes };
@@ -75,7 +89,8 @@
         }
 
         return {
-            interfaceVersion: module._lvl_interface_version(),
+            interfaceVersion: found,
+            isDead: function () { return dead; },
             readReport: fileCall(function (ptr, size, p) { return module._lvl_read_report(ptr, size, p); }, 'json'),
             checkOriginal: fileCall(function (ptr, size, p) { return module._lvl_check_original(ptr, size, p); }, 'json'),
             rewrite: fileCall(function (ptr, size, p) { return module._lvl_rewrite(ptr, size, p); }, 'bytes'),
@@ -87,10 +102,11 @@
                 for (var i = 0; i < numbers.length; i++) {
                     if (typeof numbers[i] !== 'number' || !isFinite(numbers[i]) || numbers[i] < 0 || numbers[i] > 4294967295 || Math.floor(numbers[i]) !== numbers[i]) return fault(1, 'the sizes, the tile, the eggs and the minutes are whole numbers');
                 }
+                if (dead) return stopped();
                 try {
                     return take(module._lvl_blank(rows, columns, ground, eggs, minutes, p), 'bytes');
                 } catch (e) {
-                    return fault(2, 'the map core failed: ' + (e && e.message ? e.message : String(e)));
+                    return trapped(e);
                 }
             },
             sameLevel: function (a, b, profile) {

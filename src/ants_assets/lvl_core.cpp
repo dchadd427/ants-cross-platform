@@ -262,17 +262,28 @@ Result same_level_impl(const uint8_t* a, size_t size_a, const uint8_t* b, size_t
     return Result{0, out};
 }
 
+// A fault as a Result, built so that it cannot throw: the sentence is assigned inside its own try, because a string beyond the small-string size allocates, and the
+// memory may be exactly what ran out (an empty payload then, which the callers read as "out of memory")
+Result fault(const char* sentence) noexcept {
+    Result r;
+    r.status = kFault;
+    try { r.payload = sentence; } catch (...) { r.payload.clear(); }
+    return r;
+}
+
 // Nothing leaves a call as an exception: a fault of the core (or no memory left) is a status
 template <typename Fn>
 Result guarded(Fn&& fn) noexcept {
     try {
         return fn();
     } catch (const std::bad_alloc&) {
-        return Result{kFault, "out of memory"};
+        return fault("out of memory");
     } catch (const std::exception& e) {
-        try { return Result{kFault, std::string("internal error: ") + e.what()}; } catch (...) { return Result{kFault, "internal error"}; }
+        Result r = fault("internal error");
+        try { r.payload = std::string("internal error: ") + e.what(); } catch (...) {}
+        return r;
     } catch (...) {
-        return Result{kFault, "internal error"};
+        return fault("internal error");
     }
 }
 

@@ -265,19 +265,57 @@ function main() {
             const huge = new Uint8Array(40 * 1024 * 1024);
             const hugeRead = core.readReport(huge);
             check(hugeRead.status === 0 && hugeRead.json.loaded === false && hugeRead.json.findings[0].code === 'file_too_large', 'a 40 MB buffer is refused as too large');
-            // memory: the same calls again and again must not make the module's memory grow
-            const bomber = library.find((c) => c.id === 'bomberworld').bytes;
-            const round = () => {
-                core.readReport(bomber); core.checkOriginal(bomber); const rw = core.rewrite(bomber); core.sameLevel(bomber, rw.bytes);
-                core.blank(100, 100, 485, 6, 10);
-                for (const c of hostile) { core.readReport(c.bytes); core.rewrite(c.bytes); }
-            };
-            round(); round();
-            const settled = module.HEAPU8.length;
-            for (let i = 0; i < 40; i++) round();
-            check(module.HEAPU8.length === settled, 'the module\'s memory does not grow over 40 more rounds (' + settled + ' bytes): every buffer is given back');
             // and the module still answers as before
             check(core.readReport(library[0].bytes).text === text(library[0].id + '.read.json'), 'the module answers as before');
+        });
+
+        await runCase('D memory: every buffer is given back (a fresh module, a baseline before anything large)', async () => {
+            const fresh = await createLvlCore();
+            const c2 = api.wrap(fresh);
+            const bomber = library.find((c) => c.id === 'bomberworld').bytes;
+            const round = () => {
+                c2.readReport(bomber); c2.checkOriginal(bomber); const rw = c2.rewrite(bomber); c2.sameLevel(bomber, rw.bytes);
+                c2.blank(100, 100, 485, 6, 10);
+                for (const c of hostile.filter((h) => h.bytes.length < 200000)) { c2.readReport(c.bytes); c2.rewrite(c.bytes); }
+            };
+            round(); round();                                              // warm-up: the allocator settles
+            const baseline = fresh.HEAPU8.length;
+            const probe = () => { const p = fresh._lvl_alloc(1 << 20); fresh._lvl_free(p); return p; };
+            const firstProbe = probe();
+            for (let i = 0; i < 300; i++) round();                         // (about 8,000 calls: a leak of 1 KB a call would be 8 MB)
+            check(fresh.HEAPU8.length === baseline, 'the heap does not grow over 300 rounds (' + baseline + ' bytes)');
+            check(probe() === firstProbe, 'a 1 MB buffer is given the same place before and after (nothing was left in its way)');
+            // a freed buffer is reused: the same size comes back at the same place
+            const p = fresh._lvl_alloc(4096); fresh._lvl_free(p);
+            const q = fresh._lvl_alloc(4096); fresh._lvl_free(q);
+            check(p === q, 'a freed buffer is reused');
+        });
+
+        await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
+            let threw = '';
+            try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
+            check(/interface version 2/.test(threw) && /needs 1/.test(threw), 'a module of interface version 2 is refused with a sentence: ' + threw);
+            threw = '';
+            try { api.wrap({}); } catch (e) { threw = e.message; }
+            check(/interface version 0/.test(threw), 'a module with no version call is refused');
+            // a module whose reader traps (wasm RuntimeError): status 2 once, then the core is dead
+            const real = module;
+            const broken = Object.create(real);
+            broken._lvl_read_report = () => { throw new WebAssembly.RuntimeError('unreachable'); };
+            const c3 = api.wrap(broken);
+            check(c3.isDead() === false, 'alive at first');
+            const first = c3.readReport(new Uint8Array(10));
+            check(first.status === 2 && /unreachable/.test(first.error), 'the trap is a status 2 with its sentence: ' + first.error);
+            check(c3.isDead() === true, 'the core is dead after a trap');
+            for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10)]) {
+                check(r.status === 2 && /stopped/.test(r.error) && /create the module again/.test(r.error), 'every later call fails clearly: ' + r.error);
+            }
+            // a module that has no memory left: the null block is "out of memory", not a trap
+            const noMemory = Object.create(real);
+            noMemory._lvl_read_report = () => 0;
+            const c4 = api.wrap(noMemory);
+            const none = c4.readReport(new Uint8Array(4));
+            check(none.status === 2 && none.error === 'out of memory' && !c4.isDead(), 'a call with no memory left answers out of memory and the core lives');
         });
     });
 }

@@ -8,7 +8,7 @@
 //   uint8_t* lvl_rewrite(data, size, profile)                      the canonical bytes of a file (lvl_core::rewrite)
 //   uint8_t* lvl_blank(rows, columns, ground_tile, eggs, minutes, profile)   a new map's bytes (lvl_core::blank)
 //   uint8_t* lvl_same_level(a, size_a, b, size_b, profile)         JSON {"same": ...} (lvl_core::same_level)
-//   uint32_t lvl_result_status(const uint8_t* result)              0 the answer, 1 a refusal (the payload is a sentence), 2 a fault or no memory (a sentence)
+//   uint32_t lvl_result_status(const uint8_t* result)              0 the answer, 1 a refusal (the payload is a sentence), 2 a fault or no memory (a sentence, empty when even that did not fit); a null block reads as 2
 //   uint32_t lvl_result_size(const uint8_t* result)                the bytes of the payload
 //   const uint8_t* lvl_result_data(const uint8_t* result)          the payload (valid until lvl_free(result))
 //   uint32_t lvl_interface_version()                               1
@@ -69,7 +69,8 @@ LVL_CORE_EXPORT uint8_t* lvl_same_level(const uint8_t* a, uint32_t size_a, const
     return block_of(ants::assets::lvl_core::same_level(a, size_a, b, size_b, profile_of(profile)));
 }
 
-LVL_CORE_EXPORT uint32_t lvl_result_status(const uint8_t* result) { return get_u32(result); }
-LVL_CORE_EXPORT uint32_t lvl_result_size(const uint8_t* result) { return get_u32(result + 4); }
-LVL_CORE_EXPORT const uint8_t* lvl_result_data(const uint8_t* result) { return result + kHeader; }
+// (a null block, which a call answers when there is no memory left for its answer, reads as status 2, no payload)
+LVL_CORE_EXPORT uint32_t lvl_result_status(const uint8_t* result) { return result == nullptr ? 2 : get_u32(result); }
+LVL_CORE_EXPORT uint32_t lvl_result_size(const uint8_t* result) { return result == nullptr ? 0 : get_u32(result + 4); }
+LVL_CORE_EXPORT const uint8_t* lvl_result_data(const uint8_t* result) { return result == nullptr ? nullptr : result + kHeader; }
 LVL_CORE_EXPORT uint32_t lvl_interface_version() { return 1; }
