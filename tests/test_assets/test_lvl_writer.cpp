@@ -1297,8 +1297,8 @@ void w6_new_maps() {
             CHECK_MSG(refused_with(loose, grid), loose.error);
         }
         CHECK(blank_level(90, 111, names, new_map).layer1_terrain.size() == 9990u && blank_level(76, 130, names, new_map).layer2_interactive.size() == 9880u);
-        CHECK(blank_level(91, 10, names, new_map).layer1_terrain.empty() && blank_level(90, 130, names, new_map).layer1_terrain.empty());
-        CHECK(!write_level(blank_level(100, 100, names), new_map).ok);                       // (100 x 100 was a new map before the 90 rows)      // (91 rows: the wall; 90 x 130: 11,700 cells)
+        CHECK(blank_level(91, 10, names, new_map).layer1_terrain.empty() && blank_level(90, 130, names, new_map).layer1_terrain.empty());      // (91 rows: the wall; 90 x 130: 11,700 cells)
+        CHECK(!write_level(blank_level(100, 100, names), new_map).ok);                       // (100 x 100 was a new map before the 90 rows)
         const LevelData largest = blank_level(256, 256, names);
         CHECK(largest.layer1_terrain.size() == 65536u && write_level(largest).ok);
     });

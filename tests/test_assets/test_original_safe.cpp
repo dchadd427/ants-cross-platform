@@ -1036,6 +1036,28 @@ void s6_kinds() {
             CHECK(check_map(e, limits).report.first(Code::TileOutsideDictionary)->message ==
                   "one ground cell uses a tile beyond the dictionary of 670 names (row 3, column 3: tile 1300): the dictionary has no name for that tile");
         }
+        {
+            LevelData c = classic;
+            LevelData e = ext;
+            c.layer1_terrain[at(c, 3, 3)].tile_index = LVL_EMPTY_TILE;
+            e.layer1_terrain[at(e, 3, 3)].tile_index = LVL_EMPTY_TILE;
+            CHECK(check_original_safe(c).first(Code::GroundMissing)->message ==
+                  "one cell has no ground tile (the empty tile 32766; row 3, column 3): the original reads its terrain table past its end there");
+            CHECK(check_map(e, limits).report.first(Code::GroundMissing)->message == "one cell has no ground tile (the empty tile 32766; row 3, column 3): every cell needs a ground tile");
+            FoodSchedule pile;
+            pile.y = 4;
+            pile.x = 4;
+            c = classic;
+            e = ext;
+            c.food_schedules.push_back(pile);
+            e.food_schedules.push_back(pile);
+            CHECK(check_original_safe(c).first(Code::FoodPileWithoutStages)->message ==
+                  "the food pile at row 4, column 4 has no stages: the original stops reading the food there and reads the rest of the map from the wrong place");
+            CHECK(check_map(e, limits).report.first(Code::FoodPileWithoutStages)->message == "the food pile at row 4, column 4 has no stages: a food pile needs at least one stage");
+            e.food_schedules.push_back(pile);
+            CHECK(check_map(e, limits).report.first(Code::FoodPileWithoutStages)->message ==
+                  "2 food piles have no stages (the first at row 4, column 4): a food pile needs at least one stage");
+        }
         // a wrong dictionary and an empty grid
         {
             LevelData e = ext;
