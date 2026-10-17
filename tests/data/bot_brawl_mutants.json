@@ -1,0 +1,242 @@
+{
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "brawl_pack_cap_off_by_one",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "while (load_of(fo.ant->id) < params_.per_target) {",
+   "new": "while (load_of(fo.ant->id) <= params_.per_target) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.4"
+  },
+  {
+   "id": "brawl_crowd_unbounded",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (d < near_d && load_of(fo.ant->id) < params_.crowd) {",
+   "new": "if (d < near_d) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.4"
+  },
+  {
+   "id": "brawl_hurt_not_first",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "- static_cast<int64_t>(f->hp) * static_cast<int64_t>(params_.hp_weight)",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.4"
+  },
+  {
+   "id": "brawl_no_retreat",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (a.hp <= params_.retreat_hp) {",
+   "new": "if (false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.6"
+  },
+  {
+   "id": "brawl_retreat_to_wrong_tile",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "c.orders.move(going_home, home.entrance, Priority::Urgent);",
+   "new": "c.orders.move(going_home, home.origin, Priority::Urgent);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.6"
+  },
+  {
+   "id": "brawl_healed_stay_home",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (job.kind == Kind::Home && a.hp < params_.return_hp && !a.idle()) continue;",
+   "new": "if (job.kind == Kind::Home) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.6"
+  },
+  {
+   "id": "brawl_ignores_walls",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (shunned(a->id, f->id, now) || !meets(*a, *f)) continue;\n            nearest",
+   "new": "if (shunned(a->id, f->id, now)) continue;\n            nearest",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.7"
+  },
+  {
+   "id": "brawl_strikes_allies",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (ally_of(v, e.team)) continue;\n        AntView probe = e;",
+   "new": "AntView probe = e;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.8"
+  },
+  {
+   "id": "brawl_marches_with_foes_in_sight",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (!idle_left.empty() && foes.empty()) {",
+   "new": "if (!idle_left.empty()) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.7"
+  },
+  {
+   "id": "brawl_marches_to_unreachable_hill",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(walkers && c.map.hill_component(t) != c.map.hill_component(c.seat))",
+   "new": "false",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.7"
+  },
+  {
+   "id": "brawl_reorder_only_when_idle",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(moved || idle_member)",
+   "new": "idle_member",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_reorder_only_when_moved",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(moved || idle_member)",
+   "new": "moved",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_chases_walkers",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (f->state == sim::UnitState::Walking && nearest > 2) continue;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_hit_clip_victim_lost",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (e.state == sim::UnitState::Flinch || e.state == sim::UnitState::Knockback) probe.state = sim::UnitState::Idle;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_never_gives_up_a_refused_pair",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (r.count >= 2) shun_[{a.id, job.target}] = now + kShunTicks;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.9"
+  },
+  {
+   "id": "brawl_chases_the_fleeing_far_off",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(f->hp <= 1 && close)",
+   "new": "(f->hp <= 1)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_mode_gate_open",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (tactics_.plan.brawl187 && view.game_mode() == sim::GameMode::Kills187) {",
+   "new": "if (tactics_.plan.brawl187) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.3"
+  },
+  {
+   "id": "brawl_switch_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (tactics_.plan.brawl187 && view.game_mode() == sim::GameMode::Kills187) {",
+   "new": "if (view.game_mode() == sim::GameMode::Kills187) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.2"
+  },
+  {
+   "id": "brawl_view_forgets_the_mode",
+   "file": "src/ants_ai/bot_view.cpp",
+   "old": "    v.game_mode_ = sim.game_mode();\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.1"
+  },
+  {
+   "id": "brawl_view_copy_forgets_the_mode",
+   "file": "src/ants_ai/bot_view.cpp",
+   "old": "      game_mode_(other.game_mode_),\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.1"
+  },
+  {
+   "id": "brawl_plan_off_by_default",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "bool brawl187{true};",
+   "new": "bool brawl187{false};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.2"
+  },
+  {
+   "id": "brawl_pack_of_three",
+   "file": "include/ants_ai/brawl_params.hpp",
+   "old": "uint32_t per_target{2};",
+   "new": "uint32_t per_target{3};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.4"
+  },
+  {
+   "id": "brawl_wounded_fight_on",
+   "file": "include/ants_ai/brawl_params.hpp",
+   "old": "uint8_t retreat_hp{3};",
+   "new": "uint8_t retreat_hp{1};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.6"
+  },
+  {
+   "id": "brawl_crowd_of_five",
+   "file": "include/ants_ai/brawl_params.hpp",
+   "old": "uint32_t crowd{3};",
+   "new": "uint32_t crowd{5};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.4"
+  },
+  {
+   "id": "brawl_arena_ignores_the_mode",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "    sim.set_game_mode(spec.game_mode);\n    sim.init(*spec.level, spec.seed, roster);",
+   "new": "    sim.init(*spec.level, spec.seed, roster);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.10"
+  },
+  {
+   "id": "brawl_replay_ignores_the_mode",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "    sim.set_game_mode(spec.game_mode);\n    sim.init(*spec.level, spec.seed, roster_of(spec.bots));",
+   "new": "    sim.init(*spec.level, spec.seed, roster_of(spec.bots));",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.10"
+  },
+  {
+   "id": "brawl_tool_mode_not_carried",
+   "file": "tools/bot_arena.cpp",
+   "old": "    s.game_mode = o.game_mode;\n",
+   "new": "",
+   "build": "bot_arena",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "spec_of carries --game-mode"
+  },
+  {
+   "id": "brawl_tool_report_always_names_the_mode",
+   "file": "tools/bot_arena.cpp",
+   "old": "if (o.game_mode != sim::GameMode::HighestScore) j.field(\"game_mode\"",
+   "new": "if (true) j.field(\"game_mode\"",
+   "build": "bot_arena",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the report names the mode"
+  },
+  {
+   "id": "brawl_tool_mode_word_loose",
+   "file": "tools/bot_arena.cpp",
+   "old": "if (!net::parse_game_mode_name(v, mode)) {",
+   "new": "if (false) {",
+   "build": "bot_arena",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "--game-mode: no number"
+  }
+ ]
+}

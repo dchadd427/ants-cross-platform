@@ -2073,6 +2073,20 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
         const MatchReport checked = run_job(o, maps, job, selftest_factory);
         t.check(checked.replay_checked && checked.replay.ok && checked.commands > 20 && checked.result.log.empty() && checked.result.checkpoints.empty() && checked.result.ticks == 300,
                 "a match that was replay-checked keeps the number of its commands, not the commands");
+        // --game-mode 187: the spec carries the mode, the match is another match than the original's, its commands still replay into a fresh engine, and the report names the mode (only a 187 report does)
+        {
+            Options m = o;
+            m.game_mode = sim::GameMode::Kills187;
+            m.replay_check = true;
+            m.ticks = 300;
+            t.check(spec_of(m, tiny, job, false).game_mode == sim::GameMode::Kills187 && spec_of(o, tiny, job, false).game_mode == sim::GameMode::HighestScore, "spec_of carries --game-mode");
+            const MatchReport in187 = run_job(m, maps, job, selftest_factory);
+            t.check(in187.ok() && in187.replay_checked && in187.replay.ok && in187.result.hash != checked.result.hash, "a 187 match is another match than the original's, and its commands replay into a fresh engine of the same mode");
+            const std::vector<MatchReport> one187 = {in187};
+            const std::vector<MatchReport> one_original = {checked};
+            t.check(report_json(m, maps, one187).find("\"game_mode\": \"187\"") != std::string::npos && report_json(o, maps, one_original).find("game_mode") == std::string::npos,
+                    "the report names the mode when it is 187 and says nothing of it for the original's game");
+        }
         // a replay that fails is reported as such, with its first bad tick
         std::vector<MatchReport> broken = {checked};
         broken[0].replay.ok = false;
@@ -2493,6 +2507,11 @@ int selftest() {
         Options wb;
         t.check(parse_args({"--write-baselines", "--threads", "2"}, wb, err) && wb.write_baselines && wb.threads == 2 && !d.write_baselines, "--write-baselines is an option of its own (off by default)");
         Options bad;
+        Options gm;
+        t.check(d.game_mode == sim::GameMode::HighestScore && parse_args({"--game-mode", "187"}, gm, err) && gm.game_mode == sim::GameMode::Kills187 &&
+                    parse_args({"--game-mode", "highest-score"}, gm, err) && gm.game_mode == sim::GameMode::HighestScore,
+                "--game-mode: the original's game by default, 187 and highest-score by their words");
+        t.check(!parse_args({"--game-mode", "188"}, bad, err) && !parse_args({"--game-mode", "1"}, bad, err) && !parse_args({"--game-mode"}, bad, err), "--game-mode: no number, no other word, a value is needed");
         t.check(!parse_args({"--seat", "0=idle", "--seat", "0=hard"}, bad, err) && !parse_args({"--ticks", "0"}, bad, err) && !parse_args({"--wat"}, bad, err) &&
                     !parse_args({"--threads", "0"}, bad, err) && !parse_args({"--map"}, bad, err),
                 "two bots on one seat, 0 ticks, an unknown option, 0 threads and a missing value are refused");
