@@ -453,7 +453,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
         self.assertIn("root.AntsRematch = api", read("web", "front", "rematch.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.script)
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 
