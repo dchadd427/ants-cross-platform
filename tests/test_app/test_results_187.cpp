@@ -1,9 +1,9 @@
-// The on-screen part of the game mode 187 (docs/GAMEPLAY.md "187", include/ants_app/results_layout.hpp, scorecard.hpp, hud.hpp): the pictures the owner approved, as numbers.
+// The on-screen part of the game mode 187 (docs/GAMEPLAY.md "187", include/ants_app/results_layout.hpp, scorecard.hpp, hud.hpp): the design's pictures, as numbers.
 //   1. the headline: "<Name> is the last colony standing!", "<A> and <B> are the last colonies standing!" (two allies that are both left), "Time is up. The most kills wins!", "Nobody is left.
 //      The most kills wins!", and none for a match that a quit ended; the names are the page's own (the players' names, else the color words);
 //   2. the rows: the numbers are the kills (the score), the ants lost and the ants left, three of them; the order of the rows, "Winner!", "other players..." and the cue are the original's;
 //   3. the baked headings (newstats.bmp) are not drawn in 187, in the wide page and in the classic page, and everything else of the page is (the original's modes draw them, as before);
-//   4. the three headings, their strokes and arrows, the numbers and the headline stand where the approved picture has them (the positions of tools/compose.py at 960 x 540, written out here
+//   4. the three headings, their strokes and arrows, the numbers and the headline stand where the picture has them (the positions at 960 x 540, written out here
 //      as numbers of their own: the arrows pixel for pixel, the texts by the calls that draw them), and nothing else of the page changed (pixel for pixel, outside the places that are 187's);
 //      the lettering has the look of the original's own (YOUR SCORE, Winner!): the fill, a lit edge one pixel up and left, a shadow edge one pixel down and right, in the colors sampled from the art;
 //      the page of the original's rules is as it was (its draw calls and its pixels, pinned from before the lettering had that look);
@@ -255,7 +255,7 @@ Rgb pixel(const std::vector<uint8_t>& px, int32_t width, int32_t x, int32_t y) {
     return Rgb{px[i], px[i + 1], px[i + 2]};
 }
 
-// The look of the original's own lettering ("YOUR SCORE", "Winner!"), sampled from its art (tools/compose.py: ARTGREEN, ARTHI, ARTLO): the fill, the lit edge one pixel up and to the left, the shadow
+// The look of the original's own lettering ("YOUR SCORE", "Winner!"), sampled from its art: the fill, the lit edge one pixel up and to the left, the shadow
 // edge one pixel down and to the right
 constexpr Rgb kFill{43, 95, 67};
 constexpr Rgb kLit{115, 191, 155};
@@ -392,7 +392,7 @@ void test_headline() {
         s.left = {0, 0, 2, 9};
         check(headline_of(s) == "Time is up. The most kills wins!", "an ant of a team with a row does: \"" + headline_of(s) + "\"");
     }
-    {   // a player's quit ended the match: no wording was approved for it, so the page has no headline
+    {   // a player's quit ended the match: it has no wording, so the page has no headline
         Scene s;
         s.standing = sim::PLAYER_NEUTRAL;
         s.quitter = 2;
@@ -512,18 +512,18 @@ void test_baked_headings(const assets::AssetArchive& arc) {
 // 4. Where everything stands
 // =====================================================================================================================================================
 
-// The approved picture's positions, from tools/compose.py (results_page, a 960 x 540 frame), as numbers of their own: the three columns the arrows stand on, the text's right edge (the column - 14),
-// the row of each stroke (the heading's top + its size / 2 + 2), the end of the shafts, the head's rows, the line of the headline (centred on x 570, its text 35 px high at y 71)
+// The picture's positions (a 960 x 540 frame), as numbers of their own: the three columns the arrows stand on, the text's right edge (the column - 14),
+// the row of each stroke (the heading's top + its size / 2 + 2), the end of the shafts, the head's rows, the line of the headline (centered on x 570, its text 35 px high at y 71)
 constexpr int32_t kPictureColumn[3] = {805, 854, 896};
 constexpr int32_t kPictureStrokeY[3] = {220, 185, 153};      // 204 + 28 / 2 + 2, 172 + 22 / 2 + 2, 140 + 22 / 2 + 2
 constexpr int32_t kPictureShaftEnd = 246;                    // the shafts run down to this row, the heads are the polygon (cx + 1, 238), (cx + 11, 238), (cx + 6, 247)
 constexpr int32_t kPictureHeadTop = 238;
 constexpr int32_t kPictureTip = 247;
-constexpr int32_t kPictureHeadlineCentre = 570;
+constexpr int32_t kPictureHeadlineCenter = 570;
 constexpr int32_t kPictureHeadlineY = 71;
 
 void test_positions(const assets::AssetArchive& arc) {
-    group("places", "the three headings, strokes, arrows, numbers and the headline of the wide page stand where the approved picture has them; the classic page moves them as the page moves");
+    group("places", "the three headings, strokes, arrows, numbers and the headline of the wide page stand where the picture has them; the classic page moves them as the page moves");
     const ResultsLayout& w = ResultsLayout::wide();
     const ResultsLayout& c = ResultsLayout::classic();
     // the layout's own numbers
@@ -540,7 +540,7 @@ void test_positions(const assets::AssetArchive& arc) {
     }
     check(w.arrow_tip_y187 == kPictureTip && c.arrow_tip_y187 + w.dy == kPictureTip, "the arrows' tips are at row 247 (wide)");
     check(kPictureShaftEnd == w.arrow_tip_y187 - 1 && kPictureHeadTop + 9 == w.arrow_tip_y187 - 0, "the shafts run down to the row above the tips' row, and the head's ten rows end at the tip (the picture's own numbers agree with the layout)");
-    check(w.headline187.x + w.headline187.w / 2 == kPictureHeadlineCentre, "the headline is centred on x 570");
+    check(w.headline187.x + w.headline187.w / 2 == kPictureHeadlineCenter, "the headline is centered on x 570");
     check(w.headline187.y + (w.headline187.h - font_cell_height(FontSize::Px35)) / 2 == kPictureHeadlineY, "its 35 px line is at y 71");
     check(w.numbers187_w[0] == 49 && w.numbers187_w[1] == 42 && w.numbers187_w[2] == 24, "the labels of the three numbers: up to the next column, the last one up to the box's inside edge");
     // the headings' sizes: the game's own letters, the first (the lowest) larger
@@ -591,7 +591,7 @@ void test_positions(const assets::AssetArchive& arc) {
         if (t.fill != nullptr) {
             const Spy::Ev* h = t.fill;
             const int32_t width = static_cast<int32_t>(headline.size()) * 6;
-            check(h->size == FontSize::Px35 && h->x == l.headline187.x + (l.headline187.w - width) / 2 && h->y == l.headline187.y + (l.headline187.h - 35) / 2, at + "centred in its box, one 35 px line (" + str(h->x) + ", " + str(h->y) + ")");
+            check(h->size == FontSize::Px35 && h->x == l.headline187.x + (l.headline187.w - width) / 2 && h->y == l.headline187.y + (l.headline187.h - 35) / 2, at + "centered in its box, one 35 px line (" + str(h->x) + ", " + str(h->y) + ")");
             check(art_text_in_place(t), at + "the shadow copy is 1 px right and down, the lit copy 1 px left and up of the fill");
         }
     }
@@ -630,7 +630,7 @@ void test_pixels(const assets::AssetArchive& arc) {
     draw_results_art(rig.renderer, arc, false);                      // the ground of the 187 page: the art without the baked headings and without any lettering of 187's
     const std::vector<uint8_t> ground = rig.read();
 
-    // the arrows, as the picture draws them (tools/compose.py: emboss_line, then emboss_poly, per heading): a 2 px stroke from 12 px left of the column to the shaft and the shaft (2 px wide at the
+    // the arrows, as the picture draws them (per heading, the line first and then the head): a 2 px stroke from 12 px left of the column to the shaft and the shaft (2 px wide at the
     // column + 6) down to row 238, as one shape; the head, the polygon (cx + 1, 238), (cx + 11, 238), (cx + 6, 247), as the next; a shape is its shadow copy (1 px right and down), its lit copy (1 px left
     // and up) and then its fill. The pixels around every arrow, from the stroke's start to the head's end and a pixel beyond (the shadow's last row, 248, lies in the first row of the winner's
     // box), are these three colors where the picture has them and the page's ground (the art without the baked headings) where it has not
@@ -862,7 +862,7 @@ void test_fit(const assets::AssetArchive& arc) {
         const Results187Headline cut = fit_results_headline_187(rig.renderer, l, very_long);
         check(cut.size == FontSize::Px18 && !cut.lines.empty() && cut.lines.back().size() >= 3 && cut.lines.back().substr(cut.lines.back().size() - 3) == "...", page + "a wording that nothing holds is cut at the smallest size");
     }
-    {   // the approved picture's line: one line at the largest size in the wide page
+    {   // the picture's line: one line at the largest size in the wide page
         const Results187Headline one = fit_results_headline_187(rig.renderer, ResultsLayout::wide(), "Juniper is the last colony standing!");
         check(one.lines.size() == 1 && one.size == FontSize::Px35 && one.lines[0] == "Juniper is the last colony standing!", "wide: the picture's line is one line at the largest size (size " + str(font_cell_height(one.size)) + ", " + str(static_cast<int64_t>(one.lines.size())) + " line(s))");
         check(one.y == kPictureHeadlineY, "wide: and it stands at y 71 (" + str(one.y) + ")");

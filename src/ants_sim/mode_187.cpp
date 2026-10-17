@@ -16,7 +16,7 @@ bool SimulationEngineImpl::end_rule_187() const {
 }
 
 // 187: a team that has no ant, no egg and no hatch left is out of the fight for good (nothing brings an egg or an ant back), so it is said once, as a News Flash for every player, with the cue
-// of a player that drops out (playerout.wav, as FUN_0100d03b plays it; tick() never gets here once the match is over)). Every machine runs this at the same tick on the same state, and the line and the cue are
+// of a player that drops out (playerout.wav, as FUN_0100d03b plays it; tick() never gets here once the match is over). Every machine runs this at the same tick on the same state, and the line and the cue are
 // presentation (the news and audio queues are not hashed), so the machines stay in step whatever they do with them. A team that dropped out has the line "%s dropped out of the game!" and gets none.
 void SimulationEngineImpl::announce_out_of_ants_187() {
     for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {

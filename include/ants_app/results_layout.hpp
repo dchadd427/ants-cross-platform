@@ -17,11 +17,11 @@
 //     (Franklin Gothic Medium at the height 18) has digits 8 px wide, so two digits take 16 of the 19 - 21 px. The bundled substitute face has wider digits (10 px on average): the numbers are drawn
 //     squeezed to the original's 8 px a digit and clipped to the label's box (ScorecardModal::render, IRenderer::draw_text_squeezed). Before, "20", "4" and "10" ran into one another ("204 10").
 //
-// The 187 page (docs/GAMEPLAY.md "187", the owner approved the pictures): the four baked headings (newstats.bmp: Score, Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) are not drawn. Three
+// The 187 page (docs/GAMEPLAY.md "187"): the four baked headings (newstats.bmp: Score, Friendly Ants Lost, Enemy Ants Killed, New Ants Hatched) are not drawn. Three
 // headings of the game's own letters stand in their place, "Kills", "Ants lost" and "Ants left", each with a stroke and an arrow over the number column it names (the columns of the score, the
 // friendly ants lost and the new ants hatched, whose last place the ants that are left take), and a headline stands at the top, right of "YOUR SCORE". All of this lettering has the look of the art's
 // own ("YOUR SCORE", "Winner!"): the fill of its green and a lit and a shadow edge, one pixel each (draw_art_text, draw_art_rects). The numbers are the
-// original's counters (above). In the wide page every position is the approved picture's own (the pixel positions of its 960 x 540 frame); the classic page has the same construction moved the way
+// original's counters (above). In the wide page every position is the picture's own (the pixel positions of its 960 x 540 frame); the classic page has the same construction moved the way
 // the page moves its parts (what is anchored to the right by -320, what is in the middle by -30), with the headline in the free space right of "YOUR SCORE" (the pictures do not show it).
 //
 // The classic picture is the original's page: its numbers are the layout's classic() rectangles, and nothing of the wide composition is used there.
@@ -114,7 +114,7 @@ struct ResultsLayout {
     int32_t arrow_tip_y187{0};                         // the row of the arrows' tips (the next row is the top line of the winner's box)
     std::array<int32_t, 3> numbers187_x{};             // the three numbers of a row (kills, ants lost, ants left): left edges (the columns of the headings)
     std::array<int32_t, 3> numbers187_w{};             // and the widths of their labels (what is wider is cut): up to the next column, the last one to the box's inside edge
-    LayoutRect headline187;                            // where the headline stands: its lines are centred in this box, whose height holds what the page has room for
+    LayoutRect headline187;                            // where the headline stands: its lines are centered in this box, whose height holds what the page has room for
 
     /// The row of position i (0 = the top row)
     constexpr int32_t row_y(size_t i) const noexcept { return i == 0 ? first_row_y : static_cast<int32_t>(i) * row_pitch + other_rows_y; }
@@ -150,7 +150,7 @@ void draw_art_rects(IRenderer& renderer, const std::vector<LayoutRect>& parts);
 void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout);
 
 /// The headline of the 187 page as it is drawn: the largest of the sizes (35, 27, 24, 20, 18) at which the text, wrapped at the box's width, fits the box's height; if none does, the smallest with
-/// as many lines as the box holds and the end of the last one cut ("..."). `y` is the top of the first line (the lines are centred in the box); every line is centred in the box's width.
+/// as many lines as the box holds and the end of the last one cut ("..."). `y` is the top of the first line (the lines are centered in the box); every line is centered in the box's width.
 struct Results187Headline {
     FontSize size{FontSize::Px35};
     std::vector<std::string> lines;

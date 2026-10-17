@@ -168,6 +168,14 @@
    "new": "bool fits = !lines.empty();",
    "build": "test_results_187",
    "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "standing_names_a_dropped_team",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;",
+   "new": "if ((roster_mask_ & (1u << k)) != 0 && team_alive(k)) return k;",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
   }
  ]
 }

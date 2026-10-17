@@ -48,7 +48,7 @@ enum class FontSize : uint8_t {
     Px18 = 18,   // the setup screen's names and map name, the results screen's rows
     Px20 = 20,   // "Waiting for scores..."
     Px24 = 24,   // dialog texts (quit, alliance, notices), "Waiting for others..."
-    Px27 = 27,   // the remake's own (not an original height): the smaller headings of the 187 results page, the size of the approved picture's text
+    Px27 = 27,   // the remake's own (not an original height): the smaller headings of the 187 results page, the size of that page's design
     Px35 = 35,   // the start dialog's main text
     Px96 = 96    // the countdown's count (protocol 21: the remake's own, the original has no such label)
 };

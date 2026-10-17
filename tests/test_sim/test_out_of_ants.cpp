@@ -280,6 +280,19 @@ int main() {
         ASSERT_EQ(heard.lines(kLine).size(), lines);
     } TEST_END();
 
+    TEST_CASE("2.5 a lower-numbered team that dropped out is not the one standing: team 0 drops out, teams 2 and 3 fall, and the match is won by team 1 (the live team), not by team 0") {
+        SimulationEngine e = world(GameMode::Kills187, 3);
+        Heard heard;
+        run(e, heard, 10);
+        e.drop_player(0);
+        kill_team(e, 2);
+        kill_team(e, 3);
+        run(e, heard, 20);
+        ASSERT_TRUE(e.is_match_over());
+        ASSERT_EQ(e.get_world_state().match_result.standing, 1);
+        ASSERT_TRUE(e.get_world_state().match_result.winning_players.size() == 1 && e.get_world_state().match_result.winning_players[0] == 1);
+    } TEST_END();
+
     TEST_CASE("3.1 the original's rules say nothing and play nothing of it: the same fall of a team, no line, no cue, and the same ids as before in its news") {
         SimulationEngine e = world(GameMode::HighestScore);
         Heard heard;

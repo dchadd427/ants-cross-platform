@@ -66,7 +66,7 @@ ResultsLayout make_classic() {
     l.portrait_alone_x = ScorecardModal::PORTRAIT_X_ALONE;
     l.portrait_pair_x = {ScorecardModal::PORTRAIT_X_PAIR[0], ScorecardModal::PORTRAIT_X_PAIR[1]};
     l.portrait_dy = ScorecardModal::PORTRAIT_Y_OFFSET;
-    // The 187 page, in the original's page coordinates (the approved wide picture's positions less the page's own moves, 320 and 30): the three headings stand over the columns of the score, the
+    // The 187 page, in the original's page coordinates (the wide picture's positions less the page's own moves, 320 and 30): the three headings stand over the columns of the score, the
     // friendly ants lost and the new ants hatched, one step up and to the left of each other, their strokes and arrows come down to the top line of the winner's box (the row of the tips is the one above)
     l.headings187 = {{
         {"Kills", FontSize::Px35, 0, 471, 171, 190},
@@ -107,7 +107,7 @@ ResultsLayout make_wide() {
     }
     l.arrow_tip_y187 += l.dy;
     for (int32_t& x : l.numbers187_x) x += l.dx;
-    l.headline187 = LayoutRect{265, 69, 610, 40};          // centred on x 570, the line of the approved picture (a 35 px line at y 71)
+    l.headline187 = LayoutRect{265, 69, 610, 40};          // centered on x 570, the line of the picture (a 35 px line at y 71)
     return l;
 }
 
@@ -178,7 +178,7 @@ void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t
 // a triangle of 11 px at its base and 1 px at its tip, symmetric about the shaft
 constexpr int32_t kArrowHead[10][2] = {{1, 11}, {2, 9}, {2, 9}, {3, 7}, {3, 7}, {4, 5}, {4, 5}, {5, 3}, {5, 3}, {6, 1}};
 
-// The picture's order (tools/compose.py): the text, then the line (the stroke and the shaft down to the head's top row, as one shape), then the head (its own shape, so its edges lie over the line's)
+// The picture's order: the text, then the line (the stroke and the shaft down to the head's top row, as one shape), then the head (its own shape, so its edges lie over the line's)
 void draw_results_headings_187(IRenderer& renderer, const ResultsLayout& layout) {
     for (const Results187Heading& h : layout.headings187) {
         const int32_t cx = layout.column_x[static_cast<size_t>(h.column)];
