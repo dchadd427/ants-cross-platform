@@ -2685,7 +2685,7 @@
         // A click on the game takes the lock again: where the page has held the lock before, that click is only that; where it has not, it is an ordinary click too. ESC is locked in Chromium fullscreen.
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
-            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER")
+            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked() || window.antsFinger) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER"; a finger is never locked: a locked browser reports its touches at x = 0 and the replay bar would seek to 0 wherever it is tapped)
             lockStartAt = startAt || null;
             try {
                 var result = request.call(canvas);
@@ -3496,8 +3496,8 @@
                 lastKey = '';
                 tick();
             }
-            function turnAt(ev) {
-                var r = $('rail').getBoundingClientRect();
+            function turnAt(ev) {                                // -1: no place (a locked browser reports a finger at x = 0: that is no tap on the start)
+                var r = $('rail').getBoundingClientRect(); if (ev.pointerType === 'touch' && isLocked() && ev.clientX <= r.left) return -1;
                 var turn = Math.round(get(VALUE.total) * Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width))));
                 return liveOn ? Math.min(turn, limitTurn()) : turn;
             }
@@ -3517,6 +3517,7 @@
                 var bar = $('rbar');
                 var over = isFullscreen(), home = over ? (isLocked() ? boxElement : stageElement) : null;        // (a locked pointer is held to the picture: the bar lies inside the picture's box then, so that all of it can be reached)
                 cam.fullscreen(over);
+                if (dragging && bar.parentNode !== home) return;                  // (a press on the timeline is going on: moving the bar now would cancel it; pointerup/pointercancel come back here)
                 if (over && bar.parentNode !== home) { home.appendChild(bar); bar.classList.add('over'); wake(); }
                 else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
             };
@@ -3625,20 +3626,19 @@
             var tl = $('tl');
             tl.addEventListener('pointerdown', function (ev) {
                 if (!isReadyToPlay || shown) return;
+                if (ev.pointerType === 'touch') releaseLock(); if ((dragTurn = turnAt(ev)) < 0) return;
                 dragging = true;
                 try { tl.setPointerCapture(ev.pointerId); } catch (e) { /* no capture: the moves still come while the pointer is over */ }
-                dragTurn = turnAt(ev);
                 lastKey = '';
                 tick();
             });
-            tl.addEventListener('pointermove', function (ev) { if (dragging) { dragTurn = turnAt(ev); lastKey = ''; tick(); } });
+            tl.addEventListener('pointermove', function (ev) { if (dragging && turnAt(ev) >= 0) { dragTurn = turnAt(ev); lastKey = ''; tick(); } });
             tl.addEventListener('pointerup', function (ev) {
                 if (!dragging) return;
                 dragging = false;
-                seek(turnAt(ev) / TPS);
-                wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
+                if (turnAt(ev) >= 0) seek(turnAt(ev) / TPS); window.antsReplayPlaceBar(); wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
             });
-            tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; });
+            tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; window.antsReplayPlaceBar(); });
             tl.addEventListener('keydown', function (ev) {
                 var now = get(VALUE.turn) / TPS, total = get(VALUE.total) / TPS;
                 var to = ev.key === 'ArrowRight' ? now + 10 : ev.key === 'ArrowLeft' ? now - 10 : ev.key === 'Home' ? 0 : ev.key === 'End' ? total : null;
@@ -3657,7 +3657,7 @@
             ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
                 document.addEventListener(name, function (ev) {
                     var touch = ev.type === 'touchstart' || ev.pointerType === 'touch'; if (ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()) return;       // (a locked browser repeats the mouse's place without a motion: that is not a touch of the bar)
-                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
+                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = window.antsFinger = touch; syncEdge(); if (touch) releaseLock(); }          // (what touched last: a finger gets the strip, a mouse does not)
                     if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
                     if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)
                     wake();

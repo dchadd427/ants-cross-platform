@@ -122,7 +122,7 @@ class TheReplayIsLockedLikeTheGame(PageCase):
         request = re.search(r"function requestLock\(startAt\) \{[^\n]*\n(.*?)\n        \}", self.page, re.S)
         self.assertIsNotNone(request)
         self.assertNotIn("ANTS_REPLAY_MODE", request.group(1))
-        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", request.group(1))
+        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked() || window.antsFinger) return false;", request.group(1))
         change = re.search(r"document\.addEventListener\(name, function \(\) \{\n\s*if \(!isRealFullscreen\(\)\) \{ fullscreenEnded\(\); return; \}\n(.*?)\n            \}\);", self.page, re.S)
         self.assertIsNotNone(change)
         self.assertNotIn("ANTS_REPLAY_MODE", change.group(1))
