@@ -26,11 +26,12 @@ bool limits_of(Profile profile, LevelLimits& limits) {
     switch (profile) {
         case Profile::NewMap: limits = LevelLimits::for_new_maps(); return true;
         case Profile::Game: limits = LevelLimits{}; return true;
+        case Profile::Extended: limits = LevelLimits::for_extended_maps(); return true;
     }
     return false;
 }
 
-const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : "game"; }
+const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : profile == Profile::Game ? "game" : "extended"; }
 
 Result refused(const std::string& sentence) { return Result{1, sentence}; }
 
@@ -166,21 +167,12 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     return Result{0, out};
 }
 
-Result check_original_impl(const uint8_t* data, size_t size, Profile profile) {
-    LevelLimits limits;
-    if (!limits_of(profile, limits)) return refused("unknown profile");
-    const OriginalSafeReport r = check_original_safe(data, size, limits);
-    std::string out = "{";
-    put_bool(out, "judged", r.judged);
-    out += ',';
-    put_bool(out, "works_in_original_game", r.works_in_original_game());
-    out += ',';
-    put_bool(out, "fits_the_place", r.fits_the_place());
-    out += ",\n";
+// The findings of an original-safe or per-kind report: "findings":[ ... ] (the same lines for both)
+void put_issues(std::string& out, const std::vector<OriginalSafeIssue>& issues) {
     put_key(out, "findings");
     out += '[';
-    for (size_t i = 0; i < r.issues.size(); ++i) {
-        const OriginalSafeIssue& p = r.issues[i];
+    for (size_t i = 0; i < issues.size(); ++i) {
+        const OriginalSafeIssue& p = issues[i];
         out += i == 0 ? "\n{" : ",\n{";
         put_text(out, "severity", to_string(p.severity));
         out += ',';
@@ -199,7 +191,44 @@ Result check_original_impl(const uint8_t* data, size_t size, Profile profile) {
         put_bool(out, "place_limit", p.place_limit);
         out += '}';
     }
-    out += r.issues.empty() ? "]}" : "\n]}";
+    out += issues.empty() ? "]" : "\n]";
+}
+
+Result check_original_impl(const uint8_t* data, size_t size, Profile profile) {
+    LevelLimits limits;
+    if (!limits_of(profile, limits)) return refused("unknown profile");
+    const OriginalSafeReport r = check_original_safe(data, size, limits);
+    std::string out = "{";
+    put_bool(out, "judged", r.judged);
+    out += ',';
+    put_bool(out, "works_in_original_game", r.works_in_original_game());
+    out += ',';
+    put_bool(out, "fits_the_place", r.fits_the_place());
+    out += ",\n";
+    put_issues(out, r.issues);
+    out += '}';
+    return Result{0, out};
+}
+
+Result check_map_impl(const uint8_t* data, size_t size, Profile profile) {
+    LevelLimits limits;
+    if (!limits_of(profile, limits)) return refused("unknown profile");
+    const MapCheckReport r = ants::assets::check_map(data, size, limits);
+    std::string out = "{";
+    put_text(out, "kind", to_string(r.kind));
+    out += ',';
+    put_bool(out, "judged", r.report.judged);
+    out += ',';
+    put_bool(out, "works", r.works);
+    out += ',';
+    put_bool(out, "fits_the_place", r.fits_the_place);
+    out += ',';
+    put_text(out, "headline", r.headline);
+    out += ',';
+    put_text(out, "badge", r.badge);
+    out += ",\n";
+    put_issues(out, r.report.issues);
+    out += '}';
     return Result{0, out};
 }
 
@@ -224,14 +253,15 @@ Result rewrite_impl(const uint8_t* data, size_t size, Profile profile) {
     return Result{0, std::string(w.bytes.begin(), w.bytes.end())};
 }
 
-Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
+// A blank map of either kind: Classic (version 8) under the limits of `profile`, or Extended (version 9) under the Extended limits
+Result blank_of_kind(bool extended, uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
     LevelLimits limits;
-    if (!limits_of(profile, limits)) return refused("unknown profile");
+    if (!limits_of(extended ? Profile::Extended : profile, limits)) return refused("unknown profile");
     if (rows == 0 || columns == 0 || rows > 65535 || columns > 65535) return refused("a blank map needs 1 to 65535 rows and columns");
     if (ground_tile >= kMostTileId) return refused("the ground tile is a tile id from 0 to " + std::to_string(kMostTileId - 1));
     if (eggs > 65535 || minutes > 65535) return refused("the eggs and the minutes are numbers from 0 to 65535");
     const std::vector<std::string> names = tile_names();
-    LevelData level = blank_level(static_cast<uint16_t>(rows), static_cast<uint16_t>(columns), names, limits);
+    LevelData level = extended ? blank_extended_level(rows, columns, names, limits) : blank_level(static_cast<uint16_t>(rows), static_cast<uint16_t>(columns), names, limits);
     for (MapCell& cell : level.layer1_terrain) cell.tile_index = static_cast<uint16_t>(ground_tile);
     level.boundary_param = static_cast<uint16_t>(eggs);
     level.default_minutes = static_cast<uint16_t>(minutes);
@@ -240,6 +270,157 @@ Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_
     const LevelWriteResult w = write_level(level, limits);
     if (!w.ok) return refused("a blank map of " + std::to_string(rows) + " rows x " + std::to_string(columns) + " columns cannot be written: " + w.error);
     return Result{0, std::string(w.bytes.begin(), w.bytes.end())};
+}
+
+Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
+    return blank_of_kind(false, rows, columns, ground_tile, eggs, minutes, profile);
+}
+
+// A size that has no limit (the game's own profile reads a file of any size) is null: the maximum of size_t differs between a native build and the wasm module, the text must not
+void put_size_limit(std::string& out, const char* key, size_t value) {
+    put_key(out, key);
+    out += value >= 0xFFFFFFFFu ? std::string("null") : std::to_string(value);
+}
+
+Result profile_limits_impl(Profile profile) {
+    LevelLimits limits;
+    if (!limits_of(profile, limits)) return refused("unknown profile");
+    std::string out = "{";
+    put_text(out, "profile", profile_name(profile));
+    out += ',';
+    put_bool(out, "allow_extended", limits.allow_extended);
+    out += ",\n";
+    put_key(out, "classic");
+    out += '{';
+    put_number(out, "rows", limits.rows_for(LVL_EXPECTED_VERSION));
+    out += ',';
+    put_number(out, "columns", limits.columns_for(LVL_EXPECTED_VERSION));
+    out += ',';
+    put_number(out, "cells", limits.cells_for(LVL_EXPECTED_VERSION));
+    out += "},\n";
+    put_key(out, "extended");
+    if (limits.allow_extended) {
+        out += '{';
+        put_number(out, "rows", limits.rows_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "columns", limits.columns_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "cells", limits.cells_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "description_bytes", static_cast<long long>(limits.description_bytes()));
+        out += '}';
+    } else {
+        out += "null";
+    }
+    out += ",\n";
+    put_size_limit(out, "read_bytes", limits.read_bytes());
+    out += ',';
+    put_size_limit(out, "write_bytes", limits.write_bytes());
+    out += ',';
+    put_number(out, "dictionary_names", static_cast<long long>(limits.dictionary_names()));
+    out += '}';
+    return Result{0, out};
+}
+
+// ---- the conversions between the two kinds of map ----
+
+// "reasons":[{"code":..,"message":..}, ...] (or "notes"): the sentences with their stable codes, in the order the conversion made them
+void put_coded(std::string& out, const char* key, const std::vector<std::string>& codes, const std::vector<std::string>& texts) {
+    put_key(out, key);
+    out += '[';
+    for (size_t i = 0; i < texts.size(); ++i) {
+        out += i == 0 ? "\n{" : ",\n{";
+        put_text(out, "code", i < codes.size() ? codes[i] : std::string());
+        out += ',';
+        put_text(out, "message", texts[i]);
+        out += '}';
+    }
+    out += texts.empty() ? "]" : "\n]";
+}
+
+// What a conversion made: the conversion of the library (reasons, notes, codes), the new file when it was possible
+struct Converted {
+    LevelConversion conversion;
+    std::vector<uint8_t> bytes;
+    bool from_extended{false};
+};
+
+// A conversion that cannot be written within the limits of the place is no conversion: the map stays as it is, and the reason has the code beyond_place_limits
+void refuse_for_place(Converted& c, const std::string& error) {
+    c.conversion.ok = false;
+    c.conversion.reasons.push_back("this place does not take the map as it would be: " + error);
+    c.conversion.reason_codes.push_back("beyond_place_limits");
+    c.conversion.notes.clear();
+    c.conversion.note_codes.clear();
+}
+
+// The file is read as a place that takes Extended maps reads it (a map of either kind), converted, and the copy written under `place`; false (with the sentence) when the file does not load
+bool convert_file(bool to_extended, const uint8_t* data, size_t size, const LevelLimits& place, Converted& c, std::string& why) {
+    LevelData level;
+    if (!load(data, size, LevelLimits::for_extended_maps(), level, why)) return false;
+    c.from_extended = level.version == LVL_EXTENDED_VERSION;
+    c.conversion = to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level);
+    level = LevelData{};                                                         // (the source is not needed any more: less memory at the peak)
+    if (c.conversion.ok) {
+        LevelWriteResult w = write_level(c.conversion.level, place);
+        if (w.ok) c.bytes = std::move(w.bytes);
+        else refuse_for_place(c, w.error);
+        c.conversion.level = LevelData{};
+    }
+    return true;
+}
+
+// A conversion's JSON, then the new file: the payload of convert_to_extended and convert_to_classic
+Result conversion_result(bool to_extended, const Converted& c) {
+    std::string json = "{";
+    put_text(json, "to", to_extended ? "extended" : "classic");
+    json += ',';
+    put_text(json, "from", c.from_extended ? "extended" : "classic");
+    json += ',';
+    put_bool(json, "ok", c.conversion.ok);
+    json += ',';
+    put_number(json, "bytes", static_cast<long long>(c.bytes.size()));
+    json += ",\n";
+    put_coded(json, "reasons", c.conversion.reason_codes, c.conversion.reasons);
+    json += ",\n";
+    put_coded(json, "notes", c.conversion.note_codes, c.conversion.notes);
+    json += '}';
+    Result r;
+    r.payload.reserve(4 + json.size() + c.bytes.size());
+    for (int i = 0; i < 4; ++i) r.payload += static_cast<char>((json.size() >> (8 * i)) & 0xFF);
+    r.payload += json;
+    r.payload.append(c.bytes.begin(), c.bytes.end());
+    return r;
+}
+
+Result convert_to_extended_impl(const uint8_t* data, size_t size) {
+    Converted c;
+    std::string why;
+    if (!convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why)) return refused(why);
+    return conversion_result(true, c);
+}
+
+Result convert_to_classic_impl(const uint8_t* data, size_t size, Profile profile) {
+    LevelLimits place;
+    if (!limits_of(profile, place)) return refused("unknown profile");
+    Converted c;
+    std::string why;
+    if (!convert_file(false, data, size, place, c, why)) return refused(why);
+    return conversion_result(false, c);
+}
+
+Result needs_extended_impl(const uint8_t* data, size_t size, Profile profile) {
+    LevelLimits place;
+    if (!limits_of(profile, place)) return refused("unknown profile");
+    Converted c;
+    std::string why;
+    if (!convert_file(false, data, size, place, c, why)) return refused(why);
+    std::string out = "{";
+    put_bool(out, "needs_extended", !c.conversion.ok);
+    out += ",\n";
+    put_coded(out, "reasons", c.conversion.reason_codes, c.conversion.reasons);
+    out += '}';
+    return Result{0, out};
 }
 
 Result same_level_impl(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
@@ -291,10 +472,18 @@ Result guarded(Fn&& fn) noexcept {
 
 Result read_report(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return read_report_impl(data, size, profile); }); }
 Result check_original(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_original_impl(data, size, profile); }); }
+Result check_map(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_map_impl(data, size, profile); }); }
+Result convert_to_extended(const uint8_t* data, size_t size) { return guarded([&] { return convert_to_extended_impl(data, size); }); }
+Result convert_to_classic(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return convert_to_classic_impl(data, size, profile); }); }
+Result needs_extended(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return needs_extended_impl(data, size, profile); }); }
 Result rewrite(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return rewrite_impl(data, size, profile); }); }
 Result blank(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
     return guarded([&] { return blank_impl(rows, columns, ground_tile, eggs, minutes, profile); });
 }
+Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes) {
+    return guarded([&] { return blank_of_kind(true, rows, columns, ground_tile, eggs, minutes, Profile::Extended); });
+}
+Result profile_limits(Profile profile) { return guarded([&] { return profile_limits_impl(profile); }); }
 Result same_level(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
     return guarded([&] { return same_level_impl(a, size_a, b, size_b, profile); });
 }

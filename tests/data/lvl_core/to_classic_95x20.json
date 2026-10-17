@@ -1,0 +1,5 @@
+{"to":"classic","from":"extended","ok":false,"bytes":0,
+"reasons":[
+{"code":"rows_beyond_wall","message":"this map has 95 rows; a Classic map made now has at most 90 (ants cannot enter or cross the 91st row of a taller map, in the original game too): crop it to 90 rows first, or keep it an Extended map"}
+],
+"notes":[]}

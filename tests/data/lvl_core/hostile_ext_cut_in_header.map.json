@@ -1,0 +1,5 @@
+{"kind":"extended","judged":true,"works":false,"fits_the_place":true,"headline":"Does not work in the new version","badge":"New version only",
+"findings":[
+{"severity":"fatal","code":"file_cut_short","message":"the file ends inside the header (byte 10 of 12): the original's loader throws \"System read file error.\" there and the game does not start","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false},
+{"severity":"note","code":"not_for_original","message":"not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false}
+]}

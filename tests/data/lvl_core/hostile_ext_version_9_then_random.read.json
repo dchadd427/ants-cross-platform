@@ -1,0 +1,4 @@
+{"bytes":30000,"profile":"extended","loaded":false,"reason":"the format flags are 0xdaa1d937, of which 0xdaa1d937 are bits that this reader does not know (it knows none): the file is from a later version of the format and is not read",
+"findings":[
+{"severity":"fatal","code":"format_flags_unknown","message":"the format flags are 0xdaa1d937, of which 0xdaa1d937 are bits that this reader does not know (it knows none): the file is from a later version of the format and is not read","team":-1,"count":1}
+]}
