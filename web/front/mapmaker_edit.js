@@ -5,12 +5,13 @@
 // starting ants, a food pile), the pieces of the file after the layers that it took out and put in, so that they go in the same history as the strokes. A plain ES5 script that a page and node can load.
 //
 // The cells (docs/MAP_FORMAT.md, "The layout"): six bytes each, three words: the tile id, the flags (bit 0 of a layer-2 cell: the cell is the origin of its object) and a third word (a
-// layer-1 cell: 0xCDCD or 0; a layer-2 cell: the anchor of its object, absolute in a version 8 file, a signed offset in a version 9 file).
+// layer-1 cell: 0xCDCD or 0; a layer-2 cell: the anchor of its object, absolute in a version 8 file, a signed offset in a version 9 file). Bit 0 of a layer-1 cell's flags is the solid bit:
+// an object whose tile is solid (mapmaker_solid.js; not a hill) sets it where it stands and clears it when it goes, as the original does.
 (function (root, factory) {
     'use strict';
-    if (typeof module === 'object' && module.exports) module.exports = factory();
-    else root.MapEdit = factory();
-})(this, function () {
+    if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_solid.js'));
+    else root.MapEdit = factory(root.MapSolid);
+})(this, function (Solid) {
     'use strict';
 
     var EMPTY2 = 0x7FFE;            // layer 2: no object in this cell
@@ -184,16 +185,29 @@
                 seen[key] = 1; keys.push(key);
                 before.push(tile(f, layer, idx), flags(f, layer, idx), third(f, layer, idx));
             }
+            // The solid bit of a cell of layer 1 (the other flags stay); a cell that already is as asked is not touched. Row 0 never loses it (the original's rule).
+            function setSolid(idx, on) {
+                if (!on && idx < f.columns) return;
+                var was = flags(f, 1, idx);
+                if ((was & 1) === (on ? 1 : 0)) return;
+                touch(1, idx); setCell(f, 1, idx, tile(f, 1, idx), on ? (was | 1) : (was & ~1), third(f, 1, idx));
+            }
             function removeObject(idx) {
                 var cells = objectCells(f, idx), n = 0;
-                for (var i = 0; i < cells.length; i++) { touch(2, cells[i]); setCell(f, 2, cells[i], EMPTY2, 0, 0); dirty.push(cells[i]); n++; }
+                for (var i = 0; i < cells.length; i++) {
+                    var gone = tile(f, 2, cells[i]);
+                    touch(2, cells[i]); setCell(f, 2, cells[i], EMPTY2, 0, 0); dirty.push(cells[i]); n++;
+                    if (Solid.sets(gone)) setSolid(cells[i], false);
+                }
                 return n;
             }
             function putObject(idx) {
                 if (tile(f, 2, idx) === tileId && flags(f, 2, idx) === 1 && third(f, 2, idx) === ownAnchor(f, idx)) return 0;
-                var n = 0;
-                if (tile(f, 2, idx) !== EMPTY2 && objectCells(f, idx).length > 1) n += removeObject(idx);       // (a bigger object goes whole: never half a hill)
+                var n = 0, old = tile(f, 2, idx);
+                if (old !== EMPTY2 && objectCells(f, idx).length > 1) n += removeObject(idx);       // (a bigger object goes whole: never half a hill)
+                else if (Solid.sets(old) && !Solid.sets(tileId)) setSolid(idx, false);
                 touch(2, idx); setCell(f, 2, idx, tileId, 1, ownAnchor(f, idx)); dirty.push(idx);
+                if (Solid.sets(tileId)) setSolid(idx, true);
                 return n + 1;
             }
             function putGround(idx) {
@@ -209,6 +223,7 @@
                     if (made.grew) f = self.file = hooks.rebase(made.bytes);
                 }
                 for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i]; touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; }
+                for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);                 // (the solid bits of layer 1 that go with the cells)
                 for (i = 0; i < ch.splices.length; i++) {
                     var s = ch.splices[i];
                     f = self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));

@@ -23,6 +23,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) has a new tool, Bigger (or press K), for the objects that cover several cells: grass, leaves, rocks, toys, cans and glasses, 29 of them, named as the game names them (grass4, grassmed1, bearbod ...). They are the ones that the game's own maps use most. Tap or click and the whole object appears, the same shape that the game's maps have; the eraser takes it away whole; undo and redo work for it.
+- Rocks and power-ups put with the Objects tool now block ants and work in the game, as the ones in the game's maps do (before, the map file did not say that they are solid).
+- An object that is in the way of a hill, a team's starting ants or a food pile is never taken away by a tap: the page says what is in the way.
+- Putting objects does not change what the check says about a map.
+
 ## v0.12.75 - 2026-10-17 - Map maker: hills, ants and food (E3a)
 
 **For players:**

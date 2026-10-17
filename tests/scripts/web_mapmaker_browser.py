@@ -18,6 +18,9 @@ Parts:
              the hill is there and "Works in the original game" when the four hills, their ants and a pile are, undo and redo bring the check back, the eraser takes a hill, a team's ants and a pile
              away, a drag looks around and puts nothing, the letters H, A and F choose the tools, and Download hands over what the core writes; then a touch screen (390 x 844): a tap puts, a drag
              and two fingers do not, and the sheet of a phone has the teams, the stepper and the numbers;
+  * bigger   1280 x 800, the Bigger tool: the letter K chooses it, its palette is one button and a sheet of 29 objects with the game's names (on a desktop too), a click puts an object whole (the canvas is read
+             pixel by pixel, and the marked box is the object's), the eraser takes it whole, undo and redo, an opened map keeps its verdict ("Works in the original game") with an object put on it, an
+             Extended map takes one, and Download hands over what the core writes; then a touch screen (390 x 844): a tap puts one whole, a drag and two fingers do not, the sheet has 44 pixel buttons;
   * panel    a desktop that is not tall (1280 x 800, 1366 x 768, 1280 x 720), with classic scrollbars of 15 pixels forced on: for every tool the tools column has no scrollbar at all (nothing is cut or
              hidden under one), its steppers' buttons are inside it, and the note under the palette is there when the screen is tall enough;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
@@ -43,7 +46,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "blocks", "panel", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "bigger", "panel", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -58,6 +61,35 @@ def tiny_hill():
         if 245 <= struct.unpack_from("<H", data, layer2 + 6 * i)[0] <= 248:
             return i // columns, i % columns
     raise RuntimeError("TINY has no hill")
+
+
+def tiny_free(size=6):
+    """(row, column) of the top left cell of a square of `size` cells in TINY.LVL where layer 2 is empty and no cell of layer 1 is solid, read here with struct"""
+    with open(os.path.join(REPO, "Original-Ants", "Maps", "TINY.LVL"), "rb") as f:
+        data = f.read()
+    at = 42 + 11 * (struct.unpack_from("<H", data, 40)[0] + 1)
+    rows, columns = struct.unpack_from("<II", data, at)
+    layer1 = at + 8
+    layer2 = layer1 + 6 * rows * columns
+    blocks = layer2 + 6 * rows * columns
+    taken = set()
+    count = struct.unpack_from("<H", data, blocks)[0]
+    for i in range(count):                              # (the starting ants and plants of block 1)
+        _, r0, c0 = struct.unpack_from("<HHH", data, blocks + 2 + 6 * i)
+        taken.add((r0, c0))
+    at = blocks + 2 + 6 * count
+    for i in range(struct.unpack_from("<H", data, at)[0]):          # (and the food piles of block 2)
+        r0, c0, _, _, stages = struct.unpack_from("<HHHHH", data, at + 2)
+        taken.add((r0, c0))
+        at += 10 + 4 * stages
+    for r in range(3, rows - size - 1):
+        for c in range(3, columns - size - 1):
+            if any((r + i, c + j) in taken for i in range(-1, size + 1) for j in range(-1, size + 1)):
+                continue
+            if all(struct.unpack_from("<H", data, layer2 + 6 * ((r + i) * columns + c + j))[0] == 0x7FFE and not struct.unpack_from("<H", data, layer1 + 6 * ((r + i) * columns + c + j) + 2)[0] & 1
+                   for i in range(size) for j in range(size)):
+                return r, c
+    raise RuntimeError("TINY has no free square")
 
 
 def wait_for(condition, timeout=8.0, step=0.1):
@@ -732,6 +764,156 @@ def run_part(part, tab, args, check, tiny, junk):
         time.sleep(0.3)
         check(page.pixel(*page.cell_point(10, 20)) == food_color or page.pixel(*page.cell_point(10, 20))[0] > 200, "a tap puts a food pile (a gold square under the marked square)")
         page.shot(args.shots, "mapmaker-blocks-phone")
+    elif part == "bigger":
+        print("[web map maker] bigger objects, desktop, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts with its map core")
+        grass = page.color_of(485)
+        # (the anchor's cell has a dot in its middle: cells are read a little above and to the left of it)
+
+        def at(r, c):
+            x, y = page.cell_point(r, c)
+            k = float(page.ev("document.getElementById('map').getAttribute('data-scale')")) * 0.3
+            return page.pixel(x - k, y - k)
+
+        def goldish(x, y, along):
+            return any((lambda px: px[0] > 200 and px[1] > 150 and px[2] < 140)(page.pixel(x + (d if along == "x" else 0), y + (d if along == "y" else 0))) for d in (-1, 0, 1))
+        page.ev("document.getElementById('map').focus()")
+        page.key("k")
+        check(page.ev("document.querySelector('[data-tool=bigger]').getAttribute('aria-pressed')") == "true", "the letter K chooses Bigger")
+        check(page.ev("(function () { var b = document.getElementById('tile-btn'); return !b.hidden && b.offsetParent !== null; })()") and page.ev("document.getElementById('palette').offsetParent === null"),
+              "its palette is the one button and no row of tiles, on a desktop too")
+        check(page.ev("document.getElementById('tile-name').textContent") == "grass4 \u00b7 4 cells", "the button says the game's name and the cells: %s" % page.ev("document.getElementById('tile-name').textContent"))
+        page.ev("document.getElementById('tile-btn').click()")
+        check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 29), "the button opens a sheet of the 29 bigger objects")
+        names = page.ev("[].map.call(document.querySelectorAll('.pick'), function (b) { return b.textContent; }).join('|')")
+        check(names.startswith("grass4 \u00b7 4 cells|grassmed1 \u00b7 10 cells|grass2") and "bearbod \u00b7 30 cells" in names, "with the game's names: %s" % names[:80])
+        page.shot(args.shots, "mapmaker-bigger-sheet")
+        page.ev("document.querySelector('.pick[data-tile=\"1324\"]').click()")
+        check(not page.ev("!!document.querySelector('.dlg')") and page.ev("document.getElementById('tile-name').textContent") == "grassmed1 \u00b7 10 cells", "a pick is chosen and the sheet closes")
+        item = page.color_of(0, 1324)
+        check(item != grass, "an object's color is not the ground's")
+        # the marked box: 2 rows and 5 columns round the cell (rows -1 to 0, columns -2 to 2)
+        scale = float(page.ev("document.getElementById('map').getAttribute('data-scale')"))
+        c10 = page.cell_point(10, 10)
+        page.tab.mouse("mouseMoved", c10[0], c10[1], button="none")
+        time.sleep(0.3)
+        left, right, top, bottom = c10[0] - 2.5 * scale - 1.5, c10[0] + 2.5 * scale + 1.5, c10[1] - 1.5 * scale - 1.5, c10[1] + 0.5 * scale + 1.5
+        check(goldish(left, c10[1], "x") and goldish(right, c10[1], "x") and goldish(c10[0] - scale, top, "y") and goldish(c10[0] - scale, bottom, "y"),
+              "the marked box is the object's: 2 rows and 5 columns round the cell (the gold line at its four sides)")
+        check(not goldish(left - 2 * scale, c10[1], "x") and not goldish(c10[0] - scale, bottom + 2 * scale, "y"), "and not wider")
+        page.shot(args.shots, "mapmaker-bigger-hover")
+        page.tab.click(*c10)
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.3)
+        cells = [(r, c) for r in (9, 10) for c in range(8, 13)]
+        check(all(at(r, c) == item for r, c in cells), "a click puts the object whole: its 10 cells are its color")
+        check(all(at(r, c) == grass for r, c in ((8, 10), (11, 10), (10, 7), (10, 13), (9, 13))), "and nothing round it")
+        check(not page.button_off("#undo-btn"), "Undo is on")
+        page.shot(args.shots, "mapmaker-bigger-placed")
+        page.key("e")
+        page.tab.click(*page.cell_point(9, 12))
+        time.sleep(0.2)
+        check(all(at(r, c) == grass for r, c in cells), "the eraser on one cell takes the whole object away")
+        page.ctrl_key("z", "KeyZ", 90)
+        time.sleep(0.2)
+        check(all(at(r, c) == item for r, c in cells), "Control+Z gives it back whole")
+        page.ctrl_key("z", "KeyZ", 90)
+        time.sleep(0.2)
+        check(all(at(r, c) == grass for r, c in cells), "and the next one takes it away")
+        page.ctrl_key("y", "KeyY", 89)
+        time.sleep(0.2)
+        check(all(at(r, c) == item for r, c in cells), "Control+Y puts it back")
+        # an opened map keeps its verdict
+        page.choose_file(tiny)
+        wait_for(lambda: page.state()["name"] == "TINY")
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 6), "TINY works in the original game")
+        free = tiny_free(6)
+        page.tool("bigger")
+        page.ev("document.getElementById('tile-btn').click()")
+        wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 29)
+        page.ev("document.querySelector('.pick[data-tile=\"346\"]').click()")          # bearbod: 30 cells
+        wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+        page.tab.click(*page.cell_point(free[0] + 3, free[1] + 3))
+        time.sleep(0.3)
+        bear = page.color_of(0, 346)
+        check(sum(1 for r in range(free[0], free[0] + 6) for c in range(free[1], free[1] + 6) if at(r, c) == bear) >= 25, "an object of 30 cells is put on TINY (%d of the 36 cells of its box are its color)" % sum(1 for r in range(free[0], free[0] + 6) for c in range(free[1], free[1] + 6) if at(r, c) == bear))
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 6), "and TINY still works in the original game: an object does not change the checker's verdict")
+        page.ev("window.__blobs = []; var make = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__blobs.push(b); return make(b); }")
+        page.press_act("download")
+        check(wait_for(lambda: page.ev("window.__blobs.length === 1")), "Download hands over the map")
+        head = page.ev("new Promise(function (ok) { window.__blobs[0].slice(0, 8).arrayBuffer().then(function (b) { ok(Array.prototype.join.call(new Uint8Array(b), ',')); }); })")
+        check(head.startswith("8,0,0,0,1,0,0,0"), "written by the core: version 8, mode 1 (%s)" % head)
+        # an Extended map takes one too
+        page.press_act("new")
+        if wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'"), 2):
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Leave without saving'; })[0].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "New map opens")
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "40")
+        page.type_into("#size-columns", "60")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "40"), "an Extended map of 40 x 60 is made")
+        before = page.state()["check"]
+        page.tool("bigger")
+        page.ev("document.getElementById('tile-btn').click()")
+        wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 29)
+        page.ev("document.querySelector('.pick[data-tile=\"1324\"]').click()")
+        wait_for(lambda: not page.ev("!!document.querySelector('.dlg')"))
+        page.tab.click(*page.cell_point(20, 30))
+        time.sleep(0.3)
+        check(all(at(r, c) == item for r, c in ((19, 28), (19, 32), (20, 28), (20, 32), (20, 30))), "an Extended map takes the object whole")
+        check(wait_for(lambda: page.state()["check"] == before, 4), "and its verdict is as it was (%s)" % before)
+        # a touch screen: a tap puts one whole, a drag and two fingers do not
+        print("[web map maker] bigger objects, a touch screen, 390 x 844")
+        tab.emulate(390, 844, 2, mobile=True)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+
+        def touch(kind, points):
+            tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [{"x": x, "y": y, "id": i, "radiusX": 10, "radiusY": 10, "force": .5} for i, (x, y) in points.items()]})
+        page.tool("bigger")
+        page.ev("document.getElementById('tile-btn').click()")
+        check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 29), "the button opens the sheet of 29 objects")
+        small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('.dlg button'), function (b) { var r = b.getBoundingClientRect(); return r.width < 43.5 || r.height < 43.5; }).length)")
+        check(small == "0", "every button of the sheet is at least 44 pixels each way")
+        page.shot(args.shots, "mapmaker-bigger-sheet-phone")
+        page.ev("document.querySelector('.pick[data-tile=\"1324\"]').click()")
+        check(page.ev("document.getElementById('tile-name').textContent") == "grassmed1 \u00b7 10 cells", "grassmed1 is chosen")
+        item = page.color_of(0, 1324)
+        grass = page.color_of(485)
+
+        def at(r, c):
+            x, y = page.cell_point(r, c)
+            k = float(page.ev("document.getElementById('map').getAttribute('data-scale')")) * 0.3
+            return page.pixel(x - k, y - k)
+        p = page.cell_point(14, 14)
+        touch("touchStart", {1: p})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(all(at(r, c) == item for r, c in ((13, 12), (13, 16), (14, 12), (14, 16), (14, 14))), "a tap puts the object whole")
+        q = page.cell_point(22, 14)
+        touch("touchStart", {1: q})
+        for i in range(1, 9):
+            touch("touchMove", {1: (q[0] + i * 6, q[1] + i * 3)})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(page.pixel(*page.cell_point(22, 14)) == grass, "a finger that is dragged looks around: nothing is put")
+        cx, cy = q
+        touch("touchStart", {1: (cx - 30, cy), 2: (cx + 30, cy)})
+        for i in range(1, 6):
+            touch("touchMove", {1: (cx - 30 - i * 5, cy), 2: (cx + 30 + i * 5, cy)})
+        touch("touchEnd", {})
+        time.sleep(0.2)
+        page.ev("document.getElementById('map').focus()")
+        page.key("0")
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(22, 14)) == grass, "two fingers (a pinch) put nothing")
+        page.ev("document.getElementById('undo-btn').click()")
+        time.sleep(0.2)
+        check(all(at(r, c) == grass for r, c in ((13, 12), (14, 14), (14, 16))), "Undo takes the object away whole")
+        page.shot(args.shots, "mapmaker-bigger-phone")
     elif part == "panel":
         for w, h in ((1280, 800), (1366, 768), (1280, 720)):
             print("[web map maker] the tools column, %d x %d, classic scrollbars" % (w, h))
@@ -739,7 +921,7 @@ def run_part(part, tab, args, check, tiny, junk):
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
             page.ev("(function () { var s = document.createElement('style'); s.textContent = '*::-webkit-scrollbar { width: 15px; height: 15px; }'; document.head.appendChild(s); })()")
-            for tool in ("ground", "objects", "hills", "ants", "food", "erase", "move"):
+            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"):
                 page.tool(tool)
                 time.sleep(0.1)
                 found = json.loads(page.ev("""JSON.stringify((function () {
@@ -760,7 +942,7 @@ def run_part(part, tab, args, check, tiny, junk):
             tab.emulate(w, h, 2, mobile=True)
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
-            for tool in ("ground", "objects", "hills", "ants", "food", "erase", "move"):
+            for tool in ("ground", "objects", "bigger", "hills", "ants", "food", "erase", "move"):
                 page.tool(tool)
                 time.sleep(0.2)
                 found = json.loads(page.ev("""JSON.stringify((function () {
@@ -790,7 +972,7 @@ def run_part(part, tab, args, check, tiny, junk):
             if (w, h) in ((667, 375), (375, 667)):
                 page.shot(args.shots, "mapmaker-layout-%dx%d" % (w, h))
             # the sheets of Hills, Ants and Food: the teams, the stepper, the number that the button says
-            for tool, picks, stepper in (("hills", 4, False), ("ants", 4, True), ("food", 0, True)):
+            for tool, picks, stepper in (("bigger", 29, False), ("hills", 4, False), ("ants", 4, True), ("food", 0, True)):
                 page.tool(tool)
                 time.sleep(0.1)
                 page.ev("document.getElementById('tile-btn').click()")

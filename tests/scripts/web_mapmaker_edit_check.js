@@ -17,6 +17,7 @@
 //   I  hills (mapmaker_blocks.js): a whole hill for a team, moved, over other things, in version 8 and 9, the dictionary, undo and redo, byte for byte
 //   J  starting ants and food piles: the records of blocks 1 and 2, spliced exactly, everything else as it was; the eraser takes them away; one history with the strokes
 //   K  Hills, Ants and Food on a fake page: the team swatches, the steppers, the sheets of a phone, the letters H, A and F, a tap that puts, undo
+//   L  the Bigger tool on a fake page: the letter K, the one button and its sheet of 29 named objects, a tap that puts one whole, a hill in the way, Erase and undo, and the solid bit of a rock
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -339,13 +340,13 @@ function caseF() {
     const keys = Palette.TOOLS.map((t) => t.key);
     check(new Set(keys).size === keys.length && keys.every((k) => k.length === 1), 'every tool has its own letter');
     equal(Palette.TOOLS.filter((t) => t.draws).map((t) => t.id), ['ground', 'objects', 'erase'], 'the tools that paint with a brush');
-    equal(Palette.TOOLS.filter((t) => t.places).map((t) => t.id), ['hills', 'ants', 'food'], 'the tools that put a whole thing with a tap');
+    equal(Palette.TOOLS.filter((t) => t.places).map((t) => t.id), ['bigger', 'hills', 'ants', 'food'], 'the tools that put a whole thing with a tap');
     check(Palette.TOOLS.every((t) => Palette.usable(t.id)) && !Palette.usable('nothing'), 'every tool can be chosen');
-    equal(Palette.TOOLS.map((t) => t.id), ['ground', 'objects', 'hills', 'ants', 'food', 'erase', 'move'], 'the seven tools in the order of the picture');
+    equal(Palette.TOOLS.map((t) => t.id), ['ground', 'objects', 'bigger', 'hills', 'ants', 'food', 'erase', 'move'], 'the eight tools: the seven of the picture, and Bigger after Objects');
     check(Palette.toolOfKey('G').id === 'ground' && Palette.toolOfKey('x') === null, 'a letter finds its tool, in either case');
     check(Palette.paints('ground') && Palette.paints('erase') && !Palette.paints('move') && !Palette.paints('hills'), 'which tools paint');
     check(Palette.places('hills') && Palette.places('ants') && Palette.places('food') && !Palette.places('ground') && !Palette.places('erase'), 'which tools put a whole thing');
-    equal(Palette.TOOLS.map((t) => t.key), ['g', 'o', 'h', 'a', 'f', 'e', 'm'], 'the letters of the tools (B, the two brackets and the keys of the canvas are not among them)');
+    equal(Palette.TOOLS.map((t) => t.key), ['g', 'o', 'k', 'h', 'a', 'f', 'e', 'm'], 'the letters of the tools (B, the two brackets and the keys of the canvas are not among them)');
     const teams = Palette.teams();
     equal(teams.map((t) => t.label), ['Green', 'Red', 'Blue', 'Black'], 'the four teams in the order of the game\'s seats, by the game\'s names');
     check(teams.every((t) => t.color === Tiles.TEAMS[t.key] && t.color === Tiles.css(0, Blocks.TEAMS[t.id].hill)), 'each with the color that its hill has on the canvas');
@@ -423,7 +424,7 @@ function toolsPage(file, opts) {
 
 function caseG() {
     const p = toolsPage(open(9, 30, 30));
-    equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['hills', false], ['ants', false], ['food', false], ['erase', false], ['move', false]], 'all seven tools are on');
+    equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['bigger', false], ['hills', false], ['ants', false], ['food', false], ['erase', false], ['move', false]], 'all eight tools are on');
     check(p.button('ground').getAttribute('aria-pressed') === 'true' && p.button('move').getAttribute('aria-pressed') === 'false', 'Ground is the tool at the start');
     check(!p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.children.length === 8 && p.host.title.textContent === 'Ground', 'with its palette of 8');
     check(p.host.tile.querySelector('span').textContent === 'Grass' && p.host.tile.querySelector('i').style.background === Tiles.css(485, Tiles.EMPTY2), 'the phone\'s palette button shows the tile that is chosen');
@@ -1028,7 +1029,67 @@ function caseK() {
     check(p.host.hint.children[0].textContent.indexOf('team’s ants') > 0 && p.host.hint.children[1].textContent.length > 0, 'Erase says that it takes ants, hills and piles too');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK]];
+// ---- L: the Bigger tool on a fake page ----
+function caseL() {
+    const EMPTY2 = 0x7FFE;
+    const p = toolsPage(File.parse(mapWith(8, 24, 24, 486, [], []))), pt = p.painter();
+    const list = Palette.items('bigger');
+    p.doc.key('k');
+    check(p.tools.state().tool === 'bigger' && p.button('bigger').getAttribute('aria-pressed') === 'true', 'the letter K chooses Bigger');
+    check(p.host.title.textContent === 'Bigger objects' && !p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.hidden && p.host.stepper.hidden, 'its palette is the one button (no swatches, no stepper, on a desktop too)');
+    check(p.host.tile.querySelector('span').textContent === 'grass4 · 4 cells' && p.host.tile.querySelector('i').style.background === list[0].color && p.host.name.textContent === 'grass4 · 4 cells', 'the button says the game\'s name and the number of cells: ' + p.host.tile.querySelector('span').textContent);
+    check(pt.tapOnly() && pt.door() && pt.size() === 1 && p.host.fill.disabled && p.brush(3).disabled, 'a tap puts it whole (the cell that is tapped has the dot), no brush and no Fill');
+    equal(pt.shape(), list[0].box, 'the canvas marks the box of the object');
+    check(/Erase takes it away whole/.test(p.host.hint.children[0].textContent) && p.host.hint.children[1].textContent.length > 0, 'the notes say so');
+    // the sheet
+    p.host.tile.click();
+    const sheet = p.sheets[p.sheets.length - 1], picks = sheet.body.children[0].children;
+    check(sheet.spec.title === 'Bigger objects' && picks.length === 29 && picks.every((b) => b.className === 'pick') && sheet.body.children[1].className === 'pickinfo', 'the sheet has the 29 objects and a line');
+    equal(picks.map((b) => b.querySelector('span').textContent).slice(0, 3), ['grass4 · 4 cells', 'grassmed1 · 10 cells', 'grass2 · 6 cells'], 'named as the game names them, with their cells');
+    check(picks[0].getAttribute('aria-checked') === 'true' && picks.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1, 'the one that is chosen is marked');
+    picks[1].click();
+    check(p.tools.state().big === 1324 && sheet.ctl.closed && p.host.tile.querySelector('span').textContent === 'grassmed1 · 10 cells', 'a pick is chosen, the sheet closes and the button follows');
+    equal(pt.shape(), list[1].box, 'and the marked box follows');
+    check(p.tools.state().ground === 485 && p.tools.state().objects === 302, 'the ground and the objects that were chosen are as they were');
+    // a tap puts it whole
+    check(pt.begin({ row: 10, column: 10 }) === false && p.log.edits === 1, 'a tap puts it (the page is told)');
+    check(Edit.objectCells(p.file(), 10 * 24 + 10).length === 10 && Edit.tile(p.file(), 2, 10 * 24 + 10) === 1324 && !p.host.undo.disabled && !p.tools.isClean(), 'whole: 10 cells, and Undo is on');
+    check(p.log.dirty.length === 1 && p.log.dirty[0].length === 10, 'the canvas was told the 10 cells: ' + JSON.stringify(p.log.dirty.map((d) => d.length)));
+    const solid = Array.from({ length: p.file().cells }, (_, i) => Edit.flags(p.file(), 1, i) & 1).reduce((a, b) => a + b, 0);
+    check(solid === 10, 'with a solid bit under each');
+    // the same place again: nothing changes
+    const steps = p.tools.state().history.strokes;
+    pt.begin({ row: 10, column: 10 });
+    check(p.tools.state().history.strokes === steps && p.said.length === 0, 'the same object on the same place is no new step');
+    // a hill is in the way: a plain sentence, nothing changes
+    p.button('hills').click(); p.host.swatches.children[0].click(); pt.begin({ row: 5, column: 15 });
+    p.button('bigger').click();
+    const was = Array.from(p.file().bytes), edits = p.log.edits;
+    pt.begin({ row: 5, column: 15 });
+    check(p.said.length === 1 && /^It cannot be put there: A hill is in the way/.test(p.said[0]) && p.log.edits === edits && JSON.stringify(was) === JSON.stringify(Array.from(p.file().bytes)), 'over a hill: ' + p.said[0] + ', and nothing changed');
+    // the eraser takes it whole
+    p.button('erase').click();
+    pt.begin({ row: 10, column: 12 }); pt.end();
+    check(Edit.tile(p.file(), 2, 10 * 24 + 10) === EMPTY2 && Edit.objectCells(p.file(), 10 * 24 + 11).length === 0, 'Erase takes it whole, from the cell that was touched');
+    p.doc.key('z', { ctrlKey: true });
+    check(Edit.objectCells(p.file(), 10 * 24 + 10).length === 10, 'undo gives it back whole');
+    p.doc.key('z', { ctrlKey: true });
+    p.doc.key('z', { ctrlKey: true });
+    check(Edit.tile(p.file(), 2, 10 * 24 + 10) === EMPTY2 && Edit.flags(p.file(), 1, 10 * 24 + 10) === 0, 'and two undos more (the hill, then the object) leave nothing (the solid bit goes with it)');
+    // a phone: the same button and sheet; the label of the sheet is a radio group
+    check(sheet.body.children[0].getAttribute('role') === 'radiogroup' && sheet.body.children[0].getAttribute('aria-label') === 'Bigger objects', 'the sheet is a radio group named Bigger objects');
+    // the tools that have a palette, and Objects with the solid bit
+    const q = toolsPage(File.parse(mapWith(9, 24, 24, 486, [], []))), qt = q.painter();
+    q.button('objects').click();
+    q.doc.key('o');
+    qt.begin({ row: 4, column: 4 }); qt.end();
+    check(Edit.tile(q.file(), 2, 4 * 24 + 4) === 302 && (Edit.flags(q.file(), 1, 4 * 24 + 4) & 1) === 1, 'a rock put by the Objects tool is solid, as the library\'s are');
+    q.button('erase').click();
+    qt.begin({ row: 4, column: 4 }); qt.end();
+    check(Edit.tile(q.file(), 2, 4 * 24 + 4) === EMPTY2 && (Edit.flags(q.file(), 1, 4 * 24 + 4) & 1) === 0, 'and it is not when the rock is taken away');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['L the Bigger tool on a fake page', caseL]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }
