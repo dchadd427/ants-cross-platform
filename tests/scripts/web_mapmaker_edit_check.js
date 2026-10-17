@@ -1037,7 +1037,7 @@ function caseL() {
     p.doc.key('k');
     check(p.tools.state().tool === 'bigger' && p.button('bigger').getAttribute('aria-pressed') === 'true', 'the letter K chooses Bigger');
     check(p.host.title.textContent === 'Bigger objects' && !p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.hidden && p.host.stepper.hidden, 'its palette is the one button (no swatches, no stepper, on a desktop too)');
-    check(p.host.tile.querySelector('span').textContent === 'grass4 · 4 cells' && p.host.tile.querySelector('i').style.background === list[0].color && p.host.name.textContent === 'grass4 · 4 cells', 'the button says the game\'s name and the number of cells: ' + p.host.tile.querySelector('span').textContent);
+    check(p.host.tile.querySelector('.pkn').textContent === 'grass4' && p.host.tile.querySelector('.pkc').textContent === '4 cells' && p.host.tile.querySelector('i').style.background === list[0].color && p.host.name.textContent === 'grass4 · 4 cells', 'the button says the game\'s name and, under it, the number of cells: ' + p.host.tile.querySelector('span').textContent);
     check(pt.tapOnly() && pt.door() && pt.size() === 1 && p.host.fill.disabled && p.brush(3).disabled, 'a tap puts it whole (the cell that is tapped has the dot), no brush and no Fill');
     equal(pt.shape(), list[0].box, 'the canvas marks the box of the object');
     check(/Erase takes it away whole/.test(p.host.hint.children[0].textContent) && p.host.hint.children[1].textContent.length > 0, 'the notes say so');
@@ -1045,10 +1045,11 @@ function caseL() {
     p.host.tile.click();
     const sheet = p.sheets[p.sheets.length - 1], picks = sheet.body.children[0].children;
     check(sheet.spec.title === 'Bigger objects' && picks.length === 29 && picks.every((b) => b.className === 'pick') && sheet.body.children[1].className === 'pickinfo', 'the sheet has the 29 objects and a line');
-    equal(picks.map((b) => b.querySelector('span').textContent).slice(0, 3), ['grass4 · 4 cells', 'grassmed1 · 10 cells', 'grass2 · 6 cells'], 'named as the game names them, with their cells');
+    equal(picks.map((b) => b.querySelector('.pkn').textContent + ' ' + b.querySelector('.pkc').textContent).slice(0, 3), ['grass4 4 cells', 'grassmed1 10 cells', 'grass2 6 cells'], 'named as the game names them, with their cells');
+    equal(picks.slice(0, 2).map((b) => b.getAttribute('aria-label')), ['grass4 · 4 cells', 'grassmed1 · 10 cells'], 'and a screen reader hears both in one');
     check(picks[0].getAttribute('aria-checked') === 'true' && picks.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1, 'the one that is chosen is marked');
     picks[1].click();
-    check(p.tools.state().big === 1324 && sheet.ctl.closed && p.host.tile.querySelector('span').textContent === 'grassmed1 · 10 cells', 'a pick is chosen, the sheet closes and the button follows');
+    check(p.tools.state().big === 1324 && sheet.ctl.closed && p.host.tile.querySelector('.pkn').textContent === 'grassmed1' && p.host.tile.querySelector('.pkc').textContent === '10 cells', 'a pick is chosen, the sheet closes and the button follows');
     equal(pt.shape(), list[1].box, 'and the marked box follows');
     check(p.tools.state().ground === 485 && p.tools.state().objects === 302, 'the ground and the objects that were chosen are as they were');
     // a tap puts it whole

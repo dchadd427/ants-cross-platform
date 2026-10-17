@@ -44,6 +44,8 @@
         function teamNow() { return Palette.teams()[state.team]; }
         function bigNow() { return Palette.itemOf('bigger', state.big); }
         function bigText(item) { return item.label + ' \u00b7 ' + plural(item.cells.length, 'cell', 'cells'); }
+        // the name and, under it, the cells, in a node (a button or a pick): two lines, so that a long name does not break in the middle
+        function bigLines(node, item) { node.textContent = ''; node.appendChild(el('b', 'pkn', item.label)); node.appendChild(el('small', 'pkc', plural(item.cells.length, 'cell', 'cells'))); }
         function heading(tool) { return tool === 'bigger' ? 'Bigger objects' : Palette.tool(tool).label; }
 
         // ---- the buttons ----
@@ -134,8 +136,8 @@
             } else if (tool === 'bigger') {
                 var big = bigNow();
                 chip.className = ''; chip.style.background = big.color;
-                text.textContent = bigText(big);
-                host.tile.setAttribute('aria-label', label + ': ' + text.textContent + '. Change');
+                bigLines(text, big);
+                host.tile.setAttribute('aria-label', label + ': ' + bigText(big) + '. Change');
             } else if (tool === 'food') {
                 chip.className = ''; chip.style.background = Tiles.FOOD;
                 text.textContent = plural(state.stages, 'stage', 'stages');
@@ -196,7 +198,9 @@
                         list.forEach(function (item) {
                             var b = el('button', 'pick'), chip = el('i');
                             b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(item.id === chosen)); b.setAttribute('data-tile', String(item.id));
-                            chip.style.background = item.color; b.appendChild(chip); b.appendChild(el('span', '', tool === 'bigger' ? bigText(item) : item.label));
+                            chip.style.background = item.color; b.appendChild(chip);
+                            var who = el('span', '', ''); if (tool === 'bigger') { bigLines(who, item); b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;
+                            b.appendChild(who);
                             b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });
                             grid.appendChild(b);
                         });
