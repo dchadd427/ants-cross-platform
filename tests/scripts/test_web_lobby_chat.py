@@ -102,11 +102,11 @@ class ThePage(unittest.TestCase):
             self.assertLess(self.page.index(tag), self.page.index("</head>"), name)
 
     def test_the_script_is_loaded_after_the_client_and_before_the_map_list_and_the_pages_own_code(self):
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
         self.assertLess(self.page.index("front/lobby_chat.js"), self.page.index("AntsLobbyChat"), "loaded before the page's own code uses it")
 
     def test_the_page_stops_with_its_line_when_the_script_did_not_come(self):
-        self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch\) \{")                           # (the rematch's strip too: front/rematch.js)
+        self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch \|\| !Modes \|\| !GameType\) \{")                           # (the rematch's strip too: front/rematch.js)
 
     def test_the_page_mounts_the_box_with_its_colors_its_client_and_its_toast_and_gives_it_every_client(self):
         self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colors: COLORS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: say \}\);")
@@ -240,7 +240,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/lobby.html", "tests/scripts/web_lobby_chat_check.js",
+    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "tests/scripts/web_lobby_chat_check.js",
              "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
              "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 

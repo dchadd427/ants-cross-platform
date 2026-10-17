@@ -370,7 +370,7 @@ const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.index
 const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
 const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 {
-    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/map_picker.js', 'map_files.js', 'inline']);
+    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'map_files.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -626,6 +626,8 @@ function runLobby(search, stored, options) {
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
     win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
     win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
+    win.AntsGameModes = loadFront('game_modes.js', scope).AntsGameModes;
+    win.AntsGameType = loadFront('game_type.js', scope).AntsGameType;
     const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
     if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
     // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)

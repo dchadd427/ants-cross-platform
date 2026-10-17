@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Under the hood: the map checker now answers for each of the two kinds of map (a Classic map, and an Extended map that only the new version loads), and a new Classic map is limited to 90 rows, because the original game's ants cannot enter or cross the 91st row of a taller map; a taller map is an Extended map. No map of the library is taller than 81 rows. Nothing changes in the game or on the site; the map maker's limits and checks are prepared.
 
+## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
+
+**For players:**
+- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser. The computer players are not good at 187 yet (they still play their food game); that is being worked on.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a011f5d6...cb6892ad), [Game type in the lobby](docs/PLAY_IN_BROWSER.md#game-type)
+
 ## v0.12.65 - 2026-10-16 - Extended maps: the map file version 9 in the core
 
 **For players:**
