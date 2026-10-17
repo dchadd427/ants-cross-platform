@@ -31,9 +31,9 @@
         <div class="toolbtns" id="toolbtns" role="group" aria-label="Tools">
             <button class="tool" type="button" data-tool="ground" aria-pressed="true" aria-keyshortcuts="G" disabled><i style="background:#5f8f3c"></i>Ground</button>
             <button class="tool" type="button" data-tool="objects" aria-pressed="false" aria-keyshortcuts="O" disabled><i style="background:#2f6b2a"></i>Objects</button>
-            <button class="tool" type="button" data-tool="hills" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#c0392b"></i>Hills</button>
-            <button class="tool" type="button" data-tool="ants" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#222"></i>Ants</button>
-            <button class="tool" type="button" data-tool="food" aria-pressed="false" title="Comes in the next update" disabled><i style="background:#f2c230"></i>Food</button>
+            <button class="tool" type="button" data-tool="hills" aria-pressed="false" aria-keyshortcuts="H" disabled><i style="background:#c0392b"></i>Hills</button>
+            <button class="tool" type="button" data-tool="ants" aria-pressed="false" aria-keyshortcuts="A" disabled><i style="background:#222"></i>Ants</button>
+            <button class="tool" type="button" data-tool="food" aria-pressed="false" aria-keyshortcuts="F" disabled><i style="background:#f2c230"></i>Food</button>
             <button class="tool" type="button" data-tool="erase" aria-pressed="false" aria-keyshortcuts="E" disabled><i style="background:#ddd"></i>Erase</button>
             <button class="tool" type="button" data-tool="move" aria-pressed="false" aria-keyshortcuts="M" disabled><i style="background:#8fb3a6"></i>Move</button>
         </div>
@@ -41,6 +41,7 @@
         <div class="palette" id="palette-box" hidden>
             <h3 id="palette-title">Ground</h3>
             <div class="swatches" id="palette" role="radiogroup" aria-label="Ground to paint with"></div>
+            <div class="stepper" id="stepper" hidden><span class="stl" id="stepper-label"></span><span class="stbtns"><button class="stp" type="button" id="step-less" aria-label="Fewer">&minus;</button><output class="stv" id="step-val" aria-live="polite"></output><button class="stp" type="button" id="step-more" aria-label="More">+</button></span></div>
             <div class="pname" id="palette-name"></div>
         </div>
         <p class="toolnote" id="tool-hint"></p>
@@ -82,8 +83,9 @@
 <script src="lvl_core_api.js"></script>
 <script src="front/mapmaker_file.js"></script>
 <script src="front/mapmaker_tiles.js"></script>
-<script src="front/mapmaker_palette.js"></script>
 <script src="front/mapmaker_edit.js"></script>
+<script src="front/mapmaker_blocks.js"></script>
+<script src="front/mapmaker_palette.js"></script>
 <script src="front/mapmaker_view.js"></script>
 <script src="front/mapmaker_sizes.js"></script>
 <script src="front/mapmaker_checks.js"></script>

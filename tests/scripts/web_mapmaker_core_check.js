@@ -14,6 +14,8 @@
 //   D  the check of a new map and of an opened one by the profile the page uses ("extended": both kinds), in the words of the checks card
 //   E  an older module is refused by its interface version, before anything is asked of it
 //   F  a map that has been drawn on (web/front/mapmaker_edit.js): the core reads it, checks it, writes it as the same level, and the objects keep the anchors of their kind (version 8 and 9)
+//   G  hills, starting ants and food piles (web/front/mapmaker_blocks.js): the core's checker says "Blue has no hill" until the hill is there and then says nothing of it, counts the ants and the piles
+//      as they were put, writes the edited file as the same bytes, and every hill of the 540 maps taken away and put back is the same level (version 8 and 9)
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
 'use strict';
 
@@ -22,7 +24,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FRONT = path.join(ROOT, 'web', 'front');
-const Edit = require(path.join(FRONT, 'mapmaker_edit.js')), Palette = require(path.join(FRONT, 'mapmaker_palette.js'));
+const Edit = require(path.join(FRONT, 'mapmaker_edit.js')), Blocks = require(path.join(FRONT, 'mapmaker_blocks.js')), Palette = require(path.join(FRONT, 'mapmaker_palette.js'));
 const File = require(path.join(FRONT, 'mapmaker_file.js')), Sizes = require(path.join(FRONT, 'mapmaker_sizes.js')), Checks = require(path.join(FRONT, 'mapmaker_checks.js'));
 const LvlCore = require(path.join(ROOT, 'web', 'lvl_core_api.js'));
 
@@ -241,6 +243,96 @@ function caseF(core) {
     check(written > 400, 'and the core writes the drawn map wherever it writes the original (' + written + ')');
 }
 
+
+// ---- G: hills, ants and food with the core ----
+function caseG(core) {
+    const editorOn = (file) => Edit.create(file, { rebase: (b) => File.parse(b), erase: Blocks.eraseAt });
+    const messages = (bytes) => core.checkMap(bytes, 'extended').json.findings.map((f) => f.message);
+    const codes = (bytes) => core.checkMap(bytes, 'extended').json.findings.map((f) => f.code);
+    const teamsOf = (bytes) => core.readReport(bytes, 'extended').json.teams;
+    for (const kind of ['classic', 'extended']) {
+        const tag = ' (' + kind + ')', made = kind === 'classic' ? core.blank(40, 50, 485, 6, 10, 'new_map') : core.blankExtended(300, 400, 485, 6, 10);
+        const ed = editorOn(File.parse(made.bytes));
+        const first = messages(ed.file.bytes).filter((m) => !/not for the original/.test(m));
+        check(first.length === 8 && first.indexOf('Blue has no hill') >= 0 && first.indexOf('Black has no hill') >= 0 && first.some((m) => /^Blue has no starting ants/.test(m)), 'a blank map: every team has no hill and no starting ants' + tag + ': ' + first.join('; '));
+        const spots = [[8, 8], [8, 40], [30, 8], [30, 40]];
+        for (let t = 0; t < 4; t++) {
+            const label = Blocks.TEAMS[t].label, ch = Blocks.placeHill(ed.file, t, spots[t][0], spots[t][1]);
+            check(!ch.error && ed.act(ch) !== null, label + ': the hill is put' + tag);
+            const now = messages(ed.file.bytes);
+            check(now.indexOf(label + ' has no hill') < 0 && now.filter((m) => /no hill/.test(m)).length === 3 - t, label + ': "' + label + ' has no hill" is gone and the others are still said' + tag);
+            check(!codes(ed.file.bytes).some((c) => /hill_not_whole|hill_without_entrance|hills_several|tile_outside_dictionary|tile_not_drawn/.test(c)), label + ': the core finds the hill whole, with its entrance, and its tile in the dictionary' + tag);
+            equal(teamsOf(ed.file.bytes)[t].hill_cells, 16, label + ': the core counts 16 cells of its hill' + tag);
+        }
+        for (let t = 0; t < 4; t++) {
+            const label = Blocks.TEAMS[t].label, ch = Blocks.placeStart(ed.file, t, spots[t][0] + 5, spots[t][1], 5);
+            check(!ch.error && ed.act(ch) !== null, label + ': five ants are put' + tag);
+            const now = messages(ed.file.bytes);
+            check(now.filter((m) => /no starting ants/.test(m)).length === 3 - t && !now.some((m) => m.indexOf(label + ' has no starting ants') === 0), label + ': "' + label + ' has no starting ants" is gone' + tag);
+            equal(teamsOf(ed.file.bytes)[t].start_markers, 5, label + ': the core counts 5 start markers' + tag);
+        }
+        let report = core.checkMap(ed.file.bytes, 'extended').json;
+        check(report.works && report.findings.every((f) => f.severity === 'note'), 'every team has its hill and its ants: the map works, nothing to fix (' + report.headline + ')' + tag);
+        for (let n = 2; n <= 6; n++) {
+            const ch = Blocks.placePile(ed.file, 15 + n, 20, n);
+            check(!ch.error && ed.act(ch) !== null, n + ' stages: the pile is put' + tag);
+            const found = core.readReport(ed.file.bytes, 'extended').json;
+            check(found.food_piles === n - 1 && !codes(ed.file.bytes).some((c) => /food_pile|tile_outside_dictionary|tile_not_drawn/.test(c)), n + ' stages: the core counts ' + (n - 1) + ' piles, none outside the map, none without stages, none that it cannot show' + tag);
+        }
+        const finished = ed.file.bytes.slice(), written = core.rewrite(finished, 'extended');
+        check(written.status === 0 && written.bytes.length === finished.length && digestOf(written.bytes) === digestOf(finished), 'the core writes the edited file as the very same bytes (the lists are as the writer makes them)' + tag);
+        equal(core.sameLevel(finished, written.bytes, 'extended').json, { same: true }, 'the same level' + tag);
+        check(core.readReport(finished, 'extended').json.playable === true, 'and all four teams play' + tag);
+        // the eraser through the page's hooks, then the check says so again
+        const gone = ed.begin('erase', null);
+        gone.stamp(8, 8, 1); gone.stamp(30 + 5, 8, 1); gone.stamp(15 + 4, 20, 1);
+        gone.end();
+        const after = messages(ed.file.bytes);
+        check(after.indexOf('Green has no hill') >= 0 && after.some((m) => /^Black has no starting ants/.test(m)) === false && core.readReport(ed.file.bytes, 'extended').json.food_piles === 4, 'the eraser takes a hill, a team\'s ants and a pile, and the core says so (' + after.filter((m) => !/not for the original/.test(m)).join('; ') + ')' + tag);
+        ed.undo();
+        check(digestOf(ed.file.bytes) === digestOf(finished), 'undo of the whole drag gives the same bytes' + tag);
+        let steps = 0;
+        while (ed.history.canUndo()) { ed.undo(); steps++; }
+        check(steps === 4 + 4 + 5 && messages(ed.file.bytes).filter((m) => !/not for the original/.test(m)).join() === first.join(), 'all ' + steps + ' steps undone: the blank map\'s eight sentences are back' + tag);
+        equal(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.same === true || /dictionary name/.test(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.difference), true, 'and it is the blank map\'s level (only the names that the dictionary got may differ)' + tag);
+    }
+    // the library: every whole hill taken away and put back is the same level, in both kinds; a team's ants moved and put back by another path are the level that they were
+    const each = [], differences = {};
+    let hills = 0, same = 0, sameUp = 0, upHills = 0;
+    for (const file0 of libraryFiles()) {
+        const bytes = new Uint8Array(fs.readFileSync(file0)), f0 = File.parse(bytes);
+        if (!f0.ok) continue;
+        const up = core.convertToExtended(bytes);
+        for (const [source, isUp] of [[bytes, false], [up.status === 0 && up.json.ok ? up.bytes : null, true]]) {
+            if (!source) continue;
+            const f = File.parse(source);
+            for (let t = 0; t < 4; t++) {
+                const tile = Blocks.TEAMS[t].hill, cells = [];
+                for (let i = 0; i < f.cells; i++) if (Edit.tile(f, 2, i) === tile) cells.push(i);
+                const entrances = cells.filter((i) => (Edit.flags(f, 2, i) & 1) !== 0);
+                if (cells.length !== 16 || entrances.length !== 1 || Edit.objectCells(f, entrances[0]).length !== 16) continue;
+                const er = Math.floor(entrances[0] / f.columns), ec = entrances[0] % f.columns;
+                if (er < 1 || ec < 1 || er + 2 >= f.rows || ec + 2 >= f.columns) continue;
+                if (cells.some((i) => { const r = Math.floor(i / f.columns), c = i % f.columns; return r < er - 1 || r > er + 2 || c < ec - 1 || c > ec + 2; })) continue;       // (a hill that is not the 4 x 4 square round its entrance is not whole)
+                const ed = editorOn(File.parse(source.slice())), s = ed.begin('erase', null);
+                const bare = cells.filter((i) => Blocks.eraseAt(f, i) === null)[0];           // (a cell of the hill with no ants and no pile on it: the eraser takes those too)
+                if (bare === undefined) continue;
+                s.stamp(Math.floor(bare / f.columns), bare % f.columns, 1); s.end();
+                const gone = core.checkMap(ed.file.bytes, 'extended').json.findings.map((x) => x.code);
+                if (gone.filter((c) => c === 'hill_missing').length !== 1 + (core.checkMap(source, 'extended').json.findings.filter((x) => x.code === 'hill_missing').length)) check(false, file0 + ': the core does not say that team ' + t + ' has no hill after the eraser');
+                ed.act(Blocks.placeHill(ed.file, t, er, ec));
+                const verdict = core.sameLevel(source, ed.file.bytes, 'extended').json;
+                if (isUp) upHills++; else hills++;
+                if (verdict.same) { if (isUp) sameUp++; else same++; } else { const key = verdict.difference.replace(/#\d+.*$/, '#'); differences[key] = (differences[key] || 0) + 1; each.push(file0 + ' team ' + t + ': ' + verdict.difference); }
+            }
+        }
+    }
+    check(hills > 2000 && upHills > 2000, 'the library has ' + hills + ' whole hills (and ' + upHills + ' as Extended maps)');
+    const names = each.filter((d) => /dictionary name #24[5-8]/.test(d)).length;
+    check(each.length === names, 'every hill taken away and put back is the same level; the only difference is the name that the dictionary got, when the map had "." for the hill\'s tile (' + names + ' of ' + (hills + upHills) + '), never a cell: ' + each.filter((d) => !/dictionary name #24[5-8]/.test(d)).slice(0, 3).join(' | '));
+    console.log('    (' + same + ' of ' + hills + ' and ' + sameUp + ' of ' + upHills + ' are the same level to the name; ' + names + ' differ only in a dictionary name)');
+}
+
 async function main() {
     const o = parseArgs(process.argv.slice(2));
     const js = path.join(o.module, 'lvl_core.js');
@@ -249,7 +341,7 @@ async function main() {
         process.exit(o.require ? 1 : 0);
     }
     const core = LvlCore.wrap(await require(path.resolve(js))());
-    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF]]) {
+    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF], ['G hills, ants and food with the core', caseG]]) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(core); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

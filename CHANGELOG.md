@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.75 - 2026-10-17 - Map maker: hills, ants and food (E3a)
+
+**For players:**
+- The map maker page (not linked from the site yet: /mapmaker.html) can put hills, starting ants and food now. Choose Hills, Ants or Food (or press H, A or F), choose a team (Green, Red, Blue or Black), and tap or click the map: a whole hill appears, a team's ants stand together where you tapped (you choose how many), or a food pile (you choose how many stages). Put one again and it moves; the eraser takes a hill, a team's ants or a pile away; undo and redo work for them like for drawing.
+- The check says what is still missing, for example "Blue has no hill", and says nothing of it once the hill is there.
+- On a phone the team, the number of ants and the stages are on one button that opens a list.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/402c19c5...23feff4e)
+
 ## v0.12.74 - 2026-10-17 - Replays: the scrub bar should jump to where you tap
 
 **For players:**
