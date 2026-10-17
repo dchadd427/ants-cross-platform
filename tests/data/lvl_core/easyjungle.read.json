@@ -1,0 +1,8 @@
+{"bytes":113880,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":23,"description":"MoreChange = More Fun!","description_bytes":22,
+"rows":81,"columns":100,"dictionary_names":1324,"tile_ids_used":99,"eggs":32,"default_type_tile":32766,"food_piles":15,"waypoints":114,
+"teams":[{"team":"green","start_markers":4,"hill_cells":16},{"team":"red","start_markers":4,"hill_cells":16},{"team":"blue","start_markers":4,"hill_cells":16},{"team":"black","start_markers":4,"hill_cells":16}],
+"playable":true,
+"findings":[
+{"severity":"note","code":"object_outside_grid","message":"0 block 1 objects and 1 waypoints lie outside the grid: the original ignores them (the waypoint reader checks the cell, the dropper poll checks the drop tile), and so does the remake","team":-1,"count":1}
+]}

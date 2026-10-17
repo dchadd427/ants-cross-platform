@@ -1,0 +1,6 @@
+IcoN.LVL: does not work in the original game: the hill of Red has no entrance: none of its 11 cells is marked as the entrance
+  warning hill_without_entrance: the hill of Red has no entrance: none of its 11 cells is marked as the entrance
+  warning hill_without_entrance: the hill of Black has no entrance: none of its 13 cells is marked as the entrance
+  note hill_not_whole: the hill of Green is not whole: 3 cells (the first at row 4, column 4) differ from the 4 x 4 hill around its entrance (row 5, column 5)
+  note hill_not_whole: the hill of Blue is not whole: 3 cells (the first at row 4, column 23) differ from the 4 x 4 hill around its entrance (row 5, column 24)
+  note tile_not_drawn: 15 cells use tiles that the dictionary names "." (the first at row 4, column 5: tile 1): the original does not load their pictures, so it does not draw them

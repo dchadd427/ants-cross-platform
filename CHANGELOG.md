@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Under the hood: the map code (reading, checking and writing a map) now also runs in the browser; nothing changes in the game or on the site.
+
+**Details:** [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
+
 ## v0.12.60 - 2026-10-16 - Walled maps: the bots open a pile behind a bomb field
 
 **For players:**

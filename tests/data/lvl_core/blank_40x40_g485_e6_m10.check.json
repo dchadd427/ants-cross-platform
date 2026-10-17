@@ -1,0 +1,11 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"warning","code":"hill_missing","message":"Green has no hill","row":-1,"column":-1,"team":0,"count":1,"place_limit":false},
+{"severity":"warning","code":"hill_missing","message":"Red has no hill","row":-1,"column":-1,"team":1,"count":1,"place_limit":false},
+{"severity":"warning","code":"hill_missing","message":"Blue has no hill","row":-1,"column":-1,"team":2,"count":1,"place_limit":false},
+{"severity":"warning","code":"hill_missing","message":"Black has no hill","row":-1,"column":-1,"team":3,"count":1,"place_limit":false},
+{"severity":"warning","code":"starting_ants_missing","message":"Green has no starting ants (no start marker, tile 154)","row":-1,"column":-1,"team":0,"count":1,"place_limit":false},
+{"severity":"warning","code":"starting_ants_missing","message":"Red has no starting ants (no start marker, tile 155)","row":-1,"column":-1,"team":1,"count":1,"place_limit":false},
+{"severity":"warning","code":"starting_ants_missing","message":"Blue has no starting ants (no start marker, tile 153)","row":-1,"column":-1,"team":2,"count":1,"place_limit":false},
+{"severity":"warning","code":"starting_ants_missing","message":"Black has no starting ants (no start marker, tile 152)","row":-1,"column":-1,"team":3,"count":1,"place_limit":false}
+]}

@@ -1,0 +1,14 @@
+hostile_empty	-	1	-	does not load: no data
+hostile_one_byte	-	1	-	does not load: the file ends inside the header (byte 0 of 1): the original's loader throws "System read file error." there and the game does not start
+hostile_cut_in_header	-	1	-	does not load: the file ends inside the header (byte 20 of 20): the original's loader throws "System read file error." there and the game does not start
+hostile_cut_in_dictionary	-	1	-	does not load: the file ends inside the tile dictionary (byte 3000 of 3000): the original's loader throws "System read file error." there and the game does not start
+hostile_cut_in_layers	-	1	-	does not load: the file ends inside the layers (byte 12000 of 12000): the original's loader throws "System read file error." there and the game does not start
+hostile_cut_in_half	-	1	-	does not load: the file ends inside the layers (byte 9656 of 9656): the original's loader throws "System read file error." there and the game does not start
+hostile_zeros_513_kb	-	1	-	does not load: the file has 525312 bytes, more than the 524288 allowed here: nothing of it is read
+hostile_huge_dictionary	-	1	-	does not load: the file ends inside the tile dictionary (byte 19312 of 19312): the original's loader throws "System read file error." there and the game does not start
+hostile_huge_grid	-	1	-	does not load: the file ends inside the layers (byte 19312 of 19312): the original's loader throws "System read file error." there and the game does not start
+hostile_huge_block_1	-	1	-	does not load: the file ends inside the block 1 (start markers and plants) (byte 19312 of 19312): the original's loader throws "System read file error." there and the game does not start
+hostile_random_1	-	1	-	does not load: header version 1338310945, the original reads version 8 only (0x1006386): it shows "The MAP you tried to play is the wrong version" and goes on without a map
+hostile_random_2	-	1	-	does not load: header version 109183554, the original reads version 8 only (0x1006386): it shows "The MAP you tried to play is the wrong version" and goes on without a map
+hostile_random_3	-	1	-	does not load: header version 1229390691, the original reads version 8 only (0x1006386): it shows "The MAP you tried to play is the wrong version" and goes on without a map
+hostile_version_8_then_random	-	1	-	does not load: the file ends inside the tile dictionary (byte 30000 of 30000): the original's loader throws "System read file error." there and the game does not start
