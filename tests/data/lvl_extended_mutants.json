@@ -1,0 +1,918 @@
+{
+ "note": "Mutants of the map file version 9 (docs/MAP_FORMAT.md, \"Version 9: the Extended map\"): the relative anchor and its sign, the format flags and the rules word, the limits and the ceiling, the refusal by a place that reads Classic maps only, the strict reader, the checker's not_for_original outcome, the conversions and their reasons, lvl_tool convert, info and blank --extended. Run: python3 tools/mutate.py tests/data/lvl_extended_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by test_lvl_writer, test_original_safe, test_map_roundtrip or lvl_tool --selftest.",
+ "defaults": {},
+ "mutants": [
+  {
+   "id": "anchor_offset_made_with_the_wrong_sign",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "const uint32_t row_offset = (anchor_row - row) & 0xFFu;",
+   "new": "const uint32_t row_offset = (row - anchor_row) & 0xFFu;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "column_offset_made_with_the_wrong_sign",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "const uint32_t column_offset = (anchor_column - column) & 0xFFu;",
+   "new": "const uint32_t column_offset = (column - anchor_column) & 0xFFu;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "offset_bytes_swapped",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "cell.properties = static_cast<uint16_t>(row_offset | (column_offset << 8));",
+   "new": "cell.properties = static_cast<uint16_t>(column_offset | (row_offset << 8));",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "anchor_decoded_with_the_wrong_sign",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "int32_t r = static_cast<int32_t>(row) + static_cast<int8_t>(static_cast<uint8_t>(word & 0xFFu));",
+   "new": "int32_t r = static_cast<int32_t>(row) - static_cast<int8_t>(static_cast<uint8_t>(word & 0xFFu));",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "column_decoded_as_unsigned",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "int32_t c = static_cast<int32_t>(column) + static_cast<int8_t>(static_cast<uint8_t>((word >> 8) & 0xFFu));",
+   "new": "int32_t c = static_cast<int32_t>(column) + static_cast<int32_t>((word >> 8) & 0xFFu);",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "anchor_not_wrapped_in_a_classic_sized_map",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (height <= LVL_MAX_GRID_SIDE && width <= LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "new": "if (false) {\n        r &= 0xFF;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "anchor_wrapped_in_every_map",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (height <= LVL_MAX_GRID_SIDE && width <= LVL_MAX_GRID_SIDE) {\n        r &= 0xFF;",
+   "new": "if (true) {\n        r &= 0xFF;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "bomb_owner_read_as_an_anchor",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "(tile < LVL_BOMB_TILE_FIRST || tile > LVL_BOMB_TILE_LAST);",
+   "new": "true;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "bomb_range_one_short",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint16_t LVL_BOMB_TILE_LAST = 132;",
+   "new": "constexpr uint16_t LVL_BOMB_TILE_LAST = 131;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "empty_cell_word_converted",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (!level.has_object_anchor(row, column)) continue;           // (empty cells",
+   "new": "if (false) continue;           // (empty cells",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "no_cell_has_an_anchor",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "return tile != LVL_EMPTY_TILE && tile != 0xFFFFu &&",
+   "new": "return false && tile != LVL_EMPTY_TILE && tile != 0xFFFFu &&",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "unknown_flag_bits_read",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if ((lvl.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {\n            add_problem(p.fatal",
+   "new": "if (false) {\n            add_problem(p.fatal",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "only_the_low_flag_bits_refused",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if ((lvl.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {\n            add_problem(p.fatal",
+   "new": "if ((lvl.format_flags & ~LVL_KNOWN_FORMAT_FLAGS & 0xFFFFu) != 0) {\n            add_problem(p.fatal",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_flag_is_known",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint32_t LVL_KNOWN_FORMAT_FLAGS = 0; ",
+   "new": "constexpr uint32_t LVL_KNOWN_FORMAT_FLAGS = 1; ",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "rules_2_read",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (lvl.rules > LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
+   "new": "if (lvl.rules > 2) {\n            add_problem(p.fatal",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "rules_1_refused",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (lvl.rules > LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
+   "new": "if (lvl.rules >= LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "writer_writes_unknown_flags",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if ((level.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {\n            return",
+   "new": "if (false) {\n            return",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "writer_writes_rules_2",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.rules > LVL_RULES_EXTENDED) return \"the rules word",
+   "new": "if (level.rules > 2) return \"the rules word",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "classic_level_with_rules_written",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "} else if (level.format_flags != 0 || level.rules != 0) {",
+   "new": "} else if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_allowed_by_default",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "bool allow_extended{false};",
+   "new": "bool allow_extended{true}; ",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "new_maps_allow_extended",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "144u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "144u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_maps_do_not_allow_extended",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "new": "3584u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_cells_one_more",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "4u * 1024u * 1024u, 262144, 3584u * 1024u",
+   "new": "4u * 1024u * 1024u, 262145, 3584u * 1024u",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_side_wider",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return LevelLimits{1024, 1024, LVL_MAX_DICTIONARY_ENTRIES, 4u",
+   "new": "return LevelLimits{1025, 1024, LVL_MAX_DICTIONARY_ENTRIES, 4u",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_read_limit_larger",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "4u * 1024u * 1024u, 262144, 3584u * 1024u",
+   "new": "5u * 1024u * 1024u, 262144, 3584u * 1024u",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_write_limit_larger",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "262144, 3584u * 1024u, true",
+   "new": "262144, 4096u * 1024u, true",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "ceiling_side_larger",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint32_t LVL_FORMAT_CEILING_SIDE = 2048;",
+   "new": "constexpr uint32_t LVL_FORMAT_CEILING_SIDE = 4096;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "ceiling_file_larger",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr size_t   LVL_FORMAT_CEILING_FILE_BYTES = 64u * 1024u * 1024u;",
+   "new": "constexpr size_t   LVL_FORMAT_CEILING_FILE_BYTES = 128u * 1024u * 1024u;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "side_cap_ignores_allow_extended",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint32_t side_cap() const noexcept { return allow_extended ? LVL_FORMAT_CEILING_SIDE : LVL_MAX_GRID_SIDE; }",
+   "new": "constexpr uint32_t side_cap() const noexcept { return LVL_FORMAT_CEILING_SIDE; }",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "cells_cap_ignores_the_ceiling",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "return max_cells < cap ? max_cells : cap;",
+   "new": "return max_cells;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "read_bytes_ignores_the_ceiling",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr size_t read_bytes() const noexcept { return allow_extended && max_read_bytes > LVL_FORMAT_CEILING_FILE_BYTES ? LVL_FORMAT_CEILING_FILE_BYTES : max_read_bytes; }",
+   "new": "constexpr size_t read_bytes() const noexcept { return max_read_bytes; }",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "classic_map_keeps_no_256_in_extended_limits",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint32_t rows_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || rows() < LVL_MAX_GRID_SIDE ? rows() : LVL_MAX_GRID_SIDE; }",
+   "new": "constexpr uint32_t rows_for(uint32_t version) const noexcept { return rows(); }",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "description_limit_ignored",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr size_t description_bytes() const noexcept { return max_description_bytes < LVL_EXTENDED_MAX_DESCRIPTION ? max_description_bytes : LVL_EXTENDED_MAX_DESCRIPTION; }",
+   "new": "constexpr size_t description_bytes() const noexcept { return max_description_bytes; }",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "description_256_read",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (description_bytes > limits.description_bytes()) {",
+   "new": "if (description_bytes > limits.description_bytes() + 1) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "grid_not_checked_before_the_cells",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (extended && lvl.height.val != 0 && lvl.width.val != 0) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "dimensions_masked_to_16_bits_in_version_9",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "lvl.height.val = extended ? rows_raw : (rows_raw & 0xFFFFu);",
+   "new": "lvl.height.val = rows_raw & 0xFFFFu;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "cell_count_in_32_bits",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "} else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version)) {",
+   "new": "} else if (static_cast<uint64_t>(static_cast<uint32_t>(rows * columns)) > limits.cells_for(version)) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "cells_over_the_limit_accepted",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "} else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version)) {",
+   "new": "} else if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_read_by_a_classic_only_reader",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (!limits.allow_extended) {\n            add_problem(p.fatal, Severity::Fatal, Kind::VersionNotSupported",
+   "new": "if (false) {\n            add_problem(p.fatal, Severity::Fatal, Kind::VersionNotSupported",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_written_by_a_classic_only_writer",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (extended && !limits.allow_extended) {\n        return \"the level says version 9",
+   "new": "if (false) {\n        return \"the level says version 9",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_level_valid_for_a_classic_only_place",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (extended && !limits.allow_extended) {\n        add_problem(out, Severity::Fatal, Kind::VersionNotSupported",
+   "new": "if (false) {\n        add_problem(out, Severity::Fatal, Kind::VersionNotSupported",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_not_supported_code_renamed",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "case LevelProblemKind::VersionNotSupported: return \"version_not_supported\";",
+   "new": "case LevelProblemKind::VersionNotSupported: return \"wrong_version\";",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_not_extended",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "constexpr uint32_t LVL_EXTENDED_VERSION = 9; ",
+   "new": "constexpr uint32_t LVL_EXTENDED_VERSION = 10;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_cut_in_block_4_read",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (extended && (cut || r.remaining() < 2)) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "version_9_pile_without_stages_read",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (item_count == 0 && extended) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_level_judged_by_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (level.version == LVL_EXTENDED_VERSION) return not_for_original_report();",
+   "new": "if (false) return not_for_original_report();",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_file_read_by_the_original_check",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {",
+   "new": "(static_cast<uint32_t>(data[3]) << 24)) == 12345u) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "not_for_original_is_a_warning",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::NotForOriginal, Severity::Info, \"not for the original",
+   "new": "f.add(Code::NotForOriginal, Severity::Warning, \"not for the original",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "not_for_original_is_fatal",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "f.add(Code::NotForOriginal, Severity::Info, \"not for the original",
+   "new": "f.add(Code::NotForOriginal, Severity::Fatal, \"not for the original",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_map_works_in_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "if (!judged || not_for_original()) return false;",
+   "new": "if (!judged) return false;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "not_for_original_never_said",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "bool OriginalSafeReport::not_for_original() const noexcept { return has(Code::NotForOriginal); }",
+   "new": "bool OriginalSafeReport::not_for_original() const noexcept { return false; }",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "conversion_keeps_the_extended_rules",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "copy.rules = LVL_RULES_ORIGINAL;                      // the original's rules",
+   "new": "copy.rules = LVL_RULES_EXTENDED;                      // the original's rules",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_drops_the_description",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        LevelData copy(level);\n        copy.load_notes.clear();                                  // (what the reader noticed",
+   "new": "        LevelData copy(level);\n        copy.description.clear();\n        copy.load_notes.clear();                                  // (what the reader noticed",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "conversion_back_keeps_version_9",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "            copy.version = LVL_EXPECTED_VERSION;\n            copy.format_flags = 0;\n            copy.rules = 0;",
+   "new": "            copy.format_flags = 0;\n            copy.rules = 0;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "conversion_up_keeps_version_8",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "            copy.version = LVL_EXTENDED_VERSION;\n            copy.format_flags = 0;",
+   "new": "            copy.format_flags = 0;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "conversion_back_keeps_the_relative_anchor",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "copy.layer2_interactive[i].properties = static_cast<uint16_t>((static_cast<uint32_t>(anchor_row) & 0xFFu) | ((static_cast<uint32_t>(anchor_column) & 0xFFu) << 8));",
+   "new": "(void)anchor_row; (void)anchor_column;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_description_limit_29",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "constexpr size_t kClassicMostDescription = kDescriptionBytes;",
+   "new": "constexpr size_t kClassicMostDescription = 29;",
+   "build": [
+    "test_map_roundtrip",
+    "test_lvl_writer"
+   ],
+   "test": "./build/tests/test_sim/test_map_roundtrip --only TINY && ./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_description_limit_31",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "constexpr size_t kClassicMostDescription = kDescriptionBytes;",
+   "new": "constexpr size_t kClassicMostDescription = 31;",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_wide_map_fits_a_classic_map",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (columns > LVL_MAX_GRID_SIDE) why.push_back",
+   "new": "if (columns > 300) why.push_back",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "a_tall_map_fits_a_classic_map",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (rows > LVL_MAX_GRID_SIDE) why.push_back",
+   "new": "if (rows > 300) why.push_back",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "anchor_255_does_not_fit",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (ar < 0 || ar > 255 || ac < 0 || ac > 255) {",
+   "new": "if (ar < 0 || ar >= 255 || ac < 0 || ac >= 255) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "anchor_256_fits",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (ar < 0 || ar > 255 || ac < 0 || ac > 255) {",
+   "new": "if (ar < 0 || ar > 256 || ac < 0 || ac > 256) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "negative_anchor_fits",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (ar < 0 || ar > 255 || ac < 0 || ac > 255) {",
+   "new": "if (ar > 255 || ac > 255) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "flags_do_not_stop_a_classic_map",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.format_flags != 0) why.push_back(\"the map has format flags",
+   "new": "if (false) why.push_back(\"the map has format flags",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "rules_1_without_a_note",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "} else if (level.rules == LVL_RULES_EXTENDED && notes != nullptr) {",
+   "new": "} else if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "dictionary_of_a_classic_map_unlimited",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {\n        why.push_back",
+   "new": "if (false) {\n        why.push_back",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "blank_extended_rules_at_90_rows",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "(rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
+   "new": "(rows >= LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "blank_extended_rules_never",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "(rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
+   "new": "(rows > 100000)",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "flags_and_rules_not_compared",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (a.rules != b.rules) return differ",
+   "new": "if (false) return differ",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "rules_and_flags_swapped",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        o.u32(level.format_flags);\n        o.u16(level.rules);",
+   "new": "        o.u16(level.rules);\n        o.u32(level.format_flags);",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "description_length_a_dword_not_a_word",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        o.u16(static_cast<uint16_t>(level.description.size()));\n        o.text(level.description, level.description.size());",
+   "new": "        o.u32(static_cast<uint32_t>(level.description.size()));\n        o.text(level.description, level.description.size());",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "description_of_version_9_padded_to_30",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "        o.text(level.description, level.description.size());",
+   "new": "        o.text(level.description, 30);",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "extended_description_offset",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "constexpr size_t kExtendedDescriptionAt = 18; ",
+   "new": "constexpr size_t kExtendedDescriptionAt = 17; ",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_blank_extended_uses_the_ceiling",
+   "file": "tools/lvl_tool.cpp",
+   "old": "const LevelLimits limits = o.extended ? LevelLimits::for_extended_maps() :",
+   "new": "const LevelLimits limits = o.extended ? LevelLimits::format_ceiling() :",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_convert_overwrites_the_source",
+   "file": "tools/lvl_tool.cpp",
+   "old": "if (fs::exists(o.output, same) && fs::equivalent(in_path, o.output, same)) {",
+   "new": "if (false) {",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_convert_writes_when_it_does_not_fit",
+   "file": "tools/lvl_tool.cpp",
+   "old": "    if (!c.ok) {\n        out << name << \": cannot be \"",
+   "new": "    if (false) {\n        out << name << \": cannot be \"",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_info_does_not_list_why",
+   "file": "tools/lvl_tool.cpp",
+   "old": "for (const std::string& r : reasons) out << \"  \" << r << \"\\n\";",
+   "new": "",
+   "build": [
+    "test_lvl_writer",
+    "test_original_safe",
+    "lvl_tool"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
+  }
+ ]
+}

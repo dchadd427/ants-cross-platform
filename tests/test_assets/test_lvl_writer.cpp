@@ -1614,6 +1614,28 @@ void w7_extended_maps() {
         c = convert_to_classic(wide);
         CHECK(!c.ok && c.reasons.size() == 2u);
         CHECK(c.reasons.size() == 2u && c.reasons[1] == "1 object cells are anchored outside the 0 to 255 that a Classic anchor byte holds (the first at row 0, column 290)");
+        // the edges of a byte: column 255 and row 255 are the last anchors a Classic map holds, 256 and -1 are not (the map is wide as well: its width is a reason of its own)
+        auto anchor_reasons = [](uint32_t rows, uint32_t columns, size_t at, uint16_t word) {
+            LevelData m = extended_level();
+            m.description.clear();
+            m.height.val = rows;
+            m.width.val = columns;
+            m.layer1_terrain.assign(static_cast<size_t>(rows) * columns, MapCell{1, 0, 0});
+            m.layer2_interactive.assign(static_cast<size_t>(rows) * columns, MapCell{LVL_EMPTY_TILE, 0, 0});
+            m.layer2_interactive[at] = MapCell{2, 0, word};
+            size_t n = 0;
+            for (const std::string& r : needs_extended(m)) n += r.find("object cells are anchored outside") != std::string::npos ? 1u : 0u;
+            return n;
+        };
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xFB00)) == 1u);            // column 280 - 5 = 275: beyond a byte
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xE700)) == 0u);            // column 280 - 25 = 255: the last anchor a byte holds
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0xE800)) == 1u);            // column 280 - 24 = 256: no byte
+        CHECK(anchor_reasons(1, 300, 280, static_cast<uint16_t>(0x0000)) == 1u);            // column 280: no byte
+        CHECK(anchor_reasons(1, 300, 0, static_cast<uint16_t>(0xFF00)) == 1u);              // column 0 - 1 = -1: no byte
+        CHECK(anchor_reasons(1, 300, 0, static_cast<uint16_t>(0x0000)) == 0u);              // column 0: fine
+        CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E7)) == 0u);            // row 280 - 25 = 255
+        CHECK(anchor_reasons(300, 1, 280, static_cast<uint16_t>(0x00E8)) == 1u);            // row 256
+        CHECK(anchor_reasons(300, 1, 0, static_cast<uint16_t>(0x00FF)) == 1u);              // row -1
         // an anchor that points outside the grid of a map of 256 or less is a byte modulo 256 (so no reason): a bomb's word never is an anchor
         LevelData small_map = base;
         small_map.layer2_interactive[6].properties = 0x7F80;                         // -128 rows, +127 columns from row 1, column 2

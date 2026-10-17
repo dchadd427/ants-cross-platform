@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Under the hood: the map code and the map tool now know a second kind of map, the Extended map (a new map file version for bigger and taller maps), and can convert a map between the two kinds; nothing changes in the game or on the site, and the game still reads the classic maps only.
+
+**Details:** [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
+
 ## v0.12.62 - 2026-10-16 - Map maker: the map core runs in the browser
 
 **For players:**
