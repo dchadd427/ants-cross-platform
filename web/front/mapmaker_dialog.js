@@ -13,7 +13,7 @@
         classic: { title: 'Classic map', line: 'Works in the original game and in the new version.' },
         extended: { title: 'Extended map', line: 'Bigger and taller. Works in the new version only: the original game cannot open it.' }
     };
-    var EXTENDED_NOTE = 'Only the new version can open an Extended map. You can turn it into a Classic map later if it fits.';
+    var EXTENDED_NOTE = 'Only the new version can open an Extended map.';
     var first = 0;
 
     function create(doc, host, behind) {

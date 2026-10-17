@@ -232,7 +232,7 @@ class ThePage(unittest.TestCase):
         dialog = self.code["mapmaker_dialog.js"]
         self.assertIn("'Works in the original game and in the new version.'", dialog)
         self.assertIn("'Bigger and taller. Works in the new version only: the original game cannot open it.'", dialog)
-        self.assertIn("'Only the new version can open an Extended map. You can turn it into a Classic map later if it fits.'", dialog)
+        self.assertIn("'Only the new version can open an Extended map.'", dialog)
         self.assertIn("'Make it an Extended map'", dialog)
         self.assertIn("'What kind of map do you want to make?'", dialog)
         self.assertIn("' cells of ' + Sizes.number(live.max) + ' \u00b7 the file will be ' + live.text", dialog)

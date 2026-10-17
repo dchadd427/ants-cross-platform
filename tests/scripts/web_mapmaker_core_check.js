@@ -154,7 +154,7 @@ async function main() {
         console.log((o.require ? 'FAIL' : 'SKIP') + ': no lvl_core.js and lvl_core.wasm in ' + o.module + ' (build the web build, or give --module)');
         process.exit(o.require ? 1 : 0);
     }
-    const core = LvlCore.wrap(await require(js)());
+    const core = LvlCore.wrap(await require(path.resolve(js))());
     for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE]]) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
         const before = failures;
