@@ -137,11 +137,11 @@ void s1_rules() {
         }
     });
 
-    run_case("S1.1 Version 8: Version 9 Is Fatal (The Original Says \"Wrong Version\" And Starts Without A Map)", [] {
+    run_case("S1.1 Version 8: Version 10 Is Fatal (The Original Says \"Wrong Version\" And Starts Without A Map)", [] {
         LevelData l = tiny();
-        l.version = 9;
+        l.version = 10;
         const OriginalSafeReport r = check_original_safe(l);
-        CHECK(finds(r, Code::VersionNot8, Severity::Fatal, "the map is version 9: the original plays version 8 only (it says \"wrong version\" and starts without a map)"));
+        CHECK(finds(r, Code::VersionNot8, Severity::Fatal, "the map is version 10: the original plays version 8 only (it says \"wrong version\" and starts without a map)"));
         CHECK(!r.works_in_original_game());
         l.version = 8;
         CHECK(!check_original_safe(l).has(Code::VersionNot8));
@@ -498,7 +498,7 @@ void s2_report() {
             {Code::FoodPileOutsideMap, "food_pile_outside_map"}, {Code::FoodPileWithoutStages, "food_pile_without_stages"}, {Code::HillMissing, "hill_missing"},
             {Code::HillWithoutEntrance, "hill_without_entrance"}, {Code::HillsSeveral, "hills_several"}, {Code::StartingAntsMissing, "starting_ants_missing"},
             {Code::HillNotWhole, "hill_not_whole"}, {Code::TileNotDrawn, "tile_not_drawn"}, {Code::FoodPileNotShown, "food_pile_not_shown"},
-            {Code::ObjectOutsideMap, "object_outside_map"},
+            {Code::ObjectOutsideMap, "object_outside_map"}, {Code::NotForOriginal, "not_for_original"},
         };
         std::set<std::string> texts;
         for (const auto& c : codes) {
@@ -545,15 +545,15 @@ void s3_files() {
     Spots t;
     const bool located = locate(tiny_file, t);
 
-    run_case("S3.1 What The Reader Refuses Is Fatal, With The Reader's Sentence: No Bytes, Version 9, A File Cut Before Block 4, A File Over The Limits", [&] {
+    run_case("S3.1 What The Reader Refuses Is Fatal, With The Reader's Sentence: No Bytes, Version 10, A File Cut Before Block 4, A File Over The Limits", [&] {
         CHECK(located);
         OriginalSafeReport r = check_original_safe(nullptr, 0);
         CHECK(finds(r, Code::FileUnreadable, Severity::Fatal, "no data"));
         std::vector<uint8_t> m = tiny_file;
-        wr32(m, 0, 9);
+        wr32(m, 0, 10);
         r = check_original_safe(m.data(), m.size());
         CHECK(r.issues.size() == 1u && r.has(Code::VersionNot8) && r.issues[0].severity == Severity::Fatal);
-        CHECK(r.issues.size() == 1u && r.issues[0].message.find("header version 9") == 0);
+        CHECK(r.issues.size() == 1u && r.issues[0].message.find("header version 10") == 0);
         r = check_original_safe(tiny_file.data(), 10000);
         CHECK(r.issues.size() == 1u && r.has(Code::FileCutShort) && r.issues[0].message.find("the file ends inside the layers") == 0);
         r = check_original_safe(tiny_file.data(), tiny_file.size(), LevelLimits{256, 256, 1344, 1000});

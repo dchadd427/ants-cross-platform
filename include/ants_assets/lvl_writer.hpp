@@ -19,7 +19,7 @@ struct LevelWriteResult {
     std::string error;
 };
 
-/// The canonical bytes of `level`: version 8, the parts in the order the original's loader reads them (docs/MAP_FORMAT.md), every field as the level holds it, the
+/// The canonical bytes of `level`: version 8 (or version 9, an Extended map, when `limits.allow_extended`; docs/MAP_FORMAT.md, "Version 9"), the parts in the order the original's loader reads them (docs/MAP_FORMAT.md), every field as the level holds it, the
 /// bytes after the end of the description and of each dictionary name zero, nothing after the egg word. Refused (ok false, `error` says why) is a level that the
 /// reader cannot have made, or whose canonical file is larger than `limits.max_write_bytes` or `limits.max_read_bytes` (a file cut short grows by a few bytes when
 /// its blocks are written whole), so that what the writer returns always reads back (LVLParser::load_from_memory, with the same limits) as the same level
@@ -58,6 +58,29 @@ const char* to_string(RewriteChangeKind kind) noexcept;
 /// Each byte that differs is accounted for by one of the kinds above, in file order; a difference that none of them explains is an Unexplained change.
 std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, const LevelData& read, const std::vector<uint8_t>& canonical);
 
+/// What a conversion between the two kinds of map made of a level (convert_to_extended, convert_to_classic). A conversion always makes a COPY: the source level is not touched,
+/// and the copy is another level (written, it is another file with another hash). `ok` false: `reasons` say in plain sentences why the level cannot be made (nothing is
+/// converted). `notes` are things to tell the person that do not stop the conversion ("the extended rules are not carried").
+struct LevelConversion {
+    bool ok{false};
+    LevelData level;
+    std::vector<std::string> reasons;
+    std::vector<std::string> notes;
+};
+
+/// The level as an Extended map (version 9): every field carried, the layer-2 anchors made relative to their cells, format flags 0, rules 0 (the original's rules, so the map plays
+/// as it did: the same state hashes), the description kept. Always possible for a Classic map that the reader made or the writer can write; a level that is already Extended is
+/// copied as it is. `reasons` only for a level that is no map (another version, layers that are not rows x columns, a level the writer cannot write).
+LevelConversion convert_to_extended(const LevelData& level);
+
+/// The level as a Classic map (version 8), when it fits: both sides at most 256, the dictionary at most 1,344 names, the description at most 30 bytes (the file's field), no
+/// format flags, rules 0 or 1 (rules 1 is dropped, with a note), every object anchor inside a byte (0 .. 255). Else `reasons` list every way in which it does not. The 90-row
+/// policy of new Classic maps is no part of this (it is a limit of the places that make maps). A level that is already Classic is copied as it is.
+LevelConversion convert_to_classic(const LevelData& level);
+
+/// Why `level` cannot be a Classic map (version 8): the reasons of convert_to_classic, one sentence each, empty when it can. For the editor to show.
+std::vector<std::string> needs_extended(const LevelData& level);
+
 /// The tile ids a level uses, in rising order: every layer cell, block 1 record, food stage and block 3's default type that is not the empty tile 0x7FFE.
 std::vector<uint16_t> used_tile_ids(const LevelData& level);
 
@@ -75,9 +98,18 @@ std::vector<std::string> dictionary_of_used_tiles(const LevelData& level, const 
 constexpr uint16_t LVL_BLANK_GROUND_TILE = 485;
 constexpr uint16_t LVL_LAYER1_THIRD_WORD = 0xCDCD;
 
+/// The tallest map that the original's rules play whole: its path finder never enters tile row 90 (docs/MAP_FORMAT.md, "Version 9"), so a new Extended map of more rows asks for
+/// the extended rules.
+constexpr uint32_t LVL_ORIGINAL_RULES_MOST_ROWS = 90;
+
 /// A new map of `rows` x `columns` cells of plain ground, nothing on it, no start marker, no hill: version 8, mode 1, 10 minutes, 6 eggs a team, no default ant
 /// type, an empty description, and the dictionary of its content (dictionary_of_used_tiles). The starting point of the map maker. A grid beyond `limits` (or without
 /// a cell) gets no cell: nothing of its size is allocated, and write_level refuses the level with the sentence of its grid.
 LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits = LevelLimits{});
+
+/// A new Extended map (version 9) of `rows` x `columns` cells: the same plain ground and defaults as blank_level, format flags 0, rules 1 when the map is taller than 90 rows or
+/// wider than 256 columns (rules 0 otherwise). A grid beyond `limits` gets no cell, as for blank_level. `limits` should allow Extended maps (allow_extended), else write_level
+/// refuses the level.
+LevelData blank_extended_level(uint32_t rows, uint32_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits = LevelLimits::for_extended_maps());
 
 }  // namespace ants::assets

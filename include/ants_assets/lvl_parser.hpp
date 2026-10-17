@@ -9,10 +9,23 @@
 
 namespace ants::assets {
 
-constexpr uint32_t LVL_EXPECTED_VERSION = 8;
+constexpr uint32_t LVL_EXPECTED_VERSION = 8;      // the Classic map: the only version the original reads
+constexpr uint32_t LVL_EXTENDED_VERSION = 9;      // the Extended map: this remake only (docs/MAP_FORMAT.md, "Version 9")
 constexpr uint32_t LVL_GAME_MODE_STANDARD = 1;   // what the shipped maps hold; the original stores the dword (map + 0x74) and never reads it again, so it is no condition
 constexpr uint16_t LVL_EMPTY_TILE = 0x7FFE; // 32,766 = Empty interactive overlay sentinel
 constexpr uint32_t LVL_MAX_GRID_SIDE = 256;       // rows and columns of a grid the remake hosts (the anchor bytes of a layer-2 object are 8 bit)
+// What no LevelLimits can exceed once a place accepts Extended maps (LevelLimits::allow_extended): the hard ceiling of the version 9 format. A reader refuses a header that
+// announces more before it allocates anything, and a file of more bytes before it reads one.
+constexpr uint32_t LVL_FORMAT_CEILING_SIDE = 2048;
+constexpr uint32_t LVL_FORMAT_CEILING_CELLS = LVL_FORMAT_CEILING_SIDE * LVL_FORMAT_CEILING_SIDE;   // 4,194,304
+constexpr size_t   LVL_FORMAT_CEILING_FILE_BYTES = 64u * 1024u * 1024u;
+constexpr size_t   LVL_EXTENDED_MAX_DESCRIPTION = 255;       // bytes of a version 9 description (the word before it holds the length)
+constexpr size_t   LVL_CLASSIC_MAX_DESCRIPTION = 29;         // characters of a version 8 description that the original can end with a zero byte (the field holds 30 bytes)
+constexpr uint32_t LVL_KNOWN_FORMAT_FLAGS = 0;               // the `format flags` bits this reader knows (none yet): a file with any other bit set is refused
+constexpr uint16_t LVL_RULES_ORIGINAL = 0;                   // `rules` 0: the original's rules exactly
+constexpr uint16_t LVL_RULES_EXTENDED = 1;                   // `rules` 1: extended rules (the simulation does not read the word yet)
+constexpr uint16_t LVL_BOMB_TILE_FIRST = 129;                // the original's bomb tiles 129 .. 132: the third word of their layer-2 cell is the owner, not an anchor
+constexpr uint16_t LVL_BOMB_TILE_LAST = 132;
 // Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the colour ids are 0 black, 1 blue, 2 red, 3 green, the hill of a colour is
 // the layer-2 id 245 + colour (245 black, 246 blue, 247 red, 248 green) and its start marker the block-1 id 152 + colour (152 black, 153 blue, 154 green, 155 red). The remake numbers its teams
 // 0 green, 1 red, 2 blue, 3 black. Both functions answer -1 for any other id.
@@ -45,6 +58,10 @@ constexpr bool tile_always_loaded(uint16_t id) noexcept {
  * (LVL_MAX_DICTIONARY_ENTRIES names), the grid the remake hosts (LVL_MAX_GRID_SIDE a side) and no limit on the size of a file, so that they refuse no map of the
  * library. A limit can only be made tighter: a value above a default counts as the default. A place that takes a map from a stranger or makes a new one passes
  * for_new_maps() (docs/MAP_FORMAT.md, "Limits").
+ *
+ * A place reads and writes Classic maps (version 8) only until it sets `allow_extended`: a version 9 file is then refused with the finding version_not_supported
+ * (and a version 9 level is not written). With it the grid may be as large as the hard ceiling of the format (LVL_FORMAT_CEILING_*) and no more, whatever the
+ * values below say; a version 8 file or level keeps the 256 a side of its format either way.
  */
 struct LevelLimits {
     uint32_t max_rows{LVL_MAX_GRID_SIDE};
@@ -53,18 +70,47 @@ struct LevelLimits {
     size_t max_read_bytes{std::numeric_limits<size_t>::max()};        // a file as it is, before it is read (the reader)
     uint32_t max_cells{LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE};       // rows x columns
     size_t max_write_bytes{std::numeric_limits<size_t>::max()};       // the canonical file of a level (the writer)
+    bool allow_extended{false};                                       // may a version 9 file or level pass (an Extended map)? false for LevelLimits{} and for_new_maps()
+    size_t max_description_bytes{LVL_EXTENDED_MAX_DESCRIPTION};       // the description of a version 9 level (a version 8 description is the file's 30 bytes)
 
     /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 10,000 cells and 130 a side,
     /// so that every map of the library fits (Bomb Races has 129 columns); a file of at most 512 KB is read as it is (every file of the library: BOMBERWORLD's
     /// 235,594 bytes are mostly bytes after its egg word, which a rewrite drops), and its canonical file may have 144 KB, so that a 100 x 100 map with the largest
     /// dictionary fits with room for its blocks
-    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u}; }
+    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION}; }
 
-    // the limits as they are applied (a value above the default is the default)
-    constexpr uint32_t rows() const noexcept { return max_rows < LVL_MAX_GRID_SIDE ? max_rows : LVL_MAX_GRID_SIDE; }
-    constexpr uint32_t columns() const noexcept { return max_columns < LVL_MAX_GRID_SIDE ? max_columns : LVL_MAX_GRID_SIDE; }
-    constexpr uint32_t cells() const noexcept { return max_cells < LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE ? max_cells : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE; }
+    /// An Extended map (version 9) that is made or brought in now: at most 262,144 cells (512 x 512, any shape) and 1,024 a side, a file of at most 4 MiB is read and
+    /// its canonical file may have 3.5 MiB (a 512 x 512 map is 3.1 MiB), the dictionary of 1,344 names, a description of 255 bytes. A Classic map (version 8) is
+    /// still held to 256 a side. Never above the hard ceiling of the format (LVL_FORMAT_CEILING_*).
+    static constexpr LevelLimits for_extended_maps() noexcept {
+        return LevelLimits{1024, 1024, LVL_MAX_DICTIONARY_ENTRIES, 4u * 1024u * 1024u, 262144, 3584u * 1024u, true, LVL_EXTENDED_MAX_DESCRIPTION};
+    }
+
+    /// Everything that the version 9 format holds and nothing a place adds (the hard ceiling: 2,048 a side, 4,194,304 cells, a file of 64 MiB): for a tool that reads or converts
+    /// a map and for the tests. A place that takes maps from other people uses for_extended_maps().
+    static constexpr LevelLimits format_ceiling() noexcept {
+        return LevelLimits{LVL_FORMAT_CEILING_SIDE, LVL_FORMAT_CEILING_SIDE, LVL_MAX_DICTIONARY_ENTRIES, LVL_FORMAT_CEILING_FILE_BYTES, LVL_FORMAT_CEILING_CELLS,
+                           LVL_FORMAT_CEILING_FILE_BYTES, true, LVL_EXTENDED_MAX_DESCRIPTION};
+    }
+
+    // the limits as they are applied (a value above the default is the default; with allow_extended the default is the hard ceiling of the format)
+    constexpr uint32_t side_cap() const noexcept { return allow_extended ? LVL_FORMAT_CEILING_SIDE : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t rows() const noexcept { return max_rows < side_cap() ? max_rows : side_cap(); }
+    constexpr uint32_t columns() const noexcept { return max_columns < side_cap() ? max_columns : side_cap(); }
+    constexpr uint32_t cells() const noexcept {
+        const uint32_t cap = allow_extended ? LVL_FORMAT_CEILING_CELLS : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE;
+        return max_cells < cap ? max_cells : cap;
+    }
     constexpr size_t dictionary_names() const noexcept { return max_dictionary_names < LVL_MAX_DICTIONARY_ENTRIES ? max_dictionary_names : LVL_MAX_DICTIONARY_ENTRIES; }
+    constexpr size_t read_bytes() const noexcept { return allow_extended && max_read_bytes > LVL_FORMAT_CEILING_FILE_BYTES ? LVL_FORMAT_CEILING_FILE_BYTES : max_read_bytes; }
+    constexpr size_t write_bytes() const noexcept { return allow_extended && max_write_bytes > LVL_FORMAT_CEILING_FILE_BYTES ? LVL_FORMAT_CEILING_FILE_BYTES : max_write_bytes; }
+    constexpr size_t description_bytes() const noexcept { return max_description_bytes < LVL_EXTENDED_MAX_DESCRIPTION ? max_description_bytes : LVL_EXTENDED_MAX_DESCRIPTION; }
+    // the same for a level of `version`: a Classic map (anything but 9) keeps the 256 a side of its format whatever the limits say
+    constexpr uint32_t rows_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || rows() < LVL_MAX_GRID_SIDE ? rows() : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t columns_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || columns() < LVL_MAX_GRID_SIDE ? columns() : LVL_MAX_GRID_SIDE; }
+    constexpr uint32_t cells_for(uint32_t version) const noexcept {
+        return version == LVL_EXTENDED_VERSION || cells() < LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE ? cells() : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE;
+    }
 };
 
 /**
@@ -95,7 +141,12 @@ enum class LevelProblemKind : uint8_t {
     FoodOutsideGrid,         // a food object anchored outside the grid: the original writes beside its tile table
     ObjectOutsideGrid,       // plants and waypoints outside the grid: harmless in the original (bounds checked or never looked up)
     // a limit of the place that reads the file (LevelLimits), not of the original
-    FileTooLarge             // more bytes than LevelLimits::max_read_bytes: nothing of it is read
+    FileTooLarge,            // more bytes than LevelLimits::max_read_bytes: nothing of it is read
+    // version 9 (the Extended map), which only a place with LevelLimits::allow_extended reads
+    VersionNotSupported,     // a version 9 file or level where Extended maps are not accepted (LevelLimits::allow_extended is false): nothing of it is read
+    FormatFlagsUnknown,      // a version 9 `format flags` dword with a bit this reader does not know: a later version of the format, so the file is refused
+    RulesOutOfRange,         // a version 9 `rules` word other than 0 (the original's rules) or 1 (extended rules)
+    DescriptionTooLong       // a version 9 description of more bytes than the limits allow (at most 255)
 };
 
 const char* to_string(LevelProblemSeverity severity) noexcept;
@@ -188,10 +239,12 @@ struct Waypoint {
  */
 class LevelData {
 public:
-    uint32_t version{0};         // Must be 8
+    uint32_t version{0};         // 8 (a Classic map) or 9 (an Extended map)
+    uint32_t format_flags{0};    // version 9 only (0 in a Classic map): the file's `format flags` dword; the reader refuses any bit it does not know, so this is 0 today
+    uint16_t rules{0};           // version 9 only: 0 = the original's rules exactly, 1 = extended rules (the simulation does not read it yet)
     uint32_t game_mode{0};       // 1 in the shipped maps (standard); the original stores it and never reads it again
     uint16_t default_minutes{0}; // Match duration (6, 8, 10, 12)
-    std::string description;     // 30-byte ASCII description
+    std::string description;     // the description: at most 30 bytes in version 8 (the file's field), at most 255 in version 9
     uint16_t tile_type_count{0}; // Tile dictionary count
     std::vector<std::string> tile_dictionary; // 11-byte ASCII tile names
     // Dimension property supporting both .width and .width()
@@ -238,7 +291,7 @@ public:
     LevelData() {
         layer1_terrain.parent = this;
     }
-    LevelData(const LevelData& o) : version(o.version), game_mode(o.game_mode),
+    LevelData(const LevelData& o) : version(o.version), format_flags(o.format_flags), rules(o.rules), game_mode(o.game_mode),
         default_minutes(o.default_minutes), description(o.description),
         tile_type_count(o.tile_type_count), tile_dictionary(o.tile_dictionary),
         width(o.width), height(o.height), layer1_terrain(o.layer1_terrain),
@@ -248,7 +301,7 @@ public:
         boundary_param(o.boundary_param), load_notes(o.load_notes) {
         layer1_terrain.parent = this;
     }
-    LevelData(LevelData&& o) noexcept : version(o.version), game_mode(o.game_mode),
+    LevelData(LevelData&& o) noexcept : version(o.version), format_flags(o.format_flags), rules(o.rules), game_mode(o.game_mode),
         default_minutes(o.default_minutes), description(std::move(o.description)),
         tile_type_count(o.tile_type_count), tile_dictionary(std::move(o.tile_dictionary)),
         width(o.width), height(o.height), layer1_terrain(std::move(o.layer1_terrain)),
@@ -260,7 +313,7 @@ public:
     }
     LevelData& operator=(const LevelData& o) {
         if (this != &o) {
-            version = o.version; game_mode = o.game_mode; default_minutes = o.default_minutes;
+            version = o.version; format_flags = o.format_flags; rules = o.rules; game_mode = o.game_mode; default_minutes = o.default_minutes;
             description = o.description; tile_type_count = o.tile_type_count;
             tile_dictionary = o.tile_dictionary; width = o.width; height = o.height;
             layer1_terrain = o.layer1_terrain; layer1_terrain.parent = this;
@@ -273,7 +326,7 @@ public:
     }
     LevelData& operator=(LevelData&& o) noexcept {
         if (this != &o) {
-            version = o.version; game_mode = o.game_mode; default_minutes = o.default_minutes;
+            version = o.version; format_flags = o.format_flags; rules = o.rules; game_mode = o.game_mode; default_minutes = o.default_minutes;
             description = std::move(o.description); tile_type_count = o.tile_type_count;
             tile_dictionary = std::move(o.tile_dictionary); width = o.width; height = o.height;
             layer1_terrain = std::move(o.layer1_terrain); layer1_terrain.parent = this;
@@ -300,6 +353,20 @@ public:
     const MapCell& get_cell_layer2(uint32_t x, uint32_t y) const;
     std::vector<MapCell>& layer1_cells() noexcept { return layer1_terrain; }
     std::vector<MapCell>& layer2_cells() noexcept { return layer2_interactive; }
+
+    /// Is the level an Extended map (version 9)?
+    constexpr bool is_extended() const noexcept { return version == LVL_EXTENDED_VERSION; }
+
+    /// Does the layer-2 cell at (`row`, `column`) hold an object anchor in its third word? Every cell with a tile does, except the original's bomb tiles (their third
+    /// word is the owner) and the empty cell. false for a cell outside the grid.
+    bool has_object_anchor(uint32_t row, uint32_t column) const noexcept;
+
+    /// The absolute anchor (row and column of the object's first cell) of the layer-2 cell at (`row`, `column`): false when the cell has none (has_object_anchor).
+    /// Version 8: the low byte of the third word is the row and the high byte the column. Version 9: the third word holds the anchor RELATIVE to the cell, the low byte a
+    /// signed row offset and the high byte a signed column offset, so that a cell far from its anchor needs no wide number; in a map of at most 256 rows and 256 columns
+    /// the sum is taken modulo 256 (an anchor byte of a Classic map keeps its value through a conversion even when it points outside the grid, as some library
+    /// maps' do), in a larger map it is the plain sum (which may lie outside the grid or the 0 .. 255 of a Classic map; convert_to_classic says so).
+    bool object_anchor(uint32_t row, uint32_t column, int32_t& anchor_row, int32_t& anchor_column) const noexcept;
 
     // Dictionary Lookups
     const std::string& get_tile_name(uint16_t tile_index) const;

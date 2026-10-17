@@ -24,11 +24,20 @@ constexpr size_t kCountAt = 40;               // the dictionary's count word (th
 constexpr size_t kNamesAt = 42;
 constexpr size_t kNameBytes = 11;
 constexpr size_t kMaxBlockEntries = 0xFFFF;   // every count of the file is a word
+constexpr size_t kExtendedDescriptionAt = 18;  // version 9: version (dword), mode (dword), minutes (word), format flags (dword), rules (word), the description's length (word), then its bytes
 
 std::string num(uint64_t v) { return std::to_string(v); }
 
+std::string hex(uint32_t v) {
+    static const char digits[] = "0123456789abcdef";
+    std::string out;
+    do { out.insert(out.begin(), digits[v & 0xFu]); v >>= 4; } while (v != 0);
+    return out;
+}
+
 // Where the parts of a level's canonical file are (byte offsets from the start), in 64 bits: a level that the writer refuses may be any size
 struct Layout {
+    uint64_t names_at{0};
     uint64_t grid_size{0};
     uint64_t layer1{0};
     uint64_t block1{0};
@@ -40,7 +49,8 @@ struct Layout {
 
 Layout layout_of(const LevelData& level) {
     Layout l;
-    l.grid_size = kNamesAt + kNameBytes * static_cast<uint64_t>(level.tile_dictionary.size());
+    l.names_at = level.version == LVL_EXTENDED_VERSION ? kExtendedDescriptionAt + static_cast<uint64_t>(level.description.size()) + 2 : kNamesAt;   // (the dictionary's count word is the two bytes before)
+    l.grid_size = l.names_at + kNameBytes * static_cast<uint64_t>(level.tile_dictionary.size());
     l.layer1 = l.grid_size + 8;
     const uint64_t cells = static_cast<uint64_t>(level.layer1_terrain.size());
     l.block1 = l.layer1 + 6 * cells + 6 * static_cast<uint64_t>(level.layer2_interactive.size());
@@ -67,17 +77,30 @@ std::string grid_text(uint32_t rows, uint32_t columns) { return num(rows) + " ro
 
 // The first reason why the reader cannot have made `level` within `limits`; empty when it can
 std::string check_writable(const LevelData& level, const LevelLimits& limits) {
-    if (level.version != LVL_EXPECTED_VERSION) {
-        return "the level says version " + num(level.version) + ": the writer writes version 8, the only one the original reads";
+    const bool extended = level.version == LVL_EXTENDED_VERSION;
+    if (extended && !limits.allow_extended) {
+        return "the level says version 9 (an Extended map): this place writes Classic maps (version 8) only";
+    }
+    if (level.version != LVL_EXPECTED_VERSION && !extended) {
+        return "the level says version " + num(level.version) + ": the writer writes version 8, the only one the original reads" +
+               (limits.allow_extended ? std::string(", and version 9, an Extended map") : std::string());
+    }
+    if (extended) {
+        if ((level.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {
+            return "the format flags are 0x" + hex(level.format_flags) + ": this writer knows no flag bit (0x" + hex(LVL_KNOWN_FORMAT_FLAGS) + "), and a reader refuses a file with any other";
+        }
+        if (level.rules > LVL_RULES_EXTENDED) return "the rules word is " + num(level.rules) + ": only 0 (the original's rules) and 1 (extended rules) are known";
+    } else if (level.format_flags != 0 || level.rules != 0) {
+        return "a version 8 file has no format flags and no rules word, the level holds flags 0x" + hex(level.format_flags) + " and rules " + num(level.rules);
     }
     const uint32_t rows = level.height;
     const uint32_t columns = level.width;
     if (rows == 0 || columns == 0) return "the grid has " + grid_text(rows, columns) + ": a map needs at least one cell";
-    if (rows > limits.rows() || columns > limits.columns()) {
-        return "the grid has " + grid_text(rows, columns) + ", more than the " + num(limits.rows()) + " x " + num(limits.columns()) + " allowed here";
+    if (rows > limits.rows_for(level.version) || columns > limits.columns_for(level.version)) {
+        return "the grid has " + grid_text(rows, columns) + ", more than the " + num(limits.rows_for(level.version)) + " x " + num(limits.columns_for(level.version)) + " allowed here";
     }
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;
-    if (cells > limits.cells()) return "the grid has " + grid_text(rows, columns) + ", " + num(cells) + " cells, more than the " + num(limits.cells()) + " allowed here";
+    if (cells > limits.cells_for(level.version)) return "the grid has " + grid_text(rows, columns) + ", " + num(cells) + " cells, more than the " + num(limits.cells_for(level.version)) + " allowed here";
     if (level.layer1_terrain.empty() && level.layer2_interactive.empty()) {
         return "the grid has " + grid_text(rows, columns) + " but the level holds no cell (blank_level makes none for a grid beyond the limits it is given)";
     }
@@ -85,7 +108,13 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
         return "the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " +
                num(columns) + " = " + num(cells);
     }
-    if (level.description.size() > kDescriptionBytes) return "the description has " + num(level.description.size()) + " bytes, the file holds 30";
+    if (extended) {
+        if (level.description.size() > limits.description_bytes()) {
+            return "the description has " + num(level.description.size()) + " bytes, more than the " + num(limits.description_bytes()) + " allowed here";
+        }
+    } else if (level.description.size() > kDescriptionBytes) {
+        return "the description has " + num(level.description.size()) + " bytes, the file holds 30";
+    }
     const size_t zero = level.description.find('\0');
     if (zero != std::string::npos) return "the description holds a zero byte (at " + num(zero) + "): a reader would end it there";
     const size_t names = level.tile_dictionary.size();
@@ -133,7 +162,7 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
     }
     const uint64_t size = layout_of(level).size;
     // the limit of a written file, and of one that is read: what the writer returns reads back with the same limits
-    const size_t most = std::min(limits.max_write_bytes, limits.max_read_bytes);
+    const size_t most = std::min(limits.write_bytes(), limits.read_bytes());
     if (size > most) return "the file would have " + num(size) + " bytes, more than the " + num(most) + " allowed here";
     return std::string();
 }
@@ -170,10 +199,20 @@ private:
 };
 
 void serialize(const LevelData& level, Out& o) {
-    o.u32(LVL_EXPECTED_VERSION);
-    o.u32(level.game_mode);
-    o.u16(level.default_minutes);
-    o.text(level.description, kDescriptionBytes);
+    if (level.version == LVL_EXTENDED_VERSION) {
+        o.u32(LVL_EXTENDED_VERSION);
+        o.u32(level.game_mode);
+        o.u16(level.default_minutes);
+        o.u32(level.format_flags);
+        o.u16(level.rules);
+        o.u16(static_cast<uint16_t>(level.description.size()));
+        o.text(level.description, level.description.size());
+    } else {
+        o.u32(LVL_EXPECTED_VERSION);
+        o.u32(level.game_mode);
+        o.u16(level.default_minutes);
+        o.text(level.description, kDescriptionBytes);
+    }
     o.u16(static_cast<uint16_t>(level.tile_dictionary.size() - 1));
     for (const std::string& name : level.tile_dictionary) o.text(name, kNameBytes);
     o.u32(level.height);                                                              // the first dword is the number of ROWS (docs/MAP_FORMAT.md)
@@ -265,6 +304,8 @@ bool same_level(const LevelData& a, const LevelData& b, std::string* difference)
     if (a.version != b.version) return differ("version: " + num(a.version) + " / " + num(b.version));
     if (a.game_mode != b.game_mode) return differ("mode: " + num(a.game_mode) + " / " + num(b.game_mode));
     if (a.default_minutes != b.default_minutes) return differ("minutes: " + num(a.default_minutes) + " / " + num(b.default_minutes));
+    if (a.format_flags != b.format_flags) return differ("format flags: " + num(a.format_flags) + " / " + num(b.format_flags));
+    if (a.rules != b.rules) return differ("rules: " + num(a.rules) + " / " + num(b.rules));
     if (a.description != b.description) return differ("description: \"" + a.description + "\" / \"" + b.description + "\"");
     if (a.tile_type_count != b.tile_type_count) return differ("tile_type_count: " + num(a.tile_type_count) + " / " + num(b.tile_type_count));
     if (a.tile_dictionary.size() != b.tile_dictionary.size()) return differ("dictionary: " + num(a.tile_dictionary.size()) + " / " + num(b.tile_dictionary.size()) + " names");
@@ -352,6 +393,15 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
     };
     const size_t m = canonical.size();
     if (source != nullptr && size == m && (m == 0 || std::memcmp(source, canonical.data(), m) == 0)) return out;
+    if (read.version == LVL_EXTENDED_VERSION) {
+        // a version 9 file is read exactly (its reader copies no quirk of the original's), so only bytes after the egg word can differ from its rewrite
+        if (source != nullptr && size > m && std::memcmp(source, canonical.data(), m) == 0) {
+            add(RewriteChangeKind::TrailingBytes, size - m, m, num(size - m) + " bytes after the egg word are dropped (a reader never reads them)");
+        } else {
+            add(RewriteChangeKind::Unexplained, 1, 0, "the canonical bytes differ from the file (" + num(m) + " bytes, the file has " + num(size) + "), and nothing a version 9 reader ignores explains it");
+        }
+        return out;
+    }
     const Layout full = layout_of(read);
     if (source == nullptr || full.size != m || m < kNamesAt || size < kNamesAt) {
         add(RewriteChangeKind::Unexplained, 1, 0, "the canonical bytes are not the rewrite of this level and file (" + num(m) + " bytes, the level makes " + num(full.size) + ")");
@@ -473,6 +523,169 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
     return out;
 }
 
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+// Conversion between the Classic map (version 8) and the Extended map (version 9)
+// ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+constexpr size_t kClassicMostDescription = kDescriptionBytes;      // the file's field (29 characters and a zero byte end it for the original; the checker says so)
+
+// Why a level cannot be a Classic map; `notes` get what does not stop it (null: not wanted). Every sentence names the number and the limit.
+std::vector<std::string> classic_reasons(const LevelData& level, std::vector<std::string>* notes) {
+    std::vector<std::string> why;
+    if (level.version != LVL_EXPECTED_VERSION && level.version != LVL_EXTENDED_VERSION) {
+        why.push_back("the level says version " + num(level.version) + ": a map is version 8 (Classic) or 9 (Extended)");
+        return why;
+    }
+    const uint32_t rows = level.height;
+    const uint32_t columns = level.width;
+    if (rows == 0 || columns == 0) why.push_back("the grid has " + grid_text(rows, columns) + ": a map needs at least one cell");
+    if (columns > LVL_MAX_GRID_SIDE) why.push_back("this map is " + num(columns) + " columns wide; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " columns");
+    if (rows > LVL_MAX_GRID_SIDE) why.push_back("this map is " + num(rows) + " rows tall; a Classic map has at most " + num(LVL_MAX_GRID_SIDE) + " rows");
+    const uint64_t cells = static_cast<uint64_t>(rows) * columns;
+    if (level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
+        why.push_back("the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " + num(rows) + " x " + num(columns) +
+                      " = " + num(cells));
+        return why;                                                                     // (the anchors cannot be looked at)
+    }
+    if (level.tile_dictionary.size() > LVL_MAX_DICTIONARY_ENTRIES) {
+        why.push_back("the dictionary has " + num(level.tile_dictionary.size()) + " names; a Classic map holds at most " + num(LVL_MAX_DICTIONARY_ENTRIES));
+    }
+    if (level.description.size() > kClassicMostDescription) {
+        why.push_back("the description is " + num(level.description.size()) + " bytes; a Classic map holds " + num(kClassicMostDescription) + " (29 characters end with the zero byte that the original needs)");
+    }
+    if (level.format_flags != 0) why.push_back("the map has format flags (0x" + hex(level.format_flags) + "); a Classic map has none");
+    if (level.rules > LVL_RULES_EXTENDED) {
+        why.push_back("the rules word is " + num(level.rules) + ": only 0 and 1 are known");
+    } else if (level.rules == LVL_RULES_EXTENDED && notes != nullptr) {
+        notes->push_back("the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
+                         "and a long path order can fail)");
+    }
+    // every object anchor must fit the byte of a Classic map; only a map of more than 256 a side can hold one that does not (a smaller map's anchors are bytes modulo 256)
+    if (level.version == LVL_EXTENDED_VERSION && rows != 0 && columns != 0) {
+        uint64_t beyond = 0;
+        uint32_t first_row = 0;
+        uint32_t first_column = 0;
+        for (uint32_t r = 0; r < rows; ++r) {
+            for (uint32_t c = 0; c < columns; ++c) {
+                int32_t ar = 0;
+                int32_t ac = 0;
+                if (!level.object_anchor(r, c, ar, ac)) continue;
+                if (ar < 0 || ar > 255 || ac < 0 || ac > 255) {
+                    if (beyond++ == 0) {
+                        first_row = r;
+                        first_column = c;
+                    }
+                }
+            }
+        }
+        if (beyond != 0) {
+            why.push_back(num(beyond) + " object cells are anchored outside the 0 to 255 that a Classic anchor byte holds (the first at row " + num(first_row) + ", column " +
+                          num(first_column) + ")");
+        }
+    }
+    return why;
+}
+
+LevelLimits conversion_limits(bool extended) { return extended ? LevelLimits::format_ceiling() : LevelLimits{}; }   // (no cap of a place: the ceiling of the format, or the 256 a side of a Classic map)
+
+}  // namespace
+
+std::vector<std::string> needs_extended(const LevelData& level) {
+    try {
+        return classic_reasons(level, nullptr);
+    } catch (...) {
+        return {"the level cannot be looked at (out of memory)"};
+    }
+}
+
+LevelConversion convert_to_extended(const LevelData& level) {
+    LevelConversion result;
+    try {
+        if (level.version != LVL_EXPECTED_VERSION && level.version != LVL_EXTENDED_VERSION) {
+            result.reasons.push_back("the level says version " + num(level.version) + ": a map is version 8 (Classic) or 9 (Extended)");
+            return result;
+        }
+        const uint64_t cells = static_cast<uint64_t>(level.height) * level.width;
+        if (level.height == 0 || level.width == 0 || level.layer1_terrain.size() != cells || level.layer2_interactive.size() != cells) {
+            result.reasons.push_back("the layers hold " + num(level.layer1_terrain.size()) + " and " + num(level.layer2_interactive.size()) + " cells, the grid has " +
+                                     grid_text(level.height, level.width) + ": a map needs rows x columns cells in each layer");
+            return result;
+        }
+        LevelData copy(level);
+        copy.load_notes.clear();                                  // (what the reader noticed in the source file is no fact of the new one)
+        if (level.version == LVL_EXPECTED_VERSION) {
+            copy.version = LVL_EXTENDED_VERSION;
+            copy.format_flags = 0;
+            copy.rules = LVL_RULES_ORIGINAL;                      // the original's rules: the map plays as it did
+            const uint32_t columns = copy.width;
+            for (size_t i = 0; i < copy.layer2_interactive.size(); ++i) {
+                MapCell& cell = copy.layer2_interactive[i];
+                const uint32_t row = static_cast<uint32_t>(i / columns);
+                const uint32_t column = static_cast<uint32_t>(i % columns);
+                if (!level.has_object_anchor(row, column)) continue;           // (empty cells and the bombs, whose word is the owner, keep their word)
+                const uint32_t anchor_row = cell.properties & 0xFFu;
+                const uint32_t anchor_column = (cell.properties >> 8) & 0xFFu;
+                const uint32_t row_offset = (anchor_row - row) & 0xFFu;           // the signed byte that makes the sum modulo 256 (object_anchor)
+                const uint32_t column_offset = (anchor_column - column) & 0xFFu;
+                cell.properties = static_cast<uint16_t>(row_offset | (column_offset << 8));
+            }
+        }
+        const LevelWriteResult check = write_level(copy, conversion_limits(true));
+        if (!check.ok) {
+            result.reasons.push_back("the map cannot be written as an Extended map: " + check.error);
+            return result;
+        }
+        result.level = std::move(copy);
+        result.ok = true;
+    } catch (...) {
+        result = LevelConversion{};
+        result.reasons.push_back("the map cannot be converted (out of memory)");
+    }
+    return result;
+}
+
+LevelConversion convert_to_classic(const LevelData& level) {
+    LevelConversion result;
+    try {
+        result.reasons = classic_reasons(level, &result.notes);
+        if (!result.reasons.empty()) {
+            result.notes.clear();
+            return result;
+        }
+        LevelData copy(level);
+        copy.load_notes.clear();
+        if (level.version == LVL_EXTENDED_VERSION) {
+            copy.version = LVL_EXPECTED_VERSION;
+            copy.format_flags = 0;
+            copy.rules = 0;
+            const uint32_t columns = copy.width;
+            for (size_t i = 0; i < copy.layer2_interactive.size(); ++i) {
+                const uint32_t row = static_cast<uint32_t>(i / columns);
+                const uint32_t column = static_cast<uint32_t>(i % columns);
+                int32_t anchor_row = 0;
+                int32_t anchor_column = 0;
+                if (!level.object_anchor(row, column, anchor_row, anchor_column)) continue;
+                copy.layer2_interactive[i].properties = static_cast<uint16_t>((static_cast<uint32_t>(anchor_row) & 0xFFu) | ((static_cast<uint32_t>(anchor_column) & 0xFFu) << 8));
+            }
+        }
+        const LevelWriteResult check = write_level(copy, conversion_limits(false));
+        if (!check.ok) {
+            result.reasons.push_back("the map cannot be written as a Classic map: " + check.error);
+            result.notes.clear();
+            return result;
+        }
+        result.level = std::move(copy);
+        result.ok = true;
+    } catch (...) {
+        result = LevelConversion{};
+        result.reasons.push_back("the map cannot be converted (out of memory)");
+    }
+    return result;
+}
+
 std::vector<uint16_t> used_tile_ids(const LevelData& level) {
     std::vector<uint8_t> seen(0x10000, 0);
     auto use = [&seen](uint16_t id) {
@@ -512,9 +725,11 @@ std::vector<std::string> dictionary_of_used_tiles(const LevelData& level, const 
     return names;
 }
 
-LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
+namespace {
+
+LevelData blank_of_version(uint32_t version, uint32_t rows, uint32_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
     LevelData level;
-    level.version = LVL_EXPECTED_VERSION;
+    level.version = version;
     level.game_mode = LVL_GAME_MODE_STANDARD;
     level.default_minutes = 10;                                                       // GAUNTLET and MEDIUM: 10 minutes and 6 eggs (the six originals: 6 to 12 minutes, 2 to 9 eggs)
     level.height.val = rows;
@@ -522,7 +737,7 @@ LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::st
     // the cells of a grid beyond the limits are not made: such a level keeps its size and has no cell, so that nothing of its size is allocated (65,535 x 65,535
     // would be 51 GB) and write_level refuses it with the sentence of its grid
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;
-    if (rows <= limits.rows() && columns <= limits.columns() && cells <= limits.cells()) {
+    if (rows <= limits.rows_for(version) && columns <= limits.columns_for(version) && cells <= limits.cells_for(version)) {
         level.layer1_terrain.assign(static_cast<size_t>(cells), MapCell{LVL_BLANK_GROUND_TILE, 0, LVL_LAYER1_THIRD_WORD});
         level.layer2_interactive.assign(static_cast<size_t>(cells), MapCell{LVL_EMPTY_TILE, 0, 0});
     }
@@ -531,6 +746,19 @@ LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::st
     level.boundary_param = 6;
     level.tile_dictionary = dictionary_of_used_tiles(level, tile_names);
     level.tile_type_count = static_cast<uint16_t>(level.tile_dictionary.size() - 1);
+    return level;
+}
+
+}  // namespace
+
+LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
+    return blank_of_version(LVL_EXPECTED_VERSION, rows, columns, tile_names, limits);
+}
+
+LevelData blank_extended_level(uint32_t rows, uint32_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
+    LevelData level = blank_of_version(LVL_EXTENDED_VERSION, rows, columns, tile_names, limits);
+    // a map taller than 90 rows or wider than 256 is not one the original's rules play (the row-90 wall, the 8 bit anchors): it asks for the extended rules
+    level.rules = (rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_EXTENDED : LVL_RULES_ORIGINAL;
     return level;
 }
 

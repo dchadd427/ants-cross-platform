@@ -792,7 +792,7 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
     } TEST_END();
 
     TEST_CASE("6c.2 Only Version 8 Loads (0x1006386: The Original Shows 'The MAP You Tried To Play Is The Wrong Version' And Goes On Without A Map)") {
-        for (uint32_t version : {0u, 1u, 6u, 7u, 9u, 66012u, 0xFFFFFFFFu}) {
+        for (uint32_t version : {0u, 1u, 6u, 7u, 10u, 66012u, 0xFFFFFFFFu}) {
             std::vector<uint8_t> d = tiny;
             wr32(d, 0, version);
             LevelData m;
