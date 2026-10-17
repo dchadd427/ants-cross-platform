@@ -13,6 +13,7 @@
 //   C  the limits as the cards say them, and the core's refusals of a size as short sentences (too many rows offers an Extended map)
 //   D  the check of a new map and of an opened one by the profile the page uses ("extended": both kinds), in the words of the checks card
 //   E  an older module is refused by its interface version, before anything is asked of it
+//   F  a map that has been drawn on (web/front/mapmaker_edit.js): the core reads it, checks it, writes it as the same level, and the objects keep the anchors of their kind (version 8 and 9)
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
 'use strict';
 
@@ -21,6 +22,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FRONT = path.join(ROOT, 'web', 'front');
+const Edit = require(path.join(FRONT, 'mapmaker_edit.js')), Palette = require(path.join(FRONT, 'mapmaker_palette.js'));
 const File = require(path.join(FRONT, 'mapmaker_file.js')), Sizes = require(path.join(FRONT, 'mapmaker_sizes.js')), Checks = require(path.join(FRONT, 'mapmaker_checks.js'));
 const LvlCore = require(path.join(ROOT, 'web', 'lvl_core_api.js'));
 
@@ -150,6 +152,95 @@ function caseE() {
     check(LvlCore.EXPECTED_INTERFACE === 2, 'the page needs interface version 2');
 }
 
+// The page's drawing, then the core: what the page writes into the bytes is a map that the core reads, checks and writes again as the same level
+function paint(file, ed, kind, tile, stamps, size) {
+    const name = (Palette.itemOf(kind, tile) || { name: '' }).name;
+    if (tile !== null) { const made = Edit.ensureTile(file, tile, name); if (made.grew) { file = File.parse(made.bytes); ed.rebase(file); } }
+    const s = ed.begin(kind, tile);
+    for (const [r, c] of stamps) s.stamp(r, c, size || 1);
+    s.end();
+    return file;
+}
+function digestOf(bytes) { return require('crypto').createHash('sha256').update(bytes).digest('hex'); }
+function cellsDigest(f) { return digestOf(f.bytes.slice(f.layer1, f.layer2 + 6 * f.cells)); }       // (both layers: the dictionary, which only grows, is not in it)
+
+function caseF(core) {
+    const codes = (bytes) => core.checkMap(bytes, 'extended').json.findings.map((f) => f.severity + ':' + f.code).sort();
+    for (const kind of ['classic', 'extended']) {
+        const made = kind === 'classic' ? core.blank(40, 50, 485, 6, 10, 'new_map') : core.blankExtended(300, 400, 485, 6, 10);
+        let file = File.parse(made.bytes);
+        const ed = Edit.create(file), blankCodes = codes(file.bytes), start = digestOf(file.bytes);
+        file = paint(file, ed, 'ground', 487, [[3, 3], [3, 4], [10, 10]], 3);
+        file = paint(file, ed, 'ground', 571, [[20, 20]], 9);
+        file = paint(file, ed, 'ground', 476, [[0, 0]], 5);
+        file = paint(file, ed, 'objects', 302, [[5, 5], [5, 6], [30, 30]], 3);
+        file = paint(file, ed, 'objects', 63, [[12, 12]], 1);
+        file = paint(file, ed, 'erase', null, [[5, 5]], 1);
+        const tag = ' (' + kind + ')';
+        const read = core.readReport(file.bytes, 'extended').json;
+        check(read.loaded && read.rows === file.rows && read.columns === file.columns, 'the core reads the map that was drawn on' + tag);
+        equal(codes(file.bytes), blankCodes, 'and finds nothing new in it: a tile outside the dictionary, a name of "." and an anchor in the wrong place are all findings' + tag);
+        check(read.tile_ids_used >= 6, 'it counts the tiles used (' + read.tile_ids_used + ')' + tag);
+        const written = core.rewrite(file.bytes, 'extended');
+        check(written.status === 0, 'the core writes it (' + (written.error || '') + ')' + tag);
+        if (written.status !== 0) continue;
+        const again = File.parse(written.bytes);
+        check(again.ok && again.kind === kind && sameCells(file, again) === null, 'the file that it writes has the same cells' + tag);
+        equal(core.sameLevel(file.bytes, written.bytes, 'extended').json, { same: true }, 'and is the same level' + tag);
+        check(core.checkMap(written.bytes, 'extended').json.works === core.checkMap(file.bytes, 'extended').json.works, 'with the same answer to the check' + tag);
+        let n = 0;
+        while (ed.undo()) n++;
+        check(n === 6 && cellsDigest(ed.file) === cellsDigest(File.parse(made.bytes)), 'six undos put every cell back' + tag);
+        check(start !== digestOf(file.bytes) && digestOf(written.bytes) !== digestOf(made.bytes), 'and the drawn map is not the blank one' + tag);
+    }
+    // a map of the library: a hill goes whole, and the check says so; undo brings it back
+    const tinyBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TINY.LVL')));
+    for (const [label, bytes] of [['TINY', tinyBytes], ['TINY as an Extended map', core.convertToExtended(tinyBytes).bytes]]) {
+        const file = File.parse(bytes), ed = Edit.create(file), before = codes(bytes), start = digestOf(bytes);
+        let hill = -1;
+        for (let i = 0; i < file.cells && hill < 0; i++) if (Edit.tile(file, 2, i) >= 245 && Edit.tile(file, 2, i) <= 248 && Edit.objectCells(file, i).length === 16) hill = i;
+        check(hill >= 0, label + ' has a hill that the page finds whole');
+        const s = ed.begin('erase', null);
+        s.stamp(Math.floor(hill / file.columns), hill % file.columns, 1);
+        s.end();
+        const after = codes(file.bytes);
+        check(after.filter((c) => c === 'warning:hill_missing').length === 1 && !after.some((c) => /hill_not_whole|hill_without_entrance/.test(c)), label + ': the hill is gone whole, and the core says one team has no hill: ' + JSON.stringify(after));
+        ed.undo();
+        check(digestOf(file.bytes) === start && JSON.stringify(codes(file.bytes)) === JSON.stringify(before), label + ': undo gives the same bytes and the same check');
+    }
+    // the anchors of an object painted in an Extended map are the ones that a Classic copy reads (the same cell), and the other way
+    const up = core.convertToExtended(tinyBytes).bytes, upFile = File.parse(up), upEd = Edit.create(upFile);
+    const stamps = [[2, 2], [5, 9], [upFile.rows - 1, upFile.columns - 1]];
+    paint(upFile, upEd, 'objects', 303, stamps, 1);
+    const down = core.convertToClassic(upFile.bytes);
+    check(down.status === 0 && down.json.ok, 'an Extended map with objects drawn on it goes down to a Classic map (' + JSON.stringify(down.json && down.json.reasons) + ')');
+    if (down.json && down.json.ok) {
+        const classic = File.parse(down.bytes);
+        check(stamps.every(([r, c]) => classic.tile2(r, c) === 303 && Edit.third(classic, 2, r * classic.columns + c) === (r | (c << 8))), 'each object is its own anchor there: row in the low byte, column in the high byte');
+        check(stamps.every(([r, c]) => Edit.anchorIndex(upFile, r * upFile.columns + c) === r * upFile.columns + c), 'and in the Extended map the page reads the anchor as the cell itself');
+    }
+    // the library, all of it: draw, undo, and the bytes are the file again; what the core writes of the original it writes of the drawn map
+    let worked = 0, undone = 0, written = 0;
+    for (const file0 of libraryFiles()) {
+        const bytes = new Uint8Array(fs.readFileSync(file0)), f = File.parse(bytes);
+        if (!f.ok) continue;
+        worked++;
+        const ed = Edit.create(f), start = digestOf(bytes);
+        let g = f;
+        g = paint(g, ed, 'ground', 487, [[0, 0], [Math.floor(g.rows / 2), Math.floor(g.columns / 2)]], 5);
+        g = paint(g, ed, 'objects', 304, [[1, 1], [g.rows - 1, g.columns - 1]], 3);
+        g = paint(g, ed, 'erase', null, [[Math.floor(g.rows / 2), Math.floor(g.columns / 2)]], 9);
+        const edited = g.bytes.slice();
+        const here = core.readReport(edited, 'extended').json;
+        if (here.loaded && core.rewrite(edited, 'extended').status === 0 && core.rewrite(bytes, 'extended').status === 0) written++;
+        else if (core.rewrite(bytes, 'extended').status === 0) check(false, path.basename(file0) + ': the original is written by the core and the drawn map is not');
+        while (ed.undo()) { /* all of them */ }
+        if (cellsDigest(ed.file) === cellsDigest(File.parse(bytes))) undone++;
+    }
+    check(worked === 540 && undone === 540, 'all 540 maps of the library: drawn on and taken back to the cells they had (' + undone + ')');
+    check(written > 400, 'and the core writes the drawn map wherever it writes the original (' + written + ')');
+}
+
 async function main() {
     const o = parseArgs(process.argv.slice(2));
     const js = path.join(o.module, 'lvl_core.js');
@@ -158,7 +249,7 @@ async function main() {
         process.exit(o.require ? 1 : 0);
     }
     const core = LvlCore.wrap(await require(path.resolve(js))());
-    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE]]) {
+    for (const [name, fn] of [['A blank maps', caseA], ['B the library, as version 8 and as version 9', caseB], ['C limits and refusals', caseC], ['D the checks', caseD], ['E an older module', caseE], ['F drawing and the core', caseF]]) {
         process.stdout.write('  RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(core); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

@@ -147,7 +147,58 @@
         }
     }
 
-    // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null). Returns {rects, pixels}: what was drawn, for the tests.
+    // The marked square (a black line under a gold one), as wide as the brush that is on it: the cells that the brush would cover when it is put on `cur` ({row, column}), cut by the map's edge
+    function cursorRect(file, cur, brush) {
+        if (!cur || cur.row < 0 || cur.column < 0 || cur.row >= file.rows || cur.column >= file.columns) return null;
+        var size = brush || 1, lo = Math.floor((size - 1) / 2), hi = size - 1 - lo;
+        return { r0: Math.max(0, cur.row - lo), r1: Math.min(file.rows - 1, cur.row + hi), c0: Math.max(0, cur.column - lo), c1: Math.min(file.columns - 1, cur.column + hi) };
+    }
+
+    function drawCursor(ctx, view, file, w, h, cur, brush) {
+        var rect = cursorRect(file, cur, brush);
+        if (!rect) return;
+        var p = toScreen(view, w, h, rect.r0, rect.c0), s = view.scale, bw = Math.max((rect.c1 - rect.c0 + 1) * s, 6), bh = Math.max((rect.r1 - rect.r0 + 1) * s, 6);
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(p.x - 1.5, p.y - 1.5, bw + 3, bh + 3);
+        ctx.strokeStyle = '#f6d058'; ctx.lineWidth = 2.5; ctx.strokeRect(p.x - 1.5, p.y - 1.5, bw + 3, bh + 3);
+    }
+
+    // One tile again, where a stroke changed it (and no other): the tile's own rectangle, the two grid lines that belong to it and what is drawn over it. Only for tiles of 5 pixels or more.
+    function redrawCell(ctx, view, file, w, h, r, c) {
+        var s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s;
+        var xa = Math.round(x0 + c * s), xb = Math.round(x0 + (c + 1) * s), ya = Math.round(y0 + r * s), yb = Math.round(y0 + (r + 1) * s);
+        ctx.fillStyle = Tiles.css(file.tile1(r, c), file.tile2(r, c));
+        ctx.fillRect(xa, ya, xb - xa, yb - ya);
+        if (s >= GRID_FROM) {
+            ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1; ctx.beginPath();
+            ctx.moveTo(xa, ya + 0.5); ctx.lineTo(xb, ya + 0.5); ctx.moveTo(xa + 0.5, ya); ctx.lineTo(xa + 0.5, yb);
+            ctx.stroke();
+        }
+        if (s >= 6) drawMarks(ctx, view, file, w, h, { r0: r, r1: r, c0: c, c1: c });
+    }
+
+    // The same for the pixel way (tiles under 5 pixels): the pixels of the tile in the picture that the last full frame kept (`scratch.keptImage`). False when there is no such picture.
+    function redrawPixelCell(view, file, w, h, r, c, scratch, box) {
+        var image = scratch && scratch.keptImage;
+        if (!image) return false;
+        var t = Tiles.packedTables(), b = file.bytes, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, cw = image.width, ch = image.height;
+        var px = new Uint32Array(image.data.buffer), at = 6 * (r * file.columns + c), o = t.objects[b[file.layer2 + at] | (b[file.layer2 + at + 1] << 8)];
+        var color = o !== 0 ? o : t.ground[b[file.layer1 + at] | (b[file.layer1 + at + 1] << 8)];
+        var xa = Math.max(0, Math.ceil(x0 + c * s - 0.5)), xb = Math.min(cw, Math.ceil(x0 + (c + 1) * s - 0.5)), ya = Math.max(0, Math.ceil(y0 + r * s - 0.5)), yb = Math.min(ch, Math.ceil(y0 + (r + 1) * s - 0.5));
+        for (var y = ya; y < yb; y++) for (var x = xa; x < xb; x++) px[y * cw + x] = color;
+        if (box && xa < xb && ya < yb) { box.x0 = Math.min(box.x0, xa); box.y0 = Math.min(box.y0, ya); box.x1 = Math.max(box.x1, xb); box.y1 = Math.max(box.y1, yb); }       // (the pixels that changed)
+        return true;
+    }
+
+    // Put the part of the kept picture that changed (`box`: x0, y0, x1, y1, as redrawPixelCell collected it) on the canvas again
+    function blitPixels(ctx, scratch, box) {
+        if (!box || box.x1 <= box.x0 || box.y1 <= box.y0) return;
+        var x = box.x0, y = box.y0, bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+        scratch.getContext('2d').putImageData(scratch.keptImage, 0, 0, x, y, bw, bh);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(scratch, x, y, bw, bh, x, y, bw, bh);
+    }
+
+    // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor). Returns {rects, pixels}: what was drawn, for the tests.
     function draw(ctx, view, file, w, h, opts) {
         opts = opts || {};
         ctx.fillStyle = '#0b1612'; ctx.fillRect(0, 0, w, h);
@@ -157,12 +208,7 @@
             done.rects = drawRects(ctx, view, file, w, h, vis);
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
         } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'));
-        var cur = opts.cursor;
-        if (cur && cur.row >= 0 && cur.column >= 0 && cur.row < file.rows && cur.column < file.columns) {
-            var p = toScreen(view, w, h, cur.row, cur.column), side = Math.max(view.scale, 6);
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(p.x - 1.5, p.y - 1.5, side + 3, side + 3);
-            ctx.strokeStyle = '#f6d058'; ctx.lineWidth = 2.5; ctx.strokeRect(p.x - 1.5, p.y - 1.5, side + 3, side + 3);
-        }
+        if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush);
         return done;
     }
 
@@ -198,6 +244,6 @@
 
     return {
         MAX_SCALE: MAX_SCALE, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
-        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
+        centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
     };
 });
