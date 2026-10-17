@@ -23,12 +23,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.65 - 2026-10-16 - Extended maps: the map file version 9 in the core
 
 **For players:**
 - Under the hood: the map code and the map tool now know a second kind of map, the Extended map (a new map file version for bigger and taller maps), and can convert a map between the two kinds; nothing changes in the game or on the site, and the game still reads the classic maps only.
 
-**Details:** [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c7c46030...895da29b), [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
 
 ## v0.12.64 - 2026-10-16 - Spelling follow-up: the history address and record say color
 
