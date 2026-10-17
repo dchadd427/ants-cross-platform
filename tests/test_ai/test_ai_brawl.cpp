@@ -3,10 +3,12 @@
 // on a field of grass); whole matches run on shipped maps.
 //
 //   AI30.1   the view tells the game mode of the engine, a copy of it too
+//   AI30.1b  the plans that ship play the brawl, and the bot of the registry fights in 187
 //   AI30.2   in 187 every level strikes enemy ants that nobody hit first, with attack orders, and sends no order of the food game; with the switch off (`brawl187`) it does what it did before
 //   AI30.3   in the original's game the switch changes nothing: the same orders, to the tick
 //   AI30.4   packs: at most two ants strike a victim, each victim its own pack, the wounded and the near first; the ants left over join the nearest fight (three on a victim)
 //   AI30.5   a pack is ordered onto its victim again when a blow threw it to another tile, and the blows land (a lone victim loses hit points and is followed)
+//   AI30.5b  an enemy on the move is not ordered upon while it is far; a victim that cannot be thrown (a pocket of rock) is struck on, the pack ordered again because an ant stands idle
 //   AI30.6   an ant with three hit points or fewer goes home to heal and is not sent to fight; healed, it strikes again
 //   AI30.7   no walk, no order: enemy ants behind a wall and a hill that no walk reaches draw no attack and no march; the hill that a walk reaches is marched to
 //   AI30.8   allies are never struck
@@ -66,6 +68,16 @@ void run_brawl_tests() {
             ASSERT_TRUE(view.game_mode() == mode);
             const BotView copy(view);
             ASSERT_TRUE(copy.game_mode() == mode);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI30.1b The Plans That Ship Play The Brawl, And The Bot Of The Registry Fights In 187 With No Plan Of The Test's Making") {
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
+            ASSERT_TRUE(plan_for(level).brawl187);
+            Fight f(sim::GameMode::Kills187, 4, {TileCoord{30, 12}, TileCoord{31, 12}});
+            Rig rig(f.sim, 0, level, std::make_unique<StandardBot>(level), 4, 8);
+            rig.run(900);
+            ASSERT_TRUE(rig.proposed_count(CommandType::GroupAttack) >= 10);
         }
     } TEST_END();
 
@@ -172,17 +184,50 @@ void run_brawl_tests() {
         Fight f(sim::GameMode::Kills187, 3, {TileCoord{30, 30}}, TileCoord{22, 22});
         Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
         uint16_t least = 10;
+        uint64_t fled_at = 0;                                                                     // the tick the victim was left with one hit point and began its walk home
         for (int t = 0; t < 600; ++t) {
             rig.tick();
             const sim::AntSnapshot* v = snapshot_of(f.sim, f.foes[0]);
             if (v != nullptr) least = std::min<uint16_t>(least, v->hp);
+            if (v != nullptr && v->hp <= 1 && fled_at == 0) fled_at = f.sim.current_tick();
         }
+        ASSERT_TRUE(fled_at != 0);
+        size_t chase = 0;                                                                         // orders after the first moments of its flight: the pack does not run after an ant with a lead
+        for (const auto& e : rig.proposed) chase += (e.second.type == CommandType::GroupAttack && e.first > fled_at + 60) ? 1u : 0u;
+        ASSERT_TRUE(chase <= 6);
         const std::vector<Command> attacks = attacks_of(rig);
         std::set<std::pair<int, int>> tiles;
         for (const Command& c : attacks) tiles.insert({c.tile_x, c.tile_y});
         ASSERT_TRUE(tiles.size() >= 4);                                                           // the victim was thrown from tile to tile and the pack named each
         ASSERT_TRUE(least <= 4);                                                                  // the blows land, one about every 40 ticks
         ASSERT_TRUE(attacks.size() <= 80);                                                        // and the orders are not a flood: a pack is ordered again only when the victim moved or an ant stands idle
+    } TEST_END();
+
+    TEST_CASE("AI30.5b An Enemy Ant On The Move Is Not Ordered Upon While It Is Far (An Order Names The Tile It Stands On And It Is Gone When The Ants Arrive); A Victim That Cannot Be Thrown Is Struck On, The Pack Ordered Again Because An Ant Stands Idle") {
+        {
+            Fight f(sim::GameMode::Kills187, 3, {TileCoord{40, 30}});
+            f.sim.apply_command(command_of(CommandType::GroupMove, 1, {f.foes[0]}, 40, 56));
+            tick_all(f.sim, 30);                                                                  // it walks by now, as the view shows it
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(60);
+            ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
+        }
+        {   // a pocket of rock with one way in: the blow has nowhere to throw the victim, it stays and is struck again and again
+            Fight f(sim::GameMode::Kills187, 2, {TileCoord{30, 12}});
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if ((dx != 0 || dy != 0) && !(dx == -1 && dy == 0)) f.sim.set_terrain(30 + dx, 12 + dy, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            uint16_t least = 10;
+            for (int t = 0; t < 700; ++t) {
+                rig.tick();
+                const sim::AntSnapshot* v = snapshot_of(f.sim, f.foes[0]);
+                if (v != nullptr) least = std::min<uint16_t>(least, v->hp);
+            }
+            ASSERT_TRUE(least <= 4);
+        }
     } TEST_END();
 
     TEST_CASE("AI30.6 An Ant With Three Hit Points Or Fewer Goes Home To Heal And Is Not Sent To Fight; Healed, It Strikes Again") {
@@ -216,6 +261,23 @@ void run_brawl_tests() {
             rig.run(600);
             ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), 0u);
             ASSERT_EQ(rig.proposed_count(CommandType::GroupMove), 0u);
+        }
+        {   // the ant that is nearer to the enemy ant but behind the wall is not sent; the one that can walk there is (and no other ant is made to join it)
+            sim::SimulationEngine sim;
+            sim.set_game_mode(sim::GameMode::Kills187);
+            empty_field(sim, 35);
+            for (int y = 0; y < 60; ++y) sim.set_terrain(30, y, sim::TERRAIN_OBSTACLE);
+            const uint32_t behind = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{29, 12});
+            const uint32_t free_ant = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 12});
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{32, 12});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(120);
+            const std::vector<Command> attacks = attacks_of(rig);
+            ASSERT_TRUE(!attacks.empty());
+            for (const Command& c : attacks) {
+                ASSERT_TRUE(names(c, free_ant));
+                ASSERT_FALSE(names(c, behind));
+            }
         }
         {   // no enemy ant in sight, the hill of team 1 across a wall and the hill of team 2 on the own side: the march goes to team 2's door (the hill's tile 42), team 1 is not a goal
             sim::SimulationEngine sim;
@@ -257,6 +319,21 @@ void run_brawl_tests() {
         const std::vector<Command> attacks = attacks_of(rig);
         ASSERT_TRUE(!attacks.empty());                                                            // the enemy of both is struck
         for (const Command& c : attacks) ASSERT_TRUE(friends.count({c.tile_x, c.tile_y}) == 0 && c.tile_y >= 20);
+        // no enemy ant in sight: the march goes to a hill of an enemy, never to the ally's (team 1's hill is as near as team 2's)
+        sim::SimulationEngine quiet;
+        quiet.set_game_mode(sim::GameMode::Kills187);
+        empty_field(quiet, 36);
+        quiet.form_alliance(0, 1);
+        for (int i = 0; i < 3; ++i) quiet.spawn_unit(0, sim::AntType::Worker, TileCoord{12 + i, 12});
+        Rig march(quiet, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+        march.run(40);
+        size_t moves = 0;
+        for (const auto& e : march.proposed) {
+            if (e.second.type != CommandType::GroupMove) continue;
+            ++moves;
+            ASSERT_FALSE(e.second.tile_x == march.map().hill(1).tile42.x && e.second.tile_y == march.map().hill(1).tile42.y);
+        }
+        ASSERT_TRUE(moves > 0);
     } TEST_END();
 
     TEST_CASE("AI30.9 An Attack That Is Refused Twice (The Walk Does Not Exist, Though The Analysis Of The Start Says It Does) Is Not Ordered Again For A While: A Fenced Enemy Ant Draws A Few Orders, Not A Flood") {

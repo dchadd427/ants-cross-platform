@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **The computer players fight in 187.** They go for your ants, gang up on one ant at a time, send hurt ants home to heal and come back, and wait at your hill when nobody is in reach.
+
+**Details:** [the 187 bots](docs/BOTS.md#187-the-brawl)
+
 ## v0.12.67 - 2026-10-16 - 187 mode: the out-of-ants line, the start line and the results page on screen
 
 **For players:**
@@ -33,7 +40,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
 
 **For players:**
-- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser. The computer players are not good at 187 yet (they still play their food game); that is being worked on.
+- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a011f5d6...cb6892ad), [Game type in the lobby](docs/PLAY_IN_BROWSER.md#game-type)
 

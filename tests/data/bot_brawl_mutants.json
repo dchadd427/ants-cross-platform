@@ -52,22 +52,6 @@
    "expect": "AI30.6"
   },
   {
-   "id": "brawl_ignores_walls",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "if (shunned(a->id, f->id, now) || !meets(*a, *f)) continue;\n            nearest",
-   "new": "if (shunned(a->id, f->id, now)) continue;\n            nearest",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.7"
-  },
-  {
-   "id": "brawl_strikes_allies",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "if (ally_of(v, e.team)) continue;\n        AntView probe = e;",
-   "new": "AntView probe = e;",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.8 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.8"
-  },
-  {
    "id": "brawl_marches_with_foes_in_sight",
    "file": "src/ants_ai/brawl_task.cpp",
    "old": "if (!idle_left.empty() && foes.empty()) {",
@@ -84,30 +68,6 @@
    "expect": "AI30.7"
   },
   {
-   "id": "brawl_reorder_only_when_idle",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "(moved || idle_member)",
-   "new": "idle_member",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.5"
-  },
-  {
-   "id": "brawl_reorder_only_when_moved",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "(moved || idle_member)",
-   "new": "moved",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.5"
-  },
-  {
-   "id": "brawl_chases_walkers",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "if (f->state == sim::UnitState::Walking && nearest > 2) continue;",
-   "new": "",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.5"
-  },
-  {
    "id": "brawl_hit_clip_victim_lost",
    "file": "src/ants_ai/brawl_task.cpp",
    "old": "if (e.state == sim::UnitState::Flinch || e.state == sim::UnitState::Knockback) probe.state = sim::UnitState::Idle;",
@@ -122,14 +82,6 @@
    "new": "",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.9 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.9"
-  },
-  {
-   "id": "brawl_chases_the_fleeing_far_off",
-   "file": "src/ants_ai/brawl_task.cpp",
-   "old": "(f->hp <= 1 && close)",
-   "new": "(f->hp <= 1)",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.5"
   },
   {
    "id": "brawl_mode_gate_open",
@@ -162,14 +114,6 @@
    "new": "",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.1 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.1"
-  },
-  {
-   "id": "brawl_plan_off_by_default",
-   "file": "include/ants_ai/tactics.hpp",
-   "old": "bool brawl187{true};",
-   "new": "bool brawl187{false};",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.2 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.2"
   },
   {
    "id": "brawl_pack_of_three",
@@ -237,6 +181,62 @@
    "build": "bot_arena",
    "test": "timeout 300 ./build/bot_arena --selftest",
    "expect": "--game-mode: no number"
+  },
+  {
+   "id": "brawl_packs_ignore_walls",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (fresh.count(a->id) != 0 || shunned(a->id, fo.ant->id, now) || !meets(*a, *fo.ant)) continue;",
+   "new": "if (fresh.count(a->id) != 0 || shunned(a->id, fo.ant->id, now)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.7"
+  },
+  {
+   "id": "brawl_support_ignores_walls",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (shunned(a->id, fo.ant->id, now) || !meets(*a, *fo.ant)) continue;\n            const int32_t d = a->tile.chebyshev_dist(fo.ant->tile);\n            if (d < near_d",
+   "new": "if (shunned(a->id, fo.ant->id, now)) continue;\n            const int32_t d = a->tile.chebyshev_dist(fo.ant->tile);\n            if (d < near_d",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.7"
+  },
+  {
+   "id": "brawl_marches_to_the_ally",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (t == c.seat || !row.present || row.dropped || ally_of(v, t)) continue;",
+   "new": "if (t == c.seat || !row.present || row.dropped || (ally_of(v, t) && false)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.8"
+  },
+  {
+   "id": "brawl_reorder_only_when_moved",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(moved || idle_member)",
+   "new": "moved",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5b"
+  },
+  {
+   "id": "brawl_chases_walkers",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (f->state == sim::UnitState::Walking && nearest > 2) continue;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5b"
+  },
+  {
+   "id": "brawl_chases_the_fleeing_far_off",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(f->hp <= 1 && close)",
+   "new": "(f->hp <= 1)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.5"
+  },
+  {
+   "id": "brawl_plan_off_by_default",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "bool brawl187{true};",
+   "new": "bool brawl187{false};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.1b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.1b"
   }
  ]
 }

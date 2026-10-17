@@ -82,10 +82,9 @@ void BrawlTask::step(TaskContext& c) {
         else ++it;
     }
 
-    // ---- the enemy ants that a blow can reach (one that was struck stands again after its hit clip)
+    // ---- the enemy ants that a blow can reach (attackable() leaves out the ally's; one that was struck stands again after its hit clip)
     std::vector<const AntView*> foes;
     for (const AntView& e : v.others()) {
-        if (ally_of(v, e.team)) continue;
         AntView probe = e;
         if (e.state == sim::UnitState::Flinch || e.state == sim::UnitState::Knockback) probe.state = sim::UnitState::Idle;
         if (attackable(v, probe)) foes.push_back(&e);
