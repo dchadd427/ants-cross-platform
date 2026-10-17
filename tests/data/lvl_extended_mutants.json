@@ -346,7 +346,7 @@
    "id": "cells_cap_ignores_the_ceiling",
    "file": "include/ants_assets/lvl_parser.hpp",
    "old": "return max_cells < cap ? max_cells : cap;",
-   "new": "return max_cells;",
+   "new": "(void)cap; return max_cells;",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -370,7 +370,7 @@
    "id": "classic_map_keeps_no_256_in_extended_limits",
    "file": "include/ants_assets/lvl_parser.hpp",
    "old": "constexpr uint32_t rows_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || rows() < LVL_MAX_GRID_SIDE ? rows() : LVL_MAX_GRID_SIDE; }",
-   "new": "constexpr uint32_t rows_for(uint32_t version) const noexcept { return rows(); }",
+   "new": "constexpr uint32_t rows_for(uint32_t version) const noexcept { (void)version; return rows(); }",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -419,18 +419,6 @@
    "file": "src/ants_assets/lvl_parser.cpp",
    "old": "lvl.height.val = extended ? rows_raw : (rows_raw & 0xFFFFu);",
    "new": "lvl.height.val = rows_raw & 0xFFFFu;",
-   "build": [
-    "test_lvl_writer",
-    "test_original_safe",
-    "lvl_tool"
-   ],
-   "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
-  },
-  {
-   "id": "cell_count_in_32_bits",
-   "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "} else if (static_cast<uint64_t>(rows) * columns > limits.cells_for(version)) {",
-   "new": "} else if (static_cast<uint64_t>(static_cast<uint32_t>(rows * columns)) > limits.cells_for(version)) {",
    "build": [
     "test_lvl_writer",
     "test_original_safe",

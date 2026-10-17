@@ -1446,6 +1446,32 @@ void w7_extended_maps() {
         CHECK(std::equal(c.bytes.begin() + 42, c.bytes.begin() + 42 + 44, expected.begin() + 18 + 130 + 2));
     });
 
+    run_case("W7.1b What The Writer Refuses In A Version 9 Level: Flags It Does Not Know, A Rules Word Above 1, Flags Or Rules In A Version 8 Level, A Description Of 256 Bytes Or With A Zero Byte", [] {
+        LevelData l = extended_level();
+        l.format_flags = 0x10;
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the format flags are 0x10: this writer knows no flag bit"), write_level(l, extended_limits()).error);
+        l = extended_level();
+        l.rules = 2;
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known"), write_level(l, extended_limits()).error);
+        l = extended_level();
+        l.version = 8;
+        l.description = "short";
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "a version 8 file has no format flags and no rules word, the level holds flags 0x0 and rules 1"), write_level(l, extended_limits()).error);
+        l.rules = 0;
+        l.format_flags = 1;
+        CHECK_MSG(refused_with(write_level(l), "holds flags 0x1 and rules 0"), write_level(l).error);
+        l = extended_level();
+        l.description = std::string(256, 'x');
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the description has 256 bytes, more than the 255 allowed here"), write_level(l, extended_limits()).error);
+        l.description = std::string(255, 'x');
+        CHECK(write_level(l, extended_limits()).ok);
+        l.description[3] = '\0';
+        CHECK(refused_with(write_level(l, extended_limits()), "the description holds a zero byte"));
+        l = extended_level();
+        l.version = 10;
+        CHECK(refused_with(write_level(l, extended_limits()), "version 10: the writer writes version 8, the only one the original reads, and version 9"));
+    });
+
     run_case("W7.2 Read, Write, Read Of 1,500 Random Extended Levels (Rules 0 And 1, Descriptions Of 0 To 255 Bytes): The Same Level, Written Twice The Same Bytes", [] {
         Lcg r(0xE17E4DEDu);
         for (int i = 0; i < 1500; ++i) {
@@ -1682,6 +1708,14 @@ void w7_extended_maps() {
         CHECK_MSG(refused_with(write_level(blank_extended_level(1025, 1, names), e), "1025 rows x 1 columns, more than the 1024 x 1024 allowed here"), "1025 x 1");
         const LevelWriteResult tall = write_level(blank_extended_level(2048, 2048, names, LevelLimits::format_ceiling()), LevelLimits::format_ceiling());
         CHECK_MSG(tall.ok && tall.bytes.size() > 48u * 1024u * 1024u && tall.bytes.size() <= 64u * 1024u * 1024u, tall.error + " / " + std::to_string(tall.bytes.size()));
+        // the size of the canonical file is what the writer's layout says: a limit of exactly its bytes passes, one byte less refuses
+        const std::vector<uint8_t> exact = extended_bytes();
+        LevelLimits fits = extended_limits();
+        fits.max_write_bytes = exact.size();
+        CHECK(write_level(extended_level(), fits).ok);
+        fits.max_write_bytes = exact.size() - 1;
+        CHECK_MSG(refused_with(write_level(extended_level(), fits), "the file would have " + std::to_string(exact.size()) + " bytes, more than the " + std::to_string(exact.size() - 1) + " allowed here"),
+                  write_level(extended_level(), fits).error);
         // the ceiling is the format's: the writer refuses 2049 whatever the limits
         CHECK_MSG(refused_with(write_level(blank_extended_level(2049, 1, names), huge), "2049 rows x 1 columns, more than the 2048 x 2048 allowed here"), "2049");
         // the blank Extended map: rules 1 from 91 rows or 257 columns on
