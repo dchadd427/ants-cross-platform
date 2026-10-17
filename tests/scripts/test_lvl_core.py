@@ -35,7 +35,7 @@ class TheWiring(unittest.TestCase):
         self.assertTrue(listed)
         exported = {name.lstrip("_") for name in listed.group(1).split(",")}
         self.assertEqual(exported, defined)
-        self.assertEqual(len(defined), 11)
+        self.assertEqual(len(defined), 13)
 
     def test_the_module_is_a_target_of_the_web_build_only_and_has_no_game_code(self):
         text = read("CMakeLists.txt")

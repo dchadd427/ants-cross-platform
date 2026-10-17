@@ -137,7 +137,7 @@ function main() {
         const hostile = hostileCases();
 
         await runCase('module: the interface', () => {
-            check(core.interfaceVersion === 1, 'interface version 1');
+            check(core.interfaceVersion === 2, 'interface version 2');
             check(typeof module._lvl_free === 'function' && typeof module._lvl_alloc === 'function', 'the buffer calls are exported');
             check(module.FS === undefined, 'no file system in the module');
         });
@@ -294,8 +294,8 @@ function main() {
 
         await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
             let threw = '';
-            try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
-            check(/interface version 2/.test(threw) && /needs 1/.test(threw), 'a module of interface version 2 is refused with a sentence: ' + threw);
+            try { api.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { threw = e.message; }
+            check(/interface version 1/.test(threw) && /needs 2/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
             threw = '';
             try { api.wrap({}); } catch (e) { threw = e.message; }
             check(/interface version 0/.test(threw), 'a module with no version call is refused');

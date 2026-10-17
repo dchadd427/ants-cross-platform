@@ -26,11 +26,12 @@ bool limits_of(Profile profile, LevelLimits& limits) {
     switch (profile) {
         case Profile::NewMap: limits = LevelLimits::for_new_maps(); return true;
         case Profile::Game: limits = LevelLimits{}; return true;
+        case Profile::Extended: limits = LevelLimits::for_extended_maps(); return true;
     }
     return false;
 }
 
-const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : "game"; }
+const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : profile == Profile::Game ? "game" : "extended"; }
 
 Result refused(const std::string& sentence) { return Result{1, sentence}; }
 
@@ -224,14 +225,15 @@ Result rewrite_impl(const uint8_t* data, size_t size, Profile profile) {
     return Result{0, std::string(w.bytes.begin(), w.bytes.end())};
 }
 
-Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
+// A blank map of either kind: Classic (version 8) under the limits of `profile`, or Extended (version 9) under the Extended limits
+Result blank_of_kind(bool extended, uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
     LevelLimits limits;
-    if (!limits_of(profile, limits)) return refused("unknown profile");
+    if (!limits_of(extended ? Profile::Extended : profile, limits)) return refused("unknown profile");
     if (rows == 0 || columns == 0 || rows > 65535 || columns > 65535) return refused("a blank map needs 1 to 65535 rows and columns");
     if (ground_tile >= kMostTileId) return refused("the ground tile is a tile id from 0 to " + std::to_string(kMostTileId - 1));
     if (eggs > 65535 || minutes > 65535) return refused("the eggs and the minutes are numbers from 0 to 65535");
     const std::vector<std::string> names = tile_names();
-    LevelData level = blank_level(static_cast<uint16_t>(rows), static_cast<uint16_t>(columns), names, limits);
+    LevelData level = extended ? blank_extended_level(rows, columns, names, limits) : blank_level(static_cast<uint16_t>(rows), static_cast<uint16_t>(columns), names, limits);
     for (MapCell& cell : level.layer1_terrain) cell.tile_index = static_cast<uint16_t>(ground_tile);
     level.boundary_param = static_cast<uint16_t>(eggs);
     level.default_minutes = static_cast<uint16_t>(minutes);
@@ -240,6 +242,56 @@ Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_
     const LevelWriteResult w = write_level(level, limits);
     if (!w.ok) return refused("a blank map of " + std::to_string(rows) + " rows x " + std::to_string(columns) + " columns cannot be written: " + w.error);
     return Result{0, std::string(w.bytes.begin(), w.bytes.end())};
+}
+
+Result blank_impl(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
+    return blank_of_kind(false, rows, columns, ground_tile, eggs, minutes, profile);
+}
+
+// A size that has no limit (the game's own profile reads a file of any size) is null: the maximum of size_t differs between a native build and the wasm module, the text must not
+void put_size_limit(std::string& out, const char* key, size_t value) {
+    put_key(out, key);
+    out += value >= 0xFFFFFFFFu ? std::string("null") : std::to_string(value);
+}
+
+Result profile_limits_impl(Profile profile) {
+    LevelLimits limits;
+    if (!limits_of(profile, limits)) return refused("unknown profile");
+    std::string out = "{";
+    put_text(out, "profile", profile_name(profile));
+    out += ',';
+    put_bool(out, "allow_extended", limits.allow_extended);
+    out += ",\n";
+    put_key(out, "classic");
+    out += '{';
+    put_number(out, "rows", limits.rows_for(LVL_EXPECTED_VERSION));
+    out += ',';
+    put_number(out, "columns", limits.columns_for(LVL_EXPECTED_VERSION));
+    out += ',';
+    put_number(out, "cells", limits.cells_for(LVL_EXPECTED_VERSION));
+    out += "},\n";
+    put_key(out, "extended");
+    if (limits.allow_extended) {
+        out += '{';
+        put_number(out, "rows", limits.rows_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "columns", limits.columns_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "cells", limits.cells_for(LVL_EXTENDED_VERSION));
+        out += ',';
+        put_number(out, "description_bytes", static_cast<long long>(limits.description_bytes()));
+        out += '}';
+    } else {
+        out += "null";
+    }
+    out += ",\n";
+    put_size_limit(out, "read_bytes", limits.read_bytes());
+    out += ',';
+    put_size_limit(out, "write_bytes", limits.write_bytes());
+    out += ',';
+    put_number(out, "dictionary_names", static_cast<long long>(limits.dictionary_names()));
+    out += '}';
+    return Result{0, out};
 }
 
 Result same_level_impl(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
@@ -295,6 +347,10 @@ Result rewrite(const uint8_t* data, size_t size, Profile profile) { return guard
 Result blank(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes, Profile profile) {
     return guarded([&] { return blank_impl(rows, columns, ground_tile, eggs, minutes, profile); });
 }
+Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes) {
+    return guarded([&] { return blank_of_kind(true, rows, columns, ground_tile, eggs, minutes, Profile::Extended); });
+}
+Result profile_limits(Profile profile) { return guarded([&] { return profile_limits_impl(profile); }); }
 Result same_level(const uint8_t* a, size_t size_a, const uint8_t* b, size_t size_b, Profile profile) {
     return guarded([&] { return same_level_impl(a, size_a, b, size_b, profile); });
 }

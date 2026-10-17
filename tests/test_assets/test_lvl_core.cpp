@@ -270,7 +270,7 @@ void c1_names() {
 
 // ---- C2 ----
 void c2_interface() {
-    CHECK(lvl_interface_version() == 1);
+    CHECK(lvl_interface_version() == 2);
     lvl_free(nullptr);
     uint8_t* zero = lvl_alloc(0);
     CHECK(zero != nullptr);
