@@ -1,0 +1,5 @@
+{"kind":"extended","judged":true,"works":true,"fits_the_place":true,"headline":"Works in the new version","badge":"New version only",
+"findings":[
+{"severity":"note","code":"not_for_original","message":"not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false},
+{"severity":"note","code":"object_outside_map","message":"one waypoint stands outside the map (row 106, column 67): it is ignored","row":106,"column":67,"team":-1,"count":1,"place_limit":false}
+]}

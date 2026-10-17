@@ -1,0 +1,8 @@
+hostile_ext_format_flag	1	does not load: the format flags are 0x1, of which 0x1 are bits that this reader does not know (it knows none): the file is from a later version of the format and is not read
+hostile_ext_rules_2	1	does not load: the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known, the file is not read
+hostile_ext_huge_grid	1	does not load: the grid has 4294967295 rows x 4294967295 columns, more than the 2048 a side that version 9 of the format holds
+hostile_ext_grid_65535	1	does not load: the grid has 65535 rows x 65535 columns, more than the 2048 a side that version 9 of the format holds
+hostile_ext_cut_in_header	1	does not load: the file ends inside the header (byte 10 of 12): the original's loader throws "System read file error." there and the game does not start
+hostile_ext_cut_in_layers	1	does not load: the file ends inside the layers (byte 12000 of 12000): the original's loader throws "System read file error." there and the game does not start
+hostile_ext_cut_in_half	1	does not load: the file ends inside the layers (byte 9657 of 9657): the original's loader throws "System read file error." there and the game does not start
+hostile_ext_version_9_then_random	1	does not load: the format flags are 0xdaa1d937, of which 0xdaa1d937 are bits that this reader does not know (it knows none): the file is from a later version of the format and is not read

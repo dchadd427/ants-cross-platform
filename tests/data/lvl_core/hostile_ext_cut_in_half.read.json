@@ -1,0 +1,4 @@
+{"bytes":9657,"profile":"extended","loaded":false,"reason":"the file ends inside the layers (byte 9657 of 9657): the original's loader throws \"System read file error.\" there and the game does not start",
+"findings":[
+{"severity":"fatal","code":"truncated","message":"the file ends inside the layers (byte 9657 of 9657): the original's loader throws \"System read file error.\" there and the game does not start","team":-1,"count":1}
+]}

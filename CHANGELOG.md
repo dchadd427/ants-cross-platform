@@ -27,6 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - Under the hood: the map checker now answers for each of the two kinds of map (a Classic map, and an Extended map that only the new version loads), and a new Classic map is limited to 90 rows, because the original game's ants cannot enter or cross the 91st row of a taller map; a taller map is an Extended map. No map of the library is taller than 81 rows. Nothing changes in the game or on the site; the map maker's limits and checks are prepared.
+- Under the hood: the map code in the browser module can now make a blank Extended map, turn a Classic map into an Extended one and back (with plain reasons and notes, each with a stable code), check either kind and tell a page the limits of each; a page can refuse an older module. No page uses it yet; nothing changes in the game or on the site.
 
 ## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
 

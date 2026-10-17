@@ -4,8 +4,8 @@
 //   <script src="lvl_core.js"></script><script src="lvl_core_api.js"></script>
 //   createLvlCore().then(function (module) { var core = LvlCore.wrap(module); var r = core.readReport(bytes); if (r.status === 0) console.log(r.json.findings); });
 //
-// Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal and sameLevel, `bytes` is the file for
-// rewrite and blank, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
+// Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal, checkMap, needsExtended, limits and
+// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended and convertToClassic when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
 // `profile`: "new_map" (the default: the limits of a new Classic map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
@@ -80,6 +80,14 @@
                     return { status: status, error: sentence, text: sentence };
                 }
                 if (kind === 'bytes') return { status: 0, bytes: bytes };
+                if (kind === 'conversion') {
+                    // a dword (the size of the JSON), the JSON, then the bytes of the new file (none when the map cannot be converted)
+                    var jsonSize = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+                    var jsonText = decoder.decode(bytes.subarray(4, 4 + jsonSize));
+                    var answer = { status: 0, text: jsonText, json: JSON.parse(jsonText) };
+                    if (answer.json.ok) answer.bytes = bytes.slice(4 + jsonSize);
+                    return answer;
+                }
                 var text = decoder.decode(bytes);
                 return { status: 0, text: text, json: JSON.parse(text) };
             } finally {
@@ -116,6 +124,22 @@
                     return trapped(e);
                 }
             },
+            // The check of a file by its kind (a Classic map: works in the original game; an Extended map: works in the new version): json.kind, json.judged, json.works, json.fits_the_place,
+            // json.headline, json.badge ("New version only" for an Extended map) and json.findings. Give profile "extended" to a place that takes Extended maps.
+            checkMap: fileCall(function (ptr, size, p) { return module._lvl_check_map(ptr, size, p); }, 'json'),
+            // The file as an Extended map. Answers a conversion: json.ok, json.reasons and json.notes (each {code, message}), json.from, json.to, and bytes (the new file) when json.ok. A map
+            // that cannot be converted is status 0 with json.ok false and its reasons: it stays as it is. A file that does not load is status 1.
+            convertToExtended: function (bytes) {
+                return withBuffers([bytes], function (ptr) { return take(module._lvl_convert_to_extended(ptr[0], bytes.length), 'conversion'); });
+            },
+            // The file as a Classic map when it fits (profile: the limits the new file must be within, "new_map" by default); the same answer as convertToExtended
+            convertToClassic: function (bytes, profile) {
+                var p = profileOf(profile);
+                if (p < 0) return fault(1, 'unknown profile');
+                return withBuffers([bytes], function (ptr) { return take(module._lvl_convert_to_classic(ptr[0], bytes.length, p), 'conversion'); });
+            },
+            // Why a file cannot be a Classic map: json.needs_extended and json.reasons (each {code, message}), empty when it can
+            needsExtended: fileCall(function (ptr, size, p) { return module._lvl_needs_extended(ptr, size, p); }, 'json'),
             // A new Extended map (version 9): rows, columns (at most 1,024 a side and 262,144 cells), ground, eggs for each team, minutes
             blankExtended: function (rows, columns, ground, eggs, minutes) {
                 var numbers = [rows, columns, ground, eggs, minutes];
