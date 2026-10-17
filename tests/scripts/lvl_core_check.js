@@ -119,6 +119,7 @@ function libraryCases() {
 
 function main() {
     const o = parseArgs(process.argv.slice(2));
+    o.module = path.resolve(o.module);         // (require() takes a bare 'dir/file.js' for a package name: the folder is made absolute first, relative to the current folder)
     const modulePath = path.join(o.module, 'lvl_core.js');
     if (!fs.existsSync(modulePath) || !fs.existsSync(path.join(o.module, 'lvl_core.wasm'))) {
         console.log((o.require ? 'FAIL' : 'SKIP') + ': no lvl_core.js and lvl_core.wasm in ' + o.module + ' (build them: docs/MAP_FORMAT.md, "In the browser")');

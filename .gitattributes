@@ -14,6 +14,8 @@ VERSION text eol=lf
 Original-Ants/**        -text
 Community-Maps/**       -text
 tests/data/*.csv        -text
+# the stored answers of the map core (tests/data/lvl_core/): compared byte for byte with the core's output, which has LF only
+tests/data/lvl_core/**  -text
 # a byte copy of the licence text beside the game's own font, which the front page serves (tools/front_page_art/make_art.py)
 web/front/LibreFranklin-OFL.txt  -text
 
