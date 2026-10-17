@@ -14,6 +14,8 @@ Parts:
              undo and redo (the buttons and the keys), the Move tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
              a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
              processor slowed down six times every frame of a stroke is only a few cells (its time is measured);
+  * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
+             keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names;
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
              paints (a tool), a tap paints a cell, two fingers do not paint;
   * older    a map core of another interface version (the page is given a module that says it is version 1): the page says so and offers a reload, and no button works.
@@ -35,7 +37,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "phone", "older")
+PARTS = ("desktop", "draw", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -405,7 +407,7 @@ def run_part(part, tab, args, check, tiny, junk):
         page.ctrl_key("z", "KeyZ", 90)
         time.sleep(0.2)
         check(page.pixel(*f) == grass, "and one Undo takes the whole fill back")
-        page.key("b")
+        check(page.ev("document.getElementById('fill-btn').getAttribute('aria-pressed')") == "false", "Fill is for one click: it is off again")
         # looking around instead of painting
         page.ev("document.querySelector('[data-tile=\"487\"]').click()")
         box = page.box("#map")
@@ -505,6 +507,40 @@ def run_part(part, tab, args, check, tiny, junk):
         DIALOGS[:] = []
         page.open()
         check(DIALOGS == [], "and does not ask when nothing was drawn")
+    elif part == "layout":
+        for w, h in ((667, 375), (740, 360), (812, 375), (844, 390), (390, 844), (375, 667), (360, 640), (340, 700), (320, 568)):
+            print("[web map maker] layout, %d x %d" % (w, h))
+            tab.emulate(w, h, 2, mobile=True)
+            page = Page(tab, args.web)
+            check(page.open() and page.ready(), "the page starts")
+            for tool in ("ground", "objects"):
+                page.tool(tool)
+                time.sleep(0.2)
+                found = json.loads(page.ev("""JSON.stringify((function () {
+                    var bad = [], small = [];
+                    [].forEach.call(document.querySelectorAll('button, input'), function (n) {
+                        if (n.offsetParent === null || n.type === 'file' || n.disabled) return;
+                        var b = n.getBoundingClientRect(), card = n.closest('.panel, header'), c = card ? card.getBoundingClientRect() : {left: 0, right: innerWidth, top: 0, bottom: 1e9}, name = (n.id || n.textContent || n.className).slice(0, 14);
+                        if (b.left < c.left - 1 || b.right > c.right + 1 || b.top < c.top - 1 || b.bottom > c.bottom + 1 || b.right > innerWidth + 1 || b.left < -1) bad.push(name + ' ' + Math.round(b.right - c.right) + ',' + Math.round(b.bottom - c.bottom));
+                        if (b.width < 43.5 || b.height < 43.5) small.push(name + ' ' + Math.round(b.width) + 'x' + Math.round(b.height));
+                    });
+                    var cv = document.getElementById('map').getBoundingClientRect();
+                    return {bad: bad, small: small, canvas: Math.round(cv.height), sideways: document.documentElement.scrollWidth > innerWidth};
+                })())"""))
+                check(found["bad"] == [] and not found["sideways"], "%d x %d, %s tool: every control lies inside its card and the screen (%s)" % (w, h, tool, found["bad"]))
+                check(found["small"] == [], "%d x %d, %s tool: every control is at least 44 pixels each way (%s)" % (w, h, tool, found["small"]))
+                check(found["canvas"] >= (190 if h > w else 150), "%d x %d: the map is %d pixels high" % (w, h, found["canvas"]))
+            check(page.ev("!document.getElementById('tile-btn').hidden && document.getElementById('palette').offsetParent === null"), "a phone has the one palette button and not the row of tiles")
+            page.ev("document.getElementById('tile-btn').click()")
+            check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 11), "the button opens a sheet of the 11 objects")
+            names = page.ev("[].map.call(document.querySelectorAll('.pick'), function (b) { return b.textContent; }).join('|')")
+            check(names.startswith("Rock 1|Rock 2") and "Fire ant power-up" in names, "with their names: %s" % names)
+            inside = page.ev("[].every.call(document.querySelectorAll('.dlg-foot button'), function (b) { var r = b.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.top >= -1; })")
+            check(inside, "the sheet's Close button is on the screen (the tiles scroll inside it)")
+            page.ev("document.querySelector('.pick[data-tile=\"304\"]').click()")
+            check(not page.ev("!!document.querySelector('.dlg')") and page.ev("document.getElementById('tile-name').textContent") == "Rock 3", "a tile of the sheet is chosen and the sheet closes")
+            if (w, h) in ((667, 375), (375, 667)):
+                page.shot(args.shots, "mapmaker-layout-%dx%d" % (w, h))
     elif part == "phone":
         for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390), ("narrow", 340, 700)):
             print("[web map maker] phone, %s, %d x %d" % (label, w, h))
@@ -517,10 +553,10 @@ def run_part(part, tab, args, check, tiny, junk):
             page.shot(args.shots, "mapmaker-%s-classic" % label)
             small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button:not([disabled]), input:not([hidden])'), function (n) { if (n.offsetParent === null || n.type === 'file') return false; var b = n.getBoundingClientRect(); return b.width < 43.5 || b.height < 43.5; }).map(function (n) { return (n.textContent || n.id || n.getAttribute('data-act')) + ' ' + Math.round(n.getBoundingClientRect().width) + 'x' + Math.round(n.getBoundingClientRect().height); }))")
             check(small == "[]", "every control that works is at least 44 pixels each way (%s)" % small)
-            check(page.ev("document.querySelector('.toolnote').offsetParent !== null"), "the note about the tool that is chosen shows")
-            check(page.ev("(function () { var b = document.querySelector('.swatches').getBoundingClientRect(); return b.left >= -1 && b.right <= window.innerWidth + 1; })()"), "the row of swatches is inside the screen (it scrolls sideways inside itself)")
-            check(page.ev("[].every.call(document.querySelectorAll('.swatch'), function (n) { var b = n.getBoundingClientRect(); return b.width >= 43.5 && b.height >= 43.5; })"), "every swatch is at least 44 pixels each way")
-            bad = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button, input, a'), function (n) { if (n.offsetParent === null || n.closest('.swatches')) return false; var b = n.getBoundingClientRect(); return b.right > window.innerWidth + 1 || b.bottom > window.innerHeight + 1 || b.left < -1; }).map(function (n) { return n.textContent || n.id; }))")
+            if w < 601:
+                check(page.ev("document.querySelector('.toolnote').offsetParent !== null"), "the note about the tool that is chosen shows")
+            check(page.ev("(function () { var b = document.getElementById('tile-btn'); return b.offsetParent !== null && !b.hidden && b.getBoundingClientRect().height >= 43.5; })()"), "the palette is one button of at least 44 pixels")
+            bad = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button, input, a'), function (n) { if (n.offsetParent === null) return false; var b = n.getBoundingClientRect(); return b.right > window.innerWidth + 1 || (window.innerWidth > 600 && b.bottom > window.innerHeight + 1) || b.left < -1; }).map(function (n) { return n.textContent || n.id; }))")
             check(bad == "[]", "every visible control is inside the screen (%s)" % bad)
             page.press_act("menu")
             check(wait_for(lambda: page.ev("!!document.querySelector('.menulist')")), "the Menu button opens the menu")

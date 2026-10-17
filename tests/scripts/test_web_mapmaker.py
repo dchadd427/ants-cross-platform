@@ -110,7 +110,7 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=EDIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page"):
+        for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page", "H the canvas on a fake page"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_drawing_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -139,6 +139,22 @@ class TheCodeRuns(unittest.TestCase):
             "an undo in the middle of a stroke": ("mapmaker_tools.js", "function undo() { if (editor && !canvas.isStroking())", "function undo() { if (editor)"),
             "a stroke that does not tell the canvas what changed": ("mapmaker_tools.js", "                current.segment(from.row, from.column, to.row, to.column, state.brush);\n                canvas.markDirty(current.takeDirty());", "                current.segment(from.row, from.column, to.row, to.column, state.brush);"),
             "a tile that is not named in the dictionary before it is used": ("mapmaker_tools.js", "if (made.grew) editor.rebase(env.rebase(made.bytes));", "void 0;"),
+            "a history that forgets the strokes it dropped when it says a map is clean": ("mapmaker_edit.js", "isClean: function () { return undo.length === 0 && dropped === 0; },", "isClean: function () { return undo.length === 0; },"),
+            "a saved marker that forgets the strokes that were dropped": ("mapmaker_edit.js", "return lastId() === savedId && dropped === savedDropped;", "return lastId() === savedId;"),
+            "an anchor that does not wrap in a small version 9 map": ("mapmaker_edit.js", "if (file.rows <= 256 && file.columns <= 256) { r &= 255; c &= 255; }", "void 0;"),
+            "an object that is skipped when only its tile is the same": ("mapmaker_edit.js", "if (tile(f, 2, idx) === tileId && flags(f, 2, idx) === 1 && third(f, 2, idx) === ownAnchor(f, idx)) return 0;", "if (tile(f, 2, idx) === tileId) return 0;"),
+            "a patch that keeps cells that came back to what they were": ("mapmaker_edit.js", "if (t === before[3 * i] && fl === before[3 * i + 1] && th === before[3 * i + 2]) continue;", "void 0;"),
+            "a name written in the dictionary that the page is not told of": ("mapmaker_tools.js", "if (made.named || made.grew) env.onEdit();", "void 0;"),
+            "an undo that does not tell the canvas": ("mapmaker_tools.js", "            canvas.markDirty(dirty);\n            canvas.refreshMini();", "            canvas.refreshMini();"),
+            "a Fill that stays on": ("mapmaker_tools.js", "state.fill = false;                                    // (Fill is for one click: the next press paints again)", "void 0;"),
+            "a tile the dictionary cannot hold that is refused in silence": ("mapmaker_tools.js", "if (env.say) env.say(", "if (false) env.say("),
+            "a palette button that does not open the sheet": ("mapmaker_tools.js", "host.tile.addEventListener('click', openPicker);", "void 0;"),
+            "a sheet whose tile is not chosen": ("mapmaker_tools.js", "b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });", "b.addEventListener('click', function () { ctl.close(); });"),
+            "a stroke that goes on after the mouse button was let go outside": ("mapmaker_canvas.js", "if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();", "void 0;"),
+            "a stroke that goes on after the pointer was lost": ("mapmaker_canvas.js", "canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(); });", "void 0;"),
+            "a stroke that goes on after the window lost the focus": ("mapmaker_canvas.js", "win.addEventListener('blur', function () { if (stroke) endStroke(); });", "void 0;"),
+            "a stroke that goes on after the page was hidden": ("mapmaker_canvas.js", "doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });", "void 0;"),
+            "a finger that paints before it is known not to be the first of two": ("mapmaker_canvas.js", "if (mouse) startStroke(e.pointerId, cell); else pending = { id: e.pointerId, cell: cell };", "startStroke(e.pointerId, cell);"),
             "a brush that does not reach the painter": ("mapmaker_tools.js", "size: function () { return editor && paints() ? state.brush : 0; },", "size: function () { return editor && paints() ? 1 : 0; },"),
         }
         for what, (name, old, new) in mutants.items():

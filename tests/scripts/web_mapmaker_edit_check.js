@@ -24,7 +24,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.join(ROOT, 'web', 'front');
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js');
+const File = load('mapmaker_file.js'), Canvas = load('mapmaker_canvas.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Palette = load('mapmaker_palette.js'), Tools = load('mapmaker_tools.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -137,18 +137,43 @@ function caseB() {
     equal(Edit.objectCells(f, 3 * 10 + 3), [33], 'an anchor outside the map: the cell stands alone');
     equal(Edit.objectCells(f, 4 * 10 + 4), [44], 'a cell that names itself without the origin flag stands alone');
     equal(Edit.objectCells(f, 5), [], 'an empty cell has no object');
+    // an object that is not as a stroke of the page would write it is made so (the same tile alone is not enough: its flag and its anchor count)
+    put(f, 2, 6, 6, 302, 0, 0x0000);
+    const fixer = ed.begin('objects', 302);
+    check(fixer.stamp(6, 6, 1) === 1 && cellOf(f, 2, 6, 6)[1] === 1 && cellOf(f, 2, 6, 6)[2] === (6 | (6 << 8)), 'a cell of the same object tile with no flag and another anchor is written again');
+    fixer.end();
+    // a cell that goes and comes back inside one stroke is not in the patch (and the stroke is not kept)
+    const bounce = ed.begin('ground', 476);
+    bounce.stamp(8, 8, 1);
+    const wasHere = Edit.tile(f, 1, 8 * 10 + 8);
+    Edit.applyPatch(f, { keys: Uint32Array.of((8 * 10 + 8) * 2), before: Uint16Array.of(wasHere, 0, 0xCDCD), after: Uint16Array.of(485, 0, 0xCDCD) }, true);
+    check(bounce.finish().keys.length === 0 && bounce.end() === 0, 'a cell that is put back to its first words inside one stroke is not a record, and a stroke of no records is not kept');
     // a stroke taken back leaves the map as it was
-    const before = digest(f.bytes), c = ed.begin('ground', 476);
+    const before = digest(f.bytes), strokesBefore = ed.history.size().strokes, c = ed.begin('ground', 476);
     c.stamp(1, 1, 9); c.segment(1, 1, 8, 8, 5);
     const back = c.cancel();
-    check(back.length > 0 && digest(f.bytes) === before && ed.history.size().strokes === 0, 'a cancelled stroke puts every cell back and keeps nothing');
+    check(back.length > 0 && digest(f.bytes) === before && ed.history.size().strokes === strokesBefore, 'a cancelled stroke puts every cell back and keeps nothing');
     const e2 = ed.begin('ground', 485);
-    check(e2.stamp(2, 2, 1) === 0 && e2.end() === 0 && ed.history.size().strokes === 0, 'painting the tile that is there changes nothing and keeps no stroke');
+    const keptStrokes = ed.history.size().strokes;
+    check(e2.stamp(2, 2, 1) === 0 && e2.end() === 0 && ed.history.size().strokes === keptStrokes, 'painting the tile that is there changes nothing and keeps no stroke');
     const g = ed.begin('ground', 476);
     g.stamp(5, 5, 1);
     Edit.applyPatch(f, { keys: Uint32Array.of((5 * 10 + 5) * 2), before: Uint16Array.of(485, 0, 0xCDCD), after: Uint16Array.of(476, 0, 0xCDCD) }, false);
     g.stamp(5, 5, 1);
     equal(g.end(), 1, 'a patch lists the cells once (a cell touched twice in a stroke is one record)');
+}
+
+// ---- anchors of a version 9 map that wraps ----
+function anchors() {
+    const small = open(9, 256, 4), t = (r, c) => r * 4 + c;
+    put(small, 2, 250, 1, 62, 1, 10);                              // offset +10 rows, 0 columns: 260, which wraps to row 4 in a map of 256 x 256 or less
+    equal(Edit.anchorIndex(small, t(250, 1)), t(4, 1), 'in a version 9 map of 256 x 256 or less the anchor wraps modulo 256');
+    const wide = open(9, 10, 300);
+    put(wide, 2, 3, 295, 62, 1, 10 << 8);                          // offset +10 columns: 305, outside a map of 300 columns, and no wrap in a map that is wider than 256
+    equal(Edit.anchorIndex(wide, 3 * 300 + 295), -1, 'in a wider map it does not wrap');
+    const v8 = open(8, 20, 20);
+    put(v8, 2, 3, 4, 62, 1, 7 | (9 << 8));
+    equal(Edit.anchorIndex(v8, 3 * 20 + 4), 7 * 20 + 9, 'in a version 8 map the anchor is the row in the low byte and the column in the high byte');
 }
 
 // ---- C ----
@@ -241,6 +266,18 @@ function caseD() {
     check(!ed.history.canRedo(), 'a new stroke ends the redo line');
     check(!ed.history.isSaved(), 'and it makes a saved map unsaved: even when it brings the number of strokes back to what it was');
     check(ed.undo() !== null && ed.undo() !== null, 'undo goes on after it');
+    // more strokes than the history keeps: undo goes back as far as it can, and the map is still not the one that was opened
+    const long = Edit.create(open(9, 30, 30)), longStart = digest(long.file.bytes);
+    for (let n = 0; n < Edit.MAX_STROKES + 5; n++) { const t = long.begin('ground', n % 2 ? 476 : 487); t.stamp(Math.floor(n / 30), n % 30, 1); t.end(); }
+    while (long.undo()) { /* all that are kept */ }
+    check(long.history.size().dropped === 5 && !long.history.canUndo(), 'after ' + (Edit.MAX_STROKES + 5) + ' strokes the history holds ' + Edit.MAX_STROKES + ' and says it dropped 5');
+    check(!long.history.isClean() && digest(long.file.bytes) !== longStart, 'and a map undone as far as it goes is not called clean: Download would skip the core, and nothing would ask before it is left');
+    const kept = Edit.create(open(9, 30, 30));
+    for (let n = 0; n < Edit.MAX_STROKES + 2; n++) { const t = kept.begin('ground', n % 2 ? 476 : 487); t.stamp(Math.floor(n / 30), n % 30, 1); t.end(); }
+    kept.history.markSaved();
+    const extra = kept.begin('ground', 523); extra.stamp(2, 2, 1); extra.end();
+    kept.undo();
+    check(!kept.history.isSaved(), 'a stroke that pushed an old one out of the history makes a saved map unsaved, even when it is undone again');
     // bounded
     const h = Edit.createHistory(), mk = (n) => ({ keys: new Uint32Array(n), before: new Uint16Array(3 * n), after: new Uint16Array(3 * n) });
     for (let i = 0; i < Edit.MAX_STROKES + 50; i++) h.push(mk(1));
@@ -316,7 +353,7 @@ function fakeDom() {
         n.focus = () => { doc.activeElement = n; };
         n.click = () => { if (!n.disabled) for (const f of n.listeners.click || []) f({ type: 'click' }); };
         n.all = () => n.children.reduce((a, c) => a.concat([c], c.all()), []);
-        n.querySelectorAll = (sel) => n.all().filter((x) => sel.split(',').some((s) => (s === '.swatch' ? x.className === 'swatch' : false)));
+        n.querySelectorAll = (sel) => n.all().filter((x) => sel.split(',').some((s) => (s === '.swatch' ? x.className === 'swatch' : (s === '.pick' ? x.className === 'pick' : s === x.tagName))));
         n.querySelector = (sel) => {
             if (sel === '[aria-checked="true"]') return n.all().filter((x) => x.attrs['aria-checked'] === 'true')[0] || null;
             return n.querySelectorAll(sel)[0] || null;
@@ -338,7 +375,9 @@ function fakeDom() {
 function toolsPage(file, opts) {
     opts = opts || {};
     const doc = fakeDom(), el = (tag) => doc.createElement(tag), log = { dirty: [], edits: 0, minis: 0, refreshes: 0, rebased: 0 };
-    const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), hint: el('p'), brushes: [], fill: el('button'), undo: el('button'), redo: el('button') };
+    const host = { tools: [], box: el('div'), title: el('h3'), swatches: el('div'), name: el('div'), tile: el('button'), hint: el('p'), brushes: [], fill: el('button'), undo: el('button'), redo: el('button') };
+    host.tile.appendChild(el('i')); host.tile.appendChild(el('span'));
+    const sheets = [], said = [];
     for (const t of Palette.TOOLS) { const b = el('button'); b.setAttribute('data-tool', t.id); b.disabled = true; host.tools.push(b); }
     for (const n of [1, 3, 5, 9]) { const b = el('button'); b.setAttribute('data-brush', String(n)); host.brushes.push(b); }
     host.box.hidden = true;
@@ -349,17 +388,24 @@ function toolsPage(file, opts) {
     };
     const tools = Tools.create({
         doc, win: {}, canvas, host, file: () => current, busy: () => busy,
+        dialogs: { open: (spec) => { const body = el('div'), ctl = { closed: false, close() { ctl.closed = true; } }; spec.build(body, ctl); sheets.push({ spec, body, ctl }); return ctl; } }, say: (title, text) => said.push(title + ': ' + text),
         rebase: (bytes) => { log.rebased++; current = File.parse(bytes); return current; }, onEdit: () => { log.edits++; }
     });
     tools.setMap(current);
-    return { doc, host, tools, painter: () => painter, log, file: () => current, busy: (v) => { busy = v; }, stroking: (v) => { stroking = v; }, button: (id) => host.tools.filter((b) => b.getAttribute('data-tool') === id)[0], brush: (n) => host.brushes.filter((b) => b.getAttribute('data-brush') === String(n))[0] };
+    return { doc, host, tools, sheets, said, painter: () => painter, log, file: () => current, busy: (v) => { busy = v; }, stroking: (v) => { stroking = v; }, button: (id) => host.tools.filter((b) => b.getAttribute('data-tool') === id)[0], brush: (n) => host.brushes.filter((b) => b.getAttribute('data-brush') === String(n))[0] };
 }
 
 function caseG() {
     const p = toolsPage(open(9, 30, 30));
     equal(p.host.tools.map((b) => [b.getAttribute('data-tool'), b.disabled]), [['ground', false], ['objects', false], ['hills', true], ['ants', true], ['food', true], ['erase', false], ['move', false]], 'Ground, Objects, Erase and Move are on; Hills, Ants and Food wait');
     check(p.button('ground').getAttribute('aria-pressed') === 'true' && p.button('move').getAttribute('aria-pressed') === 'false', 'Ground is the tool at the start');
-    check(!p.host.box.hidden && p.host.swatches.children.length === 8 && p.host.title.textContent === 'Ground', 'with its palette of 8');
+    check(!p.host.box.hidden && !p.host.tile.hidden && p.host.swatches.children.length === 8 && p.host.title.textContent === 'Ground', 'with its palette of 8');
+    check(p.host.tile.querySelector('span').textContent === 'Grass' && p.host.tile.querySelector('i').style.background === Tiles.css(485, Tiles.EMPTY2), 'the phone\'s palette button shows the tile that is chosen');
+    p.host.tile.click();
+    check(p.sheets.length === 1 && p.sheets[0].spec.title === 'Ground' && p.sheets[0].body.children[0].children.length === 8, 'and opens the palette as a sheet of 8 tiles with their names');
+    p.sheets[0].body.children[0].children[4].click();
+    check(p.tools.state().ground === 571 && p.sheets[0].ctl.closed && p.host.tile.querySelector('span').textContent === 'Sand', 'a tile of the sheet is chosen and the sheet closes');
+    p.host.swatches.children[0].click();
     check(p.host.swatches.children.filter((b) => b.getAttribute('aria-checked') === 'true').length === 1 && p.host.name.textContent === 'Grass', 'one swatch chosen, and its name said');
     check(p.host.undo.disabled && p.host.redo.disabled && !p.host.fill.disabled && !p.brush(3).disabled, 'undo and redo are off with nothing drawn; Fill and the brushes are on');
     p.host.swatches.children[2].click();
@@ -368,7 +414,7 @@ function caseG() {
     check(p.host.swatches.children.length === 11 && p.host.title.textContent === 'Objects' && p.tools.state().tool === 'objects', 'Objects has its own palette of 11');
     check(p.tools.state().ground === 487, 'and the ground that was chosen is kept');
     p.button('erase').click();
-    check(p.host.box.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette and no Fill, and keeps the brushes');
+    check(p.host.box.hidden && p.host.tile.hidden && p.host.fill.disabled && p.brush(5).disabled === false, 'Erase has no palette (nor the phone\'s palette button) and no Fill, and keeps the brushes');
     p.button('move').click();
     check(p.host.box.hidden && p.painter().size() === 0 && p.brush(5).disabled && p.host.fill.disabled, 'Move paints nothing: no brush, no fill');
     p.button('hills').click();
@@ -420,14 +466,31 @@ function caseG() {
     r.stroking(true); r.doc.key('z', { ctrlKey: true }); r.stroking(false);
     check(digest(r.file().bytes) === after, 'undo waits while a stroke is going on');
     // fill: one stroke, and begin answers false (nothing goes on)
+    const dirtyBefore = r.log.dirty.length;
+    r.doc.key('z', { ctrlKey: true }); r.doc.key('z', { ctrlKey: true, shiftKey: true });
+    check(r.log.dirty.length === dirtyBefore + 2 && r.log.dirty[dirtyBefore].length > 0, 'undo and redo tell the canvas which cells to paint again');
     r.doc.key('b');
     check(pt.begin({ row: 20, column: 20 }) === false, 'with Fill on a press fills and nothing goes on');
+    check(r.tools.state().fill === false && r.host.fill.getAttribute('aria-pressed') === 'false', 'Fill is for one click: it is off again');
+    r.doc.key('b');
+    r.doc.key('b');
     check(Edit.tile(r.file(), 1, 25 * 30 + 25) === 487 && r.tools.state().history.strokes === 2, 'the whole field is dirt, in one more stroke');
     // a cancelled stroke
-    r.doc.key('b');
     const c0 = digest(r.file().bytes);
     pt.begin({ row: 1, column: 1 }); pt.extend({ row: 1, column: 1 }, { row: 3, column: 3 }); pt.cancel();
     check(digest(r.file().bytes) === c0 && r.tools.state().history.strokes === 2, 'a stroke that is cancelled leaves no trace');
+    // a tile that only needs its name in the dictionary changes the map (the check must run again), though the stroke is taken back
+    const w = toolsPage(open(9, 20, 20)), editsBefore = w.log.edits;
+    w.button('objects').click();
+    check(w.painter().begin({ row: 3, column: 3 }) === true, 'an object stroke begins');
+    w.painter().cancel();
+    check(w.log.edits === editsBefore + 1 && w.file().names === 486 && Edit.tile(w.file(), 2, 63) === 0x7FFE, 'a name written in the dictionary alone is a change that the page is told of (' + (w.log.edits - editsBefore) + ')');
+    // a tile that the dictionary cannot hold: a plain message, no stroke
+    Palette.GROUND.push([1400, 'zz', 'Test tile']);
+    const z = toolsPage(open(9, 20, 20));
+    z.host.swatches.children[z.host.swatches.children.length - 1].click();
+    check(z.painter().begin({ row: 1, column: 1 }) === false && z.said.length === 1 && /cannot be used/.test(z.said[0]), 'a tile beyond the dictionary is said in plain words, and nothing is painted: ' + z.said[0]);
+    Palette.GROUND.pop();
     // Erase through the painter; Move does not paint
     r.button('erase').click();
     check(pt.size() === 1 && pt.begin({ row: 2, column: 2 }) === true, 'Erase has a stroke');
@@ -441,7 +504,49 @@ function caseG() {
     check(start !== after, 'the map did change');
 }
 
-const cases = [['A the brush and the line', caseA], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG]];
+// ---- H: a stroke ends when its pointer is lost, not only when it lifts (the canvas on a fake page) ----
+function fakeCanvasPage() {
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createImageData' ? (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }) : () => undefined)), set: (t, k, v) => { t[k] = v; return true; } });
+    const listeners = () => { const l = {}; return { l, addEventListener: (t, f) => { (l[t] = l[t] || []).push(f); }, fire: (t, e) => (l[t] || []).forEach((f) => f(e)) }; };
+    const canvasNode = () => Object.assign(listeners(), { width: 0, height: 0, attrs: {}, classes: {}, getContext: () => ctx, getBoundingClientRect: () => ({ left: 0, top: 0, width: 600, height: 400 }),
+        setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setPointerCapture() {}, focus() {}, classList: { toggle() {} }, hidden: false });
+    const doc = Object.assign(listeners(), { createElement: canvasNode, visibilityState: 'visible' }), win = Object.assign(listeners(), { devicePixelRatio: 1, performance: { now: () => 0 } });
+    const canvas = canvasNode(), log = [], plain = () => Object.assign(listeners(), { hidden: true, textContent: '', disabled: false });
+    const api = Canvas.create({ doc, win, canvas, minimap: plain(), mini: canvasNode(), miniCap: plain(), where: plain(), zoomIn: plain(), zoomOut: plain() });
+    const painter = { size: () => 1, begin: () => { log.push('begin'); return true; }, extend: () => log.push('extend'), end: () => log.push('end'), cancel: () => log.push('cancel') };
+    api.setPainter(painter);
+    api.setFile(open(9, 31, 31));
+    const mouse = (type, extra) => canvas.fire(type, Object.assign({ pointerType: 'mouse', pointerId: 7, button: 0, buttons: 1, clientX: 300, clientY: 200, preventDefault() {} }, extra));
+    return { api, canvas, doc, win, log, mouse };
+}
+
+function caseH() {
+    let p = fakeCanvasPage();
+    p.mouse('pointerdown');
+    check(p.api.isStroking() && p.log.join() === 'begin', 'a press of the mouse begins a stroke');
+    p.mouse('pointermove', { clientX: 330 });
+    check(p.log.join() === 'begin,extend', 'a move with the button down goes on');
+    p.mouse('pointerup');
+    check(!p.api.isStroking() && p.log.join() === 'begin,extend,end', 'the button lifted ends it');
+    p = fakeCanvasPage(); p.mouse('pointerdown'); p.mouse('pointermove', { buttons: 0, clientX: 340 });
+    check(!p.api.isStroking() && p.log.join() === 'begin,end', 'a move with no button down (it was let go where the page could not hear) ends the stroke');
+    p = fakeCanvasPage(); p.mouse('pointerdown'); p.mouse('lostpointercapture');
+    check(!p.api.isStroking() && p.log.join() === 'begin,end', 'a pointer that is lost ends the stroke');
+    p = fakeCanvasPage(); p.mouse('pointerdown'); p.win.fire('blur', {});
+    check(!p.api.isStroking() && p.log.join() === 'begin,end', 'a window that loses the focus ends the stroke');
+    p = fakeCanvasPage(); p.mouse('pointerdown'); p.doc.visibilityState = 'hidden'; p.doc.fire('visibilitychange', {});
+    check(!p.api.isStroking() && p.log.join() === 'begin,end', 'a page that is hidden ends the stroke');
+    p = fakeCanvasPage(); p.mouse('pointerdown'); p.mouse('pointerdown', { pointerId: 8 });
+    check(!p.api.isStroking() && p.log.join() === 'begin,cancel', 'a second pointer takes the stroke back');
+    p = fakeCanvasPage(); p.mouse('pointerdown', { button: 1 });
+    check(!p.api.isStroking() && p.log.length === 0, 'the middle button looks around and does not paint');
+    p = fakeCanvasPage(); p.mouse('pointerdown', { pointerType: 'touch', button: 0 });
+    check(!p.api.isStroking() && p.log.length === 0, 'a finger that has only come down has not begun a stroke yet (it may be the first of two)');
+    p.mouse('pointerup', { pointerType: 'touch' });
+    check(p.log.join() === 'begin,end', 'a tap is a one-cell stroke');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

@@ -9,7 +9,7 @@
     'use strict';
 
     var HINTS = {
-        ground: 'Tap or click to paint the ground. Drag to paint a line.',
+        ground: 'Tap or click to paint the ground. Drag to paint a line. Fill works for one click.',
         objects: 'Tap or click to put an object. Drag to put a line of them.',
         erase: 'Tap or click to take an object away. A bigger object goes whole.',
         move: 'Drag to look around. Wheel or two fingers to zoom.'
@@ -17,8 +17,9 @@
     var PHONE_HINTS = { ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', erase: 'Tap to take an object away.', move: 'Drag to look around.' };
     var LATER = 'Hills, Ants and Food come next.';
 
-    // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, hint, brushes (buttons with data-brush), fill, undo, redo},
-    //       file() -> the open map's reader view, rebase(bytes) -> the reader view of the longer bytes (the dictionary grew), onEdit() after a change, busy() -> a dialog is open}
+    // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, tile (the phone's one button for the palette), hint, brushes (buttons with data-brush), fill, undo, redo},
+    //       file() -> the open map's reader view, rebase(bytes) -> the reader view of the longer bytes (the dictionary grew), onEdit() after a change, busy() -> a dialog is open,
+    //       dialogs (MapDialog.create: the palette of a phone is a sheet), say(title, text) -> a plain message}
     function create(env) {
         var doc = env.doc, canvas = env.canvas, host = env.host;
         var state = { tool: 'ground', ground: 485, objects: 302, brush: 1, fill: false };
@@ -51,6 +52,7 @@
             });
             var hasPalette = !!(Palette.tool(state.tool) || {}).palette;
             host.box.hidden = !hasPalette;
+            host.tile.hidden = !hasPalette;
             host.hint.textContent = '';
             host.hint.appendChild(el('span', 'dsk', HINTS[state.tool]));
             host.hint.appendChild(el('span', 'mob', PHONE_HINTS[state.tool]));
@@ -73,7 +75,29 @@
                 var chip = el('i'); chip.style.background = item.color; b.appendChild(chip);
                 b.addEventListener('click', function () { chooseTile(item.id); });
                 host.swatches.appendChild(b);
-                if (on) host.name.textContent = item.label;
+                if (on) { host.name.textContent = item.label; host.tile.querySelector('i').style.background = item.color; host.tile.querySelector('span').textContent = item.label; host.tile.setAttribute('aria-label', Palette.tool(tool).label + ': ' + item.label + '. Change'); }
+            });
+        }
+
+        // A phone has no room for the palette beside the map: its one button opens the same tiles as a sheet, with their names
+        function openPicker() {
+            if (!env.dialogs || env.busy()) return;
+            var tool = state.tool, list = Palette.items(tool), chosen = tileOf();
+            env.dialogs.open({
+                title: Palette.tool(tool).label, cls: 'narrow',
+                build: function (body, ctl) {
+                    var grid = el('div', 'pickgrid');
+                    grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', Palette.tool(tool).label + ' to paint with');
+                    list.forEach(function (item) {
+                        var b = el('button', 'pick'), chip = el('i');
+                        b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(item.id === chosen)); b.setAttribute('data-tile', String(item.id));
+                        chip.style.background = item.color; b.appendChild(chip); b.appendChild(el('span', '', item.label));
+                        b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });
+                        grid.appendChild(b);
+                    });
+                    body.appendChild(grid);
+                },
+                focus: '.pick[aria-checked="true"]', buttons: [{ text: 'Close', ghost: true }]
             });
         }
 
@@ -106,7 +130,7 @@
             var kind = state.tool, id = tileOf();
             if (id !== null) {
                 var item = Palette.itemOf(kind, id), made = Edit.ensureTile(env.file(), id, item ? item.name : '');
-                if (made.error) return null;
+                if (made.error) { if (env.say) env.say('This tile cannot be used', 'The map already holds as many different tiles as a map file can name.'); return null; }
                 if (made.grew) editor.rebase(env.rebase(made.bytes));
                 if (made.named || made.grew) env.onEdit();
             }
@@ -123,6 +147,8 @@
                     current.fill(cell.row, cell.column);
                     canvas.markDirty(current.takeDirty());
                     painter.end();
+                    state.fill = false;                                    // (Fill is for one click: the next press paints again)
+                    showButtons();
                     return false;
                 }
                 current.stamp(cell.row, cell.column, state.brush);
@@ -193,6 +219,7 @@
             });
         });
         host.fill.addEventListener('click', function () { state.fill = !state.fill; showButtons(); });
+        host.tile.addEventListener('click', openPicker);
         host.undo.addEventListener('click', undo);
         host.redo.addEventListener('click', redo);
         host.swatches.addEventListener('keydown', arrows);

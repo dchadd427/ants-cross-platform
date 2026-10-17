@@ -86,6 +86,7 @@
     // The map has changed (a stroke, an undo, a name written in the dictionary): the numbers, and the check again soon
     function edited() {
         showFacts();
+        $('check-dot').className = 'dot wait'; $('check-line').textContent = 'Checking\u2026';          // (not the old answer for the moment it takes)
         checkSoon();
     }
 
@@ -196,9 +197,9 @@
             doc: doc, win: win, canvas: canvas,
             host: {
                 tools: doc.querySelectorAll('[data-tool]'), box: $('palette-box'), title: $('palette-title'), swatches: $('palette'), name: $('palette-name'), hint: $('tool-hint'),
-                brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn')
+                tile: $('tile-btn'), brushes: doc.querySelectorAll('[data-brush]'), fill: $('fill-btn'), undo: $('undo-btn'), redo: $('redo-btn')
             },
-            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen(); }
+            file: function () { return map.file; }, rebase: rebase, onEdit: edited, busy: function () { return dialogs.isOpen(); }, dialogs: dialogs, say: function (t, m) { dialogs.message(t, m); }
         });
         win.addEventListener('beforeunload', function (e) { if (map && !tools.isSaved()) { e.preventDefault(); e.returnValue = ''; } });         // (a drawn map is not kept anywhere yet)
         Array.prototype.forEach.call(doc.querySelectorAll('[data-act]'), function (b) {

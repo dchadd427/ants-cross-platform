@@ -124,6 +124,13 @@
 
         function setStroke(next) { stroke = next; if (next) canvas.setAttribute('data-stroke', 'on'); else canvas.removeAttribute('data-stroke'); }       // (what a test reads: a stroke is going on)
 
+        // A stroke ends when its pointer lifts; it also ends when the browser lost the pointer without saying so (a button let go outside the window, a lost capture, a window that lost focus)
+        function endStroke() {
+            if (stroke) { painter.end(); setStroke(null); }
+            pending = null; pointers = {}; drag = null; pinch = null;
+            redraw();
+        }
+
         function cancelStroke() { if (stroke) { painter.cancel(); setStroke(null); } pending = null; }
 
         function down(e) {
@@ -170,7 +177,10 @@
             }
             var before = pointers[e.pointerId];
             pointers[e.pointerId] = p;
-            if (stroke && stroke.id === e.pointerId) { var inside = cellOf(p); if (inside) carryOn(inside); return; }
+            if (stroke && stroke.id === e.pointerId) {
+                if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();               // (the button was let go where this page could not hear it)
+                var inside = cellOf(p); if (inside) carryOn(inside); return;
+            }
             if (pending && pending.id === e.pointerId) {
                 if (Math.hypot(p.x - drag.x, p.y - drag.y) < TAP) return;
                 var first = pending.cell, now = cellOf(p);
@@ -264,6 +274,9 @@
         canvas.addEventListener('pointermove', move);
         canvas.addEventListener('pointerup', up);
         canvas.addEventListener('pointercancel', up);
+        canvas.addEventListener('lostpointercapture', function (e) { if (stroke && stroke.id === e.pointerId) endStroke(); });
+        win.addEventListener('blur', function () { if (stroke) endStroke(); });
+        doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });
         canvas.addEventListener('pointerleave', function () { hover = null; if (file) { chrome(); if (brushNow() > 0) redraw(); } });
         canvas.addEventListener('wheel', wheel, { passive: false });
         canvas.addEventListener('keydown', key);
