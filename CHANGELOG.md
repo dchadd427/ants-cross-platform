@@ -28,7 +28,7 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **The computer players fight in 187.** They go for your ants, gang up on one ant at a time, send hurt ants home to heal and come back, and wait at your hill when nobody is in reach.
 
-**Details:** [the 187 bots](docs/BOTS.md#187-the-brawl)
+**Details:** [the 187 bots](docs/BOT_187.md)
 
 ## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
 
