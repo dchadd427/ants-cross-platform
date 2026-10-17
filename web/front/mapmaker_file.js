@@ -67,7 +67,8 @@
 
     // The name of the file that a download of a map is saved as: the map's name without what a file name cannot hold, then ".lvl"
     function downloadName(name) {
-        var clean = String(name || '').replace(/[\u0000-\u001f\u007f\\\/:*?"<>|]/g, '_').replace(/^[\s.]+|[\s.]+$/g, '').slice(0, 40);
+        var clean = Array.from(String(name || '').replace(/[\u0000-\u001f\u007f\\\/:*?"<>|]/g, '_').replace(/^[\s.]+|[\s.]+$/g, '')).slice(0, 40).join('').replace(/[\s.]+$/, '');
+        if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(clean)) clean = '_' + clean;       // names that Windows keeps for devices
         return (clean || 'map') + '.lvl';
     }
 

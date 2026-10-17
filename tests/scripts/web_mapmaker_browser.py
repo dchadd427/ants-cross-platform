@@ -263,7 +263,7 @@ def run_part(part, tab, args, check, tiny, junk):
         size = page.ev("window.__blobs[0].size")
         check(size > 3000000 and size < 3300000, "of the 512 x 512 map's bytes (%s)" % size)
     elif part == "phone":
-        for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390)):
+        for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390), ("narrow", 340, 700)):
             print("[web map maker] phone, %s, %d x %d" % (label, w, h))
             tab.emulate(w, h, 2, mobile=True)
             page = Page(tab, args.web)
@@ -272,6 +272,9 @@ def run_part(part, tab, args, check, tiny, junk):
             page.choose_file(tiny)
             wait_for(lambda: page.state()["name"] == "TINY")
             page.shot(args.shots, "mapmaker-%s-classic" % label)
+            small = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button:not([disabled]), input:not([hidden])'), function (n) { if (n.offsetParent === null || n.type === 'file') return false; var b = n.getBoundingClientRect(); return b.width < 43.5 || b.height < 43.5; }).map(function (n) { return (n.textContent || n.id || n.getAttribute('data-act')) + ' ' + Math.round(n.getBoundingClientRect().width) + 'x' + Math.round(n.getBoundingClientRect().height); }))")
+            check(small == "[]", "every control that works is at least 44 pixels each way (%s)" % small)
+            check(page.ev("document.querySelector('.toolnote').offsetParent !== null"), "the note about the tools that are not there yet shows")
             bad = page.ev("JSON.stringify([].filter.call(document.querySelectorAll('button, input, a'), function (n) { if (n.offsetParent === null) return false; var b = n.getBoundingClientRect(); return b.right > window.innerWidth + 1 || b.bottom > window.innerHeight + 1 || b.left < -1; }).map(function (n) { return n.textContent || n.id; }))")
             check(bad == "[]", "every visible control is inside the screen (%s)" % bad)
             page.press_act("menu")
@@ -287,7 +290,7 @@ def run_part(part, tab, args, check, tiny, junk):
             check(wait_for(lambda: page.state()["rows"] == "300"), "an Extended map of 300 x 400 is made")
             # touch: two fingers zoom, one finger pans
             box = page.box("#map")
-            cx, cy = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+            cx, cy = box["x"] + box["w"] * 0.35, box["y"] + box["h"] * 0.7           # (left and low: the small map covers the top right)
             scale = page.state()["scale"]
             fingers = {}
 
@@ -295,7 +298,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [{"x": x, "y": y, "id": i, "radiusX": 10, "radiusY": 10, "force": .5} for i, (x, y) in points.items()]})
             touch("touchStart", {1: (cx - 40, cy), 2: (cx + 40, cy)})
             for i in range(1, 9):
-                touch("touchMove", {1: (cx - 40 - i * 10, cy), 2: (cx + 40 + i * 10, cy)})
+                touch("touchMove", {1: (cx - 40 - i * 4, cy), 2: (cx + 40 + i * 10, cy)})
             touch("touchEnd", {})
             time.sleep(0.3)
             check(page.state()["scale"] > scale * 1.5, "two fingers moving apart zoom in (%s to %s)" % (scale, page.state()["scale"]))

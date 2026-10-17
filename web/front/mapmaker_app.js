@@ -10,6 +10,7 @@
     function $(id) { return doc.getElementById(id); }
     function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
+    var opening = 0;
     var core = null, limits = null, dialogs = null, canvas = null, map = null;
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
@@ -50,11 +51,11 @@
         setTags('top-tags', kind); setTags('side-tags', kind);
         $('s-rows').textContent = f.rows; $('s-cols').textContent = f.columns;
         $('s-cells').textContent = MapSizes.number(f.cells);
-        $('s-file').textContent = MapSizes.sizeText(map.bytes.length);
-        var max = kind === 'classic' ? limits.classic.cells : limits.extended.cells;
-        $('meter-fill').style.width = Math.max(2, Math.min(100, Math.round(f.cells / max * 100))) + '%';
-        $('meter').setAttribute('aria-valuemax', max); $('meter').setAttribute('aria-valuenow', Math.min(f.cells, max));
-        $('meter-cap').textContent = MapSizes.number(f.cells) + ' of ' + MapSizes.number(max) + ' cells';
+        var facts = MapSizes.mapFacts(kind, f.cells, map.bytes.length, limits);
+        $('s-file').textContent = facts.file;
+        $('meter-fill').style.width = facts.percent + '%';
+        $('meter').setAttribute('aria-valuemax', facts.max); $('meter').setAttribute('aria-valuenow', Math.min(f.cells, facts.max));
+        $('meter-cap').textContent = facts.caption;
         var sum = MapChecks.summary(map.report);
         $('check-dot').className = 'dot ' + (sum.works ? 'ok' : 'bad');
         $('check-line').textContent = sum.text;
@@ -87,8 +88,9 @@
     function openFile(file) {
         var cap = core.limits('extended').json.read_bytes;
         if (file.size > cap) return dialogs.message('This file cannot be opened', 'This file is ' + (file.size / 1048576).toFixed(1) + ' MB; the map maker opens files of up to ' + Math.round(cap / 1048576) + ' MB.');
-        var name = file.name.replace(/\.[^.]*$/, '').slice(0, 40).replace(/^\s+|\s+$/g, '') || 'Opened map';
-        var done = function (buffer) { openBytes(new Uint8Array(buffer), name); };
+        var name = win.Array.from(file.name.replace(/\.[^.]*$/, '')).slice(0, 40).join('').replace(/^\s+|\s+$/g, '') || 'Opened map';      // (cut by characters, not in the middle of one)
+        var mine = ++opening;                                                // two files chosen quickly: only the last one is opened
+        var done = function (buffer) { if (mine === opening) openBytes(new Uint8Array(buffer), name); };
         if (file.arrayBuffer) file.arrayBuffer().then(done, function () { dialogs.message('This file cannot be opened', 'The file could not be read.'); });
         else { var reader = new win.FileReader(); reader.onload = function () { done(reader.result); }; reader.onerror = function () { dialogs.message('This file cannot be opened', 'The file could not be read.'); }; reader.readAsArrayBuffer(file); }
     }

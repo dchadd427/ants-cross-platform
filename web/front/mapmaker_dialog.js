@@ -37,11 +37,12 @@
                 box.setAttribute('aria-labelledby', h.id);
                 inner.appendChild(h);
             } else box.setAttribute('aria-label', spec.label || 'Dialog');
-            var foot = el('div', 'dlg-foot'), buttons = {};
+            var foot = el('div', 'dlg-foot'), buttons = {}, removeKeys = function () {};
             var ctl = { body: inner, foot: foot, el: box, buttons: buttons, closed: false };
             ctl.close = function () {
                 if (ctl.closed) return;
                 ctl.closed = true;
+                removeKeys();
                 if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
                 for (var i = 0; i < behind.length; i++) behind[i].removeAttribute('inert');
                 if (current === ctl) current = null;
@@ -61,7 +62,8 @@
             box.appendChild(inner);
             box.appendChild(foot);
             scrim.appendChild(box);
-            scrim.addEventListener('keydown', function (e) {
+            // The keys are heard on the document while the dialog is open: a click on plain text moves the focus to the page's body, and Escape must still close it
+            function onKey(e) {
                 if (e.key === 'Escape') { e.stopPropagation(); ctl.close(); return; }
                 if (e.key !== 'Tab') return;
                 var items = Array.prototype.filter.call(box.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null || n === doc.activeElement; });
@@ -69,7 +71,9 @@
                 var firstItem = items[0], last = items[items.length - 1];
                 if (e.shiftKey && (doc.activeElement === firstItem || !box.contains(doc.activeElement))) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && (doc.activeElement === last || !box.contains(doc.activeElement))) { e.preventDefault(); firstItem.focus(); }
-            });
+            }
+            doc.addEventListener('keydown', onKey, true);
+            removeKeys = function () { doc.removeEventListener('keydown', onKey, true); };
             for (var i = 0; i < behind.length; i++) behind[i].setAttribute('inert', '');
             host.appendChild(scrim);
             current = ctl;
@@ -179,7 +183,7 @@
                 return;
             }
             liveEl.appendChild(el('b', '', Sizes.number(live.cells)));
-            liveEl.appendChild(doc.createTextNode(' cells of ' + Sizes.number(live.max) + ' · the file will be ' + live.text));
+            liveEl.appendChild(doc.createTextNode((live.cells === 1 ? ' cell of ' : ' cells of ') + Sizes.number(live.max) + ' · the file will be ' + live.text));
             var fit = within(live.rows, live.columns);
             if (fit.rows && fit.columns && fit.cells) {
                 setNote('', kind === 'extended' ? 'i' : '', kind === 'extended' ? EXTENDED_NOTE : '');

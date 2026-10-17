@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- The map maker has a first page, mapmaker.html: make a Classic or an Extended map, open a map file from your computer, look around it, see its checks and download it. Drawing comes next.
+- A first map maker page (not linked from the site yet: /mapmaker.html): make a Classic or Extended map, open a map file, look around, check it, download it. Drawing comes next.
 
 ## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
 

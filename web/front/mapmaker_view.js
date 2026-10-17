@@ -105,7 +105,9 @@
         var t = Tiles.packedTables(), b = file.bytes, l1 = file.layer1, l2 = file.layer2, s = view.scale;
         var cw = Math.max(1, Math.ceil(w)), ch = Math.max(1, Math.ceil(h));
         if (scratch.width !== cw || scratch.height !== ch) { scratch.width = cw; scratch.height = ch; }
-        var sctx = scratch.getContext('2d'), image = sctx.createImageData(cw, ch), px = new Uint32Array(image.data.buffer);
+        var sctx = scratch.getContext('2d'), image = scratch.keptImage;
+        if (!image || image.width !== cw || image.height !== ch) image = scratch.keptImage = sctx.createImageData(cw, ch);        // (one picture kept for every frame)
+        var px = new Uint32Array(image.data.buffer);
         var x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, columns = new Int32Array(cw), x, y;
         for (x = 0; x < cw; x++) { var c = Math.floor((x + 0.5 - x0) / s); columns[x] = c < 0 || c >= file.columns ? -1 : c; }
         var back = Tiles.hexToPacked('#0b1612');

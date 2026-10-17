@@ -1,5 +1,5 @@
 /* The map maker's page (web/mapmaker.html), in the Classic look of the front page (classic.css): the top bar, the tools, the canvas with its small map, the side panel, the dialogs and the checks card,
-   as the approved pictures draw them on a desktop (1280 x 800), a phone held upright (390 x 844) and a phone held sideways (844 x 390). The colors are classic.css's tokens, and four more
+   laid out for a desktop (1280 x 800), a phone held upright (390 x 844) and a phone held sideways (844 x 390). The colors are classic.css's tokens, and four more
    for the kind tags and the neutral badge (blue-grey on purpose: "New version only" is a note, not a fault). */
 :root {
     --nv-bg: #12222c; --nv-ink: #cfe6f5; --nv-edge: #4f86a8;
@@ -9,7 +9,8 @@
 }
 html, body { height: 100%; }
 body { overflow: hidden; }
-button { font: inherit; color: inherit; }
+button { font: inherit; color: inherit; touch-action: manipulation; }
+.btn, .tool, .zoom button, .finds .go { touch-action: manipulation; }
 .muted { color: var(--muted); }
 
 /* tags and badges */
@@ -30,6 +31,7 @@ button { font: inherit; color: inherit; }
 .edname { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
 .edname .nm { width: auto; flex: 0 1 300px; min-width: 120px; min-height: 44px; font-size: 18px; }
 .edmenu { display: flex; gap: 10px; }
+.edmenu .btn.sm { min-height: 40px; }
 .btn { white-space: nowrap; }
 .btn[disabled] { opacity: .45; cursor: default; }
 .edbody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 270px; gap: 18px; padding: 8px 28px 28px 28px; }
@@ -40,6 +42,7 @@ button { font: inherit; color: inherit; }
 .tool[aria-pressed="true"] { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
 .tool i { width: 18px; height: 18px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .5); }
 .toolnote { font-size: 13px; line-height: 1.35; color: var(--muted); }
+.toolnote .mob { display: none; }
 .canvaswrap { position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 .cv { position: relative; flex: 1 1 auto; min-height: 0; background: #0b1612; }
 .cv canvas.map { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; cursor: grab; }
@@ -126,13 +129,16 @@ button { font: inherit; color: inherit; }
     .edtop { padding: 10px 14px 6px; gap: 8px 10px; flex-wrap: wrap; align-items: center; } .edtop .edmenu { order: 2; margin-left: auto; } .edtop .edname { order: 3; flex: 1 1 100%; flex-wrap: nowrap; }
     .edlogo { width: 64px; }
     .edname { gap: 6px; }
-    .edname .nm { min-width: 0; flex: 1 1 110px; font-size: 16px; padding: 4px 10px; min-height: 40px; }
+    .edname .nm { min-width: 0; flex: 1 1 110px; font-size: 16px; padding: 4px 10px; min-height: 44px; }
+    .btn.sm, .edmenu .btn.sm { min-height: 44px; }
+    .zoom button { width: 44px; height: 44px; }
     .edname .tags { flex: none; } .edname .tag, .edname .badge-nv { font-size: 12px; padding: 1px 6px; }
     .dsk { display: none !important; } .mob { display: flex; }
     .edbody { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; padding: 4px 14px 16px; }
-    .canvaswrap { order: 1; } .tools { order: 2; flex-direction: row; overflow: hidden; padding: 8px; gap: 8px; } .side { order: 3; }
-    .tools h3, .toolnote { display: none; }
-    .tool { flex: 1 1 0; flex-direction: column; justify-content: center; min-width: 0; min-height: 56px; font-size: 11.5px; letter-spacing: -.01em; gap: 3px; padding: 4px 1px; text-align: center; } .tool i { width: 16px; height: 16px; }
+    .canvaswrap { order: 1; } .tools { order: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); overflow: hidden; padding: 4px; gap: 4px; } .side { order: 3; }
+    .tools h3 { display: none; }
+    .toolnote { grid-column: 1 / -1; font-size: 12px; padding: 0 4px 2px; } .toolnote .dsk { display: none; } .toolnote .mob { display: inline; }
+    .tool { flex-direction: column; justify-content: center; min-width: 44px; min-height: 56px; font-size: 11.5px; letter-spacing: -.01em; gap: 3px; padding: 4px 1px; text-align: center; } .tool i { width: 16px; height: 16px; }
     .side { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; gap: 8px 12px; overflow: visible; }
     .side .kv, .side .meterbox, .side .checkline, .side h3, .side .sidetags, .side .chkbtn { display: none; }
     .side .phone-row { display: flex; width: 100%; align-items: center; gap: 10px; justify-content: space-between; font-size: 17px; }
@@ -156,28 +162,29 @@ button { font: inherit; color: inherit; }
 @media (min-width: 601px) and (max-height: 450px) {
     .edtop { padding: 10px 16px 6px; gap: 10px; }
     .edlogo { width: 54px; }
-    .edname .nm { min-height: 38px; font-size: 16px; min-width: 150px; padding: 3px 10px; }
+    .edname .nm { min-height: 44px; font-size: 16px; min-width: 150px; padding: 3px 10px; }
     .edbody { grid-template-columns: 84px minmax(0, 1fr) 214px; gap: 10px; padding: 4px 16px 12px; }
-    .tools { padding: 6px; gap: 6px; }
-    .tools h3, .toolnote { display: none; }
-    .tool { justify-content: center; min-height: 37px; font-size: 12px; padding: 2px; text-align: center; } .tool i { display: none; }
+    .tools { padding: 6px; gap: 4px; }
+    .tools h3 { display: none; }
+    .toolnote { font-size: 11.5px; line-height: 1.25; } .toolnote .dsk { display: none; } .toolnote .mob { display: inline; }
+    .tool { justify-content: center; min-height: 32px; font-size: 12px; padding: 2px; text-align: center; } .tool:not([disabled]) { min-height: 44px; } .tool i { display: none; }
     .dsk { display: none !important; } .mob { display: flex; } .sidetags { display: none; } .cvbar .dsk { display: none; }
     .side { padding: 8px 10px; gap: 8px; }
     .side .kv { font-size: 13px; gap: 1px 8px; } .side .meter-cap { font-size: 12px; } .side .checkline { font-size: 13px; padding: 5px 8px; }
     .side h3 { display: none; }
-    .cvbar { padding: 4px 10px; font-size: 13px; } .zoom button { width: 30px; height: 30px; }
+    .cvbar { padding: 4px 10px; font-size: 13px; } .zoom button { width: 44px; height: 44px; }
     .minimap { width: 120px; top: 6px; right: 6px; }
     .minimap div { display: none; }
-    .btn.sm { min-height: 38px; padding: 4px 12px; font-size: 14px; }
+    .btn.sm, .edmenu .btn.sm { min-height: 44px; padding: 4px 12px; font-size: 14px; }
     .scrim { padding: 8px 14px; }
     .dlg-in { padding: 10px 16px 4px; }
     .dlg h2 { font-size: 21px; margin-bottom: 0; }
     .dlg .lead { font-size: 15px; margin-bottom: 6px; }
     .dlg-foot { padding: 8px 16px 10px; }
-    .dlg-foot .btn { min-height: 40px; padding: 4px 16px; font-size: 15px; }
+    .dlg-foot .btn { min-height: 44px; padding: 4px 16px; font-size: 15px; }
     .kind { padding: 8px 10px 8px 42px; gap: 2px; } .kind .rb { left: 10px; top: 10px; width: 20px; height: 20px; } .kind .kt { font-size: 17px; } .kind .kl, .kind .kx { font-size: 13.5px; line-height: 1.25; }
     .kinds { gap: 8px; margin-bottom: 6px; }
-    .fld input { min-height: 38px; font-size: 16px; padding: 3px 10px; width: 90px; } .fld label { font-size: 12.5px; margin-bottom: 1px; }
+    .fld input { min-height: 44px; font-size: 16px; padding: 3px 10px; width: 90px; } .fld label { font-size: 12.5px; margin-bottom: 1px; }
     .live { font-size: 13.5px; }
     .note { font-size: 13.5px; padding: 6px 10px; margin: 5px 0; }
     .ccard { padding: 10px 14px; } .ccard .hl { font-size: 19px; margin-bottom: 4px; } .ccard .hl .mk { width: 28px; height: 28px; font-size: 18px; } .finds li { padding: 5px 0; font-size: 13.5px; }

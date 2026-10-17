@@ -21,7 +21,7 @@
         function measure() {
             var box = canvas.getBoundingClientRect();
             w = Math.max(1, Math.round(box.width)); h = Math.max(1, Math.round(box.height));
-            dpr = Math.min(3, win.devicePixelRatio || 1);
+            dpr = Math.min(3, win.devicePixelRatio || 1, Math.sqrt(16000000 / (w * h)));       // (at most 16 million pixels behind the canvas)
             canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
         }
 

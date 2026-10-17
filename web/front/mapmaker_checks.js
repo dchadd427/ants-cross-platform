@@ -1,4 +1,4 @@
-// The checks card of the map maker (docs/MAP_EDITOR.md): the answer of the map core's `checkMap` for a map, as the approved picture draws it: the kind, the headline, the neutral badge
+// The checks card of the map maker (docs/MAP_EDITOR.md): the answer of the map core's `checkMap` for a map, as it is shown: the kind, the headline, the neutral badge
 // "New version only" of an Extended map, and the findings in the checker's own sentences under the three marks (stops the map, warning, good to know). A sentence can hold text of the
 // file, so everything is put in with textContent. A plain ES5 script that a page and node can load.
 (function (root, factory) {

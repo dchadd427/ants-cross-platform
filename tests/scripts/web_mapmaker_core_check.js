@@ -10,7 +10,7 @@
 //   A  a blank map of each kind and size is read by the page as the core reports it (rows, columns, kind), and a Classic one has the bytes that the live line says
 //   B  every map of the library (540) is read, goes up to an Extended map through the core, and is read again with the same rows, columns and every tile of both layers,
 //      the same start markers and food piles as the core counts: the page reads version 8 and version 9 where the core does
-//   C  the limits as the cards say them, and the core's refusals of a size as the sentences of the approved pictures (1c: too many rows)
+//   C  the limits as the cards say them, and the core's refusals of a size as short sentences (too many rows offers an Extended map)
 //   D  the check of a new map and of an opened one by the profile the page uses ("extended": both kinds), in the words of the checks card
 //   E  an older module is refused by its interface version, before anything is asked of it
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
@@ -105,12 +105,12 @@ function caseC(core) {
         const answer = kind === 'classic' ? core.blank(rows, columns, 485, 6, 10, 'new_map') : core.blankExtended(rows, columns, 485, 6, 10);
         return answer.status === 1 ? Sizes.refusal(answer.error) : answer.status;
     };
-    equal(refused('classic', 100, 80), { text: 'A Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too).', offersExtended: true }, 'picture 1c');
+    equal(refused('classic', 100, 80), { text: 'A Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too).', offersExtended: true }, 'too many rows');
     equal(refused('classic', 91, 10).offersExtended, true, 'one row too many offers the Extended map');
     equal(refused('classic', 90, 131), { text: 'The grid has 90 rows x 131 columns, more than the 90 x 130 allowed here.', offersExtended: false }, 'one column too many');
-    equal(refused('classic', 90, 120).text, 'The grid has 90 rows x 120 columns, 10800 cells, more than the 10000 allowed here.', 'too many cells');
-    equal(refused('extended', 513, 513).text, 'The grid has 513 rows x 513 columns, 263169 cells, more than the 262144 allowed here.', 'too many cells in an Extended map');
-    equal(refused('extended', 1025, 10).text, 'The grid has 1025 rows x 10 columns, more than the 1024 x 1024 allowed here.', 'a side of more than 1,024');
+    equal(refused('classic', 90, 120).text, 'The grid has 90 rows x 120 columns, 10,800 cells, more than the 10,000 allowed here.', 'too many cells');
+    equal(refused('extended', 513, 513).text, 'The grid has 513 rows x 513 columns, 263,169 cells, more than the 262,144 allowed here.', 'too many cells in an Extended map');
+    equal(refused('extended', 1025, 10).text, 'The grid has 1,025 rows x 10 columns, more than the 1,024 x 1,024 allowed here.', 'a side of more than 1,024');
     // the page's own test of a size agrees with the core on both sides of every limit
     const fits = (kind, rows, columns) => (kind === 'classic' ? rows <= limits.classic.rows && columns <= limits.classic.columns && rows * columns <= limits.classic.cells
         : rows <= limits.extended.longest && columns <= limits.extended.longest && rows * columns <= limits.extended.cells);
@@ -136,6 +136,9 @@ function caseD(core) {
     const tall = core.checkMap(core.blank(100, 80, 485, 6, 10, 'game').bytes, 'extended').json;
     check(tall.findings.some((f) => f.code === 'rows_beyond_wall' && f.row === 90), 'a Classic map of 100 rows has the warning about the 91st row, at row 90');
     check(!tall.findings.some((f) => f.place_limit), 'and no limit of the place: the page judges by the profile that takes both kinds');
+    const wide = core.blank(80, 200, 485, 6, 10, 'game').bytes, wideFile = File.parse(wide);
+    check(wideFile.ok && core.checkMap(wide, 'extended').json.judged, 'a legal Classic map of 80 x 200 cells is opened');
+    equal(Sizes.mapFacts('classic', wideFile.cells, wide.length, Sizes.limitsOf(core.limits('new_map').json, core.limits('extended').json)).caption, '16,000 of 65,536 cells', 'and its meter counts against the limit of an opened Classic map');
     check(core.checkMap(new Uint8Array(5), 'extended').status === 0, 'a file that is no map still gets an answer to show');
 }
 

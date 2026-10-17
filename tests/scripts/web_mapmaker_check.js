@@ -9,9 +9,9 @@
 //      tests/scripts/test_web_mapmaker.py computes again in Python), a version 9 file made here is read, and a file that is cut, wrong or empty is refused
 //   B  the view: a zoom keeps the point under the pointer, a view never leaves the map, a cell and its place on the screen give each other, the first view of a small and of a
 //      big map, and that a frame of a 512 x 512 map draws only the tiles that are on the screen (one rectangle each), or a picture of the canvas when the tiles are small
-//   C  the sizes: the limits as the cards say them, the live line of the three sizes of the approved pictures, the refusals of the core turned into their sentences
-//   D  the checks card: the picture's headline, marks and links, from made-up reports; a sentence that holds markup stays text; no link where a finding has no place
-//   E  the colors of the tiles: the kinds of ground and object that the pictures show, and the packed form that the pixel loop uses
+//   C  the sizes: the limits as the cards say them, the live line of three sizes, the refusals of the core turned into their sentences
+//   D  the checks card: the headline, marks and links, from made-up reports; a sentence that holds markup stays text; no link where a finding has no place
+//   E  the colors of the tiles: the kinds of ground and object that the page shows, and the packed form that the pixel loop uses
 // Exit status 0 when everything passes, 1 otherwise. (The page and the real module together: web_mapmaker_core_check.js and the opt-in browser check.)
 'use strict';
 
@@ -105,6 +105,9 @@ function caseA() {
     const huge = Uint8Array.from(good);
     new DataView(huge.buffer).setUint32(18 + 3 + 2 + 22, 100000, true);
     check(File.parse(huge).ok === false, 'a header that announces 100,000 rows is refused');
+    equal([File.downloadName('CON'), File.downloadName('nul.txt'), File.downloadName('COM3'), File.downloadName('Console')], ['_CON.lvl', '_nul.txt.lvl', '_COM3.lvl', 'Console.lvl'], 'names that Windows keeps for devices');
+    const cut = File.downloadName('\u{1F41C}'.repeat(60));
+    check(cut === '\u{1F41C}'.repeat(40) + '.lvl', 'a long name is cut between characters, not inside one');
     equal([File.downloadName('Sunny Picnic'), File.downloadName('a/b\\c:d*e?f"g<h>i|j'), File.downloadName('  ..  '), File.downloadName(''), File.downloadName('x'.repeat(100)).length], ['Sunny Picnic.lvl', 'a_b_c_d_e_f_g_h_i_j.lvl', 'map.lvl', 'map.lvl', 44], 'the name of a download');
 }
 
@@ -222,35 +225,43 @@ function fakeScratch() {
 }
 
 function caseC() {
-    const limits = Sizes.limitsOf({ classic: { rows: 90, columns: 130, cells: 10000 } }, { extended: { rows: 1024, columns: 1024, cells: 262144 } });
-    equal(limits, { classic: { rows: 90, columns: 130, cells: 10000 }, extended: { side: 512, cells: 262144, longest: 1024 } }, 'the limits as the cards need them');
+    const limits = Sizes.limitsOf({ classic: { rows: 90, columns: 130, cells: 10000 } }, { classic: { rows: 256, columns: 256, cells: 65536 }, extended: { rows: 1024, columns: 1024, cells: 262144 } });
+    equal(limits, { classic: { rows: 90, columns: 130, cells: 10000, openCells: 65536 }, extended: { side: 512, cells: 262144, longest: 1024 } }, 'the limits as the cards need them');
     const words = (kind) => Sizes.limitLine(kind, limits).map((p) => p[0]).join('');
-    const other = Sizes.limitsOf({ classic: { rows: 80, columns: 120, cells: 9000 } }, { extended: { rows: 2048, columns: 1500, cells: 1000000 } });
-    equal(other, { classic: { rows: 80, columns: 120, cells: 9000 }, extended: { side: 1000, cells: 1000000, longest: 2048 } }, 'other limits are taken as they are (nothing is kept by hand)');
+    const other = Sizes.limitsOf({ classic: { rows: 80, columns: 120, cells: 9000 } }, { classic: { rows: 256, columns: 256, cells: 65536 }, extended: { rows: 2048, columns: 1500, cells: 1000000 } });
+    equal(other, { classic: { rows: 80, columns: 120, cells: 9000, openCells: 65536 }, extended: { side: 1000, cells: 1000000, longest: 2048 } }, 'other limits are taken as they are (nothing is kept by hand)');
     equal(Sizes.limitLine('classic', other).map((p) => p[0]).join(''), 'Up to 80 rows and 120 columns, 9,000 cells in all.', 'and the Classic card says them');
     equal(Sizes.limitLine('extended', other).map((p) => p[0]).join(''), 'Up to 1000 x 1000 cells (1,000,000 in all). The longest side can be 2,048.', 'and the Extended card');
-    equal(words('classic'), 'Up to 90 rows and 130 columns, 10,000 cells in all.', 'the Classic card, as the picture says it');
+    equal(words('classic'), 'Up to 90 rows and 130 columns, 10,000 cells in all.', 'the Classic card');
     equal(words('extended'), 'Up to 512 x 512 cells (262,144 in all). The longest side can be 1,024.', 'the Extended card');
     equal(Sizes.limitLine('classic', limits).filter((p) => p[1]).map((p) => p[0]), ['90 rows', '130 columns'], 'bold in the Classic card');
     equal(Sizes.limitLine('extended', limits).filter((p) => p[1]).map((p) => p[0]), ['512 x 512'], 'bold in the Extended card');
     const line = (kind, r, c) => { const l = Sizes.liveLine(kind, r, c, limits); return l && [Sizes.number(l.cells), Sizes.number(l.max), l.text]; };
-    equal(line('classic', '31', '31'), ['961', '10,000', 'about 17 KB'], 'picture 1a');
-    equal(line('extended', '300', '400'), ['120,000', '262,144', 'about 1.4 MB'], 'picture 1b');
-    equal(line('classic', '100', '80'), ['8,000', '10,000', 'about 99 KB'], 'picture 1c');
+    equal(line('classic', '31', '31'), ['961', '10,000', 'about 17 KB'], '31 x 31 Classic');
+    equal(line('extended', '300', '400'), ['120,000', '262,144', 'about 1.4 MB'], '300 x 400 Extended');
+    equal(line('classic', '100', '80'), ['8,000', '10,000', 'about 99 KB'], '100 x 80 Classic');
     equal(line('classic', '', '80'), null, 'an empty box');
     equal(line('classic', '0', '80'), null, 'zero');
     equal(line('classic', '1e3', '80'), null, 'not a whole number');
     equal(line('classic', ' 12 ', '80')[0], '960', 'spaces round a number');
     equal(line('classic', '-5', '5'), null, 'a minus sign');
     equal(Sizes.number(1234567), '1,234,567', 'numbers get commas');
+    equal(Sizes.cellsWord(1), '1 cell', 'one cell'); equal(Sizes.cellsWord(961), '961 cells', 'many cells');
+    equal(Sizes.sizeText(5e12), 'over 1 GB', 'a huge file size does not become a huge number of megabytes');
+    // the side panel: a legal opened Classic map of 16,000 cells is not "16,000 of 10,000"
+    equal(Sizes.mapFacts('classic', 961, 16940, limits), { max: 10000, percent: 10, caption: '961 of 10,000 cells', file: 'about 17 KB' }, 'facts of a small Classic map');
+    equal(Sizes.mapFacts('classic', 16000, 200000, limits), { max: 65536, percent: 24, caption: '16,000 of 65,536 cells', file: 'about 195 KB' }, 'facts of an opened Classic map of 16,000 cells (80 x 200)');
+    equal(Sizes.mapFacts('classic', 65536, 900000, limits).percent, 100, 'a full Classic map');
+    equal(Sizes.mapFacts('extended', 120000, 1445386, limits), { max: 262144, percent: 46, caption: '120,000 of 262,144 cells', file: 'about 1.4 MB' }, 'facts of an Extended map');
     equal([Sizes.sizeText(1048575), Sizes.sizeText(1048576), Sizes.sizeText(3151114), Sizes.sizeText(0)], ['about 1024 KB', 'about 1.0 MB', 'about 3.0 MB', 'about 0 KB'], 'file sizes');
     equal(Sizes.blankBytes(961), 16940, 'the size of a blank 31 x 31 map is the writer\'s');
     const tall = 'a blank map of 100 rows x 80 columns cannot be written: the grid has 100 rows x 80 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?';
-    equal(Sizes.refusal(tall), { text: 'A Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too).', offersExtended: true }, 'the sentence of picture 1c');
+    equal(Sizes.refusal(tall), { text: 'A Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too).', offersExtended: true }, 'the sentence for too many rows');
     equal(Sizes.refusal('a blank map of 90 rows x 131 columns cannot be written: the grid has 90 rows x 131 columns, more than the 90 x 130 allowed here'),
         { text: 'The grid has 90 rows x 131 columns, more than the 90 x 130 allowed here.', offersExtended: false }, 'too many columns');
+    equal(Sizes.refusal('a blank map of 90 rows x 120 columns cannot be written: the grid has 90 rows x 120 columns, 10800 cells, more than the 10000 allowed here').text, 'The grid has 90 rows x 120 columns, 10,800 cells, more than the 10,000 allowed here.', 'numbers of a refusal get commas as the live line has them');
     equal(Sizes.refusal('a blank map of 513 rows x 513 columns cannot be written: the grid has 513 rows x 513 columns, 263169 cells, more than the 262144 allowed here').offersExtended, false, 'too many cells for an Extended map offers nothing');
-    equal(Sizes.refusal('a blank map needs 1 to 65535 rows and columns').text, 'A blank map needs 1 to 65535 rows and columns.', 'a sentence with no prefix');
+    equal(Sizes.refusal('a blank map needs 1 to 65535 rows and columns').text, 'A blank map needs 1 to 65,535 rows and columns.', 'a sentence with no prefix');
 }
 
 // A document that is just enough for the checks card
@@ -273,7 +284,7 @@ function caseD() {
     const works = { kind: 'classic', judged: true, works: true, headline: 'Works in the original game', badge: '', findings: [{ severity: 'note', code: 'object_outside_map', message: 'one plant stands outside the map (row 31, column 12): the original ignores it', row: 31, column: 12 }] };
     const shown = [];
     let card = Checks.render(doc, works, { onShow: (r, c) => shown.push([r, c]) });
-    equal(texts(card, 'hl'), ['✓Works in the original game'], 'picture 5, Classic works: the headline');
+    equal(texts(card, 'hl'), ['✓Works in the original game'], 'Classic works: the headline');
     equal(texts(card, 'clean'), [Checks.ALL_GOOD], 'and the line that says nothing is to fix');
     equal(texts(card, 'sev'), ['Good to know'], 'a note is "Good to know"');
     equal(texts(card, 'msg'), ['One plant stands outside the map (row 31, column 12): the original ignores it'], 'the sentence of the checker with a capital');
@@ -289,7 +300,7 @@ function caseD() {
             { severity: 'warning', code: 'starting_ants_missing', message: 'Red has no starting ants (no start marker, tile 155)', row: -1, column: -1 }]
     };
     card = Checks.render(doc, no, { onShow() {} });
-    equal(texts(card, 'sev'), ['Stops the map', 'Warning', 'Warning'], 'picture 5, Classic does not: the marks, in the checker\'s order');
+    equal(texts(card, 'sev'), ['Stops the map', 'Warning', 'Warning'], 'Classic does not: the marks, in the checker\'s order');
     equal(texts(card, 'go'), ['Show me: row 12, column 40'], 'a link for the finding that has a place and none for the others');
     equal(texts(Checks.render(doc, no, null), 'go'), [], 'and no link at all without a handler');
     equal(texts(card, 'clean'), [], 'no "nothing to fix" while something stops the map');
@@ -298,7 +309,7 @@ function caseD() {
     equal(texts(Checks.render(doc, tall, { onShow() {} }), 'go'), ['Show me: row 90'], 'a finding of a row only says the row');
     const ext = { kind: 'extended', judged: true, works: true, headline: 'Works in the new version', badge: 'New version only', findings: [{ severity: 'note', code: 'not_for_original', message: 'not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads', row: -1, column: -1 }] };
     card = Checks.render(doc, ext, null);
-    equal(texts(card, 'badge-nv'), ['New version only'], 'picture 5, Extended works: the neutral badge');
+    equal(texts(card, 'badge-nv'), ['New version only'], 'Extended works: the neutral badge');
     equal(texts(card, 'foot'), [Checks.NOT_A_FAULT], 'and the line that says it is not a fault');
     equal(texts(card, 'tag'), ['Extended map'], 'the kind is Extended');
     equal(texts(Checks.render(doc, Object.assign({}, ext, { works: false, headline: 'Does not work in the new version' }), null), 'foot'), [], 'the line is for a map that works only');

@@ -23,6 +23,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONT = os.path.join(REPO, "web", "front")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_check.js")
+DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
 SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_app.js")
@@ -33,8 +34,8 @@ def read(*parts):
         return f.read()
 
 
-def run_check(front=None):
-    args = [NODE, CHECK] + (["--front", front] if front else [])
+def run_check(front=None, script=CHECK):
+    args = [NODE, script] + (["--front", front] if front else [])
     return subprocess.run(args, capture_output=True, text=True, timeout=300)
 
 
@@ -74,6 +75,35 @@ class TheCodeRuns(unittest.TestCase):
         for part in ("A the file reader", "B the view", "C the sizes", "D the checks card", "E the colors of the tiles"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
+    def test_the_dialogs_pass_their_checks_on_a_fake_dom(self):
+        done = run_check(script=DIALOG_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("RUNNING: A the box ... PASS", done.stdout)
+        self.assertIn("RUNNING: B New map ... PASS", done.stdout)
+
+    def test_the_dialog_check_can_fail_on_broken_copies_of_the_script(self):
+        mutants = {
+            "a page that stays live behind a dialog": ("setAttribute('inert', '')", "setAttribute('data-was-inert', '')"),
+            "Escape heard only inside the box (not after a click on plain text)": ("doc.addEventListener('keydown', onKey, true);", "scrim.addEventListener('keydown', onKey);"),
+            "a key listener that is never taken off": ("doc.removeEventListener('keydown', onKey, true);", "void 0;"),
+            "a Tab that does not wrap": ("{ e.preventDefault(); firstItem.focus(); }", "{ e.preventDefault(); }"),
+            "a focus that is not given back": ("opener.focus();", "void 0;"),
+            "an Extended map that loses the sizes typed for the Classic map": ("if (!keepSizes) {", "if (true) {"),
+            "a refusal that is not shown": ("setNote('bad', '!', why.text, button);", "setNote('', '', '');"),
+            "a Make map that stays on for a size that is too big": ("ctl.setDisabled('make', true);\n        }\n\n        function make()", "}\n\n        function make()"),
+        }
+        for what, (old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", "mapmaker_dialog.js")
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in mapmaker_dialog.js exactly once: %s" % old)
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, "mapmaker_dialog.js"), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, DIALOG_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
     def test_the_reader_sees_every_map_of_the_library_as_a_second_reading_does(self):
         done = subprocess.run([NODE, CHECK, "--list-maps"], capture_output=True, text=True, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -98,6 +128,8 @@ class TheCodeRuns(unittest.TestCase):
             "a sentence that is not capitalized": ("mapmaker_checks.js", "body.appendChild(el('div', 'msg', capital(f.message)));", "body.appendChild(el('div', 'msg', f.message));"),
             "a link where the finding has no place": ("mapmaker_checks.js", "if (typeof f.row !== 'number' || f.row < 0) return null;", "if (typeof f.row !== 'number') return null;"),
             "a hill with the wrong color": ("mapmaker_tiles.js", "[246, 246, '#4a5fc8']", "[246, 246, '#c0392b']"),
+            "a meter that counts an opened Classic map against the limit of a new one": ("mapmaker_sizes.js", "(cells <= limits.classic.cells ? limits.classic.cells : limits.classic.openCells)", "limits.classic.cells"),
+            "a download named like a Windows device": ("mapmaker_file.js", "clean = '_' + clean;", "void 0;"),
             "a meter that cannot show the Extended limit": ("mapmaker_sizes.js", "side: Math.floor(Math.sqrt(e.cells))", "side: 512"),
         }
         for what, (name, old, new) in mutants.items():
@@ -157,7 +189,11 @@ class ThePage(unittest.TestCase):
 
     def test_the_scripts_are_loaded_in_their_order_with_the_core_first_and_the_app_last(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
-        self.assertEqual(tags, ["lvl_core.js", "lvl_core_api.js"] + ["front/" + name for name in SCRIPTS])
+        wanted = ["lvl_core.js", "lvl_core_api.js"] + ["front/" + name for name in SCRIPTS]
+        self.assertEqual(sorted(tags), sorted(wanted), "the page loads these scripts and no other")
+        order = [tags.index(name) for name in wanted]
+        self.assertEqual(order, sorted(order), "the core first, then the helpers before the dialogs, the canvas and the app (the app last)")
+        self.assertEqual(tags[-1], "front/mapmaker_app.js")
         self.assertEqual(self.page.count("<script"), len(tags), "no inline script")
         self.assertLess(self.page.index("front/mapmaker_app.js"), self.page.index("</body>"))
 
@@ -228,14 +264,14 @@ class ThePage(unittest.TestCase):
         self.assertIn("aria-invalid", dialog)
         self.assertIn("aria-live", dialog)
 
-    def test_the_size_boxes_and_the_cards_say_what_the_pictures_say(self):
+    def test_the_size_boxes_and_the_cards_say_what_they_should(self):
         dialog = self.code["mapmaker_dialog.js"]
         self.assertIn("'Works in the original game and in the new version.'", dialog)
         self.assertIn("'Bigger and taller. Works in the new version only: the original game cannot open it.'", dialog)
         self.assertIn("'Only the new version can open an Extended map.'", dialog)
         self.assertIn("'Make it an Extended map'", dialog)
         self.assertIn("'What kind of map do you want to make?'", dialog)
-        self.assertIn("' cells of ' + Sizes.number(live.max) + ' \u00b7 the file will be ' + live.text", dialog)
+        self.assertIn("' cells of ') + Sizes.number(live.max) + ' \u00b7 the file will be ' + live.text", dialog)
 
 
 class TheImageCarriesThePage(unittest.TestCase):
