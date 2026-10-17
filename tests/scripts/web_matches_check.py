@@ -447,12 +447,12 @@ def main():
             check(tab.ev("[].map.call(document.querySelectorAll('#sections > section'), function (s) { return s.id; })") == ["result", "replay", "board", "more", "about"] and
                   tab.ev("document.querySelector('#more').textContent") == "More statsOver time and activity are counted from the recording, and this one could not be counted. Only the totals above were kept.",
                   "a match that the replay pass could not count (the marker): no stats sections, the line says so")
-            check(tab.ev("document.querySelector('#result .verdict').textContent") == "Ann won500  \u2013  300  \u2013  200" and tab.ev("document.querySelectorAll('#board .share li').length") == 3, "... and it is no part of the verdict or of the share: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
+            check(tab.ev("document.querySelector('#result .verdict').textContent") == "Ann won500  –  300  –  200" and tab.ev("document.querySelectorAll('#board .share li').length") == 3, "... and it is no part of the verdict or of the share: %r" % tab.ev("document.querySelector('#result .verdict').textContent"))
             tab.close()
             tab = new_tab()
             open_page(tab, "/match.html?id=" + ID_DOLLAR)
             until(tab, "!!document.getElementById('board')")
-            check(tab.ev("document.title") == "Ant$&s$'x, 1 v 1 \u2014 Ants (1998)" and tab.ev("document.querySelector('#result h1').firstChild.textContent") == "Ant$&s$'x", "a map name made of replace patterns is text in the title and the heading (%r)" % tab.ev("document.title"))
+            check(tab.ev("document.title") == "Ant$&s$'x, 1 v 1 — Ants (1998)" and tab.ev("document.querySelector('#result h1').firstChild.textContent") == "Ant$&s$'x", "a map name made of replace patterns is text in the title and the heading (%r)" % tab.ev("document.title"))
             tab.close()
             tab = new_tab()
             open_page(tab, "/matches.html?q=quin")
@@ -537,6 +537,47 @@ def main():
             time.sleep(1.0)
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True and tab.ev("(function () { var r = document.querySelector('iframe').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth; })()") is True, "a phone: the frame fits the window")
             shot(tab, "frame-phone")
+            # the match page's Fullscreen button: the GAME (the stage of the page in the frame) goes fullscreen and fills the screen, not the frame with the bar under the picture
+            tab.ev("document.getElementById('rep-full').scrollIntoView({block: 'center'})")
+            time.sleep(0.3)
+            pt = tab.ev("(function () { var r = document.getElementById('rep-full').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+            for kind in ("mousePressed", "mouseReleased"):
+                tab.call("Input.dispatchMouseEvent", {"type": kind, "x": pt[0], "y": pt[1], "button": "left", "clickCount": 1, "buttons": 1 if kind == "mousePressed" else 0})
+            what = ("(function () { var f = document.querySelector('iframe'), d = f.contentDocument, e = d.fullscreenElement; "
+                    "var s = d.getElementById('game-stage').getBoundingClientRect(), b = d.getElementById('game-container').getBoundingClientRect(); "
+                    "return [e ? e.id || e.tagName : '', Math.round(s.width), Math.round(s.height), Math.round(b.width), innerWidth, innerHeight]; })()")
+            until(tab, "(function () { var d = document.querySelector('iframe').contentDocument; return !!d.fullscreenElement; })()", 5)
+            time.sleep(1.0)
+            got = tab.ev(what)
+            check(got[0] == "game-stage" and got[1] == got[4] and got[2] == got[5] and got[3] >= got[4] - 16, "Fullscreen on the match page: the game's stage is the fullscreen element and fills the screen, picture across the width (%s)" % got)
+            tab.ev("document.exitFullscreen && document.exitFullscreen()")
+            time.sleep(0.5)
+            check(tab.ev("!document.querySelector('iframe').contentDocument.fullscreenElement") is True, "... and it leaves again")
+            check(tab.ev("[].map.call(document.querySelectorAll('iframe'), function (f) { var d = f.contentDocument; return d.getElementById('game-stage').getBoundingClientRect().width; })[0] < 390") is True, "... with the page's layout back")
+            tab.close()
+            # a phone on its side: Fullscreen of the match page, then the bar goes by itself and a swipe up from the bottom edge brings it back (the frame holds the same page as the game page, and the same bar)
+            tab = new_tab(800, 360, 2, True)
+            open_page(tab, "/match.html?id=" + ID_PEOPLE)
+            until(tab, "!!document.getElementById('board')")
+            tab.ev("document.getElementById('show').click()")
+            until(tab, "(function () { var f = document.querySelector('iframe'); try { return !!f.contentWindow.__stub && f.contentWindow.__stub.total > 0; } catch (e) { return false; } })()", 20)
+            time.sleep(1.0)
+            tab.ev("document.getElementById('rep-full').scrollIntoView({block: 'center'})")
+            time.sleep(0.3)
+            pt = tab.ev("(function () { var r = document.getElementById('rep-full').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
+            tab.tap(pt[0], pt[1])
+            IN = "document.querySelector('iframe').contentDocument."
+            check(until(tab, IN + "fullscreenElement && " + IN + "getElementById('rbar').classList.contains('over')", 10) is True, "a phone on its side: Fullscreen of the match page puts the bar over the picture, in the frame")
+            idle, edge_up = IN + "getElementById('rbar').classList.contains('idle')", "!" + IN + "getElementById('redge').hidden"
+            check(until(tab, idle, 8) is True and tab.ev(edge_up) is True, "... the bar goes by itself and the strip along the bottom edge is there")
+            # (the browser reports a finger's place as 0,0 inside a fullscreen frame when it is driven from outside, so the swipe is given to the strip as the pointer events that a finger makes)
+            tab.ev("(function () { var e = document.querySelector('iframe').contentDocument.getElementById('redge'), W = document.querySelector('iframe').contentWindow;"
+                   " function fire(type, y) { e.dispatchEvent(new W.PointerEvent(type, { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 400, clientY: y, bubbles: true, cancelable: true })); }"
+                   " fire('pointerdown', 340); fire('pointermove', 310); fire('pointermove', 280); fire('pointerup', 280); })()")
+            check(until(tab, "!" + idle, 3) is True, "... a swipe up from the bottom edge calls the bar back")
+            got = tab.ev("(function () { var d = document.querySelector('iframe').contentDocument, b = d.getElementById('rbar').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), Math.round(b.bottom), innerWidth, innerHeight]; })()")
+            check(got[0] >= 0 and got[1] <= got[3] and got[2] <= got[4], "... and the bar lies inside the screen (%s)" % got)
+            shot(tab, "frame-side-fullscreen-bar")
             tab.close()
             # the frame's address opened on its own (no page around it): Quit goes to the list instead of doing nothing
             fresh()
@@ -569,7 +610,7 @@ def main():
             open_page(tab, "/play.html?replay=" + ID_PEOPLE + ".antsrep")
             until(tab, READY)
             check(until(tab, "!document.getElementById('mstats-flow').hidden") is True and tab.ev("(" + live.SHOWN + ")('mstats')") is False and tab.ev("(" + live.SHOWN + ")('stats-btn')") is False, "a phone: the row under the controls, not the button and not the panel")
-            check(tab.ev("document.querySelector('#mstats-flow .mbody') && getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") == "none" and tab.ev("document.querySelector('#mstats-flow .mt').textContent") == "Match stats\u25be" and tab.ev("document.querySelector('#mstats-flow .mt').getBoundingClientRect().height") < 80, "... closed, and its line says nothing of who won (%r)" % tab.ev("document.querySelector('#mstats-flow .mt').textContent"))
+            check(tab.ev("document.querySelector('#mstats-flow .mbody') && getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") == "none" and tab.ev("document.querySelector('#mstats-flow .mt').textContent") == "Match stats▾" and tab.ev("document.querySelector('#mstats-flow .mt').getBoundingClientRect().height") < 80, "... closed, and its line says nothing of who won (%r)" % tab.ev("document.querySelector('#mstats-flow .mt').textContent"))
             tab.ev("document.querySelector('#mstats-flow .mt').click()")
             check(tab.ev("getComputedStyle(document.querySelector('#mstats-flow .mbody')).display") != "none" and tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "... it opens in the page, inside the window")
             shot(tab, "stats-phone")
@@ -581,7 +622,7 @@ def main():
             until(tab, READY)
             until(tab, "!document.getElementById('stats-btn').hidden")
             tab.ev("document.getElementById('stats-btn').click()")
-            check(until(tab, "(" + live.SHOWN + ")('mstats')") is True and tab.ev("document.querySelectorAll('#mstats .nm .left').length") == 1 and tab.ev("document.querySelector('#mstats .mv').textContent") == "Ann won500 \u2013 300 \u2013 200", "a seat that left: marked in the panel, and no part of the verdict (%r)" % tab.ev("document.querySelector('#mstats .mv').textContent"))
+            check(until(tab, "(" + live.SHOWN + ")('mstats')") is True and tab.ev("document.querySelectorAll('#mstats .nm .left').length") == 1 and tab.ev("document.querySelector('#mstats .mv').textContent") == "Ann won500 – 300 – 200", "a seat that left: marked in the panel, and no part of the verdict (%r)" % tab.ev("document.querySelector('#mstats .mv').textContent"))
             tab.close()
             # no record, no stats
             for address, what in (("/play.html?live=" + live.ID, "a live match"), ("/play.html?replay=" + ID_PEOPLE + ".antsrep&embed=1", "the frame of a match page"), ("/play.html?replay=ants-TREASURE-20261001-000000Z.antsrep", "a match that has no record")):
