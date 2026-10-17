@@ -446,7 +446,8 @@ void w2_refusals() {
 
     run_case("W2.2 The Limits Of A New Map, 10,000 Cells, 130 A Side, 144 KB Of Canonical File: Each Is Written At Exactly The Limit (100 x 100 With The Largest Dictionary And 12,610 Bytes Of Blocks, 130 Rows, 130 Columns) And Refused Past It", [] {
         const std::vector<std::string> names(1344, "n");
-        const LevelLimits new_map = LevelLimits::for_new_maps();
+        LevelLimits new_map = LevelLimits::for_new_maps();
+        new_map.max_rows = 130;     // (this case is the arithmetic of the sizes of a map of 10,000 cells and 130 a side; the 90 rows of a Classic map made now are W2.3)
         // a blank 100 x 100 map: 42 + 486 x 11 + 8 + 10,000 x 12 + 12 bytes
         const LevelData blank = blank_level(100, 100, names);
         const LevelWriteResult written = write_level(blank, new_map);
@@ -510,6 +511,41 @@ void w2_refusals() {
         few_names.max_dictionary_names = 100;
         const LevelWriteResult dictionary = write_level(blank_level(5, 5, names), few_names);  // (the blank map's dictionary has 486 names)
         CHECK_MSG(refused_with(dictionary, "the dictionary has 486 names, more than the 100 allowed here"), dictionary.error);
+    });
+
+    run_case("W2.3 A Classic Map Made Now Has At Most 90 Rows (The Wall At Row 90 Of The Original): 90 Is Written And Read, 91 Is Refused By The Writer And By The Reader With The Reason, The Game's Own Limits And Extended Maps Have No Such Wall", [] {
+        const std::vector<std::string> names(486, "n");
+        const LevelLimits new_map = LevelLimits::for_new_maps();
+        const std::string wall = "a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?";
+        // 90 rows x 111 columns (9,990 cells) is the largest by the cells; 90 x 130 is more cells than a new map has, so the columns are held by the cells there
+        for (const uint32_t columns : {1u, 111u}) {
+            const LevelWriteResult w = write_level(blank_level(90, static_cast<uint16_t>(columns), names), new_map);
+            CHECK_MSG(w.ok, w.error);
+            LevelData back;
+            CHECK(w.ok && back.load_from_memory(w.bytes.data(), w.bytes.size(), nullptr, new_map) && back.height == 90u);
+        }
+        const LevelWriteResult tall = write_level(blank_level(91, 10, names), new_map);
+        CHECK_MSG(refused_with(tall, "the grid has 91 rows x 10 columns: " + wall), tall.error);
+        // the same for a file: the reader refuses it with the same words, and the game's limits (and the library's 81 rows) read it
+        const LevelWriteResult as_game = write_level(blank_level(91, 10, names));
+        CHECK_MSG(as_game.ok, as_game.error);
+        LevelData level;
+        LevelValidation report;
+        CHECK(!level.load_from_memory(as_game.bytes.data(), as_game.bytes.size(), &report, new_map));
+        CHECK_MSG(report.reason() == "the grid has 91 rows x 10 columns: " + wall, report.reason());
+        CHECK(level.load_from_memory(as_game.bytes.data(), as_game.bytes.size(), nullptr, LevelLimits{}) && level.height == 91u);
+        // the wall is about rows only: 130 columns of 76 rows are fine, and 131 columns are refused as a column limit, not as the wall
+        CHECK(write_level(blank_level(76, 130, names), new_map).ok);
+        const LevelWriteResult wide = write_level(blank_level(10, 131, names), new_map);
+        CHECK_MSG(refused_with(wide, "the grid has 10 rows x 131 columns, more than the 90 x 130 allowed here"), wide.error);
+        // a map with both too many rows and too many columns says the wall (the first thing to change)
+        const LevelWriteResult both = write_level(blank_level(200, 200, names), new_map);
+        CHECK_MSG(refused_with(both, "the grid has 200 rows x 200 columns: " + wall), both.error);
+        // an Extended map has no wall: 91 rows and 400 rows are within its limits
+        const LevelLimits extended = LevelLimits::for_extended_maps();
+        CHECK(write_level(blank_extended_level(91, 10, names), extended).ok && write_level(blank_extended_level(400, 100, names), extended).ok);
+        // a Classic map under the Extended place's limits is a Classic map: its 256 rows read (the warning is the checker's, not the reader's)
+        CHECK(write_level(blank_level(200, 10, names), extended).ok);
     });
 }
 
@@ -1248,7 +1284,7 @@ void w6_new_maps() {
         }
         // with the limits of a new map: 131 a side or 10,010 cells get no cell either; the largest grids of each limit get theirs
         const LevelLimits new_map = LevelLimits::for_new_maps();
-        for (const Grid& g : {Grid{200, 200, "the grid has 200 rows x 200 columns, more than the 130 x 130 allowed here"},
+        for (const Grid& g : {Grid{200, 200, "the grid has 200 rows x 200 columns: a Classic map made now has at most 90 rows"},
                               Grid{77, 130, "the grid has 77 rows x 130 columns, 10010 cells, more than the 10000 allowed here"}}) {
             LevelData l;
             const size_t held = peak_of([&] { l = blank_level(g.rows, g.columns, names, new_map); });
@@ -1260,7 +1296,9 @@ void w6_new_maps() {
             const std::string grid = "the grid has " + std::to_string(g.rows) + " rows x " + std::to_string(g.columns) + " columns but the level holds no cell";
             CHECK_MSG(refused_with(loose, grid), loose.error);
         }
-        CHECK(blank_level(100, 100, names, new_map).layer1_terrain.size() == 10000u && blank_level(76, 130, names, new_map).layer2_interactive.size() == 9880u);
+        CHECK(blank_level(90, 111, names, new_map).layer1_terrain.size() == 9990u && blank_level(76, 130, names, new_map).layer2_interactive.size() == 9880u);
+        CHECK(blank_level(91, 10, names, new_map).layer1_terrain.empty() && blank_level(90, 130, names, new_map).layer1_terrain.empty());      // (91 rows: the wall; 90 x 130: 11,700 cells)
+        CHECK(!write_level(blank_level(100, 100, names), new_map).ok);                       // (100 x 100 was a new map before the 90 rows)
         const LevelData largest = blank_level(256, 256, names);
         CHECK(largest.layer1_terrain.size() == 65536u && write_level(largest).ok);
     });
@@ -1628,9 +1666,11 @@ void w7_extended_maps() {
         big.layer1_terrain.assign(120000, MapCell{1, 0, 0});
         big.layer2_interactive.assign(120000, MapCell{LVL_EMPTY_TILE, 0, 0});
         c = convert_to_classic(big);
-        CHECK(!c.ok && c.reasons.size() == 2u);
+        CHECK(!c.ok && c.reasons.size() == 3u);
         CHECK(c.reasons[0] == "this map is 400 columns wide; a Classic map has at most 256 columns" && c.reasons[1] == "this map is 300 rows tall; a Classic map has at most 256 rows");
-        CHECK(needs_extended(big) == c.reasons);
+        CHECK(c.reasons[2].find("this map has 300 rows; a Classic map made now has at most 90") == 0);
+        CHECK(c.reason_codes == (std::vector<std::string>{"columns_beyond_classic", "rows_beyond_classic", "rows_beyond_wall"}));
+        CHECK(needs_extended(big) == c.reasons && needs_extended_codes(big) == c.reason_codes);
         LevelData names = base;
         names.tile_dictionary.assign(1345, ".");
         names.tile_type_count = 1344;
@@ -1687,15 +1727,26 @@ void w7_extended_maps() {
             m.layer2_interactive.assign(static_cast<size_t>(rows) * columns, MapCell{LVL_EMPTY_TILE, 0, 0});
             return m;
         };
-        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 256}, std::pair<uint32_t, uint32_t>{256, 1}, std::pair<uint32_t, uint32_t>{256, 256}}) {
+        // (the rows of a Classic map made now stop at 90, the wall; the 256 of the format are the line between rows_beyond_classic and rows_beyond_wall alone)
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 256}, std::pair<uint32_t, uint32_t>{90, 1}, std::pair<uint32_t, uint32_t>{90, 256}}) {
             const LevelData m = of_shape(shape.first, shape.second);
             CHECK_MSG(convert_to_classic(m).ok && needs_extended(m).empty(), std::to_string(shape.first) + " x " + std::to_string(shape.second));
         }
-        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 257}, std::pair<uint32_t, uint32_t>{257, 1}}) {
+        for (const auto& shape : {std::pair<uint32_t, uint32_t>{1, 257}}) {
             const LevelData m = of_shape(shape.first, shape.second);
             const LevelConversion r = convert_to_classic(m);
             CHECK_MSG(!r.ok && r.reasons.size() == 1u && needs_extended(m) == r.reasons, std::to_string(shape.first) + " x " + std::to_string(shape.second));
-            CHECK(r.reasons.size() == 1u && r.reasons[0].find("a Classic map has at most 256") != std::string::npos);
+            CHECK(r.reasons.size() == 1u && r.reasons[0].find("a Classic map has at most 256") != std::string::npos && r.reason_codes[0] == "columns_beyond_classic");
+        }
+        for (const uint32_t rows : {91u, 256u, 257u}) {
+            // 256 rows is the line of the format: a reason of its own beyond it; the wall is the one reason below it
+            const LevelData m = of_shape(rows, 1);
+            const LevelConversion r = convert_to_classic(m);
+            CHECK_MSG(!r.ok && needs_extended(m) == r.reasons && needs_extended_codes(m) == r.reason_codes, std::to_string(rows) + " x 1");
+            CHECK_MSG(r.reason_codes.size() == (rows > 256u ? 2u : 1u) && r.reason_codes.back() == "rows_beyond_wall" && (rows > 256u) == (r.reason_codes.front() == "rows_beyond_classic"),
+                      std::to_string(rows) + " x 1");
+            CHECK(r.reasons.back() == "this map has " + std::to_string(rows) + " rows; a Classic map made now has at most 90 (ants cannot enter or cross the 91st row of a taller map, in the original game too): "
+                                                                                    "crop it to 90 rows first, or keep it an Extended map");
         }
         // a description of exactly 30 bytes converts, with a note
         {
@@ -1760,7 +1811,8 @@ void w7_extended_maps() {
         LevelLimits classic = huge;
         classic.allow_extended = false;                                              // without it the values count as the game's
         CHECK(classic.rows() == 256u && classic.columns() == 256u && classic.cells() == 65536u && classic.read_bytes() == std::numeric_limits<size_t>::max());
-        CHECK(LevelLimits{}.rows() == 256u && LevelLimits::for_new_maps().rows() == 130u && LevelLimits::for_new_maps().cells() == 10000u);   // the Classic kinds are as they were
+        CHECK(LevelLimits{}.rows() == 256u && LevelLimits::for_new_maps().rows() == 90u && LevelLimits::for_new_maps().columns() == 130u && LevelLimits::for_new_maps().cells() == 10000u);
+        CHECK(LVL_CLASSIC_ROW_WALL == 90u && LevelLimits::for_extended_maps().rows() == 1024u);       // (a new Classic map: 90 rows, 130 columns; the game's own limits and the Extended ones have no wall)
         // a canonical file of a 512 x 512 map is within the 3.5 MiB the limits write, and 513 x 512 is not
         std::vector<std::string> names(1344, ".");
         const LevelWriteResult w = write_level(blank_extended_level(512, 512, names), e);
@@ -2112,6 +2164,74 @@ void w7_extended_maps() {
         CHECK_MSG(!v.parsed && held < kSlack, std::to_string(held));
     });
 
+    run_case("W7.12b The Reasons Have Stable Codes (One For Each, In The Same Order); A New Classic Map Has At Most 90 Rows, So An Extended Map Of More Is Refused Down With A Reason To Crop First; A Classic Map Of More Rows Is Copied As It Is", [] {
+        const std::vector<std::string> names(486, "n");
+        // a conversion down of 90 rows works, of 91 does not: the reason, its code and the sentence
+        LevelData e90 = convert_to_extended(blank_level(90, 20, names)).level;
+        LevelData e91 = convert_to_extended(blank_level(91, 20, names)).level;
+        CHECK(e90.version == 9u && e91.version == 9u);
+        const LevelConversion ok = convert_to_classic(e90);
+        CHECK_MSG(ok.ok && ok.reasons.empty() && ok.reason_codes.empty() && ok.level.version == 8u && ok.level.height == 90u, ok.reasons.empty() ? "" : ok.reasons[0]);
+        LevelConversion refused = convert_to_classic(e91);
+        CHECK(!refused.ok && refused.reasons.size() == 1u && refused.reason_codes == std::vector<std::string>{"rows_beyond_wall"});
+        CHECK(refused.reasons.size() == 1u && refused.reasons[0] == "this map has 91 rows; a Classic map made now has at most 90 (ants cannot enter or cross the 91st row of a taller map, in the original game too): "
+                                                                     "crop it to 90 rows first, or keep it an Extended map");
+        CHECK(needs_extended(e91) == refused.reasons && needs_extended_codes(e91) == refused.reason_codes && needs_extended(e90).empty() && needs_extended_codes(e90).empty());
+        // a 120-row Extended map with the extended rules: the wall is the reason, and the dropped rules are no reason
+        LevelData e120 = convert_to_extended(blank_level(120, 20, names)).level;
+        e120.rules = LVL_RULES_EXTENDED;
+        refused = convert_to_classic(e120);
+        CHECK(!refused.ok && refused.reason_codes == std::vector<std::string>{"rows_beyond_wall"} && refused.notes.empty() && refused.note_codes.empty());
+        // after the crop it goes down, with the note about the rules
+        LevelData cropped = e120;
+        cropped.height.val = 90;
+        cropped.layer1_terrain.resize(90u * 20u);
+        cropped.layer2_interactive.resize(90u * 20u);
+        const LevelConversion down = convert_to_classic(cropped);
+        CHECK(down.ok && down.note_codes == std::vector<std::string>{"rules_extended_dropped"} && down.notes.size() == 1u);
+        // a Classic map of 120 rows (the game's own limits) is not made now: it is copied as it is, whatever the rows
+        const LevelData classic120 = blank_level(120, 20, names);
+        const LevelConversion same = convert_to_classic(classic120);
+        CHECK(same.ok && same_level(same.level, classic120) && needs_extended(classic120).empty());
+        // the codes of the other reasons and notes, in the order of the reasons
+        LevelData many = e90;
+        many.description = std::string(31, 'x');
+        many.format_flags = 0x10;
+        many.rules = 5;
+        const LevelConversion c = convert_to_classic(many);
+        CHECK(!c.ok && c.reasons.size() == c.reason_codes.size() && c.reason_codes == (std::vector<std::string>{"description_too_long", "format_flags_set", "rules_unknown"}));
+        LevelData thirty = e90;
+        thirty.description = std::string(30, 'x');
+        thirty.rules = 0;
+        const LevelConversion t = convert_to_classic(thirty);
+        CHECK(t.ok && t.notes.size() == 1u && t.note_codes == std::vector<std::string>{"description_30_bytes"} &&
+              t.notes[0] == "the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns");
+        LevelData dictionary = e90;
+        dictionary.tile_dictionary.assign(1345, ".");
+        dictionary.tile_type_count = 1344;
+        CHECK(convert_to_classic(dictionary).reason_codes == std::vector<std::string>{"dictionary_too_large"});
+        LevelData grid = e90;
+        grid.layer1_terrain.pop_back();
+        CHECK(convert_to_classic(grid).reason_codes == std::vector<std::string>{"layers_not_grid"});
+        LevelData version = e90;
+        version.version = 12;
+        CHECK(convert_to_classic(version).reason_codes == std::vector<std::string>{"level_version_unknown"} && convert_to_extended(version).reason_codes == std::vector<std::string>{"level_version_unknown"});
+        CHECK(convert_to_extended(grid).reason_codes == std::vector<std::string>{"layers_not_grid"});
+        LevelData empty = e90;
+        empty.height.val = 0;
+        empty.layer1_terrain.clear();
+        empty.layer2_interactive.clear();
+        CHECK(convert_to_classic(empty).reason_codes == std::vector<std::string>{"grid_empty"});
+        // an anchor beyond a byte (a map wider than 256 has it besides the size reasons; this one is 300 wide and 1 row)
+        LevelData wide = convert_to_extended(blank_level(1, 256, names)).level;
+        wide.width.val = 300;
+        wide.layer1_terrain.assign(300, MapCell{1, 0, 0});
+        wide.layer2_interactive.assign(300, MapCell{LVL_EMPTY_TILE, 0, 0});
+        wide.layer2_interactive[299] = MapCell{3, 0, static_cast<uint16_t>(0x0001)};      // row 0 + 1, column 299 + 0
+        const LevelConversion w = convert_to_classic(wide);
+        CHECK(!w.ok && w.reason_codes == (std::vector<std::string>{"columns_beyond_classic", "anchor_beyond_byte"}) && w.reasons.size() == 2u);
+    });
+
     run_case("W7.13 Round Trip Of A Bigger Extended Map With Objects Everywhere: 300 x 700, Anchors Of -128 To 127, Read Back The Same, Written Twice The Same Bytes", [] {
         LevelData l;
         l.version = 9;
@@ -2138,8 +2258,9 @@ void w7_extended_maps() {
         CHECK(write_level(back, extended_limits()).bytes == w.bytes);
         const LevelConversion c = convert_to_classic(l);
         CHECK(!c.ok);
-        CHECK(c.reasons.size() == 3u && c.reasons[0].find("700 columns wide") != std::string::npos && c.reasons[1].find("300 rows tall") != std::string::npos &&
-              c.reasons[2].find("object cells are anchored outside the 0 to 255") != std::string::npos);
+        CHECK(c.reasons.size() == 4u && c.reasons[0].find("700 columns wide") != std::string::npos && c.reasons[1].find("300 rows tall") != std::string::npos &&
+              c.reasons[2].find("this map has 300 rows; a Classic map made now has at most 90") == 0 && c.reasons[3].find("object cells are anchored outside the 0 to 255") != std::string::npos);
+        CHECK(c.reason_codes == (std::vector<std::string>{"columns_beyond_classic", "rows_beyond_classic", "rows_beyond_wall", "anchor_beyond_byte"}));
     });
 }
 

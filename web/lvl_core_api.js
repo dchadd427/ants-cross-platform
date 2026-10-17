@@ -8,7 +8,7 @@
 // rewrite and blank, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
-// `profile`: "new_map" (the default: the limits of a new map, at most 10,000 cells and 130 a side, 512 KB read) or "game" (the game's own limits).
+// `profile`: "new_map" (the default: the limits of a new map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read) or "game" (the game's own limits).
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory();
