@@ -23,12 +23,12 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.12.60 - 2026-10-16 - Walled maps: the bots open a pile behind a bomb field
 
 **For players:**
 - **On walled maps the computer players now get food out of piles that lie behind a bomb field:** a Medium or Hard bot on POPcOrN and maps like it sends one ant through the bombs, the fire wall and the water to open the pile, and then carries the food home. Alone on POPcOrN a Hard bot scores about 2,300 points a game instead of 580, and it now scores in matches there too (about 1,140 points a seat one against one, 570 with four bots; before, nothing). Other maps of this kind score more too; maps without such a pile play as before ([why and how](docs/BOT_GATES.md)).
 
-**Details:** [walled maps](docs/BOT_GATES.md)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4fccf668...b44f54aa), [walled maps](docs/BOT_GATES.md)
 
 ## v0.12.59 - 2026-10-16 - Walled maps: the bots leave the map's own bombs to their plan
 
