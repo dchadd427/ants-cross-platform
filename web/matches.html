@@ -139,7 +139,7 @@
         var sides = el('ul', 'sides'); sides.setAttribute('aria-label', 'Who played and what they scored');
         H.sidesOf(rec).forEach(function (sd) {
             var x = el('li', 'side' + (sd.winner ? ' w' : '')); x.title = H.sideName(sd);
-            var sq = el('span', 'sq'); sd.seats.forEach(function (m) { var i = el('i'); i.setAttribute('data-c', m.colour); sq.appendChild(i); }); x.appendChild(sq);
+            var sq = el('span', 'sq'); sd.seats.forEach(function (m) { var i = el('i'); i.setAttribute('data-c', H.colorOf(m)); sq.appendChild(i); }); x.appendChild(sq);
             x.appendChild(el('span', 'nm', H.sideName(sd)));
             if (sd.left) x.appendChild(el('span', 'left', 'Left')); else x.appendChild(el('span', 'sc', H.scoreText(rec, sd)));
             if (sd.winner && rec.draw !== true) x.appendChild(el('span', 'won', 'Won'));

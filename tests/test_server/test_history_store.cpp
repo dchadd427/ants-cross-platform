@@ -1028,7 +1028,7 @@ int main() {
         ASSERT_TRUE(list.get("keep_days").as_int_or(0) == 30 && list.get("sim_rules").as_int_or(0) == replay::kSimRules && list.get("history").size() == 2);
         const ctl::JsonValue first = list.get("history").at(0);
         ASSERT_TRUE(first.get("id").str() == id1 && first.get("recording").str() == "watch" && first.get("file").str() == history_recording_file(id1) && first.get("mode").str() == "highest-score");
-        ASSERT_TRUE(first.get("seats").size() == 2 && first.get("seats").at(0).get("bombs_planted").is_null() && first.get("seats").at(0).get("colour").str() == "Green");        // (the lean form)
+        ASSERT_TRUE(first.get("seats").size() == 2 && first.get("seats").at(0).get("bombs_planted").is_null() && first.get("seats").at(0).get("color").str() == "Green" && first.get("seats").at(0).get("colour").str() == "Green");        // (the lean form)
         ASSERT_TRUE(first.get("rows").size() == 2 && first.get("format").str() == "1v1" && first.get("result").str() == "cut" && first.get("v").is_null());      // (1000 turns: the rules did not end it)
         ASSERT_EQ(list.get("history").at(1).get("id").str(), id0);
         // filters through the query string
@@ -1036,7 +1036,9 @@ int main() {
         ASSERT_EQ(parse_text(s.door("GET", "/history", "q=ann&sort=old&limit=1").body).get("history").at(0).get("id").str(), id0);
         ASSERT_EQ(parse_text(s.door("GET", "/history", "mode=187").body).get("count").as_int_or(-1), int64_t{0});
         ASSERT_EQ(parse_text(s.door("GET", "/history", "mode=highest-score").body).get("count").as_int_or(-1), int64_t{2});
-        ASSERT_EQ(parse_text(s.door("GET", "/history", "colour=blue").body).get("count").as_int_or(-1), int64_t{1});
+        ASSERT_EQ(parse_text(s.door("GET", "/history", "color=blue").body).get("count").as_int_or(-1), int64_t{1});
+        ASSERT_EQ(parse_text(s.door("GET", "/history", "colour=blue").body).get("count").as_int_or(-1), int64_t{1});       // (the older spelling of the same filter: bookmarks and scripts)
+        ASSERT_EQ(s.door("GET", "/history", "color=blue&colour=blue").status, 400);                                        // (both together are refused)
         ASSERT_EQ(parse_text(s.door("GET", "/history", "rec=watch").body).get("count").as_int_or(-1), int64_t{2});         // (the state of a recording, made when the query asks for it)
         ASSERT_EQ(parse_text(s.door("GET", "/history", "rec=removed").body).get("count").as_int_or(-1), int64_t{0});
         ASSERT_EQ(parse_text(s.control("GET", "/history", "rec=old").body).get("count").as_int_or(-1), int64_t{0});
@@ -1046,15 +1048,20 @@ int main() {
         HistoryQuery q;
         std::string why;
         ASSERT_TRUE(parse_history_query("", q, why) && q.limit == 50 && q.offset == 0 && q.mode == HistoryQuery::Mode::All);
-        ASSERT_TRUE(parse_history_query("limit=100&offset=1000000&sort=short&format=team&result=cut&who=computers&rec=old&colour=black&mode=187&q=a%20b%2Bc+d", q, why));
+        ASSERT_TRUE(parse_history_query("limit=100&offset=1000000&sort=short&format=team&result=cut&who=computers&rec=old&color=black&mode=187&q=a%20b%2Bc+d", q, why));
         ASSERT_TRUE(q.limit == 100 && q.offset == 1000000 && q.sort == HistoryQuery::Sort::Short && q.format == HistoryQuery::Format::Teams && q.result == HistoryQuery::Result::Cut);
         ASSERT_TRUE(q.who == HistoryQuery::Who::Computers && q.rec == HistoryQuery::Rec::Old && q.color == 3 && q.mode == HistoryQuery::Mode::Kills187 && q.text == "a b+c d");
         ASSERT_TRUE(parse_history_query("mode=highest-score", q, why) && q.mode == HistoryQuery::Mode::HighestScore);
+        for (const char* w : {"all", "green", "red", "blue", "black"}) {                                      // the older spelling is the same key with the same words
+            HistoryQuery a, b;
+            ASSERT_TRUE(parse_history_query(std::string("color=") + w, a, why) && parse_history_query(std::string("colour=") + w, b, why) && a.color == b.color);
+        }
+        ASSERT_TRUE(parse_history_query("colour=blue&limit=5", q, why) && q.color == 2 && q.limit == 5);
         const std::vector<std::pair<std::string, std::string>> bad = {
             {"limit=0", "limit"}, {"limit=101", "limit"}, {"limit=-1", "limit"}, {"limit=abc", "limit"}, {"limit=", "limit"}, {"offset=1000001", "offset"}, {"offset=1.5", "offset"},
-            {"sort=best", "sort"}, {"format=3v3", "format"}, {"result=won", "result"}, {"who=robots", "who"}, {"rec=lost", "rec"}, {"colour=purple", "colour"}, {"colour=BLACK", "colour"}, {"colour=any", "colour"}, {"mode=chess", "mode"}, {"mode=1", "mode"},
+            {"sort=best", "sort"}, {"format=3v3", "format"}, {"result=won", "result"}, {"who=robots", "who"}, {"rec=lost", "rec"}, {"color=purple", "color"}, {"color=BLACK", "color"}, {"color=any", "color"}, {"colour=purple", "color"}, {"colour=BLACK", "color"}, {"colour=any", "color"}, {"mode=chess", "mode"}, {"mode=1", "mode"},
             {"mode=187&mode=187", "mode"}, {"limit=5&limit=6", "limit"}, {"q=%zz", "q"}, {"q=%4", "q"}, {"q=%00", "q"}, {"q=" + std::string(41, 'a'), "q"}, {"q=%7F", "q"},
-            {"colour", "colour"}, {"nonsense=1", "nonsense"}, {"Limit=5", "Limit"}, {"sort=NEW", "sort"}};
+            {"color", "color"}, {"colour", "color"}, {"colour=", "color"}, {"color=red&color=red", "color"}, {"colour=red&colour=red", "color"}, {"color=red&colour=red", "color"}, {"colour=red&color=blue", "color"}, {"nonsense=1", "nonsense"}, {"Limit=5", "Limit"}, {"sort=NEW", "sort"}};
         for (const auto& b : bad) {
             ASSERT_FALSE(parse_history_query(b.first, q, why));
             ASSERT_TRUE(contains(why, b.second));

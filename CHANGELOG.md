@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- Under the hood: the match history's address and records now say color; addresses, bookmarks and pages keep working as before, and nothing changes in the game or on the site.
+
 ## v0.12.63 - 2026-10-16 - Spelling: color, not the British spelling
 
 **For players:**

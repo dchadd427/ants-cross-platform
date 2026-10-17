@@ -70,12 +70,12 @@
         return s;
     }
     function who(seat, side, rec) {
-        var w = el('span', 'who'), sq = el('i', 'sq'); sq.setAttribute('data-c', seat.colour); w.appendChild(sq); w.appendChild(el('span', '', H.seatLabel(seat)));
+        var w = el('span', 'who'), sq = el('i', 'sq'); sq.setAttribute('data-c', H.colorOf(seat)); w.appendChild(sq); w.appendChild(el('span', '', H.seatLabel(seat)));
         if (side.winner && rec.draw !== true) w.appendChild(el('span', 'won', 'Won'));
         if (seat.left === true) w.appendChild(el('span', 'left', 'Left early'));
         return w;
     }
-    function meter(seat, value, max) { var bar = el('span', 'mb'), i = el('i'); i.style.width = max ? Math.round(value / max * 100) + '%' : '0%'; i.setAttribute('data-c', seat.colour); bar.appendChild(i); return bar; }
+    function meter(seat, value, max) { var bar = el('span', 'mb'), i = el('i'); i.style.width = max ? Math.round(value / max * 100) + '%' : '0%'; i.setAttribute('data-c', H.colorOf(seat)); bar.appendChild(i); return bar; }
     function sum(seats, key) { var n = 0; seats.forEach(function (s) { n += typeof s[key] === 'number' && s[key] > 0 ? Math.floor(s[key]) : 0; }); return n; }
     function copyText(textToCopy, done) {
         function fallback() {
@@ -151,8 +151,8 @@
         if (share.length) {
             var sh = el('div', 'share'), bar = el('div', 'sbar'), ul = el('ul'); bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', rec.mode === '187' ? 'Share of the kills' : 'Share of the score');
             ranked.forEach(function (sd, i) {
-                var seg = el('i'); seg.style.flex = share[i].value ? share[i].value + ' 1 0' : '0 0 3px'; seg.setAttribute('data-c', sd.seats[0].colour); bar.appendChild(seg);
-                var li = el('li'), sq = el('i'); sq.setAttribute('data-c', sd.seats[0].colour); li.appendChild(sq); li.appendChild(document.createTextNode(H.sideName(sd) + ' ')); li.appendChild(el('b', '', share[i].percent + '%')); ul.appendChild(li);
+                var seg = el('i'); seg.style.flex = share[i].value ? share[i].value + ' 1 0' : '0 0 3px'; seg.setAttribute('data-c', H.colorOf(sd.seats[0])); bar.appendChild(seg);
+                var li = el('li'), sq = el('i'); sq.setAttribute('data-c', H.colorOf(sd.seats[0])); li.appendChild(sq); li.appendChild(document.createTextNode(H.sideName(sd) + ' ')); li.appendChild(el('b', '', share[i].percent + '%')); ul.appendChild(li);
             });
             sh.appendChild(bar); sh.appendChild(ul); s.appendChild(sh);
         }
