@@ -105,7 +105,7 @@
         rest.appendChild(v);
         var acts = el('div', 'acts'), st = H.recState(rec);
         if (st.kind === 'watch') {
-            var show = el('button', 'btn', '▶ Show replay'); show.type = 'button'; show.id = 'show'; show.setAttribute('aria-expanded', 'false'); show.setAttribute('aria-controls', 'replay'); acts.appendChild(show);
+            var show = el('button', 'btn', '▶ Show replay'); show.type = 'button'; show.id = 'show'; show.setAttribute('aria-expanded', 'false'); show.setAttribute('aria-controls', 'replay'); acts.appendChild(show);
         } else acts.appendChild(el('span', 'why', st.note));
         if (st.file) { var dl = el('a', 'dl', 'Download file'); dl.href = '/replays/' + encodeURIComponent(st.file); dl.setAttribute('download', st.file); acts.appendChild(dl); }
         var cp = el('button', 'btn sm ghost', 'Copy link'); cp.type = 'button';
@@ -139,7 +139,7 @@
         }
         if (!open && frame) { frame.src = 'about:blank'; if (frame.parentNode) frame.parentNode.removeChild(frame); frame = null; }
         sec.hidden = !open;
-        btn.textContent = open ? 'Hide replay' : '▶ Show replay'; btn.setAttribute('aria-expanded', String(open));
+        btn.textContent = open ? 'Hide replay' : '▶ Show replay'; btn.setAttribute('aria-expanded', String(open));
         $('rep-full').hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
         if (open) { try { sec.scrollIntoView({ block: 'start' }); sec.focus({ preventScroll: true }); } catch (e) { /* it is shown anyway */ } }
     }
@@ -234,7 +234,8 @@
         document.title = document.title.replace(/^Match/, function () { return R.mapTitle(rec.map) + ', ' + H.formatText(rec.format); });      // (a function: a map name with $& or $' in it is text, not a pattern of replace)
         var show = $('show'); if (show) show.addEventListener('click', function () { setReplay(!frame); });
         var full = $('rep-full');
-        if (full) full.addEventListener('click', function () { var f = frame; if (!f) return; var go = f.requestFullscreen || f.webkitRequestFullscreen; if (go) { try { go.call(f); } catch (e) { /* the page's own button is there */ } } });
+        var finger = false; if (full) full.addEventListener('pointerdown', function (e) { finger = e.pointerType === 'touch'; });
+        if (full) full.addEventListener('click', function () { var f = frame; if (!f) return; try { var d = f.contentDocument, own = d.getElementById('fullscreen-btn'); if (own) { if (finger) d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); own.click(); return; } } catch (e) { /* not reachable: the frame itself goes */ } var go = f.requestFullscreen || f.webkitRequestFullscreen; if (go) { try { go.call(f); } catch (e) { /* the page's own button is there */ } } });
         pics.lookMaps().then(function () { var d = $('fact-map'); if (d) d.textContent = R.mapTitle(rec.map) + (H.mapFact(rec.map, pics.maps()) ? '  ' + H.mapFact(rec.map, pics.maps()) : ''); });
     }
     function load() {
