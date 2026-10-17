@@ -88,7 +88,7 @@ public:
     MatchState match_state_{MatchState::NotStarted};
     uint8_t roster_mask_{0x0F};             // bit p: team p takes part (a team without a player is NULL in the original's team table: no hill, ants or eggs)
     uint8_t dropped_mask_{0};               // bit p: team p dropped out of the match (team +0x64, FUN_0100d03b)
-    /// 187 only: bit p = the line "<Name> (<Colour>) is out of ants!" of team p has been said (or the team dropped out and has its own line). Presentation only, like the news and audio queues
+    /// 187 only: bit p = the line "<Name> (<Color>) is out of ants!" of team p has been said (or the team dropped out and has its own line). Presentation only, like the news and audio queues
     /// beside it: what it decides (a news line and a cue) never feeds back into the simulation, so it is not in the state hash (state_hash.cpp), and being a plain member it is copied with
     /// the engine.
     uint8_t out_of_ants_told_{0};

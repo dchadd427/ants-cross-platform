@@ -1,14 +1,14 @@
 // The on-screen part of the game mode 187 (docs/GAMEPLAY.md "187", include/ants_app/results_layout.hpp, scorecard.hpp, hud.hpp): the pictures the owner approved, as numbers.
 //   1. the headline: "<Name> is the last colony standing!", "<A> and <B> are the last colonies standing!" (two allies that are both left), "Time is up. The most kills wins!", "Nobody is left.
-//      The most kills wins!", and none for a match that a quit ended; the names are the page's own (the players' names, else the colour words);
+//      The most kills wins!", and none for a match that a quit ended; the names are the page's own (the players' names, else the color words);
 //   2. the rows: the numbers are the kills (the score), the ants lost and the ants left, three of them; the order of the rows, "Winner!", "other players..." and the cue are the original's;
 //   3. the baked headings (newstats.bmp) are not drawn in 187, in the wide page and in the classic page, and everything else of the page is (the original's modes draw them, as before);
 //   4. the three headings, their strokes and arrows, the numbers and the headline stand where the approved picture has them (the positions of tools/compose.py at 960 x 540, written out here
 //      as numbers of their own: the arrows pixel for pixel, the texts by the calls that draw them), and nothing else of the page changed (pixel for pixel, outside the places that are 187's);
-//      the lettering has the look of the original's own (YOUR SCORE, Winner!): the fill, a lit edge one pixel up and left, a shadow edge one pixel down and right, in the colours sampled from the art;
+//      the lettering has the look of the original's own (YOUR SCORE, Winner!): the fill, a lit edge one pixel up and left, a shadow edge one pixel down and right, in the colors sampled from the art;
 //      the page of the original's rules is as it was (its draw calls and its pixels, pinned from before the lettering had that look);
 //   5. the headline fits: at the real fonts every wording of the page lies inside its box, wrapped or made smaller when a name is long, and never touches the art around it;
-//   6. the start line of the chat log ("Game started! Most kills wins.") and the line "<Name> (<Colour>) is out of ants!" reach the chat log; the original's modes say the old start line and
+//   6. the start line of the chat log ("Game started! Most kills wins.") and the line "<Name> (<Color>) is out of ants!" reach the chat log; the original's modes say the old start line and
 //      nothing of ants running out;
 //   7. the application: a match of the rules 187 starts with its line and ends in its results page.
 // Usage: test_results_187. Exit code 0 when every check passes.
@@ -120,7 +120,7 @@ public:
         Kind kind{Kind::Sprite};
         std::string name;                     // the sprite's name, the text
         int32_t x{0}, y{0}, w{0}, h{0};       // (a squeezed text: w is the width it is squeezed to)
-        assets::ColorRGBA colour{};
+        assets::ColorRGBA color{};
         FontSize size{FontSize::Px12};
     };
 
@@ -182,7 +182,7 @@ public:
             f.byte(static_cast<uint8_t>(e.kind));
             f.text(e.name);
             for (int32_t v : {e.x, e.y, e.w, e.h}) f.i32(v);
-            f.byte(e.colour.r); f.byte(e.colour.g); f.byte(e.colour.b); f.byte(e.colour.a);
+            f.byte(e.color.r); f.byte(e.color.g); f.byte(e.color.b); f.byte(e.color.a);
             f.byte(static_cast<uint8_t>(e.size));
         }
         return f.value();
@@ -203,13 +203,13 @@ private:
     }
     void rect(Kind k, int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) {
         Ev e = base(k);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void text(Kind k, const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c, FontSize size, int32_t max_width) {
         Ev e = base(k);
         e.name = s;
-        e.x = x; e.y = y; e.w = max_width; e.colour = c; e.size = size;
+        e.x = x; e.y = y; e.w = max_width; e.color = c; e.size = size;
         events.push_back(e);
     }
     const assets::AssetArchive& arc_;
@@ -261,10 +261,10 @@ constexpr Rgb kFill{43, 95, 67};
 constexpr Rgb kLit{115, 191, 155};
 constexpr Rgb kShadow{19, 55, 47};
 
-bool has_colour(const Spy::Ev& e, const Rgb& c) { return e.colour.r == c.r && e.colour.g == c.g && e.colour.b == c.b && e.colour.a == 255; }
+bool has_color(const Spy::Ev& e, const Rgb& c) { return e.color.r == c.r && e.color.g == c.g && e.color.b == c.b && e.color.a == 255; }
 
 /// The three copies that a text of this look is drawn in, in the order they are drawn: the shadow copy (at +1, +1), the lit copy (at -1, -1), then the fill (at the true place): three text calls in a
-/// row for the same text, in these colours
+/// row for the same text, in these colors
 struct ArtText {
     const Spy::Ev* shadow{nullptr};
     const Spy::Ev* lit{nullptr};
@@ -277,7 +277,7 @@ ArtText find_art_text(const Spy& spy, const std::string& text) {
         const Spy::Ev& b = spy.events[i + 1];
         const Spy::Ev& c = spy.events[i + 2];
         if (a.kind != Spy::Kind::Text || b.kind != Spy::Kind::Text || c.kind != Spy::Kind::Text || a.name != text || b.name != text || c.name != text) continue;
-        if (has_colour(a, kShadow) && has_colour(b, kLit) && has_colour(c, kFill)) return ArtText{&a, &b, &c};
+        if (has_color(a, kShadow) && has_color(b, kLit) && has_color(c, kFill)) return ArtText{&a, &b, &c};
     }
     return ArtText{};
 }
@@ -412,13 +412,13 @@ void test_headline() {
         check(card.headline().empty() && card.game_mode() == sim::GameMode::HighestScore, "... and the rows do not bring one");
         check(headline_of(Scene{}, sim::GameMode::HighestScore).empty(), "the original's rules: no headline");
     }
-    {   // the colour words stand in for names that are not given (the page's own display names): the headline names what the first row names
+    {   // the color words stand in for names that are not given (the page's own display names): the headline names what the first row names
         ScorecardModal card;
         card.set_wide_layout(true);
         card.show(make_result(Scene{}), 0, sim::GameMode::Kills187);
         card.update(0.3f);
         const std::string tail = " is the last colony standing!";
-        check(card.rows().size() == 4 && card.headline() == card.rows()[0].name + tail && !card.rows()[0].name.empty(), "without a name the colour word is the name, as on the first row: \"" + card.headline() + "\"");
+        check(card.rows().size() == 4 && card.headline() == card.rows()[0].name + tail && !card.rows()[0].name.empty(), "without a name the color word is the name, as on the first row: \"" + card.headline() + "\"");
     }
 }
 
@@ -632,7 +632,7 @@ void test_pixels(const assets::AssetArchive& arc) {
     // the arrows, as the picture draws them (tools/compose.py: emboss_line, then emboss_poly, per heading): a 2 px stroke from 12 px left of the column to the shaft and the shaft (2 px wide at the
     // column + 6) down to row 238, as one shape; the head, the polygon (cx + 1, 238), (cx + 11, 238), (cx + 6, 247), as the next; a shape is its shadow copy (1 px right and down), its lit copy (1 px left
     // and up) and then its fill. The pixels around every arrow, from the stroke's start to the head's end and a pixel beyond (the shadow's last row, 248, lies in the first row of the winner's
-    // box), are these three colours where the picture has them and the page's ground (the art without the baked headings) where it has not
+    // box), are these three colors where the picture has them and the page's ground (the art without the baked headings) where it has not
     const int32_t half[10] = {5, 4, 4, 3, 3, 2, 2, 1, 1, 0};                  // the head's rows (238 .. 247): half widths around the shaft's left column
     for (size_t i = 0; i < 3; ++i) {
         const int32_t cx = kPictureColumn[i];
@@ -670,7 +670,7 @@ void test_pixels(const assets::AssetArchive& arc) {
         check(painted > 150, n + "the picture's arrow has " + str(painted) + " pixels around it");
         check(wrong == 0, n + "stroke, shaft and head are the picture's, with the lit and the shadow edge, pixel for pixel (" + str(wrong) + " differ, the first at (" + str(first_x) + ", " + str(first_y) + "))");
     }
-    // the three colours are in the right places by their own: the stroke's fill, the lit edge over it, the shadow edge under it (the first arrow's stroke at row 220, columns 800)
+    // the three colors are in the right places by their own: the stroke's fill, the lit edge over it, the shadow edge under it (the first arrow's stroke at row 220, columns 800)
     check(pixel(now, 960, 800, 220) == kFill && pixel(now, 960, 800, 221) == kFill && pixel(now, 960, 800, 219) == kLit && pixel(now, 960, 800, 222) == kShadow, "the stroke: fill on rows 220 and 221, the lit edge above (219), the shadow edge below (222)");
     check(pixel(now, 960, 811, 230) == kFill && pixel(now, 960, 812, 230) == kFill && pixel(now, 960, 810, 230) == kLit && pixel(now, 960, 813, 230) == kShadow, "the shaft: fill at x 811 and 812, the lit edge left of it (810), the shadow edge right of it (813)");
     check(pixel(ground, 960, 800, 219) != kLit && pixel(ground, 960, 800, 220) != kFill && pixel(ground, 960, 811, 230) != kFill, "the ground has none of it there");
@@ -905,7 +905,7 @@ void kill_team(sim::SimulationEngine& e, uint8_t team) {
 }
 
 void test_chat() {
-    group("chat", "the start line of the chat log in 187 and in the original's rules; \"<Name> (<Colour>) is out of ants!\" reaches the log of every player, in 187 only");
+    group("chat", "the start line of the chat log in 187 and in the original's rules; \"<Name> (<Color>) is out of ants!\" reaches the log of every player, in 187 only");
     {
         HUD hud;
         hud.set_game_mode(sim::GameMode::Kills187);

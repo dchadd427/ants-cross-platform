@@ -133,12 +133,12 @@ inline constexpr int32_t kResultsDigitWidth = 8;
 void draw_results_art(IRenderer& renderer, const ants::assets::AssetArchive& archive, bool headers = true);
 
 /// The look of the art's own lettering ("YOUR SCORE", "Winner!"), which the 187 page's headings, strokes, arrows and headline have: the fill, a lit edge one pixel up and to the left, and a shadow edge
-/// one pixel down and to the right (the colours are sampled from the original's art)
+/// one pixel down and to the right (the colors are sampled from the original's art)
 inline constexpr ants::assets::ColorRGBA kArtFill{43, 95, 67, 255};
 inline constexpr ants::assets::ColorRGBA kArtLit{115, 191, 155, 255};
 inline constexpr ants::assets::ColorRGBA kArtShadow{19, 55, 47, 255};
 
-/// A text in that look: a copy in the shadow colour at (x + 1, y + 1), a copy in the lit colour at (x - 1, y - 1), then the fill at (x, y)
+/// A text in that look: a copy in the shadow color at (x + 1, y + 1), a copy in the lit color at (x - 1, y - 1), then the fill at (x, y)
 void draw_art_text(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, FontSize size);
 /// A filled rectangle in that look: its shadow copy 1 px right and down, its lit copy 1 px left and up, then the fill
 void draw_art_rect(IRenderer& renderer, int32_t x, int32_t y, int32_t w, int32_t h);

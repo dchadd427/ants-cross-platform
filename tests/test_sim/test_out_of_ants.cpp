@@ -1,4 +1,4 @@
-// Tests of the line "<Name> (<Colour>) is out of ants!" of the game mode 187 (include/ants_sim/game_mode.hpp, docs/GAMEPLAY.md "187"): when a team of the match has no ant, no egg and no
+// Tests of the line "<Name> (<Color>) is out of ants!" of the game mode 187 (include/ants_sim/game_mode.hpp, docs/GAMEPLAY.md "187"): when a team of the match has no ant, no egg and no
 // hatch left, every player reads it once as a News Flash of the chat log and hears the cue of a player that drops out; a team that dropped out has its own line and gets none, a team that is
 // not in the match gets none, and a match of the original's rules says and plays nothing of it. The news and the cues are presentation: they stay out of the state hash, and an engine copy
 // carries what has been said.
@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 #include "ants_test_paths.hpp"
+#include "../common/test_assert.hpp"
 
 using namespace ants::sim;
 using ants::assets::LevelData;
@@ -40,19 +41,6 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
     if (g_test_failures == prev) std::cout << "PASS\n";
 }
 
-#define TEST_CASE(name) run_test_case(name, [&]()
-#define TEST_END() );
-#define ASSERT_TRUE(cond) \
-    do { \
-        ++g_assert_count; \
-        if (!(cond)) { \
-            std::cout << "FAILED!\n    Assertion failed: " #cond " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-            ++g_test_failures; \
-            return; \
-        } \
-    } while (0)
-#define ASSERT_FALSE(cond) ASSERT_TRUE(!(cond))
-#define ASSERT_EQ(a, b) ASSERT_TRUE((a) == (b))
 
 namespace {
 
@@ -141,7 +129,7 @@ void run(SimulationEngine& e, Heard& heard, int ticks) {
 int main() {
     std::cout << "=== Out of ants (187) ===\n";
 
-    TEST_CASE("1.1 the words: \"Name (Colour) is out of ants!\", a News Flash of the chat log for every player, with the match time of the moment, once, and the cue of a player that drops out") {
+    TEST_CASE("1.1 the words: \"Name (Color) is out of ants!\", a News Flash of the chat log for every player, with the match time of the moment, once, and the cue of a player that drops out") {
         SimulationEngine e = world(GameMode::Kills187);
         Heard heard;
         run(e, heard, 40);
@@ -164,7 +152,7 @@ int main() {
         ASSERT_EQ(heard.cues(SoundID::PlayerDropOut), 1u);
     } TEST_END();
 
-    TEST_CASE("1.2 each team has its own line with its own name and colour (green, red, blue, black), and without a name the colour word stands in both places, as in the other lines of the game") {
+    TEST_CASE("1.2 each team has its own line with its own name and color (green, red, blue, black), and without a name the color word stands in both places, as in the other lines of the game") {
         SimulationEngine e = world(GameMode::Kills187, 1);
         Heard heard;
         kill_team(e, 0);

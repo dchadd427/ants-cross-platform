@@ -861,6 +861,26 @@ void app_pixel_wide_scenarios() {
             rig.shot("px.wide.app.results", wide_masks({&kWMaskResults}));
         }
     }
+    if (wanted_group("px.wide.app.results187")) {                                   // the results page of the game mode 187 (new): its lettering is TrueType text, masked like the rows
+        WideAppRig rig;
+        if (rig.ok && rig.start_match("SMALL")) {
+            sim::MatchResult mr;
+            mr.is_over = true;
+            mr.standing = 0;
+            const int32_t kills[4] = {14, 3, 15, 11};
+            for (size_t p = 0; p < 4; ++p) {
+                mr.stats[p].score = kills[p];
+                mr.stats[p].enemy_killed = static_cast<uint32_t>(kills[p]);
+                mr.stats[p].friendly_lost = static_cast<uint32_t>(7 + p);
+                mr.ants_left[p] = p == 0 ? 5u : 0u;
+            }
+            mr.decide_winners();
+            rig.app.scorecard().show(mr, 0, sim::GameMode::Kills187);
+            rig.app.scorecard().update(0.25f);
+            const std::vector<MaskRect> lettering = {{330, 60, 930, 120}, {730, 135, 925, 240}};   // the headline and the three headings (the arrows stay unmasked)
+            rig.shot("px.wide.app.results187", wide_masks({&kWMaskResults, &lettering}));
+        }
+    }
     // the match screen: the "Get ready" dialog, the start view of every map, the corners and edges of MEDIUM, the windows of the original
     if (wanted_group("px.wide.app.match")) {
         WideAppRig rig;

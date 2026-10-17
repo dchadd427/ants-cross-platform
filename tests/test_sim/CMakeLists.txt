@@ -326,7 +326,7 @@ target_link_libraries(test_game_mode PRIVATE ants_test_paths)
 
 add_test(NAME test_game_mode COMMAND test_game_mode)
 
-# The line "<Name> (<Colour>) is out of ants!" and its cue (187), the engine copy and the state hash
+# The line "<Name> (<Color>) is out of ants!" and its cue (187), the engine copy and the state hash
 add_executable(test_out_of_ants
     test_out_of_ants.cpp
 )

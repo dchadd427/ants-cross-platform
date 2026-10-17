@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **187 on screen.** When a room plays 187 (the food-free game where kills decide: a server room that was made for it, or a game started with `--game-mode 187`), the chat log begins with "Game started! Most kills wins." and says "<Name> (<Color>) is out of ants!" once, to every player, when a team has no ant, egg or hatch left. The results page has its own look: the headings Kills, Ants lost and Ants left, and a line at the top that says how the match ended ("<Name> is the last colony standing!", "Time is up. The most kills wins!" or "Nobody is left. The most kills wins!"), also on the 4:3 page, where it takes two lines. The lobby has no way to pick 187 yet; that comes in a later release, and games of the original's rules look as before.
+
 ## v0.12.64 - 2026-10-16 - Spelling follow-up: the history address and record say color
 
 **For players:**
