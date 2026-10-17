@@ -469,7 +469,9 @@ def run_part(part, tab, args, check, tiny, junk):
         check(wait_for(lambda: page.state()["check"] == "Works in the original game", 4), "Undo gives the hill back and the check says it works again")
         # 512 x 512 with the processor slowed down: a stroke is a few cells a frame
         page.press_act("new")
-        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "a map that was undone back to the start is left without a question")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'")), "a map that changed again after it was downloaded is asked about")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Leave without saving'; })[0].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "Leave without saving goes on to New map")
         page.ev("document.querySelectorAll('.kind input')[1].click()")
         page.type_into("#size-rows", "512")
         page.type_into("#size-columns", "512")
