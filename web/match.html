@@ -105,7 +105,7 @@
         rest.appendChild(v);
         var acts = el('div', 'acts'), st = H.recState(rec);
         if (st.kind === 'watch') {
-            var show = el('button', 'btn', '▶ Show replay'); show.type = 'button'; show.id = 'show'; show.setAttribute('aria-expanded', 'false'); show.setAttribute('aria-controls', 'replay'); acts.appendChild(show);
+            var show = el('button', 'btn', '▶ Show replay'); show.type = 'button'; show.id = 'show'; show.setAttribute('aria-expanded', 'false'); show.setAttribute('aria-controls', 'replay'); acts.appendChild(show);
         } else acts.appendChild(el('span', 'why', st.note));
         if (st.file) { var dl = el('a', 'dl', 'Download file'); dl.href = '/replays/' + encodeURIComponent(st.file); dl.setAttribute('download', st.file); acts.appendChild(dl); }
         var cp = el('button', 'btn sm ghost', 'Copy link'); cp.type = 'button';
@@ -139,7 +139,7 @@
         }
         if (!open && frame) { frame.src = 'about:blank'; if (frame.parentNode) frame.parentNode.removeChild(frame); frame = null; }
         sec.hidden = !open;
-        btn.textContent = open ? 'Hide replay' : '▶ Show replay'; btn.setAttribute('aria-expanded', String(open));
+        btn.textContent = open ? 'Hide replay' : '▶ Show replay'; btn.setAttribute('aria-expanded', String(open));
         $('rep-full').hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
         if (open) { try { sec.scrollIntoView({ block: 'start' }); sec.focus({ preventScroll: true }); } catch (e) { /* it is shown anyway */ } }
     }
