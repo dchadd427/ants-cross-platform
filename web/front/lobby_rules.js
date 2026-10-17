@@ -231,6 +231,17 @@
         else if (typeof room.mode === 'number') plan.mode = room.mode;
         return plan;
     }
+    // The leader's pick of a game type is the room's mode for every plan that the page sends until a Room message says it (a plan that is built from the last Room alone would carry the old mode back and
+    // undo the pick): withMode gives the room as the page means it (`pending` is a mode number, -1 for none), pendingAfter what is still pending once `room` has come (none when the room says it,
+    // when the page does not lead, or when START was pressed)
+    function withMode(room, pending) {
+        if (!(pending >= 0)) return room;
+        var out = {};
+        for (var k in room) if (Object.prototype.hasOwnProperty.call(room, k)) out[k] = room[k];
+        out.mode = pending;
+        return out;
+    }
+    function pendingAfter(pending, room, model) { return pending >= 0 && !model.guest && !room.starting && room.mode !== pending ? pending : -1; }
     function sidesOfPair(a, b) { var out = [0, 0, 0, 0]; if (a !== NO_TEAM && b !== NO_TEAM && a < PLAYERS && b < PLAYERS) { out[a] = 1; out[b] = 1; } return out; }
     // The colors that would play if the plan were `kinds`: every color that a person holds, and every other color whose plan is a bot
     function playingAfter(model, kinds) {
@@ -428,7 +439,7 @@
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
-        planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
+        planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
         notBack: notBack, startNote: startNote
     };
 });

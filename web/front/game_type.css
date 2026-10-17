@@ -23,7 +23,7 @@
 .gt-opt.active { background: #1b4538; } .gt-opt.sel.active { background: #14332b; }
 .gt-combo:focus-visible + .gt-pop .gt-opt.active { outline: 3px solid var(--gold); outline-offset: -3px; }      /* (the keys' cursor is shown by an outline; the mouse's by a lighter row) */
 .gt-combo:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
-.gt-scrim { display: none; }
+.gt-scrim { display: none; touch-action: none; }
 /* the tag by the room's name: the mode's short name, none for the default mode */
 .modetag { display: inline-block; margin-left: 10px; padding: 1px 7px; font-size: 13px; line-height: 1.4; letter-spacing: .04em; vertical-align: 3px; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; }
 @media (max-width: 600px) {
@@ -33,7 +33,7 @@
     .gt-scrim { position: fixed; inset: 0; z-index: 85; background: rgba(5, 10, 8, .72); }
     .gtype.open .gt-scrim { display: block; }
     .gt-pop { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 90; display: flex; flex-direction: column; max-height: 60vh; max-height: 60dvh; border-width: 3px 0 0; border-radius: 10px 10px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -6px 0 rgba(157, 13, 23, .9); }
-    .gt-title { display: block; padding: 12px 16px 8px; font-size: 17px; color: var(--cream); border-bottom: 1px solid #17382f; }
+    .gt-title { display: block; touch-action: none; padding: 12px 16px 8px; font-size: 17px; color: var(--cream); border-bottom: 1px solid #17382f; }
     .gt-list { flex: 1 1 auto; max-height: none; }
     .gt-opt { min-height: 64px; grid-template-columns: 26px minmax(0, 1fr); padding: 10px 16px; align-content: center; }
     .gt-oname { font-size: 20px; } .gt-oline { font-size: 15px; }

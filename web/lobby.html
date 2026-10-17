@@ -380,7 +380,7 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
-        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false;
+        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
         if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
@@ -868,7 +868,7 @@
                 if (bannerKind === 'lost' || bannerKind === 'unreachable' || bannerKind === 'busy') hideBanner();
                 if (wasLost) say('You are back in the room.');
             }
-            if (e.created) newRoom = true;                   // (a room that this page made starts with the leader's last game type: onRoom)
+            pendingMode = -1; if (e.created) newRoom = true;      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
             if (e.created && !ownRoom) showBanner('old', { sameMap: false });
             saveSession();
             render();
@@ -880,14 +880,15 @@
                 return;
             }
             model = Rules.modelOf(room);
-            if (newRoom) { newRoom = false; var want = !room.starting && room.leader === room.you ? Modes.wanted(storage, room.mode) : -1; if (want >= 0) client.setPlan(Rules.planWith(room, model, { mode: want })); }
+            pendingMode = Rules.pendingAfter(pendingMode, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
+            if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
             localSides = Rules.reconcileSides(localSides, model);
             if (model.guest) {
                 if (lastStarting && !room.starting) showBanner('lateplayer', { host: Rules.hostName(model) });      // the start was given up: everybody is back in the room
             } else if (room.starting) {
                 /* the correction waits for the start to end */
             } else if (Rules.teamNeedsFix(room, model)) {
-                var plan = Rules.planWith(room, model, { sides: [0, 0, 0, 0] });
+                var plan = Rules.planWith(Rules.withMode(room, pendingMode), model, { sides: [0, 0, 0, 0] });
                 var stamp = JSON.stringify(plan);
                 if (stamp !== fixSent && client.setPlan(plan)) fixSent = stamp;
             } else fixSent = '';                       // (the room is right: the next time that a team is left alone is a new case and is corrected again)
@@ -1038,9 +1039,9 @@
         // ---- the buttons and the cards ----
         function sendPlan(change) {
             if (!client || !client.room) return false;
-            return client.setPlan(Rules.planWith(client.room, Rules.modelOf(client.room), change));
+            return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
         }
-        var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (!sendPlan({ mode: id })) render(); } });      // (front/game_type.js)
+        var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
         function setMap(step) {                          // the next or the previous original; from a map of the players the first or the last
             var list = Rules.MAPS, at = mapIndex();
             var key = list[at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length].key;

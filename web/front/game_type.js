@@ -1,10 +1,12 @@
 // The "Game type" control of the front page's lobby (web/lobby.html), made from the rows of front/game_modes.js: for the leader ONE field that opens a list (a drop-down under the field; a bottom sheet
 // with big rows on a phone, by front/game_type.css), for a guest one read-only line. It is the ARIA select-only combobox: the field has focus all the time and names the option under the cursor with
 // aria-activedescendant; the list is a listbox of options, the chosen one aria-selected. It knows nothing of the room: the page says what to show (paint) and is told what the leader chose (onChoose).
-//   * Open: a click or a tap on the field, or Enter, Space, Down or Up on it. Choose: a click or a tap on a row, or Up, Down, Home, End and Enter or Space. Escape or a click outside closes it (Tab too).
+//   * Open: a click or a tap on the field, or Enter, Space, Down or Up on it. Choose: a click or a tap on a row, or Up, Down, Home, End and Enter or Space. Escape or a click outside closes it.
 //     Typing the first letters of a name jumps to that mode.
 //   * ES5 and no module system: a page gets the global AntsGameType, node gets module.exports (the DOM comes in as `doc`).
 //   * Nothing here puts a name into markup: every text is set with textContent.
+//   * The ids (gt-label, gt-combo, gt-list, gt-name, gt-line, gt-note, gt-opt-N) are fixed, so the control exists once on a page.
+//   * Tab on the open list takes the option under the cursor (as the select-only pattern says) and the focus goes on; Escape and a click outside choose nothing.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -31,7 +33,7 @@
         var combo = el('div', 'gt-combo'); combo.id = 'gt-combo';
         combo.setAttribute('role', 'combobox'); combo.setAttribute('tabindex', '0');
         combo.setAttribute('aria-haspopup', 'listbox'); combo.setAttribute('aria-expanded', 'false'); combo.setAttribute('aria-controls', 'gt-list');
-        combo.setAttribute('aria-labelledby', 'gt-label gt-name'); combo.setAttribute('aria-describedby', 'gt-line gt-note');
+        combo.setAttribute('aria-labelledby', 'gt-label'); combo.setAttribute('aria-describedby', 'gt-line gt-note');
         var name = el('span', 'gt-name'); name.id = 'gt-name';
         var arrow = el('i', 'gt-arrow'); arrow.setAttribute('aria-hidden', 'true');
         combo.appendChild(name); combo.appendChild(arrow);
@@ -114,9 +116,10 @@
             else if (k === 'End') { e.preventDefault(); setActive(rows.length - 1); }
             else if (k === 'Enter' || k === ' ') { e.preventDefault(); choose(active); }
             else if (k === 'Escape') { e.preventDefault(); close(); }
-            else if (k === 'Tab') close();
+            else if (k === 'Tab') choose(active);            // (the select-only pattern: Tab takes the option under the cursor and lets the focus go on)
             else if (k.length === 1) { e.preventDefault(); typeAhead(k); }
         });
+        combo.addEventListener('blur', function (e) { if (open && e && e.relatedTarget && !field.contains(e.relatedTarget)) close(); });      // (the focus moved on by a script: a click elsewhere is the pointerdown below)
         doc.addEventListener('pointerdown', function (e) { if (open && !field.contains(e.target)) close(); }, true);
         scrim.addEventListener('click', close);
 

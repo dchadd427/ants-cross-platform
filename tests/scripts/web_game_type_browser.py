@@ -7,10 +7,12 @@ check starts the server, puts a front door before the site (/ws goes to the serv
   * leader   the closed field says "Highest score" with its line and no tag; a click opens the list (a drop-down, one row for each mode, the chosen one aria-selected); picking 187 sends the plan (the
              server's room says "187"), the field, the note and the tag by the room's name change, the choice is kept in the browser; a second browser that joins sees the read-only line "Game type: 187"
              and the tag, and both change when the leader picks Highest score again; the guest has no field;
-  * keys     Down opens the list on the chosen row, Down and Up move (aria-activedescendant), Enter chooses, Escape closes and chooses nothing, a letter jumps to a mode, Tab closes;
+  * keys     Down opens the list on the chosen row, Down and Up move (aria-activedescendant), Enter chooses, Escape closes and chooses nothing, a letter jumps to a mode, Tab takes the row under the cursor;
   * phone    a 390 px screen: the list is a bottom sheet with a title and rows of 64 px or more, over a dimmed page, no sideways scroll; a tap on a row chooses; a tap outside closes;
   * remember a new room starts with the leader's last choice (a new tab of the same browser); a remembered word that no mode has gives the default; with localStorage refused the page works and
              every room starts with the default;
+  * pending  the leader picks 187 and changes a computer player's level before the room has answered: the second plan carries the pick, the room stays on 187;
+  * survive  the leader's open list keeps its row and its focus when the room changes under it (a guest joins);
   * rows     the control made on a list of three modes (a row added to the data) with one that this browser does not know: the list holds three rows and scrolls inside itself when it is long, the unknown
              mode reads "New mode" with that tag, nothing is thrown.
 --shots DIR saves the pictures that the check looks at, to compare with the approved ones.
@@ -33,7 +35,7 @@ from web_rejoin_check import Server, wait_for, REPO                            #
 from web_map_fetch_check import Front                                           # noqa: E402
 from web_map_picker_browser import Visitor                                      # noqa: E402
 
-PARTS = ("leader", "keys", "phone", "remember", "rows")
+PARTS = ("leader", "keys", "phone", "remember", "pending", "survive", "rows")
 BLOCK = "Object.defineProperty(window, 'localStorage', { get: function () { throw new Error('storage refused'); } });"
 
 
@@ -209,7 +211,7 @@ def main():
             time.sleep(0.2)
             check(v.is_open() and v.active() == "1", "a letter (or digit) opens the list on the mode that starts with it")
             v.press("Tab")
-            check(not v.is_open() and mode_of(v) == "highest-score", "Tab closes the list and chooses nothing")
+            check(not v.is_open() and mode_is(v, "187"), "Tab takes the row under the cursor (187) and closes the list")
             v.click("#gt-combo")
             v.ev("document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
             check(not v.is_open(), "a click outside closes the list")
@@ -265,6 +267,41 @@ def main():
             b.click("#gt-opt-1")
             check(mode_is(b, "187") and bool(wait_for(lambda: b.combo() == "187" and b.tag() == "187", 10, 0.2)), "the control still chooses 187")
             check(not b.errors() and not v.errors(), "no page threw anything")
+
+        if wanted("pending"):
+            print("part pending", flush=True)
+            v = person()
+            v.desktop()
+            check(v.open_front(web), "the front page is up with its room")
+            v.ev("""(function () {
+                document.getElementById('gt-combo').click(); document.getElementById('gt-opt-1').click();
+                var s = document.querySelector('#slots select.mode'); s.value = 'easy'; s.dispatchEvent(new Event('change', { bubbles: true }));
+            })()""")
+            check(bool(wait_for(lambda: v.ev("document.querySelectorAll('#slots .slot.k-bot').length") >= 1, 10, 0.2)), "the second plan (a computer player) reached the room")
+            time.sleep(1.0)
+            check(mode_of(v) == "187" and v.combo() == "187" and v.tag() == "187", "the room stayed on 187: the second plan carried the pick (%s)" % mode_of(v))
+            v.click("#gt-combo")
+            v.click("#gt-opt-0")
+            check(mode_is(v, "highest-score"), "a later pick still works")
+            check(not v.errors(), "no page threw anything")
+
+        if wanted("survive"):
+            print("part survive", flush=True)
+            ann = person()
+            ann.desktop()
+            check(ann.open_front(web), "the front page is up with its room")
+            ann.ev("document.getElementById('gt-combo').focus()")
+            ann.press("ArrowDown")
+            ann.press("ArrowDown")
+            check(ann.is_open() and ann.active() == "1", "the list is open on 187's row")
+            bob = person("Bob")
+            bob.desktop()
+            check(bob.join(web, ann.room_code(), "Bob"), "a guest joins while the list is open")
+            time.sleep(0.5)
+            check(ann.is_open() and ann.active() == "1" and ann.ev("document.activeElement.id") == "gt-combo", "the list is still open on the same row and the focus is on the field")
+            ann.press("Enter")
+            check(mode_is(ann, "187"), "Enter then chooses the row that was under the cursor")
+            check(not ann.errors(), "no page threw anything")
 
         if wanted("rows"):
             print("part rows", flush=True)

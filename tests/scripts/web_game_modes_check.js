@@ -146,7 +146,28 @@ function build(modes, extra) {
     click(u.combo); click(u.opt(0)); same('a click on the other row', u.chosen, [1, 1, 0]);
     click(u.combo); u.doc.pointerdown(u.doc.root); same('a click on the page outside closes', [u.c.isOpen(), u.chosen.length], [false, 3]);
     click(u.combo); u.doc.pointerdown(u.opt(0)); check('a click inside the list does not close it', u.c.isOpen());
-    key(u.combo, 'Tab'); check('Tab closes', !u.c.isOpen());
+    u.c.close(); u.c.paint({ id: 0, guest: false, disabled: false }); u.chosen.length = 0;
+    click(u.combo); key(u.combo, 'End'); key(u.combo, 'Tab');
+    same('Tab takes the option under the cursor and closes (the focus goes on: Tab is not prevented)', [u.c.isOpen(), u.chosen[u.chosen.length - 1], key(u.combo, 'Tab')], [false, 1, false]);
+    u.c.paint({ id: 0, guest: false, disabled: false }); u.chosen.length = 0;
+    click(u.combo); u.combo.handlers.blur.forEach((f) => f({ relatedTarget: u.opt(0) }));
+    check('a focus moved into the control itself does not close it', u.c.isOpen());
+    u.combo.handlers.blur.forEach((f) => f({ relatedTarget: null }));
+    check('a blur with no target (a click on the page) is left to the pointer rule', u.c.isOpen());
+    u.combo.handlers.blur.forEach((f) => f({ relatedTarget: { parent: null } }));
+    same('the focus moved elsewhere by a script closes the list and chooses nothing', [u.c.isOpen(), u.chosen.length], [false, 0]);
+    check('the field is named by the label only', u.combo.getAttribute('aria-labelledby') === 'gt-label');
+    {   // paint is a no-op when [id, guest, disabled, serverName] is unchanged: an open list keeps its row
+        click(u.combo); key(u.combo, 'End');
+        const before = [u.c.isOpen(), u.combo.getAttribute('aria-activedescendant')];
+        let writes = 0; const nameNode = u.q('gt-name'), was = nameNode._text;
+        Object.defineProperty(nameNode, 'textContent', { get() { return was; }, set() { writes++; } });
+        u.c.paint({ id: 0, guest: false, disabled: false }); u.c.paint({ id: 0, guest: false, disabled: false, serverName: '' });
+        same('an unchanged paint writes nothing at all', writes, 0);
+        same('an unchanged paint leaves the open list and its row alone', [u.c.isOpen(), u.combo.getAttribute('aria-activedescendant')], before);
+        u.c.paint({ id: 0, guest: false, disabled: false, serverName: 'x' }); check('a changed server name is painted (the stamp counts it)', u.c.isOpen());
+        u.c.close();
+    }
     click(u.combo); u.c.paint({ id: 1, guest: true, disabled: false });
     check('the leader becomes a guest while the list is open: it closes', !u.c.isOpen());
     same('the guest: the field and its line are hidden, the read-only line shows', [u.q('gt-field').hidden, u.q('gt-line').hidden, u.q('gt-note').hidden, u.q('gt-guest').hidden, u.q('gt-guest').textContent, u.q('gt-gline').textContent, u.q('gt-gline').hidden], [true, true, true, false, 'Game type: 187', M.MODES[1].line, false]);

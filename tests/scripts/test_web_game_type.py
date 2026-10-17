@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The lobby's Game type control (run by ./run_tests.sh --fast, with the other python tests of tests/scripts, and by the CI): the leader's field with its list, the guest's read-only line and the tag by the
-room's name, all made from the ROWS of web/front/game_modes.js (a game type is one row of data, so a new one is a row and no new code), with the leader's last choice kept in the browser (docs/PLAY_IN_BROWSER.md,
+room's name, all made from the ROWS of web/front/game_modes.js (the page needs no new button or code for a new type; the type's number must still become the protocol's last game mode), with the leader's last choice kept in the browser (docs/PLAY_IN_BROWSER.md,
 "Game type").
 
   - the code is RUN (node, when it is installed): the rows and the pure functions (the mode a new room starts with, the tag, the guest's line, the mode that this browser does not know, storage that is
@@ -55,13 +55,19 @@ class ThePage(unittest.TestCase):
         self.assertIn("if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.page)
 
     def test_a_choice_is_a_plan_with_the_mode_and_is_kept_in_the_browser(self):
-        self.assertIn("onChoose: function (id) { Modes.remember(storage, id); if (!sendPlan({ mode: id })) render(); }", self.page)
+        self.assertIn("onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); }", self.page)
         self.assertIn("try { storage = window.localStorage; } catch (e)", self.page)       # (the page works without the storage)
 
     def test_a_new_room_starts_with_the_leaders_last_choice_and_a_rematch_or_a_joined_room_does_not(self):
-        self.assertIn("if (e.created) newRoom = true;", self.page)
-        self.assertIn("if (newRoom) { newRoom = false; var want = !room.starting && room.leader === room.you ? Modes.wanted(storage, room.mode) : -1; if (want >= 0) client.setPlan(Rules.planWith(room, model, { mode: want })); }", self.page)
+        self.assertIn("pendingMode = -1; if (e.created) newRoom = true;", self.page)
+        self.assertIn("if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }", self.page)
         self.assertEqual(self.page.count("newRoom = true"), 1, "only the room that this page made (the Welcome that says created) is new")
+
+    def test_every_plan_the_page_sends_carries_the_pending_mode(self):
+        self.assertIn("pendingMode = Rules.pendingAfter(pendingMode, room, model);", self.page)
+        self.assertEqual(self.page.count("Rules.withMode(client.room, pendingMode)"), 1)
+        self.assertIn("Rules.planWith(Rules.withMode(room, pendingMode), model, { sides: [0, 0, 0, 0] })", self.page)
+        self.assertEqual(len(re.findall(r"Rules\.planWith\(", self.page)), 3, "every plan is built with the pending mode, except the first plan of a new room, which sets it")
 
     def test_the_room_decides_what_the_control_and_the_tag_show(self):
         self.assertIn("gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro });", self.page)
@@ -140,6 +146,10 @@ class TheCheckIsNotVacuous(unittest.TestCase):
         "a guest can open the list": ("if (open || state.guest || state.disabled) return;", "if (open) return;"),
         "a disabled field opens": ("if (open || state.guest || state.disabled) return;", "if (open || state.guest) return;"),
         "the chosen row is not marked": ("li.setAttribute('aria-selected', String(rows[i].id === s.id))", "li.setAttribute('aria-selected', 'false')"),
+        "Tab does not take the option": ("else if (k === 'Tab') choose(active);", "else if (k === 'Tab') close();"),
+        "a focus moved away by a script leaves the list open": ("if (open && e && e.relatedTarget && !field.contains(e.relatedTarget)) close();", "if (false) close();"),
+        "the field is named by its value too": ("combo.setAttribute('aria-labelledby', 'gt-label');", "combo.setAttribute('aria-labelledby', 'gt-label gt-name');"),
+        "a paint with the same stamp repaints": ("if (stamp === last) return;", ""),
         "Enter does not choose": ("else if (k === 'Enter' || k === ' ') { e.preventDefault(); choose(active); }", "else if (k === 'Enter' || k === ' ') { e.preventDefault(); close(); }"),
         "the list does not close after a choice": ("            var m = rows[i];\n            close();", "            var m = rows[i];"),
         "a click outside does not close": ("if (open && !field.contains(e.target)) close();", "if (false) close();"),

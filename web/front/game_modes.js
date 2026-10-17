@@ -1,11 +1,12 @@
-// The game types of the front page's lobby (web/lobby.html), as DATA: one row for each mode, so that a new mode is one more row here and nothing else (the control of front/game_type.js, the tag by the
-// room's name and the guest's line are all made from these rows). The pure functions that decide what the page shows and what it remembers have no browser in it, so that node can run them
+// The game types of the front page's lobby (web/lobby.html), as DATA: one row for each mode (the control of front/game_type.js, the tag by the room's name and the guest's line are all made from these
+// rows, so the page needs no new button or code for a new mode). A new mode is NOT only a row: its number must also be the protocol's last game mode (LAST_GAME_MODE of front/lobby_net.js, sim::kLastGameMode and
+// valid_game_mode of the server), because the codec refuses a Room message above it (an older client must refuse a newer room: a protocol bump), and the simulation must play it. The pure functions that decide what the page shows and what it remembers have no browser in it, so that node can run them
 // (tests/scripts/web_game_modes_check.js).
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsGameModes, node gets module.exports.
 //   * A row: id (the mode's number in the plan message and the Room message of network protocol 17: sim::GameMode), word (the protocol's word of POST /rooms and of the room status, which is also what a
 //     browser remembers), name (the field's text), tag (the short name by the room's name, '' for none: the default mode has none), line (one line under the name), note (shown under the field when
 //     the mode is chosen, '' for none) and, on one row only, def: true (the mode that a browser starts with when it remembers nothing, or something that this list does not hold).
-//   * The wire says a mode by its number. A number that no row holds is a mode of a newer server: it is shown as "New mode" and never played as another one.
+//   * The wire says a mode by its number. A number that no row holds is shown as "New mode", a defensive display: the codec refuses such a room today, so it cannot reach the page over the wire.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;

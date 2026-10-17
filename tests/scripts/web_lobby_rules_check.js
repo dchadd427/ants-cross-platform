@@ -54,8 +54,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
     'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
-    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pickName',
-    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf'
+    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pickName',
+    'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
 ]);
 
 // The colors: the server's seats (Green 0, Red 1, Blue 2, Black 3); the cards lie Black, Green, Red, Blue
@@ -253,6 +253,26 @@ const S13 = mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0], st
 const S13b = mk([P('Juniper'), P('Sam'), O, P('Priya')], { plan: [0, 0, 2, 0], starting: true, inGame: 1, you: 1 });  // picture 13b: the same on Sam's screen; Juniper's game is open
 const S4 = mk([P('Juniper'), O, O, P('Sam')], { you: 3, leader: 0, plan: [0, 1, 2, 0], teamA: 0, teamB: 3 });         // picture 4: Sam's screen (Black), Juniper hosts, an Easy and a Medium bot, Green + Black
 const S12 = mk([O, P('Sam'), O, P('Priya')], { you: 1, leader: 1, plan: [0, 0, 2, 0] });                              // picture 12: Juniper left, Sam is the host now in Red
+
+// ---- the leader's pending game type: a second plan before the room's answer must not undo the pick ----
+{
+    const room0 = mk([P('Juniper'), P('Sam'), O, O]);                       // the room still says Highest score
+    const pend = (r, p) => R.planWith(R.withMode(r, p), model(r), { seat: 2, kind: 'easy' });
+    same('withMode: nothing pending gives the room itself', R.withMode(room0, -1), room0);
+    same('withMode: a pending mode is the room\'s mode in a copy', [R.withMode(room0, 1).mode, room0.mode, R.withMode(room0, 1) !== room0], [1, 0, true]);
+    same('a second plan (a color changes) before the answer carries the pending mode', pend(room0, 1).mode, 1);
+    same('... and the map change too', R.planWith(R.withMode(room0, 1), model(room0), { map: 'tiny' }).mode, 1);
+    same('... the team mending plan too', R.planWith(R.withMode(room0, 1), model(room0), { sides: [0, 0, 0, 0] }).mode, 1);
+    same('with no pending mode the room\'s own goes back', pend(room0, -1).mode, 0);
+    const answered = mk([P('Juniper'), P('Sam'), O, O], { mode: 1 });
+    same('pendingAfter: the room says it: cleared', R.pendingAfter(1, answered, model(answered)), -1);
+    same('pendingAfter: the room does not say it yet: kept', R.pendingAfter(1, room0, model(room0)), 1);
+    same('pendingAfter: nothing pending stays none', R.pendingAfter(-1, room0, model(room0)), -1);
+    const guestRoom = mk([P('Juniper'), P('Sam'), O, O], { you: 1 });
+    same('pendingAfter: a guest (the lead moved) drops it', R.pendingAfter(1, guestRoom, model(guestRoom)), -1);
+    const starting = mk([P('Juniper'), P('Sam'), O, O], { starting: true });
+    same('pendingAfter: START pressed drops it', R.pendingAfter(1, starting, model(starting)), -1);
+}
 
 // ---- modelOf ----
 same('modelOf, picture 1: you alone at Green, the host', model(S1), {
