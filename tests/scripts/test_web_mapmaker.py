@@ -267,8 +267,6 @@ class TheCodeRuns(unittest.TestCase):
             "a sheet that does not say the whole name to a screen reader": ("mapmaker_tools.js", "b.setAttribute('aria-label', bigText(item)); } else who.textContent = item.label;", "} else who.textContent = item.label;"),
             "a rock put without its solid bit": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
             "an eraser that leaves the solid bits": ("mapmaker_edit.js", "if (Solid.sets(gone)) setSolid(cells[i], false);", "void 0;"),
-            "a solid bit that row 0 loses": ("mapmaker_edit.js", "if (!on && idx < f.columns) return;", "void 0;"),
-            "a solid bit that takes the other flags with it": ("mapmaker_edit.js", "on ? (was | 1) : (was & ~1)", "on ? 1 : 0"),
             "a change whose solid bits are not applied": ("mapmaker_edit.js", "for (i = 0; ch.solid && i < ch.solid.length; i++) setSolid(ch.solid[i][0], ch.solid[i][1]);", "void 0;"),
             "a pile of one stage": ("mapmaker_tools.js", "[Blocks.MIN_STAGES, Blocks.MAX_STAGES]", "[1, Blocks.MAX_STAGES]"),
             "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }", "function chooseTeam(id) { fits = ''; showPalette(); }"),
@@ -349,6 +347,8 @@ class TheCodeRuns(unittest.TestCase):
             "a box that the canvas does not take from the object": ("mapmaker_view.js", "if (shape) return {", "if (false) return {"),
             "an eraser that takes one cell of a bigger object": ("mapmaker_edit.js", "var cells = objectCells(f, idx), n = 0;", "var cells = [idx], n = 0;"),
             "a rock whose solid bit is not set by the Objects tool": ("mapmaker_edit.js", "if (Solid.sets(tileId)) setSolid(idx, true);", "void 0;"),
+            "a solid bit that row 0 loses": ("mapmaker_edit.js", "if (!on && idx < f.columns) return;", "void 0;"),
+            "a solid bit that takes the other flags with it": ("mapmaker_edit.js", "on ? (was | 1) : (was & ~1)", "on ? 1 : 0"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
