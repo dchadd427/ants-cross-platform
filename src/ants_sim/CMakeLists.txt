@@ -12,6 +12,7 @@ add_library(ants_sim STATIC
     state_hash.cpp
     game_strings.cpp
     start_teams.cpp
+    mode_187.cpp
 )
 
 target_include_directories(ants_sim PUBLIC

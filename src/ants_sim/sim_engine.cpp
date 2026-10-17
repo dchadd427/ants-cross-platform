@@ -95,6 +95,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     const ants::assets::LevelData& level = everybody ? level_in : roster_level;
     impl_->roster_mask_ = roster_mask;
     impl_->dropped_mask_ = 0;
+    impl_->out_of_ants_told_ = 0;
     impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
@@ -200,6 +201,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;
+    impl_->out_of_ants_told_ = 0;
     impl_->quitter_ = NO_QUITTER;
     impl_->prng_.srand(random_seed);
     impl_->cosmetic_prng_.srand(random_seed ^ 0x5EEDu);
@@ -237,6 +239,9 @@ void SimulationEngine::tick() {
     if (impl_->match_state_ == MatchState::GameOver) {
         return;
     }
+
+    // 187: a team that has no ant, egg or hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
+    if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();
 
     // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match
     if (impl_->match_clock_ms_ <= impl_->checkgo_next_ms_) {
@@ -484,28 +489,6 @@ uint32_t SimulationEngineImpl::alive_sides() const {
         ++sides;
     }
     return sides;
-}
-
-bool SimulationEngineImpl::end_rule_187() const {
-    uint32_t in_match = 0;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
-    }
-    const uint32_t sides = alive_sides();
-    if (sides == 0) return true;                                // nobody has anything left (the original's rule too)
-    return in_match >= 2 && sides == 1;                         // the last side standing wins at once, whatever its score (a match of one team has no one to beat)
-}
-
-uint8_t SimulationEngineImpl::last_standing_187() const {
-    uint32_t in_match = 0;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
-    }
-    if (in_match < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;
-    }
-    return PLAYER_NEUTRAL;
 }
 
 bool SimulationEngine::issue_order(const AntOrder& order) {

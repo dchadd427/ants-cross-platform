@@ -1,0 +1,181 @@
+{
+ "note": "Mutants of the on-screen part of the game mode 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the line \"<Name> (<Color>) is out of ants!\" against test_out_of_ants (2.9.7), the start line (and, for the room made after the application began, test_network_app AI6.11f), the page's words and numbers and the headline's fit against test_results_187 (3.16.2). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/mode_187_screens_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "out_of_ants_said_every_tick",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "        out_of_ants_told_ = static_cast<uint8_t>(out_of_ants_told_ | bit);\n        post_news_flash",
+   "new": "        post_news_flash",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_said_for_a_team_with_ants",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "        if (team_alive(k)) continue;\n",
+   "new": "",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_dropped_team_gets_a_line",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "        if (team_dropped(k)) {",
+   "new": "        if (false) {",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_team_not_in_match_gets_a_line",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "if ((roster_mask_ & bit) == 0 || (out_of_ants_told_ & bit) != 0) continue;",
+   "new": "if ((out_of_ants_told_ & bit) != 0) continue;",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_no_cue",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "        audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut",
+   "new": "        if (false) audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_said_after_the_end_check",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();\n",
+   "new": "",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_said_in_every_mode",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();",
+   "new": "impl_->announce_out_of_ants_187();",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "out_of_ants_new_match_keeps_told_bits",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->roster_mask_ = roster_mask;\n    impl_->dropped_mask_ = 0;\n    impl_->out_of_ants_told_ = 0;",
+   "new": "    impl_->roster_mask_ = roster_mask;\n    impl_->dropped_mask_ = 0;",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  },
+  {
+   "id": "start_line_is_the_food_line_in_187",
+   "file": "src/ants_app/hud.cpp",
+   "old": "game_mode_ == sim::GameMode::Kills187 ? \"Game started! Most kills wins.\"",
+   "new": "false ? \"Game started! Most kills wins.\"",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "start_line_hud_not_told_the_mode",
+   "file": "src/ants_app/application.cpp",
+   "old": "    hud_.set_game_mode(sim_.game_mode());\n    hud_.init(local_player_id_, !rejoin);",
+   "new": "    hud_.init(local_player_id_, !rejoin);",
+   "build": "test_network_app",
+   "test": "timeout 900 env ANTS_TEST_FILTER=AI6.11f ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "results_page_not_told_the_mode",
+   "file": "src/ants_app/application.cpp",
+   "old": "scorecard_.show(world.match_result, local_player_id_, world.game_mode);",
+   "new": "scorecard_.show(world.match_result, local_player_id_);",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_clock_words",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "\"Time is up. The most kills wins!\"",
+   "new": "\"Time is up!\"",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_nobody_is_clock",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "return ants == 0 ? \"Nobody is left. The most kills wins!\" : ",
+   "new": "return ants == 0 ? \"Time is up. The most kills wins!\" : ",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_quit_has_one",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "    if (r.quitter != sim::NO_QUITTER) return std::string();\n",
+   "new": "",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_allies_always_pair",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "row.has_second() && r.ants_left[row.first] > 0 && r.ants_left[row.second] > 0",
+   "new": "row.has_second()",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_standing_names_the_wrong_team",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "return name_of(r.standing) + \" is the last colony standing!\";",
+   "new": "return name_of(rows_[0].first == r.standing ? rows_.back().first : rows_[0].first) + \" is the last colony standing!\";",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "results_187_shows_four_numbers",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "for (size_t c = 0; c < 3; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c]",
+   "new": "for (size_t c = 0; c < 2; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c]",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "results_187_row_numbers_are_the_old_ones",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "std::to_string(r.friendly_lost), std::to_string(r.ants_left), std::string()}",
+   "new": "std::to_string(r.friendly_lost), std::to_string(r.enemy_killed), std::to_string(r.new_hatched)}",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "results_187_keeps_baked_headings",
+   "file": "src/ants_app/scorecard.cpp",
+   "old": "if (baked_headings >= 0 && static_cast<int32_t>(fr.sprite_index) == baked_headings) continue;",
+   "new": "if (false && baked_headings >= 0 && static_cast<int32_t>(fr.sprite_index) == baked_headings) continue;",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_never_wraps_on_the_classic_page",
+   "file": "src/ants_app/results_layout.cpp",
+   "old": "    static constexpr FontSize kSizes[] = {FontSize::Px35, FontSize::Px27, FontSize::Px24, FontSize::Px20, FontSize::Px18};",
+   "new": "    static constexpr FontSize kSizes[] = {FontSize::Px18};",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "headline_biggest_size_only",
+   "file": "src/ants_app/results_layout.cpp",
+   "old": "bool fits = !lines.empty() && static_cast<int32_t>(lines.size()) * font_cell_height(size) <= box.h;",
+   "new": "bool fits = !lines.empty();",
+   "build": "test_results_187",
+   "test": "timeout 600 ./build/tests/test_app/test_results_187"
+  },
+  {
+   "id": "standing_names_a_dropped_team",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;",
+   "new": "if ((roster_mask_ & (1u << k)) != 0 && team_alive(k)) return k;",
+   "build": "test_out_of_ants",
+   "test": "timeout 600 ./build/tests/test_sim/test_out_of_ants"
+  }
+ ]
+}
