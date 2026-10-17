@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **A way to find out why the controls do not come back from part of the bottom edge on a phone:** add `&edgedebug=1` to the address of a replay or of its match page, go fullscreen and touch the bottom edge. The strip where a finger brings the controls back is outlined in red, and the last touches are written over the picture: where, which part of the page took each one, and whether the phone took it away. Nothing else changes.
+
 ## v0.12.71 - 2026-10-17 - Tests: faster and steadier (round 2)
 
 **For players:**

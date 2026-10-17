@@ -282,10 +282,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay, rewind, picture or bar (default: all)")
+    ap.add_argument("--only", default="", help="one part: list, watch, ends, cards, replay, rewind, picture, bar or edgedebug (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("list", "watch", "ends", "cards", "replay", "rewind", "picture", "bar")
+    parts = ("list", "watch", "ends", "cards", "replay", "rewind", "picture", "bar", "edgedebug")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -837,6 +837,37 @@ def main():
                 a = tab.ev(apart)
                 check(a[7] != "none" and a[5] is True and a[6] is True, "%s: the tag (x %d to %d) and the tab (x %d to %d) lie apart, inside the %d px screen" % ((label, a[0], a[1], a[2], a[3], a[4])))
                 shot(tab, "fs-phone-" + ("paused" if wait_for == "Paused" else "live"))
+                tab.close()
+        if args.only in ("", "edgedebug"):
+            print("[web live] part edgedebug: the diagnostic of the bottom strip (edgedebug=1), on a phone on its side with a notch at both sides")
+            fresh(kept_at=1.0)
+            w, h = 844, 390
+            idle = "document.getElementById('rbar').classList.contains('idle')"
+            for flag in ("", "&edgedebug=1"):
+                tab = new_tab(w, h, 2, True)
+                tab.call("Emulation.setSafeAreaInsetsOverride", {"insets": {"top": 0, "left": 47, "right": 47, "bottom": 21}})       # (the notch and the home bar of a phone on its side)
+                tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": "Element.prototype.requestPointerLock = function () {};"})    # (a desktop browser that is driven from outside takes the pointer lock in fullscreen and then reports every finger at 0,0; a phone has none)
+                open_page(tab, "/play.html?replay=" + KEPT + flag)
+                until(tab, READY)
+                time.sleep(1.0)
+                fx, fy = centre(tab, "fullscreen-btn-r")
+                tab.tap(fx, fy)
+                until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                check(until(tab, idle, 8) is True and tab.ev("!document.getElementById('redge').hidden") is True, "%s: the bar is away and the strip is there" % (flag or "no flag"))
+                if not flag:
+                    check(tab.ev("document.getElementById('edgelog')") is None and tab.ev("document.getElementById('redge').classList.contains('edgedebug')") is False, "no flag: no log and no outline")
+                    tab.close()
+                    continue
+                check(tab.ev("!!document.getElementById('edgelog') && document.getElementById('redge').classList.contains('edgedebug') && getComputedStyle(document.getElementById('redge')).outlineStyle") == "dashed", "edgedebug=1: the strip is outlined and a log is there")
+                got = tab.ev("document.getElementById('edgelog').textContent")
+                check(got.startswith("window 844x390\nready | ") and "\nclick" in got, "the log names the window and has what the first tap did (%r)" % got[:120])
+                for share in (0.04, 0.5, 0.96):
+                    until(tab, idle, 6)
+                    time.sleep(0.4)
+                    touch(tab, [(w * share, h - 20)])
+                    check(until(tab, "!" + idle, 3) is True, "%d%% of the width: a tap on the strip calls the bar" % round(share * 100))
+                    got = tab.ev("document.getElementById('edgelog').textContent")
+                    check("pointerdown %d,%d on redge | strip at 0,313 844x77 | bar away" % (round(w * share), h - 20) in got and "click %d,%d on redge" % (round(w * share), h - 20) in got, "... and the log says which element took it (%r)" % got.split("\n")[-3:])
                 tab.close()
     except (RuntimeError, TimeoutError, ConnectionError) as e:
         check(False, "the browser or the page broke down: %s" % e)

@@ -210,6 +210,17 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
         self.assertRegex(self.page, r"@media \(max-width: 700px\)[^@]*?\.rbar\.over \.rtab \{ left: auto; right: 14px; transform: none; \}")   # (a phone upright: the tab at the right end, clear of the tag)
 
 
+    def test_the_edge_diagnostic_is_only_for_an_address_that_asks_and_changes_nothing_else(self):
+        for line in ("/(^|[?&])edgedebug=1(&|$)/.test(w.location.search)",                                   # (asked by the address, or by the match page that holds the frame)
+                     "asked(window) || (window.parent !== window && asked(window.parent))",
+                     "stageElement.appendChild(log);",                                                       # (in the stage: the only thing that a fullscreen page shows)
+                     "document.addEventListener(name, function (ev) { if (ev.pointerType !== 'mouse') say(name, ev); }, true);"):
+            self.assertIn(line, self.glue, line)
+        self.assertIn(".redge.edgedebug {", self.page)
+        self.assertRegex(self.page, r"\.edgelog \{[^}]*pointer-events: none;")                                  # (the log never takes a touch)
+        self.assertNotIn("edgedebug", read("web", "match.html"))                                             # (the page of a match changes nothing: the frame reads its address)
+
+
 class TheLiveGlue(unittest.TestCase):
     """play.html?live=<id>: the game plays a file that grows (docs/REPLAYS.md "Watching a replay"); the page asks the door for it again and again and tells the game each time it has more."""
     page = read("web", "shell.html")
