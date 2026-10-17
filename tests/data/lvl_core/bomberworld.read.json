@@ -1,0 +1,6 @@
+{"bytes":235594,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":12,"description":"bomb. trez hell hole.","description_bytes":21,
+"rows":60,"columns":60,"dictionary_names":1335,"tile_ids_used":131,"eggs":9,"default_type_tile":32766,"food_piles":18,"waypoints":19,
+"teams":[{"team":"green","start_markers":6,"hill_cells":16},{"team":"red","start_markers":6,"hill_cells":16},{"team":"blue","start_markers":6,"hill_cells":16},{"team":"black","start_markers":6,"hill_cells":16}],
+"playable":true,
+"findings":[]}

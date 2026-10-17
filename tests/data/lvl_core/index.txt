@@ -1,0 +1,9 @@
+tiny	Original-Ants/Maps/TINY.LVL	0	19312	71a9b7dac68be3a3
+small	Original-Ants/Maps/SMALL.LVL	0	34190	25df67e54aa21e59
+medium	Original-Ants/Maps/MEDIUM.LVL	0	58381	d82a439f6e6f1f84
+turtleworld	Community-Maps/!TurtleWorld.lvl	0	58381	ff72edaa8b773252
+party	Community-Maps/ANTS_PARTY-V.3.0.5.lvl	0	27564	83531b81799636fb
+conquer	Community-Maps/Conquer.lvl	0	19134	9861a6de1053993d
+bomberworld	Community-Maps/BOMBERWORLD.lvl	0	58853	0b93bf03e225a25c
+easyjungle	Community-Maps/Easy jungle.lvl	0	113880	a7ee81e88f9183f5
+icon	Community-Maps/IcoN.LVL	0	19102	6eabcc7f8fb51a90

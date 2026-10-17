@@ -6,6 +6,7 @@ add_library(ants_assets STATIC
     lvl_checker.cpp
     asset_archive.cpp
     object_footprint.cpp
+    lvl_core.cpp
 )
 
 target_include_directories(ants_assets PUBLIC

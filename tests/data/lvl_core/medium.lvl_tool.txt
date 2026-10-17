@@ -1,0 +1,1 @@
+MEDIUM.LVL: works in the original game; no findings

@@ -1,0 +1,4 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"fatal","code":"file_cut_short","message":"the file ends inside the tile dictionary (byte 30000 of 30000): the original's loader throws \"System read file error.\" there and the game does not start","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false}
+]}

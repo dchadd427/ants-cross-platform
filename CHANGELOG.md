@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.62 - 2026-10-16 - Map maker: the map core runs in the browser
+
+**For players:**
+- Under the hood: the map code (reading, checking and writing a map) now also runs in the browser; nothing changes in the game or on the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0731389a...0d6c0ff6), [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
+
 ## v0.12.61 - 2026-10-16 - Replays: the full screen button fills the screen with the game
 
 **For players:**

@@ -1,0 +1,6 @@
+{"bytes":19102,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":10,"description":"The Ultimate Power Map!<^^>","description_bytes":27,
+"rows":31,"columns":31,"dictionary_names":670,"tile_ids_used":51,"eggs":47,"default_type_tile":32766,"food_piles":1,"waypoints":0,
+"teams":[{"team":"green","start_markers":5,"hill_cells":14},{"team":"red","start_markers":5,"hill_cells":11},{"team":"blue","start_markers":5,"hill_cells":15},{"team":"black","start_markers":5,"hill_cells":13}],
+"playable":true,
+"findings":[]}

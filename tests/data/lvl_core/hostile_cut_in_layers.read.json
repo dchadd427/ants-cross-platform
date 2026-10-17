@@ -1,0 +1,4 @@
+{"bytes":12000,"profile":"new_map","loaded":false,"reason":"the file ends inside the layers (byte 12000 of 12000): the original's loader throws \"System read file error.\" there and the game does not start",
+"findings":[
+{"severity":"fatal","code":"truncated","message":"the file ends inside the layers (byte 12000 of 12000): the original's loader throws \"System read file error.\" there and the game does not start","team":-1,"count":1}
+]}

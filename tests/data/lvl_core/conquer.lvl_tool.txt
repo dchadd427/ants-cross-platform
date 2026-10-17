@@ -1,0 +1,4 @@
+Conquer.lvl: does not work in the original game: the file ends inside its list of flower droppers: the original keeps the complete records it read, goes on to read the places that were never filled, and leaves the number of eggs each team starts with to chance
+  fatal file_cut_in_block_4: the file ends inside its list of flower droppers: the original keeps the complete records it read, goes on to read the places that were never filled, and leaves the number of eggs each team starts with to chance
+  warning description_too_long: the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)
+  note tile_not_drawn: one cell uses a tile that the dictionary names "." (row 0, column 30: tile 88): the original does not load its picture, so it does not draw it

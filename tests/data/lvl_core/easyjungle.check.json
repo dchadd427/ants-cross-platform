@@ -1,0 +1,6 @@
+{"judged":true,"works_in_original_game":true,"fits_the_place":true,
+"findings":[
+{"severity":"note","code":"hill_not_whole","message":"the hill of Blue is not whole: 15 cells (the first at row 45, column 5) differ from the 4 x 4 hill around its entrance (row 46, column 6)","row":45,"column":5,"team":2,"count":15,"place_limit":false},
+{"severity":"note","code":"tile_not_drawn","message":"one cell uses a tile that the dictionary names \".\" (row 39, column 7: tile 254): the original does not load its picture, so it does not draw it","row":39,"column":7,"team":-1,"count":1,"place_limit":false},
+{"severity":"note","code":"object_outside_map","message":"one waypoint stands outside the map (row 106, column 67): the original ignores it","row":106,"column":67,"team":-1,"count":1,"place_limit":false}
+]}

@@ -82,3 +82,14 @@ add_executable(test_original_safe
 target_link_libraries(test_original_safe PRIVATE ants_assets ants_test_paths)
 
 add_test(NAME test_original_safe COMMAND test_original_safe)
+
+# The map core behind plain data (include/ants_assets/lvl_core.hpp) and its C interface, the code of the browser module lvl_core.wasm; it also keeps the expectation
+# in tests/data/lvl_core/ that tests/scripts/lvl_core_check.js holds the module to
+add_executable(test_lvl_core
+    test_lvl_core.cpp
+    ../../src/ants_assets/lvl_core_c.cpp
+)
+
+target_link_libraries(test_lvl_core PRIVATE ants_assets ants_test_paths)
+
+add_test(NAME test_lvl_core COMMAND test_lvl_core)

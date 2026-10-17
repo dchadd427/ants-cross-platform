@@ -1,0 +1,4 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"fatal","code":"file_unreadable","message":"no data","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false}
+]}

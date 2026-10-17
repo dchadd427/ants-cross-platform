@@ -1,0 +1,4 @@
+{"bytes":525312,"profile":"new_map","loaded":false,"reason":"the file has 525312 bytes, more than the 524288 allowed here: nothing of it is read",
+"findings":[
+{"severity":"fatal","code":"file_too_large","message":"the file has 525312 bytes, more than the 524288 allowed here: nothing of it is read","team":-1,"count":1}
+]}
