@@ -6,6 +6,11 @@
 //   3. the rewrite is canonical: written again it is the same bytes, and the same within the limits of a new map (LevelLimits::for_new_maps(), which every map fits);
 //   4. the file and its rewrite PLAY the same: two engines, one on each, with the four teams and the scripted players of the map sweep (tests/common/scripted_players.hpp),
 //      have the same full state hash at the start and after every game second, for kPlayTicks ticks.
+//   5. the Extended map (version 9, docs/MAP_FORMAT.md): convert_to_extended, written, read again (the same level, written twice the same bytes, refused by a reader of
+//      Classic maps only), convert_to_classic: the same bytes as the rewrite of step 1 (so a map goes up and comes back unchanged);
+//   6. the converted map (rules 0) PLAYS as its source does: the simulation does not read version 9 yet (and a reader of Classic maps refuses it), so the level that it
+//      gets is the converted one with its anchors turned absolute again by LevelData::object_anchor (as_sim_level below), which is all a version 9 loader will do;
+//      the hashes are the source's, at the start and after every game second.
 // The counts of the library (and of the dictionaries by the rule of the original maps) are those of docs/MAP_FORMAT.md. `test_map_roundtrip --ticks N` plays N ticks
 // instead (the time of a CI run is the reason for the default), `--only TEXT` only the maps whose names hold TEXT (and checks no count).
 #include "ants_assets/lvl_parser.hpp"
@@ -26,6 +31,7 @@
 #include <string>
 #include <vector>
 
+using ants::assets::LevelConversion;
 using ants::assets::LevelData;
 using ants::assets::LevelLimits;
 using ants::assets::LevelProblemKind;
@@ -108,6 +114,25 @@ std::vector<ants::sim::StateHash> play(const LevelData& level, uint32_t ticks) {
     return hashes;
 }
 
+// The level that the simulation plays for a version 9 map of rules 0: the same grid, with every object anchor in the absolute form of version 8 (the sum that
+// LevelData::object_anchor makes), and nothing else changed. Test-only: the simulation's loader takes version 8 maps only in this version of the game.
+LevelData as_sim_level(const LevelData& extended) {
+    LevelData out = extended;
+    out.version = ants::assets::LVL_EXPECTED_VERSION;
+    out.format_flags = 0;
+    out.rules = 0;
+    for (uint32_t row = 0; row < extended.height; ++row) {
+        for (uint32_t column = 0; column < extended.width; ++column) {
+            int32_t anchor_row = 0;
+            int32_t anchor_column = 0;
+            if (!extended.object_anchor(row, column, anchor_row, anchor_column)) continue;
+            out.layer2_interactive[static_cast<size_t>(row) * extended.width + column].properties =
+                static_cast<uint16_t>((static_cast<uint32_t>(anchor_row) & 0xFFu) | ((static_cast<uint32_t>(anchor_column) & 0xFFu) << 8));
+        }
+    }
+    return out;
+}
+
 bool same_hash(const ants::sim::StateHash& a, const ants::sim::StateHash& b) {
     return a.total == b.total && a.engine == b.engine && a.players == b.players && a.grid == b.grid && a.food == b.food && a.ants == b.ants && a.paths == b.paths &&
            a.droppers == b.droppers;
@@ -145,6 +170,29 @@ void the_fingerprint_sees_a_changed_map(uint32_t ticks) {
     }
 }
 
+// The play comparison of step 6 sees a misplaced anchor: the anchors of a version 9 map moved by one cell (a converter that got the sign of the offset wrong)
+// play otherwise than the map does. A hill is the object whose anchor the simulation reads at the start.
+void the_fingerprint_sees_a_misplaced_anchor(uint32_t ticks) {
+    LevelData tiny;
+    if (!tiny.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL")) {
+        check(false, "TINY.LVL loads");
+        return;
+    }
+    const LevelConversion up = ants::assets::convert_to_extended(tiny);
+    check(up.ok, "TINY.LVL goes up to an Extended map");
+    if (!up.ok) return;
+    LevelData misplaced = up.level;
+    for (uint32_t row = 0; row < misplaced.height; ++row) {
+        for (uint32_t column = 0; column < misplaced.width; ++column) {
+            if (!misplaced.has_object_anchor(row, column)) continue;
+            uint16_t& word = misplaced.layer2_interactive[static_cast<size_t>(row) * misplaced.width + column].properties;
+            word = static_cast<uint16_t>((word & 0xFF00u) | ((word + 1u) & 0xFFu));                // one row further
+        }
+    }
+    check(play(as_sim_level(misplaced), ticks) != play(tiny, ticks), "TINY with every anchor one row off plays otherwise than TINY");
+    check(play(as_sim_level(up.level), ticks) == play(tiny, ticks), "TINY as an Extended map plays as TINY does");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -172,6 +220,10 @@ int main(int argc, char* argv[]) {
     int byte_identical = 0;
     int same_where_read = 0;                        // the same bytes once the bytes the original never reads are zeroed or dropped (no restructured part)
     int same_play = 0;
+    int extended_same_level = 0;                    // the version 9 file reads back as the converted level, and writes twice the same bytes
+    int extended_same_bytes = 0;                    // and converts back to the bytes of the rewrite
+    int extended_refused = 0;                       // and a reader of Classic maps only refuses it (version_not_supported)
+    int extended_same_play = 0;
     uint64_t ticks_played = 0;
     size_t largest = 0;
     std::string largest_name;
@@ -255,11 +307,46 @@ int main(int argc, char* argv[]) {
         for (; equal && first < pa.size(); ++first) equal = same_hash(pa[first], pb[first]);
         check(equal, m.name + ": the rewrite plays as the file does (the hashes differ at checkpoint " + std::to_string(first) + ")");
         same_play += equal ? 1 : 0;
+        // 5. the Extended map: up, written, read, down
+        const LevelConversion up = ants::assets::convert_to_extended(a);
+        check(up.ok && up.reasons.empty(), m.name + ": convert_to_extended");
+        if (!up.ok) continue;
+        const LevelWriteResult w9 = ants::assets::write_level(up.level, LevelLimits::format_ceiling());
+        check(w9.ok, m.name + ": the Extended map is written: " + w9.error);
+        if (!w9.ok) continue;
+        LevelData r9;
+        const bool read9 = r9.load_from_memory(w9.bytes.data(), w9.bytes.size(), nullptr, LevelLimits::format_ceiling());
+        std::string difference9;
+        const LevelWriteResult w9_again = read9 ? ants::assets::write_level(r9, LevelLimits::format_ceiling()) : LevelWriteResult{};
+        const bool level9 = read9 && ants::assets::same_level(up.level, r9, &difference9) && w9_again.ok && w9_again.bytes == w9.bytes;
+        check(level9, m.name + ": the Extended map reads back as the converted level and is written twice as the same bytes (" + difference9 + ")");
+        extended_same_level += level9 ? 1 : 0;
+        LevelData classic_only;
+        ants::assets::LevelValidation refusal;
+        const bool refused = !classic_only.load_from_memory(w9.bytes.data(), w9.bytes.size(), &refusal) && refusal.has(LevelProblemKind::VersionNotSupported) &&
+                             !classic_only.load_from_memory(w9.bytes.data(), w9.bytes.size(), &refusal, LevelLimits::for_new_maps());
+        check(refused, m.name + ": a reader of Classic maps only refuses the Extended map");
+        extended_refused += refused ? 1 : 0;
+        const LevelConversion down = read9 ? ants::assets::convert_to_classic(r9) : LevelConversion{};
+        const LevelWriteResult w8 = down.ok ? ants::assets::write_level(down.level) : LevelWriteResult{};
+        const bool bytes8 = down.ok && w8.ok && w8.bytes == w.bytes;
+        check(bytes8, m.name + ": the Extended map converts back to the bytes of the rewrite" + (down.reasons.empty() ? "" : " (" + down.reasons[0] + ")"));
+        extended_same_bytes += bytes8 ? 1 : 0;
+        // 6. the same play
+        const std::vector<ants::sim::StateHash> pc = read9 ? play(as_sim_level(r9), ticks) : std::vector<ants::sim::StateHash>{};
+        bool equal9 = pa.size() == pc.size();
+        size_t first9 = 0;
+        for (; equal9 && first9 < pa.size(); ++first9) equal9 = same_hash(pa[first9], pc[first9]);
+        check(equal9, m.name + ": the Extended map (rules 0) plays as the Classic map does (the hashes differ at checkpoint " + std::to_string(first9) + ")");
+        extended_same_play += equal9 ? 1 : 0;
         ticks_played += 2u * static_cast<uint64_t>(pa.size() > 1 ? (pa.size() - 1) * kTicksPerSecond : 0);
     }
     if (only.empty()) the_fingerprint_sees_a_changed_map(ticks);
+    if (only.empty()) the_fingerprint_sees_a_misplaced_anchor(ticks);
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     std::cout << "  maps " << total << ": the same map " << same_map << ", the same play " << same_play << " (" << ticks << " ticks, all four teams)\n"
+              << "  as Extended maps (version 9): the same level " << extended_same_level << ", back to the same bytes " << extended_same_bytes << ", refused by Classic-only readers "
+              << extended_refused << ", the same play " << extended_same_play << "\n"
               << "  byte-identical rewrites " << byte_identical << "; the same bytes where the original reads " << same_where_read << "; restructured "
               << maps_with[RewriteChangeKind::Restructured] << "\n"
               << "  maps with name leftovers " << maps_with[RewriteChangeKind::NamePadding] << ", description leftovers " << maps_with[RewriteChangeKind::DescriptionPadding]
@@ -270,6 +357,9 @@ int main(int argc, char* argv[]) {
         // The numbers of docs/MAP_FORMAT.md ("The round-trip law"): a change of the library or of the writer that moves them updates the document with them.
         check(total == 540, "the library has 540 maps (6 originals and the 534 of maps.json): " + std::to_string(total));
         check(same_map == total && same_play == total, "every map reads back and plays the same as its rewrite");
+        check(extended_same_level == total && extended_same_bytes == total && extended_refused == total && extended_same_play == total,
+              "every map goes up to an Extended map, comes back as the same bytes, is refused by a reader of Classic maps only, and plays the same: " + std::to_string(extended_same_level) + " / " +
+                  std::to_string(extended_same_bytes) + " / " + std::to_string(extended_refused) + " / " + std::to_string(extended_same_play));
         check(byte_identical == 0, "no map of the library is rewritten byte for byte: every one has leftovers after the end of its dictionary names");
         check(maps_with[RewriteChangeKind::NamePadding] == 540, "540 maps have leftovers after their names: " + std::to_string(maps_with[RewriteChangeKind::NamePadding]));
         check(maps_with[RewriteChangeKind::DescriptionPadding] == 14, "14 maps have leftovers after their description: " + std::to_string(maps_with[RewriteChangeKind::DescriptionPadding]));

@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **187 on screen.** When a room plays 187 (the food-free game where kills decide: a server room that was made for it, or a game started with `--game-mode 187`), the chat log begins with "Game started! Most kills wins." and says "<Name> (<Color>) is out of ants!" once, to every player, when a team has no ant, egg or hatch left. The results page has its own look: the headings Kills, Ants lost and Ants left, and a line at the top that says how the match ended ("<Name> is the last colony standing!", "Time is up. The most kills wins!" or "Nobody is left. The most kills wins!"), also on the 4:3 page, where it takes two lines. The lobby has no way to pick 187 yet; that comes in a later release, and games of the original's rules look as before.
 
+## v0.12.65 - 2026-10-16 - Extended maps: the map file version 9 in the core
+
+**For players:**
+- Under the hood: the map code and the map tool now know a second kind of map, the Extended map (a new map file version for bigger and taller maps), and can convert a map between the two kinds; nothing changes in the game or on the site, and the game still reads the classic maps only.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c7c46030...895da29b), [the Extended map](docs/MAP_FORMAT.md#version-9-the-extended-map)
+
 ## v0.12.64 - 2026-10-16 - Spelling follow-up: the history address and record say color
 
 **For players:**

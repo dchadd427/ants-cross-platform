@@ -8,7 +8,7 @@ Every number is little-endian; a word is 2 bytes, a dword 4. The parts follow ea
 
 | Part | Bytes | `LevelData` | What it holds |
 |---|---|---|---|
-| Version | dword at 0 | `version` | 8. The original refuses any other. |
+| Version | dword at 0 | `version` | 8. The original refuses any other. (Version 9, the Extended map of this remake: [below](#version-9-the-extended-map).) |
 | Mode | dword at 4 | `game_mode` | 1 in the original maps; the original stores it and never reads it. |
 | Minutes | word at 8 | `default_minutes` | The length of a match. |
 | Description | 30 bytes at 10 | `description` | A text up to its first zero byte. |
@@ -43,6 +43,56 @@ The reader refuses a file beyond its limits (`FileTooLarge` before a byte is rea
 
 On hostile input the reader never asks for memory for a count before it has the bytes the count announces, and it gives back the room of a count that the file does not fill (a block 2 that ends at a food pile without stages) before it reads on. What it holds at once is at most 7 times the size of the file and 64 KiB: a waypoint without trigger, 8 bytes of file, is 56 bytes in memory, and nothing of a file costs more (a dictionary name about 3 times, a cell once). The writer holds at most 8 times the file it writes and 64 KiB: the bytes, and the level it reads back from them. From a file (`load_from_file`, `check_file`) the reader also holds the file's bytes: 8 times the file and 64 KiB. With the limits of a new map that is at most 3.6 MiB for a file that is read from memory (64 KiB + 7 x 512 KiB), 4.1 MiB for one read from a file (64 KiB + 8 x 512 KiB) and 1.2 MiB for one that is written (64 KiB + 8 x 144 KiB); the writer refuses a level beyond the limits before it takes anything of its size, and `blank_level` makes no cell of a grid beyond them. Tests: suite 6c of `test_assets` (the reader, the limits) and `test_lvl_writer` W4 and W6.4 (files cut at every byte, bytes changed at random with fixed seeds, every count of a file set to five values from 0 to 65,535 (0, 1, 32,767, 32,768 and 65,535), the dearest files (waypoints without trigger, a half record after them, a block 2 that announces 65,535 food piles and ends at once, 512 KB of waypoints), grids of 65,535 x 65,535, and a heap that counts what they take).
 
+## Version 9: the Extended map
+
+The map has two kinds. A **Classic map** is a version 8 file, the original's format, with every limit above: it plays in the original game and in this remake. An **Extended map** is a version 9 file: the same parts in the same order with a wider header and no 256-cell side, for this remake only. Version 8 is read, checked and written exactly as it always was (the same bytes, limits, findings and state hashes); version 9 is a sibling that a reader takes only when its caller says so (`LevelLimits::allow_extended`, below). In this version of the game nothing reads or writes version 9 except the tests, `lvl_tool` and the conversion functions: no caller of the game, the server or the browser module enables it.
+
+| Part | Version 8 | Version 9 |
+|---|---|---|
+| Version | dword at 0: 8 | dword at 0: 9 |
+| Mode, minutes | dword at 4, word at 8 | the same |
+| Format flags | none | dword at 10 (`LevelData::format_flags`): the bits of features the format may add later. **0 today.** A reader refuses a file with a bit it does not know (`format_flags_unknown`, fatal), so a later version of the format cannot be misread by an older reader. |
+| Rules | none | word at 14 (`LevelData::rules`): **0 = the original's rules exactly, 1 = extended rules.** Any other value is refused (`rules_out_of_range`, fatal). The simulation does not read the word yet; a converted Classic map keeps 0, so it plays as it did, and a new Extended map (`blank_extended_level`) asks for 1 when it has more than 90 rows (the original's path finder never enters tile row 90) or more than 256 columns. |
+| Description | 30 bytes at 10 | a word at 16 (the length, at most 255), then that many bytes; read up to the first zero byte as in version 8 (`description_too_long` if the length is above the limit) |
+| Dictionary | word at 40, then 11 bytes per name | the same encoding, after the description; the same cap of 1,344 names |
+| Grid size | two dwords, the lower 16 bits kept | two dwords, **every bit honored**, then checked against the limits and the ceiling below before a byte of the cells is counted or allocated |
+| Layer 1, layer 2 | 6 bytes per cell | 6 bytes per cell. **The third word of a layer-2 cell that holds an object is the anchor relative to the cell**: a signed byte for the row offset in the low byte and a signed byte for the column offset in the high byte, so no position needs a wide number. In a map larger than 256 on a side an object is at most 127 cells (-128 to 127) from its anchor; in a map of 256 x 256 or less the sum wraps modulo 256 (below), so every anchor byte can be stored. The third word of the original's bomb tiles (129 to 132, the owner of the bomb) and of the empty tile 0x7FFE stays as it is. |
+| Blocks 1 to 4, eggs | words | the same, 65,535 entries a block |
+| After the egg word | never read | never read |
+
+`LevelData` holds a version 9 level as the file does: `MapCell::properties` is the file's word, so the relative form of the anchor. `LevelData::object_anchor(row, column, anchor_row, anchor_column)` gives the absolute anchor of either version and `has_object_anchor` says which cells have one; the simulation will use them when it reads version 9. **In a map of at most 256 rows and 256 columns the sum of cell and offset is taken modulo 256**, so the anchor byte of a Classic map keeps its value through a conversion even when it points outside the grid (13 cells of 8 library maps hold such a byte, for example 0xCDCD), and the conversion is lossless for every map. In a larger map the sum is plain and may be negative or above 255, which `convert_to_classic` reports. **So the anchor encoding depends on the size of the map: the same bytes mean different anchors when a map grows past 256 on a side.** Example: in a 200-wide map, a cell in column 10 with its anchor in column 190 stores the offset +180, which is the signed byte -76; read in a 300-wide map the same byte puts the anchor in column -66. An editor must therefore read every anchor through `LevelData::object_anchor` before a resize across 256 (rows or columns) and write it again (relative to its cell, within -128 to 127 for the larger map) after it; an object that is further than 127 cells from its anchor in the larger map cannot be kept as it is.
+
+A version 9 reader is **strict where the version 8 reader copies the original's loader**: a food pile without stages, a file that ends inside block 4 or before the egg word are not read (`food_block_ended_early`, `truncated`, fatal), because the quirks of that loader are not a format to keep. Bytes after the egg word are never read, as in version 8.
+
+**Limits.** Both kinds, and the ceiling that no `LevelLimits` can exceed once Extended maps are allowed:
+
+| | Classic (version 8) | Extended (version 9): `LevelLimits::for_extended_maps()` | Ceiling of the format (`LevelLimits::format_ceiling()`) |
+|---|---|---|---|
+| A side | 256 by the format; a new map 130 (`for_new_maps()`) | 1,024 | 2,048 |
+| Cells | 65,536 by the format; a new map 10,000 | 262,144 in all, any shape (512 x 512, 1,024 x 256, ...) | 4,194,304 |
+| A file as it is read | no limit; a new map 512 KB | 4 MiB | 64 MiB (refused before a byte is read) |
+| The canonical file that is written | no limit; a new map 144 KB | 3.5 MiB (a 512 x 512 map is 3.1 MiB) | 64 MiB |
+| Dictionary | 1,344 names | 1,344 | 1,344 |
+| Entries in a block | 65,535 | 65,535 | 65,535 |
+| Description | 30 bytes in the file (29 characters that the original can end) | 255 bytes | 255 bytes |
+| Teams | four | four | four (the format flags leave room) |
+
+No compression in this version of the format: 12 bytes a cell. The reader's memory rule holds for version 9: at most 7 times the file and 64 KiB at once, and no allocation for a count before the bytes it announces exist (a header that announces 65,535 x 65,535 or 2^32-1 cells is refused as `grid_too_large` and allocates nothing; the cell count is computed in 64 bits).
+
+**A place that reads Classic maps only refuses version 9.** `LevelLimits::allow_extended` is `false` for `LevelLimits{}` and `for_new_maps()` and `true` for `for_extended_maps()` and `format_ceiling()`. The game, the server and the browser module pass the first two, so given a version 9 file they answer, without reading it, `version_not_supported` (fatal: "header version 9 is an Extended map: version 9 is not supported here, this place reads Classic maps (version 8) only"), not a crash and not a misreading; `write_level` refuses a version 9 level the same way, and `LevelData::validate` says it of a level in memory. A place enables Extended maps in its own change, with its own limits.
+
+**What the original does with a version 9 file.** It reads version 8 only (the loader report, 0x1006386): it shows "The MAP you tried to play is the wrong version" and the match starts without a map. Not a crash and not a misreading. (Not tried in the original game itself.)
+
+**The original-safe profile of an Extended map** is not a failure: `check_original_safe` answers a version 9 level, or a file whose version word is 9 (without reading it), with the one finding `not_for_original` ("not for the original game (needs a version 8 file)"). Its severity is note (it is neither fatal nor a warning), `works_in_original_game()` is false, `not_for_original()` is true and `judged` and `fits_the_place` stay true. The profile for the remake and the wording of the checks by kind are another change.
+
+**Conversion** (`include/ants_assets/lvl_writer.hpp`; `lvl_tool convert FILE --to extended|classic -o OUT`). A conversion always makes a copy: another level, written as another file with another hash; the source is kept.
+
+- `convert_to_extended(level)`: always possible for a Classic map. Every field is carried, the anchors become relative, `rules` 0 and `format_flags` 0, the description is kept. A level that is Extended already is copied.
+- `convert_to_classic(level)`: only when the map fits: both sides at most 256, the dictionary at most 1,344 names, the description at most 30 bytes (the file's field; a description of exactly 30 bytes converts with a note, because the original reads no zero byte that ends it and the checker warns), no format flags, every object anchor inside a byte (0 to 255). Rules 0 or 1: rules 1 is dropped with a note (the original's rules apply to a Classic map: ants cannot cross tile row 90, a long path order can fail). When it does not fit, `reasons` lists every cause in a sentence with the number and the limit ("this map is 400 columns wide; a Classic map has at most 256 columns", "the description is 31 bytes; a Classic map holds 30"). The policy of new Classic maps (90 rows) is a limit of the places that make maps, not of the conversion.
+- `needs_extended(level)`: the same reasons, empty when the level can be a Classic map.
+
+**The laws** (all in `tests/test_assets/test_lvl_writer.cpp` W7 and `tests/test_sim/test_map_roundtrip.cpp`): (1) a Classic map goes up and comes back as the same bytes as its canonical file, for all 540 maps of the library; (2) read, write, read of a version 9 file is the same level and writing twice gives the same bytes; (3) a converted map (rules 0) plays with the same state hashes as its source. The simulation does not load version 9 in this version of the game, so the play check gives it the converted level with its anchors turned absolute again by `object_anchor`, which is all a version 9 loader will do; (4) version 8 is unchanged (the bot baselines, the round-trip counts of the table above, the recorded replays); (5) hostile input: the headers above, unknown flag bits, rules out of range, a cut at every byte, bytes changed at random with fixed seeds, a version 9 file given to a Classic-only reader, a version 8 file given to the version 9 reader, the memory bound; and the mutants of `tests/data/lvl_extended_mutants.json`.
+
 ## The original-safe profile
 
 `check_original_safe(level)`, or of a file's bytes (`lvl_tool check FILE --original`), answers "does this map work in the original game?". **The yardstick: a map works in the original game when the original loads it without refusing it or reading outside its tables, and plays what the map shows** (a hill and starting ants for each of the four teams, every food pile where the map puts it). It is stricter than "the remake plays it": every file that the remake refuses or plays with a warning has a fatal finding or a warning here too. Each finding has a stable code (the editor and the server key on it), a severity, one sentence in plain words ("Blue has no hill", "one food pile stands outside the map (row 12, column 40)") and the cell it is about when there is one; a report lists the findings that stop the map first, in the order of the rules below, then the notes.
@@ -61,6 +111,7 @@ On hostile input the reader never asks for memory for a count before it has the 
 | `egg_word_missing` | warning | The egg word (the number of eggs each team starts with) is there. Cut off, the egg stock of every team is whatever its heap held (the egg field is never set otherwise). |
 | `food_block_ended_early` | warning | Block 2 ends where its count says. A pile without stages ends it on the spot (0x1006dc9), and blocks 3, 4 and the egg word are read from the bytes behind it. |
 | `version_not_8` | fatal | Version 8: any other is "wrong version", and the match starts without a map (0x1006386). |
+| `not_for_original` | note, and no "works in the original game" | An [Extended map](#version-9-the-extended-map) (version 9): the original cannot load it. Not a fault of the map: the one finding of such a map. |
 | `description_too_long` | warning | A description of at most 29 bytes (not letters: a browser editor writes UTF-8, and a letter outside a to z takes 2 or 3 bytes): the original reads 30 bytes without a check (0x10063c3), and 30 leave no zero byte to end the text. |
 | `grid_empty`, `grid_too_large`, `layers_not_grid` | fatal | 1 to 256 rows and columns, the remake's own limits (the original loads 0 rows into a map without a cell; an object's anchor holds its row and its column in a byte each), and, for a level in memory, layers of rows x columns cells. |
 | `dictionary_too_large` | fatal | At most 1,344 names: more overrun the original's buffer of 0x1500 bytes (0x1006795). |
@@ -110,6 +161,9 @@ The profile's choices: the mode is a note, because the original never reads it; 
 |---|---|
 | Read back as the same map (`same_level`: every field of the file) | 540 |
 | Play the same (the full state hash at the start and after every game second; all four teams, the map sweep's scripted players, 200 ticks) | 540 |
+| Go up to an Extended map (`convert_to_extended`), written, read again as the same level, written twice as the same bytes, refused by a Classic-only reader | 540 |
+| Come back (`convert_to_classic`) as the same bytes as the rewrite | 540 |
+| The Extended map (rules 0) plays the same as its source (the simulation is given its anchors absolute again; [Version 9](#version-9-the-extended-map)) | 540 |
 | The same bytes as the file | 0: every file has leftovers after the end of its names (every name of TINY is `.`, its zero and then `\0\0.\level`: what was in the editor's buffer) |
 | The same bytes as the file where the original reads it | 528 |
 | Leftovers after the description | 14 |
@@ -135,7 +189,7 @@ A copy of a map keeps its source's dictionary. A new map gets the dictionary tha
 
 ## In the browser
 
-The map core runs in a page: `lvl_core.js` + `lvl_core.wasm` are the reader, the checker, the writer, the blank map and `same_level` compiled from the same C++ files as the game and `lvl_tool` (`src/ants_assets/lvl_parser.cpp`, `lvl_writer.cpp`, `lvl_checker.cpp`, and `lvl_core.cpp`, which turns their results into plain data), so the page, the server and the tools cannot disagree about a map. It is a module of its own (no SDL, no game code, no file system), built by the web build and shipped in the web image beside `index.wasm`; no page loads it yet (the map maker's page is a later pull request), and nothing about the game or the site changes.
+The map core runs in a page: `lvl_core.js` + `lvl_core.wasm` are the reader, the checker, the writer, the blank map and `same_level` compiled from the same C++ files as the game and `lvl_tool` (`src/ants_assets/lvl_parser.cpp`, `lvl_writer.cpp`, `lvl_checker.cpp`, and `lvl_core.cpp`, which turns their results into plain data), so the page, the server and the tools cannot disagree about a map. It is a module of its own (no SDL, no game code, no file system), built by the web build and shipped in the web image beside `index.wasm`; no page loads it yet (the map maker's page is a later pull request), and nothing about the game or the site changes. **It still answers Classic maps only**: it passes the limits of a Classic map, so its reader refuses a version 9 file with `version_not_supported` and its checker answers `not_for_original` ([Version 9](#version-9-the-extended-map)); every answer for a version 8 file is the same as before.
 
 **The interface** (`include/ants_assets/lvl_core.hpp` in C++; `src/ants_assets/lvl_core_c.cpp` for the module). Bytes go in, and JSON text or bytes come out. Every call is a pure function of its arguments: nothing is kept between calls, nothing is thrown (a failure is a status), and the limits are `LevelLimits::for_new_maps()` (at most 10,000 cells and 130 a side, 512 KB read, 144 KB written) unless the call passes `profile` 1, the game's own limits.
 
@@ -170,10 +224,12 @@ createLvlCore().then(function (module) {
 cmake --build build --target lvl_tool
 ./build/lvl_tool check map.lvl [--roster MASK] [--new-map]          # loads? plays for these teams? every finding
 ./build/lvl_tool check map.lvl --original [--new-map]                # works in the original game? every finding with its code; with --new-map, too big for a new map? (on a line of its own)
-./build/lvl_tool info map.lvl                                        # grid, dictionary, start markers and hills of each team, food, waypoints, eggs, works in the original game?, what a rewrite changes
+./build/lvl_tool info map.lvl                                        # (an Extended map: also its kind, flags, rules, and whether it fits a Classic map) grid, dictionary, start markers and hills of each team, food, waypoints, eggs, works in the original game?, what a rewrite changes
 ./build/lvl_tool rewrite in.lvl out.lvl [--roster MASK] [--new-map]  # checks it and writes its canonical bytes; says what differs
 ./build/lvl_tool blank out.lvl --rows 31 --columns 31 [--new-map]    # a blank map of 1 to 256 rows and columns (the tile names from Original-Ants/ants.chd, or --chd FILE)
+./build/lvl_tool blank out.lvl --extended --rows 300 --columns 400   # a blank Extended map (version 9): at most 1,024 a side and 262,144 cells
+./build/lvl_tool convert in.lvl --to extended|classic -o out.lvl     # a copy as the other kind (to classic: only when it fits, else the reasons are listed); in.lvl is kept
 ./build/lvl_tool --selftest
 ```
 
-(`build\lvl_tool.exe` on Windows.) `--roster` is a mask of the teams that play (1 green, 2 red, 4 blue, 8 black; 15, all four, by default); `--new-map` holds the file to the limits of a new map. A file is read up to 64 MiB, or 512 KB with `--new-map`: one that holds more is not read to its end, and it does not load. `rewrite` writes nothing for a file that does not load or does not play for the roster, and it writes through a new file beside OUT, which takes OUT's place once it is whole (so OUT may be IN). The exit status is 0 when the file plays (`check`; with `--original`, when it works in the original game and, with `--new-map`, is no bigger than a new map may be), is described (`info`) or is written (`rewrite`, `blank`), 1 when it does not load, does not play (does not work in the original game) or cannot be written within the limits, and 2 for a wrong command line, a file that cannot be read or written, or no memory left.
+(`build\lvl_tool.exe` on Windows.) `--roster` is a mask of the teams that play (1 green, 2 red, 4 blue, 8 black; 15, all four, by default); `--new-map` holds the file to the limits of a new map. A file is read up to 64 MiB, or 512 KB with `--new-map`: one that holds more is not read to its end, and it does not load. `convert` writes a copy (another file than FILE) and nothing when the map does not fit a Classic map (it lists why); `check` and `rewrite` of a version 9 file say `version_not_supported`, `check --original` says `not_for_original`, and `info` describes it. `rewrite` writes nothing for a file that does not load or does not play for the roster, and it writes through a new file beside OUT, which takes OUT's place once it is whole (so OUT may be IN). The exit status is 0 when the file plays (`check`; with `--original`, when it works in the original game and, with `--new-map`, is no bigger than a new map may be), is described (`info`) or is written (`rewrite`, `blank`), 1 when it does not load, does not play (does not work in the original game) or cannot be written within the limits, and 2 for a wrong command line, a file that cannot be read or written, or no memory left.
