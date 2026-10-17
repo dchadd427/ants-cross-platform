@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "ants_ai/bot.hpp"
+#include "ants_ai/brawl_params.hpp"
 #include "ants_ai/bot_view.hpp"
 #include "ants_ai/map_info.hpp"
 #include "ants_ai/rng.hpp"
@@ -333,6 +334,10 @@ struct LevelPlan {
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
     std::array<sim::AntType, 5> opening_order{sim::AntType::Fire, sim::AntType::Bomber, sim::AntType::Thief, sim::AntType::Combat, sim::AntType::Swimmer};
+    /// The game type 187 (docs/BOTS.md, "187: the brawl"): when the match is played by the rules of 187 the bot plays BrawlTask instead of every task above (the food game has no food to
+    /// play with there). `bot_arena --tune brawl=0` is the bot before (it plays the food game's tasks in 187 too). The original game never reads these.
+    bool brawl187{true};
+    BrawlParams brawl;
 };
 
 /// The plan of a level (the neutral one: no style, no variations)
