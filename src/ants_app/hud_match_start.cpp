@@ -33,16 +33,16 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
         renderer.draw_rect(mx, my, 320, 224, ColorRGBA{36, 82, 77, 255});
     }
 
-    // Dark slate text colour #1F1733 (COLORREF 0x33171F)
+    // Dark slate text color #1F1733 (COLORREF 0x33171F)
     const ColorRGBA text_color{31, 23, 51, 255};
 
-    // Label: "Get ready to play!  You are the <Colour> Ants." (string 105): the original's wrapped, centred label of 35 px letters in the box
+    // Label: "Get ready to play!  You are the <Color> Ants." (string 105): the original's wrapped, centred label of 35 px letters in the box
     // (30, 10) 240 x 160 of the dialog (FUN_01017127: FUN_0102b0b5 wraps it, DrawTextA centres every line, the lines are one cell height apart)
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
     const std::string label = std::string("Get ready to play!  You are the ") + TEAM_NAMES[local_player_id_ % 4] + " Ants.";
     draw_label(renderer, label, mx + 30, my + 10, 240, text_color, FontSize::Px35, true);
 
-    // Animated portrait of the local colour's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
+    // Animated portrait of the local color's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
     renderer.set_hud_team(local_player_id_);
     if (const auto* ant = assets.find_animation("agst301")) {
         if (!ant->subitems.empty()) {
@@ -85,8 +85,8 @@ bool HUD::handle_countdown_key(int32_t key, uint16_t mod, bool repeat) {
     }
 }
 
-// The countdown card (protocol 21, countdown_card.hpp): the "Get ready to play!" dialog of every match, bigger while the host holds the first turn for 30 s. The colours are the original's: the clay
-// orange of the dialog, the thin green frame, the dark violet letters (#1F1733), and the black boxes of the setup screens for the count and the colours.
+// The countdown card (protocol 21, countdown_card.hpp): the "Get ready to play!" dialog of every match, bigger while the host holds the first turn for 30 s. The colors are the original's: the clay
+// orange of the dialog, the thin green frame, the dark violet letters (#1F1733), and the black boxes of the setup screens for the count and the colors.
 void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets) {
     using assets::ColorRGBA;
     (void)assets;
@@ -122,7 +122,7 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
     centred(std::to_string(shown), b, l.digits_y, FontSize::Px96, gold);
     centred(countdown_caption(shown == 0), b, l.caption_y, FontSize::Px18, cream);
 
-    // who plays which colour: the people are "in" (everybody has loaded), a computer player says so
+    // who plays which color: the people are "in" (everybody has loaded), a computer player says so
     static const ColorRGBA kDots[4] = {{63, 174, 106, 255}, {209, 75, 85, 255}, {92, 111, 224, 255}, {110, 110, 118, 255}};
     for (size_t seat = 0; seat < 4; ++seat) {
         const CountdownSeat& who = countdown_seats_[seat];

@@ -17,7 +17,7 @@ ServerLimits lobby_limits() {
     return l;
 }
 
-// A leader's plan: what each colour is, the teams (kNoTeam: none) and the map ("": the room keeps its own)
+// A leader's plan: what each color is, the teams (kNoTeam: none) and the map ("": the room keeps its own)
 net::PlanMsg plan_msg(const std::array<net::PlanKind, 4>& kinds, uint8_t team_a = net::kNoTeam, uint8_t team_b = net::kNoTeam, const std::string& map = std::string()) {
     net::PlanMsg m;
     m.map_name = map;
@@ -135,7 +135,7 @@ void run_lobby_room_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.133 The Plan Through A Real Lobby Room (Protocol 16): The Leader's Map Is Taken When The Server Lists It (In Any Case, As The List Spells It) And Kept When It Does Not, The Colours And The Teams Are In The Status And In Every Page's Room Message; Another Player's Plan Is Not Heard") {
+    TEST_CASE("S3.133 The Plan Through A Real Lobby Room (Protocol 16): The Leader's Map Is Taken When The Server Lists It (In Any Case, As The List Spells It) And Kept When It Does Not, The Colors And The Teams Are In The Status And In Every Page's Room Message; Another Player's Plan Is Not Heard") {
         World w(lobby_limits());
         Client& pia = w.connect_page("Pia", "plan0001", lobby_block_of());
         Client& bob = w.connect_page("Bob", "plan0001", lobby_block_of());
@@ -232,7 +232,7 @@ void run_lobby_room_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.135 The Plan's Bots And Teams Are The Match's: One Person And The Plan's Medium And Easy Bots Start A Match Of Three With The Plan's Teams, The Bots Are Named For Their Levels And Seated In The Colours Of The Plan, Nobody's Colour Stays Empty") {
+    TEST_CASE("S3.135 The Plan's Bots And Teams Are The Match's: One Person And The Plan's Medium And Easy Bots Start A Match Of Three With The Plan's Teams, The Bots Are Named For Their Levels And Seated In The Colors Of The Plan, Nobody's Color Stays Empty") {
         World w(lobby_limits());
         Client& pia = w.connect_page("Pia", "bots0001", lobby_block_of());
         const net::SeatKey key = pia.lobby->key();
@@ -535,7 +535,7 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(reloaded.sim.state_hash().total == s.referee_hash && !reloaded.session->desynced() && !reloaded.lost);
     } TEST_END();
 
-    TEST_CASE("S3.136 A START The Server Cannot Carry Out Ends With A Notice For The Leader And The Room Goes On Waiting, Fails Nothing: The Plan's Map Is Gone, The Colours Cannot Play The Map, There Is No Place For Another Match (And Is When An Abandoned Match Gives Its Place Up); The Same Leader Starts Again When The Plan Is Fixed") {
+    TEST_CASE("S3.136 A START The Server Cannot Carry Out Ends With A Notice For The Leader And The Room Goes On Waiting, Fails Nothing: The Plan's Map Is Gone, The Colors Cannot Play The Map, There Is No Place For Another Match (And Is When An Abandoned Match Gives Its Place Up); The Same Leader Starts Again When The Plan Is Fixed") {
         const std::string dir = temp_dir_for("lobby_refusals");
         fs::copy_file(maps_dir() + "/TINY.LVL", dir + "/TINY.LVL");
         {   // BAD.LVL: TINY with the green start marker moved outside the grid (S3.64): playable for red and blue, not for a roster with green
@@ -561,7 +561,7 @@ void run_lobby_room_tests() {
         }
         ServerLimits l = lobby_limits();
         l.demo_maps = {"TINY.LVL", "BAD.LVL", "GONE.LVL"};                                // (GONE.LVL is listed and not in the folder)
-        {   // the map of the plan is gone; then the colours cannot play the map; then a plan that can be played starts
+        {   // the map of the plan is gone; then the colors cannot play the map; then a plan that can be played starts
             World w(l, dir);
             Client& pia = w.connect_page("Pia", "refu0001", lobby_block_of());
             const net::SeatKey key = pia.lobby->key();
@@ -582,7 +582,7 @@ void run_lobby_room_tests() {
             w.run(500);
             s = w.status("refu0001");
             ASSERT_TRUE(s.state == RoomState::Waiting && !s.starting && s.bots.empty() && s.map == "BAD.LVL");
-            ASSERT_EQ(said(game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeMapLost, std::string("255||") + net::kNoticeMapColours}));
+            ASSERT_EQ(said(game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeMapLost, std::string("255||") + net::kNoticeMapColors}));
             ASSERT_TRUE(game.lobby->request_plan(plan_msg({K::Open, K::Medium, K::Nobody, K::Nobody}, net::kNoTeam, net::kNoTeam, "TINY.LVL")));
             w.run(300);
             ASSERT_TRUE(game.lobby->request_start());
@@ -694,7 +694,7 @@ void run_lobby_room_tests() {
             w.run(1600);
             ASSERT_FALSE(bob.server_end->is_open());                                      // the room closed the link
             ASSERT_TRUE(w.status("emp00004").joined == 2 && w.status("emp00004").names[1] == "Bob");      // ... and holds the seat
-            Client& bob2 = w.connect_page("Bob", "emp00004", lobby_block_of());           // (a new Hello from the same machine, without its key, is a newcomer: the colour is held, so it takes the next)
+            Client& bob2 = w.connect_page("Bob", "emp00004", lobby_block_of());           // (a new Hello from the same machine, without its key, is a newcomer: the color is held, so it takes the next)
             w.run(300);
             ASSERT_EQ(bob2.lobby->my_seat(), 2);
             Client& bob3 = w.connect_game("Bob", "emp00004", bob_key);                    // the key takes the seat back
@@ -939,7 +939,7 @@ void run_lobby_room_tests() {
         ASSERT_TRUE(pia_game.lobby->start_info().names[0] == "Pia Lee" && bob_game.lobby->start_info().names[1] == "Robert");
     } TEST_END();
 
-    TEST_CASE("S3.162 A Removal Through A Real Lobby Room (Protocol 16): The Leader's Press Takes A Person Out: Their Page Is Told (Kicked) And Its Link Is Closed, The Status Shows The Colour Free, A Newcomer Takes It, And The Removed Person's Key Fits No Seat Any More; A START That Waits For A Game That Never Opens Goes On Without That Person When The Leader Removes Them") {
+    TEST_CASE("S3.162 A Removal Through A Real Lobby Room (Protocol 16): The Leader's Press Takes A Person Out: Their Page Is Told (Kicked) And Its Link Is Closed, The Status Shows The Color Free, A Newcomer Takes It, And The Removed Person's Key Fits No Seat Any More; A START That Waits For A Game That Never Opens Goes On Without That Person When The Leader Removes Them") {
         {   // before a START
             World w(lobby_limits());
             Client& pia = w.connect_page("Pia", "rem00001", lobby_block_of());
@@ -959,14 +959,14 @@ void run_lobby_room_tests() {
             for (const Client* c : {&pia, &cat}) ASSERT_TRUE(c->lobby->room().slots[1].state == net::SlotState::Empty && c->lobby->room().slots[0].name == "Pia");
             ASSERT_TRUE(pia.lobby->is_leader() && pia.lobby->phase() == net::ClientLobby::Phase::InRoom && cat.lobby->phase() == net::ClientLobby::Phase::InRoom);
             ASSERT_TRUE(pia.lobby->chat_log().empty() && cat.lobby->chat_log().empty());     // (nobody is told by the room)
-            Client& dan = w.connect_page("Dan", "rem00001", lobby_block_of());               // the colour is free for a newcomer at once
+            Client& dan = w.connect_page("Dan", "rem00001", lobby_block_of());               // the color is free for a newcomer at once
             w.run(300);
             ASSERT_EQ(dan.lobby->my_seat(), 1);
             w.next_key = bob_key;                                                             // the removed person opens the link again, with the key they had
             Client& bob2 = w.connect_page("Bob", "rem00001", lobby_block_of());
             w.next_key = net::SeatKey{};
             w.run(300);
-            ASSERT_TRUE(bob2.lobby->phase() == net::ClientLobby::Phase::InRoom && bob2.lobby->my_seat() == 3 && !bob2.lobby->rejoined());       // a new player in the colour that was left
+            ASSERT_TRUE(bob2.lobby->phase() == net::ClientLobby::Phase::InRoom && bob2.lobby->my_seat() == 3 && !bob2.lobby->rejoined());       // a new player in the color that was left
             ASSERT_TRUE(bob2.lobby->key() != bob_key && !net::key_is_zero(bob2.lobby->key()));
             s = w.status("rem00001");
             ASSERT_TRUE(s.names[0] == "Pia" && s.names[1] == "Dan" && s.names[2] == "Cat" && s.names[3] == "Bob");
@@ -1032,7 +1032,7 @@ void run_lobby_room_tests() {
     TEST_CASE("S3.156 A Lobby Room Does Not Care Where The Server's 32-Bit Clock Is: Just Before The Signed Flip, Just After It, Across The Wrap; Names, Plan, START, The Back-Off Of Cancelled Starts, The Close Of An Empty Lobby; And A Lobby That Was Made At Time 0 And Is Read For The First Time Past The Signed Half Starts Its Match") {
         for (const uint32_t origin : {0x7FFFFE00u, 0x80000100u, 0xFFFFFC18u}) {
             const std::string at = " at origin " + std::to_string(origin);
-            {   // names, plan (a bot in the last colour), START, the match
+            {   // names, plan (a bot in the last color), START, the match
                 World w(lobby_limits());
                 w.now = origin;
                 Client& pia = w.connect_page("Pia", "clk00001", lobby_block_of());

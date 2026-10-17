@@ -29,7 +29,7 @@ void Application::handle_net_events() {
                 for (const ai::BotSpec& spec : fill_specs_) net_->remove_bot(spec.seat);      // the room is as it was before the START: the bots that it seated go again
                 fill_specs_.clear();
                 break;
-            case net::NetGame::Event::Type::RoomChanged:             // (protocol 14) a player that the leader moved takes the bot that was for its colour: NetGame moves it in its plan when the room shows the
+            case net::NetGame::Event::Type::RoomChanged:             // (protocol 14) a player that the leader moved takes the bot that was for its color: NetGame moves it in its plan when the room shows the
                 if (net_->is_leader()) config_.fill_bots = net_->fill_bots();      // move, and the application's copy of the plan, which the footer of the setup screen shows, follows
                 break;
             case net::NetGame::Event::Type::Chat:                    // (protocol 11) a line in the waiting room: the log of the program has it; the status line shows it for a few seconds
@@ -79,7 +79,7 @@ void Application::net_begin_match(bool rejoin, uint8_t countdown_seconds) {
 
 // The countdown card (protocol 21): the host holds the first turn `seconds` after the Begin that this machine has just received, so the count runs from here, on this machine's own clock (net_time_ms_ is the
 // frames' time, which the page's wake-ups keep up while the tab is hidden): the match itself does not depend on it, the first turn comes when it comes and closes the card (post_tick). The people of the
-// room and the computer players come from the Start that every machine holds, so every machine shows the same colours.
+// room and the computer players come from the Start that every machine holds, so every machine shows the same colors.
 void Application::begin_net_countdown(uint8_t seconds) {
     std::array<CountdownSeat, 4> seats{};
     const net::StartMsg& start = net_->start_info();

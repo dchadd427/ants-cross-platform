@@ -1049,7 +1049,7 @@ void run_protocol13_tests() {
             other.slots[0].name = "Anna";
             ASSERT_TRUE(seating_hash(other) != base);
             other = room;
-            other.slots[3] = {SlotState::Client, "Cat", 20, 0};                                     // somebody sits in a free colour
+            other.slots[3] = {SlotState::Client, "Cat", 20, 0};                                     // somebody sits in a free color
             ASSERT_TRUE(seating_hash(other) != base);
             other = room;
             other.slots[1].state = SlotState::Host;                                                 // the state counts as well as the name
@@ -1211,7 +1211,7 @@ void run_protocol15_tests() {
                 }
             }
             ASSERT_EQ(pairs, size_t{6});                                                                         // 4 seats: six pairs, each in the one spelling that the decoder takes
-            for (unsigned flags = 0; flags < 256; ++flags) ASSERT_EQ(decode(with("", 4, 255, 255, static_cast<uint8_t>(flags)), back), flags == 0 || flags == 1 || flags == 3);        // (2 is a lobby room: the leader starts it and it has all four colours, so 3 is the one)
+            for (unsigned flags = 0; flags < 256; ++flags) ASSERT_EQ(decode(with("", 4, 255, 255, static_cast<uint8_t>(flags)), back), flags == 0 || flags == 1 || flags == 3);        // (2 is a lobby room: the leader starts it and it has all four colors, so 3 is the one)
             // the map's name: "" (the server's own choice), a map's file name, the longest one, and not a name that could name a path
             ASSERT_TRUE(decode(with("", 2, 255, 255, 0), back) && back.create->map_name.empty());
             ASSERT_TRUE(decode(with("TINY.LVL", 2, 255, 255, 0), back) && back.create->map_name == "TINY.LVL");
@@ -1285,7 +1285,7 @@ void run_protocol15_tests() {
         // the layout of the first seat, and the end of the message: the platform byte after the round trip time, then ... map, fog, you, leader, team_a, team_b, flags
         ASSERT_TRUE(bytes.size() > 20 && bytes[0] == 12);
         ASSERT_TRUE(bytes[1] == 2 && bytes[2] == 3 && bytes[3] == 'A' && bytes[4] == 'n' && bytes[5] == 'n' && bytes[6] == 30 && bytes[7] == 0 && bytes[8] == kOsWindows);
-        const size_t end = bytes.size() - 6;                                                             // (protocol 16 ends the message with five more bytes: the plan of each colour and the seats that hold a game; N2.107 reads them; protocol 17 one more, the game mode, N2.112)
+        const size_t end = bytes.size() - 6;                                                             // (protocol 16 ends the message with five more bytes: the plan of each color and the seats that hold a game; N2.107 reads them; protocol 17 one more, the game mode, N2.112)
         ASSERT_TRUE(bytes[end] == 0 && bytes[end + 1] == 0 && bytes[end + 2] == 0 && bytes[end + 3] == 0 && bytes[end + 4] == 0 && bytes[end + 5] == 0);       // (a room that is no lobby room, and has the original's game mode, writes zeros)
         ASSERT_TRUE(bytes[end - 6] == 1 && bytes[end - 5] == 1 && bytes[end - 4] == 0 && bytes[end - 3] == 0 && bytes[end - 2] == 1 && bytes[end - 1] == 1);        // fog, you, leader, team_a, team_b, flags
         RoomMsg back;
@@ -1499,11 +1499,11 @@ void run_protocol15_tests() {
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Protocol 16: the lobby room (the client kind, the lobby block, the created flag, the plan of each colour)
+// Protocol 16: the lobby room (the client kind, the lobby block, the created flag, the plan of each color)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 void run_protocol16_tests() {
-    TEST_CASE("N2.105 Protocol 16, The Hello And The Welcome: The Client Kind (A Game Or A Lobby Page) Follows The Platform Byte And Leads The Create Block; The Lobby Flag Of The Block Needs A Leader Who Starts And All Four Colours; The Welcome Says When Its Hello Made The Room, And Only For A Seat That Has A Key; Every Other Value, Truncation And Extra Byte Is Refused, And The Layout Of Protocol 15 Is No Hello Of This Protocol") {
+    TEST_CASE("N2.105 Protocol 16, The Hello And The Welcome: The Client Kind (A Game Or A Lobby Page) Follows The Platform Byte And Leads The Create Block; The Lobby Flag Of The Block Needs A Leader Who Starts And All Four Colors; The Welcome Says When Its Hello Made The Room, And Only For A Seat That Has A Key; Every Other Value, Truncation And Extra Byte Is Refused, And The Layout Of Protocol 15 Is No Hello Of This Protocol") {
         ASSERT_EQ(kProtocolVersion, 21);
         ASSERT_TRUE(kClientGame == 0 && kClientPage == 1 && kCreateLeaderStarts == 1 && kCreateLobby == 2 && kWelcomeRejoin == 1 && kWelcomeCreated == 2);
         // a lobby page's Hello that makes a lobby room, byte by byte: the platform byte, the client kind, then the block (map, seats, team_a, team_b, flags)
@@ -1629,7 +1629,7 @@ void run_protocol16_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.106 Protocol 16, The Plan: PlanMsg Is The Type 32, A Map (A Length And Its Name; Empty Keeps The Room's), A Kind 0 .. 4 For Each Colour And The Two Team Bytes (None Both, Or Two Seats With The Lower First); Every Kind, Every Pair Of Team Bytes, Every Truncation, Every Extra Byte And Every Other Type Is Decided By The Rule; A Refused Message Leaves Its Target Alone; The Kinds Of A Bot Are The Fill Levels Of START") {
+    TEST_CASE("N2.106 Protocol 16, The Plan: PlanMsg Is The Type 32, A Map (A Length And Its Name; Empty Keeps The Room's), A Kind 0 .. 4 For Each Color And The Two Team Bytes (None Both, Or Two Seats With The Lower First); Every Kind, Every Pair Of Team Bytes, Every Truncation, Every Extra Byte And Every Other Type Is Decided By The Rule; A Refused Message Leaves Its Target Alone; The Kinds Of A Bot Are The Fill Levels Of START") {
         ASSERT_TRUE(static_cast<int>(MsgType::Plan) == 32 && kPlanKindLast == 4);
         ASSERT_TRUE(static_cast<int>(PlanKind::Open) == 0 && static_cast<int>(PlanKind::Easy) == 1 && static_cast<int>(PlanKind::Medium) == 2 && static_cast<int>(PlanKind::Hard) == 3 && static_cast<int>(PlanKind::Nobody) == 4);
         // the layout, byte by byte
@@ -1647,7 +1647,7 @@ void run_protocol16_tests() {
             PlanMsg back;
             ASSERT_TRUE(decode(want, back) && back.map_name == "TREASURE.LVL" && back.plan == m.plan && back.team_a == 1 && back.team_b == 3);
             ASSERT_TRUE(encode(back) == want);
-            PlanMsg none;                                                                               // the map stays the room's, every colour is open, free for all
+            PlanMsg none;                                                                               // the map stays the room's, every color is open, free for all
             ASSERT_TRUE(encode(none) == (std::vector<uint8_t>{32, 0, 0, 0, 0, 0, 255, 255, 0}));
             ASSERT_TRUE(decode(encode(none), back) && back.map_name.empty() && !back.teams().set);
             m.set_teams(sim::StartTeams{});
@@ -1746,7 +1746,7 @@ void run_protocol16_tests() {
                     plan_fill_level(PlanKind::Hard) == FillLevel::Hard && plan_fill_level(PlanKind::Nobody) == FillLevel::None);
     } TEST_END();
 
-    TEST_CASE("N2.107 Protocol 16, The Room: The Message Ends With The Plan Of Each Colour (0 .. 4) And The Seats That Hold A Game, Its Rule Bits Say A Lobby Room (Which The Leader Starts) That Is Starting; A Plan, A Game Or A Starting Room That No Honest Server Writes Is Refused, Every Truncation And Extra Byte Too, And The Layout Of Protocol 15 Is No Room Message") {
+    TEST_CASE("N2.107 Protocol 16, The Room: The Message Ends With The Plan Of Each Color (0 .. 4) And The Seats That Hold A Game, Its Rule Bits Say A Lobby Room (Which The Leader Starts) That Is Starting; A Plan, A Game Or A Starting Room That No Honest Server Writes Is Refused, Every Truncation And Extra Byte Too, And The Layout Of Protocol 15 Is No Room Message") {
         RoomMsg room = server_room_of(0);                                                               // seats 0, 1 and 3 hold guests, seat 2 is empty
         room.flags = static_cast<uint8_t>(kRoomLeaderStarts | kRoomLobby);
         room.plan = {PlanKind::Open, PlanKind::Hard, PlanKind::Easy, PlanKind::Nobody};
@@ -1924,7 +1924,7 @@ void run_protocol16_tests() {
             {kNoticeGameLate, "'s game did not come in time."},                                  // (the end of a line: a name comes before it)
             {kNoticeGamesLate, "These games did not come in time: "},                            // (the start of a line: the names follow)
             {kNoticeMapLost, "This map could not be loaded: choose another map."},
-            {kNoticeMapColours, "This map cannot be played with these colours."},
+            {kNoticeMapColors, "This map cannot be played with these colours."},
             {kNoticeNoPlace, "The server has no place for another match right now: try again in a minute."},
             {kNoticeStartsFailed, "The match could not start a few times in a row: try again in a minute."},
         };
@@ -1989,7 +1989,7 @@ void run_protocol16_tests() {
             ASSERT_FALSE(decode(encode(SeatMoveMsg{0, 1, 7}), keep) || decode(encode(NameMsg{"Ann"}), keep) || decode(encode(PlanMsg{}), keep) || decode(encode(StartRequestMsg{}), keep));
             ASSERT_TRUE(keep.seat == 7 && keep.guard == 9);
         }
-        {   // the guard of a removal is the guard of a colour move: the number that seating_hash gives for the seats as the leader's screen shows them (N2.107 pins what it is made of)
+        {   // the guard of a removal is the guard of a color move: the number that seating_hash gives for the seats as the leader's screen shows them (N2.107 pins what it is made of)
             RoomMsg room = server_room_of(0);
             RemoveMsg got;
             ASSERT_TRUE(decode(encode(RemoveMsg{1, seating_hash(room)}), got) && got.guard == seating_hash(room) && got.guard != 0);
@@ -1999,7 +1999,7 @@ void run_protocol16_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N2.111 Protocol 16 And 17, The Lobby Page's Messages: tests/data/lobby_messages.txt Holds Byte For Byte What The Encoders Write For What A Lobby Page Sends (The Hello, The Colour Move, The Plan, The Name, The Removal, START) And Hears (Welcome, Reject, Room, Chat, Ping); Each Line Is Made From Its Fields, Decodes And Encodes Again To The Same Bytes, And A Room's Guard Is Its seating_hash (The Page's Codec Is Held To The Same File By tests/scripts/web_lobby_net_check.js)") {
+    TEST_CASE("N2.111 Protocol 16 And 17, The Lobby Page's Messages: tests/data/lobby_messages.txt Holds Byte For Byte What The Encoders Write For What A Lobby Page Sends (The Hello, The Color Move, The Plan, The Name, The Removal, START) And Hears (Welcome, Reject, Room, Chat, Ping); Each Line Is Made From Its Fields, Decodes And Encodes Again To The Same Bytes, And A Room's Guard Is Its seating_hash (The Page's Codec Is Held To The Same File By tests/scripts/web_lobby_net_check.js)") {
         struct Sample {
             std::string kind;
             std::string name;

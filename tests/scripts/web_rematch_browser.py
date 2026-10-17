@@ -9,7 +9,7 @@ game page and the match runs; Bob quits (Ctrl+Q, Yes: with one other side left t
   * the game page: under the picture, the strip "The match is over" with its words, a chip for each player ("on the results screen" while nobody is back) and "Back to the lobby"; the strip lies
     between the picture and the Picture row, the picture makes room for it (the picture, the strip and the Picture row are in the window together; the page's text below them scrolls
     as before), and nothing of it is markup;
-  * Back to the lobby: Ann's button takes her tab to /?room=<code>: the front page is in the same room, with the strip "Back from the match." at the top, Ann leads, Bob's colour says "Still on the
+  * Back to the lobby: Ann's button takes her tab to /?room=<code>: the front page is in the same room, with the strip "Back from the match." at the top, Ann leads, Bob's color says "Still on the
     results screen…" and the note under START says that it waits for him; Bob's chips follow ("Ann · host · here"); Ann's START is answered by the room ("Bob is not back from the match yet.") and
     nothing starts; Bob's button brings him back ("Back in the room" on Ann's screen, the note is gone) and Ann's START takes both pages to the game again: the rematch runs;
   * in all of it the key is in no address and no console line.
@@ -123,7 +123,7 @@ def main():
         for p in people:
             strips[p.name] = wait_for(lambda: p.ev(STRIP), 20, 0.25)
             s = strips[p.name] or {}
-            check(s.get("title") == "The match is over" and s.get("text") == "Everybody can go back to the room together: same host, same colours, same map. Your seat is kept for you."
+            check(s.get("title") == "The match is over" and s.get("text") == "Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you."
                   and s.get("button") == "Back to the lobby" and s.get("note") == "The game’s own “Leave Game” still goes to the menu." and s.get("markup") == 0, "%s's game page shows the strip of picture R1 (%s)" % (p.name, s))
         check(bool(wait_for(lambda: [c[0] for c in (ann.ev(STRIP) or {}).get("chips", [])] == ["Ann · on the results screen", "Bob · on the results screen"], 10, 0.25)),
               "nobody is back yet: both chips say \"on the results screen\" (%s)" % (ann.ev(STRIP) or {}).get("chips"))
@@ -138,17 +138,17 @@ def main():
               "the front page is in the same room, and Ann may press START")
         ann.resize(1280, 1400)                                                    # (picture R2's window)
         bar = wait_for(lambda: ann.ev(BAR), 10, 0.25) or {}
-        check(bar.get("lead") == "Back from the match." and bar.get("text", "").startswith("Back from the match. Ann won with ") and bar.get("text", "").endswith(" Same room, same colours, same map.Stats and replay")
+        check(bar.get("lead") == "Back from the match." and bar.get("text", "").startswith("Back from the match. Ann won with ") and bar.get("text", "").endswith(" Same room, same colors, same map.Stats and replay")
               and bar.get("first") is True and (bar.get("link") or [None])[0] == "Stats and replay", "the strip at the top of the front page (picture R2): %s" % bar)
         cards = wait_for(lambda: (lambda c: c if c and c[1][1] == "Still on the results screen…" else None)(ann.ev(CARDS)), 10, 0.25) or []
-        check([c[1] for c in cards[:2]] == ["Host. You start the match.", "Still on the results screen…"] and "away" in (cards[1][2] if len(cards) > 1 else ""), "Ann leads; Bob's colour says that he is still on the results screen (%s)" % cards)
-        check(ann.ev(NOTE) == "START waits for Bob. You can wait, or press Remove on their colour to start without them.", "the note under START (%s)" % ann.ev(NOTE))
+        check([c[1] for c in cards[:2]] == ["Host. You start the match.", "Still on the results screen…"] and "away" in (cards[1][2] if len(cards) > 1 else ""), "Ann leads; Bob's color says that he is still on the results screen (%s)" % cards)
+        check(ann.ev(NOTE) == "START waits for Bob. You can wait, or press Remove on their color to start without them.", "the note under START (%s)" % ann.ev(NOTE))
         check(bool(wait_for(lambda: [c[0] for c in (bob.ev(STRIP) or {}).get("chips", [])] == ["Ann · host · here", "Bob · on the results screen"], 10, 0.25)), "Bob's strip: Ann is the host and here (%s)" % (bob.ev(STRIP) or {}).get("chips"))
         time.sleep(0.5)
         ann.shot(args.shots, "r2_lobby_after_the_match")
         ann.ev("document.getElementById('start').click(); 1")
         banner = wait_for(lambda: ann.ev(BANNER), 10, 0.25) or [None, None]
-        check(banner[0] == "Bob is not back from the match yet. START waits for them: wait, or press Remove on their colour to start without them." and "warn" in (banner[1] or ""), "START waits: the room tells Ann why (%s)" % banner)
+        check(banner[0] == "Bob is not back from the match yet. START waits for them: wait, or press Remove on their color to start without them." and "warn" in (banner[1] or ""), "START waits: the room tells Ann why (%s)" % banner)
         check(not ann.ev("document.body.classList.contains('guest')") and ann.ev("location.pathname") == "/", "nothing starts")
 
         # ---- Bob comes back; the rematch starts ----

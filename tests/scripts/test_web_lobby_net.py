@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """The lobby page's client of network protocol 16 (web/front/lobby_net.js; run by ./run_tests.sh --fast and by the CI). The front page becomes the game's lobby (it waits in a lobby room of the server,
-and the host arranges the colours, the bots and the teams for everybody); this is the page's side of the talk, a script that a browser loads and that a screen will use, written and checked before any
+and the host arranges the colors, the bots and the teams for everybody); this is the page's side of the talk, a script that a browser loads and that a screen will use, written and checked before any
 screen: the codec of every message of the protocol and the client that keeps the page's seat.
 
   - tests/scripts/web_lobby_net_check.js holds the codec to the bytes that the C++ encoders write (tests/data/lobby_messages.txt, which test_lockstep N2.111 holds the encoders to: a layout that
     changes in C++ changes the file, and this check then fails until the script follows), and to what it must refuse (a message cut at every length, a name or a map that is no name);
   - tests/scripts/web_lobby_client_check.js runs the client against a scripted server and a fake browser (sockets and timers): the Hello it sends, the Welcome and Room messages it takes in, the answers
     to the server's pings, what changed between two Room messages (who joined, left, was renamed, was moved, changed places, leads now), the requests that only the leader may make and the bytes they
-    put on the wire (a colour move's guard is the room's seating hash), the way back with the key after a lost link (the waits grow, a link that says nothing is given up), what each refusal means, and
+    put on the wire (a color move's guard is the room's seating hash), the way back with the key after a lost link (the waits grow, a link that says nothing is given up), what each refusal means, and
     the entry that the game page reads to take the seat over;
   - the entry that the client writes for the game page (ants.rejoin.<room>.<seat>) is read by the game page's own code (tests/scripts/web_lobby_entry_check.js runs the blocks REJOINKEY and NAMEGATE of
     web/shell.html): the seat is held, so the game asks no name and takes the seat over with the key, on both schemes, and not for another scheme, host, room or seat, or for a key that is too old;
-  - the pace of every kind of request (a colour move, a plan, a rename, a removal, a line of chat) keeps a margin under the server's bucket of that kind (include/ants_net/flood.hpp, which the client check
+  - the pace of every kind of request (a color move, a plan, a rename, a removal, a line of chat) keeps a margin under the server's bucket of that kind (include/ants_net/flood.hpp, which the client check
     reads): web_lobby_client_check.js replays what a page asks for through the server's own bucket with every combination of 0 and 50 / 100 / 150 ms of delay, and TheBudgetChecksAreNotVacuous below runs
     the mutants of tests/data/lobby_budget_mutants.json (a pace moved back to the server's own rate, a burst without reserve, ...) on a copy of the files: every one must be seen;
   - the client against a real server is run by tests/scripts/test_ants_server.sh (tests/scripts/web_lobby_server_check.js), which starts the servers (pages that ask as fast as they may for eight seconds, on
-    a link that jitters by up to 150 ms, lose no rename, plan, colour move or line of chat); the same script hands a lobby over to two real games
+    a link that jitters by up to 150 ms, lose no rename, plan, color move or line of chat); the same script hands a lobby over to two real games
     (tests/scripts/web_lobby_handoff_check.js: START, the pages go, a game of each name takes its seat with the page's key, the match runs).
 The node checks need node; without it these tests are skipped and say so.
 """
@@ -80,7 +80,7 @@ class TheChecksThatNodeRuns(unittest.TestCase):
         self.assertRegex(out, r"\b[1-9][0-9]* checks, 0 failed")
 
     def test_a_changed_byte_of_the_golden_file_fails_the_codec_check(self):
-        """the check is not vacuous: one byte of one message changed (the colour move's type) must be seen"""
+        """the check is not vacuous: one byte of one message changed (the color move's type) must be seen"""
         with open(GOLDEN, encoding="utf-8") as f:
             text = f.read()
         changed, count = re.subn(r"(?m)^(seatmove \S+ )1f", r"\g<1>1e", text, count=1)

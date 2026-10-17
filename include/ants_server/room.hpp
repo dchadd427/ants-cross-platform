@@ -53,7 +53,7 @@
 // Replays (replay_store.hpp, docs/REPLAYS.md "On the game server"). A room of a server that keeps replays records its match: ants_replay's Recorder watches every turn that the referee's own runner
 // executes (LockstepRunner::set_on_executed), from the first, and when the match is over, or the room fails or is closed while it runs, the recording is written as a .antsrep file and handed to the
 // server's ReplayStore. A match is kept when it ran 600 turns (30 seconds), however it ended; a seat has the name that the room showed everybody (what the person typed: replay_person_name; a seat that has no name
-// of its own is the colour in the readers) or, for a computer player, its display name. A room that was brought back from a restart record does not record (the part of its match before the restart is not seen).
+// of its own is the color in the readers) or, for a computer player, its display name. A room that was brought back from a restart record does not record (the part of its match before the restart is not seen).
 // The status says whether the match was kept, under what name and, if not, why. A room made with `"record": false` records nothing.
 
 #include <array>
@@ -194,10 +194,10 @@ struct RoomStatus {
     uint8_t games{0};                       // ... the seats (bit s) that hold a game: a page, a seat that is held and an empty seat do not
     bool reopened{false};                   // ... the rematch: the server opened this lobby again with its code when its match was over (for the tests, not shown by the control interface)
     uint8_t reserved{0};                    // ... and the seats (bit s) that still wait for a person of the match who is not back
-    std::string plan;                       // ... the plan: the kind of each colour as a letter (o open, e easy, m medium, h hard, n nobody) and the team pair ("oehn 0+3", "-" for none)
+    std::string plan;                       // ... the plan: the kind of each color as a letter (o open, e easy, m medium, h hard, n nobody) and the team pair ("oehn 0+3", "-" for none)
     uint8_t leader{255};                    // the seat of the leader while the room waits or loads (255: none: nobody has joined yet, the room does not allow an early start, or the match runs)
     uint32_t ignored_start_requests{0};     // StartRequest messages that were heard and not acted on (a player who is not the leader, a room that cannot start, a late click of a match that runs)
-    uint32_t seat_moves{0};                 // the colours that the leader moved a player to (protocol 14: each one that the room carried out)
+    uint32_t seat_moves{0};                 // the colors that the leader moved a player to (protocol 14: each one that the room carried out)
     uint32_t ignored_seat_moves{0};         // SeatMove messages that were heard and not acted on (a player who is not the leader, a seat that is not a player's, a late move of a match that runs)
     /// The computer players of the room: the specification's, and the ones that the leader's START seated (`fill`); the seats stay listed after the match. `joined` counts them (a bot is a player).
     struct Bot {
@@ -277,7 +277,7 @@ struct RoomStatus {
 };
 
 /// The name that a replay file keeps for a person's seat, from the name that the room showed everybody (the Start message's): the name as it is, in printable ASCII (every byte of anything else becomes a '?': a letter with an accent, two bytes of UTF-8, gives two), at most
-/// 32 characters, the blanks at both ends cut. The words that the game itself uses for a seat that has no name of its own give "" (the readers then show the colour: "Green", not "Green (Player)"): "Player"
+/// 32 characters, the blanks at both ends cut. The words that the game itself uses for a seat that has no name of its own give "" (the readers then show the color: "Green", not "Green (Player)"): "Player"
 /// (what a game proposes and sends when nothing was typed), "Player 1" to "Player 4" (what the lobby calls a person whose name looks like a bot's, and what every screen shows for a seat without a name), and
 /// nothing at all. A name that only starts like them ("Players", "Player 5", "player") is a name.
 std::string replay_person_name(const std::string& shown);

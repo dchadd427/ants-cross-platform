@@ -11,14 +11,14 @@ namespace ants::app {
 
 namespace {
 
-// Every label of the screen has the colour 0xdfe7ef (a COLORREF: R 239, G 231, B 223, FUN_01011821(label, 0xdfe7ef, -1, -1))
-const assets::ColorRGBA kLabelColour{239, 231, 223, 255};
+// Every label of the screen has the color 0xdfe7ef (a COLORREF: R 239, G 231, B 223, FUN_01011821(label, 0xdfe7ef, -1, -1))
+const assets::ColorRGBA kLabelColor{239, 231, 223, 255};
 
 // One number of a row: the original's single-line label (FUN_010116cb: no wrap, left aligned at its x, a surface as wide as the label that clips what does not fit; docs 5.49) drawn in the original's
 // digits, which are 8 px wide (the bundled face's are wider: the text is squeezed to the original's width for as many digits)
 void draw_counter(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t box_w) {
     renderer.set_clip_rect(x, y, box_w, ScorecardModal::LABEL_H);
-    renderer.draw_text_squeezed(text, x, y, kLabelColour, FontSize::Px18, kResultsDigitWidth * static_cast<int32_t>(text.size()));
+    renderer.draw_text_squeezed(text, x, y, kLabelColor, FontSize::Px18, kResultsDigitWidth * static_cast<int32_t>(text.size()));
     renderer.clear_clip_rect();
 }
 
@@ -57,7 +57,7 @@ void ScorecardModal::update(float dt_seconds) {
 std::string ScorecardModal::name_of(uint8_t team) const {
     if (!player_names_[team % 4].empty()) return player_names_[team % 4];
     if (team == local_player_id_ && !local_player_name_.empty()) return local_player_name_;
-    return sim::strings::colour_name(static_cast<uint8_t>(3u - (team & 3u)));        // strings 100 - 103
+    return sim::strings::color_name(static_cast<uint8_t>(3u - (team & 3u)));        // strings 100 - 103
 }
 
 // FUN_010155ac: the rows (FUN_01015136), the labels and the portraits of every row, the Leave button, and then the cue (0x1015a4a): the winner cue when the local
@@ -106,7 +106,7 @@ void ScorecardModal::handle_mouse_motion(int32_t x, int32_t y) {
     else quit_.reset();
 }
 
-// One AntSlot (FUN_01021ba4): the animation agst301 at (x, y) in the colour of the team, running since the screen was created
+// One AntSlot (FUN_01021ba4): the animation agst301 at (x, y) in the color of the team, running since the screen was created
 void ScorecardModal::draw_portrait(IRenderer& renderer, const assets::AssetArchive& assets, uint8_t team, int32_t x, int32_t y) const {
     const auto* anim = assets.find_animation("agst301");
     if (anim == nullptr || anim->subitems.empty()) return;
@@ -142,7 +142,7 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
 
     // 2. While the scores are awaited: the label (100, 350) 385 x 50, 20 px high lines; nothing else
     if (phase_ == Phase::Waiting) {
-        draw_label(renderer, sim::strings::text(sim::strings::kWaitingForScores), layout.waiting.x, layout.waiting.y, layout.waiting.w, kLabelColour, FontSize::Px20, false);
+        draw_label(renderer, sim::strings::text(sim::strings::kWaitingForScores), layout.waiting.x, layout.waiting.y, layout.waiting.w, kLabelColor, FontSize::Px20, false);
         return;
     }
 
@@ -151,7 +151,7 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
     for (size_t i = 0; i < rows_.size(); ++i) {
         const Row& row = rows_[i];
         const int32_t y = layout.row_y(i);
-        draw_label(renderer, row.name, layout.name_x, y, layout.name_w, kLabelColour, FontSize::Px18, false);
+        draw_label(renderer, row.name, layout.name_x, y, layout.name_w, kLabelColor, FontSize::Px18, false);
         for (size_t c = 0; c < 4; ++c) draw_counter(renderer, row.numbers[c], layout.column_x[c], y, layout.column_w[c]);
         if (row.has_second()) {
             draw_portrait(renderer, assets, row.first, layout.portrait_pair_x[0], y + layout.portrait_dy);

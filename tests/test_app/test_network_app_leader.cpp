@@ -107,7 +107,7 @@ void run_leader_tests() {
         // a second player: the leader keeps the screen, the other one has the guest's
         ASSERT_TRUE(bob.net.join("127.0.0.1", server.port(), "Bob", 255, "LEAD-APP"));
         ASSERT_TRUE(hall.until([&]() { return bob.net.phase() == net::NetGame::Phase::Room && app.net()->room().slots[1].state == net::SlotState::Client; }, 8000));
-        ASSERT_EQ(app.map_select().room().status, std::string("Tap a player to change their colour."));            // (the leader's first company: how to change a colour, for five seconds; looked at as soon as he is there)
+        ASSERT_EQ(app.map_select().room().status, std::string("Tap a player to change their color."));            // (the leader's first company: how to change a color, for five seconds; looked at as soon as he is there)
         ASSERT_TRUE(hall.until([&]() { return app.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
         ASSERT_TRUE(app.net()->is_leader() && app.map_select().leads_server_room());
         ASSERT_FALSE(bob.net.is_leader());
@@ -513,9 +513,9 @@ void run_leader_tests() {
         app.quit();
     } TEST_END();
 
-    // Protocol 14: the leader of a server's room puts a player in another colour by pressing the player's row of the Players' Status box (the classic page and the 16:9 one)
-    TEST_CASE("N5.91 Leader, The Colours (Protocol 14): A Press On A Player's Row Moves That Player To The Next Free Colour, On The Classic Page And On The 16:9 One; The Plan's Bots Follow, The Player Is Told By The Room, The Leader's Own Row Moves The Leader, A Quick Second Press Waits For The Room's Answer; A Release Off The Row, The Right Button, A Row Of Nobody, A Screen That Has Not Shown Its Players, A Guest's Screen And A Locked One Do Nothing; The Match Starts With The Colours As They Are") {
-        const std::string hint = "Tap a player to change their colour.";
+    // Protocol 14: the leader of a server's room puts a player in another color by pressing the player's row of the Players' Status box (the classic page and the 16:9 one)
+    TEST_CASE("N5.91 Leader, The Colors (Protocol 14): A Press On A Player's Row Moves That Player To The Next Free Color, On The Classic Page And On The 16:9 One; The Plan's Bots Follow, The Player Is Told By The Room, The Leader's Own Row Moves The Leader, A Quick Second Press Waits For The Room's Answer; A Release Off The Row, The Right Button, A Row Of Nobody, A Screen That Has Not Shown Its Players, A Guest's Screen And A Locked One Do Nothing; The Match Starts With The Colors As They Are") {
+        const std::string hint = "Tap a player to change their color.";
 
         for (const bool wide : {false, true}) {
             Server server;
@@ -547,7 +547,7 @@ void run_leader_tests() {
             ASSERT_TRUE(leader.map_select().refreshed() && leader.map_select().can_move_players());
             ASSERT_TRUE(leader.map_select().room().status != hint);                                    // (alone: nobody to move yet, and nothing is said about it)
 
-            // Gus is the second player: the leader's first company, and the line says how to change a colour (for the five seconds that a notice is shown)
+            // Gus is the second player: the leader's first company, and the line says how to change a color (for the five seconds that a notice is shown)
             Application guest;
             ASSERT_TRUE(guest.init(join_config(server, code, "Gus")));
             hall.second = &guest;
@@ -626,7 +626,7 @@ void run_leader_tests() {
                 ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::Hard, L::None));
             }
 
-            // a press on Gus's row: the click of the buttons, and with the release Gus is put in the next free colour, Blue
+            // a press on Gus's row: the click of the buttons, and with the release Gus is put in the next free color, Blue
             const std::vector<std::string> guest_notices = notices_of(guest);
             {
                 const size_t channels = leader.audio_mixer().active_channel_count();
@@ -656,7 +656,7 @@ void run_leader_tests() {
                 ASSERT_TRUE(s.names[0] == "Ann" && s.names[1].empty() && s.names[2] == "Gus" && s.seat_moves == 1 && s.ignored_seat_moves == 0 && s.leader == 0);
             }
 
-            // two quick presses (a double click): the second is held back, and Gus goes on by one colour only (to Black)
+            // two quick presses (a double click): the second is held back, and Gus goes on by one color only (to Black)
             hall.step(500);                                                                                        // (the last request was half a second ago: its double click is over)
             press_row(leader, 1);
             press_row(leader, 1);
@@ -667,9 +667,9 @@ void run_leader_tests() {
                 const server::RoomStatus s = server.status(code);
                 ASSERT_TRUE(s.seat_moves == 2 && s.ignored_seat_moves == 0);                                       // (a second request would have found Blue empty: ignored, and counted)
             }
-            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None));                           // (two colours that no bot is for: the plan stays)
+            ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None));                           // (two colors that no bot is for: the plan stays)
 
-            // Gus at Black goes on to the next free colour round the table: Green is Ann's, so Red; the bot of Red goes to the colour that Gus leaves
+            // Gus at Black goes on to the next free color round the table: Green is Ann's, so Red; the bot of Red goes to the color that Gus leaves
             press_row(leader, 1);
             ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[1].state == net::SlotState::Client && guest.net()->my_seat() == 1; }, 8000));
             hall.step(30);
@@ -691,7 +691,7 @@ void run_leader_tests() {
             ASSERT_TRUE(server.status(code).seat_moves == 4 && server.status(code).leader == 2);
             ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::None, L::Hard));
 
-            // START: the match is made with the colours as they are now, Gus plays Red, Ann Blue, and the Hard bot Black
+            // START: the match is made with the colors as they are now, Gus plays Red, Ann Blue, and the Hard bot Black
             {
                 const server::RoomStatus before = server.status(code);
                 ASSERT_TRUE(before.state == server::RoomState::Waiting && before.joined == 2 && before.ignored_start_requests == 0);
@@ -721,7 +721,7 @@ void run_leader_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.92 Leader, The Colours (Protocol 14): A Double Click Is One Press (Nothing Goes Out Within Half A Second Of The Last Request, Whatever The Room Has Said); The Press After It Waits For The Room's Answer, Or A Second (A Request That The Room Cannot Do Is Not Answered At All); The Plan Of Bots Follows What The Room Shows And Not What Was Asked, However Often It Was Asked; A Guest Sends Nothing") {
+    TEST_CASE("N5.92 Leader, The Colors (Protocol 14): A Double Click Is One Press (Nothing Goes Out Within Half A Second Of The Last Request, Whatever The Room Has Said); The Press After It Waits For The Room's Answer, Or A Second (A Request That The Room Cannot Do Is Not Answered At All); The Plan Of Bots Follows What The Room Shows And Not What Was Asked, However Often It Was Asked; A Guest Sends Nothing") {
         Server server;
         ASSERT_TRUE(server.make_room("MOVE-LATCH", 4));
         ApplicationConfig cfg = join_config(server, "MOVE-LATCH", "Ann");
@@ -745,7 +745,7 @@ void run_leader_tests() {
         ASSERT_TRUE(server.status("MOVE-LATCH").seat_moves == 0 && server.status("MOVE-LATCH").ignored_seat_moves == 0);
         ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::None, L::Hard, L::None));
 
-        // the first press is sent (Gus to Blue, the next free colour); a second one, at once or less than half a second later, is a double click: held back, with or without an answer
+        // the first press is sent (Gus to Blue, the next free color); a second one, at once or less than half a second later, is a double click: held back, with or without an answer
         ASSERT_TRUE(leader.net()->request_move_seat(1));
         ASSERT_FALSE(leader.net()->request_move_seat(1));
         ASSERT_FALSE(leader.net()->request_start());                                       // (START waits for the answer too: N5.96)
@@ -792,7 +792,7 @@ void run_leader_tests() {
         ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[3].name == "Gus" && guest.net()->my_seat() == 3; }, 8000));
         ASSERT_TRUE(leader.net()->room().slots[2].state == net::SlotState::Empty);
         ASSERT_TRUE(server.status("MOVE-LATCH").seat_moves == 2 && server.status("MOVE-LATCH").ignored_seat_moves == 1);
-        ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None));         // (two colours that no bot is for: the plan stays)
+        ASSERT_TRUE(leader.fill_bots() == plan(L::None, L::Hard, L::None, L::None));         // (two colors that no bot is for: the plan stays)
 
         // a request that the room ignores changes nothing in the plan: Cat takes Red while the leader has not read the news, so its press for Gus (Black goes to Red) finds Red held
         leader.pump_network(0.6f);                                                           // (more than half a second since the last request)
@@ -812,7 +812,7 @@ void run_leader_tests() {
         guest.quit();
     } TEST_END();
 
-    TEST_CASE("N5.93 Leader, The Colours (Protocol 14): A Press Holds The Seat Of The Row's Player, Not The Row's Place: When The Rows Close Up Before The Release (A Player Left) The Release Moves Nobody, And The Same Press On The Row That The Player Has Moved To Does") {
+    TEST_CASE("N5.93 Leader, The Colors (Protocol 14): A Press Holds The Seat Of The Row's Player, Not The Row's Place: When The Rows Close Up Before The Release (A Player Left) The Release Moves Nobody, And The Same Press On The Row That The Player Has Moved To Does") {
         Server server;
         ASSERT_TRUE(server.make_room("MOVE-HOLD", 4));
         Application leader;
@@ -842,15 +842,15 @@ void run_leader_tests() {
         hall.step(500);
         ASSERT_TRUE(server.status("MOVE-HOLD").seat_moves == 0 && server.status("MOVE-HOLD").ignored_seat_moves == 0);
         ASSERT_TRUE(leader.net()->room().slots[2].name == "Cat" && leader.net()->room().slots[3].state == net::SlotState::Empty);        // Cat sits where she sat
-        // the whole press on Cat's row moves Cat (to Black: the next free colour after Blue)
+        // the whole press on Cat's row moves Cat (to Black: the next free color after Blue)
         press_row(leader, 1);
         ASSERT_TRUE(hall.until([&]() { return leader.net()->room().slots[3].name == "Cat"; }, 8000));
         ASSERT_TRUE(server.status("MOVE-HOLD").seat_moves == 1 && server.status("MOVE-HOLD").ignored_seat_moves == 0);
         leader.quit();
     } TEST_END();
 
-    TEST_CASE("N5.94 Leader, The Colours (Protocol 14): The Hint Is For The Waiting Room (A START That Is Pressed While It Shows Leaves The Loading Screen With Its Own Words); A Net Game That Leaves A Room And Joins Another One Starts Afresh: The Hint Again, And No Wait For The Last Press Of The Room That Is Gone") {
-        const std::string hint = "Tap a player to change their colour.";
+    TEST_CASE("N5.94 Leader, The Colors (Protocol 14): The Hint Is For The Waiting Room (A START That Is Pressed While It Shows Leaves The Loading Screen With Its Own Words); A Net Game That Leaves A Room And Joins Another One Starts Afresh: The Hint Again, And No Wait For The Last Press Of The Room That Is Gone") {
+        const std::string hint = "Tap a player to change their color.";
         Server server;
         ASSERT_TRUE(server.make_room("MOVE-HINT-A", 4));
         ASSERT_TRUE(server.make_room("MOVE-HINT-B", 4));
@@ -886,7 +886,7 @@ void run_leader_tests() {
         ASSERT_TRUE(lea.net.status_text() == std::string(sim::strings::text(sim::strings::kLoadingGame)) || lea.net.status_text() == std::string(sim::strings::text(sim::strings::kWaitingForOthers)));
     } TEST_END();
 
-    TEST_CASE("N5.96 Leader, The Colours (Protocol 14): A START Pressed While A Colour Change Has Not Been Answered Waits (The Plan Of Bots Follows The Room's Answer, So A START Before It Would Carry The Colours As They Were, With The Player Already Moved): Nothing Is Sent, And Once The Room Has Answered The START Goes With The Plan As The Answer Made It; A Request That The Room Never Answers Holds START For A Second Only") {
+    TEST_CASE("N5.96 Leader, The Colors (Protocol 14): A START Pressed While A Color Change Has Not Been Answered Waits (The Plan Of Bots Follows The Room's Answer, So A START Before It Would Carry The Colors As They Were, With The Player Already Moved): Nothing Is Sent, And Once The Room Has Answered The START Goes With The Plan As The Answer Made It; A Request That The Room Never Answers Holds START For A Second Only") {
         {
             Server server;
             const std::string code = "MOVE-START-A";
@@ -937,8 +937,8 @@ void run_leader_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N5.97 Leader, The Colours (Protocol 14): The Hint Gives Way To A Line That Is Showing On The Status Line (A Player Who Comes And Speaks In One Reading); START Takes Away The Hint And Nothing Else (A Notice Shown At START Stays, As It Did Before The Hint)") {
-        const std::string hint = "Tap a player to change their colour.";
+    TEST_CASE("N5.97 Leader, The Colors (Protocol 14): The Hint Gives Way To A Line That Is Showing On The Status Line (A Player Who Comes And Speaks In One Reading); START Takes Away The Hint And Nothing Else (A Notice Shown At START Stays, As It Did Before The Hint)") {
+        const std::string hint = "Tap a player to change their color.";
         {
             Server server;
             const std::string code = "MOVE-NOTE-A";

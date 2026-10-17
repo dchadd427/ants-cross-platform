@@ -2,8 +2,8 @@
 """The front page, the lobby that it is, and the way into and out of a game, in a REAL browser (opt-in; see tests/scripts/test_web_home.sh and docs/PLAY_IN_BROWSER.md, "The front page").
 
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
-numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four colour cards (Black top left, Green top right, Red bottom left, Blue bottom right; a colour that nobody holds is open, a bot of a level or
-Nobody; players are dragged between colours), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9, which is the default, or 21:9) and START! at its side, and the footer with the version and the links. A visitor who
+numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards (Black top left, Green top right, Red bottom left, Blue bottom right; a color that nobody holds is open, a bot of a level or
+Nobody; players are dragged between colors), the map, the picture's shape (Picture: Classic 4:3, 16:10, 16:9, which is the default, or 21:9) and START! at its side, and the footer with the version and the links. A visitor who
 opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
 run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
@@ -16,18 +16,18 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
              strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
-  * lobby    one host and guests, each a browser of its own: a guest joins through the link and its name card (a bad name is refused with the reason) and takes the next free colour; the host drags a player onto an
-             open colour (a move) and onto a taken one (a swap), or taps the grip and then the colour (Esc lets go); with three players Team 1 and Team 2 appear on each colour that plays, a team goes with its player, a
-             third colour on a full team is refused with the reason, and a guest sees the teams as read-only tabs; a bot of a level takes a colour; a player renames themselves with the pencil (a bad name is refused, a name
+  * lobby    one host and guests, each a browser of its own: a guest joins through the link and its name card (a bad name is refused with the reason) and takes the next free color; the host drags a player onto an
+             open color (a move) and onto a taken one (a swap), or taps the grip and then the color (Esc lets go); with three players Team 1 and Team 2 appear on each color that plays, a team goes with its player, a
+             third color on a full team is refused with the reason, and a guest sees the teams as read-only tabs; a bot of a level takes a color; a player renames themselves with the pencil (a bad name is refused, a name
              with markup stays text); the host's Remove asks first (Keep, Esc, one question at a time) and the removed player gets a room of their own with the strip that says why; a typed code (spaces and capitals do not
              matter) leads through the name card into the room, a code that has no room does not; a reload brings the seat back; the page holds up at 320 px with a name of 32 wide letters and the question open; START
              hands everybody into the real game: every page goes to the game page with its seat's key kept in the browser, the server's status and /busy show the match (three people and a bot, the teams that were set),
              every game runs it, the state hashes agree, a game page that is reloaded takes its seat back, and a link opened now gets a room of its own;
-  * play     START with a bot in every other colour takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
+  * play     START with a bot in every other color takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
              plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
              in the same tab, which makes a room again for the same name;
-  * solo     START with nobody else in the match (every other colour Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
+  * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and 16:9, the default, is what it gets when nothing is chosen);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
              to the front page (no new tab); the same for a match in a room of the server (START with one Medium bot); the quit dialog's Yes with three opponents left (the quit ends a match only when one is left) takes the tab
@@ -66,13 +66,13 @@ PARTS = ("front", "lobby", "play", "solo", "leave", "friend", "old", "game")
 NEEDS_SERVER = ("front", "lobby", "play", "solo", "leave", "friend")         # (the parts that open "/" or play a match in a room: the page makes its room on the game server, and the site's /ws must lead to one)
 CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"                            # a room's code is six of these (31 symbols: no i, l, o, 0 or 1; web/front/lobby_rules.js makeCode)
 NAMES = ("Maple", "Clover", "Pebble", "Sorrel", "Fern", "Bramble", "Juniper", "Flint", "Willow", "Cedar", "Moss", "Thistle")      # the names that the page picks for a visitor who has none (web/front/lobby_rules.js)
-COLOURS = ("black", "green", "red", "blue")                                  # the cards in their reading order: the four hills of the maps, top left to bottom right
-SEAT = {"green": 0, "red": 1, "blue": 2, "black": 3}                         # (the number of a colour stays its seat)
+COLORS = ("black", "green", "red", "blue")                                  # the cards in their reading order: the four hills of the maps, top left to bottom right
+SEAT = {"green": 0, "red": 1, "blue": 2, "black": 3}                         # (the number of a color stays its seat)
 
-MAP_LINE_LEAST = 2.9                                                         # the map line's contrast at the tile's lightest end is 2.95:1 in the approved picture; it must not get worse (whether the picture's colour stays is a project decision)
+MAP_LINE_LEAST = 2.9                                                         # the map line's contrast at the tile's lightest end is 2.95:1 in the approved picture; it must not get worse (whether the picture's color stays is a project decision)
 
 # The contrast of every visible text with its background (WCAG: (L1 + 0.05) / (L2 + 0.05); a text that is faded by an opacity is mixed with what lies behind it, its face too); text on the clay tile is measured against the tile's two ends (its deepest and its lightest broad shade: CLAY_DEEP
-# and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1), text in the footer against the ends of its gradient and text on a colour's card against the card's
+# and CLAY_LIGHT of tools/front_page_art/artlib.py; tests/scripts/test_web_front.py holds the whole tile to the ink's 4.5 : 1), text in the footer against the ends of its gradient and text on a color's card against the card's
 # two ends, so the number is the worst case. Returns JSON: how many texts, the lowest ratio, and the three lowest.
 CONTRAST_JS = """(function () {
   function parse(c) { var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null; var p = m[1].split(',').map(parseFloat); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
@@ -130,7 +130,7 @@ FORMS_JS = """(function () {
   return JSON.stringify({ n: rows.length, lowest: rows.slice(0, 3).map(function (x) { return [Math.round(x[0] * 100) / 100, x[1]]; }) });
 })()"""
 
-# What a lobby page shows now: the room, every colour's card (who sits there or what it is set to, what its line says, the buttons it has, the team tabs), the notes, START, the strip at the top, the rejoin line, the toast
+# What a lobby page shows now: the room, every color's card (who sits there or what it is set to, what its line says, the buttons it has, the team tabs), the notes, START, the strip at the top, the rejoin line, the toast
 STATE_JS = """(function () {
   function $(id) { return document.getElementById(id); }
   function text(e) { return e ? e.textContent.replace(/\\s+/g, ' ').trim() : ''; }
@@ -236,13 +236,13 @@ def lobby_of(t):
 
 
 def seated(t):
-    """The page is in its room: the room has welcomed it (the colours are not greyed out) and a person sits in a colour."""
+    """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color."""
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 
-def card_of(state, colour):
-    """The card of a colour in a lobby state (None when there is none)."""
-    return next((c for c in state["cards"] if c["c"] == colour), None)
+def card_of(state, color):
+    """The card of a color in a lobby state (None when there is none)."""
+    return next((c for c in state["cards"] if c["c"] == color), None)
 
 
 def code_of(state):
@@ -296,9 +296,9 @@ def drag_on(t, source, target, during=None):
     return held
 
 
-def set_mode(t, colour, word):
-    """The host's drop-down of an open colour: Open, Easy bot, Medium bot, Hard bot or Nobody (the browser's own list cannot be driven: the value is set and the page told, as a pick would)."""
-    t.ev("(function () { var s = document.querySelector('#slots li[data-c=%s] select'); s.value = %s; s.dispatchEvent(new Event('change', { bubbles: true })); })(); 1" % (colour, json.dumps(word)))
+def set_mode(t, color, word):
+    """The host's drop-down of an open color: Open, Easy bot, Medium bot, Hard bot or Nobody (the browser's own list cannot be driven: the value is set and the page told, as a pick would)."""
+    t.ev("(function () { var s = document.querySelector('#slots li[data-c=%s] select'); s.value = %s; s.dispatchEvent(new Event('change', { bubbles: true })); })(); 1" % (color, json.dumps(word)))
 
 
 def open_name_card(t):
@@ -460,11 +460,11 @@ def main():
             tab.save_shot(args.shots, name)
 
         def front_up():
-            """The tab shows the front page (its colour cards are there), whatever room it is in."""
+            """The tab shows the front page (its color cards are there), whatever room it is in."""
             return bool(tab.ev("!!document.getElementById('slots')"))
 
         def front_ready(t=None, timeout=20):
-            """The front page of `t` (default: the tab) has its room: the room has welcomed it and a person sits in a colour."""
+            """The front page of `t` (default: the tab) has its room: the room has welcomed it and a person sits in a color."""
             t = t or tab
             return bool(wait_for(lambda: seated(t), timeout))
 
@@ -478,7 +478,7 @@ def main():
             key_press(tab, name, name, vk, text, modifiers)
 
         def rename_by_pencil(t, name, refused=False):
-            """The player's own colour: the pencil turns the name into a field; the name is typed (a real insertion) and Enter ends it. The next step waits until the card shows the name (the page
+            """The player's own color: the pencil turns the name into a field; the name is typed (a real insertion) and Enter ends it. The next step waits until the card shows the name (the page
             has the room's word for it: a pencil pressed before that does nothing), or, for a name that the page refuses (`refused`), a moment."""
             click_on(t, "#slots li.k-person [data-edit]")
             wait_for(lambda: t.ev("!!document.querySelector('#slots .pname input')"), 5)
@@ -492,9 +492,9 @@ def main():
 
         def set_modes(t, modes):
             """The host's drop-downs, one after another ({"red": "medium", ...}): a person takes a moment between two, so the room's reply to one comes before the next change is made."""
-            for colour, word in modes.items():
-                set_mode(t, colour, word)
-                wait_for(lambda c=colour, w=word: card_of(lobby_of(t), c)["mode"] == w, 5)
+            for color, word in modes.items():
+                set_mode(t, color, word)
+                wait_for(lambda c=color, w=word: card_of(lobby_of(t), c)["mode"] == w, 5)
                 time.sleep(0.2)
 
         def score_strip(cv):
@@ -549,7 +549,7 @@ def main():
             found = json.loads(t.ev((prepare + "; " if prepare else "") + "var found = " + CONTRAST_JS + "; " + (restore + "; " if restore else "") + "found"))
             check(found["texts"] >= least and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
             if found.get("info") is not None:
-                check(found["info"] >= MAP_LINE_LEAST, "%s: ... but for the map line, which is cream on the clay tile as picture 1 draws it (a project decision: 4.5:1 would need another colour), it is not lower than %s:1 (%s)" % (where, MAP_LINE_LEAST, found["info"]))
+                check(found["info"] >= MAP_LINE_LEAST, "%s: ... but for the map line, which is cream on the clay tile as picture 1 draws it (a project decision: 4.5:1 would need another color), it is not lower than %s:1 (%s)" % (where, MAP_LINE_LEAST, found["info"]))
             if forms:
                 f = json.loads(t.ev(FORMS_JS))
                 check(f["n"] >= 2 and f["lowest"][0][0] >= 4.5, "%s: ... and for all %d drop-downs and fields, with their placeholders (lowest: %s)" % (where, f["n"], f["lowest"]))
@@ -563,7 +563,7 @@ def main():
             print("[web home] the front page: a first visit")
             clear_storage()
             load(web, settle=1.0)
-            check(front_ready(), "the page is in a room of its own: the room has welcomed it and the host sits in a colour")
+            check(front_ready(), "the page is in a room of its own: the room has welcomed it and the host sits in a color")
             shot("home_front")
             st = lobby()
             codes.append(code_of(st))
@@ -589,20 +589,20 @@ def main():
             code = code_of(st)
             check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
                   "the room: \"Your room\" with a code of six letters and numbers (no i, l, o, 0 or 1) shown in two groups of three (%r, the link carries %r)" % (st["code"], code))
-            check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free colour.",
+            check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free color.",
                   "the link is the page's address with ?room=<code> in a read-only field, and the line under it says what it does (%r)" % (info["link"][0],))
             check(info["buttons"] == ["Copy link", "Have a code?"] and info["share"] == "none" and info["joinbox"],
                   "Copy link and Have a code? are there (the second opens nothing yet; Share is for a phone) (%s)" % (info["buttons"],))
             check(info["noMore"], "there is no \"More ways to play\": the map selection screen is the only way to play")
             status = server.room(code) or {}
             check(status.get("lobby") is True and status.get("state") == "waiting" and status.get("leader") == 0 and status.get("joined") == 1 and status.get("starting") is False and status.get("plan", "").startswith("oooo"),
-                  "the game server holds that room as a lobby: waiting, the visitor its leader at seat 0, every colour open (%s)" % {k: status.get(k) for k in ("lobby", "state", "leader", "joined", "plan")})
+                  "the game server holds that room as a lobby: waiting, the visitor its leader at seat 0, every color open (%s)" % {k: status.get(k) for k in ("lobby", "state", "leader", "joined", "plan")})
             mine = status.get("players", [{}])[0].get("name") if status.get("players") else None
             check(mine is not None and card_of(st, "green")["name"] == mine and mine in NAMES,
                   "the host plays under a picked name, the one the room shows on the host's card (%r)" % mine)
 
             # the four cards, in the reading order of the four hills of the maps
-            check([c["c"] for c in st["cards"]] == list(COLOURS) and [c["seat"] for c in st["cards"]] == [3, 0, 1, 2], "the four colour cards are built in the reading order Black, Green, Red, Blue, and keep the seats' numbers (%s)" % [(c["c"], c["seat"]) for c in st["cards"]])
+            check([c["c"] for c in st["cards"]] == list(COLORS) and [c["seat"] for c in st["cards"]] == [3, 0, 1, 2], "the four color cards are built in the reading order Black, Green, Red, Blue, and keep the seats' numbers (%s)" % [(c["c"], c["seat"]) for c in st["cards"]])
             green = card_of(st, "green")
             check(green["kind"] == "person" and green["badge"] == "You" and green["pencil"] and not green["remove"] and green["stat"] == "Host. You start the match." and green["grip"] and green["label"] == "Green: %s, you, host" % green["name"],
                   "Green is the host: the name with You, a pencil to change it, no Remove, the line \"Host. You start the match.\" and the grip (%s)" % {k: green[k] for k in ("badge", "pencil", "remove", "stat", "label")})
@@ -614,7 +614,7 @@ def main():
             by = {p[0]: p for p in pos}
             check(by["black"][1] < by["green"][1] and abs(by["black"][2] - by["green"][2]) < 3 and by["red"][1] == by["black"][1] and by["blue"][1] == by["green"][1] and abs(by["red"][2] - by["blue"][2]) < 3 and by["red"][2] > by["black"][2] + 50,
                   "at 1440 px they lie as the hills do: Black top left, Green top right, Red bottom left, Blue bottom right (%s)" % pos)
-            check(st["slotsNote"] == "Waiting for players. Drag a player onto another colour to move them." and st["teamsNote"] == "" and st["banner"]["shown"] is False and st["rejoin"] is False,
+            check(st["slotsNote"] == "Waiting for players. Drag a player onto another color to move them." and st["teamsNote"] == "" and st["banner"]["shown"] is False and st["rejoin"] is False,
                   "the line under the cards says what to do (%r); no team line with one player, no strip at the top, no rejoin line" % st["slotsNote"])
 
             # the map side
@@ -643,7 +643,7 @@ def main():
             tab.ev("var m = document.getElementById('map'); m.value = 'treasure'; m.dispatchEvent(new Event('change', { bubbles: true })); 1")
             wait_for(lambda: (server.room(code) or {}).get("map") == "TREASURE.LVL", 5)
 
-            # the open colours: a bot of a level, Nobody (the drop-down tells the room, the card and the line under START follow)
+            # the open colors: a bot of a level, Nobody (the drop-down tells the room, the card and the line under START follow)
             set_mode(tab, "red", "hard")
             ok = wait_for(lambda: card_of(lobby(), "red")["kind"] == "bot", 5)
             red = card_of(lobby(), "red")
@@ -661,7 +661,7 @@ def main():
             # How it works
             real_click("#how-open")
             how = json.loads(value("JSON.stringify({shown: !document.getElementById('how').hidden, titles: Array.prototype.map.call(document.querySelectorAll('#how h3'), function (h) { return h.textContent; }), role: document.querySelector('#how .panel').getAttribute('role'), focus: document.activeElement.id})"))
-            check(how["shown"] and how["role"] == "dialog" and how["focus"] == "how-close" and how["titles"] == ["The room", "The other colours", "Removing a player", "Teams", "START!", "When the host leaves"],
+            check(how["shown"] and how["role"] == "dialog" and how["focus"] == "how-close" and how["titles"] == ["The room", "The other colors", "Removing a player", "Teams", "START!", "When the host leaves"],
                   "How it works opens a dialog over the page, with the focus on Close (%s)" % how["titles"])
             contrast("1440 px with How it works up")
             key("Escape", 27)
@@ -797,7 +797,7 @@ def main():
             check(bool(asked) and card["title"] == "Join the room qqq qqq" and card["notice"]["shown"] and card["notice"]["below"] and card["notice"]["above"] and card["notice"]["inside"] and card["notice"]["sameType"] and not card["sideways"] and card["inside"],
                   "a link to a room (?room=qqqqqq) asks for a name first: the notice about recorded matches is under the hint and above the way out, in the hint's type, inside the card (%s)" % card["notice"])
             check(st["heading"] == "Joining a room" and st["start"]["disabled"] and st["plan"] == "" and st["cards"][0]["kind"] in ("open", "nobody") and not any(c["grip"] or c["pencil"] for c in st["cards"]) and st["offline"],
-                  "the page behind the card waits with no names and START off: \"Joining a room\", the colours grey and shut (%s)" % st["heading"])
+                  "the page behind the card waits with no names and START off: \"Joining a room\", the colors grey and shut (%s)" % st["heading"])
             check(not tab.ev("document.querySelector('.maprow').getBoundingClientRect().height > 0 && getComputedStyle(document.querySelector('.maprow')).visibility === 'visible'"), "... and the map is not shown, as it is not known yet")
             check(server.room("qqqqqq") is None, "no room was made yet: the server has none under that code")
             contrast("1440 px with the name card of a link", least=40)
@@ -852,14 +852,14 @@ def main():
                 if not two and m["side"] is not None and m["side"]["top"] < panel["bottom"] - 1:
                     problems.append("the map side overlaps the room")
                 cards = {c["c"]: c["rect"] for c in m["cards"]}
-                if [c["c"] for c in m["cards"]] != list(COLOURS):
+                if [c["c"] for c in m["cards"]] != list(COLORS):
                     problems.append("the cards are not in the order Black, Green, Red, Blue")
                 elif width >= 721:
-                    b, g, r, bl = (cards[c] for c in COLOURS)
+                    b, g, r, bl = (cards[c] for c in COLORS)
                     if not (b["left"] < g["left"] and abs(b["top"] - g["top"]) < 3 and abs(r["left"] - b["left"]) < 3 and abs(bl["left"] - g["left"]) < 3 and abs(r["top"] - bl["top"]) < 3 and r["top"] > b["bottom"] - 1):
                         problems.append("the cards do not lie two by two (Black, Green / Red, Blue): %s" % {k: (round(v["left"]), round(v["top"])) for k, v in cards.items()})
                 else:
-                    seq = [cards[c] for c in COLOURS]
+                    seq = [cards[c] for c in COLORS]
                     if not (all(abs(x["left"] - seq[0]["left"]) < 3 for x in seq) and all(a["bottom"] <= b["top"] + 1 for a, b in zip(seq, seq[1:]))):
                         problems.append("the cards are not one column in the order Black, Green, Red, Blue")
                 for c in m["cards"]:
@@ -960,7 +960,7 @@ def main():
             shot("home_front_phone_name_card")
             tab.emulate(1440, 900, 1)
 
-            # the game server cannot be reached: the gold strip, the colours grey, and the room made by itself when the server is back
+            # the game server cannot be reached: the gold strip, the colors grey, and the room made by itself when the server is back
             fresh_tab()
             server.stop()
             tab.emulate(1440, 900, 1)
@@ -1009,7 +1009,7 @@ def main():
 
             host = person("Host")
             host.call("Page.navigate", {"url": web})
-            check(bool(wait_for(lambda: seated(host), 25)), "the host opens the front page: its room is made and it sits in a colour")
+            check(bool(wait_for(lambda: seated(host), 25)), "the host opens the front page: its room is made and it sits in a color")
             hs = lobby_of(host)
             code = code_of(hs)
             codes.append(code)
@@ -1019,7 +1019,7 @@ def main():
             check(ok and named(server.room(code) or {}) == {0: "Ann"} and host.ev("localStorage.getItem('ants.name')") == "Ann",
                   "the host changes its name with the pencil: the card shows Ann, the room has it (%s) and the browser remembers it" % named(server.room(code) or {}))
 
-            # ---- a guest opens the link: the name card, then the next free colour
+            # ---- a guest opens the link: the name card, then the next free color
             pal = person("Pal")
             pal.call("Page.navigate", {"url": hs["link"]})
             check(bool(wait_for(lambda: open_name_card(pal), 15)), "a guest opens the room's link and is asked for a name first")
@@ -1041,14 +1041,14 @@ def main():
             check(bool(ok) and ps["code"] == hs["code"] and ps["heading"] == "Ann’s room" and ps["guest"], "the guest is in the room, which is named after its host (%r, code %s)" % (ps["heading"], ps["code"]))
             status = server.room(code) or {}
             check(status.get("joined") == 2 and named(status) == {0: "Ann", 1: "Pal"} and status.get("leader") == 0,
-                  "the next free colour is Red, in seat order (the server: Ann at seat 0, Pal at seat 1, Ann leads: %s)" % named(status))
+                  "the next free color is Red, in seat order (the server: Ann at seat 0, Pal at seat 1, Ann leads: %s)" % named(status))
             pg, pr = card_of(ps, "green"), card_of(ps, "red")
             check(pg["name"] == "Ann" and pg["badge"] == "Host" and pg["stat"] == "Starts the match." and not pg["pencil"] and not pg["remove"] and not pg["grip"]
                   and pr["name"] == "Pal" and pr["badge"] == "You" and pr["stat"] == "Waiting for the host to start." and pr["pencil"] and not pr["remove"] and not pr["grip"] and pr["label"] == "Red: Pal, you",
                   "the guest's screen: Ann is the Host (\"Starts the match.\"), Pal is You with a pencil; no Remove, no grip, nothing to drag (%s)" % {k: pr[k] for k in ("badge", "stat", "pencil", "grip")})
             check(all(c["kind"] == "open" and c["mode"] is None and c["who"] == "Open" and not c["grip"] for c in (card_of(ps, "black"), card_of(ps, "blue")))
-                  and ps["start"]["text"] == "Waiting for Ann" and ps["start"]["disabled"] and ps["mapDisabled"] and ps["slotsNote"] == "Ann arranges the colours and starts the match." and ps["plan"].startswith("Ann starts the match when everybody is in."),
-                  "... the open colours say Open with no drop-down, START says \"Waiting for Ann\" and is off, the map cannot be changed, and the line under the cards says who arranges them (%r)" % ps["slotsNote"])
+                  and ps["start"]["text"] == "Waiting for Ann" and ps["start"]["disabled"] and ps["mapDisabled"] and ps["slotsNote"] == "Ann arranges the colors and starts the match." and ps["plan"].startswith("Ann starts the match when everybody is in."),
+                  "... the open colors say Open with no drop-down, START says \"Waiting for Ann\" and is off, the map cannot be changed, and the line under the cards says who arranges them (%r)" % ps["slotsNote"])
             hr = card_of(hs, "red")
             check(hr["name"] == "Pal" and hr["stat"] == "In the room" and hr["remove"] and hr["grip"] and not hr["pencil"] and hr["badge"] == "" and toast_has(host, "Pal joined as Red.")
                   and hs["plan"].startswith("You and Pal play on Treasure. Blue and Black are open and stay empty unless a player joins first."),
@@ -1056,7 +1056,7 @@ def main():
             check(not any(c["teams"] for c in hs["cards"]) and hs["teamsNote"] == "Teams need three or four players." and not any(c["teams"] or c["tab"] for c in ps["cards"]) and ps["teamsNote"] == "",
                   "with two players there are no team buttons; the host's line says teams need three or four, the guest's has none (%r, %r)" % (hs["teamsNote"], ps["teamsNote"]))
 
-            # ---- the host drags: onto an open colour (a move), onto a taken one (a swap), by the grip's tap and the colour's tap
+            # ---- the host drags: onto an open color (a move), onto a taken one (a swap), by the grip's tap and the color's tap
             seen = {}
 
             def mid():
@@ -1064,7 +1064,7 @@ def main():
                     drop: (function () { var d = document.querySelector('.slot.drop'); return d ? [d.getAttribute('data-c'), d.getAttribute('data-drop')] : null; })(), lifted: Array.prototype.map.call(document.querySelectorAll('#slots li.lifted'), function (l) { return l.getAttribute('data-c'); }) })"""))
             drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox", during=mid)
             check(seen["drag"]["chip"] and "Pal" in seen["drag"]["chipText"] and seen["drag"]["drop"] == ["black", "Move here"] and seen["drag"]["lifted"] == ["red"],
-                  "while Pal is dragged a token with the name follows the pointer, the colour it came from is lifted and the open one under it says \"Move here\" (%s)" % seen["drag"])
+                  "while Pal is dragged a token with the name follows the pointer, the color it came from is lifted and the open one under it says \"Move here\" (%s)" % seen["drag"])
             ok = until(host, lambda s: card_of(s, "black")["name"] == "Pal" and card_of(s, "red")["kind"] == "open")
             status = server.room(code) or {}
             check(ok and named(status) == {0: "Ann", 3: "Pal"}, "dropped on the open Black: Pal moves there, and the room has it (%s)" % named(status))
@@ -1076,18 +1076,18 @@ def main():
             fill_name_card(quinn, "Quinn")
             ok = wait_for(lambda: seated(quinn) and not open_name_card(quinn), 15)
             status = server.room(code) or {}
-            check(bool(ok) and named(status) == {0: "Ann", 1: "Quinn", 3: "Pal"} and toast_has(host, "Quinn joined as Red."), "a second guest takes the next free colour, Red (%s) and the host is told" % named(status))
+            check(bool(ok) and named(status) == {0: "Ann", 1: "Quinn", 3: "Pal"} and toast_has(host, "Quinn joined as Red."), "a second guest takes the next free color, Red (%s) and the host is told" % named(status))
             seen.clear()
             drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox", during=mid)
-            check(seen["drag"]["drop"] == ["black", "Swap places"], "a person dragged onto a taken colour: it says \"Swap places\" (%s)" % (seen["drag"]["drop"],))
+            check(seen["drag"]["drop"] == ["black", "Swap places"], "a person dragged onto a taken color: it says \"Swap places\" (%s)" % (seen["drag"]["drop"],))
             ok = until(host, lambda s: card_of(s, "black")["name"] == "Quinn" and card_of(s, "red")["name"] == "Pal")
             status = server.room(code) or {}
-            check(ok and named(status) == {0: "Ann", 1: "Pal", 3: "Quinn"} and toast_has(pal, "swapped colours."), "... and the two swap places (the server: %s; Pal's note: %r)" % (named(status), say(pal)))
+            check(ok and named(status) == {0: "Ann", 1: "Pal", 3: "Quinn"} and toast_has(pal, "swapped colors."), "... and the two swap places (the server: %s; Pal's note: %r)" % (named(status), say(pal)))
             host.ev("document.querySelector('#slots li[data-c=black] [data-grip]').focus(); 1")
             key_press(host, "Enter", "Enter", 13, "\r")
             st = lobby_of(host)
-            check(card_of(st, "black")["picked"] and card_of(st, "red")["target"] and st["slotsNote"] == "Now tap the colour where Quinn goes (tap the same player again to let go).",
-                  "the keyboard: Enter on a grip picks the player up, the other colours become targets, and the line says what to do (%r)" % st["slotsNote"])
+            check(card_of(st, "black")["picked"] and card_of(st, "red")["target"] and st["slotsNote"] == "Now tap the color where Quinn goes (tap the same player again to let go).",
+                  "the keyboard: Enter on a grip picks the player up, the other colors become targets, and the line says what to do (%r)" % st["slotsNote"])
             key_press(host, "Escape", "Escape", 27)
             check(not any(c["picked"] for c in lobby_of(host)["cards"]), "Esc lets go")
             click_on(host, "#slots li[data-c=black] [data-grip]")
@@ -1095,13 +1095,13 @@ def main():
             click_on(host, "#slots li[data-c=blue] .antbox")
             ok = until(host, lambda s: card_of(s, "blue")["name"] == "Quinn" and card_of(s, "black")["kind"] == "open" and not any(c["picked"] for c in s["cards"]))
             status = server.room(code) or {}
-            check(ok and named(status) == {0: "Ann", 1: "Pal", 2: "Quinn"}, "... and a tap on an open colour puts the player there (the server: %s)" % named(status))
+            check(ok and named(status) == {0: "Ann", 1: "Pal", 2: "Quinn"}, "... and a tap on an open color puts the player there (the server: %s)" % named(status))
             host.shot(args.shots, "home_lobby_three")
 
-            # ---- three play: Team 1 and Team 2 on each colour that plays
+            # ---- three play: Team 1 and Team 2 on each color that plays
             st = lobby_of(host)
-            check([bool(card_of(st, c)["teams"]) for c in COLOURS] == [False, True, True, True] and st["teamsNote"] == "Free for all. For a team, put two colours on the same team." and not st["teamsWarn"],
-                  "with three players Team 1 and Team 2 appear under each colour that plays (not under the open one), and the line says free for all (%r)" % st["teamsNote"])
+            check([bool(card_of(st, c)["teams"]) for c in COLORS] == [False, True, True, True] and st["teamsNote"] == "Free for all. For a team, put two colors on the same team." and not st["teamsWarn"],
+                  "with three players Team 1 and Team 2 appear under each color that plays (not under the open one), and the line says free for all (%r)" % st["teamsNote"])
             click_on(host, "#slots button[data-seat='0'][data-side='1']")
             click_on(host, "#slots button[data-seat='1'][data-side='1']")
             ok = until(host, lambda s: s["teamsNote"] == "Teams: Green + Red against Blue.")
@@ -1109,25 +1109,25 @@ def main():
             st = lobby_of(host)
             g, r, b = card_of(st, "green"), card_of(st, "red"), card_of(st, "blue")
             check(ok and g["teams"][0]["on"] and r["teams"][0]["on"] and not g["teams"][1]["on"] and not b["teams"][0]["on"] and b["teams"][0]["dim"] and not b["teams"][1]["dim"],
-                  "Team 1 on Green and on Red: \"%s\", the third colour's Team 1 is dashed (full) and its Team 2 is free" % st["teamsNote"])
+                  "Team 1 on Green and on Red: \"%s\", the third color's Team 1 is dashed (full) and its Team 2 is free" % st["teamsNote"])
             print("  note: the server's plan with that team: %r" % status.get("plan"))
             check(status.get("plan", "").endswith(" 0+1"), "the room holds the team: Green and Red (plan %r)" % status.get("plan"))
             click_on(host, "#slots button[data-seat='2'][data-side='1']")
             st = lobby_of(host)
-            check(st["teamsWarn"] and st["teamsNote"] == "Team 1 has two colours already. Press one of them to take it off first." and not card_of(st, "blue")["teams"][0]["on"],
-                  "a third colour on the full Team 1 is refused, with the reason in the gold team line (%r)" % st["teamsNote"])
+            check(st["teamsWarn"] and st["teamsNote"] == "Team 1 has two colors already. Press one of them to take it off first." and not card_of(st, "blue")["teams"][0]["on"],
+                  "a third color on the full Team 1 is refused, with the reason in the gold team line (%r)" % st["teamsNote"])
             ps = lobby_of(pal)
-            check([card_of(ps, c)["tab"] for c in COLOURS] == ["", "Team 1", "Team 1", ""] and ps["teamsNote"] == "Teams: Green + Red against Blue." and not any(c["teams"] for c in ps["cards"]),
-                  "the guest sees the teams as read-only tabs, Team 1 on Green and Red, and the line under the cards (%s, %r)" % ([card_of(ps, c)["tab"] for c in COLOURS], ps["teamsNote"]))
+            check([card_of(ps, c)["tab"] for c in COLORS] == ["", "Team 1", "Team 1", ""] and ps["teamsNote"] == "Teams: Green + Red against Blue." and not any(c["teams"] for c in ps["cards"]),
+                  "the guest sees the teams as read-only tabs, Team 1 on Green and Red, and the line under the cards (%s, %r)" % ([card_of(ps, c)["tab"] for c in COLORS], ps["teamsNote"]))
             drag_on(host, "#slots li[data-c=red] [data-grip]", "#slots li[data-c=black] .antbox")
             ok = until(host, lambda s: card_of(s, "black")["name"] == "Pal" and s["teamsNote"] == "Teams: Green + Black against Blue.")
             st = lobby_of(host)
             check(ok and card_of(st, "black")["teams"][0]["on"] and toast_has(host, "Pal moved to Black. Team 1 goes along."),
                   "Pal dragged to the open Black takes the team along: Team 1 is on at Black now (%r; %r)" % (st["teamsNote"], st["toast"]))
             ok = until(pal, lambda s: card_of(s, "black")["tab"] == "Team 1" and card_of(s, "green")["tab"] == "Team 1" and card_of(s, "red")["kind"] == "open")
-            check(ok, "... on Pal's own screen too (the tabs: %s)" % ([card_of(lobby_of(pal), c)["tab"] for c in COLOURS],))
+            check(ok, "... on Pal's own screen too (the tabs: %s)" % ([card_of(lobby_of(pal), c)["tab"] for c in COLORS],))
             click_on(host, "#slots button[data-seat='3'][data-side='1']")
-            ok = until(host, lambda s: s["teamsNote"] == "Free for all. For a team, put two colours on the same team.")
+            ok = until(host, lambda s: s["teamsNote"] == "Free for all. For a team, put two colors on the same team.")
             check(ok and (server.room(code) or {}).get("plan", "").endswith("-"), "a press on a lit button takes it off: no team (%r)" % lobby_of(host)["teamsNote"])
             click_on(host, "#slots button[data-seat='3'][data-side='1']")
             ok = until(host, lambda s: s["teamsNote"] == "Teams: Green + Black against Blue.") and wait_for(lambda: (server.room(code) or {}).get("plan", "").endswith(" 0+3"), 5)
@@ -1142,12 +1142,12 @@ def main():
             red = card_of(st, "red")
             check(ok and red["mode"] == "medium" and red["stat"] == "Computer player" and not red["remove"] and red["grip"] and status.get("plan", "")[1:2] == "m" and toast_has(host, "Red is now a Medium bot."),
                   "Red set to a Medium bot: its card says Computer player (a grip, no Remove) and the room's plan has it (%r)" % status.get("plan"))
-            lit = [[t["on"] for t in card_of(st, c)["teams"]] for c in COLOURS]
+            lit = [[t["on"] for t in card_of(st, c)["teams"]] for c in COLORS]
             check(lit == [[True, False], [True, False], [False, True], [False, True]] and st["teamsNote"] == "Teams: Green + Black against Red + Blue.",
-                  "four play: Black and Green are on Team 1, and the other two colours show Team 2 lit though nobody pressed it; the line says \"%s\" (Team 1 and Team 2 lit, in the order Black, Green, Red, Blue: %s)" % (st["teamsNote"], lit))
+                  "four play: Black and Green are on Team 1, and the other two colors show Team 2 lit though nobody pressed it; the line says \"%s\" (Team 1 and Team 2 lit, in the order Black, Green, Red, Blue: %s)" % (st["teamsNote"], lit))
             ps = lobby_of(pal)
-            check([card_of(ps, c)["tab"] for c in COLOURS] == ["Team 1", "Team 1", "Team 2", "Team 2"] and card_of(ps, "red")["who"] == "Medium bot",
-                  "the guest sees them: Black and Green on Team 1, Red (the Medium bot) and Blue on Team 2 (%s)" % [card_of(ps, c)["tab"] for c in COLOURS])
+            check([card_of(ps, c)["tab"] for c in COLORS] == ["Team 1", "Team 1", "Team 2", "Team 2"] and card_of(ps, "red")["who"] == "Medium bot",
+                  "the guest sees them: Black and Green on Team 1, Red (the Medium bot) and Blue on Team 2 (%s)" % [card_of(ps, c)["tab"] for c in COLORS])
             host.shot(args.shots, "home_lobby_bot")
 
             # ---- the pencil: a player renames themselves (a refused name, markup, a name)
@@ -1223,7 +1223,7 @@ def main():
             ps = lobby_of(pal)
             status = server.room(code) or {}
             check(bool(ok) and card_of(ps, "black")["badge"] == "You" and card_of(ps, "black")["name"] == "Pip" and named(status) == before and status.get("joined") == 3 and ps["guest"],
-                  "a guest reloads the page: it is back in the same room, in the same colour and name, and the room has no second Pip (%s)" % named(status))
+                  "a guest reloads the page: it is back in the same room, in the same color and name, and the room has no second Pip (%s)" % named(status))
             host.call("Page.reload", {"ignoreCache": False})
             ok = wait_for(lambda: seated(host) and lobby_of(host)["code"] == hs["code"], 15)
             st = lobby_of(host)
@@ -1243,7 +1243,7 @@ def main():
             for who, p in (("the host's", host), ("the guest's", pal)):
                 m = json.loads(p.ev(LAYOUT_JS))
                 bad = [m["strays"][:3] if m["strays"] else None, [(c["c"], c["outside"][:2]) for c in m["cards"] if c["outside"]], [(c["c"], c["dots"]) for c in m["cards"] if c["dots"]]]
-                check(bool(ok) and m["scrollW"] <= m["innerW"] and not any(bad), "320 px, %s screen with a name of 32 wide letters in a colour%s: no sideways scroll, nothing out of a card (%s)" % (who, " and the Remove question open" if p is host else "", [b for b in bad if b]))
+                check(bool(ok) and m["scrollW"] <= m["innerW"] and not any(bad), "320 px, %s screen with a name of 32 wide letters in a color%s: no sideways scroll, nothing out of a card (%s)" % (who, " and the Remove question open" if p is host else "", [b for b in bad if b]))
             host.shot(args.shots, "home_lobby_phone_host")
             pal.shot(args.shots, "home_lobby_phone_guest")
             contrast("320 px, the host's screen with the question open", t=host, least=40)
@@ -1323,7 +1323,7 @@ def main():
         if wanted("play") and not can_play:
             note("play: left out (no game server: give --ws-port)")
         if wanted("play") and can_play:
-            print("[web home] START with a bot in every other colour: this tab goes into a match against Medium bots, which starts by itself")
+            print("[web home] START with a bot in every other color: this tab goes into a match against Medium bots, which starts by itself")
             clear_storage()
             load(web, settle=1.5)
             front_ready()
@@ -1333,7 +1333,7 @@ def main():
             code = code_of(st)
             codes.append(code)
             check(st["plan"] == "You, a Medium bot, a Medium bot and a Medium bot play on Treasure." and not st["start"]["disabled"] and st["start"]["text"] == "START!" and card_of(st, "green")["name"] == "Bob",
-                  "before START: Bob and a Medium bot in each of the other colours, and the line under START says so (%r)" % st["plan"])
+                  "before START: Bob and a Medium bot in each of the other colors, and the line under START says so (%r)" % st["plan"])
             before = pages()
             base = site_busy() or {"matches": -1, "players": 0}                  # (what the site counts before START: the server may hold other rooms of the earlier parts)
             real_click("#start")
@@ -1397,7 +1397,7 @@ def main():
         if wanted("solo") and not can_play:
             note("solo: left out (no game server: give --ws-port)")
         if wanted("solo") and can_play:
-            print("[web home] START with every other colour Nobody: a game for one on this computer, in this tab")
+            print("[web home] START with every other color Nobody: a game for one on this computer, in this tab")
             clear_storage()
             load(web, settle=1.5)
             front_ready()
@@ -1405,7 +1405,7 @@ def main():
             set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
             st = lobby()
             check(not st["start"]["disabled"] and st["start"]["text"] == "START!" and st["plan"] == "A game for one: only your colony is on the map." and not any(c["teams"] for c in st["cards"]),
-                  "every other colour Nobody: START is on and the line under it says that it is a game for one (%r)" % st["plan"])
+                  "every other color Nobody: START is on and the line under it says that it is a game for one (%r)" % st["plan"])
             code = code_of(st)
             before = pages()
             real_click("#start")
@@ -1484,7 +1484,7 @@ def main():
                 return x + (shape[0] - 640) + w / 2, y + h / 2
 
             def at_front_page():
-                """The tab is on the front page itself: its path "/" with no arguments, and its colour cards."""
+                """The tab is on the front page itself: its path "/" with no arguments, and its color cards."""
                 return bool(wait_for(lambda: tab.ev("location.pathname") == "/" and tab.ev("location.search") == "" and front_up(), 20))
 
             def rejoin_offered():
@@ -1508,7 +1508,7 @@ def main():
                 return went
 
             def front_with(modes):
-                """A first visit to the front page under the name Bob, the other colours set as `modes` says ({"red": "medium", ...}); the room's code."""
+                """A first visit to the front page under the name Bob, the other colors set as `modes` says ({"red": "medium", ...}); the room's code."""
                 clear_storage()
                 load(web, settle=1.5)
                 front_ready()
@@ -1528,7 +1528,7 @@ def main():
                     check(rejoin_offered() is False, "... and the front page offers no rejoin (a game on this computer has no room)")
 
             if can_play:
-                # a match in a room of the game server: the lobby's START with one Medium bot (the other colours Nobody)
+                # a match in a room of the game server: the lobby's START with one Medium bot (the other colors Nobody)
                 code = front_with({"red": "medium", "blue": "nobody", "black": "nobody"})
                 real_click("#start")
                 ok = wait_for(lambda: "join=" in tab.ev("location.search"), 20) and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout)
@@ -1966,7 +1966,7 @@ def main():
                       "... and its notice at %s: online matches are recorded, kept for 30 days and public with the players' names, in the hint's own type, between the hint and the way out, inside the card (%s)" % (label, notice))
                 real_click("#name-step-back")
                 time.sleep(1.0)
-                check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('slots')"), "... which takes the friend to the front page (the colour cards, no room in the address)")
+                check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('slots')"), "... which takes the friend to the front page (the color cards, no room in the address)")
             tab.emulate(1440, 900, 1)
             clear_storage()
     except NotReachable as e:

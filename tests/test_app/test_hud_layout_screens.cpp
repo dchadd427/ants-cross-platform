@@ -262,14 +262,14 @@ void test_room_screen(const assets::AssetArchive& arc) {
         for (const char* n : {"hostbanr.bmp", "gamesetup.bmp", "pickmap.bmp", "up1.bmp", "down1.bmp", "bstart1.bmp", "dbutonu.bmp", "dbutoffu.bmp", "optoffd.bmp", "optond.bmp"}) host_art = host_art || !gr.named(n).empty();
         check(!host_art, "guest: none of the host's art or buttons (banner, 'GAME SET UP!', 'Pick a Map', Up, Down, START, Fog On / Off)");
         check(gr.named("fowyes.bmp").empty(), "guest: fog off = no 'Yes' over the box");
-        // the rows: the guest itself first (the colour follows the player: seat 2), then the others in ascending seat order
+        // the rows: the guest itself first (the color follows the player: seat 2), then the others in ascending seat order
         auto portrait_team = [&](int32_t row_y) -> int {
             for (const auto& sp : gr.sprites) {
                 if (sp.name.rfind("agst30", 0) == 0 && sp.x >= 383 && sp.x <= 385 && sp.y >= 85 + row_y && sp.y <= 89 + row_y) return sp.team;      // the part offsets move with the frame
             }
             return -1;
         };
-        check(portrait_team(0) == 2 && portrait_team(50) == 0 && portrait_team(100) == 1 && portrait_team(150) == 3, "guest: the portraits of the rows are seats 2, 0, 1, 3 (each in its own colour)");
+        check(portrait_team(0) == 2 && portrait_team(50) == 0 && portrait_team(100) == 1 && portrait_team(150) == 3, "guest: the portraits of the rows are seats 2, 0, 1, 3 (each in its own color)");
         auto text_row = [&](const char* t, int32_t y) {
             for (const auto& tx : gr.texts) {
                 if (tx.text == t && tx.x == 415 && tx.y == y) return true;
@@ -832,7 +832,7 @@ void test_text_sizes(const assets::AssetArchive& arc) {
         const auto& cur = maps[static_cast<size_t>(screen.get_selected_index())];
         const auto* name = find(rr, cur.display_name);
         check(name != nullptr && name->size == FontSize::Px18 && name->x == 36 && name->y == 312, "setup: the map name is 18 px high at (36, 312) (the original's label top)");
-        check(name != nullptr && name->colour.r == 239 && name->colour.g == 231 && name->colour.b == 223, "setup: the labels' colour is (239, 231, 223)");
+        check(name != nullptr && name->color.r == 239 && name->color.g == 231 && name->color.b == 223, "setup: the labels' color is (239, 231, 223)");
         const auto* info = find(rr, cur.description + " (" + std::to_string(cur.minutes) + " min)");
         check(info != nullptr && info->size == FontSize::Px18 && info->x == 36 && info->y == 380, "setup: the map description is 18 px high at (36, 380)");
         const auto lines = wrap_label_text(rr, "Press START when all players' thumbs have appeared.", MapSelectScreen::STATUS_W, FontSize::Px14);
@@ -866,7 +866,7 @@ void test_results_screen(const assets::AssetArchive& arc) {
         card.render(rr, arc);
         check(rr.texts.size() == 1 && rr.texts[0].text == "Waiting for scores..." && rr.texts[0].x == 100 && rr.texts[0].y == 350 && rr.texts[0].size == FontSize::Px20,
               "results: the label \"Waiting for scores...\" is 20 px high at (100, 350)");
-        check(!rr.texts.empty() && rr.texts[0].colour.r == 239 && rr.texts[0].colour.g == 231 && rr.texts[0].colour.b == 223, "results: its colour is (239, 231, 223)");
+        check(!rr.texts.empty() && rr.texts[0].color.r == 239 && rr.texts[0].color.g == 231 && rr.texts[0].color.b == 223, "results: its color is (239, 231, 223)");
         bool leave = false, portrait = false;
         for (const auto& sp : rr.sprites) {
             leave = leave || sp.name.rfind("bleave", 0) == 0;
@@ -896,7 +896,7 @@ void test_results_screen(const assets::AssetArchive& arc) {
         const auto* n1 = text_at("Carol", 100, 323);
         const auto* n2 = text_at("Dave", 100, 373);
         check(n0 != nullptr && n1 != nullptr && n2 != nullptr, "results: the names stand at x = 100, y = 235, 323, 373 (18 px)");
-        check(n0 != nullptr && n0->colour.r == 239 && n0->colour.g == 231 && n0->colour.b == 223, "results: the name colour is (239, 231, 223)");
+        check(n0 != nullptr && n0->color.r == 239 && n0->color.g == 231 && n0->color.b == 223, "results: the name color is (239, 231, 223)");
         // the numbers are left aligned at 485 / 534 / 555 / 576 and add up the two members of an alliance
         check(text_at("500", 485, 235) != nullptr && text_at("11", 534, 235) != nullptr && text_at("22", 555, 235) != nullptr && text_at("33", 576, 235) != nullptr,
               "results: the alliance row adds up its members and the numbers start at x = 485, 534, 555, 576");
@@ -914,7 +914,7 @@ void test_results_screen(const assets::AssetArchive& arc) {
         bool one_line = false;
         for (const auto& t : rw.texts) one_line = one_line || (t.text == "1234" && t.x == 534 && t.y == 323 && t.size == FontSize::Px18);
         check(one_line, "results: a counter that is wider than its label stays on one line");
-        // the ant portraits: one per team at (60, Y + 20), an alliance shows both at (45, Y + 20) and (75, Y + 20), each in its own colour, animated
+        // the ant portraits: one per team at (60, Y + 20), an alliance shows both at (45, Y + 20) and (75, Y + 20), each in its own color, animated
         const auto* anim = arc.find_animation("agst301");
         check(anim != nullptr && !anim->subitems.empty(), "results: the portrait animation exists");
         if (anim != nullptr && !anim->subitems.empty()) {
@@ -928,8 +928,8 @@ void test_results_screen(const assets::AssetArchive& arc) {
                 }
                 return found == parts.size();
             };
-            check(portrait_at(45, 255, 0) && portrait_at(75, 255, 1), "results: the alliance row shows both ants at (45, 255) and (75, 255) in their colours");
-            check(portrait_at(60, 343, 2), "results: a single team's ant stands at (60, Y + 20) in its colour");
+            check(portrait_at(45, 255, 0) && portrait_at(75, 255, 1), "results: the alliance row shows both ants at (45, 255) and (75, 255) in their colors");
+            check(portrait_at(60, 343, 2), "results: a single team's ant stands at (60, Y + 20) in its color");
             check(portrait_at(60, 393, 3), "results: the last row's ant");
             // the portrait moves with the screen's clock: later the clip shows another frame
             const size_t f_now = Renderer::get_anim_subitem_by_time(*anim, 250);
@@ -984,7 +984,7 @@ void test_results_screen(const assets::AssetArchive& arc) {
         d.update(0.3f);
         check(d.rows().size() == 3 && d.rows()[0].name == "Carol" && d.rows()[1].name == "Alice" && d.rows()[2].name == "Dave", "results: a dropped team has no row");
     }
-    // names: without a name the colour word; the local player's own name; at most 35 characters
+    // names: without a name the color word; the local player's own name; at most 35 characters
     {
         ScorecardModal n;
         n.set_local_player_name("Me");
@@ -995,7 +995,7 @@ void test_results_screen(const assets::AssetArchive& arc) {
             me = me || r.name == "Me";
             word = word || r.name == "Red" || r.name == "Blue" || r.name.find("Red") != std::string::npos;
         }
-        check(me && word, "results: the local player's own name, the colour words for unnamed teams");
+        check(me && word, "results: the local player's own name, the color words for unnamed teams");
         ScorecardModal longname;
         longname.set_player_names({std::string(30, 'a'), std::string(30, 'b'), "C", "D"});
         longname.show(result, 0);
@@ -1071,9 +1071,9 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         }
         bool inside = l.count_box.x >= l.card.x + 4 && l.count_box.right() <= l.card.right() - 4 && l.button.x >= l.card.x + 4 && l.button.right() <= l.card.right() - 4 && l.button.bottom() <= l.card.bottom() - 4;
         for (const LayoutRect& r : l.seat) inside = inside && r.x >= l.card.x + 4 && r.right() <= l.card.right() - 4 && r.bottom() <= l.hint_y;
-        check(inside, "countdown: the count, the four colours and the button are inside the card's frame");
+        check(inside, "countdown: the count, the four colors and the button are inside the card's frame");
         check(l.seat[0].y == l.seat[1].y && l.seat[2].y == l.seat[3].y && l.seat[2].y > l.seat[0].y && l.seat[0].x == l.seat[2].x && l.seat[1].x == l.seat[3].x && l.seat[1].x > l.seat[0].right(),
-              "countdown: the colours are two rows of two, in the order of the seats");
+              "countdown: the colors are two rows of two, in the order of the seats");
     }
     check(countdown_seconds_shown(30000) == 30 && countdown_seconds_shown(29001) == 30 && countdown_seconds_shown(29000) == 29 && countdown_seconds_shown(1001) == 2 && countdown_seconds_shown(1000) == 1 &&
           countdown_seconds_shown(1) == 1 && countdown_seconds_shown(0) == 0 && countdown_seconds_shown(-50) == 0, "countdown: the count is whole seconds, rounded up, 0 at the end");
@@ -1085,7 +1085,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         }
         return nullptr;
     };
-    // what it draws: the card in the original's clay orange with its green frame, the dialog's two lines, the count, the colours with who is in, the line about the chat
+    // what it draws: the card in the original's clay orange with its green frame, the dialog's two lines, the count, the colors with who is in, the line about the chat
     {
         RecordingRenderer rr(arc);
         sim::WorldState world;
@@ -1105,13 +1105,13 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         check(clay && frame, "countdown: the card is the original's clay orange (219, 75, 19) inside its green frame");
         const auto* title = find(rr, "Get ready to play!");
         const auto* who = find(rr, "You are the Blue Ants.");
-        check(title != nullptr && title->size == FontSize::Px35 && title->y == l.title_y && title->colour.r == 31 && title->colour.g == 23 && title->colour.b == 51, "countdown: the dialog's own first line, 35 px, in its dark violet");
-        check(who != nullptr && who->size == FontSize::Px20 && who->y == l.subtitle_y, "countdown: ... and the colour of the player");
+        check(title != nullptr && title->size == FontSize::Px35 && title->y == l.title_y && title->color.r == 31 && title->color.g == 23 && title->color.b == 51, "countdown: the dialog's own first line, 35 px, in its dark violet");
+        check(who != nullptr && who->size == FontSize::Px20 && who->y == l.subtitle_y, "countdown: ... and the color of the player");
         const auto* count = find(rr, "28");
-        check(count != nullptr && count->size == FontSize::Px96 && count->y == l.digits_y && count->colour.r == 246, "countdown: the count is 96 px high, in gold");
+        check(count != nullptr && count->size == FontSize::Px96 && count->y == l.digits_y && count->color.r == 246, "countdown: the count is 96 px high, in gold");
         const auto* caption = find(rr, "seconds to the start");
         check(caption != nullptr && caption->size == FontSize::Px18 && caption->y == l.caption_y, "countdown: the words under the count");
-        check(find(rr, "Juniper") != nullptr && find(rr, "Sam") != nullptr && find(rr, "Maple (you)") != nullptr && find(rr, "Pip (bot, Hard)") != nullptr, "countdown: the four colours with their names (the player's own is told)");
+        check(find(rr, "Juniper") != nullptr && find(rr, "Sam") != nullptr && find(rr, "Maple (you)") != nullptr && find(rr, "Pip (bot, Hard)") != nullptr, "countdown: the four colors with their names (the player's own is told)");
         size_t in = 0;
         size_t bots = 0;
         for (const auto& t : rr.texts) {
@@ -1123,7 +1123,7 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         check(hint != nullptr && hint->y == l.hint_y, "countdown: the line that says the chat is open");
         check(find(rr, "Fullscreen") != nullptr, "countdown: the native game draws its own Fullscreen button");
         const auto* mine = find(rr, "Maple (you)");
-        check(mine != nullptr && mine->y >= l.seat[2].y && mine->y < l.seat[2].bottom() && mine->x > l.seat[2].x && mine->x < l.seat[2].right(), "countdown: the player's own name is in its colour's box (Blue is the third)");
+        check(mine != nullptr && mine->y >= l.seat[2].y && mine->y < l.seat[2].bottom() && mine->x > l.seat[2].x && mine->x < l.seat[2].right(), "countdown: the player's own name is in its color's box (Blue is the third)");
     }
     // the count follows what the application hands over every frame; the end says so
     for (const auto& step : std::vector<std::pair<int64_t, std::pair<std::string, std::string>>>{{30000, {"30", "seconds to the start"}}, {1001, {"2", "seconds to the start"}}, {1, {"1", "seconds to the start"}},

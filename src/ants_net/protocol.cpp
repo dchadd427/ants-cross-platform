@@ -118,7 +118,7 @@ bool valid_create_block(const CreateBlock& block) noexcept {
     if (!block.map_name.empty() && !valid_map_name(block.map_name)) return false;
     if (block.seats < 2 || block.seats > sim::MAX_PLAYERS) return false;
     if ((block.flags & ~(kCreateLeaderStarts | kCreateLobby)) != 0) return false;
-    if (block.lobby() && (!block.leader_starts() || block.seats != sim::MAX_PLAYERS)) return false;      // a lobby room (protocol 16) is started by its leader and has all four colours
+    if (block.lobby() && (!block.leader_starts() || block.seats != sim::MAX_PLAYERS)) return false;      // a lobby room (protocol 16) is started by its leader and has all four colors
     if (block.team_a == kNoTeam && block.team_b == kNoTeam) return true;
     return block.team_a < block.team_b && block.team_b < sim::MAX_PLAYERS;             // two different seats, the lower first: a pair has one spelling
 }
@@ -492,7 +492,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     // the room's own teams (protocol 15): none, or two seats, the lower first; and no rule bit that this build does not know
     if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && (m.team_a >= m.team_b || m.team_b >= sim::MAX_PLAYERS)) return false;
     if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting)) != 0) return false;
-    // the lobby room's fields (protocol 16): a kind of each colour (0 - 4), a game only for a seat that a person holds, "starting" only in a lobby room; no room that is not a lobby room has a plan or a game
+    // the lobby room's fields (protocol 16): a kind of each color (0 - 4), a game only for a seat that a person holds, "starting" only in a lobby room; no room that is not a lobby room has a plan or a game
     if (m.starting() && !m.lobby()) return false;
     if (m.lobby() && !m.leader_starts()) return false;                    // (a lobby room is made with kCreateLeaderStarts: its leader starts it)
     for (size_t seat = 0; seat < plan.size(); ++seat) {
@@ -501,7 +501,7 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
         if (m.seat_in_game(static_cast<uint8_t>(seat)) && (!m.lobby() || m.slots[seat].state != SlotState::Client)) return false;
     }
     if ((m.in_game & ~((1u << sim::MAX_PLAYERS) - 1u)) != 0) return false;
-    // protocol 20: an empty seat has no name, except the planned bot's in a lobby room (the colour's plan is a bot level): then the name is that bot's label ("Pip (bot, Hard)")
+    // protocol 20: an empty seat has no name, except the planned bot's in a lobby room (the color's plan is a bot level): then the name is that bot's label ("Pip (bot, Hard)")
     for (size_t seat = 0; seat < m.slots.size(); ++seat) {
         const RoomMsg::Slot& slot = m.slots[seat];
         if (slot.state != SlotState::Empty || slot.name.empty()) continue;
@@ -919,21 +919,21 @@ std::vector<std::pair<uint8_t, FillLevel>> plan_fill_seats(const FillPlan& plan,
     return seats;
 }
 
-std::string seat_colour_word(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(sim::strings::colour_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
+std::string seat_color_word(uint8_t seat) { return seat < sim::MAX_PLAYERS ? std::string(sim::strings::color_name(static_cast<uint8_t>(3u - seat))) : std::string(); }
 
 std::string fill_seats_sentence(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
     std::string out;
     for (size_t i = 0; i < seats.size(); ++i) {
         const std::string level = fill_level_title(seats[i].second);
         const std::string article = seats[i].second == FillLevel::Easy ? "an " : "a ";
-        out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + (i == 0 ? " gets " : " ") + article + level + " bot";
+        out += (i == 0 ? "" : ", ") + seat_color_word(seats[i].first) + (i == 0 ? " gets " : " ") + article + level + " bot";
     }
     return out;
 }
 
 std::string fill_seats_short(const std::vector<std::pair<uint8_t, FillLevel>>& seats) {
     std::string out;
-    for (size_t i = 0; i < seats.size(); ++i) out += (i == 0 ? "" : ", ") + seat_colour_word(seats[i].first) + " " + fill_level_title(seats[i].second);
+    for (size_t i = 0; i < seats.size(); ++i) out += (i == 0 ? "" : ", ") + seat_color_word(seats[i].first) + " " + fill_level_title(seats[i].second);
     return out;
 }
 

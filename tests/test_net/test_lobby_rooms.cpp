@@ -6,8 +6,8 @@
 #include "ants_ai/bot_names.hpp"
 
 void run_lobby_rooms_tests() {
-    TEST_CASE("N4.23 The Swap And The Guard (Protocol 15): Two Guests Change Places, In A Full Room As In One With A Free Colour, Each With All That Is Its Own And Each Told By The Room; A Press Acts Only On The Seating That Its Leader Saw, So A Newcomer, A Replacement Or A Second Tap Of The Same Press Is Never Moved Or Swapped By Mistake; A Colour That A Bot Or The Host Holds Stays Where It Is") {
-        {   // a full room (no colour is free) is arranged by swaps: the leader puts Bob and Dan in each other's colours; each goes with all that is its own and each is told by the room, nobody else is
+    TEST_CASE("N4.23 The Swap And The Guard (Protocol 15): Two Guests Change Places, In A Full Room As In One With A Free Color, Each With All That Is Its Own And Each Told By The Room; A Press Acts Only On The Seating That Its Leader Saw, So A Newcomer, A Replacement Or A Second Tap Of The Same Press Is Never Moved Or Swapped By Mistake; A Color That A Bot Or The Host Holds Stays Where It Is") {
+        {   // a full room (no color is free) is arranged by swaps: the leader puts Bob and Dan in each other's colors; each goes with all that is its own and each is told by the room, nobody else is
             Room room(keyed_server_config(40));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -34,7 +34,7 @@ void run_lobby_rooms_tests() {
             ASSERT_TRUE(notices_of(*room.guests[ann].lobby).empty() && notices_of(*room.guests[cat].lobby).empty());
             ASSERT_TRUE(room.host.seat_moves() == 1u && room.host.ignored_seat_moves() == 0u && room.host.players() == 4u && room.host.leader() == 0);
             ASSERT_TRUE(seating_hash(room.host.room()) != seated);                                                       // (the seating that the next press has to know is the new one)
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(0, 2));                                                // the leader's own colour is a guest's too: Ann and Cat change places and Ann still leads
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(0, 2));                                                // the leader's own color is a guest's too: Ann and Cat change places and Ann still leads
             room.run(300);
             ASSERT_EQ(layout(room.host.room()), "Cat@0 Dan@1 Ann@2 Bob@3");
             ASSERT_TRUE(room.host.leader() == 2 && room.guests[ann].lobby->is_leader() && room.guests[ann].lobby->my_seat() == 2 && room.guests[cat].lobby->room().leader == 2);
@@ -46,17 +46,17 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.host.leader(), 3);
             ASSERT_TRUE(room.guests[bob].lobby->is_leader() && !room.guests[cat].lobby->is_leader() && !room.guests[dan].lobby->is_leader());
         }
-        {   // two guests of a room with a free colour: the swap does not need it, and the free colour is still a move (the guest goes there, nobody changes places)
+        {   // two guests of a room with a free color: the swap does not need it, and the free color is still a move (the guest goes there, nobody changes places)
             Room room(keyed_server_config(41));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             const size_t cat = room.join_seat("Cat");
             room.run(300);
             for (const size_t g : {ann, bob, cat}) room.guests[g].lobby->take_chat();
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(2, 1));                                                // Cat onto Bob's colour
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(2, 1));                                                // Cat onto Bob's color
             room.run(300);
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Cat@1 Bob@2");
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                                                // Cat onto the free colour
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                                                // Cat onto the free color
             room.run(300);
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@2 Cat@3");
             ASSERT_TRUE(!room.host.occupied(1) && room.host.seat_moves() == 2u && room.host.ignored_seat_moves() == 0u);
@@ -82,7 +82,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(layout(room.host.room()), "Ann@0 Bob@1 Cat@2");
             ASSERT_TRUE(room.host.seat_moves() == 2u && room.host.ignored_seat_moves() == 1u);
         }
-        {   // a newcomer: the press was made for a room with a free colour, and the newcomer took the colour before it came; it would have swapped the newcomer out of the colour that it took. It is ignored and counted,
+        {   // a newcomer: the press was made for a room with a free color, and the newcomer took the color before it came; it would have swapped the newcomer out of the color that it took. It is ignored and counted,
             // nobody moves, nobody is told; the leader's screen has the newcomer a moment later and its next press is the one that swaps
             Room room(keyed_server_config(43));
             const size_t ann = room.join_seat("Ann");
@@ -107,8 +107,8 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(notices_of(*room.guests[bob].lobby), (std::vector<std::string>{"Ann moved you to Black."}));
             ASSERT_EQ(notices_of(*room.guests[dan].lobby), (std::vector<std::string>{"Ann moved you to Red."}));
         }
-        {   // a replacement: the player that the press meant has left and another has taken the colour (the same state, another name): the press is ignored, so it is not the replacement that is moved; and a player of
-            // the same name that comes back to the same colour makes the same seating, which is what the guard says (who sits where): the press is heard
+        {   // a replacement: the player that the press meant has left and another has taken the color (the same state, another name): the press is ignored, so it is not the replacement that is moved; and a player of
+            // the same name that comes back to the same color makes the same seating, which is what the guard says (who sits where): the press is heard
             Room room(keyed_server_config(44));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -165,7 +165,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.host.ignored_seat_moves(), kIgnoredSeatMovesAllowed + 1u);
             ASSERT_TRUE(room.guests[ann].lobby->phase() == ClientLobby::Phase::InRoom && room.host.leader() == 0);
         }
-        {   // a START that was heard before a swap, in the same pass: the colours that are free are the same colours after it, so its plan of bots is left as it is, and its sender, the leader, is where it sits now
+        {   // a START that was heard before a swap, in the same pass: the colors that are free are the same colors after it, so its plan of bots is left as it is, and its sender, the leader, is where it sits now
             // (whether it is the one that the press names or the one that the press puts it with)
             using F = FillLevel;
             Room room(keyed_server_config(46));
@@ -182,15 +182,15 @@ void run_lobby_rooms_tests() {
             };
             Screen screen{room.host.room()};
             const auto swap = [&](uint8_t from, uint8_t to) { room.guests[ann].client_end->send(screen.press(from, to)); };
-            ask(F::None, F::Easy, F::Hard, F::None);                                                                     // levels for two colours that guests hold ...
-            swap(1, 2);                                                                                                  // ... which change places: nobody takes or leaves a free colour, the plan stays
+            ask(F::None, F::Easy, F::Hard, F::None);                                                                     // levels for two colors that guests hold ...
+            swap(1, 2);                                                                                                  // ... which change places: nobody takes or leaves a free color, the plan stays
             room.run(300);
             ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"0:0130"}));
-            ask(F::None, F::None, F::Easy, F::Hard);                                                                     // the leader presses its own colour as the first of the two: it goes to Red, and the START names Red
+            ask(F::None, F::None, F::Easy, F::Hard);                                                                     // the leader presses its own color as the first of the two: it goes to Red, and the START names Red
             swap(0, 1);
             room.run(300);
             ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"1:0013"}));
-            ask(F::Medium, F::None, F::None, F::Hard);                                                                   // a guest presses the leader's colour as the second: the leader goes to Blue, and the START names Blue
+            ask(F::Medium, F::None, F::None, F::Hard);                                                                   // a guest presses the leader's color as the second: the leader goes to Blue, and the START names Blue
             swap(2, 1);
             room.run(300);
             ASSERT_EQ(leader_plans(room.host), (std::vector<std::string>{"2:2003"}));
@@ -216,9 +216,9 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(notices_of(*lan.guests[0].lobby), (std::vector<std::string>{"The room moved you to Blue."}));
             ASSERT_EQ(notices_of(*lan.guests[1].lobby), (std::vector<std::string>{"The room moved you to Red."}));
             ASSERT_EQ(lan.host.seat_moves(), 1u);
-            ASSERT_TRUE(!lan.host.move_seat(0, 1) && !lan.host.move_seat(1, 0) && !lan.host.move_seat(0, 2) && lan.host.seat_moves() == 1u);   // the host's own colour never moves, and nobody swaps with it
+            ASSERT_TRUE(!lan.host.move_seat(0, 1) && !lan.host.move_seat(1, 0) && !lan.host.move_seat(0, 2) && lan.host.seat_moves() == 1u);   // the host's own color never moves, and nobody swaps with it
         }
-        {   // a colour that a bot holds stays where it is, from either side, whatever the guard says
+        {   // a color that a bot holds stays where it is, from either side, whatever the guard says
             Room room(keyed_server_config(47));
             ASSERT_TRUE(room.host.add_bot(2, "Bot (Hard)"));
             const size_t ann = room.join_seat("Ann");
@@ -228,8 +228,8 @@ void run_lobby_rooms_tests() {
             const std::string before = layout(room.host.room());
             ASSERT_EQ(before, "Ann@0 Bob@1 Bot (Hard)@2 Cat@3");
             for (const size_t g : {ann, bob, cat}) room.guests[g].lobby->take_chat();
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 2));                                                // a guest onto the bot's colour
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(2, 3));                                                // the bot onto a guest's colour
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 2));                                                // a guest onto the bot's color
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(2, 3));                                                // the bot onto a guest's color
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(3, 2));
             room.run(300);
             ASSERT_EQ(layout(room.host.room()), before);
@@ -241,7 +241,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.24 The Room Tells Its Own Rules (Protocol 15): The Teams And The Leader-Starts Rule That A Room Was Made With Are In Every Room Message, For Every Guest From Its Welcome On And After Every Change Of The Seats (A Join, A Colour Move, A Leave); A Room Made Without Them Says None; A Pair That No Honest Client Sends Is No Team") {
+    TEST_CASE("N4.24 The Room Tells Its Own Rules (Protocol 15): The Teams And The Leader-Starts Rule That A Room Was Made With Are In Every Room Message, For Every Guest From Its Welcome On And After Every Change Of The Seats (A Join, A Color Move, A Leave); A Room Made Without Them Says None; A Pair That No Honest Client Sends Is No Team") {
         const auto rules_of = [](const ClientLobby& lobby) {          // "<teams> <rule bits>": "0+3 1" ("none" for free for all)
             const RoomMsg& r = lobby.room();
             const std::string teams = r.team_a == kNoTeam && r.team_b == kNoTeam ? "none" : std::to_string(static_cast<unsigned>(r.team_a)) + "+" + std::to_string(static_cast<unsigned>(r.team_b));
@@ -260,7 +260,7 @@ void run_lobby_rooms_tests() {
                 ASSERT_TRUE(room.guests[g].lobby->room().leader_starts() && room.guests[g].lobby->room().teams() == sim::StartTeams({true, 0, 3}));
             }
             const size_t cat = room.join_seat("Cat");                                    // a join ...
-            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                // ... a colour move ...
+            ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));                // ... a color move ...
             room.run(300);
             room.guests[bob].client_end->close();                                        // ... and a leave: the rules are the room's, no seat's
             room.run(300);
@@ -407,7 +407,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.26 The Lobby Room (Protocol 16), The Joiners: A Newcomer Takes The Colour It Asked For When Nobody Holds It And The Plan Calls It Open, Else The Lowest Such Colour; A Colour That The Plan Gives To A Bot Or To Nobody Is Not Taken, And No Such Colour Is Full; A Room Is A Lobby Room Only With What It Needs") {
+    TEST_CASE("N4.26 The Lobby Room (Protocol 16), The Joiners: A Newcomer Takes The Color It Asked For When Nobody Holds It And The Plan Calls It Open, Else The Lowest Such Color; A Color That The Plan Gives To A Bot Or To Nobody Is Not Taken, And No Such Color Is Full; A Room Is A Lobby Room Only With What It Needs") {
         using K = PlanKind;
         {   // the plan decides who may sit where
             Room room(lobby_room_config(60));
@@ -418,13 +418,13 @@ void run_lobby_rooms_tests() {
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Easy, K::Nobody, K::Open})));
             room.run(100);
             ASSERT_EQ(plan_text(room.guests[ann].lobby->room()), std::string("oeno -"));
-            const size_t bob = room.join_seat("Bob", 1);                           // it asks for the colour of a bot: it gets the lowest one that is open
+            const size_t bob = room.join_seat("Bob", 1);                           // it asks for the color of a bot: it gets the lowest one that is open
             ASSERT_EQ(room.guests[bob].lobby->my_seat(), 3);
-            const size_t cat = room.join_seat("Cat");                              // no colour is open any more
+            const size_t cat = room.join_seat("Cat");                              // no color is open any more
             ASSERT_EQ(room.guests[cat].lobby->phase(), ClientLobby::Phase::Rejected);
             ASSERT_EQ(room.guests[cat].lobby->reject_reason(), RejectReason::Full);
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@3"));
-            // the leader opens every colour: a wish is kept when the colour is open, and is the lowest open colour otherwise
+            // the leader opens every color: a wish is kept when the color is open, and is the lowest open color otherwise
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Open})));
             room.run(100);
             const size_t dan = room.join_seat("Dan", 2);
@@ -436,20 +436,20 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.guests[fay].lobby->reject_reason(), RejectReason::Full);
             ASSERT_FALSE(room.guests[bob].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Open})));       // (a guest knows it does not lead: nothing is sent)
         }
-        {   // a colour that a person leaves goes back to the plan's kind: a bot's colour is not taken by the next newcomer, an open one is
+        {   // a color that a person leaves goes back to the plan's kind: a bot's color is not taken by the next newcomer, an open one is
             Room room(lobby_room_config(61));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             room.join_seat("Cat");
-            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Medium, K::Open, K::Open})));        // Bob sits in a colour that is a bot's underneath
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Medium, K::Open, K::Open})));        // Bob sits in a color that is a bot's underneath
             room.run(100);
             room.guests[bob].lobby->leave();
             room.run(100);
             const size_t dan = room.join_seat("Dan");
-            ASSERT_EQ(room.guests[dan].lobby->my_seat(), 3);                       // seat 1 is a bot's; seat 2 is Cat's; the lowest open colour is 3
+            ASSERT_EQ(room.guests[dan].lobby->my_seat(), 3);                       // seat 1 is a bot's; seat 2 is Cat's; the lowest open color is 3
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2 Dan@3"));
         }
-        {   // a room that is no lobby room seats as ever: the first free colour, and it has no plan to read
+        {   // a room that is no lobby room seats as ever: the first free color, and it has no plan to read
             HostLobby::Config hc = lobby_room_config(62);
             hc.lobby_room = false;
             Room room(hc);
@@ -460,7 +460,7 @@ void run_lobby_rooms_tests() {
             ASSERT_FALSE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Easy, K::Open, K::Open})));       // (the leader of a room that is no lobby room has nothing to plan)
             ASSERT_EQ(plan_text(room.host.room()), std::string("oooo -"));
         }
-        {   // what a lobby room needs: keys (a seat is held for a key), a server's host with a leader that starts, and all four colours; without any of them the room is none
+        {   // what a lobby room needs: keys (a seat is held for a key), a server's host with a leader that starts, and all four colors; without any of them the room is none
             const auto is_lobby = [](const std::function<void(HostLobby::Config&)>& spoil) {
                 HostLobby::Config hc = lobby_room_config(63);
                 spoil(hc);
@@ -476,7 +476,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.27 The Plan (Protocol 16): Only The Leader's Plan Of An Open Lobby Room Is Heard, It Sets The Map The Server Offers, What Each Colour Is And The Teams, And The Room Is Shown To Everybody When It Changed; The Others Are Ignored And Counted (16 Free, Then Offences), The Leader's Clicks Have A Budget, A Room That Is No Lobby Room Has No Plan") {
+    TEST_CASE("N4.27 The Plan (Protocol 16): Only The Leader's Plan Of An Open Lobby Room Is Heard, It Sets The Map The Server Offers, What Each Color Is And The Teams, And The Room Is Shown To Everybody When It Changed; The Others Are Ignored And Counted (16 Free, Then Offences), The Leader's Clicks Have A Budget, A Room That Is No Lobby Room Has No Plan") {
         using K = PlanKind;
         {   // what a plan sets
             Room room(lobby_room_config(64));
@@ -569,7 +569,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.28 A Colour Move In A Lobby Room (Protocol 16): The Colours Are Exchanged Completely, What The Plan Calls Each One And The Team Pair Go With The Person, A Person Whose Seat Is Held Can Be Moved; A Room That Is No Lobby Room Moves Only The People") {
+    TEST_CASE("N4.28 A Color Move In A Lobby Room (Protocol 16): The Colors Are Exchanged Completely, What The Plan Calls Each One And The Team Pair Go With The Person, A Person Whose Seat Is Held Can Be Moved; A Room That Is No Lobby Room Moves Only The People") {
         using K = PlanKind;
         {
             Room room(lobby_room_config(68));
@@ -578,23 +578,23 @@ void run_lobby_rooms_tests() {
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Hard, K::Open, K::Easy, K::Nobody}, 0, 2)));
             room.run(100);
             ASSERT_EQ(plan_text(room.host.room()), std::string("hoen 0+2"));
-            // a swap with Bob: Ann's colour, with its kind and its place in the pair, is Bob's now, and Bob's is Ann's
+            // a swap with Bob: Ann's color, with its kind and its place in the pair, is Bob's now, and Bob's is Ann's
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(0, 1));
             room.run(100);
             ASSERT_EQ(layout(room.host.room()), std::string("Bob@0 Ann@1"));
             ASSERT_EQ(plan_text(room.host.room()), std::string("ohen 1+2"));
             ASSERT_EQ(plan_text(room.guests[bob].lobby->room()), std::string("ohen 1+2"));
-            // a move to a colour that nobody holds and that is Nobody's: Ann takes its kind's place and the colour she left takes hers
+            // a move to a color that nobody holds and that is Nobody's: Ann takes its kind's place and the color she left takes hers
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(1, 3));
             room.run(100);
             ASSERT_EQ(layout(room.host.room()), std::string("Bob@0 Ann@3"));
             ASSERT_EQ(plan_text(room.host.room()), std::string("oneh 2+3"));
             ASSERT_EQ(room.host.seat_moves(), 2u);
-            // the pair is written with the lower colour first, whatever the move
+            // the pair is written with the lower color first, whatever the move
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(3, 2));
             room.run(100);
             ASSERT_EQ(plan_text(room.host.room()), std::string("onhe 2+3"));
-            // back to the first colour: the swap with Bob is complete there as well
+            // back to the first color: the swap with Bob is complete there as well
             ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(2, 0));
             room.run(100);
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Bob@2"));
@@ -631,7 +631,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.29 The Hold (Protocol 16): A Guest Whose Connection Ends Keeps Its Seat For A Minute (It Counts As Present, A Held Leader Still Leads, Nobody Takes The Colour, Its Key Takes The Seat Back); Leave And A Kick Remove It At Once, And A Guest That Was Given No Key Cannot Be Held") {
+    TEST_CASE("N4.29 The Hold (Protocol 16): A Guest Whose Connection Ends Keeps Its Seat For A Minute (It Counts As Present, A Held Leader Still Leads, Nobody Takes The Color, Its Key Takes The Seat Back); Leave And A Kick Remove It At Once, And A Guest That Was Given No Key Cannot Be Held") {
         {
             Room room(lobby_room_config(71));
             const size_t ann = room.join_seat("Ann");
@@ -649,7 +649,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(games_text(room.host.room()), std::string("0110"));
             ASSERT_EQ(games_text(room.guests[bob].lobby->room()), std::string("0110"));
             ASSERT_EQ(room.guests[bob].lobby->room().leader, 0);
-            const size_t dan = room.join_seat("Dan", 0);                           // the colour is not free for a newcomer
+            const size_t dan = room.join_seat("Dan", 0);                           // the color is not free for a newcomer
             ASSERT_EQ(room.guests[dan].lobby->my_seat(), 3);
             const size_t eve = room.join_seat("Eve");
             ASSERT_EQ(room.guests[eve].lobby->reject_reason(), RejectReason::Full);
@@ -683,7 +683,7 @@ void run_lobby_rooms_tests() {
             ASSERT_FALSE(room.host.occupied(1));
             ASSERT_EQ(room.host.hold_expiries(), 1u);
             ASSERT_EQ(room.host.players(), 1u);
-            const size_t fay = room.join_seat("Fay");                              // the colour is free again
+            const size_t fay = room.join_seat("Fay");                              // the color is free again
             ASSERT_EQ(room.guests[fay].lobby->my_seat(), 1);
         }
         {   // the leader that stays away for the hold's time is replaced by the guest who was welcomed next
@@ -773,7 +773,7 @@ void run_lobby_rooms_tests() {
             ASSERT_TRUE(leader_starts(room.host).empty());
             ASSERT_FALSE(room.host.start(5, 6, room.now));
             ASSERT_EQ(room.host.phase(), HostLobby::Phase::Room);
-            // while it stands: no newcomer, no colour moves, no new plan; a second START is counted
+            // while it stands: no newcomer, no color moves, no new plan; a second START is counted
             const size_t dan = room.join_seat("Dan");
             ASSERT_EQ(room.guests[dan].lobby->phase(), ClientLobby::Phase::Rejected);
             ASSERT_EQ(room.guests[dan].lobby->reject_reason(), RejectReason::MatchRunning);
@@ -1125,7 +1125,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.33 The Name (Protocol 16): Any Person Of An Open Lobby Room Can Change The Name They Go By, The Room Is Shown To Everybody When It Changed, A Name That Looks Like A Bot's Is Not Taken, The Name Stays With The Seat When Its Key Takes It Back, And It Is Part Of What A Colour Move's Guard Is Made Of; A Room Whose START Waits Ignores It (Counted, No Offence At First), It Has A Budget Of Its Own, And A Room That Is No Lobby Room Takes It For Garbage") {
+    TEST_CASE("N4.33 The Name (Protocol 16): Any Person Of An Open Lobby Room Can Change The Name They Go By, The Room Is Shown To Everybody When It Changed, A Name That Looks Like A Bot's Is Not Taken, The Name Stays With The Seat When Its Key Takes It Back, And It Is Part Of What A Color Move's Guard Is Made Of; A Room Whose START Waits Ignores It (Counted, No Offence At First), It Has A Budget Of Its Own, And A Room That Is No Lobby Room Takes It For Garbage") {
         {   // what a rename sets: the person's own name, for the whole room; the leader and any other person alike
             Room room(lobby_room_config(80));
             const size_t ann = room.join_seat("Ann");
@@ -1198,7 +1198,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(room.guests[ann].lobby->room().slots[bob_seat].name, std::string("Robert"));
             ASSERT_EQ(room.host.takeovers(), 1u);
         }
-        {   // a rename changes the seating that a colour move's guard is made of: a move that the leader made for the room as it was is ignored (counted), one made for the room as it shows now is done
+        {   // a rename changes the seating that a color move's guard is made of: a move that the leader made for the room as it was is ignored (counted), one made for the room as it shows now is done
             Room room(lobby_room_config(83));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -1297,7 +1297,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Colour Move, Plan, Rename, Removal); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
+    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Color Move, Plan, Rename, Removal); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
         ASSERT_EQ(HostLobby::Config{}.forgive_ms, kLobbyForgiveMs);
         ASSERT_EQ(kLobbyForgiveMs, 60000u);
         // `wish` is a message that this guest may send but the room ignores (counted, free up to 16, then a violation each): the room has no use for it from this sender now
@@ -1335,7 +1335,7 @@ void run_lobby_rooms_tests() {
         };
         const std::vector<uint8_t> start_wish = encode(StartRequestMsg{});
         const std::vector<uint8_t> plan_wish = encode(PlanMsg{});
-        {   // a guest that is not the leader: its START, its colour move and its plan are ignored
+        {   // a guest that is not the leader: its START, its color move and its plan are ignored
             Room room(lobby_room_config(90));
             room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -1349,8 +1349,8 @@ void run_lobby_rooms_tests() {
             const size_t bob = room.join_seat("Bob");
             const size_t cat = room.join_seat("Cat");
             const std::vector<uint8_t> move_wish = encode(SeatMoveMsg{2, 3, seating_hash(room.host.room())});
-            case_of("colour move", room, bob, move_wish, true);
-            allowance_of("colour move", room, cat, move_wish);
+            case_of("color move", room, bob, move_wish, true);
+            allowance_of("color move", room, cat, move_wish);
         }
         {
             Room room(lobby_room_config(92));
@@ -1477,7 +1477,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.36 The Activity Of A Lobby Room (Protocol 16): activity() Counts What The People Do With The Room (A Welcome, A Colour Move, A Plan Or A Name That Changed, A Removal, A Line Of Chat, A START That Stands) And Nothing Else: Not A Ping, A Request That Was Ignored Or Changed Nothing, A Link That Ends, Comes Back Or Gives Up") {
+    TEST_CASE("N4.36 The Activity Of A Lobby Room (Protocol 16): activity() Counts What The People Do With The Room (A Welcome, A Color Move, A Plan Or A Name That Changed, A Removal, A Line Of Chat, A START That Stands) And Nothing Else: Not A Ping, A Request That Was Ignored Or Changed Nothing, A Link That Ends, Comes Back Or Gives Up") {
         {
             HostLobby::Config hc = lobby_room_config(99);
             hc.hold_ms = 5000;
@@ -1493,7 +1493,7 @@ void run_lobby_rooms_tests() {
             const uint32_t seated = room.host.activity();
             room.run(30000);                                                           // half a minute of pings and pongs, and nobody does a thing
             ASSERT_EQ(room.host.activity(), seated);
-            // a colour move and a plan of a guest that does not lead are ignored, the leader's colour move is not
+            // a color move and a plan of a guest that does not lead are ignored, the leader's color move is not
             const uint8_t bob_seat = room.guests[bob].lobby->my_seat();
             ASSERT_EQ(bob_seat, 1);
             room.guests[bob].client_end->send(encode(SeatMoveMsg{bob_seat, 3, seating_hash(room.host.room())}));
@@ -1577,9 +1577,9 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.37 The Removal (Protocol 16): The Leader Of An Open Lobby Room Takes Another Person Out, Held Or Not, Also While The START Waits For The Games; The Person Is Told (Kicked), The Colour Is Free At Once, The Key Is Forgotten And Nobody Is Sent A Notice; It Acts Only On The Seating That The Leader Saw, Never On The Leader, A Bot Or An Empty Seat; Everything Else Is Ignored And Counted, And Removals Have A Budget Of Their Own") {
+    TEST_CASE("N4.37 The Removal (Protocol 16): The Leader Of An Open Lobby Room Takes Another Person Out, Held Or Not, Also While The START Waits For The Games; The Person Is Told (Kicked), The Color Is Free At Once, The Key Is Forgotten And Nobody Is Sent A Notice; It Acts Only On The Seating That The Leader Saw, Never On The Leader, A Bot Or An Empty Seat; Everything Else Is Ignored And Counted, And Removals Have A Budget Of Their Own") {
         using K = PlanKind;
-        {   // what a removal does: the person is told and their link closed, the colour is free for everybody at once, nothing else of the room changes (the plan, the teams, the lead), nobody is sent a notice
+        {   // what a removal does: the person is told and their link closed, the color is free for everybody at once, nothing else of the room changes (the plan, the teams, the lead), nobody is sent a notice
             Room room(lobby_room_config(100));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -1601,11 +1601,11 @@ void run_lobby_rooms_tests() {
             ASSERT_FALSE(room.guests[bob].client_end->is_open());
             for (const size_t g : {ann, cat}) ASSERT_EQ(layout(room.guests[g].lobby->room()), std::string("Ann@0 Cat@2"));
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2"));
-            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));                      // (the colour keeps what the plan calls it, the teams stay as they were)
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));                      // (the color keeps what the plan calls it, the teams stay as they were)
             ASSERT_EQ(room.host.leader(), 0);
             ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.guests[cat].lobby->is_leader());
             ASSERT_TRUE(room.guests[ann].lobby->chat_log().empty() && room.guests[cat].lobby->chat_log().empty());       // (the room says nothing to anybody)
-            // the key of the person who was removed fits no seat: whoever shows it is a new player, in the lowest colour that is free, and not a guest who takes a seat back
+            // the key of the person who was removed fits no seat: whoever shows it is a new player, in the lowest color that is free, and not a guest who takes a seat back
             const size_t bob2 = join_keyed(room, "Bob", bob_key);
             room.run(300);
             ASSERT_EQ(room.guests[bob2].lobby->my_seat(), 1);
@@ -1658,7 +1658,7 @@ void run_lobby_rooms_tests() {
             expect(2, "a guest on itself");
             press(ann, 0, seating_hash(room.host.room()));                                               // the leader does not take itself out (it leaves)
             expect(3, "the leader on itself");
-            press(ann, 3, seating_hash(room.host.room()));                                               // nobody in the colour
+            press(ann, 3, seating_hash(room.host.room()));                                               // nobody in the color
             expect(4, "an empty seat");
             ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
             room.run(100);
@@ -1680,7 +1680,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(layout(room.host.room()), std::string("Ann@0 Cat@2 Bot (Easy)@3"));
             ASSERT_TRUE(room.host.occupied(room.guests[ann].lobby->my_seat()) && room.host.occupied(room.guests[cat].lobby->my_seat()));
         }
-        {   // the guard keeps a press on the person it was made for: the screen showed Bob in the second colour, Bob went, Dan took the colour, and the press arrives: Dan stays
+        {   // the guard keeps a press on the person it was made for: the screen showed Bob in the second color, Bob went, Dan took the color, and the press arrives: Dan stays
             Room room(lobby_room_config(103));
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
@@ -1728,7 +1728,7 @@ void run_lobby_rooms_tests() {
             const size_t pia = join_with(room, page_config("Pia"));
             const size_t pat = join_with(room, page_config("Pat"));
             room.run(100);
-            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last colour: one person is enough for the match)
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last color: one person is enough for the match)
             room.run(100);
             ASSERT_TRUE(room.guests[ann].lobby->request_start());
             room.run(100);
@@ -1782,7 +1782,7 @@ void run_lobby_rooms_tests() {
             const size_t ann = room.join_seat("Ann");
             const size_t bob = join_with(room, page_config("Bob"));
             room.run(100);
-            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last colour: one person is enough for the match)
+            ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Easy})));      // (a bot in the last color: one person is enough for the match)
             room.run(100);
             room.guests[bob].client_end->close();
             room.run(100);
@@ -1902,12 +1902,12 @@ void run_lobby_rooms_tests() {
             const size_t ann = room.join_seat("Ann");
             const size_t bob = room.join_seat("Bob");
             ASSERT_FALSE(room.guests[bob].lobby->request_remove(0));                                          // a guest that does not lead
-            ASSERT_FALSE(room.guests[ann].lobby->request_remove(0));                                          // the leader's own colour
-            ASSERT_FALSE(room.guests[ann].lobby->request_remove(2));                                          // a colour that nobody holds
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(0));                                          // the leader's own color
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(2));                                          // a color that nobody holds
             ASSERT_TRUE(room.host.add_bot(3, "Bot (Easy)"));
             room.run(100);
             ASSERT_FALSE(room.guests[ann].lobby->request_remove(3));                                          // a computer player
-            ASSERT_FALSE(room.guests[ann].lobby->request_remove(4));                                          // no colour
+            ASSERT_FALSE(room.guests[ann].lobby->request_remove(4));                                          // no color
             ASSERT_FALSE(room.guests[ann].lobby->request_remove(255));
             Room::Guest& fresh = room.join("Fay");                                                           // a machine that has not been welcomed yet
             ASSERT_FALSE(fresh.lobby->request_remove(1));
@@ -2113,7 +2113,7 @@ void run_lobby_rooms_tests() {
             ASSERT_EQ(plain.host.start_info().mode, 0);
         }
     } TEST_END();
-    TEST_CASE("N4.40 The Names Of The Bots (Protocol 20): With A Name Key A Lobby Room Shows The Bot That A Colour's Plan Asks For, Under Its Own Name, In The Empty Seat Of Every Guest's Room Message (The Room's Own Copy Keeps The Seat Empty, So The Guard Of A Move Is The Same On Both Sides); Without A Key The Seat Is Empty As Before; A Bot That Is Seated Keeps The Name It Is Given; A Person Cannot Be Called Like A Bot; The Decoders Refuse A Name On An Empty Seat That Is No Planned Bot's And A New Name That Is A Bot's") {
+    TEST_CASE("N4.40 The Names Of The Bots (Protocol 20): With A Name Key A Lobby Room Shows The Bot That A Color's Plan Asks For, Under Its Own Name, In The Empty Seat Of Every Guest's Room Message (The Room's Own Copy Keeps The Seat Empty, So The Guard Of A Move Is The Same On Both Sides); Without A Key The Seat Is Empty As Before; A Bot That Is Seated Keeps The Name It Is Given; A Person Cannot Be Called Like A Bot; The Decoders Refuse A Name On An Empty Seat That Is No Planned Bot's And A New Name That Is A Bot's") {
         using K = PlanKind;
         const uint64_t key = ai::bot_name_key("N4.40");
         {   // the plan's bots are named in the guests' Room messages, seat by seat, and the name goes with the plan

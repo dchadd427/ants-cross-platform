@@ -209,7 +209,7 @@ void put_all_u16(Bytes& out, const T (&values)[N]) {
 }
 
 // A table of uint16 animation indices, in its row order. The runs of a region are the stored directions 0..4 (or the
-// types 0..5) of each row; the virtual ids of the mirrored directions 5..7 and the colour blocks 1..3 are not in the
+// types 0..5) of each row; the virtual ids of the mirrored directions 5..7 and the color blocks 1..3 are not in the
 // remake and are not read by the tests.
 template <const auto& Table>
 Bytes u16_table() {
@@ -305,7 +305,7 @@ struct Region {
 };
 
 inline const Region kRegions[] = {
-    // Locomotion tables of FUN_010175ad (colour-0 block): [type 6][terrain 5][dir 8], [type 6][dir 8], [dir 8]; the runs
+    // Locomotion tables of FUN_010175ad (color-0 block): [type 6][terrain 5][dir 8], [type 6][dir 8], [dir 8]; the runs
     // are the stored directions 0..4 of each row
     {"walk", 0x1002fb8u, 10, 30, 16, "02fcaa037fd985517ff19365598b3294da741e7b8e6dd9429932d5f43464a202", &u16_table<mvd::kWalk>},
     {"carry walk", 0x1003738u, 10, 30, 16, "8ce0f425ffa4895ce189cfa950a63f1b475a51d27a6398c428258c2aab74b340", &u16_table<mvd::kCarryWalk>},
@@ -318,7 +318,7 @@ inline const Region kRegions[] = {
     {"climb", 0x10048c0u, 10, 1, 0, "352b131926aa23230cbbd03900bd31134d251347d1033099c27e0531d23c1400", &u16_table<mvd::kClimb>},
     {"idle in water", 0x10048b8u, 2, 1, 0, "75a343cae007ba3927506d9b8f98994e795740f01136d7d80060d76c16dcb20c", &u16_value<mvd::kIdleWater>},
     {"bump push", 0x101cae3u, 5, 1, 0, "497cbde725e3f9eb9237058fa2058bd5057c689b06902eb744f44bbde4e34b06", &bump_push},
-    // Action clips of SetAction FUN_0101ad02 (colour-0 blocks): [type 6], [type 6][dir 8] (runs: dirs 0..4), [dir 8]
+    // Action clips of SetAction FUN_0101ad02 (color-0 blocks): [type 6], [type 6][dir 8] (runs: dirs 0..4), [dir 8]
     {"enter", 0x1003eb8u, 12, 1, 0, "7616d1fc32c45230513805976124633066f4fd29dcc8cc12f3ce0c26488ff299", &u16_table<mvd::kEnter>},
     {"carry enter", 0x1003ee8u, 12, 1, 0, "caeb84eb050a8eea046d22b2a7c6345fd1c79fd8c4b5bbf26689d56cd824e346", &u16_table<mvd::kCarryEnter>},
     {"harvest", 0x1003f18u, 10, 6, 16, "31f3cc0a06320f1e9e19e9c589c6beed44cf788704fede42af2402bf5e680795", &u16_table<mvd::kHarvest>},

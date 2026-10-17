@@ -4,11 +4,11 @@
 The site's pages are found, not listed: the html files of web/ (the front page and the game page: the Dockerfile copies the folder, the image serves them at "/", /lobby.html, /index.html and
 /play.html), every html file of asset_catalog/ (Sprites and sounds, copied whole), and the page that the Dockerfile generates from the changelog with tools/changelog_to_html.py (built
 here the way the image builds it). A page is in the Classic look when it links the shared stylesheet, /front/classic.css, or, for the two pages that keep an inline copy of it
-(lobby.html and shell.html), defines the same colours as that stylesheet. A page that is not fails the test by name, so that a new page, or an old one that is redone, cannot be
+(lobby.html and shell.html), defines the same colors as that stylesheet. A page that is not fails the test by name, so that a new page, or an old one that is redone, cannot be
 forgotten when the look moves on.
 
   - PENDING names the pages that are known not to be there yet. The test needs them to stay that way: when one is restyled the test fails and says to remove it from the list.
-  - the colours of the inline copies are the stylesheet's (the three places cannot drift apart)
+  - the colors of the inline copies are the stylesheet's (the three places cannot drift apart)
   - everything a Classic page loads from /front/ is in web/front/ (and so in the image)
   - the checks themselves are tried on made-up pages, one in the old look and one in the new
 """
@@ -26,7 +26,7 @@ FRONT = os.path.join(REPO, "web", "front")
 PENDING = {
 }
 
-# The colours that a page must share with the stylesheet to be in the look without linking it (the names of the front page's own :root).
+# The colors that a page must share with the stylesheet to be in the look without linking it (the names of the front page's own :root).
 TOKENS = ("clay", "ink", "teal", "teal-hi", "teal-lo", "edge", "cream", "inset", "frame", "frame-hi", "frame-lo", "shadow", "gold", "bad-bg", "bad-ink", "bad-edge")
 LINK = re.compile(r'<link\b(?=[^>]*\brel="stylesheet")(?=[^>]*\bhref="/front/classic\.css")[^>]*>')
 
@@ -37,12 +37,12 @@ def read(*parts):
 
 
 def tokens_of(css):
-    """{name: value} of the colours that a stylesheet or a page's inline style defines ("--clay: #db4b13;")."""
+    """{name: value} of the colors that a stylesheet or a page's inline style defines ("--clay: #db4b13;")."""
     return {m.group(1): m.group(2).lower() for m in re.finditer(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;", css)}
 
 
 def is_classic(page):
-    """(True, how) when the page links the shared stylesheet or carries all of its colours, else (False, why)."""
+    """(True, how) when the page links the shared stylesheet or carries all of its colors, else (False, why)."""
     page = re.sub(r"<!--.*?-->", "", page, flags=re.S)                    # (a link in a comment is no link)
     if LINK.search(page):
         return True, "it links /front/classic.css"
@@ -50,8 +50,8 @@ def is_classic(page):
     shared = tokens_of(read("web", "front", "classic.css"))
     missing = [t for t in TOKENS if own.get(t) != shared[t]]
     if not missing:
-        return True, "it carries the colours of the stylesheet"
-    return False, "it neither links /front/classic.css nor carries its colours (missing or different: %s)" % ", ".join(missing[:6])
+        return True, "it carries the colors of the stylesheet"
+    return False, "it neither links /front/classic.css nor carries its colors (missing or different: %s)" % ", ".join(missing[:6])
 
 
 def generated_pages():
@@ -136,14 +136,14 @@ class TheReleasePlates(unittest.TestCase):
 
 
 class TheInlineCopies(unittest.TestCase):
-    def test_the_front_pages_colours_are_the_stylesheets(self):
+    def test_the_front_pages_colors_are_the_stylesheets(self):
         shared = tokens_of(read("web", "front", "classic.css"))
         lobby = read("web", "lobby.html")
         own = tokens_of(lobby[:lobby.index("</style>")])
         for name in TOKENS:
             self.assertEqual(own.get(name), shared[name], "--%s of web/lobby.html is not the stylesheet's" % name)
 
-    def test_a_page_that_links_the_stylesheet_does_not_make_colours_of_its_own(self):
+    def test_a_page_that_links_the_stylesheet_does_not_make_colors_of_its_own(self):
         shared = tokens_of(read("web", "front", "classic.css"))
         for name, page in sorted(pages().items()):
             if not LINK.search(page):
@@ -151,7 +151,7 @@ class TheInlineCopies(unittest.TestCase):
             own = tokens_of("\n".join(re.findall(r"<style\b[^>]*>(.*?)</style>", page, re.S)))
             for token, value in own.items():
                 if token in shared:
-                    self.assertEqual(value, shared[token], "%s redefines --%s: the colours are the stylesheet's" % (name, token))
+                    self.assertEqual(value, shared[token], "%s redefines --%s: the colors are the stylesheet's" % (name, token))
 
 
 class TheFilesOfTheLook(unittest.TestCase):
@@ -184,7 +184,7 @@ class TheCheckItself(unittest.TestCase):
         self.assertFalse(is_classic('<link rel="stylesheet" href="/front/classic2.css">')[0])
         self.assertFalse(is_classic('<link rel="stylesheet" href="https://example.com/front/classic.css">')[0])
 
-    def test_a_page_with_the_colours_but_one_changed_fails(self):
+    def test_a_page_with_the_colors_but_one_changed_fails(self):
         shared = tokens_of(read("web", "front", "classic.css"))
         root = " ".join("--%s: %s;" % (t, shared[t]) for t in TOKENS)
         self.assertTrue(is_classic("<style>:root { %s }</style>" % root)[0])

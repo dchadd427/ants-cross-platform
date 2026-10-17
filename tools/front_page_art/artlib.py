@@ -1,4 +1,4 @@
-"""Helpers of make_art.py: the game's sprites, the clay key, the clay of the pages, the ant in the game's own team colours, the mouse arrow, saving a small PNG.
+"""Helpers of make_art.py: the game's sprites, the clay key, the clay of the pages, the ant in the game's own team colors, the mouse arrow, saving a small PNG.
 
 A developer's tool (it needs Pillow: pip install pillow); not part of any build or test.
 """
@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "asset_catalog"           # the sprites that the repository already ships, extracted from Original-Ants/ants.chd
-CHD = ROOT / "Original-Ants" / "ants.chd"  # the game's data archive: the 256 colours and the palette indices of every sprite (the catalog's pictures hold only the colours)
+CHD = ROOT / "Original-Ants" / "ants.chd"  # the game's data archive: the 256 colors and the palette indices of every sprite (the catalog's pictures hold only the colors)
 CLAY = (0xDB, 0x4B, 0x13)                  # the orange of every menu screen of the game
 CLAY_DOT = (0xFB, 0x33, 0x5B)              # the pink dots that its dithering leaves in it
 
@@ -54,12 +54,12 @@ CLAY_GRIT = (224, 130, 98)         # a pale grain of grit
 INK = (0x0C, 0x08, 0x05)           # the ink of the pages (--ink)
 
 
-def _luminance(colour):
+def _luminance(color):
     """The relative luminance of WCAG 2.x (the same arithmetic as tests/scripts/test_web_front.py)."""
     def channel(value):
         value /= 255
         return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
-    r, g, b = (channel(v) for v in colour)
+    r, g, b = (channel(v) for v in color)
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
@@ -91,7 +91,7 @@ def _noise(draw, size, cells):
 
 
 def dirty_clay(size=CLAY_SIZE, seed=1998, mottling=0.6, grain=0.8, specks=0.010):
-    """The clay of the pages: CLAY with a little noise and dirt. On average it is the original's orange (so the flat colour behind it, and the pictures cut from the original's sprites, sit right).
+    """The clay of the pages: CLAY with a little noise and dirt. On average it is the original's orange (so the flat color behind it, and the pictures cut from the original's sprites, sit right).
 
     Added to it: a broad mottling (patches a little deeper and a little lighter than the clay), grain (each pixel a step off its neighbours), pale grit and small brown specks of dirt (one to four
     pixels). The ink of the pages keeps its contrast: the deepest shade holds 4.5 : 1, a speck is never darker than 3 : 1, and a speck is only put where the 5 x 5 pixels around it still hold 4.5 : 1 on
@@ -129,8 +129,8 @@ def dirty_clay(size=CLAY_SIZE, seed=1998, mottling=0.6, grain=0.8, specks=0.010)
         if all(window((cx + dx) % size, (cy + dy) % size) >= needed for dx in range(-3, 4) for dy in range(-3, 4)):
             specks -= len(cells)
         else:
-            for x, y, colour, value in reversed(old):
-                pixels[y][x], light[y][x] = colour, value
+            for x, y, color, value in reversed(old):
+                pixels[y][x], light[y][x] = color, value
     for _ in range(int(size * size * 0.0035)):
         x, y = pick(size), pick(size)
         pixels[y][x] = _mix(pixels[y][x], CLAY_GRIT, (0.4, 0.7)[pick(2)])
@@ -140,7 +140,7 @@ def dirty_clay(size=CLAY_SIZE, seed=1998, mottling=0.6, grain=0.8, specks=0.010)
 
 
 # The game does not tint its ants: it blits a sprite's palette indices with the team's offset added to each (the transparent index stays; a sprite named by a digit is left alone), so a team shows another stretch of
-# the same 256 colours (src/ants_app/renderer.cpp, TextureCache::compose_palette: green +60, red +40, blue +20, black +0). The catalog's pictures are the black team's, so the other teams' come from ants.chd.
+# the same 256 colors (src/ants_app/renderer.cpp, TextureCache::compose_palette: green +60, red +40, blue +20, black +0). The catalog's pictures are the black team's, so the other teams' come from ants.chd.
 TEAMS = {"green": 60, "red": 40, "blue": 20, "black": 0}
 KEY = 254                                  # the palette index that is left transparent (magenta, alpha 0)
 
@@ -169,7 +169,7 @@ def chd_sprite(number):
 
 
 def team_palette(name, team):
-    """The 256 colours that a sprite of this file name is drawn with for this team: the ant branch of compose_palette, line for line (the setup screen's portrait takes the HUD branch, which gives this sprite the same colours)."""
+    """The 256 colors that a sprite of this file name is drawn with for this team: the ant branch of compose_palette, line for line (the setup screen's portrait takes the HUD branch, which gives this sprite the same colors)."""
     _data, _table, base = _archive()
     palette = list(base)
     if TEAMS[team] and not name[:1].isdigit():
@@ -180,7 +180,7 @@ def team_palette(name, team):
 
 
 def team_ant(number, team):
-    """The sprite with this id of ants.chd, as RGBA, in the colours that the game gives this team. For the black team it is the catalog's picture of the sprite, pixel for pixel."""
+    """The sprite with this id of ants.chd, as RGBA, in the colors that the game gives this team. For the black team it is the catalog's picture of the sprite, pixel for pixel."""
     name, width, height, rows = chd_sprite(number)
     palette = team_palette(name, team)
     image = Image.new("RGBA", (width, height))
@@ -225,21 +225,21 @@ def remove_cursor(image, box=(476, 266, 500, 296)):
                 filled[(x, y)] = tuple(sum(c[i] for c in around) // len(around) for i in range(3))
         if not filled:
             break
-        for point, colour in filled.items():
-            pixels[point] = colour
-            known[point] = colour
+        for point, color in filled.items():
+            pixels[point] = color
+            known[point] = color
             mask.discard(point)
     return image
 
 
 def save_png(image, path):
-    """As small as PNG goes without changing a pixel: a picture of at most 256 colours (with their transparency) is saved with a palette, and every file is optimised."""
+    """As small as PNG goes without changing a pixel: a picture of at most 256 colors (with their transparency) is saved with a palette, and every file is optimised."""
     image = image.convert("RGBA") if "A" in image.getbands() else image.convert("RGB")
-    colours = image.getcolors(maxcolors=256)
-    if colours is None:
+    colors = image.getcolors(maxcolors=256)
+    if colors is None:
         image.save(path, optimize=True)
         return
-    rgba = [c if len(c) == 4 else c + (255,) for _, c in sorted(colours, key=lambda item: -item[0])]
+    rgba = [c if len(c) == 4 else c + (255,) for _, c in sorted(colors, key=lambda item: -item[0])]
     index = {c: i for i, c in enumerate(rgba)}
     packed = Image.new("P", image.size)
     packed.putdata([index[p if len(p) == 4 else p + (255,)] for p in image.getdata()])

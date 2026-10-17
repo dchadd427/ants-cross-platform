@@ -122,8 +122,8 @@ public:
     /// 187: the team that is the last one standing (the lowest-numbered alive team of the one side that is left), else PLAYER_NEUTRAL
     uint8_t last_standing_187() const;
     std::array<std::string, MAX_PLAYERS> player_names_{};
-    std::string player_display_name(uint8_t p) const;    // the set name, else the colour word
-    std::string player_colour_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black
+    std::string player_display_name(uint8_t p) const;    // the set name, else the color word
+    std::string player_color_name(uint8_t p) const;     // strings 100..103; the remake's player 0..3 are green, red, blue, black
     void set_match_clock(int64_t ms);          // jumps the clock (start, test hook): CHECKGO runs at its next tick
     void set_match_clock_running(int64_t ms);  // the clock advances with the game
 

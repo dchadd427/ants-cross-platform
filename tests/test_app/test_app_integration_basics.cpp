@@ -1793,13 +1793,13 @@ void run_suite_9_gameplay_mechanics_and_options() {
         hud.set_chat_input("GG everyone");
         hud.handle_mouse_down(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
         hud.handle_mouse_up(545, 450, SDL_BUTTON_LEFT, sim_engine, cam);
-        // an entry is a header line "QueenAnt:" (in the colour of the sender's team) and its body lines
+        // an entry is a header line "QueenAnt:" (in the color of the sender's team) and its body lines
         bool found_all_msg = false;
         for (size_t li = 0; li + 1 < log.size(); ++li) {
             if (log[li] == "QueenAnt:" && log[li + 1] == "GG everyone") {
                 found_all_msg = true;
-                ASSERT_TRUE(hud.get_chat_line_colour(li) <= 3);      // a team colour
-                ASSERT_EQ(hud.get_chat_line_colour(li + 1), 5);      // the body colour (7, 11, 15)
+                ASSERT_TRUE(hud.get_chat_line_color(li) <= 3);      // a team color
+                ASSERT_EQ(hud.get_chat_line_color(li + 1), 5);      // the body color (7, 11, 15)
                 break;
             }
         }

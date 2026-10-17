@@ -103,13 +103,13 @@ class TheCommonFiles(unittest.TestCase):
                 self.assertIn("cache: 'no-store'", call, name + ": " + call)
         self.assertIn("fetch('/maps', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
 
-    def test_the_one_stylesheet_is_the_pages_and_the_colours_are_the_front_pages(self):
+    def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")
         self.assertEqual(len(re.findall(r"\bbody \{", css)), 1)
         self.assertIn("@media (max-width: 720px)", css)
         self.assertNotIn("@import", css)
         for name in PAGES:
-            self.assertEqual(len(re.findall(r"<style>", read("web", name))), 1, name)                    # (only the colours: test_web_pages_classic.py keeps them the same as web/front/classic.css)
+            self.assertEqual(len(re.findall(r"<style>", read("web", name))), 1, name)                    # (only the colors: test_web_pages_classic.py keeps them the same as web/front/classic.css)
 
 
 class TheListPage(unittest.TestCase):
@@ -274,7 +274,7 @@ class TheSharedCode(unittest.TestCase):
     MUTANTS = {
         "a bot with a name is not shown as Name (bot, Level)": ("' (bot, ' + bot + ')' : 'Bot (' + bot + ')'", "' (' + bot + ')' : 'Bot (' + bot + ')'"),
         "a bot with no name is not Bot (Level)": ("'Bot (' + bot + ')'", "bot"),
-        "a seat with an unknown colour is a seat": ("if (s && typeof s === 'object' && COLOURS.indexOf(s.colour) !== -1) out.push(s);", "if (s && typeof s === 'object') out.push(s);"),
+        "a seat with an unknown color is a seat": ("if (s && typeof s === 'object' && COLORS.indexOf(s.colour) !== -1) out.push(s);", "if (s && typeof s === 'object') out.push(s);"),
         "the winner of a side is not its row's": ("winner: r.winner === true, left: false }); members", "winner: false, left: false }); members"),
         "a seat with no row is a side that left": ("winner: false, left: true }); });\n        return out;", "winner: false, left: false }); });\n        return out;"),
         "a card of mode 187 calls its kills a score": ("if (k && sort === 'score' && rec && rec.mode === '187') k = SORT_KEYS.kills;", ""),

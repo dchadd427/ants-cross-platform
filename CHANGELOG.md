@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.63 - 2026-10-16 - Spelling: color, not the British spelling
+
+**For players:**
+- **Spelling: the site and the game now write "color".** The lobby, the team and color words, the map pages, the match list filter, the chat help and the game's own screens all use the American spelling. Nothing else changed: your saved settings, recordings and bookmarked addresses keep working, and the game plays exactly as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06ea886a...f58c0990)
+
 ## v0.12.62 - 2026-10-16 - Map maker: the map core runs in the browser
 
 **For players:**
@@ -69,7 +76,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.56 - 2026-10-16 - Rematch: back to the lobby with one button
 
 **For players:**
-- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colours, bots, teams and map.
+- **Back to the lobby:** when a match started on the front page is over, a button under the results takes you back to the same room: same link, host, colors, bots, teams and map.
 - **Your seat waits** while the room is open (three hours at most). START waits for whoever is not back, or the host removes them; if nobody from the match is in the room for a minute, the room goes on without the waiting seats. Desktop and phone-app players join by the code.
 
 **Rules / network:** none.
@@ -88,17 +95,17 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **Ghetto and ANTS_PARTY:** a computer player whose worker starts beside the food harvests at once instead of waiting two minutes for a plan it does not need. Ghetto, one against one: Hard 2,291 -> 2,741, Medium 1,593 -> 2,240 (both seat pairs). ANTS_PARTY: Hard 26,952 -> 28,831, Medium about 6 percent less.
 - **!-Midz-!:** a Hard bot gives up a trip to a power-up only when an enemy really gets there first: 343 -> 645. Medium keeps its old rule; without it, it lost a quarter of its score on Ghetto.
-- **A bomb of the bot's own colour that closes the way is now defused** instead of being ordered again for minutes.
+- **A bomb of the bot's own color that closes the way is now defused** instead of being ordered again for minutes.
 - **Dustbin and FKD Deathmatch** score a little less than before v0.12.49 (docs/BOTS.md); POPcOrN against one Hard opponent loses its rare 50 points.
 
 **Rules / network:** none.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f21844cc...8cc8d538)
 
-## v0.12.52 - 2026-10-15 - Lobby: far fewer renames, map changes and colour moves lost to a slow moment
+## v0.12.52 - 2026-10-15 - Lobby: far fewer renames, map changes and color moves lost to a slow moment
 
 **For players:**
-- **A rename, a new map or a colour move in the lobby is far less likely to be lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or colour moves at once and then about three a second. A hiccup of up to about a third of a second for a map change or a colour move, and of up to one and a half seconds for a rename or a removal, no longer loses one; a longer hiccup still can.
+- **A rename, a new map or a color move in the lobby is far less likely to be lost to a slow moment.** The page asked for these at exactly the pace the server allows, and the server drops a request it handles a few milliseconds early without a word, so a change could vanish from the screen (a fourth rename in a few seconds, or holding the next-map arrow). The page now keeps a little under the limit, as the chat does: two renames or removals at once and then one every 1.25 seconds, five map changes or color moves at once and then about three a second. A hiccup of up to about a third of a second for a map change or a color move, and of up to one and a half seconds for a rename or a removal, no longer loses one; a longer hiccup still can.
 
 **Rules / network:** none. Network protocol 21 and the server are as before; only the pace of the page's requests changed.
 
@@ -121,7 +128,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.50 - 2026-10-15 - Chat in the lobby
 
 **For players:**
-- **The front page has a chat now.** A **Chat** box under the colours lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the colour of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
+- **The front page has a chat now.** A **Chat** box under the colors lets the people in a room talk before START: type a line (up to 100 letters, digits and signs) and press Enter or Send, and everybody in the room reads it in the color of the sender's seat. It is the chat of the game's own waiting room, so a player of the desktop game in the same room reads it too.
 - A small line tells who comes and goes ("Sam joined as Red."). A line that arrives while the box is out of view (below the window, or under START on a phone) also shows as a short message at the bottom of the page, at most one every 4 s (the box has every line).
 - The box keeps a little under the room's pace (four lines at once, then one every 1.25 s) and asks for a little slower when you are faster (your line stays in the field). If the room does not say a line back within 3 s, or the connection drops first, the box says "Your last line may not have arrived" and puts the text back in the field. What the game cannot show, an accent or a smiley, is left out as you type. On a phone the field is big enough to tap and the keyboard does not hide it behind START.
 - Nothing is saved: a reload starts an empty box, and when START takes everybody to the game the lines stay behind (they are not in the countdown's chat; that is a later change).
@@ -155,7 +162,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.46 - 2026-10-15 - Every match has a page: stats, replay and live games
 
 **For players:**
-- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, colour, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
+- **Every match has a page now.** **Matches** (a link in the footer of every page, a button at the top of the front page and of the game page) lists every match played here, newest first: the map, who played (computer players as "Pip (bot, Hard)"), who won and the scores, the length and when. Search for a map or a player, show only the matches with people or only the computers' matches, and narrow it by format, result, color, mode and whether the replay can still be watched. The list comes in pages of 25 and the address of a view can be sent to somebody.
 - **Open a match for all its stats and its replay.** Every seat's score, ants killed, lost and hatched, bombs set and defused and fires lit, a bar for each against the best seat, the share of the score, the total of a team, and who left early. **Show replay** opens the game on that page and plays the match; nothing of the game is downloaded until you press it. A match recorded by an older version, or whose recording is more than 30 days old, still shows its stats ("Older version", "Replay removed"), with the file to download where it is still kept.
 - **Matches that are being played have their own page,** **Live now**, and the Matches page shows a button "N live now" while one is on. The old addresses `/watch.html` and `/matches` lead to the new list.
 - **Stats on the replay page:** a **Stats** button (a row under the controls on a phone) shows the final numbers of the match you are watching. It is closed until you open it, so it does not tell you who won.
@@ -179,7 +186,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.44 - 2026-10-15 - A 30 second countdown with the chat open before an online match
 
 **For players:**
-- A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which colour (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
+- A match of an online room with two or more people now opens with a **30 second countdown** instead of the 5 second "Get ready to play!" dialog. It starts when everybody's game has loaded. The card shows the seconds left, who plays which color (computer players are marked) and the chat, which is open: type and press Enter (on a phone, tap the chat box) to say hello and arrange before the ants move. The status line above the chat says "Match starts in N s".
 - The card has a **Fullscreen** button, so you can go fullscreen before the match starts (in the browser the page's own button, on the desktop a button on the card). The Quit button and Ctrl+Q still leave the room; clicks on the map and the keys of the match stay out of reach until the match begins.
 - Rooms of one person (with computer players), games on the local network and games on this computer keep the 5 second dialog.
 
@@ -257,7 +264,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.36 - 2026-10-13 - Names of the computer players in the server's rooms (protocol 20)
 
 **For players:**
-- Computer players now have names. In a room on the game server a bot is called, for example, `Pip (bot, Hard)` (a random short name, then `bot` and its level) instead of `Bot (Hard)`: in the waiting room, on the results, in the replay list and in the match history. The front page's room shows the name of a bot as soon as the host picks it for a colour, before START, and the bot keeps that name in the match. The test bots are `Pip (bot, idle)` and `Pip (bot, worker)`. Matches kept before keep their old `Bot (Hard)`.
+- Computer players now have names. In a room on the game server a bot is called, for example, `Pip (bot, Hard)` (a random short name, then `bot` and its level) instead of `Bot (Hard)`: in the waiting room, on the results, in the replay list and in the match history. The front page's room shows the name of a bot as soon as the host picks it for a color, before START, and the bot keeps that name in the match. The test bots are `Pip (bot, idle)` and `Pip (bot, worker)`. Matches kept before keep their old `Bot (Hard)`.
 - A name that looks like a computer player's is not for people: a name that ends with `(bot)` or `(bot, ...)` is refused like the names that start with `Bot (` (start menu, front page, game page, rooms).
 - A game on the local network and a game on your own computer still say `Bot (Level)`; the in-game label is unchanged for now.
 
@@ -305,9 +312,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.30 - 2026-10-12 - Maps without the full four-seat setup taken out
 
 **For players:**
-- 13 more maps of the players are gone from the map list, because every map now has to have a hill and starting ants for all four colours: the nine 1 v 1 maps (`!aLkAtRaZ1v1bOmBeR`, `!aLkAtRaZ1v1tHiEf!`, `!aLkAtRaZ_1v1!`, `ANTS SOCCER`, `ANTSSOCCER`, `GRiM-FAiT`, `ShowDown`, `aLkAtRaZ1v1cOmBaNt`, `aLkAtRaZ1v1cOmBaNtn`), `Fighter Dream 2` and `junk yard` (ants for all four colours, but a hill missing for some) and the two arenas without any hill, `DEATH WAR!!!!!!!!!!!!ARENA 3` and `HELLRASIER ARENA`. 534 maps of the players remain; the lobby's list and the map picker are shorter by the same 13.
+- 13 more maps of the players are gone from the map list, because every map now has to have a hill and starting ants for all four colors: the nine 1 v 1 maps (`!aLkAtRaZ1v1bOmBeR`, `!aLkAtRaZ1v1tHiEf!`, `!aLkAtRaZ_1v1!`, `ANTS SOCCER`, `ANTSSOCCER`, `GRiM-FAiT`, `ShowDown`, `aLkAtRaZ1v1cOmBaNt`, `aLkAtRaZ1v1cOmBaNtn`), `Fighter Dream 2` and `junk yard` (ants for all four colors, but a hill missing for some) and the two arenas without any hill, `DEATH WAR!!!!!!!!!!!!ARENA 3` and `HELLRASIER ARENA`. 534 maps of the players remain; the lobby's list and the map picker are shorter by the same 13.
 - A kept replay (30 days) of a match played on one of these maps can no longer be watched.
-- A map of the players is only taken in when all four colours have a hill and starting ants, and the check and the test of the map list now fail if one is added that does not.
+- A map of the players is only taken in when all four colors have a hill and starting ants, and the check and the test of the map list now fail if one is added that does not.
 
 **Rules / network:** none. The beta lists the smaller set after its next deploy (the images copy the maps; nothing of them persists).
 
@@ -335,9 +342,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.27 - 2026-10-12 - Broken maps of the players taken out
 
 **For players:**
-- 11 maps of the players that could not be played are gone from the map list: `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` (no ants for any colour), `K-P`, `Pulse2`, `Pulse3`, `QuItErS`, `firewar`, `hellzone` and `WAR TIME` (a colour with a hill and no ants), and `hell2` (a map of water: every ant drowns in the first three seconds). 547 maps of the players remain.
+- 11 maps of the players that could not be played are gone from the map list: `Home Bound`, `IsLaNd FiRe BoOm` and `Thief craker` (no ants for any color), `K-P`, `Pulse2`, `Pulse3`, `QuItErS`, `firewar`, `hellzone` and `WAR TIME` (a color with a hill and no ants), and `hell2` (a map of water: every ant drowns in the first three seconds). 547 maps of the players remain.
 - A kept replay of a match on one of these maps can no longer be watched.
-- A map of the players is only taken in when every colour it claims has ants, and a test now fails if one is added that does not.
+- A map of the players is only taken in when every color it claims has ants, and a test now fails if one is added that does not.
 
 **Rules / network:** none. The beta lists the new set after its next deploy.
 
@@ -470,7 +477,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Community maps load the way the original loads them.** The game now reads what the map file says (the numbers of its tiles and its solid-ground marks) and no longer guesses from the names the map maker gave the tiles.
 - **Power-ups are walkable only where the map says so.** On `POPcOrN` the power-ups no longer plug the corridors (94 maps are like that); on the original maps they stay obstacles that you take by clicking on them.
 - **Lakes, mud and dirt that a map leaves unnamed are what they are.** Ants no longer walk across the lakes of Wata fight and hell2, and the mud of the Gant2 maps and the dirt of Turtle World slow them (16 maps).
-- **Hills and start ants follow the colour of their tile.** Seven maps lost a hill or swapped two colours because of damaged names (CRISS CROSS and Conquer have four teams now).
+- **Hills and start ants follow the color of their tile.** Seven maps lost a hill or swapped two colors because of damaged names (CRISS CROSS and Conquer have four teams now).
 - Food piles are told by their tile, a food pile whose next stage has no picture in the map's list vanishes as in the original, and stray objects in a map's list of start positions are ignored and no longer drawn.
 
 **Rules / network:** network protocol 19 (a v0.12.9 game cannot join); replay rules 5 and 6, older recordings stay under "Earlier versions".
@@ -480,7 +487,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.9 - 2026-10-11 - The bombs of the community maps work
 
 **For players:**
-- **The bombs of 208 community maps work.** The original's bombs, laid out in the map file (`Bombz Away` is a floor of them), were invisible rocks. Now they show in their colours and the first ant that steps on one sets it off (2 hit points, a throw of 4 tiles). Each bomb has an owner team named in the file (mostly the first player): that team's ants and its ally walk around it. Other maps play as before.
+- **The bombs of 208 community maps work.** The original's bombs, laid out in the map file (`Bombz Away` is a floor of them), were invisible rocks. Now they show in their colors and the first ant that steps on one sets it off (2 hit points, a throw of 4 tiles). Each bomb has an owner team named in the file (mostly the first player): that team's ants and its ally walk around it. Other maps play as before.
 
 **Rules / network:** network protocol 18 (a v0.12.8 game cannot join); replay rules 3 and 4, older recordings stay under "Earlier versions".
 
@@ -555,7 +562,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.1 - 2026-10-10 - The front page is the lobby, matches to watch, computer players that fight (network protocol 17)
 
 **For players:**
-- **The front page is now the lobby, and the only way to play.** Open it and your room is ready: a code of six letters and numbers (like `k7m 2xq`), a link to send, the four colours and the map. Players who open the link ask for a name first, take the next free colour and show up at once. The host drags a player onto another colour to move them (a taken colour swaps places; on a phone, tap the player's dots and then the colour), gives a free colour to an Easy, Medium or Hard computer player or to nobody, picks the map, makes teams with three or four players, removes a player (it asks first) and presses START for everybody; everybody can rename themselves with the pencil. A room lasts while anybody is in it: when the host leaves, the player who has been there longest becomes the host; after a match, Leave Game takes you to the front page, where a new room is ready. **Have a code?** joins a room by its code, and a link to a room that is gone, full or already playing starts a room of your own, with a line that says why. A strip at the top says what happens (the host left, the match did not start, the connection is lost and your colour is kept for a minute, a newer version is out). The old one-card page, the **More ways to play** button and the testing page behind it are gone; shared links (`?room=<code>`) and the game's own addresses (`?join=...`) work as before, and the old addresses show the front page.
+- **The front page is now the lobby, and the only way to play.** Open it and your room is ready: a code of six letters and numbers (like `k7m 2xq`), a link to send, the four colors and the map. Players who open the link ask for a name first, take the next free color and show up at once. The host drags a player onto another color to move them (a taken color swaps places; on a phone, tap the player's dots and then the color), gives a free color to an Easy, Medium or Hard computer player or to nobody, picks the map, makes teams with three or four players, removes a player (it asks first) and presses START for everybody; everybody can rename themselves with the pencil. A room lasts while anybody is in it: when the host leaves, the player who has been there longest becomes the host; after a match, Leave Game takes you to the front page, where a new room is ready. **Have a code?** joins a room by its code, and a link to a room that is gone, full or already playing starts a room of your own, with a line that says why. A strip at the top says what happens (the host left, the match did not start, the connection is lost and your color is kept for a minute, a newer version is out). The old one-card page, the **More ways to play** button and the testing page behind it are gone; shared links (`?room=<code>`) and the game's own addresses (`?join=...`) work as before, and the old addresses show the front page.
 - **Four picture shapes, changed while you play.** The buttons under the game (Classic 4:3, 16:10, 16:9, 21:9) switch at once: no reload, no "Leave the match?" question, and a joined match keeps its seat; a wider or taller picture shows more of the map. 16:10 and 21:9 are new (`?aspect=16:10` and `?aspect=21:9` in the browser, `--aspect` on the desktop), and a small "fills your screen" tag stands under the shape nearest to your screen. The front page's Screen selector has all four and hands the shape on to the game. In 16:10 and 21:9 the setup screen, the room, the loading screen, the help and the results are for now the 16:9 page, centred with black around it; the match fills the whole picture.
 - **Watch matches, also while they are played.** The server keeps the matches that ran 30 seconds or more for 30 days (up to a size limit); the list is public and shows the names the players typed (no address, room code or chat), and the name screens say so. The front page's header has a **Watch matches** button and the game page has it after Menu (from a 1140 px window; in More on a phone), and everywhere the footer link; it opens a new tab, so a match you are playing goes on. The page lists the matches being played ("Live now") above the earlier ones; **Watch** plays one in the game page with the whole map showing: jump anywhere on the timeline, pause, speed it from 1/2x to 8x, go fullscreen, copy the link or download the file. A live match shows about 10 seconds behind the players, with a red LIVE mark and "Jump to live", and becomes a replay of the whole match when it ends. The server plays a match of computer players every hour ("Bot (Medium)" or "Bot (Hard)"), so there is usually something to watch.
 - **Computer players fight, stand their ground and cross the water.** At every level they go for each other's ants once they have nothing left to harvest (Easy later and only with the better odds, Hard soonest); Medium and Hard light fire walls round the gate of their best opponent, a Bomber lays bombs round the food an opponent works and in front of his gate (a Hard bot keeps up to ten mines at a pile an enemy works and twelve on the enemy's lanes, a Medium bot eight, never on its own carriers' way), and every level hunts a Fire or Bomber Ant that comes near its hill. A player who is losing fights harder, the further behind the more: earlier, on worse odds, at the leader's ants first, with its Combat Ants off the food, with bombs at the leader's piles and in front of his gate, and (Medium) fire walls from minute 1.5 instead of 4.5; a bot hundreds of points behind sends its typed ants at the leader's ants after three minutes, and one that is behind starts mining the enemy gate sooner. They bank about as much food as before against players who do not fight. A bot whose gate is fired in by an enemy Fire Ant sends its own Fire Ant at it; at Hard, an ant without food that blocks the ramp steps aside for a carrier; two thieves on one hole no longer jam. On ISLANDS they get their Swimmers across sooner and lose fewer ants: the Bomber flies over with the crew, the team on the far side almost always gets all three Swimmers, and a Hard player takes a Swimmer through the Fire power-ups of a corner row with one ant and exactly timed clicks.
@@ -564,7 +571,7 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** network protocol 17, so a game of an earlier release cannot join (reload the page once after the update): a match has a game mode, carried by the room's Start and Room messages, the leader's plan, a server room's `"mode"` and the game's `--game-mode`, and a replay of mode 187 has its own rules number; the original's game plays exactly as before (a switched player's state hash after every tick is the one of a match that was never switched). Recordings now say which simulation they need (`sim_rules`: 1 for the original's game, 2 for game mode 187), so a later protocol change that leaves the rules alone no longer strands them.
 
 **Fixes:**
-- The front page's four ants are drawn in the game's own team colours: the red ant no longer has purple legs and a bright rim round its eyes.
+- The front page's four ants are drawn in the game's own team colors: the red ant no longer has purple legs and a bright rim round its eyes.
 - A player can take a seat back up to twelve times a minute (it was three), so a few lost connections or reloads in a row keep you in the match.
 - The replay player's REPLAY (or LIVE) tag sits just above the scrub bar (about 25 pixels of height), not over the picture, and in fullscreen above the bar's left end, going with the bar; there a finger on the picture, a tap or a drag of the map, no longer brings the bar up (a tap or swipe up along the bottom edge does, and a swipe down on the bar, or a tap on the small tab on its top edge, hides it at once, also while the match is paused), and the first time the bar goes away after a finger was used, a note says how to bring it back; a mouse works as before.
 
@@ -573,9 +580,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.0 - 2026-10-08 - The server's lobby rooms (network protocol 16; no page uses them yet)
 
 **For players:**
-- **Nothing on screen changes in this release.** It teaches the game server to keep a room open before a match starts, which the lobby page that comes next will use: you will land in a room the moment the front page opens, send one link, and the host will set the colours, the computer players, the teams and the map while everybody waits. No page or menu uses it yet.
+- **Nothing on screen changes in this release.** It teaches the game server to keep a room open before a match starts, which the lobby page that comes next will use: you will land in a room the moment the front page opens, send one link, and the host will set the colors, the computer players, the teams and the map while everybody waits. No page or menu uses it yet.
 
-**Rules / network:** network protocol 16, so a game of an earlier release cannot join (reload the page once after the update); no rule of the game changes. A lobby page can now ask the server for a lobby room, which holds no match yet: the player who has been in it the longest leads (the next player when the leader goes, never a computer player), and the leader's plan (the map, what each colour is, the teams) and every player's name are shown to everybody. The leader can swap two players' colours, take a player out of the room, and press START, which waits (up to 90 seconds) until every player's game has opened. A colour is kept for a minute after a lost connection, and a room that nobody is in closes a minute later. Three messages are new (the plan, a player's own new name, the removal); the full text is [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120).
+**Rules / network:** network protocol 16, so a game of an earlier release cannot join (reload the page once after the update); no rule of the game changes. A lobby page can now ask the server for a lobby room, which holds no match yet: the player who has been in it the longest leads (the next player when the leader goes, never a computer player), and the leader's plan (the map, what each color is, the teams) and every player's name are shown to everybody. The leader can swap two players' colors, take a player out of the room, and press START, which waits (up to 90 seconds) until every player's game has opened. A color is kept for a minute after a lost connection, and a room that nobody is in closes a minute later. Three messages are new (the plan, a player's own new name, the removal); the full text is [`docs/NETWORK_PORT.md`](docs/NETWORK_PORT.md#protocol-16-the-lobby-room-the-front-page-waits-in-v0120).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4a536a9...305ccb9)
 

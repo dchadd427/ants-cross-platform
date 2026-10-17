@@ -456,9 +456,9 @@ void test_renderer_draws_spans(const assets::AssetArchive& arc) {
         rig.renderer.begin_frame();
         hud.render_shell(rig.renderer, arc);
         const std::vector<uint8_t> px = rig.read();
-        // the expected picture: the mock-up's composition in the HUD's colours (every pixel the art does not cover is the black that the frame starts with)
+        // the expected picture: the mock-up's composition in the HUD's colors (every pixel the art does not cover is the black that the frame starts with)
         Pic reference = compose_reference(arc, sz.first, sz.second);
-        // (who drew each pixel is needed for the colour: compose again piece by piece, in the same order)
+        // (who drew each pixel is needed for the color: compose again piece by piece, in the same order)
         std::vector<std::array<uint8_t, 4>> want(static_cast<size_t>(sz.first) * static_cast<size_t>(sz.second), std::array<uint8_t, 4>{0, 0, 0, 255});
         {
             const int32_t dw = sz.first - 640, dh = sz.second - 480;

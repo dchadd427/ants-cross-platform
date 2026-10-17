@@ -854,7 +854,7 @@ void run_suite_7_input_controls() {
             ASSERT_EQ(count_of(app.hud().chat_transcript(std::string()), "are a team now!"), 2u);
             app.shutdown();
         }
-        {   // a game without bots (the original's single player: the other colours stand still): the teams are made among the four seats, as asked
+        {   // a game without bots (the original's single player: the other colors stand still): the teams are made among the four seats, as asked
             Application app;
             ASSERT_TRUE(app.init(config({}, LocalTeams{true, 0, 1})));
             ASSERT_TRUE(app.bots() == nullptr);

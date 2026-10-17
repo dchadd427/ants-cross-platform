@@ -1,5 +1,5 @@
 // The tests of the replays that the server keeps (ants_server/replay_store.hpp, Room, RoomManager::enable_replays and the control calls GET /replays, GET and DELETE /replays/<file>): a whole match
-// through the door is kept and plays out to the same state on a fresh engine, the people's typed names are in it (and a seat that was given none is the colour), a bot has its name, no address or
+// through the door is kept and plays out to the same state on a fresh engine, the people's typed names are in it (and a seat that was given none is the color), a bot has its name, no address or
 // room code is, short and unrecorded matches are not kept (and the status says why),
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
 // public one) answer as they should. The live door (S3.176 - S3.178: GET /live and GET /live/<id> in front of real rooms: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map,
@@ -157,7 +157,7 @@ void run_replay_tests() {
         // (a match that the rules ended has one turn more than the engine counts ticks: the call of tick() that finds the end does not count one)
         ASSERT_MSG(list[0].turns >= s.ticks && list[0].turns <= s.ticks + 2, "turns " + std::to_string(list[0].turns) + " ticks " + std::to_string(s.ticks));
         ASSERT_TRUE(list[0].game == "v0.0.0-test" && list[0].rules == net::kProtocolVersion);
-        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Bob)", "Blue (Ann)", "Black (Cat)"}));      // seats 0, 2 and 3 (Ann asked for 2, Bob took the first free seat, Cat asked for 3): a colour each, with its player's name
+        ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Bob)", "Blue (Ann)", "Black (Cat)"}));      // seats 0, 2 and 3 (Ann asked for 2, Bob took the first free seat, Cat asked for 3): a color each, with its player's name
         // the file: it is what the server says, and it is the whole match
         const StoredReplay f = load_stored(store, s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete && f.rep.match_over);
@@ -483,7 +483,7 @@ void run_replay_tests() {
         ASSERT_EQ(purged, size_t{1});
     } TEST_END();
 
-    TEST_CASE("S3.168 The Control Interface Lists, Gives And Deletes The Files: The List Is The Newest First With What The Head Says (Colours With The Names That Were Typed), \"limit\" Is 1 To 1000, A File Is Given Byte For Byte, A Name That Is No File Of The Store Is 404 Whatever It Holds, DELETE Takes The File Away") {
+    TEST_CASE("S3.168 The Control Interface Lists, Gives And Deletes The Files: The List Is The Newest First With What The Head Says (Colors With The Names That Were Typed), \"limit\" Is 1 To 1000, A File Is Given Byte For Byte, A Name That Is No File Of The Store Is 404 Whatever It Holds, DELETE Takes The File Away") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -590,7 +590,7 @@ void run_replay_tests() {
         ASSERT_TRUE(j.get("replays").at(0).get("file").str() == names.back() && j.get("replays").at(199).get("file").str() == names[5]);       // the newest 200
         const ctl::JsonValue& e = j.get("replays").at(0);
         ASSERT_TRUE(e.get("readable").is_null() && e.get("map").str() == "TINY.LVL" && e.get("players").size() == 2 && e.get("turns").as_int_or(0) == 700 && e.get("seconds").as_int_or(0) == 35);
-        ASSERT_TRUE(e.get("players").at(0).str() == "Green (Ann)" && e.get("players").at(1).str() == "Red");                // (the public list gives the names: a seat with none is its colour)
+        ASSERT_TRUE(e.get("players").at(0).str() == "Green (Ann)" && e.get("players").at(1).str() == "Red");                // (the public list gives the names: a seat with none is its color)
         ASSERT_TRUE(e.get("finished").as_bool_or(false) && e.get("game").str() == "v0.0.0-test" && e.get("ended").as_int_or(0) == clock.now && e.get("bytes").as_int_or(0) > 100);
         ASSERT_TRUE(r.body.find("JUNK") == std::string::npos && r.body.find("enabled") == std::string::npos && r.body.find("max_bytes") == std::string::npos);
         // a file
@@ -725,7 +725,7 @@ void run_replay_tests() {
         ASSERT_EQ(w.mgr.take_notices().size(), size_t{0});                                                 // ... once
     } TEST_END();
 
-    TEST_CASE("S3.173 The Words The Game Uses For A Seat Without A Name Are Not Kept As A Name: A Person Who Typed Nothing, One Whose Name The Lobby Replaced With \"Player 4\", Are Their Colours In The File, The Owner's List, The Store's And The Public One; The Person Who Typed A Name And The Bot Have Theirs") {
+    TEST_CASE("S3.173 The Words The Game Uses For A Seat Without A Name Are Not Kept As A Name: A Person Who Typed Nothing, One Whose Name The Lobby Replaced With \"Player 4\", Are Their Colors In The File, The Owner's List, The Store's And The Public One; The Person Who Typed A Name And The Bot Have Theirs") {
         ReplayClock clock;
         World w;
         std::string why;

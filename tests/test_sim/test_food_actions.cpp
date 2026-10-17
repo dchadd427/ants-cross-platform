@@ -100,7 +100,7 @@ uint16_t layer2(const SimulationEngine& sim, int32_t x, int32_t y) {
     return sim.grid().get_cell(TileCoord{x, y}).interactive_id;
 }
 
-// The clip the grab plays for an ant type facing `dir` (the colour-0 row of the original's static table).
+// The clip the grab plays for an ant type facing `dir` (the color-0 row of the original's static table).
 mv::MotionClip harvest_clip(uint8_t type, Direction dir) {
     return mv::action_clip(mv::ActionClip::Harvest, type, static_cast<uint8_t>(dir), false);
 }

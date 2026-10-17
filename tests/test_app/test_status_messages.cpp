@@ -1,6 +1,6 @@
 // Status line and message tests: the one-slot status box of Ants.exe (PostStatus FUN_0100e944 with the CLEARSTAT and TXTFLASH
 // tasks), the texts that selections and ordering commands post (FUN_01027f07, FUN_0101b67b / b711 / b78a, FUN_01028a60), the
-// flash flags of the world messages, and the drawing of the box (rect (481, 254) - (620, 266), colour (79, 0, 143)).
+// flash flags of the world messages, and the drawing of the box (rect (481, 254) - (620, 266), color (79, 0, 143)).
 // (docs/GAME_REVERSE_ENGINEERING.md 5.41)
 #include <cstdint>
 #include <cstdio>
@@ -33,7 +33,7 @@ void check(bool ok, const std::string& what) {
     }
 }
 
-// Records the text draws of the HUD (with colour) and ignores everything else.
+// Records the text draws of the HUD (with color) and ignores everything else.
 class TextRenderer : public IRenderer {
 public:
     void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
@@ -159,7 +159,7 @@ void test_slot_flash() {
 
 void test_box_geometry() {
     g_group = "box";
-    std::printf("[status] the text is drawn at (481, 254) in colour (79, 0, 143), nothing invented while it is empty\n");
+    std::printf("[status] the text is drawn at (481, 254) in color (79, 0, 143), nothing invented while it is empty\n");
     sim::SimulationEngine sim;
     make_world(sim);
     HUD hud;
@@ -173,7 +173,7 @@ void test_box_geometry() {
         hud.render(rr, *g_archive, world, camera);
         const auto* s = rr.status();
         check(s && s->text == "Welcome to Ants!", "the welcome text is posted when the match screen is built");
-        check(s && s->color.r == 79 && s->color.g == 0 && s->color.b == 143, "colour (79, 0, 143)");
+        check(s && s->color.r == 79 && s->color.g == 0 && s->color.b == 143, "color (79, 0, 143)");
     }
     run(hud, world, 100);                          // 5 s
     check(status_after_render(hud, world).empty(), "nothing is drawn once the welcome has expired (no idle text)");
@@ -566,7 +566,7 @@ void test_world_message_flags() {
     check(std::string(sim::strings::text(53)) == "A ThiefAnt is at your anthill!", "string 53");
     check(sim::strings::format(5, "Ants") == "Welcome to Ants!", "string 5 with the title");
     check(sim::strings::format(39, "Ann", "Blue", "Bob", "Red") == "Ann (Blue) and Bob (Red) are a team now!", "string 39 with four arguments");
-    check(std::string(sim::strings::colour_name(0)) == "Black" && std::string(sim::strings::colour_name(3)) == "Green", "colour names");
+    check(std::string(sim::strings::color_name(0)) == "Black" && std::string(sim::strings::color_name(3)) == "Green", "color names");
 }
 
 void test_events_reach_the_status_line() {
@@ -756,7 +756,7 @@ void test_alliance_texts() {
     make_world(sim);
     sim.set_player_name(0, "Ann");
     sim.set_player_name(1, "Bob");
-    check(sim.get_player_name(2) == "Blue" && sim.get_player_name(3) == "Black", "unnamed players print their colour");
+    check(sim.get_player_name(2) == "Blue" && sim.get_player_name(3) == "Black", "unnamed players print their color");
 
     // propose: the invitee gets the modal question (string 1) and the allypro cue, nobody gets a status
     sim.clear_news_events();
@@ -838,13 +838,13 @@ void test_alliance_texts() {
 
 void test_chat_log_format() {
     g_group = "chat";
-    std::printf("[chat] the log: News Flash headers, team-coloured names, bodies wrapped and indented, limits\n");
+    std::printf("[chat] the log: News Flash headers, team-colored names, bodies wrapped and indented, limits\n");
     HUD hud;
     hud.init(0);
     const auto& log = hud.get_chat_log();
     check(log.size() >= 2 && log[0] == "[0:00] News Flash:", "the start message is a News Flash entry: header \"[0:00] News Flash:\"");
-    check(hud.get_chat_line_colour(0) == 4, "news flash header colour (79, 0, 143)");
-    check(log.size() >= 2 && log[1] == "Game started! Go get" && hud.get_chat_line_colour(1) == 5, "the body wraps at 21 characters: " + (log.size() > 1 ? log[1] : std::string()));
+    check(hud.get_chat_line_color(0) == 4, "news flash header color (79, 0, 143)");
+    check(log.size() >= 2 && log[1] == "Game started! Go get" && hud.get_chat_line_color(1) == 5, "the body wraps at 21 characters: " + (log.size() > 1 ? log[1] : std::string()));
 
     hud.add_news_flash(75000, "x");
     check(log[log.size() - 2] == "[1:15] News Flash:", "header time is the match time played");
@@ -853,7 +853,7 @@ void test_chat_log_format() {
     const size_t before = log.size();
     hud.add_chat_entry("Ann", "hello there", false, 2);
     check(log.size() == before + 2 && log[before] == "Ann:" && log[before + 1] == "hello there", "header line and body line");
-    check(hud.get_chat_line_colour(before) == 2 && hud.get_chat_line_colour(before + 1) == 5, "the header takes the team colour, the body (7, 11, 15)");
+    check(hud.get_chat_line_color(before) == 2 && hud.get_chat_line_color(before + 1) == 5, "the header takes the team color, the body (7, 11, 15)");
     hud.add_chat_entry("Ann", "to my friend", true, 3);
     check(log[log.size() - 2] == "Ann (To Teammate):", "team text: \"(To Teammate):\"");
 
@@ -871,7 +871,7 @@ void test_chat_log_format() {
 
 void test_chat_rendering() {
     g_group = "chat";
-    std::printf("[chat] the log is drawn from (482, 299): headers in team colours, bodies in (7, 11, 15) 10 px to the right, one pixel between the entries\n");
+    std::printf("[chat] the log is drawn from (482, 299): headers in team colors, bodies in (7, 11, 15) 10 px to the right, one pixel between the entries\n");
     sim::SimulationEngine sim;
     make_world(sim);
     HUD hud;
@@ -886,7 +886,7 @@ void test_chat_rendering() {
         if (t.text == "hi" && t.x == 492 && t.color.r == 7 && t.color.g == 11 && t.color.b == 15) body = true;
         if (t.text == "[0:00] News Flash:" && t.x == 482 && t.color.r == 79 && t.color.g == 0 && t.color.b == 143) news = true;
     }
-    check(header, "header at x = 482 in the red team colour (119, 0, 0)");
+    check(header, "header at x = 482 in the red team color (119, 0, 0)");
     check(body, "body at x = 482 + 10 in (7, 11, 15) (MoveTo(body, 10, y), 0x1012607)");
     check(news, "the news flash header in (79, 0, 143)");
     // The entries are stacked from y = 299: the news flash is a 12 px header and a body of two 12 px lines (36 px), the next entry starts one pixel below it (37 px)
@@ -928,7 +928,7 @@ void test_chat_gate_and_filter() {
     const sim::WorldState& world2 = sim.get_world_state();
     hud.receive_chat_message(1, "Bob", "team plan", true, world2);
     check(log[log.size() - 2] == "Bob (To Teammate):" && log[log.size() - 1] == "team plan", "my ally's team text is shown with \"(To Teammate):\"");
-    check(hud.get_chat_line_colour(log.size() - 2) == 2, "in the colour of Bob's team (red)");
+    check(hud.get_chat_line_color(log.size() - 2) == 2, "in the color of Bob's team (red)");
 
     // the option off: nothing is sent, nothing is received, quick chat is silent
     ViewportCamera camera;

@@ -244,7 +244,7 @@ void test_score_slots(const assets::AssetArchive& arc) {
         {"two teams (green local, red)", 0, 0x03},      {"three teams (green local, red, blue)", 0, 0x07}, {"four teams", 0, 0x0F},
         {"four teams, blue is the local team", 2, 0x0F}, {"two teams, black local, green", 3, 0x09},       {"three teams, red local", 1, 0x0D},
     };
-    const uint8_t colours[4][3] = {{7, 67, 47}, {119, 0, 0}, {43, 39, 107}, {39, 39, 59}};
+    const uint8_t colors[4][3] = {{7, 67, 47}, {119, 0, 0}, {43, 39, 107}, {39, 39, 59}};
     for (const ScreenLayout& layout : {classic, wide}) {
         for (const Case& c : cases) {
             HudRig rig(arc, layout, c.local);
@@ -260,7 +260,7 @@ void test_score_slots(const assets::AssetArchive& arc) {
                 bool box = false;
                 bool cover = false;
                 for (const Spy::Ev& e : spy.events) {
-                    if (e.kind == Spy::Kind::Fill && e.w == 54 && e.h == 14 && e.colour.r == colours[team][0] && e.colour.g == colours[team][1] && e.colour.b == colours[team][2]) box = e.x == want.box_left && e.y == want.top;
+                    if (e.kind == Spy::Kind::Fill && e.w == 54 && e.h == 14 && e.color.r == colors[team][0] && e.color.g == colors[team][1] && e.color.b == colors[team][2]) box = e.x == want.box_left && e.y == want.top;
                     if (e.kind == Spy::Kind::Named && e.name == "scorcovr.bmp" && e.x == want.box_left - 2 && e.y == want.top - 1) cover = true;
                 }
                 all = all && (exists ? (box && !cover) : (!box && cover));
@@ -527,7 +527,7 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
                 if (e.kind == Spy::Kind::Origin && e.x == 0 && e.y == 0 && i > i_origin && i_reset == spy.events.size()) i_reset = i;
                 if (e.kind == Spy::Kind::Clip && i > i_origin && i_clip == spy.events.size()) i_clip = i;
                 if (e.kind == Spy::Kind::ClearClip && i > i_clip && i_unclip == spy.events.size()) i_unclip = i;
-                clay = clay || (e.kind == Spy::Kind::Fill && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19);
+                clay = clay || (e.kind == Spy::Kind::Fill && e.color.r == 219 && e.color.g == 75 && e.color.b == 19);
             }
             check(!clay, at + "no clay margin: the options window does not cover the match");
             size_t pieces_before = 0;
@@ -567,7 +567,7 @@ void test_dialogs_and_pages(const assets::AssetArchive& arc) {
             const Spy spy = rig.frame();
             check(rig.hud.is_quick_help_open(), at + "the quick help is open");
             bool clay = false;
-            for (const Spy::Ev& e : spy.events) clay = clay || (e.kind == Spy::Kind::Fill && e.colour.r == 219 && e.colour.g == 75 && e.colour.b == 19);
+            for (const Spy::Ev& e : spy.events) clay = clay || (e.kind == Spy::Kind::Fill && e.color.r == 219 && e.color.g == 75 && e.color.b == 19);
             check(!clay, at + "no clay margin: the quick help does not cover the match");
             check(spy.has_sprite_at("x480y126.bmp", 480 + layout.dx(), 126), at + "the HUD is drawn under it (the status card at its place)");
             rig.hud.handle_mouse_motion(529 + q.x + 10, 437 + q.y + 10, rig.sim, rig.cam);

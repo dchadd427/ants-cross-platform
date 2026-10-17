@@ -2,13 +2,13 @@
 """The pages' side of the rematch of a lobby room (web/front/rematch.js and rematch.css, wired into web/shell.html and web/lobby.html; run by ./run_tests.sh --fast, with the other python tests of
 tests/scripts, and by the CI). When the rules end the match that a lobby room began, the game server opens a lobby room with the same code at once, with the match's plan and a seat kept for each person
 of the match who played in a browser (docs/SERVER.md "Lobby rooms"); the game page shows "The match is over" under the picture with "Back to the lobby", and the front page that the button opens shows
-"Back from the match." at the top, with the words of each colour and the note under START (docs/PLAY_IN_BROWSER.md "After a match").
+"Back from the match." at the top, with the words of each color and the note under START (docs/PLAY_IN_BROWSER.md "After a match").
 
   - tests/scripts/web_rematch_check.js runs the library without a browser, on tables and with a small fake of the DOM (a name is TEXT: the fake throws when markup is assigned), the game page's strip
     with the real client of web/front/lobby_net.js on a fake socket; it reads the game's own text of a match that is over from tests/data/match_over.txt (test_network_app N5.99 holds the game to it);
   - the pages: the strip's element, the stylesheet and the scripts in their places, the hooks (the game's word, the layout that counts the strip, the front page's strip, the note under START, START
     that waits), and the limits of tools/check_hygiene.py for the two pages;
-  - the stylesheet: the classes that the scripts set, in the colours of the approved pictures;
+  - the stylesheet: the classes that the scripts set, in the colors of the approved pictures;
   - the mutants of tests/data/rematch_mutants.json that need no build (the pages' own: rematch.js, lobby_net.js, lobby_rules.js) are run here on a COPY of the files, one at a time: each must make its
     check fail; the C++ ones are run by tools/mutate.py (the deep tier).
 The node check needs node; without it these tests are skipped and say so.
@@ -145,7 +145,7 @@ class TheStylesheet(unittest.TestCase):
                          ".rmt-note {", ".backbar {", ".backbar b {", ".backbar a {", ".pstat.back::before {", ".pstat.away::before {", ".start-note {", ".start-note[hidden]"):
             self.assertIn(selector, self.css)
 
-    def test_the_colours_of_the_pictures(self):
+    def test_the_colors_of_the_pictures(self):
         """picture R1: the panel in the gold frame, the chips; picture R2: the green strip at the top, the dots of back and away, the gold note under START"""
         css = self.css
         self.assertRegex(css, r"\.rematch \{[^}]*border: 3px solid var\(--gold\)")

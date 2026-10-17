@@ -80,7 +80,7 @@ inline int32_t idle_clip(const assets::AssetArchive& arc, int type, int dir_digi
     return arc.find_animation_id(name);
 }
 
-/// Ants of every type, colour and facing spread over the world window (x0, y0, w, h) and 80 px beyond its edges, so that sprites straddle every border
+/// Ants of every type, color and facing spread over the world window (x0, y0, w, h) and 80 px beyond its edges, so that sprites straddle every border
 inline void populate(sim::WorldState& world, const assets::AssetArchive& arc, int32_t x0, int32_t y0, int32_t w, int32_t h, int count, uint32_t seed) {
     static const int kDirs[5] = {3, 7, 2, 8, 9};
     const int32_t map_w = static_cast<int32_t>(world.width) * 32;
@@ -368,12 +368,12 @@ class RectRenderer : public IRenderer {
 public:
     struct Rect {
         int32_t x, y, w, h;
-        ants::assets::ColorRGBA colour;
+        ants::assets::ColorRGBA color;
     };
     void draw_sprite(uint32_t, int32_t, int32_t, bool) override {}
     void draw_named_sprite(const std::string&, int32_t, int32_t, bool) override {}
     void fill_rect(int32_t, int32_t, int32_t, int32_t, ants::assets::ColorRGBA) override {}
-    void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA colour) override { frames.push_back(Rect{x, y, w, h, colour}); }
+    void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override { frames.push_back(Rect{x, y, w, h, color}); }
     void draw_text(const std::string&, int32_t, int32_t, ants::assets::ColorRGBA) override {}
     void set_hud_team(uint8_t) override {}
     std::vector<Rect> frames;

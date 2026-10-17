@@ -101,7 +101,7 @@ private:
     std::streambuf* old_;
 };
 
-/// What a screen logs on std::cerr (the map preview says once that it fell back to the minimap colours) is of no interest to the tests that use a renderer that cannot draw offscreen; it is
+/// What a screen logs on std::cerr (the map preview says once that it fell back to the minimap colors) is of no interest to the tests that use a renderer that cannot draw offscreen; it is
 /// kept, and test_map_preview checks it. (Failures are printed on the C stream stderr, which this does not touch.)
 class QuietCerr {
 public:
@@ -365,7 +365,7 @@ void test_layout() {
 // 2. The seams
 // =====================================================================================================================================================
 
-/// Are two lines of a sprite (columns or rows, over the cross range) identical, pixel for pixel (the colour key included)?
+/// Are two lines of a sprite (columns or rows, over the cross range) identical, pixel for pixel (the color key included)?
 bool lines_identical(const assets::Sprite& s, bool columns, int32_t a, int32_t b, int32_t cross_first, int32_t cross_count) {
     const int32_t cross = cross_count > 0 ? cross_count : (columns ? static_cast<int32_t>(s.height) : static_cast<int32_t>(s.width));
     for (int32_t i = 0; i < cross; ++i) {
@@ -664,7 +664,7 @@ void test_mockups(const assets::AssetArchive& arc) {
     RendererRig rig(arc, 960, 540);
     check(rig.ok, "the renderer is up on a 960 x 540 canvas");
     if (!rig.ok) return;
-    // The mock-ups drew the map preview as the minimap-colour picture. The preview is now the game's own render of the map (map_preview.hpp), so the mock-ups' own pixels of the preview are
+    // The mock-ups drew the map preview as the minimap-color picture. The preview is now the game's own render of the map (map_preview.hpp), so the mock-ups' own pixels of the preview are
     // no longer the picture (the preview of the real renderer is pinned in test_map_preview); what stays the mock-ups' is everything around it. The mask is the preview's whole inner box
     // (the 300 x 300 or 248 x 248 square: the pictures fill it now, the old ones were smaller whole-scale squares inside it), the pinned digests are those of the mock-ups' PNGs with that
     // mask (the three single-player cases share one: the art outside the preview and the text is the same on every map).
@@ -720,7 +720,7 @@ assets::LevelData load_level(const char* name) {
     return level;
 }
 
-/// A big level made of the cells of GAUNTLET (a map of a community's size): `cols` x `rows` cells, no plants (so that the picture is the cells' colours alone)
+/// A big level made of the cells of GAUNTLET (a map of a community's size): `cols` x `rows` cells, no plants (so that the picture is the cells' colors alone)
 constexpr uint64_t kBigSampledDigest = 0x8dc913ccdfd4cf5dull;      // pinned below (printed by --print)
 
 assets::LevelData big_level(uint32_t cols, uint32_t rows) {
@@ -747,7 +747,7 @@ assets::LevelData big_level(uint32_t cols, uint32_t rows) {
 }
 
 void test_preview(const assets::AssetArchive& arc) {
-    group("preview", "the minimap-colour preview (the fallback of the rendered one): the size rule, the mock-ups' pictures, a big map sampled, plants, the caption");
+    group("preview", "the minimap-color preview (the fallback of the rendered one): the size rule, the mock-ups' pictures, a big map sampled, plants, the caption");
     const auto& pal = arc.get_palette();
     // the size rule
     struct SizeCase {
@@ -790,18 +790,18 @@ void test_preview(const assets::AssetArchive& arc) {
         const MapPreview same = render_map_preview(level, pal, c.scale);
         check(preview_digest(same) == preview_digest(p), at + "render_map_preview at the scale gives the same picture");
     }
-    // the picture shows the colours of the minimap's table: water, the four hills in their team colours, the grass; nothing is made up
+    // the picture shows the colors of the minimap's table: water, the four hills in their team colors, the grass; nothing is made up
     {
         const assets::LevelData islands = load_level("ISLANDS.LVL");
         const MapPreview p = render_map_preview(islands, pal, 1);
-        std::map<uint32_t, int> colours;
-        for (size_t i = 0; i + 3 < p.rgba.size(); i += 4) ++colours[(static_cast<uint32_t>(p.rgba[i]) << 16) | (static_cast<uint32_t>(p.rgba[i + 1]) << 8) | p.rgba[i + 2]];
-        auto has = [&](uint8_t index) { return colours.count((static_cast<uint32_t>(pal[index].r) << 16) | (static_cast<uint32_t>(pal[index].g) << 8) | pal[index].b) > 0; };
-        check(has(37), "water has the minimap's water colour (37)");
-        check(has(47) && has(158) && has(211) && has(239), "the four hills are in their team colours: green 47, red 158, blue 211, black 239");
-        check(has(171), "food and power-ups have the minimap's food colour (171)");
-        check(has(251) || has(235), "the ground has the minimap's gravel / slate colour");
-        // a hill is a square of cells in its colour: the number of green pixels is a whole number of hill squares
+        std::map<uint32_t, int> colors;
+        for (size_t i = 0; i + 3 < p.rgba.size(); i += 4) ++colors[(static_cast<uint32_t>(p.rgba[i]) << 16) | (static_cast<uint32_t>(p.rgba[i + 1]) << 8) | p.rgba[i + 2]];
+        auto has = [&](uint8_t index) { return colors.count((static_cast<uint32_t>(pal[index].r) << 16) | (static_cast<uint32_t>(pal[index].g) << 8) | pal[index].b) > 0; };
+        check(has(37), "water has the minimap's water color (37)");
+        check(has(47) && has(158) && has(211) && has(239), "the four hills are in their team colors: green 47, red 158, blue 211, black 239");
+        check(has(171), "food and power-ups have the minimap's food color (171)");
+        check(has(251) || has(235), "the ground has the minimap's gravel / slate color");
+        // a hill is a square of cells in its color: the number of green pixels is a whole number of hill squares
         int green = 0;
         for (size_t i = 0; i + 3 < p.rgba.size(); i += 4) green += (p.rgba[i] == pal[47].r && p.rgba[i + 1] == pal[47].g && p.rgba[i + 2] == pal[47].b) ? 1 : 0;
         check(green > 0 && green % 4 == 0, "the green hill covers whole cells");
@@ -824,7 +824,7 @@ void test_preview(const assets::AssetArchive& arc) {
                 wrong += (box.rgba[a] != one.rgba[b] || box.rgba[a + 1] != one.rgba[b + 1] || box.rgba[a + 2] != one.rgba[b + 2]) ? 1 : 0;
             }
         }
-        check(wrong == 0, "every pixel of the sampled picture is the colour of the cell under it (" + std::to_string(wrong) + " are not)");
+        check(wrong == 0, "every pixel of the sampled picture is the color of the cell under it (" + std::to_string(wrong) + " are not)");
         const MapPreview doubled = render_map_preview(big, pal, 2);
         int wrong2 = 0;
         for (int32_t y = 0; y < doubled.height; ++y) {
@@ -839,7 +839,7 @@ void test_preview(const assets::AssetArchive& arc) {
         if (g_print) std::printf("    PINNED big_level_250x200_in_248 %s\n", hex64(digest).c_str());
         check(digest == kBigSampledDigest, "the sampled picture of the 250 x 200 level is the pinned one: " + hex64(digest) + ", wanted " + hex64(kBigSampledDigest));
     }
-    // the plants' dots: a plant of the original's table with a size flag draws a square of that many cells on its cell (colour of the table), none without one. The oracle paints them
+    // the plants' dots: a plant of the original's table with a size flag draws a square of that many cells on its cell (color of the table), none without one. The oracle paints them
     // on the picture of the same level without its plants, in the mock-up's own formula (x * s - s * (flag - 1) / 2, s * flag pixels wide)
     {
         const assets::LevelData gauntlet = load_level("GAUNTLET.LVL");
@@ -927,13 +927,13 @@ public:
         std::string name;                     // the sprite's name, the text
         int32_t x{0}, y{0}, w{0}, h{0};
         int32_t sx{0}, sy{0}, sw{0}, sh{0};
-        assets::ColorRGBA colour{};
+        assets::ColorRGBA color{};
         FontSize size{FontSize::Px12};
         uint64_t image_hash{0};
         const uint8_t* image{nullptr};
     };
 
-    explicit Spy(const assets::AssetArchive& archive) : arc_(archive) {}   // (this renderer draws no offscreen images: the screens it sees show the minimap-colour preview)
+    explicit Spy(const assets::AssetArchive& archive) : arc_(archive) {}   // (this renderer draws no offscreen images: the screens it sees show the minimap-color preview)
 
     void draw_sprite(uint32_t id, int32_t x, int32_t y, bool) override { push(Kind::Sprite, arc_.get_sprite(id).name, x, y); }
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool) override { push(Kind::Named, name, x, y); }
@@ -945,12 +945,12 @@ public:
     }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Fill);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, assets::ColorRGBA c) override {
         Ev e = base(Kind::Rect);
-        e.x = x; e.y = y; e.w = w; e.h = h; e.colour = c;
+        e.x = x; e.y = y; e.w = w; e.h = h; e.color = c;
         events.push_back(e);
     }
     void draw_text(const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c) override { text(s, x, y, c, FontSize::Px12); }
@@ -1019,7 +1019,7 @@ public:
             f.byte(static_cast<uint8_t>(e.kind));
             f.text(e.name);
             for (int32_t v : {e.x, e.y, e.w, e.h, e.sx, e.sy, e.sw, e.sh}) f.i32(v);
-            f.byte(e.colour.r); f.byte(e.colour.g); f.byte(e.colour.b); f.byte(e.colour.a);
+            f.byte(e.color.r); f.byte(e.color.g); f.byte(e.color.b); f.byte(e.color.a);
             f.byte(static_cast<uint8_t>(e.size));
             for (int i = 0; i < 8; ++i) f.byte(static_cast<uint8_t>((e.image_hash >> (8 * i)) & 0xffu));
         }
@@ -1042,7 +1042,7 @@ private:
     void text(const std::string& s, int32_t x, int32_t y, assets::ColorRGBA c, FontSize size) {
         Ev e = base(Kind::Text);
         e.name = s;
-        e.x = x; e.y = y; e.colour = c; e.size = size;
+        e.x = x; e.y = y; e.color = c; e.size = size;
         events.push_back(e);
     }
     QuietCerr quiet_;
@@ -1103,13 +1103,13 @@ void test_state(const assets::AssetArchive& arc) {
         const Spy::Ev* name = spy.find_text("TINY");
         const Spy::Ev* info = spy.find_text("Tiny map with no PowerUps (6 min)");
         const Spy::Ev* prompt = spy.find_text("Press START when all players' thumbs have appeared.");
-        check(name != nullptr && name->x == l.name_text.x && name->y == l.name_text.y && name->size == FontSize::Px18 && name->colour.r == 239 && name->colour.g == 231 && name->colour.b == 223, "the map's name is a label at (36, 372), 18 px, in the labels' cream");
+        check(name != nullptr && name->x == l.name_text.x && name->y == l.name_text.y && name->size == FontSize::Px18 && name->color.r == 239 && name->color.g == 231 && name->color.b == 223, "the map's name is a label at (36, 372), 18 px, in the labels' cream");
         check(info != nullptr && info->x == l.info_text.x && info->y == l.info_text.y && info->size == FontSize::Px18, "its description (and minutes) at (36, 440)");
         check(prompt != nullptr && prompt->x == l.prompt_text.x && prompt->y == l.prompt_text.y && prompt->size == FontSize::Px14, "the prompt at (36, 507), 14 px");
         const Spy::Ev* player = spy.find_text("Player");
         check(player != nullptr && player->x == 735 && player->y == 95 && player->size == FontSize::Px18, "the player's name at (735, 95)");
         check(spy.has_sprite_at("thumb1.bmp", 860, 95), "the player's thumb at (860, 95)");
-        // the portrait: the animation's parts at the origin (715, 115), in the seat's colour
+        // the portrait: the animation's parts at the origin (715, 115), in the seat's color
         const auto* stand = arc.find_animation("agst301");
         bool portrait = stand != nullptr;
         if (stand != nullptr) {
@@ -1125,7 +1125,7 @@ void test_state(const assets::AssetArchive& arc) {
         check(image != nullptr && image->x == 363 && image->y == 60 && image->w == 279 && image->h == 279, "the preview picture of TINY: 279 square at (363, 60)");
         const std::string caption = "31 x 31 cells \xC2\xB7 4 players";
         const Spy::Ev* cap = spy.find_text(caption);
-        check(cap != nullptr && cap->y == l.caption_y && cap->x == 503 - spy.get_text_width(caption) / 2 && cap->size == FontSize::Px18 && cap->colour.r == 239, "its caption under the box, centred on 503, in the players' names' font and colour");
+        check(cap != nullptr && cap->y == l.caption_y && cap->x == 503 - spy.get_text_width(caption) / 2 && cap->size == FontSize::Px18 && cap->color.r == 239, "its caption under the box, centred on 503, in the players' names' font and color");
         check(spy.find_text("Chat") == nullptr && !spy.anything_in(LayoutRect{414, 363, 217, 148}), "no chat column on a game of one machine");
         check(spy.find_text("Empty seats at START:") == nullptr, "no bot-fill footer on a game of one machine");
         // the buttons' pictures follow the layout's rectangles: the union of the parts of the animation, moved, is the layout's rectangle
@@ -1198,14 +1198,14 @@ void test_state(const assets::AssetArchive& arc) {
         bool shadow = false, teal = false;
         for (const Spy::Ev& e : spy.events) {
             if (e.kind != Spy::Kind::Text || e.name != "Chat") continue;
-            shadow = shadow || (e.x == 415 && e.y == 364 && e.colour.r == 7 && e.colour.g == 11 && e.colour.b == 15 && e.size == FontSize::Px20);
-            teal = teal || (e.x == 414 && e.y == 363 && e.colour.r == 59 && e.colour.g == 151 && e.colour.b == 111 && e.size == FontSize::Px20);
+            shadow = shadow || (e.x == 415 && e.y == 364 && e.color.r == 7 && e.color.g == 11 && e.color.b == 15 && e.size == FontSize::Px20);
+            teal = teal || (e.x == 414 && e.y == 363 && e.color.r == 59 && e.color.g == 151 && e.color.b == 111 && e.size == FontSize::Px20);
         }
         check(label != nullptr && shadow && teal, "the label \"Chat\": TrueType 20 px, the engraved labels' teal at (414, 363) over their ink shadow one pixel down and right");
         // the black box: the efram construction at the chat box (a flat fill inside, the corners, the strips)
         bool fill = false, c1 = false, c4 = false;
         for (const Spy::Ev& e : spy.events) {
-            fill = fill || (e.kind == Spy::Kind::Fill && e.x == 418 && e.y == 390 && e.w == 209 && e.h == 99 && e.colour.r == 7 && e.colour.g == 11 && e.colour.b == 15);
+            fill = fill || (e.kind == Spy::Kind::Fill && e.x == 418 && e.y == 390 && e.w == 209 && e.h == 99 && e.color.r == 7 && e.color.g == 11 && e.color.b == 15);
             c1 = c1 || (e.kind == Spy::Kind::Named && e.name == "efram1c.bmp" && e.x == 414 && e.y == 386);
             c4 = c4 || (e.kind == Spy::Kind::Named && e.name == "efram4c.bmp" && e.x == 414 + 217 - 32 && e.y == 386 + 4 + 99);
         }
@@ -1220,7 +1220,7 @@ void test_state(const assets::AssetArchive& arc) {
             }
         }
         check(input_width == 217 && input_rows, "the input box is statline's box (rows 11 .. 40) 217 columns wide at y = 500");
-        // the lines: the newest at the bottom, in the names' font and colour; a notice smaller; the area is 209 x 99 starting at (418, 390): its bottom row is 488
+        // the lines: the newest at the bottom, in the names' font and color; a notice smaller; the area is 209 x 99 starting at (418, 390): its bottom row is 488
         struct Line {
             const char* text;
             int32_t y;
@@ -1229,15 +1229,15 @@ void test_state(const assets::AssetArchive& arc) {
         const Line lines[] = {{"Ben joined.", 420, FontSize::Px14}, {"Ben: hi, which map?", 434, FontSize::Px18}, {"Ana: TINY first, then ISLANDS", 452, FontSize::Px18}, {"Ben: ok, ready when you are", 470, FontSize::Px18}};
         for (const Line& ln : lines) {
             const Spy::Ev* e = spy.find_text(ln.text);
-            check(e != nullptr && e->x == 422 && e->y == ln.y && e->size == ln.size && e->colour.r == 239 && e->colour.g == 231 && e->colour.b == 223, std::string("the chat line \"") + ln.text + "\" at (422, " + std::to_string(ln.y) + ")");
+            check(e != nullptr && e->x == 422 && e->y == ln.y && e->size == ln.size && e->color.r == 239 && e->color.g == 231 && e->color.b == 223, std::string("the chat line \"") + ln.text + "\" at (422, " + std::to_string(ln.y) + ")");
         }
         const Spy::Ev* typed = spy.find_text("ready in a minute");
-        check(typed != nullptr && typed->x == 424 && typed->y == 508 && typed->size == FontSize::Px18 && typed->colour.r == 239, "the typed text in the input box at (424, 508), 18 px, in the names' colour");
+        check(typed != nullptr && typed->x == 424 && typed->y == 508 && typed->size == FontSize::Px18 && typed->color.r == 239, "the typed text in the input box at (424, 508), 18 px, in the names' color");
         check(spy.find_text("_") != nullptr && spy.find_text("_")->x > 424, "the caret (an underscore, as every edit field of the original) follows it");
         // the footer
         const Spy::Ev* f1 = spy.find_text("Empty seats at START:");
         const Spy::Ev* f2 = spy.find_text("Medium bots");
-        check(f1 != nullptr && f1->x == l.footer_x && f1->y == l.footer_y1 && f1->size == FontSize::Px18 && f1->colour.r == 239, "the footer's first line at (691, 294), 18 px, in the names' colour");
+        check(f1 != nullptr && f1->x == l.footer_x && f1->y == l.footer_y1 && f1->size == FontSize::Px18 && f1->color.r == 239, "the footer's first line at (691, 294), 18 px, in the names' color");
         check(f2 != nullptr && f2->x == l.footer_x && f2->y == l.footer_y2 && f2->size == FontSize::Px18, "its second line at (691, 314)");
     }
     {
@@ -1461,7 +1461,7 @@ void test_state(const assets::AssetArchive& arc) {
         int32_t w_single = 0, w_room = 0;
         for (const Spy::Ev& e : single.events) w_single = e.kind == Spy::Kind::Image ? e.w : w_single;
         for (const Spy::Ev& e : room.events) w_room = e.kind == Spy::Kind::Image ? e.w : w_room;
-        check(w_single == 300 && w_room == 240, "the same map is 300 pixels wide in the single player's box and 240 in the room's (the minimap-colour picture of this test renderer: a whole scale of 4 cells in 248) (" + std::to_string(w_single) + ", " + std::to_string(w_room) + ")");
+        check(w_single == 300 && w_room == 240, "the same map is 300 pixels wide in the single player's box and 240 in the room's (the minimap-color picture of this test renderer: a whole scale of 4 cells in 248) (" + std::to_string(w_single) + ", " + std::to_string(w_room) + ")");
     }
     // a chat panel on a game of one machine has no place: the Single variant has no chat column, whatever was set
     {

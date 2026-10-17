@@ -241,7 +241,7 @@ void test_start_view_and_minimap(const assets::AssetArchive& arc) {
         Spy spy(arc);
         hud.render(spy, arc, world, cam);
         for (const Spy::Ev& e : spy.events) {
-            if (e.kind == Spy::Kind::Rect && e.colour.r == 251 && e.colour.g == 251 && e.colour.b == 255) return LayoutRect{e.x, e.y, e.w, e.h};
+            if (e.kind == Spy::Kind::Rect && e.color.r == 251 && e.color.g == 251 && e.color.b == 255) return LayoutRect{e.x, e.y, e.w, e.h};
         }
         return LayoutRect{-1, -1, -1, -1};
     };
@@ -854,7 +854,7 @@ OptionsPair options_pair(Aspect aspect, int32_t width, int32_t height) {
     return r;
 }
 
-/// What the options window does outside its card: every second pixel is the dither's own colour (the pixels where x + y of the window's own numbers is odd), every other pixel is what it was
+/// What the options window does outside its card: every second pixel is the dither's own color (the pixels where x + y of the window's own numbers is odd), every other pixel is what it was
 /// with the window shut; returns the number of pixels that break that rule. Not looked at: the cursor's area, the corner's plate of the frame rate, the Options button (pressed art while the
 /// window is open), the card's last column (the art of its right edge, with the dither over every second pixel of it) and, in the original's own 640 x 480 picture, the last column of its
 /// bottom right strip (the original's pieces there are 100 wide at x = 459 and 539, so column 639 is the one that its own dim leaves out below y = 400)
@@ -894,7 +894,7 @@ void test_options_dim(const assets::AssetArchive& arc) {
             check(classic.options_card() == (LayoutRect{17, 20, 442, 440}), "classic: the card is 442 x 440 at (17, 20)");
             int64_t dimmed = 0, kept = 0;
             const int64_t breaks = dim_breaks(p, LayoutPoint{}, classic.options_card(), dither, &dimmed, &kept);
-            check(breaks == 0 && dimmed > 50000 && kept > 50000, "classic: outside the card every pixel with x + y odd is the dither's colour and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
+            check(breaks == 0 && dimmed > 50000 && kept > 50000, "classic: outside the card every pixel with x + y odd is the dither's color and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
         }
     }
     {   // 16:9: the card is centred in the map view (offset (160, 30)), the picture around it is dimmed the same way: the map left and right of it, above and below it, the frame, the panel
@@ -905,7 +905,7 @@ void test_options_dim(const assets::AssetArchive& arc) {
             check(wide.options_card() == (LayoutRect{177, 50, 442, 440}), "16:9: the card is 442 x 440 at (177, 50), in the middle of the map view");
             int64_t dimmed = 0, kept = 0;
             const int64_t breaks = dim_breaks(p, wide.options_offset(), wide.options_card(), dither, &dimmed, &kept);
-            check(breaks == 0 && dimmed > 150000 && kept > 150000, "16:9: outside the card every pixel with x + y odd is the dither's colour and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
+            check(breaks == 0 && dimmed > 150000 && kept > 150000, "16:9: outside the card every pixel with x + y odd is the dither's color and every other is the shut picture's (" + std::to_string(breaks) + " breaks in " + std::to_string(dimmed + kept) + " pixels)");
             // the places that were not dimmed before the fix: the map left of the card (x 16 - 176), and the panel
             check(pixel(p.open, 960, 100, 201) == dither && pixel(p.open, 960, 100, 200) == pixel(p.shut, 960, 100, 200), "the map left of the card is dimmed (141 pixels of the view were not)");
             check(pixel(p.open, 960, 880, 301) == dither && pixel(p.open, 960, 20, 31) == dither, "the right panel and the frame's left edge are dimmed as in the original's picture");

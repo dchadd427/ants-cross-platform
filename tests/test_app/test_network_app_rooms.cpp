@@ -398,7 +398,7 @@ void run_room_bot_tests() {
         ASSERT_TRUE(guest.init(join_config(server, "TEAMS-APP", "Guest")));
         hall.second = &guest;
         ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
-        hall.step(5300);                                                                                  // (the first five seconds of company say how to change a colour: the plan's line is back after them)
+        hall.step(5300);                                                                                  // (the first five seconds of company say how to change a color: the plan's line is back after them)
         // what the leader is told before START: the longest way of saying it that fits the label
         const std::vector<std::string>& prompts = leader.net()->prompt_texts();
         ASSERT_TRUE(prompts.size() >= 4 && prompts.front() == "Press START: Blue gets an Easy bot, Black a Hard bot; teams Green + Blue against Red + Black.");
@@ -630,7 +630,7 @@ void run_room_bot_tests() {
             ASSERT_TRUE(guest.init(join_config(server, code, "Guest")));
             hall.second = &guest;
             ASSERT_TRUE(hall.until([&]() { return guest.net()->phase() == net::NetGame::Phase::Room && leader.net()->room().slots[1].state == net::SlotState::Client && leader.net()->room().slots[1].rtt_ms != net::kRttUnknown; }, 8000));
-            hall.step(5300);                                                                              // (the first five seconds of company say how to change a colour: the plan's line is back after them)
+            hall.step(5300);                                                                              // (the first five seconds of company say how to change a color: the plan's line is back after them)
             ASSERT_TRUE(server.status(code).room_teams == "0+1" && server.status(code).state == server::RoomState::Waiting);
             ASSERT_TRUE(leader.net()->room_teams() == sim::StartTeams({true, 0, 1}) && leader.net()->effective_teams() == sim::StartTeams({true, 0, 1}));
             ASSERT_TRUE(leader.net()->start_teams() == sim::StartTeams({true, 1, 2}));                    // (its own choice is kept, and is not what the screens show or the room makes)

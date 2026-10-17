@@ -1,7 +1,7 @@
 /* The chat box of the front page's lobby (front/lobby_chat.js, docs/PLAY_IN_BROWSER.md "Chat in the lobby"). It is the lobby's own look: the black box with the green frame (.panel), the cream words,
-   the four colour accents of the cards (.slot[data-c]), the teal button, and the page's tokens (:root of web/lobby.html), which is why the page links this sheet after its own <style>. */
+   the four color accents of the cards (.slot[data-c]), the teal button, and the page's tokens (:root of web/lobby.html), which is why the page links this sheet after its own <style>. */
 
-/* Where it sits. A wide window: across the page, under the colours and the map. Below 1041 px the page is one column and the box is where the markup puts it, after the colours and before the map. */
+/* Where it sits. A wide window: across the page, under the colors and the map. Below 1041 px the page is one column and the box is where the markup puts it, after the colors and before the map. */
 @media (min-width: 1041px) {
     .grid > :first-child { grid-column: 1; grid-row: 1; }
     .grid > .side { grid-column: 2; grid-row: 1; }
@@ -27,7 +27,7 @@
 .chat-form input[readonly] { opacity: .6; }              /* (a field that is shut is read-only, not disabled: it keeps the focus, so a phone's keyboard stays up through a link that drops) */
 .chat-form .btn { min-height: 48px; }
 
-/* While the link is down the box is dimmed with the cards, but the names stay readable: every colour of the log keeps 4.5:1 on the dimmed log (tests/scripts/test_web_lobby_chat.py works the filter out). */
+/* While the link is down the box is dimmed with the cards, but the names stay readable: every color of the log keeps 4.5:1 on the dimmed log (tests/scripts/test_web_lobby_chat.py works the filter out). */
 body.offline .chat-log { filter: saturate(.5) brightness(.94); }
 
 @media (max-width: 720px) {

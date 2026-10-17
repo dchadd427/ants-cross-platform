@@ -37,7 +37,7 @@
 //   (map_store.hpp: the originals first, then the others by file name; plays are 0 without a database); 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
-// loads), "ignored_start_requests", "seat_moves" (the colours the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
+// loads), "ignored_start_requests", "seat_moves" (the colors the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
 // "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "countdown_seconds" (protocol 21), "paused": bool (the match is held: a seat is missing, or the countdown
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",
 // "progress"}] (the seats that are missing, longest away first), "vote": {"seat", "continue", "voters"} | null, "paused_seconds" (the match's total pause so far), "rejoins",
@@ -80,7 +80,7 @@ bool parse_history_query(const std::string& raw, HistoryQuery& query, std::strin
 
 /// The public door of the replays (ants_server --replay-port, ctl::HttpServer::listen_public): GET /replays (the newest 200 files that this build can read), GET /replays/<file>, GET /history (the list of the
 /// match history, with the query of its filters) and GET /history/<id>, GET /live (the matches that run now) and GET /live/<id> (one of them so far), nothing else, no other query. Every other request is 404 (a /live/<id> that cannot be given has the JSON body above). A server that keeps no replays has nothing to show.
-/// What a file or the list says of the players is a colour with the name that the player typed ("Green (Ann)"; the colour alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
+/// What a file or the list says of the players is a color with the name that the player typed ("Green (Ann)"; the color alone when nothing was typed) or a computer player's "Bot (Medium)": never an address or a room code.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request);
 
 }  // namespace ants::server

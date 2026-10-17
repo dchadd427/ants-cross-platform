@@ -427,7 +427,7 @@ void rematch_process_scenario() {
     quit.issuer = bob_game.lobby->my_seat();
     ASSERT_TRUE(bob_game.session->submit(quit));
     ASSERT_TRUE(w.until([&]() { return pia_game.sim.is_match_over() && bob_game.sim.is_match_over(); }, 20000));
-    // the code is a lobby's again at once, with nobody back: no leader, the match's colours; the match is listed beside it
+    // the code is a lobby's again at once, with nobody back: no leader, the match's colors; the match is listed beside it
     ctl::JsonValue lobby;
     ASSERT_TRUE(w.until([&]() { lobby = ctl_call(ctl_port, "GET", "/rooms/" + code, secret); return lobby.get("state").str() == "waiting"; }, 10000));
     ASSERT_TRUE(lobby.get("lobby").as_bool_or(false) && lobby.get("leader").is_null() && !lobby.get("starting").as_bool_or(true) && lobby.get("plan").str() == "oooo -");
@@ -479,7 +479,7 @@ void run_persist_process_tests() {
         real_process_scenario("persist-90", SIGKILL, true);
     } TEST_END();
 
-    TEST_CASE("S3.199 The Real Program, The Rematch Over Real TCP (--demo-lobbies): Two Pages Make A Lobby, START, Their Games Take The Seats Over With The Keys, One Quits And The Rules End The Match; The Same Code Is A Lobby At Once (Nobody Leads, The Match's Colours; The Control Interface Lists The Match Beside It); A Results Screen Holds Its Seat, A Stranger Is Turned Away (MatchRunning), The Host's Page Comes Back With Its Key And Leads, START Waits And The Host Is Told Who Is Missing, The Host Removes Them (Their Results Screen Is Told) And START Is Taken; No Key Is In The Log") {
+    TEST_CASE("S3.199 The Real Program, The Rematch Over Real TCP (--demo-lobbies): Two Pages Make A Lobby, START, Their Games Take The Seats Over With The Keys, One Quits And The Rules End The Match; The Same Code Is A Lobby At Once (Nobody Leads, The Match's Colors; The Control Interface Lists The Match Beside It); A Results Screen Holds Its Seat, A Stranger Is Turned Away (MatchRunning), The Host's Page Comes Back With Its Key And Leads, START Waits And The Host Is Told Who Is Missing, The Host Removes Them (Their Results Screen Is Told) And START Is Taken; No Key Is In The Log") {
         rematch_process_scenario();
     } TEST_END();
 

@@ -8,10 +8,10 @@
 //   AI29.4   a Swimmer bridges the fire way's water from the land beside it; a Fire Ant from the island puts the route's fire cell out from a side
 //   AI29.5   the Fire Ant's way leaves its power-up over water where the power-up that the ant leaves behind (on a free land tile beside it, the engine draws which) would shut a way
 //            over land
-//   AI29.6   the bombs of the seat's own colour that lay on the map at the start (many levels give the map's bombs to team 0) are work like any other; one planted since is a wall
+//   AI29.6   the bombs of the seat's own color that lay on the map at the start (many levels give the map's bombs to team 0) are work like any other; one planted since is a wall
 //   AI29.7   who plays it: Medium and Hard on a field world, not Easy, not with the switch off, not without a source of the Fire Ant, not when no ant of the bot can get the first work's
 //            kind (the gate goals play then); the piles of the breach are decided at the first look, and the gate goals leave them to it
-//   AI29.8   the breach in the engine: a Hard bot alone on the field world banks food, every seat, straight and transposed; and with the field's bombs in the seat's own colour
+//   AI29.8   the breach in the engine: a Hard bot alone on the field world banks food, every seat, straight and transposed; and with the field's bombs in the seat's own color
 //   AI29.9   POPcOrN: every seat alone banks food at Hard, and the gate goals leave the pile to the breach
 //   AI29.10  an ant whose order the world does not carry out is given up and rests; after four ants given up the task waits until the bot's ants or the power-ups change
 //   AI29.11  the carriers: a Swimmer of the ferry whose loop ended away from the pile is sent again
@@ -416,7 +416,7 @@ void run_field_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI29.6 The Bombs Of The Seat's Own Colour That Lay On The Map At The Start Are Work Like Any Other; One Planted Since Is A Wall (Every Seat, Straight And Transposed)") {
+    TEST_CASE("AI29.6 The Bombs Of The Seat's Own Color That Lay On The Map At The Start Are Work Like Any Other; One Planted Since Is A Wall (Every Seat, Straight And Transposed)") {
         for (uint8_t d = 0; d < 8; ++d) {
             const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
             FieldWorld::Options o;

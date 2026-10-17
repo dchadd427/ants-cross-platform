@@ -1795,7 +1795,7 @@ void run_way_back_tests() {
         ASSERT_EQ(net::resolve_host(""), std::string());
     } TEST_END();
 
-    TEST_CASE("RJ1.25 Protocol 14, A Player That The Leader Moved Is The Same Player: Its Key Is The Key Of Its New Colour In The Server's Record (Nothing Is Kept For The Old One), The Place That Keeps The Key Is Given The Seat The Player Has Then, And A Machine That Starts From Nothing With That Key Is Given The New Colour And The Match") {
+    TEST_CASE("RJ1.25 Protocol 14, A Player That The Leader Moved Is The Same Player: Its Key Is The Key Of Its New Color In The Server's Record (Nothing Is Kept For The Old One), The Place That Keeps The Key Is Given The Seat The Player Has Then, And A Machine That Starts From Nothing With That Key Is Given The New Color And The Match") {
         World w("rejoin-moved");
         ASSERT_TRUE(w.server.start(w.now));
         ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-25", 4), w.server_now()).ok);
@@ -1805,7 +1805,7 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.run_until([&]() { return a.net.is_leader() && a.net.room().slots[2].state == net::SlotState::Client && c.net.my_seat() == 2; }, 8000));
         ASSERT_EQ(b.net.my_seat(), 1);
         ASSERT_FALSE(b.net.request_move_seat(1));                                         // (a guest sends nothing: the room has one leader)
-        ASSERT_TRUE(a.net.request_move_seat(1));                                          // Bob (red) goes to the next free colour: black
+        ASSERT_TRUE(a.net.request_move_seat(1));                                          // Bob (red) goes to the next free color: black
         ASSERT_FALSE(a.net.request_move_seat(1));                                         // the next press waits for the room's answer
         ASSERT_TRUE(w.run_until([&]() { return b.net.my_seat() == 3 && a.net.room().slots[3].state == net::SlotState::Client; }, 5000));
         w.run(500);
@@ -1818,16 +1818,16 @@ void run_way_back_tests() {
         const auto record = w.server.read_record("RJ-25");
         const net::SeatKey key = record.head.keys[3];                                     // the key of Bob's seat, as the record has it
         ASSERT_FALSE(net::key_is_zero(key));
-        ASSERT_TRUE(net::key_is_zero(record.head.keys[1]));                               // nothing is kept for the colour that he left
+        ASSERT_TRUE(net::key_is_zero(record.head.keys[1]));                               // nothing is kept for the color that he left
         ASSERT_TRUE(b.keys_given.size() == 1 && net::key_matches(b.keys_given[0].key, key) && b.keys_given[0].seat == 3 && b.keys_given[0].room == "RJ-25");      // the place that keeps it has the seat he has now
         w.run(8000);
         w.machines.erase(w.machines.begin() + 1);                                         // the page of Bob is gone: its game, its engine and its links with it (no goodbye)
         ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-25").paused; }, 3000));
         ASSERT_TRUE(w.status("RJ-25").absent.size() == 1 && w.status("RJ-25").absent[0].seat == 3);       // the seat that is held is the new one
-        Machine& b2 = w.add_machine("Bob");                                               // a new machine with nothing but the key, and the colour that Bob's page had in its address (the old one)
+        Machine& b2 = w.add_machine("Bob");                                               // a new machine with nothing but the key, and the color that Bob's page had in its address (the old one)
         ASSERT_TRUE(b2.net.join("127.0.0.1", w.server.port(), "Bob", 1, "RJ-25", "", key));
         ASSERT_TRUE(w.run_until([&]() { return b2.net.phase() == NetGame::Phase::Playing && !w.status("RJ-25").paused; }, 30000));
-        ASSERT_EQ(b2.net.my_seat(), 3);                                                   // the key says who it is: the colour it has now
+        ASSERT_EQ(b2.net.my_seat(), 3);                                                   // the key says who it is: the color it has now
         s = w.status("RJ-25");
         ASSERT_TRUE(s.state == RoomState::Running && s.rejoins == 1 && s.absent.empty() && s.names[3] == "Bob" && s.names[1].empty());
         w.run(5000);

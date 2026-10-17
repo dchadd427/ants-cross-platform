@@ -57,7 +57,7 @@ public:
     static constexpr const char* DEFAULT_MAP_FILE = "TREASURE.LVL";
 
     // The labels of the screen (FUN_01012ce0): the map name (36, 312) 179 x 26, its description (36, 380) 293 x 26, the prompt (36, 447) 293 x 35 with 14 px lines,
-    // the players' names (415, 95 + 50 i) 120 x 20; every label has 18 px lines (the prompt 14) and the colour (239, 231, 223)
+    // the players' names (415, 95 + 50 i) 120 x 20; every label has 18 px lines (the prompt 14) and the color (239, 231, 223)
     static constexpr int32_t LABEL_X = 36;
     static constexpr int32_t NAME_Y = 312;
     static constexpr int32_t NAME_W = 179;
@@ -231,7 +231,7 @@ public:
     bool follow_host_choice(const std::string& filename, bool fog);
     /// START on the leader's screen (button, Enter, S, s): the leader asks the server to start now. Nothing else fires on that screen but Leave.
     void set_on_request_start(std::function<void()> cb) { on_request_start_ = std::move(cb); }
-    /// The leader of a server's room moves a player to another colour by pressing the player's row of the Players' Status box (protocol 14): `seat` is the seat of the player whose row was pressed and let
+    /// The leader of a server's room moves a player to another color by pressing the player's row of the Players' Status box (protocol 14): `seat` is the seat of the player whose row was pressed and let
     /// go of on the same row, still the player of that name (a player who leaves while the press is held, and a newcomer in the seat: nobody is moved). The press lights the row and plays the click of the buttons; the action comes with the release, as for the buttons. Rows are the leader's alone, and only while the room
     /// is open and the screen has shown its players (can_move_players()); a guest's presses on them do nothing.
     void set_on_move_seat(std::function<void(uint8_t seat)> cb) { on_move_seat_ = std::move(cb); }
@@ -257,8 +257,8 @@ public:
 
     /// The chat column of the wide screen's Online and Guest variants (SetupLayout::chat) is the waiting-room chat of the online rooms: nothing is drawn there until the room's UI
     /// turns it on (`visible`) and fills it (the application does while a room is on the screen: Application::sync_room_view). The black chat box (an efram box) holds the lines, the input box (statline's box) the typed text, the label "Chat" is TrueType in the engraved
-    /// labels' teal with their ink as shadow; the lines are in the font, size and colour of the players' names (18 px, the labels' cream), a notice (a line of the server: sender 255) in
-    /// the colour and size of the screen's status text (14 px). Nothing here applies to the Single variant or the classic page.
+    /// labels' teal with their ink as shadow; the lines are in the font, size and color of the players' names (18 px, the labels' cream), a notice (a line of the server: sender 255) in
+    /// the color and size of the screen's status text (14 px). Nothing here applies to the Single variant or the classic page.
     struct ChatPanel {
         bool visible{false};
         struct Line {
@@ -272,7 +272,7 @@ public:
     void set_chat_panel(ChatPanel panel) { chat_panel_ = std::move(panel); }
     const ChatPanel& chat_panel() const noexcept { return chat_panel_; }
     /// The foot of the Players' Status box on the Online variant, where the leader sees what fills the empty seats at START ("Empty seats at START:" / "Medium bots") and the teams that START makes:
-    /// two lines in the colour of the players' names, at 18 px when they fit the box (the footer of protocol 11, "Empty seats at START:" / "Medium bots", always does), else at 14 px, else at 12 px, else
+    /// two lines in the color of the players' names, at 18 px when they fit the box (the footer of protocol 11, "Empty seats at START:" / "Medium bots", always does), else at 14 px, else at 12 px, else
     /// cut with "..." (footer_font() says which). Nothing is drawn while both are empty (the default).
     void set_fill_footer(std::string first_line, std::string second_line) {
         fill_footer_[0] = std::move(first_line);
@@ -323,7 +323,7 @@ private:
     };
     std::vector<PreviewSlot> previews_;   // the pictures made so far (the newest last, at most kMaxPreviews)
     static constexpr size_t kMaxPreviews = 24;      // 24 pictures of 300 x 300 pixels: 8.6 MB at most
-    bool fallback_logged_{false};         // the line that says the preview fell back to the minimap colours is logged once
+    bool fallback_logged_{false};         // the line that says the preview fell back to the minimap colors is logged once
 
     RoomView room_{};
     std::function<void(const std::string& filename)> on_map_changed_{nullptr};

@@ -4,7 +4,7 @@
 #   ./start_game.sh                 one plain game: the desktop start menu comes first (Single player, Join, Host, Quit), then the original's screens as always
 #                                   (add --map-select to start on the setup screen at once)
 #   ./start_game.sh --players N     the test rig: N games on this machine (2 - 4), one player each, playing one networked match together: window 0 hosts
-#                                   (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by colour, the way
+#                                   (green), the others join (red, blue, black), every player has a random name. Four lie in a 2 x 2 grid by color, the way
 #                                   the four hills lie on the Small and Treasure maps (the same as the games on web/lobby.html): black top
 #                                   left, green top right, red bottom left, blue bottom right; two sit side by side (green left, red right), three are green,
 #                                   red, blue in the first three cells of the grid. The windows of the rig never show the menu: each has --host or --join.
@@ -62,7 +62,7 @@ fi
 
 PORT="${ANTS_PORT:-4001}"
 BIN="./build/src/ants_app/ants"
-COLOURS=(Green Red Blue Black)
+COLORS=(Green Red Blue Black)
 NAMES=(Antonio Buzz Clover Dot Ember Flick Granite Hazel Inky Juniper Kip Lumen Mortimer Nettle Oakley Pebble Quill Rusty Sprig Tango Umber Velvet Wren Zest)
 
 # four different names, drawn at random (a shuffle of the list)
@@ -151,20 +151,20 @@ GRID="2x2"
 [ "$PLAYERS" -eq 2 ] && GRID="2x1"
 
 # The cell of window n (= seat n) in the grid; --cell counts row by row, 0 = top left (1 top right, 2 bottom left, 3 bottom right of the 2 x 2 grid).
-# Four windows lie by colour, the way the four hills lie on the Small and Treasure maps (the same as the games of web/lobby.html):
+# Four windows lie by color, the way the four hills lie on the Small and Treasure maps (the same as the games of web/lobby.html):
 #   black (seat 3) top left, green (seat 0) top right, red (seat 1) bottom left, blue (seat 2) bottom right.
 # (Other maps put the hills elsewhere; the layout is the same for every map.)
-# Fewer windows keep that order of the colours (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
+# Fewer windows keep that order of the colors (black, green, red, blue) without holes, as on the page: two are green left, red right (2 x 1),
 # three are green, red, blue in cells 0, 1, 2 (nobody is black, so the top left cell goes to green).
 FOUR_CELLS=(1 2 3 0)        # by seat: green 1, red 2, blue 3, black 0
 
-# the command line of window $1: window 0 opens the room on this machine only, the others join it and ask for their own colour
+# the command line of window $1: window 0 opens the room on this machine only, the others join it and ask for their own color
 window_args() {
     local n="$1"
     local name="${pool[$n]}"
     local cell="$n"
     if [ "$PLAYERS" -eq 4 ]; then cell="${FOUR_CELLS[$n]}"; fi
-    WINDOW_ARGS=(--name "$name" --title "Ants - ${COLOURS[$n]} ($name)" --grid "$GRID" --cell "$cell" --audio-focus --no-lan)
+    WINDOW_ARGS=(--name "$name" --title "Ants - ${COLORS[$n]} ($name)" --grid "$GRID" --cell "$cell" --audio-focus --no-lan)
     if [ "$n" -eq 0 ]; then
         WINDOW_ARGS+=(--host "$PORT" --loopback)
     else
@@ -186,7 +186,7 @@ fi
 
 echo "[LAUNCHER] $PLAYERS players in one match on this machine (room on port $PORT):"
 for ((n = 0; n < PLAYERS; n++)); do
-    echo "   window $n: ${COLOURS[$n]}, ${pool[$n]}$([ "$n" -eq 0 ] && echo ' (host: choose the map and press START here)')"
+    echo "   window $n: ${COLORS[$n]}, ${pool[$n]}$([ "$n" -eq 0 ] && echo ' (host: choose the map and press START here)')"
 done
 echo ""
 

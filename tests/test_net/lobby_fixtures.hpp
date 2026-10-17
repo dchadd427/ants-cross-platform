@@ -291,7 +291,7 @@ inline ClientLobby::Config page_config(const std::string& name) {
     return cc;
 }
 
-// The plan of a room as a short text: the kind of each colour as a letter (o open, e easy, m medium, h hard, n nobody), then the team pair ("-": none): "oehn 0+3"
+// The plan of a room as a short text: the kind of each color as a letter (o open, e easy, m medium, h hard, n nobody), then the team pair ("-": none): "oehn 0+3"
 inline std::string plan_text(const RoomMsg& r) {
     static const char kLetters[] = {'o', 'e', 'm', 'h', 'n'};
     std::string out;
@@ -300,14 +300,14 @@ inline std::string plan_text(const RoomMsg& r) {
     return out + " " + (none ? std::string("-") : std::to_string(static_cast<unsigned>(r.team_a)) + "+" + std::to_string(static_cast<unsigned>(r.team_b)));
 }
 
-// Which colours hold a game, as the room shows it: "1011" (the colour of a page, of a guest whose seat is held and of nobody is 0)
+// Which colors hold a game, as the room shows it: "1011" (the color of a page, of a guest whose seat is held and of nobody is 0)
 inline std::string games_text(const RoomMsg& r) {
     std::string out;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) out += r.seat_in_game(seat) ? '1' : '0';
     return out;
 }
 
-// A leader's plan: what each colour is, the team pair and the map
+// A leader's plan: what each color is, the team pair and the map
 inline PlanMsg plan_of(const std::array<PlanKind, sim::MAX_PLAYERS>& kinds, uint8_t team_a = kNoTeam, uint8_t team_b = kNoTeam, const std::string& map = std::string()) {
     PlanMsg m;
     m.map_name = map;

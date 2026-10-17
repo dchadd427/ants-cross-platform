@@ -777,7 +777,7 @@ static void suite_exe_parity(const original_program::ProgramBytes& pe) {
     }
     if (!loaded) return;
 
-    TEST_CASE("5.2 Animation-index tables (colour-0 block, dirs 0..4)") {
+    TEST_CASE("5.2 Animation-index tables (color-0 block, dirs 0..4)") {
         ASSERT_TRUE(pe.mapped(0x1002FB8, 480) && pe.mapped(0x1003738, 480) && pe.mapped(0x1002CB8, 96) &&
                     pe.mapped(0x1002E38, 96) && pe.mapped(0x1004548, 12) && pe.mapped(0x1004578, 12) &&
                     pe.mapped(0x1004838, 16) && pe.mapped(0x1004878, 16) && pe.mapped(0x10048C0, 16) &&
@@ -810,7 +810,7 @@ static void suite_exe_parity(const original_program::ProgramBytes& pe) {
         ASSERT_EQ(static_cast<uint32_t>(md::kBump), pe.u32(0x101CAE4));
     } TEST_END();
 
-    TEST_CASE("5.2b Action clip tables (colour-0 blocks, dirs 0..4)") {
+    TEST_CASE("5.2b Action clip tables (color-0 blocks, dirs 0..4)") {
         ASSERT_TRUE(pe.mapped(0x1003EB8, 0x1004918 - 0x1003EB8));
         for (uint32_t t = 0; t < 6; ++t) {
             g_ctx = "type " + std::to_string(t);

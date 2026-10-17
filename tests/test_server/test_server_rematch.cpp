@@ -42,7 +42,7 @@ net::RejectReason refusal_of(World& w, Client& c) {
     return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
 }
 
-// Which colours hold a game in a Room message ("1100"): the reserved seats of a rematch count as games
+// Which colors hold a game in a Room message ("1100"): the reserved seats of a rematch count as games
 std::string games_of(const net::RoomMsg& r) {
     std::string out;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) out += r.seat_in_game(seat) ? '1' : '0';
@@ -92,7 +92,7 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
 void run_rematch_tests() {
     using K = net::PlanKind;
 
-    TEST_CASE("S3.194 The Rematch, The Round Trip: The Rules End A Lobby Room's Match And The Server Opens A Lobby With The Same Code At Once (The Match's Map, Colours, Bots, Teams; A Seat Reserved For Each Person's Key; Nobody Leads Yet); The Code's Status Is The Lobby's And The Match Is Listed Beside It For Its Keep Time, Its End Is Reported Once; A Results Screen Holds Its Seat, A Stranger Is Turned Away, The Host's Page Comes Back And Leads, START Waits For The One Who Is Not Back (The Host Is Told), The Host Removes Them And START Is Taken") {
+    TEST_CASE("S3.194 The Rematch, The Round Trip: The Rules End A Lobby Room's Match And The Server Opens A Lobby With The Same Code At Once (The Match's Map, Colors, Bots, Teams; A Seat Reserved For Each Person's Key; Nobody Leads Yet); The Code's Status Is The Lobby's And The Match Is Listed Beside It For Its Keep Time, Its End Is Reported Once; A Results Screen Holds Its Seat, A Stranger Is Turned Away, The Host's Page Comes Back And Leads, START Waits For The One Who Is Not Back (The Host Is Told), The Host Removes Them And START Is Taken") {
         World w(rematch_limits());
         const std::string code = "rmt00001";
         Played p;
@@ -104,7 +104,7 @@ void run_rematch_tests() {
         std::optional<RoomStatus> lobby = lobby_of(w, code);
         ASSERT_TRUE(lobby.has_value());
         ASSERT_TRUE(lobby->reopened && lobby->reserved == 0x3 && lobby->games == 0 && lobby->leader == 255);
-        ASSERT_EQ(lobby->map, std::string("SMALL.LVL"));                                           // the match's map, colours, bot and teams
+        ASSERT_EQ(lobby->map, std::string("SMALL.LVL"));                                           // the match's map, colors, bot and teams
         ASSERT_EQ(lobby->plan, std::string("oomn 0+2"));
         ASSERT_TRUE(lobby->names[0] == "Pia" && lobby->names[1] == "Bob" && lobby->names[2].empty() && lobby->names[3].empty());
         std::vector<RoomStatus> ended = w.mgr.take_ended(w.now);
@@ -336,7 +336,7 @@ void run_rematch_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.198 Whose Seat Is Kept, And When There Is No Rematch: A Game Of The Desktop Has No Seat Kept (Its Colour Is Open; It Joins By The Code Like Anybody Once Somebody Is Back), A Key Of Another Room's Match Is A Stranger's, Two Tabs With One Key Are The Take-Over Of Any Lobby; A Server With No Room For Another Room (max_rooms) Opens No Lobby; With The Default Limits A Kept Seat Waits Three Hours On The Server's Clock") {
+    TEST_CASE("S3.198 Whose Seat Is Kept, And When There Is No Rematch: A Game Of The Desktop Has No Seat Kept (Its Color Is Open; It Joins By The Code Like Anybody Once Somebody Is Back), A Key Of Another Room's Match Is A Stranger's, Two Tabs With One Key Are The Take-Over Of Any Lobby; A Server With No Room For Another Room (max_rooms) Opens No Lobby; With The Default Limits A Kept Seat Waits Three Hours On The Server's Clock") {
         {   // Bob played on the desktop (Linux): only Pia's seat is kept; Bob's game joins the lobby by the code like anybody, once Pia is back
             World w(rematch_limits());
             const std::string code = "rmt00011";
@@ -380,7 +380,7 @@ void run_rematch_tests() {
             w.next_key = net::SeatKey{};
             w.run(300);
             ASSERT_TRUE(bob_back.lobby->is_leader());
-            w.next_key = a.pia;                                                                         // now she is a newcomer there: the open colour 2, a key of her own; her seat at the first stays kept
+            w.next_key = a.pia;                                                                         // now she is a newcomer there: the open color 2, a key of her own; her seat at the first stays kept
             Client& stranger = w.connect_page("Pia", "rmt00013", lobby_block_of());
             w.next_key = net::SeatKey{};
             w.run(300);
@@ -425,7 +425,7 @@ void run_rematch_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.200 Who Left The Match Has No Seat Kept: Cid Leaves In The Middle (Leave Game: The Match Drops His Seat) And Bob's Quit Ends It (One Other Side Left: Bob Stays In The Match, So His Seat Is Kept); The Lobby Keeps Pia's And Bob's Seats, Cid's Colour Is Open And START Waits For Bob Only; Cid's Key Is Then A Newcomer's; A Game Page That Asks For Its Colour With The Key (The Front Page's Rejoin) Is The Person Back, As A Game") {
+    TEST_CASE("S3.200 Who Left The Match Has No Seat Kept: Cid Leaves In The Middle (Leave Game: The Match Drops His Seat) And Bob's Quit Ends It (One Other Side Left: Bob Stays In The Match, So His Seat Is Kept); The Lobby Keeps Pia's And Bob's Seats, Cid's Color Is Open And START Waits For Bob Only; Cid's Key Is Then A Newcomer's; A Game Page That Asks For Its Color With The Key (The Front Page's Rejoin) Is The Person Back, As A Game") {
         World w(rematch_limits());
         const std::string code = "rmt00016";
         Client& pia = w.connect_page("Pia", code, lobby_block_of());
@@ -456,8 +456,8 @@ void run_rematch_tests() {
         ASSERT_TRUE(w.ended(code).state == RoomState::Finished && w.ended(code).reason == "the match ended" && !pia_game.sim.is_player_dropped(1));
         std::optional<RoomStatus> lobby = lobby_of(w, code);
         ASSERT_TRUE(lobby.has_value() && lobby->reopened && lobby->reserved == 0x3);
-        ASSERT_TRUE(lobby->names[0] == "Pia" && lobby->names[1] == "Bob" && lobby->names[2].empty() && lobby->plan == "ooon -");      // (Cid's colour is an open colour of the plan)
-        // Pia's game page, opened again by the front page's Rejoin with her key (it asks for her colour): she is back, as a game, and leads; START waits for Bob only
+        ASSERT_TRUE(lobby->names[0] == "Pia" && lobby->names[1] == "Bob" && lobby->names[2].empty() && lobby->plan == "ooon -");      // (Cid's color is an open color of the plan)
+        // Pia's game page, opened again by the front page's Rejoin with her key (it asks for her color): she is back, as a game, and leads; START waits for Bob only
         w.next_key = kp;
         Client& pia_rejoin = w.connect("Pia", code, 0);
         w.next_key = net::SeatKey{};
@@ -468,7 +468,7 @@ void run_rematch_tests() {
         w.run(300);
         ASSERT_FALSE(lobby_of(w, code)->starting);
         ASSERT_EQ(said(pia_rejoin.room_chat), (std::vector<std::string>{std::string("255||Bob") + net::kNoticeNotBack}));
-        // Cid's key fits no kept seat: his page is a newcomer's, and takes the open colour like anybody
+        // Cid's key fits no kept seat: his page is a newcomer's, and takes the open color like anybody
         w.next_key = kc;
         Client& cid_back = w.connect_page("Cid", code, lobby_block_of());
         w.next_key = net::SeatKey{};
@@ -555,7 +555,7 @@ void run_rematch_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.202 The Link To The Match's Stats: A Lobby Room's Match That Runs 30 Seconds Is Recorded, And The Public List Of Replays Names Its Players As tests/data/replay_players.txt Says (The Colour, And The Name In Brackets; The Front Page Finds The Match By Them: web_rematch_check.js); Every Line Of That File Is What The Server's Own Functions Make Of Its Names; The File's Name Is An Id That The Page Takes") {
+    TEST_CASE("S3.202 The Link To The Match's Stats: A Lobby Room's Match That Runs 30 Seconds Is Recorded, And The Public List Of Replays Names Its Players As tests/data/replay_players.txt Says (The Color, And The Name In Brackets; The Front Page Finds The Match By Them: web_rematch_check.js); Every Line Of That File Is What The Server's Own Functions Make Of Its Names; The File's Name Is An Id That The Page Takes") {
         std::vector<std::pair<std::array<std::string, 4>, std::string>> golden;                    // (the four names, the labels joined by '|')
         {
             std::ifstream in(std::string(TEST_DATA_DIR) + "/replay_players.txt");
@@ -576,7 +576,7 @@ void run_rematch_tests() {
             }
         }
         ASSERT_TRUE(golden.size() >= 3u);
-        // every line: the labels that a recording of these names gets (a person's name as replay_person_name keeps it, a seat with none is its colour; a seat that did not play has none)
+        // every line: the labels that a recording of these names gets (a person's name as replay_person_name keeps it, a seat with none is its color; a seat that did not play has none)
         for (const auto& g : golden) {
             replay::Header head;
             for (uint8_t s = 0; s < 4; ++s) {

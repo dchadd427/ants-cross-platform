@@ -263,7 +263,7 @@
    "build": "test_ai"
   },
   {
-   "id": "armed_ignores_own_colour",
+   "id": "armed_ignores_own_color",
    "file": "src/ants_ai/gate_task.cpp",
    "old": "armed = armed || b.tile == goal_.cell;",
    "new": "armed = armed || (b.tile == goal_.cell && b.owner != context.seat);",

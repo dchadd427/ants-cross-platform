@@ -8,7 +8,7 @@
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
     <style>
     /* The look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes. The pictures and the font (the game's own
-       Libre Franklin, SIL OFL) are in web/front/, made by tools/front_page_art/make_art.py; nothing is loaded from another site. The lobby (the four colours, the map, START) is drawn as the
+       Libre Franklin, SIL OFL) are in web/front/, made by tools/front_page_art/make_art.py; nothing is loaded from another site. The lobby (the four colors, the map, START) is drawn as the
        approved pictures draw it (docs/PLAY_IN_BROWSER.md); the tile's and the ants' addresses end in ?v= and the first 8 hex digits of the file's sha256, because the server lets a browser keep a .png
        for a week (tests/scripts/test_web_front.py keeps them equal to the files). */
     @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
@@ -78,9 +78,9 @@
     .banner span { flex: 1 1 220px; }
     .banner.warn { border-color: var(--gold); }
     .joinbox input { flex: 1; min-width: 0; min-height: 44px; padding: 6px 12px; background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; color: var(--cream); }
-    .joinbox input::placeholder { color: #7f9c92; opacity: 1; }                 /* (the browser's own grey is 4.1:1 on this field; the name card's field has the same colour) */
+    .joinbox input::placeholder { color: #7f9c92; opacity: 1; }                 /* (the browser's own grey is 4.1:1 on this field; the name card's field has the same color) */
 
-    /* ---- the four colours ---- */
+    /* ---- the four colors ---- */
     .slots { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 16px; margin: 18px 0 0; padding: 0; }
     .slot { --accent: #79bf93; position: relative; display: grid; grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr); gap: 2px 14px; align-items: center; padding: 18px 14px 14px 14px; min-height: calc(41px * var(--k) + 42px);
         background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent); color: var(--cream); }
@@ -100,7 +100,7 @@
     .slot.k-nobody { background: #0a0d10; }
     .slot .txt { min-width: 0; display: grid; gap: 1px; align-content: start; }
     .cname { font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
-    .pname { font-size: 24px; line-height: 1.15; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; min-height: 52px; overflow-wrap: anywhere; }       /* as tall as a drop-down, so that the rows of the colours line up */
+    .pname { font-size: 24px; line-height: 1.15; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; min-height: 52px; overflow-wrap: anywhere; }       /* as tall as a drop-down, so that the rows of the colors line up */
     .slot.k-open .pname, .slot.k-nobody .pname, .slot.k-bot .pname { color: #a8c2b8; } .botname { display: block; font-size: 15px; line-height: 1.2; color: #a8c2b8; overflow-wrap: anywhere; }
     .you { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; padding: 0 6px; line-height: 1.5; }
     .pstat { font-size: 14px; color: var(--muted); min-height: 20px; }
@@ -114,7 +114,7 @@
     .pname input { min-width: 0; width: 100%; font-size: 24px; line-height: 1.1; color: var(--cream); background: #0b1117; border: 2px solid var(--frame-hi); border-radius: 3px; padding: 0 6px; }
     .edit { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; line-height: 1; }
     .edit:hover { color: var(--cream); }
-    /* the host's Remove button on another player's colour: small, the colour of a warning, and always followed by a question */
+    /* the host's Remove button on another player's color: small, the color of a warning, and always followed by a question */
     .rm { flex: none; min-height: 30px; padding: 2px 12px; font-size: 14px; line-height: 1.1; cursor: pointer; color: #f6c9c0; background: #1f1011; border: 2px solid #7a3b34; border-radius: 6px; }
     .rm:hover { color: #ffe4de; background: #2c1514; border-color: #c4655a; }
     .rmask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 2px; }
@@ -142,14 +142,14 @@
     .slot.drop::after { content: attr(data-drop); position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 3; background: var(--gold); color: #1a1405; padding: 3px 14px; border-radius: 4px; border: 2px solid var(--edge); box-shadow: 2px 3px 0 var(--shadow); font-size: 15px; white-space: nowrap; pointer-events: none; }
     .slot.picked-target { cursor: pointer; outline: 2px dashed #b9a24a; outline-offset: 2px; }
     .slot.picked-target::after { content: attr(data-drop); position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); background: #2a2208; color: var(--gold); border: 1px solid #6b5a14; font-size: 13px; padding: 1px 10px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
-    /* the token that follows the pointer while a player is dragged: the ant and the name, so that the colour under it stays in view */
+    /* the token that follows the pointer while a player is dragged: the ant and the name, so that the color under it stays in view */
     .chip { --k: 2; position: fixed; z-index: 60; pointer-events: none; display: flex; align-items: center; gap: 12px; padding: 8px 18px 8px 8px; background: #0f1820; color: var(--cream); border: 3px solid var(--gold); border-radius: 8px; transform: rotate(-2deg); box-shadow: 0 14px 26px rgba(0, 0, 0, .55); }
     .chip .ant { margin: 0; animation: none; background-position-x: 0; }
     .chip b { display: block; font-weight: 500; font-size: 22px; line-height: 1.1; }
     .chip small { display: block; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
     .slots-note { margin-top: 12px; font-size: 15px; color: var(--muted); min-height: 22px; }
     .teams-note { margin-top: 2px; } .teams-note.warn { color: #f2c48c; }
-    /* Team 1 and Team 2 on every colour that plays (when three or four play): lit when the colour is on that team */
+    /* Team 1 and Team 2 on every color that plays (when three or four play): lit when the color is on that team */
     .teamset { display: flex; gap: 8px; margin-top: 8px; }
     .teamset button { flex: 0 1 94px; min-width: 0; min-height: 36px; padding: 3px 8px; font-size: 15px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
     .teamset button:hover { border-color: var(--frame-hi); color: var(--cream); }
@@ -306,11 +306,11 @@
                 <button class="btn" type="button" id="copy">Copy link</button>
                 <button class="btn share" type="button" id="share" hidden>Share</button>
             </div>
-            <div class="invite-note"><span id="invite-line">Players who open this link take the next free colour.</span><span class="rt"><button type="button" id="havecode">Have a code?</button></span></div>
+            <div class="invite-note"><span id="invite-line">Players who open this link take the next free color.</span><span class="rt"><button type="button" id="havecode">Have a code?</button></span></div>
             <div class="joinbox" id="joinbox" hidden><input type="text" id="joincode" placeholder="6 letters and numbers, like k7m 2xq" aria-label="Room code" aria-describedby="joinhint" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn sm" type="button" id="joingo">Join</button></div>
             <p class="hint" id="joinhint" role="status"></p>
 
-            <ul class="slots" id="slots" aria-label="The four colours"></ul>
+            <ul class="slots" id="slots" aria-label="The four colors"></ul>
             <p class="slots-note" id="slots-note" role="status"></p>
             <p class="slots-note teams-note" id="teams-note" role="status"></p>
         </section>
@@ -344,11 +344,11 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>Open the page and your room is ready, with the first colour yours. The four colours lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free colour and show up here at once. The host drags a player onto another colour to move them; a colour that is taken swaps places. On a phone, tap a player's dots and then the colour.</p>
-    <h3>The other colours</h3><p>A colour that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
-    <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their colour. It asks first, and the colour opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
-    <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another colour, their team goes along.</p>
-    <h3>START!</h3><p>The host starts the match with whoever is in. An open colour stays empty. When the match is over, Leave Game takes you back to the front page, where a new room is ready.</p>
+    <h3>The room</h3><p>Open the page and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color.</p>
+    <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
+    <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
+    <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
+    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where a new room is ready.</p>
     <h3>When the host leaves</h3><p>A room lasts while anybody is in it. If the host leaves, the player who has been in the room longest becomes the host, and everybody is told. When the last player leaves, the room closes about a minute later, and a link to a room that is gone says that there is no room with that code, and offers to start a room of your own.</p>
     <div class="sheets"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></div>
 </div></div>
@@ -601,31 +601,31 @@
 
 
         // ================================================================================================================================================================================================
-        // THE LOBBY: the front page is a room on the game server (docs/NETWORK_PORT.md "Protocol 16"). front/lobby_net.js keeps this page's seat in it; front/lobby_rules.js decides what the four colours and the map side
+        // THE LOBBY: the front page is a room on the game server (docs/NETWORK_PORT.md "Protocol 16"). front/lobby_net.js keeps this page's seat in it; front/lobby_rules.js decides what the four colors and the map side
         // say and what the leader asks of the room (tests/scripts/web_lobby_rules_check.js); this part is the screen: it builds the cards, takes the pointer, the keys and the buttons, and does what the rules say.
         //   * A plain visit makes a room with a new code and seats you in it; ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
         //     (LOBBY_KEY), so that a reload takes the seat back. A name is only ever set as text, never into markup.
         //   * START sends every page to the game page at once with the key of its seat (ants.rejoin.<room>.<seat>, the way the game takes a seat back); a match for one player is the game page's own single player.
         // ================================================================================================================================================================================================
         var LOBBY_KEY = 'ants.lobby';                 // sessionStorage: { c: the room's code, k: the key of this page's seat (32 hex digits), n: its name, o: 1 when this page made the room }
-        var COLOURS = Rules.COLOURS;
+        var COLORS = Rules.COLORS;
         var GRID = Rules.GRID;
         var SERVER = rejoinServer(window.location.protocol === 'https:', window.location.host);
         var client = null;                            // the LobbyClient of this page's seat
         var ownRoom = true;                           // the code was made by this page (a room that is gone is made again without a word)
-        var everOnline = false;                       // the client has been welcomed once: a link that drops is "lost" (the colour is kept), else the server cannot be reached
-        var offline = 'none';                         // what the colours show instead of a room: false, 'lost', 'none' (no room yet) or 'join' (the name card is open)
+        var everOnline = false;                       // the client has been welcomed once: a link that drops is "lost" (the color is kept), else the server cannot be reached
+        var offline = 'none';                         // what the colors show instead of a room: false, 'lost', 'none' (no room yet) or 'join' (the name card is open)
         var model = null;                             // Rules.modelOf of the last Room message
         var localSides = [0, 0, 0, 0];                // the leader's own Team switches (the room holds a pair only)
-        var picked = -1;                              // the colour that was tapped to be moved
-        var pickGuard = 0;                            // the seating as the leader saw it when a colour was picked up (a move is refused when the room changed meanwhile)
-        var removing = -1;                            // the colour whose Remove question is open
+        var picked = -1;                              // the color that was tapped to be moved
+        var pickGuard = 0;                            // the seating as the leader saw it when a color was picked up (a move is refused when the room changed meanwhile)
+        var removing = -1;                            // the color whose Remove question is open
         var removeGuard = 0;
         var refusal = '';                             // why the last Team press was refused (shown once)
-        var fresh = {};                               // the colours that changed hands a moment ago (a short glow)
+        var fresh = {};                               // the colors that changed hands a moment ago (a short glow)
         var freshTimer = 0;
-        var drag = null;                              // a colour that is being dragged: { from, chip, x0, y0, moved, over, guard }
-        var editing = false;                          // the name of this page's colour is being typed (the cards are not drawn again meanwhile)
+        var drag = null;                              // a color that is being dragged: { from, chip, x0, y0, moved, over, guard }
+        var editing = false;                          // the name of this page's color is being typed (the cards are not drawn again meanwhile)
         var dirty = false;                            // something changed while the cards could not be drawn
         var skipClick = false;
         var bannerKind = '';
@@ -635,10 +635,10 @@
         var fixSent = '';                             // the correction of the room's teams that was sent for this plan
         var toastTimer = 0;
         var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
-        var lis = {};                                 // the card of each colour (by seat)
-        var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colours, until START
+        var lis = {};                                 // the card of each color (by seat)
+        var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colors, until START
         var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
-        var chat = Chat.mount({ doc: document, host: $('chat'), colours: COLOURS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
+        var chat = Chat.mount({ doc: document, host: $('chat'), colors: COLORS, say: function (text) { return !!client && client.say(text); }, toast: say });      // the chat box (front/lobby_chat.js): the room's lines, a line of one's own, a toast for a line that comes while the box is off screen
 
         function el(tag, cls, text) {
             var e = document.createElement(tag);
@@ -732,7 +732,7 @@
             paintSide(v.side);
         }
         function paintCard(card, m) {
-            var li = lis[card.seat], seat = card.seat, c = card.colour;
+            var li = lis[card.seat], seat = card.seat, c = card.color;
             var stamp = JSON.stringify([card, picked === seat, picked >= 0, fresh[seat] === true]);
             if (painted[seat] === stamp) return;
             painted[seat] = stamp;
@@ -749,7 +749,7 @@
                 grip.setAttribute('data-key', 'grip:' + seat);
                 grip.setAttribute('data-grip', String(seat));
                 grip.setAttribute('aria-pressed', String(picked === seat));
-                grip.setAttribute('aria-label', 'Move ' + Rules.nameOf(m, seat) + ' to another colour');
+                grip.setAttribute('aria-label', 'Move ' + Rules.nameOf(m, seat) + ' to another color');
                 grip.appendChild(document.createElement('i'));
                 li.appendChild(grip);
             }
@@ -847,7 +847,7 @@
             setText($('plan-short'), side.planShort);
             setText($('start-note'), side.note); $('start-note').hidden = !side.note;
         }
-        // The colours glow for a moment when a player arrives or changes places
+        // The colors glow for a moment when a player arrives or changes places
         function glow(seats) {
             seats.forEach(function (s) { fresh[s] = true; });
             clearTimeout(freshTimer);
@@ -911,18 +911,18 @@
         function onMoved(e) {
             if (!model) return;
             var team = shownTeam(e.to);
-            say((e.to === model.you ? 'You' : e.name) + ' moved to ' + COLOURS[e.to].name + '.' + (team ? ' Team ' + team + ' goes along.' : ''));
+            say((e.to === model.you ? 'You' : e.name) + ' moved to ' + COLORS[e.to].name + '.' + (team ? ' Team ' + team + ' goes along.' : ''));
             glow([e.from, e.to]);
         }
         function onSwapped(e) {
             if (!model) return;
             var a = e.a === model.you ? 'You' : e.names[0], b = e.b === model.you ? 'You' : e.names[1];
-            say(a + ' and ' + b + ' swapped colours.' + (Rules.pairOf(Rules.sidesFix(model.sides, Rules.playing(model)), Rules.playing(model)) ? ' Each keeps their team.' : ''));
+            say(a + ' and ' + b + ' swapped colors.' + (Rules.pairOf(Rules.sidesFix(model.sides, Rules.playing(model)), Rules.playing(model)) ? ' Each keeps their team.' : ''));
             glow([e.a, e.b]);
         }
         function onJoined(e) {
             if (!model || e.seat === model.you) return;
-            say(e.name + ' joined as ' + COLOURS[e.seat].name + '.');
+            say(e.name + ' joined as ' + COLORS[e.seat].name + '.');
             glow([e.seat]);
         }
         function onStatus(status) {
@@ -964,7 +964,7 @@
             c.on('moved', mine(onMoved));
             c.on('swapped', mine(onSwapped));
             c.on('host', mine(function (e) { showBanner('host', { guest: !e.you, leaver: e.before, host: e.name, back: e.back }); }));
-            c.on('notice', mine(function (e) { var n = Rules.noticeKind(e.text); if (n.kind !== 'moved') showBanner(n.kind, { server: n.server }); }));      // ('The host moved you to Blue.' is on screen already, in the colour and the toast: no strip)
+            c.on('notice', mine(function (e) { var n = Rules.noticeKind(e.text); if (n.kind !== 'moved') showBanner(n.kind, { server: n.server }); }));      // ('The host moved you to Blue.' is on screen already, in the color and the toast: no strip)
             c.on('refused', mine(onRefused));
             c.on('removed', mine(function () { startOwn('removed'); }));
             c.on('superseded', mine(function () { offline = 'none'; showBanner('away'); render(); }));
@@ -1102,26 +1102,26 @@
         }
         function setMode(seat, word) {
             if (!sendPlan({ seat: seat, kind: word })) { render(); return; }
-            say(COLOURS[seat].name + ' is now ' + (word === 'open' ? 'open for a player' : word === 'nobody' ? 'out of the match' : Rules.article(word) + Rules.levelWord(word) + ' bot') + '.');
+            say(COLORS[seat].name + ' is now ' + (word === 'open' ? 'open for a player' : word === 'nobody' ? 'out of the match' : Rules.article(word) + Rules.levelWord(word) + ' bot') + '.');
         }
         $('slots').addEventListener('change', function (e) {
             var s = e.target.closest && e.target.closest('[data-mode]');
             if (s) setMode(+s.getAttribute('data-mode'), s.value);
         });
 
-        // Move a colour onto another: the room exchanges a person with the other colour (SeatMove); two colours that nobody holds exchange their plans
-        function moveColour(from, to, guard) {
+        // Move a color onto another: the room exchanges a person with the other color (SeatMove); two colors that nobody holds exchange their plans
+        function moveColor(from, to, guard) {
             if (!client || !model || model.guest) return;
             var room = client.room, op = Rules.moveOf(room, model, from, to);
             if (!op) { render(); return; }
             if (op.op === 'move') client.move(op.from, op.to, guard);
-            else if (room.plan[from] !== room.plan[to] && client.setPlan(op.plan)) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colours.');
+            else if (room.plan[from] !== room.plan[to] && client.setPlan(op.plan)) say(Rules.nameAt(model, to, false) + ' and ' + Rules.nameAt(model, from, false) + ' swapped colors.');
             render();
         }
         function tapSlot(i) {
             if (picked < 0) { picked = i; pickGuard = client ? client.guardNow() : 0; }
             else if (picked === i) picked = -1;
-            else { var from = picked; picked = -1; moveColour(from, i, pickGuard); return; }
+            else { var from = picked; picked = -1; moveColor(from, i, pickGuard); return; }
             render();
             var g = $('slots').querySelector('[data-grip="' + i + '"]');
             if (g && picked >= 0) g.focus();
@@ -1130,7 +1130,7 @@
             var g = e.target.closest && e.target.closest('.grip');
             if (!g || e.button > 0 || !model) return;
             e.preventDefault();
-            var i = +g.getAttribute('data-grip'), c = COLOURS[i], chip = el('div', 'chip'), label = el('span');
+            var i = +g.getAttribute('data-grip'), c = COLORS[i], chip = el('div', 'chip'), label = el('span');
             chip.appendChild(el('span', 'ant ant-' + c.id));
             label.appendChild(el('small', '', c.name));
             label.appendChild(el('b', '', Rules.nameOf(model, i).replace(/^the /, '').replace(/^./, function (m) { return m.toUpperCase(); })));
@@ -1182,7 +1182,7 @@
             skipClick = true;
             setTimeout(function () { skipClick = false; }, 0);          // the click that follows a pointer press is this press: not a second tap
             if (!d.moved) { tapSlot(d.from); return; }
-            if (d.over >= 0) moveColour(d.from, d.over, d.guard); else render();
+            if (d.over >= 0) moveColor(d.from, d.over, d.guard); else render();
         }
         function onCancel() { if (endDrag()) render(); }
         function onKey(e) { if (e.key === 'Escape') onCancel(); }
@@ -1224,10 +1224,10 @@
         function removePerson(seat) {
             var name = model && model.slots[seat] && model.slots[seat].kind === 'person' ? model.slots[seat].name : '';
             removing = -1;
-            if (client && name && client.remove(seat, removeGuard)) say(name + ' was removed. ' + COLOURS[seat].name + ' is open again.');
+            if (client && name && client.remove(seat, removeGuard)) say(name + ' was removed. ' + COLORS[seat].name + ' is open again.');
             render();
         }
-        // The pencil: the name of this page's colour becomes a field; Enter or leaving it asks the room to rename (a name that the rules refuse is explained and not taken)
+        // The pencil: the name of this page's color becomes a field; Enter or leaving it asks the room to rename (a name that the rules refuse is explained and not taken)
         function editName(pencil) {
             var holder = pencil.parentNode, nm = holder.querySelector('.nm');
             if (!nm || editing) return;

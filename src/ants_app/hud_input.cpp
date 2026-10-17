@@ -283,7 +283,7 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
             if (!is_modal_open()) {
                 pending_break_ = PendingBreak{PendingBreak::Action::Attack, ally, tile, targets};
                 open_alliance_dialog(AllianceDialog::BreakConfirm, ally,
-                                     sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_colour_word(ally)));
+                                     sim::strings::format(sim::strings::kBreakTeamConfirm, alliance_name(ally), alliance_color_word(ally)));
             }
             return 0;
         }

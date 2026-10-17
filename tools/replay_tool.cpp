@@ -430,7 +430,7 @@ bool make_sample(const assets::LevelData& level, uint64_t map_hash, uint32_t tur
     head.seed = 7;
     head.roster = 0x0F;
     head.names[1] = "Bot (Hard)";
-    head.names[2] = "Ann";                                       // (a person who typed a name; the other two seats have none and are their colours)
+    head.names[2] = "Ann";                                       // (a person who typed a name; the other two seats have none and are their colors)
     head.set_mode(mode);
     Recorder recorder(head);
     for (uint32_t turn = 0; turn < turns; ++turn) {
@@ -543,7 +543,7 @@ int selftest() {
         const Run r = run_words({"info", file});
         t.check(r.status == 0 && r.err.empty(), "info succeeds");
         t.check(has(r.out, "Map:       TINY.LVL (hash " + hex64(map_hash) + "), seed 7, Fog of War off"), "info names the map, its hash and the seed");
-        t.check(has(r.out, "Seats:     Green, Red (Bot (Hard)), Blue (Ann), Black"), "info lists the seats, with the names that were typed (a seat without one is its colour)");
+        t.check(has(r.out, "Seats:     Green, Red (Bot (Hard)), Blue (Ann), Black"), "info lists the seats, with the names that were typed (a seat without one is its color)");
         t.check(has(r.out, "Length:    450 turns (0:22.5)") && has(r.out, "Commands:  " + count) && has(r.out, "Hashes:    4 (one every 100 turns)"), "info gives the length, the commands and the hashes");
         t.check(has(r.out, "End:       the match was not over, final state hash " + hex64(sample.final_hash)), "info gives the end");
         t.check(has(r.out, "rules: simulation " + std::to_string(kSimRules) + ", network protocol " + std::to_string(net::kProtocolVersion) + " (this build plays it)") && has(r.out, "Made by:   v0.0.0 (build selftest)"), "info says which rules and which game");

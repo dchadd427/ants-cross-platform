@@ -1,5 +1,5 @@
 /* The rematch (web/front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the game page's strip under the picture when the match of a lobby room is over ("The match is over", who is back,
-   "Back to the lobby"), and the front page's strip at the top of the page when it comes back from the match, with the words of each colour and the note under START. Both pages carry the colours of
+   "Back to the lobby"), and the front page's strip at the top of the page when it comes back from the match, with the words of each color and the note under START. Both pages carry the colors of
    web/front/classic.css (the tokens); the two that only classic.css names have its value as their fallback. */
 
 /* ---- the game page: the strip between the picture and the Picture row ---- */
@@ -28,7 +28,7 @@
 .backbar b { font-weight: 500; color: var(--gold); }
 .backbar a { margin-left: auto; color: var(--mint, #9ff0c4); }
 @media (max-width: 760px) { .backbar { padding: 10px 16px; font-size: 15px; } }
-/* a person of the match on a colour card: back in the room (a green dot), or still on the results screen (a grey one) */
+/* a person of the match on a color card: back in the room (a green dot), or still on the results screen (a grey one) */
 .pstat.back, .pstat.away { display: flex; align-items: center; }
 .pstat.back::before, .pstat.away::before { content: ""; flex: none; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
 .pstat.back { color: var(--cream); }

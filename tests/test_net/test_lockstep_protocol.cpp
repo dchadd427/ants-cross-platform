@@ -3,7 +3,7 @@
 
 void run_protocol_tests() {
     TEST_CASE("N2.1 Protocol: Every Message Round-Trips And Trailing Or Missing Bytes Are Rejected") {
-        ASSERT_EQ(kProtocolVersion, 21);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colours (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
+        ASSERT_EQ(kProtocolVersion, 21);                                 // 7: the room leader's START; 8: turns of 50 ms, one tick each, the adaptive buffer and the Lag message (type 25); 9: the community-map rules; 10: keys, presence, votes and the catch-up stream (types 26 - 30); 11: the leader's START carries a fill level, chat in the waiting room; 12: the match clock waits for the start dialog (the first turn is sealed kMatchStartDelayMs after the match began, a dialog ends with the first turn that executes: no message changed); 13: a level for each seat of the fill and the teams (StartRequest is seven bytes, Start ends with the two team bytes); 14: the leader moves the colors (SeatMove, type 31, three bytes); 15: a room is made by its first Hello's create block, the platform byte (Hello, Room slots, Start), the room's teams and rules in the Room message; 16: lobby rooms (the Hello's client kind, the create block's kCreateLobby, the Welcome's kWelcomeCreated, the Room message's plan and games, the PlanMsg, type 32; 17: the game mode, one byte at the end of the Start, Room and Plan messages)
         ASSERT_TRUE(kTurnMs == 50 && kTicksPerTurn == 1 && kTurnsPerSecond == 20 && kHashEveryTurns == 20);     // a hash every 20 ticks, one second, as before
         ASSERT_TRUE(turns_for_ms(0) == 0 && turns_for_ms(1) == 1 && turns_for_ms(50) == 1 && turns_for_ms(51) == 2 && turns_for_ms(3000) == 60);
         ASSERT_EQ(static_cast<int>(MsgType::Last), static_cast<int>(MsgType::Remove));
@@ -313,7 +313,7 @@ void run_protocol_tests() {
         created.key = key_with(5);
         created.flags = kWelcomeCreated;
         const std::vector<uint8_t> seed_created = encode(created);
-        RoomMsg lobby_room = server_room_of(0);                        // a lobby room: a plan for each colour and the seats that hold a game
+        RoomMsg lobby_room = server_room_of(0);                        // a lobby room: a plan for each color and the seats that hold a game
         lobby_room.flags = static_cast<uint8_t>(kRoomLeaderStarts | kRoomLobby);
         lobby_room.plan = {PlanKind::Open, PlanKind::Open, PlanKind::Hard, PlanKind::Nobody};
         lobby_room.in_game = 0x01;
@@ -426,7 +426,7 @@ void run_protocol_tests() {
                 ++accepted;
                 ASSERT_TRUE(encode(smove) == buf && buf.size() == 7 && smove.from < sim::MAX_PLAYERS && smove.to < sim::MAX_PLAYERS && smove.from != smove.to && smove.guard != 0);
             }
-            if (decode(buf, plan)) {                   // (protocol 16: a map, a kind 0 .. 4 for each colour, the teams: none or two seats, the lower first)
+            if (decode(buf, plan)) {                   // (protocol 16: a map, a kind 0 .. 4 for each color, the teams: none or two seats, the lower first)
                 ++accepted;
                 ASSERT_TRUE(encode(plan) == buf);
                 for (const PlanKind kind : plan.plan) ASSERT_TRUE(static_cast<uint8_t>(kind) <= kPlanKindLast);

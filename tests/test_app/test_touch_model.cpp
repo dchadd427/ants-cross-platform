@@ -837,7 +837,7 @@ Alphas alphas_of(const Paint& paint) {
     for (const TouchPaint& r : paint) {
         if (r.color.r == 255 && r.color.g == 214 && r.color.b == 64) a.gold = r.color.a;
         else if (r.color.r == 24 && r.color.g == 16 && r.color.b == 0) a.edge = r.color.a;
-        else a.gold = a.edge = -2;          // (a colour that is neither)
+        else a.gold = a.edge = -2;          // (a color that is neither)
     }
     return a;
 }
@@ -894,7 +894,7 @@ void test_feedback() {
     }
     check(wrong == 0, "500 annuli (centres anywhere, fractions included, radii from a speck to 40): every pixel whose centre lies in the ring is covered and no other (" + std::to_string(wrong) + " wrong)");
     check(overlapping == 0, "no pixel is covered twice (the spans of a row never overlap)");
-    check(shapes == 0, "every rectangle is one row high, wider than nothing, inside the window and in the colour that was given");
+    check(shapes == 0, "every rectangle is one row high, wider than nothing, inside the window and in the color that was given");
     check(covered_total > 100000, "(the sweep has teeth: " + std::to_string(covered_total) + " covered pixels in all)");
     {
         Paint p;
@@ -974,15 +974,15 @@ void test_feedback() {
         check(a.gold == 178 && a.edge == 133, "halfway: 178 for the gold (177.5 rounded) and three quarters of 177.5 for the dark edge: " + std::to_string(a.gold) + ", " + std::to_string(a.edge));
     }
     check(same_paint(touch_ring_paint(TouchControl::Mark{100.5, 80.5, -3.0}, slop), r0) && same_paint(touch_ring_paint(TouchControl::Mark{100.5, 80.5, 7.0}, slop), r1), "a progress outside 0 .. 1 is the nearest end");
-    // the colours: gold and a dark edge, nothing else; the hole is empty
+    // the colors: gold and a dark edge, nothing else; the hole is empty
     {
-        bool colours = true;
+        bool colors = true;
         for (const TouchPaint& r : r1) {
             const bool is_gold = r.color.r == 255 && r.color.g == 214 && r.color.b == 64;
             const bool is_edge = r.color.r == 24 && r.color.g == 16 && r.color.b == 0;
-            colours = colours && (is_gold || is_edge);
+            colors = colors && (is_gold || is_edge);
         }
-        check(colours, "gold (255, 214, 64) and a dark edge (24, 16, 0), nothing else");
+        check(colors, "gold (255, 214, 64) and a dark edge (24, 16, 0), nothing else");
         Coverage c(0, 0, 200);
         c.add(r1);
         int inside = 0;

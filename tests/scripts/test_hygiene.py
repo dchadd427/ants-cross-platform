@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -241,6 +242,70 @@ class Cli(Tree):
         done = self.run_tool("--list")
         self.assertEqual(done.returncode, 0)
         self.assertIn("ASSERT_TRUE definitions", done.stdout)
+
+
+class Spelling(Tree):
+    UK = "col" + "our"          # (the test file passes the check itself)
+
+    def test_the_british_spelling_fails_in_any_case_and_compound(self):
+        for i, w in enumerate([self.UK, self.UK.capitalize(), self.UK.upper(), self.UK + "s", "dis" + self.UK + "ed", "k" + self.UK.capitalize() + "Red"]):
+            self.put("src/f%d.cpp" % i, "int x;\n// the %s here\n" % w)
+        out = ch.check_spelling(self.root, self.files())
+        self.assertEqual(len(out), 6)
+        self.assertTrue(out[0].startswith("src/f0.cpp:2: British spelling"))
+
+    def test_the_american_spelling_and_other_words_pass(self):
+        self.put("docs/a.md", "color, Colors, COLOR, colored, a cool hour\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+
+    def test_a_file_name_fails(self):
+        self.put("tools/make_%s.py" % self.UK, "x = 1\n")
+        self.assertEqual(len(ch.check_spelling(self.root, self.files())), 1)
+
+    def test_skipped_folders_binary_files_and_lvl_pass(self):
+        for rel in ("Community-Maps/README.md", "docs/legacy/x.md", "third_party/sqlite/a.c"):
+            self.put(rel, "the %s\n" % self.UK)
+        self.put("Community-Maps/m.lvl", "%s\n" % self.UK)
+        with open(os.path.join(self.root, "b.bin"), "wb") as f:
+            f.write(b"\0\0" + self.UK.encode())
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+
+    def test_a_kept_name_passes_only_in_its_own_files(self):
+        uk = self.UK
+        forms = ['"%s": "Green"' % uk, "seat['%s']" % uk, "`%s` (`all`)" % uk, "/history?%s=blue" % uk, "seat.%s" % uk, "{ %s: 'all' }" % uk]
+        for rel in ("web/history_page.js", "web/match.html", "src/ants_server/history_record.cpp", "docs/REPLAYS.md"):
+            self.put(rel, "\n".join(forms) + "\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+        for rel in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp"):        # the same text anywhere else is found, line by line
+            self.put(rel, "\n".join(forms) + "\n")
+        out = ch.check_spelling(self.root, self.files())
+        self.assertEqual(len(out), 3 * len(forms))
+        self.assertTrue(all(o.split(":")[0] in ("web/live.html", "web/replay_page.js", "src/ants_net/x.cpp") for o in out))
+
+    def test_the_wire_notice_and_the_filter_list_have_their_own_places(self):
+        uk = self.UK
+        notice = "This map cannot be played with these %ss." % uk
+        listing = "limit, offset, who, rec, %s, mode" % uk
+        for rel in ("include/ants_net/protocol.hpp", "web/front/lobby_rules.js"):
+            self.put(rel, notice + "\n")
+        for rel in ("docker/nginx.conf", "include/ants_server/control.hpp", "src/ants_server/control_history.cpp"):
+            self.put(rel, listing + "\n")
+        self.assertEqual(ch.check_spelling(self.root, self.files()), [])
+        self.put("web/lobby.html", notice + "\n")                                         # the notice is not allowed in a page that does not compare with it
+        self.put("docs/OTHER.md", listing + "\n")
+        self.put("web/history_page.js", listing + "\n")                                   # the list form is for the three places only
+        self.assertEqual(sorted(x.split(":")[0] for x in ch.check_spelling(self.root, self.files())), ["docs/OTHER.md", "web/history_page.js", "web/lobby.html"])
+
+    def test_a_page_that_reads_a_parsed_player_does_not_read_the_records_key(self):
+        # parsePlayer("Green (Mika)") gives { color, name }; the history record's seat key is another thing (the live page slipped once)
+        bad = []
+        web = os.path.join(ROOT, "web")
+        for name in sorted(os.listdir(web)):
+            if name.endswith((".html", ".js")):
+                text = open(os.path.join(web, name), encoding="utf-8").read()
+                if "parsePlayer" in text and re.search(r"\.%s\b" % self.UK, text):
+                    bad.append(name)
+        self.assertEqual(bad, [])
 
 
 class RealRepository(unittest.TestCase):

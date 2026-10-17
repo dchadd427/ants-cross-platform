@@ -146,7 +146,7 @@ public:
     /// A group move; more ants than one command may hold (kMaxCommandAnts) become several intents. An empty list is nothing.
     void move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// A group attack on the ant that stands at `tile`. The controller lets it through only when an ant of another team (not an ally) stands there and the tile is not part of a
-    /// hill: what a person's click on an enemy ant sends (the attack cursor shows over an ant of another colour, and an ant on a hill tile gets the plain move cursor).
+    /// hill: what a person's click on an enemy ant sends (the attack cursor shows over an ant of another color, and an ant on a hill tile gets the plain move cursor).
     void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent);
     /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);

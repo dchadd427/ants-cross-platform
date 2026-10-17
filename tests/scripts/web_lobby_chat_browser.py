@@ -5,14 +5,14 @@ Needs the web image of this tree served by nginx (tools/web_without_docker.py bu
 check starts the server (with the options of docker-compose.stack.yml), puts a front door before the site (/ws goes to the server, everything else to the site), and drives the front page like people:
 each person is a browser of their own, a room is made by the first page and joined by the others through its link. Parts (--only NAME):
 
-  * desktop  three people in one room on a 1280 x 900 window: the box is under the colours, with the hint to send the link while one is alone; a person who joins is a small line of the system ("Bea
-             joined as Red.") and a joiner sees the hint to say hello; lines typed with real key events come back from the room to everybody, in the same order, in the colour of the seat and under
+  * desktop  three people in one room on a 1280 x 900 window: the box is under the colors, with the hint to send the link while one is alone; a person who joins is a small line of the system ("Bea
+             joined as Red.") and a joiner sees the hint to say hello; lines typed with real key events come back from the room to everybody, in the same order, in the color of the seat and under
              the name; a name or a line that is markup is shown as the characters that it is (no element is made, nothing runs); a character that the game cannot show is left out as it is typed, with the
              hint; five lines at once: four go, the page keeps the fifth and asks for a little slower, and it goes a moment later, nobody is thrown out; a line of 100 characters stays inside the box; a
              copy of the log reads "Ann: hello"; a line that arrives while the box is below the window is also the page's toast, one that arrives while it is in view is not; a line that the room does
              not say back (an uplink that swallows it: no echo in 3 s; a link that is cut with the line in it: at once) is flagged, its text is back in the field and the field, read-only while the
              link is down, keeps the focus; START takes every page to the game page;
-  * phone    a 390 x 844 phone: the box is after the colours and before the map, the page has no sideways scroll, the field is 16 px or more and a finger tall, the START bar does not cover the field
+  * phone    a 390 x 844 phone: the box is after the colors and before the map, the page has no sideways scroll, the field is 16 px or more and a finger tall, the START bar does not cover the field
              when the keyboard has shrunk the window (the browser scrolls the field into view), the same sideways (844 x 390), a line that is typed there reaches the others, and the toast of a line of
              100 characters with no blank stays inside its frame, is cut to 60, takes no tap and is not kept up by a talker (one chat toast in 4 s).
 --shots DIR saves the pictures that the check looks at.
@@ -177,17 +177,17 @@ def main():
             check(ann.field()["readOnly"] is False and ann.field()["disabled"] is False, "and the field is open")
             code = ann.room_code()
             grid = ann.ev("(function () { var c = document.getElementById('chat').getBoundingClientRect(), r = document.querySelector('#lobby > section.panel').getBoundingClientRect(), s = document.querySelector('aside.side').getBoundingClientRect(); return [c.top >= r.bottom - 1, c.top >= s.bottom - 1, c.width > 1000]; })()")
-            check(grid == [True, True, True], "a wide window: the box is across the page under the colours and the map (%s)" % grid)
+            check(grid == [True, True, True], "a wide window: the box is across the page under the colors and the map (%s)" % grid)
             ann.shot(args.shots, "desktop-alone")
             bea = visitor()
             bea.desktop()
             check(bea.join(web, code, "Bea"), "Bea opens the link and joins")
             check(bool(wait_for(lambda: ann.texts() == ["Bea joined as Red."], 5, 0.1)), "Ann sees a small line of the system: Bea joined as Red (%s)" % ann.texts())
-            check(ann.lines()[0]["cls"] == "sys" and ann.lines()[0]["c"] is None, "(a line of the system: in no colour)")
+            check(ann.lines()[0]["cls"] == "sys" and ann.lines()[0]["c"] is None, "(a line of the system: in no color)")
             check(bea.texts() == ["Nothing said yet. Say hello: everyone in this room will see it."], "the joiner sees the hint to say hello (%s)" % bea.texts())
             ann.say("hello Bea")
             check(bool(wait_for(lambda: bea.texts()[-1:] == ["Ann: hello Bea"] and ann.texts()[-1:] == ["Ann: hello Bea"], 5, 0.1)), "Ann's line reaches Bea and comes back to Ann, under her name")
-            check(ann.lines()[-1]["c"] == "green" and bea.lines()[-1]["c"] == "green", "in the colour of Ann's seat (Green)")
+            check(ann.lines()[-1]["c"] == "green" and bea.lines()[-1]["c"] == "green", "in the color of Ann's seat (Green)")
             check("Ann: hello Bea" in (bea.ev(SELECTED) or ""), "a copy of the log reads \"Ann: hello Bea\", with a blank after the name (%r)" % bea.ev(SELECTED))
             check(bea.ev("document.getElementById('chat-log').tagName.toLowerCase()") == "div" and bea.ev("document.querySelectorAll('#chat-log li, #chat-log ul').length") == 0, "the log is a div with div rows (no list item whose list the log's role took away)")
             check(ann.field()["value"] == "" and ann.field()["focus"] is True, "Ann's field is empty and keeps the focus")
@@ -306,7 +306,7 @@ def main():
             check(bea.join(web, code, "Bea"), "Bea joins from a computer")
             check(bool(wait_for(lambda: ann.people() == 2, 5, 0.1)), "Ann sees her")
             places = ann.ev("(function () { var cards = document.querySelectorAll('#slots .slot'), last = cards[cards.length - 1].getBoundingClientRect(), c = document.getElementById('chat').getBoundingClientRect(), m = document.querySelector('.maprow').getBoundingClientRect(); return [c.top >= last.bottom - 1, m.top >= c.bottom - 1, document.documentElement.scrollWidth <= window.innerWidth, c.width <= window.innerWidth]; })()")
-            check(places == [True, True, True, True], "the box is after the colours and before the map, and the page has no sideways scroll (%s)" % places)
+            check(places == [True, True, True, True], "the box is after the colors and before the map, and the page has no sideways scroll (%s)" % places)
             font = ann.ev("(function () { var i = document.getElementById('chat-input'), s = getComputedStyle(i), r = i.getBoundingClientRect(); return [parseFloat(s.fontSize), r.height]; })()")
             check(font[0] >= 16 and font[1] >= 44, "the field is 16 px or more (iOS does not zoom into it) and a finger tall (%s)" % font)
             bea.say("hello from the computer")

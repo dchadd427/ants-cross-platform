@@ -6,7 +6,7 @@ This page describes what happens in a match: the data the game reads, the six ki
 
 The game reads the original's own data files directly: no conversion tool and no pre-processing. The code is the library `ants_assets` (`src/ants_assets/`).
 
-- `Original-Ants/ants.chd` is the asset archive: a header, a 256-colour palette, 2,794 raw paletted sprite bitmaps, 91 PCM sound clips and 1,344 animation sequences (section 3 of the reverse-engineering document).
+- `Original-Ants/ants.chd` is the asset archive: a header, a 256-color palette, 2,794 raw paletted sprite bitmaps, 91 PCM sound clips and 1,344 animation sequences (section 3 of the reverse-engineering document).
 - `Original-Ants/Maps/*.LVL` are the maps: the match length in the header, a tile dictionary, two terrain layers, objects (start markers, plants, food piles, flower-dropper waypoints), the level's default ant type and a final word, every team's egg stock ([the map file](MAP_FORMAT.md)).
 - The map loader reads a file the way the original's loader does (sections 4.4 and 4.5), so maps made by the community load too:
   - the header lists the rows first, so a map need not be square (`OCEAN` has 81 rows of 100 columns);
@@ -131,7 +131,7 @@ A special order plays the original's action clip, with its frame sounds. A melee
 - Defuses a bomb of any team (about 1.1 s).
 - A bomb goes off when an ant walks onto it: the ant loses 2 hit points and is thrown 4 tiles. One bomb in five is a dud (see Death & Burning).
 - With several ants selected, the move click sends them all to the bomb, and the first one to step on it sets it off.
-- A map file can hold bombs of its own (the original's tile ids 129 red, 130 green, 131 black and 132 blue, whatever the map's dictionary calls them: 208 community maps do, `Bombz Away` fills its floor with them). They are drawn in that colour and are owned by the team that the map file names with each (most maps name team 0, the first player; a number that is no team owns it for nobody): only the ants of the owner and its ally route around such a bomb, and the first ant of any team that steps on one sets it off ([the report](reverse_engineering/map_file_bombs.md)).
+- A map file can hold bombs of its own (the original's tile ids 129 red, 130 green, 131 black and 132 blue, whatever the map's dictionary calls them: 208 community maps do, `Bombz Away` fills its floor with them). They are drawn in that color and are owned by the team that the map file names with each (most maps name team 0, the first player; a number that is no team owns it for nobody): only the ants of the owner and its ally route around such a bomb, and the first ant of any team that steps on one sets it off ([the report](reverse_engineering/map_file_bombs.md)).
 
 ### Fire
 
@@ -185,9 +185,9 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 
 ## The start of a match
 
-Every match opens with the original's dialog: its picture, `Get ready to play!  You are the Green Ants.` (Green, Red, Blue or Black: your team's colour), the worker, "Waiting for others...", the 5 s of its task KWFO. It takes every click and key.
+Every match opens with the original's dialog: its picture, `Get ready to play!  You are the Green Ants.` (Green, Red, Blue or Black: your team's color), the worker, "Waiting for others...", the 5 s of its task KWFO. It takes every click and key.
 
-A match of a server's room with two or more people opens with the **countdown card** instead (network protocol 21): the same dialog, bigger, with the seconds that are left of 30, the colours and who plays them, and the chat open; the 30 s start when every game has loaded, and the match's clock and ants wait for them as they wait for the 5 s ([`MULTIPLAYER.md`](MULTIPLAYER.md), "How a match runs"; [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md), "The countdown card").
+A match of a server's room with two or more people opens with the **countdown card** instead (network protocol 21): the same dialog, bigger, with the seconds that are left of 30, the colors and who plays them, and the chat open; the 30 s start when every game has loaded, and the match's clock and ants wait for them as they wait for the 5 s ([`MULTIPLAYER.md`](MULTIPLAYER.md), "How a match runs"; [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md), "The countdown card").
 
 ### The "Get ready to play!" dialog does not cost match time (a deliberate deviation)
 
@@ -212,7 +212,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 
 ### Enemy Ant Inspection
 
-Clicking an enemy ant when none of your ants is selected selects it for inspection: its selection brackets (`*ears`, coloured by health) show, but no order can be given to it. The click itself is in the mouse table of [`CONTROLS.md`](CONTROLS.md).
+Clicking an enemy ant when none of your ants is selected selects it for inspection: its selection brackets (`*ears`, colored by health) show, but no order can be given to it. The click itself is in the mouse table of [`CONTROLS.md`](CONTROLS.md).
 
 The brackets are `dogears` (green) at 9 or 10 hit points, `yelears` (yellow) at 3 to 8 and `redears` (red) at 1 or 2. Your own selected ants get the same ones.
 

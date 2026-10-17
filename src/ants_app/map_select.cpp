@@ -351,7 +351,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
 
     // The labels start empty: the refresh task's first run, 500 ms after the screen was created, fills them and puts the portraits and thumbs on the screen
     if (!refreshed()) return;
-    const ColorRGBA label_colour{239, 231, 223, 255};                 // every label: 0xdfe7ef
+    const ColorRGBA label_color{239, 231, 223, 255};                 // every label: 0xdfe7ef
 
     // 5. The map name (36, 312) 179 x 26 and its description (36, 380) 293 x 26, 18 px lines. A guest shows the HOST's choice (game message 0x22: the file name; the
     // description comes from the guest's OWN copy of the file, "???" when it has none, and before the host's first message the name is empty).
@@ -367,19 +367,19 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             info_text = own->description;
             if (own->minutes > 0) info_text += " (" + std::to_string(own->minutes) + " min)";
         }
-        if (!shown_name.empty()) renderer.draw_text(fit_text(renderer, shown_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
-        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_colour, FontSize::Px18);
+        if (!shown_name.empty()) renderer.draw_text(fit_text(renderer, shown_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_color, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_color, FontSize::Px18);
         if (guest && fog_of_war_) draw_animation_frame0(renderer, archive, "d_fowyes");        // the "Yes" over the fixed "No" box (animation 108, (534, 366)); the leader's buttons show it
     } else if (selected_index_ >= 0 && selected_index_ < static_cast<int32_t>(maps_.size())) {
         const auto& cur = maps_[static_cast<size_t>(selected_index_)];
-        renderer.draw_text(fit_text(renderer, cur.display_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_colour, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, cur.display_name, NAME_W, FontSize::Px18), LABEL_X, NAME_Y, label_color, FontSize::Px18);
         std::string info_text = cur.description;
         if (cur.minutes > 0) info_text += " (" + std::to_string(cur.minutes) + " min)";
-        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_colour, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, info_text, STATUS_W, FontSize::Px18), LABEL_X, INFO_Y, label_color, FontSize::Px18);
     }
 
     // 6. The prompt: the label (36, 447) 293 x 35 with 14 px lines, wrapped at its width
-    draw_label_lines(renderer, status_lines(renderer, room_), LABEL_X, STATUS_Y, label_colour, FontSize::Px14);
+    draw_label_lines(renderer, status_lines(renderer, room_), LABEL_X, STATUS_Y, label_color, FontSize::Px14);
 
     // 7. Players' Status, slot 0: the portrait animation agst301 (12 frames, 1650 ms loop, running since the screen was created) has its origin at (395,115) and
     // the thumbs-up sprite sits at (540,95); the sprite's own part offsets place the ant relative to that origin.
@@ -395,7 +395,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
         renderer.set_hud_team(0);
     };
     if (room_.networked) {
-        // a room: the rows of FUN_010133ef (row_seats: the local player first on a guest), each with the portrait in the seat's colour (the colour follows the
+        // a room: the rows of FUN_010133ef (row_seats: the local player first on a guest), each with the portrait in the seat's color (the color follows the
         // player, not the row), the name and the thumb of a player who is here; the local machine's own thumb is always the good one (latency 0, ready from the start)
         const std::array<int8_t, 4> rows = row_seats(room_);
         for (size_t r = 0; r < rows.size(); ++r) {
@@ -406,7 +406,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
             draw_portrait(static_cast<uint8_t>(seat), row);
             std::string name = room_.seats[seat].name.empty() ? std::string("Player") : room_.seats[seat].name;
             if (name.size() > 16) name.resize(16);
-            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_colour, FontSize::Px18);      // the label (415, 95 + 50 * row) 120 x 20
+            renderer.draw_text(fit_text(renderer, name, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y + row, label_color, FontSize::Px18);      // the label (415, 95 + 50 * row) 120 x 20
             static const char* const kThumbs[4] = {"thumb1.bmp", "thumb2.bmp", "thumb3.bmp", "thumb4.bmp"};   // netgood, netok, netbad, netunk
             const size_t thumb = seat == room_.my_seat ? 0u : (static_cast<size_t>(room_.seats[seat].thumb) & 3u);
             renderer.draw_named_sprite(kThumbs[thumb], PLAYER_THUMB_X, PLAYER_THUMB_Y + row);
@@ -414,7 +414,7 @@ void MapSelectScreen::render(IRenderer& renderer, const ants::assets::AssetArchi
     } else {
         const std::string display_user = player_name_.empty() ? "Player" : player_name_;
         draw_portrait(player_team_, 0);
-        renderer.draw_text(fit_text(renderer, display_user, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y, label_colour, FontSize::Px18);
+        renderer.draw_text(fit_text(renderer, display_user, PLAYER_NAME_W, FontSize::Px18), PLAYER_NAME_X, PLAYER_THUMB_Y, label_color, FontSize::Px18);
         renderer.draw_named_sprite("thumb1.bmp", PLAYER_THUMB_X, PLAYER_THUMB_Y);
     }
 }

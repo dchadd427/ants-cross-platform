@@ -12,6 +12,7 @@ Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --too
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
   6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS;
   7. no tracked path begins with a build folder (build/ or build_*/ at the top: local build output that .gitignore keeps out; it gets in by `git add -f` or a tool that adds everything).
+  8. American spelling (AGENTS.md "Spelling"): no tracked text file writes the British spelling of "color" (SPELLING_*: the kept names are allowed by file; the word is built from two halves below, so that this file does not name it);
 Ratchets: a number may never grow. When a page or file shrinks by more than the tolerance, the table must be lowered, so that the gain is kept.
 """
 import argparse
@@ -252,10 +253,54 @@ def check_build_folders(files):
             % (folder, len(names), names[0], folder) for folder, names in sorted(tracked.items())]
 
 
+BRITISH = "col" + "our"       # (the word the project does not write; split so that this file passes its own check)
+SPELLING_WORD = re.compile(BRITISH, re.I)
+SPELLING_SKIPPED = (
+    "Community-Maps/",         # the players' maps and their README: never edited here
+    "docs/legacy/",            # extracts of the original program, kept as the original wrote them
+    "third_party/",            # other people's code
+)
+_NOTICE = re.escape("This map cannot be played with these %ss." % BRITISH)    # the server's notice, which the web lobby matches word for word (protocol 21)
+_KEY = (r"""["'`]%s["'`]""" % BRITISH,                                          # the key "%s" of a match record's seats (GET /history, stored in the history) and of its filter
+        r"\b%s=" % BRITISH,                                                      # the query parameter of GET /history and of the pages' addresses (bookmarks)
+        r"\.%s\b|\b%s:" % (BRITISH, BRITISH))                                    # the same key as a property or object key
+_KEY_LIST = r"\brec, %s\b" % BRITISH                                            # the sentence that lists the filter names (a comment or the server's error text)
+SPELLING_KEPT = {              # file -> patterns that may keep the British word on a line (by place, so that `x = q.<word>` anywhere else is found)
+    # the wire notice: the server's text, the lobby page that compares with it, the tests that pin it
+    "include/ants_net/protocol.hpp": [_NOTICE], "web/front/lobby_rules.js": [_NOTICE], "tests/scripts/test_web_lobby_rules.py": [_NOTICE],
+    "tests/scripts/web_lobby_rules_check.js": [_NOTICE], "tests/test_net/test_lockstep_protocols.cpp": [_NOTICE],
+}
+for _f in ("src/ants_server/history_record.cpp", "src/ants_server/control_history.cpp", "web/history_page.js", "web/match.html", "web/matches.html",
+           "docs/REPLAYS.md", "docker/nginx.conf", "tests/test_server/test_history_record.cpp", "tests/test_server/test_history_store.cpp",
+           "tests/scripts/test_nginx_history.py", "tests/scripts/web_history_check.js", "tests/scripts/web_matches_check.py",
+           "tests/scripts/test_web_matches.py", "tests/scripts/web_match_stats_check.js"):       # the files that write or read the history record's key or the parameter
+    SPELLING_KEPT[_f] = list(_KEY)
+for _f in ("src/ants_server/control_history.cpp", "include/ants_server/control.hpp", "docker/nginx.conf"):    # the three places that list the filter names
+    SPELLING_KEPT.setdefault(_f, []).append(_KEY_LIST)
+
+
+def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
+    kept = SPELLING_KEPT if kept is None else kept
+    out = []
+    for rel in files:
+        if rel.startswith(skipped) or os.path.splitext(rel)[1].lower() in TEXT_SUFFIXES_SKIPPED:
+            continue
+        if SPELLING_WORD.search(rel):
+            out.append("%s: the file name has the British spelling (write the American one)" % rel)
+        data = read_bytes(root, rel)
+        if looks_binary(data):
+            continue
+        allowed = re.compile("|".join(kept[rel]), re.I) if kept.get(rel) else None
+        for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            if SPELLING_WORD.search(allowed.sub("", line) if allowed else line):
+                out.append("%s:%d: British spelling (AGENTS.md, Spelling: American English; write the American spelling of color)" % (rel, n))
+    return out
+
+
 def run_checks(root):
     files = tracked_files(root)
     return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files))
+            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files))
 
 
 def list_numbers(root):

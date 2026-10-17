@@ -2,7 +2,7 @@
 // test_view_fingerprint*.cpp pins the picture at the zoom 1 (that program, whose 551 numbers did not move when the zoom came, is the oracle of the zoom 1: at the zoom 1 the game draws
 // exactly what it always drew). The classic 640 x 480 picture and the 16:9 picture of 960 x 540 each have their own numbers.
 //   * "zoom.world.*": the pixels of the real software renderer's world pass (Renderer::render_world) on GAUNTLET and TINY at the corners and the middle of the map, from a half-pixel origin
-//     (the zoom 2), with ants of every type and colour, effects, score bubbles, selection markers, the click marker, hit point digits and the fog of war;
+//     (the zoom 2), with ants of every type and color, effects, score bubbles, selection markers, the click marker, hit point digits and the fog of war;
 //   * "zoom.app.*": whole frames of a headless Application (the HUD, the minimap with its frame of the seen world, the world) on both maps, the text boxes masked as in the zoom 1 program,
 //     taken at once after the start, behind the start dialog: the ants stand in the first frame of the clip that the first tick will start (the snapshot of an engine that has not ticked);
 //   * "zoom.app.ants.*": the same frames of a match that has TICKED (the ants play the clips that the simulation started), at 0.5, 1 and 2;
@@ -471,7 +471,7 @@ void radar_and_camera_scenarios(const assets::AssetArchive& arc) {
                         RectRenderer rec;
                         rig.hud.render(rec, rig.arc, rig.world(), rig.camera);
                         for (const auto& r : rec.frames) {
-                            if (r.colour.r != 251 || r.colour.g != 251 || r.colour.b != 255) continue;
+                            if (r.color.r != 251 || r.color.g != 251 || r.color.b != 255) continue;
                             h.i32(r.x);
                             h.i32(r.y);
                             h.i32(r.w);

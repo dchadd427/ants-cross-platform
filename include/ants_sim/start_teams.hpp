@@ -31,7 +31,7 @@ std::string start_teams_text(const StartTeams& teams);
 /// What a match of `roster` (bit s: seat s plays) makes of the teams: the pairs in the order they are made (the chosen pair, then the two other seats when both play), or `why` (and no pair) when a
 /// seat of the pair does not play or the teams would be the whole match (the original ends a match at once in which every live team is allied). Free for all makes nothing and says nothing.
 /// `short_why` is the same reason in a form that fits a line of chat with the prefix "No teams: " (the room's notice, at most kMaxChatChars in all): the seat's reason is short already, and
-/// names the seat by its colour as the pages do ("Black does not play in this match."), where `why` has the digit that the command line takes ("seat 3 does not play in this match.").
+/// names the seat by its color as the pages do ("Black does not play in this match."), where `why` has the digit that the command line takes ("seat 3 does not play in this match.").
 struct StartTeamsPlan {
     std::vector<std::array<uint8_t, 2>> pairs;
     std::string why;
@@ -51,7 +51,7 @@ std::vector<StartTeams> room_team_choices(uint8_t players);
 /// The choices for a match of the seats in `roster` (bit s: seat s plays; any seats, not the first ones): free for all first, then every way to make teams: four seats: the lowest seat with each of the others
 /// (the two left are the other team), three: any two of the three (the third plays alone); only free for all for fewer than three. Bits above seat 3 mean nothing. For the seats 0 to `players` - 1 (2 to 4) it is room_team_choices(players).
 std::vector<StartTeams> roster_team_choices(uint8_t roster);
-/// A choice as a person reads it, from the colour words of the seats that play (`roster`): "Free for all", "Green + Red against Blue + Black", "Green + Red against Blue". A pair that `roster` cannot make
+/// A choice as a person reads it, from the color words of the seats that play (`roster`): "Free for all", "Green + Red against Blue + Black", "Green + Red against Blue". A pair that `roster` cannot make
 /// is written as "Green + Red" alone.
 std::string start_teams_title(const StartTeams& teams, uint8_t roster);
 

@@ -39,8 +39,8 @@ ID_DOLLAR = "ants-Dollar-20261013-120000Z"
 READY = live.READY
 
 
-def seat(n, colour, name, bot, **kw):
-    s = {"seat": n, "colour": colour, "name": name, "bot": bot, "score": 0, "killed": 0, "lost": 0, "hatched": 0, "bombs_planted": 0, "bombs_defused": 0, "fires_lit": 0, "left": False, "winner": False}
+def seat(n, color, name, bot, **kw):
+    s = {"seat": n, "colour": color, "name": name, "bot": bot, "score": 0, "killed": 0, "lost": 0, "hatched": 0, "bombs_planted": 0, "bombs_defused": 0, "fires_lit": 0, "left": False, "winner": False}
     s.update(kw)
     return s
 
@@ -425,7 +425,7 @@ def main():
                             "#overtime ComebackPip (bot, Hard) won from 285 points behind (at 3:20)", "#activity BusiestBea: 937 orders"], "the band: four chips, each a link to its section, a name that is markup as text: %s" % chips)
             charts = tab.ev("[].map.call(document.querySelectorAll('#overtime svg.chart'), function (c) { return [c.getAttribute('width'), c.parentNode.clientWidth, c.querySelectorAll('path.ln').length, c.getAttribute('aria-label').slice(0, 24)]; })")
             check(len(charts) == 2 and all(c[0] == str(c[1]) and c[2] == 4 for c in charts) and charts[0][3] == "Score of every seat over", "over time: two charts as wide as their boxes, a line for each seat (%s)" % charts)
-            check(tab.ev("[].map.call(document.querySelectorAll('#overtime .key li'), function (l) { return l.firstChild.className; })") == ["mk circle", "mk square", "mk triangle", "mk diamond"], "the legend gives each seat its own shape as well as its colour")
+            check(tab.ev("[].map.call(document.querySelectorAll('#overtime .key li'), function (l) { return l.firstChild.className; })") == ["mk circle", "mk square", "mk triangle", "mk diamond"], "the legend gives each seat its own shape as well as its color")
             check(tab.ev("document.querySelector('#overtime .leadbar').children.length") == 2 and "Rex (bot, Hard) had no ant left at 10:13" in tab.ev("document.querySelector('#overtime .facts').textContent"),
                   "who led (two segments) and the facts under the charts")
             heat = tab.ev("[].map.call(document.querySelectorAll('#activity .heat .hrow'), function (r) { return r.querySelectorAll('.hc').length; })")

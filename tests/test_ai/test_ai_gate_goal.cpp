@@ -13,7 +13,7 @@
 //   AI27.5b  a task that ran out of attempts starts afresh when a source of its ant appears
 //   AI27.6   who plays it: Medium and Hard on a walled map, not Easy, not a map with a free pile; the numbers of the plan are the owner's
 //   AI27.7   a Bomber defuses a bomb that plugs a rock wall's tunnel; the pick-up trips avoid map bombs
-//   AI27.7c  a bomb of the seat's own colour that plugs a tunnel is defused like any other (act_defuse counts a bomb of any colour at the goal cell as armed)
+//   AI27.7c  a bomb of the seat's own color that plugs a tunnel is defused like any other (act_defuse counts a bomb of any color at the goal cell as armed)
 //   AI27.8   the sealed vault of HELLRAISER and the shore breach of POPcOrN, on the Rig
 //   AI27.9   HELLRAISER through the REAL controller (the arena's play_match, with the filter that refuses a click on a power-up and a plant under an ant): each seat banks food over two walls
 //   AI27.9b  the same with an idle own worker on the plant tile and on the tile to step from (the controller refuses an order onto an ant): they are sent aside and the first attempt banks
@@ -656,9 +656,9 @@ void run_gate_goal_tests() {
             ASSERT_EQ(rig.as<StandardBot>().powerups().taken(), 1u);
             ASSERT_TRUE(f.sim.grid().has_bomb_at(TileCoord{15, 8}));
         }
-        {   // (c) a bomb of the SEAT'S OWN colour (every bomb of Dustbin, Ghetto, FKD Deathmatch and !-Midz-! is green, team 0's): the engine refuses a bomb tile as a path step for the owner's team, so for the
-            // owner the bomb is a wall, and the engine defuses a bomb of any colour. A lake (rows 30 to 34) between the hill and the pile, its shore held by own bombs: the shore breach plans a Defuse, and the
-            // Bomber has to defuse the bomb (the task once took a bomb of its own colour for defused and ordered it again for 4,600 ticks)
+        {   // (c) a bomb of the SEAT'S OWN color (every bomb of Dustbin, Ghetto, FKD Deathmatch and !-Midz-! is green, team 0's): the engine refuses a bomb tile as a path step for the owner's team, so for the
+            // owner the bomb is a wall, and the engine defuses a bomb of any color. A lake (rows 30 to 34) between the hill and the pile, its shore held by own bombs: the shore breach plans a Defuse, and the
+            // Bomber has to defuse the bomb (the task once took a bomb of its own color for defused and ordered it again for 4,600 ticks)
             Field f;
             for (int y = 30; y <= 34; ++y) {
                 for (int x = 0; x < 60; ++x) f.sim.set_terrain(x, y, sim::TERRAIN_WATER);
@@ -673,7 +673,7 @@ void run_gate_goal_tests() {
             Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(shore_plan()));
             auto& bot = rig.as<StandardBot>();
             rig.run(2500);
-            ASSERT_TRUE(bot.gate_goals().done() >= 1u);                                // the Bomber defused a bomb of its own colour ...
+            ASSERT_TRUE(bot.gate_goals().done() >= 1u);                                // the Bomber defused a bomb of its own color ...
             ASSERT_TRUE(bot.gate_goals().defuses() < 50u);                             // ... and did not count the same bomb as defused look after look
             int left = 0;
             for (int x = 0; x < 60; ++x) left += f.sim.grid().has_bomb_at(TileCoord{x, 29}) ? 1 : 0;

@@ -399,7 +399,7 @@
    "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
   },
   {
-   "id": "rules_note_says_colour_for_two",
+   "id": "rules_note_says_color_for_two",
    "file": "web/front/lobby_rules.js",
    "old": "(names.length > 1 ? 's' : '')",
    "new": "''",
@@ -524,7 +524,7 @@
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.200 ./build/tests/test_server/test_server"
   },
   {
-   "id": "lobby_game_asking_a_colour_only_holds",
+   "id": "lobby_game_asking_a_color_only_holds",
    "file": "src/ants_net/lobby.cpp",
    "old": "if (g.reserved && (hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {",
    "new": "if (g.reserved && (hello.client_kind == kClientPage)) {",
@@ -595,8 +595,8 @@
   {
    "id": "page_replay_bare_names",
    "file": "web/front/rematch.js",
-   "old": "return kept ? COLOURS[seat] + ' (' + kept + ')' : COLOURS[seat];",
-   "new": "return kept || COLOURS[seat];",
+   "old": "return kept ? COLORS[seat] + ' (' + kept + ')' : COLORS[seat];",
+   "new": "return kept || COLORS[seat];",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
   },
   {

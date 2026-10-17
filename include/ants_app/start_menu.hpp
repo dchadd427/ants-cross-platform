@@ -94,7 +94,7 @@ const char* fill_choice_caption() noexcept;
 /// "Empty seats will be Medium bots." (the same level in every seat), else the seats one by one: "At START: Red gets an Easy bot, Black a Hard bot." (the short form "At START: Red Easy, Blue Medium,
 /// Black Hard." when the long one would not fit the line)
 std::string fill_choice_sentence(const net::FillPlan& plan, int players = 4);
-/// What the room's panel tells about the teams of the room it made, "Room teams: Green + Red against Blue + Black." (the colour words of the seats of a room of `players`; they are in the room's
+/// What the room's panel tells about the teams of the room it made, "Room teams: Green + Red against Blue + Black." (the color words of the seats of a room of `players`; they are in the room's
 /// create block, so the room makes them for every start); "" for free for all
 std::string room_teams_sentence(const LocalTeams& teams, int players);
 
@@ -184,7 +184,7 @@ enum class MenuKind : uint8_t {
     Button,
     Cycler,     // a button that shows a value and goes through its values (click, Enter, Left / Right)
     Field,      // an edit field (the original's: appends printable characters, Backspace deletes)
-    Portrait    // an ant of a colour (the seat of a row)
+    Portrait    // an ant of a color (the seat of a row)
 };
 
 enum class MenuTone : uint8_t { Normal, Dim, Bad };
@@ -207,7 +207,7 @@ struct MenuElement {
     bool pressed{false};                      // the left button went down on it and is still down
     bool caret{false};                        // a field: the caret is in its blink phase
     bool all_selected{false};                 // a field: its text is selected (the next typed character replaces it)
-    uint8_t team{0};                          // a portrait: the colour of the seat
+    uint8_t team{0};                          // a portrait: the color of the seat
     MenuGroup group{MenuGroup::Middle};       // where it hangs when the menu is the 16:9 picture (its rect is already moved)
 };
 
@@ -242,7 +242,7 @@ public:
     static constexpr const char* kRefusedCharsText = "Only letters A-Z, digits and simple punctuation.";
     /// The line of the single-player panel under the seats (the rule-8 text when a computer player is seated, the original's game when nobody is)
     static constexpr const char* kBotsLine = "Bots play without fog of war. Empty seats have no ants.";
-    static constexpr const char* kNoBotsLine = "No bots: the original single-player game (the other colours stand still).";
+    static constexpr const char* kNoBotsLine = "No bots: the original single-player game (the other colors stand still).";
 
     StartMenu();
 
@@ -328,7 +328,7 @@ public:
     std::vector<LocalTeams> team_choices() const;
     /// The teams that Continue asks for as `--teams` would give them: the Teams choice when it is one of the choices that the seats offer now, else free for all
     LocalTeams teams() const;
-    /// What the Teams cycler shows for a choice: "Free for all", "You + Red" (the colour of the bot's seat)
+    /// What the Teams cycler shows for a choice: "Free for all", "You + Red" (the color of the bot's seat)
     static std::string teams_text(const LocalTeams& teams, uint8_t own_seat);
     /// The Host panel's choices as Host asks for them. The bots: the levels of the seats 1 .. players - 1 (the leader has seat 0; the seats beyond the room's players are left out)
     net::FillPlan host_fill() const;
@@ -421,7 +421,7 @@ private:
     std::function<bool(const std::string&)> clipboard_set_;
 };
 
-/// Draws the current panel: the `sm_screen` background of the original (the 16:9 menu: the wide clay and frame instead), then the elements (banners, buttons and fields in the colours of the
+/// Draws the current panel: the `sm_screen` background of the original (the 16:9 menu: the wide clay and frame instead), then the elements (banners, buttons and fields in the colors of the
 /// original's buttons and boxes, the ants of the seats, text in the game's font). The frame-rate counter and the version are the application's, drawn over it as on every screen.
 void render_start_menu(IRenderer& renderer, const assets::AssetArchive& archive, const StartMenu& menu);
 

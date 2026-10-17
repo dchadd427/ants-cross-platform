@@ -125,7 +125,7 @@ void test_hills_by_id(Renderer& r) {
     for (uint16_t id = 245; id <= 248; ++id) dotted.tile_dictionary[id] = ".";
     Image a = picture_of(r, dotted);
     check(image_diff(reference, a) == 0, "hill names \".\": the same picture");
-    // the names of two colours exchanged, and of the other two shifted (a permuted dictionary)
+    // the names of two colors exchanged, and of the other two shifted (a permuted dictionary)
     assets::LevelData permuted = original;
     std::swap(permuted.tile_dictionary[245], permuted.tile_dictionary[248]);
     std::swap(permuted.tile_dictionary[246], permuted.tile_dictionary[247]);

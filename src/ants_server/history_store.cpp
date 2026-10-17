@@ -22,7 +22,7 @@ namespace {
 
 constexpr int kSqliteConstraint = 19;              // SQLITE_CONSTRAINT: the low byte of a refusal by a CHECK, a key or a NOT NULL (the extended codes keep it)
 
-const char* const kColours[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
+const char* const kColors[sim::MAX_PLAYERS] = {"Green", "Red", "Blue", "Black"};
 
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -187,7 +187,7 @@ db::Error load_one(db::Database& d, const std::string& id, HistoryRecord& out, b
     return e;
 }
 
-// What a seat shows on the pages: "Pip (bot, Hard)" ("Bot (Level)" for a match stored before the names), the name that was typed, or the colour
+// What a seat shows on the pages: "Pip (bot, Hard)" ("Bot (Level)" for a match stored before the names), the name that was typed, or the color
 std::string shown_name(const HistorySeat& s) {
     if (!s.bot.empty()) {
         if (s.name.empty()) return "Bot (" + s.bot + ")";                                    // (a match stored before the names, or a plain "Bot")
@@ -197,7 +197,7 @@ std::string shown_name(const HistorySeat& s) {
         return label.empty() ? "Bot (" + s.bot + ")" : label;                               // ("Pip (bot, Hard)")
     }
     if (!s.name.empty()) return s.name;
-    return kColours[s.seat < sim::MAX_PLAYERS ? s.seat : 0];
+    return kColors[s.seat < sim::MAX_PLAYERS ? s.seat : 0];
 }
 
 // The words that the list's q looks in: the map's name without its extension, then what each seat shows, one per line, lower case
@@ -635,9 +635,9 @@ HistoryPage HistoryStore::query(const HistoryQuery& q, const std::function<Recor
         case HistoryQuery::Mode::HighestScore: add("m.mode = ?"); args.push_back(text_arg(kHistoryModeScore)); break;
         case HistoryQuery::Mode::Kills187: add("m.mode = ?"); args.push_back(text_arg(kHistoryMode187)); break;
     }
-    if (q.colour >= 0 && q.colour < sim::MAX_PLAYERS) {
+    if (q.color >= 0 && q.color < sim::MAX_PLAYERS) {
         add("EXISTS (SELECT 1 FROM history_seats s WHERE s.match_id = m.id AND s.seat = ?)");
-        args.push_back(int_arg(q.colour));
+        args.push_back(int_arg(q.color));
     }
     const std::string needle = lower(q.text);
     if (!needle.empty()) {

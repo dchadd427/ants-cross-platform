@@ -103,16 +103,16 @@ constexpr int PLAYFIELD_H = ScreenLayout::kClassicViewH;
 
 constexpr int TILE_SIZE = 32;
 
-// Colour modes accepted by TextureCache::get_sprite_texture (the `team_id` argument).
+// Color modes accepted by TextureCache::get_sprite_texture (the `team_id` argument).
 //   0..3               legacy HUD path: per-team HUD table on palette indices 1..31 plus the +offset ramp shift
 //   TEAM_NONE          raw CHD palette. The original never remaps terrain, map objects, effects, plants or cursors.
-//   ant_colour(player) the original ant blit (Ants.exe FUN_0101b802 -> FUN_0102cfef): the colour offset
+//   ant_color(player) the original ant blit (Ants.exe FUN_0101b802 -> FUN_0102cfef): the color offset
 //                      {0,20,40,60} is added to EVERY non-transparent pixel index, except for images whose name
-//                      starts with a digit (lunchboxes, snorkel head, death art), which are never recoloured.
+//                      starts with a digit (lunchboxes, snorkel head, death art), which are never recolored.
 constexpr uint8_t TEAM_NONE = 0xFF;
-constexpr uint8_t ANT_COLOUR_BASE = 0x10;
-constexpr uint8_t ant_colour(uint8_t player_id) noexcept {
-    return static_cast<uint8_t>(ANT_COLOUR_BASE + (player_id & 3u));
+constexpr uint8_t ANT_COLOR_BASE = 0x10;
+constexpr uint8_t ant_color(uint8_t player_id) noexcept {
+    return static_cast<uint8_t>(ANT_COLOR_BASE + (player_id & 3u));
 }
 
 /**
@@ -291,8 +291,8 @@ public:
 
     SDL_Texture* get_sprite_texture(uint32_t sprite_id, bool mirrored = false, uint8_t team_id = TEAM_NONE);
 
-    // Pure palette selection for one image under a colour mode (see TEAM_NONE / ant_colour above). Public so tests
-    // can check the original's per-pixel colour rule without an SDL renderer.
+    // Pure palette selection for one image under a color mode (see TEAM_NONE / ant_color above). Public so tests
+    // can check the original's per-pixel color rule without an SDL renderer.
     static std::array<ants::assets::ColorRGBA, 256> compose_palette(const std::array<ants::assets::ColorRGBA, 256>& base,
                                                                     const std::string& image_name,
                                                                     uint8_t team_id);
@@ -448,8 +448,8 @@ public:
     void render_map_layers(const ants::sim::Grid& grid, const ants::sim::WorldState* world = nullptr);
     // Draws all parts of one animation frame at screen position (sx, sy) in the original part order.
     void draw_animation_frame(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy,
-                              bool mirrored = false, uint8_t colour = TEAM_NONE) {
-        draw_frame_parts(sub, sx, sy, mirrored, colour);
+                              bool mirrored = false, uint8_t color = TEAM_NONE) {
+        draw_frame_parts(sub, sx, sy, mirrored, color);
     }
 
     // IRenderer Implementation
@@ -540,11 +540,11 @@ private:
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
     // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
     void draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored = false,
-                          uint8_t colour = TEAM_NONE);
+                          uint8_t color = TEAM_NONE);
     // Current frame of the shared template of Table-4 animation `anim_id` (all users of an id show the same frame).
     size_t template_frame_index(int32_t anim_id);
-    void draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t colour = TEAM_NONE);
-    void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t colour = TEAM_NONE);
+    void draw_template_screen(int32_t anim_id, int32_t sx, int32_t sy, uint8_t color = TEAM_NONE);
+    void draw_template_world(int32_t anim_id, int32_t world_x, int32_t world_y, uint8_t color = TEAM_NONE);
     const AnimBounds& anim_bounds(int32_t anim_id);
     void draw_static_object(const StaticMapObject& obj, const ants::sim::Grid& grid, const ants::sim::WorldState* world);
     /// The second path of the layer-2 pass (FUN_01008089 0x10082a9 - 0x1008322): a cell of an object that is not its anchor, explored while its anchor is not, draws the

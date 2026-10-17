@@ -81,7 +81,7 @@ struct MotionClip {
     uint32_t total_duration_ms() const noexcept;   // one loop
 };
 
-/// Action clips of SetAction (FUN_0101ad02): the colour-0 rows of the original's static tables.
+/// Action clips of SetAction (FUN_0101ad02): the color-0 rows of the original's static tables.
 enum class ActionClip : uint8_t {
     Enter,                 // action 2: enter the own hill (carrying variant)
     Harvest,               // action 5: grab food

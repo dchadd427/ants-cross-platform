@@ -112,7 +112,7 @@ HostLobby::HostLobby(Config config) : cfg_(std::move(config)) {
         room_.team_b = cfg_.room_teams.b;
     }
     room_.flags = cfg_.leader_starts ? kRoomLeaderStarts : uint8_t{0};
-    // a lobby room (protocol 16) is a server's room that has a leader, waits for it to start, has all four colours and gives keys (a seat is held for its key); without those it is no lobby room (and
+    // a lobby room (protocol 16) is a server's room that has a leader, waits for it to start, has all four colors and gives keys (a seat is held for its key); without those it is no lobby room (and
     // the Room message would be one that no decoder takes)
     cfg_.lobby_room = cfg_.lobby_room && leads() && cfg_.leader_starts && cfg_.max_players >= sim::MAX_PLAYERS && static_cast<bool>(cfg_.make_key);
     if (cfg_.lobby_room) room_.flags = static_cast<uint8_t>(room_.flags | kRoomLobby);
@@ -224,7 +224,7 @@ void HostLobby::sync_room_flags() {
 void HostLobby::broadcast_room() {
     sync_room_flags();
     RoomMsg shown = room_;
-    if (cfg_.lobby_room && cfg_.bot_name_key != 0) {             // (protocol 20) the empty colour whose plan is a bot shows that bot's name before START; room_ itself keeps the seat empty
+    if (cfg_.lobby_room && cfg_.bot_name_key != 0) {             // (protocol 20) the empty color whose plan is a bot shows that bot's name before START; room_ itself keeps the seat empty
         for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
             if (shown.slots[s].state == SlotState::Empty) shown.slots[s].name = bot_room_name(cfg_.bot_name_key, s, plan_fill_level(shown.plan[s]));
         }
@@ -302,12 +302,12 @@ void HostLobby::kick(uint8_t seat) {
 
 // Protocol 14. A guest and its slot are one thing that changes seats: the whole Guest goes (its connection, key, thumb, place in the order of the Welcomes, violations, budgets), so a key still
 // finds its guest and the leader is still the earliest guest. The seat that it goes to is empty (the guest goes there) or a guest's (the two guests change places: protocol 15, so that a full room can be
-// arranged); a colour that a bot or the host holds is not taken from them. A press that crossed a newcomer's Hello on the wire cannot push the newcomer out of its colour or swap it by mistake: the
+// arranged); a color that a bot or the host holds is not taken from them. A press that crossed a newcomer's Hello on the wire cannot push the newcomer out of its color or swap it by mistake: the
 // SeatMove carries the guard of the seats as the leader saw them (seating_hash), and the room acts only when they are still so.
 bool HostLobby::can_move_seat(uint8_t from, uint8_t to) const noexcept {
     return phase_ == Phase::Room && !starting_.active && from < sim::MAX_PLAYERS && to < sim::MAX_PLAYERS && from != to
         && room_.slots[from].state == SlotState::Client                                                   // (an empty seat, the host's and a bot's do not move)
-        && (room_.slots[to].state == SlotState::Empty || room_.slots[to].state == SlotState::Client);     // (a free colour, or a guest's: a bot's and the host's stay)
+        && (room_.slots[to].state == SlotState::Empty || room_.slots[to].state == SlotState::Client);     // (a free color, or a guest's: a bot's and the host's stay)
 }
 
 // Protocol 16. The leader takes another person out of a lobby room (RemoveMsg). The rule alone: the room is open, whether or not the leader's START waits for the games (the person whose game never opens is the
@@ -321,13 +321,13 @@ bool HostLobby::move_seat(uint8_t from, uint8_t to) {
     const bool swapped = room_.slots[to].state == SlotState::Client;                                      // (two guests change places)
     std::swap(guests_[from], guests_[to]);                                                                // (an empty seat is a Guest{} and a Slot{}: the swap is the move)
     std::swap(room_.slots[from], room_.slots[to]);
-    if (cfg_.lobby_room) {                                                                                // (protocol 16: the colours are exchanged completely: what each colour is, and the team pair, go with the person)
+    if (cfg_.lobby_room) {                                                                                // (protocol 16: the colors are exchanged completely: what each color is, and the team pair, go with the person)
         std::swap(room_.plan[from], room_.plan[to]);
         swap_team_seats(room_.team_a, room_.team_b, from, to);
     }
     ++seat_moves_;
-    // A START that was heard earlier in this pass was made for the room as it was: its plan of bots is by colour, so when a player takes an empty colour the bot that was to fill that colour fills the
-    // colour that the player left (a swap leaves the same colours empty: the plan stays), and its sender, the leader, is where it sits now (the owner compares the seat with leader()): the lead goes
+    // A START that was heard earlier in this pass was made for the room as it was: its plan of bots is by color, so when a player takes an empty color the bot that was to fill that color fills the
+    // color that the player left (a swap leaves the same colors empty: the plan stays), and its sender, the leader, is where it sits now (the owner compares the seat with leader()): the lead goes
     // with the guest, not with the seat.
     for (Event& ev : events_) {
         if (ev.type != Event::Type::LeaderStart) continue;
@@ -345,7 +345,7 @@ bool HostLobby::move_seat(uint8_t from, uint8_t to) {
             const std::string& name = room_.slots[room_.leader].name;                                     // (a guest may have no name: "Player 2", the word that the application uses for a seat without one)
             who = name.empty() ? "Player " + std::to_string(static_cast<unsigned>(room_.leader) + 1u) : name;
         }
-        notify(seat, who + " moved you to " + seat_colour_word(seat) + ".");
+        notify(seat, who + " moved you to " + seat_color_word(seat) + ".");
     }
     return true;
 }
@@ -458,7 +458,7 @@ void HostLobby::take_over(uint8_t seat, Pending& p, const HelloMsg& hello, uint3
     g.held = false;                                              // (protocol 16: a seat that was held has its person back)
     g.heard_ms = now_ms;
     g.kind = hello.client_kind;                                  // (and a page that goes to the game page comes back as a game)
-    if (g.reserved && (hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {        // (the rematch: the person's page is back, or a game that asks for a colour (the front page's Rejoin), an
+    if (g.reserved && (hello.client_kind == kClientPage || hello.want_seat < sim::MAX_PLAYERS)) {        // (the rematch: the person's page is back, or a game that asks for a color (the front page's Rejoin), an
                                                                  // ordinary guest from now on, who may lead; the results screen asks for none: it holds the seat and changes nothing)
         g.reserved = false;
         ++returns_;
@@ -512,7 +512,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     if (any_reserved() && !anyone_back()) return reject(RejectReason::MatchRunning);         // (the rematch: nobody of the match is back yet, nobody new comes in before them: a newcomer would lead their room)
     uint8_t seat = 255;
     if (cfg_.lobby_room) {
-        seat = joiner_seat(hello.want_seat);                                                 // (protocol 16: the colour it asked for or the lowest one that nobody holds and the plan calls Open)
+        seat = joiner_seat(hello.want_seat);                                                 // (protocol 16: the color it asked for or the lowest one that nobody holds and the plan calls Open)
     } else {
         if (players() >= cfg_.max_players) return reject(RejectReason::Full);
         if (hello.want_seat < sim::MAX_PLAYERS && room_.slots[hello.want_seat].state == SlotState::Empty) seat = hello.want_seat;     // the seat it asked for, when it is free
@@ -606,7 +606,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             }
             return;
         }
-        case MsgType::SeatMove: {                                         // (protocol 14) the leader puts a player in another colour
+        case MsgType::SeatMove: {                                         // (protocol 14) the leader puts a player in another color
             SeatMoveMsg m;
             if (!decode(msg, m)) return violation(seat);                  // exactly the type, two different seats 0 - 3 and a guard that is not 0: anything else is garbage
             // Only the leader of a server's room is heard, and only while the room is open. A request that cannot be done is no offence at first (the leader's press crossed the Start; the player that it
@@ -627,7 +627,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
         case MsgType::Plan: {                                             // (protocol 16) the leader's plan of a lobby room
             PlanMsg m;
             if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no plan: the message is garbage there)
-            // Only the leader is heard, only while the room is open and its START does not wait; the plan is shown to everybody, so it has the budget of a person's clicks. As for the colour moves: one that
+            // Only the leader is heard, only while the room is open and its START does not wait; the plan is shown to everybody, so it has the budget of a person's clicks. As for the color moves: one that
             // cannot be heard is no offence at first (the leader's click crossed the Start), every one after kIgnoredPlansAllowed is a violation; one beyond the budget is dropped, and a connection that
             // goes on beyond it is flooding.
             if (phase_ == Phase::Room && !starting_.active && seat == room_.leader) {
@@ -661,14 +661,14 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             RemoveMsg m;
             if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no removals: the message is garbage there)
             // Only the leader is heard, while the room is open (a START that waits does not matter: this is how a person whose game never opens goes), for a person who is not the leader, and only for the seating
-            // that the leader's guard was made for (the person that the leader pressed on is the person who goes, not a newcomer who took the colour meanwhile). As for the colour moves: one that cannot be done is
+            // that the leader's guard was made for (the person that the leader pressed on is the person who goes, not a newcomer who took the color meanwhile). As for the color moves: one that cannot be done is
             // no offence at first, every one after kIgnoredRemovesAllowed is a violation; one that can be done is shown to the whole room, so it has the budget of a leader's presses: one beyond it is dropped,
             // and a connection that goes on beyond it is flooding.
             if (seat == room_.leader && m.guard == seating_hash(room_) && can_remove(m.seat)) {
                 switch (guests_[seat].removes.take(now_ms, kRemoveBurst, kRemovesPerSecond, kRemoveExcessBurst)) {
                     case ChatBudget::Verdict::Relay:
                         ++removals_;
-                        remove_guest(m.seat, true, RejectReason::Kicked);              // (the person is told, their key is forgotten, their colour is free; nothing of the sender's is touched)
+                        remove_guest(m.seat, true, RejectReason::Kicked);              // (the person is told, their key is forgotten, their color is free; nothing of the sender's is touched)
                         return;
                     case ChatBudget::Verdict::Drop: return;
                     case ChatBudget::Verdict::Offence: return violation(seat);
@@ -788,7 +788,7 @@ void HostLobby::update(uint32_t now_ms) {
 // The lobby room (protocol 16)
 // ------------------------------------------------------------------------------------------------
 
-// The connection of a guest ended while the room is open. The seat stays for hold_ms with all that is its own (name, colour, key, place in the order of the Welcomes, so a held leader leads still); it counts
+// The connection of a guest ended while the room is open. The seat stays for hold_ms with all that is its own (name, color, key, place in the order of the Welcomes, so a held leader leads still); it counts
 // as present, it is no game any more, and its thumb is not known.
 void HostLobby::hold_guest(uint8_t seat, uint32_t now_ms) {
     Guest& g = guests_[seat];
@@ -814,7 +814,7 @@ void HostLobby::forgive(Guest& g, uint32_t now_ms) const noexcept {
     }
 }
 
-// The colour a joiner takes: the one it asked for when nobody holds it and the plan calls it Open, else the lowest such colour; 255 when there is none (the room is Full for it)
+// The color a joiner takes: the one it asked for when nobody holds it and the plan calls it Open, else the lowest such color; 255 when there is none (the room is Full for it)
 uint8_t HostLobby::joiner_seat(uint8_t want) const noexcept {
     const auto takes = [this](uint8_t s) { return room_.slots[s].state == SlotState::Empty && room_.plan[s] == PlanKind::Open; };
     if (want < sim::MAX_PLAYERS && takes(want)) return want;
@@ -824,7 +824,7 @@ uint8_t HostLobby::joiner_seat(uint8_t want) const noexcept {
     return 255;
 }
 
-// The plan has a bot for a colour that nobody holds: then one person is enough to start (can_start_filled), as for a leader's fill
+// The plan has a bot for a color that nobody holds: then one person is enough to start (can_start_filled), as for a leader's fill
 bool HostLobby::plan_asks_bots() const noexcept {
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
         if (room_.slots[s].state == SlotState::Empty && plan_fill_level(room_.plan[s]) != FillLevel::None) return true;
@@ -833,7 +833,7 @@ bool HostLobby::plan_asks_bots() const noexcept {
 }
 
 // The room could start now with whom it holds (held seats count as players; the plan's bots are counted when they would be seated). Never while a seat is reserved for a person who is not back from the match
-// (the rematch: the START waits for them, or for the leader to remove them; neither a bot nor an empty colour takes their place)
+// (the rematch: the START waits for them, or for the leader to remove them; neither a bot nor an empty color takes their place)
 bool HostLobby::start_possible() const noexcept {
     if (any_reserved()) return false;
     return plan_asks_bots() ? can_start_filled() : can_start();
@@ -996,7 +996,7 @@ void HostLobby::rename(uint8_t seat, const std::string& raw) {
     broadcast_room();
 }
 
-// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each colour is, the teams, the game mode. The room is shown to everybody when something changed.
+// A plan of the leader (already heard: the leader, an open room, within the budget): the map when the server offers it, what each color is, the teams, the game mode. The room is shown to everybody when something changed.
 void HostLobby::apply_plan(const PlanMsg& plan) {
     bool changed = false;
     if (!plan.map_name.empty()) {                                // ("" keeps the map; a map that the server does not offer keeps it too)
@@ -1124,7 +1124,7 @@ bool ClientLobby::request_name(const std::string& name) {
 
 bool ClientLobby::request_remove(uint8_t seat) {
     if (conn_ == nullptr || phase_ != Phase::InRoom || !is_leader() || !room_.lobby() || !conn_->is_open()) return false;
-    if (seat >= sim::MAX_PLAYERS || seat == seat_ || room_.slots[seat].state != SlotState::Client) return false;       // (a person other than this machine's own: a bot's and an empty colour hold nobody)
+    if (seat >= sim::MAX_PLAYERS || seat == seat_ || room_.slots[seat].state != SlotState::Client) return false;       // (a person other than this machine's own: a bot's and an empty color hold nobody)
     return conn_->send(encode(RemoveMsg{seat, seating_hash(room_)}));                                                // (the guard: the seats as this machine shows them)
 }
 
