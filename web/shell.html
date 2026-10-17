@@ -2685,7 +2685,7 @@
         // A click on the game takes the lock again: where the page has held the lock before, that click is only that; where it has not, it is an ordinary click too. ESC is locked in Chromium fullscreen.
         function requestLock(startAt) {                                     // true: the lock was asked for
             var request = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
-            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER")
+            if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked() || window.antsFinger) return false;          // (a replay or a live match watched is locked as a game is: its bar is reached through the game's cursor, see "THE BAR UNDER A LOCKED POINTER"; a finger is never locked: a locked browser reports its touches at x = 0 and the replay bar would seek to 0 wherever it is tapped)
             lockStartAt = startAt || null;
             try {
                 var result = request.call(canvas);
@@ -3657,7 +3657,7 @@
             ['pointermove', 'pointerdown', 'touchstart'].forEach(function (name) {
                 document.addEventListener(name, function (ev) {
                     var touch = ev.type === 'touchstart' || ev.pointerType === 'touch'; if (ev.type === 'pointermove' && ev.movementX === 0 && ev.movementY === 0 && isLocked()) return;       // (a locked browser repeats the mouse's place without a motion: that is not a touch of the bar)
-                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = touch; syncEdge(); }          // (what touched last: a finger gets the strip, a mouse does not)
+                    if (touch !== touchSeen && (touch || ev.pointerType === 'mouse')) { touchSeen = window.antsFinger = touch; syncEdge(); if (touch) releaseLock(); }          // (what touched last: a finger gets the strip, a mouse does not)
                     if (touch && window.PointerEvent && $('rbar').classList.contains('over') && !$('rbar').contains(ev.target)) return;      // (a finger on the picture never calls the bar; a browser without pointer events cannot tell the strip from the picture and keeps the old way)
                     if (touch && swiped !== -1 && (ev.pointerId === undefined || ev.pointerId === swiped)) return;            // (nor does the finger that has just swiped it away: until it is lifted)
                     wake();

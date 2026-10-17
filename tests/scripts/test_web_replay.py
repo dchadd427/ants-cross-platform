@@ -146,7 +146,7 @@ class ThePlayerPage(unittest.TestCase):
     def test_a_replay_has_the_pointer_lock_of_the_game_and_no_leave_the_game_question(self):
         # (it was off while the bar was a page element under a free pointer; now the bar is reached through the locked cursor: tests/scripts/test_web_edge.py, TheReplayIsLockedLikeTheGame)
         self.assertNotIn("(!ANTS_POINTER_LOCK || ANTS_REPLAY_MODE)", self.page)
-        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked()) return false;", self.page)
+        self.assertIn("if (!ANTS_POINTER_LOCK || !request || pageFullscreen || isLocked() || window.antsFinger) return false;", self.page)
         app = read("src", "ants_app", "application.cpp")
         self.assertRegex(app, r"ants_match_running\(\)\s*\{\s*return \(g_web_app != nullptr && !g_web_app->replay_mode\(\)")
 
@@ -194,6 +194,12 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
             self.assertIn(line, self.glue, line)
         self.assertNotIn("document.addEventListener(name, wake", self.glue)                                  # (the old wiring: every touch, anywhere, called the bar)
         self.assertIn("idleTimer = setTimeout(hideBar, 3000);", self.glue)                                   # (a bar that plays still goes by itself after 3 seconds)
+
+    def test_a_finger_is_never_given_the_pointer_lock(self):
+        # a locked browser reports a finger's touches at x = 0: the bar took every tap for the start (web_live_check.py, part scrub, shows it in a browser)
+        lock = block(self.page, "function requestLock(startAt) {")
+        self.assertIn("window.antsFinger", lock.split("return false;")[0])
+        self.assertIn("touchSeen = window.antsFinger = touch; syncEdge(); if (touch) releaseLock();", self.glue)
 
     def test_the_bar_is_called_from_the_bottom_edge_and_hidden_by_a_swipe_or_the_tab(self):
         for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));",    # (the strip: only for a finger, only while the bar is away)
