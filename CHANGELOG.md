@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - A first map maker page (not linked from the site yet: /mapmaker.html): make a Classic or Extended map, open a map file, look around, check it, download it. Drawing comes next.
 
+## v0.12.71 - 2026-10-17 - Tests: faster and steadier (round 2)
+
+**For players:**
+- Under the hood: the tests are faster and steadier on slow or busy machines (the flood-control checks follow the time that really went by, the match history's timing test counts work instead of milliseconds, and the test servers no longer look up host names); nothing changes in the game or on the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/edf7086a...e86c5501), [the tests' timing rules](docs/TESTING.md)
+
 ## v0.12.70 - 2026-10-17 - Computer players fight in 187 mode
 
 **For players:**

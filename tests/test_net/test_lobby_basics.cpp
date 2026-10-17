@@ -1301,11 +1301,16 @@ void run_lobby_basics_tests() {
             }
             ASSERT_TRUE(raw_seat < sim::MAX_PLAYERS && room.host.occupied(raw_seat));
             for (uint32_t i = 1; i <= 3000; ++i) ends.second->send(encode_ping(PingMsg{i, 0}));
-            room.run(1000);
+            uint32_t flood_ms = 0;                                                  // (the host's clock is the room's: the time it takes to throw the flooder out is counted, not guessed)
+            while (room.host.occupied(raw_seat) && flood_ms < 1000) {
+                room.run(10);
+                flood_ms += 10;
+            }
             ASSERT_FALSE(room.host.occupied(raw_seat));
             uint32_t pongs = 0;
             while (ends.second->poll(m)) pongs += peek_type(m) == MsgType::Pong ? 1u : 0u;
-            ASSERT_TRUE(pongs >= kMessageBurst && pongs <= kMessageBurst + 300);   // the burst, and what the bucket gave back while the host took 64 messages per update
+            // the burst, and what the bucket gave back in the time that the host needed to read it all (64 messages per update of 10 ms): the ceiling follows that time (it was the burst and a fixed 300)
+            ASSERT_TRUE(pongs >= kMessageBurst && pongs <= kMessageBurst + kMessagesPerSecond * flood_ms / 1000 + 1);
         }
         {   // a flood of valid pongs (the host believes none of them, so they are no offence by themselves): the budget ends it too
             Room room(hc);

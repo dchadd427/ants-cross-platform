@@ -14,11 +14,15 @@ import http.server
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT = os.path.join(REPO, "tools", "deploy_webhook.sh")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quick_http     # noqa: E402
+
 SECRET_PATH = "/api/stacks/webhooks/5f1c0d3e-secret-token-8a7b"
 
 
@@ -42,7 +46,7 @@ class Webhook:
             def log_message(self, *args):
                 pass
 
-        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        self.server = quick_http.QuickHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

@@ -135,6 +135,8 @@ std::vector<std::string> ids_at(const std::vector<HistoryRecord>& all, std::vect
     return out;
 }
 
+// (The tests of the list that run on the real clock ask as the owner: the public door's box is 15 ms and a stall of that long under a parallel load would answer TooHeavy and an empty list. The box and the budget
+// of the public door are the business of HS2.8 - HS2.11, which inject a clock.)
 const std::function<Recording(const std::string&)> kNoRecordings = [](const std::string&) { return Recording::Removed; };
 
 // A thousand (or more) matches a minute apart, written by ONE statement; every third on TREASURE, every second a 1v1, every fifth mode 187, `best_*` and `turns` from k
@@ -286,7 +288,7 @@ int main() {
         HistoryStore other(again);
         std::string why;
         ASSERT_TRUE(other.prepare(why) && other.count() == all.size());
-        const HistoryPage page = other.query(HistoryQuery(), kNoRecordings);
+        const HistoryPage page = other.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == all.size() && page.items.size() == all.size());
         ASSERT_EQ(page.items.front().id, all.back().id);
         ASSERT_TRUE(same_record(page.items.back(), all.front()));
@@ -307,7 +309,7 @@ int main() {
         const auto list = [&](const std::function<void(HistoryQuery&)>& tweak) {
             HistoryQuery q;
             tweak(q);
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(list([](HistoryQuery&) {}), ids_at(all, {7, 6, 5, 4, 3, 2, 1, 0}));
         ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; }), ids_at(all, {6, 4, 3, 0}));
@@ -334,7 +336,7 @@ int main() {
         ASSERT_EQ(list([](HistoryQuery& q) { q.format = HistoryQuery::Format::OneVsOne; q.result = HistoryQuery::Result::Decided; q.who = HistoryQuery::Who::People; q.color = 1; q.text = "tiny"; }), ids_at(all, {0}));
         HistoryQuery q;
         q.format = HistoryQuery::Format::OneVsOne;
-        const HistoryPage page = d.store.query(q, kNoRecordings);
+        const HistoryPage page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == 4 && page.items.size() == 4 && d.store.count() == 8);
         ASSERT_TRUE(page.items[0].seats.size() == 2 && page.items[0].seats[1].name == "May" && page.items[0].rows.size() == 2);       // (the page holds whole records)
     } TEST_END();
@@ -347,7 +349,7 @@ int main() {
         const auto sorted = [&](HistoryQuery::Sort sort) {
             HistoryQuery q;
             q.sort = sort;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(sorted(HistoryQuery::Sort::New), ids_at(all, {7, 6, 5, 4, 3, 2, 1, 0}));
         ASSERT_EQ(sorted(HistoryQuery::Sort::Old), ids_at(all, {0, 1, 2, 3, 4, 5, 6, 7}));
@@ -365,21 +367,21 @@ int main() {
         for (int k = 0; k < 130; ++k) many.push_back(record_of(kT0 + k, "TINY.LVL", "1v1", 1000u + static_cast<uint32_t>(k), true, -1, false, {seat_of(0, "Ann", "", k, 1, 1, 1), seat_of(1, "Bob", "", 1, 1, 1, 1)}));
         ASSERT_TRUE(d.fill(many));
         HistoryQuery q;
-        HistoryPage page = d.store.query(q, kNoRecordings);
+        HistoryPage page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 50 && page.items.front().id == many.back().id);                 // (the default limit is 50)
         q.limit = 1000;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 100);                                                               // (and the most is 100)
         q.limit = 10;
         q.offset = 125;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 130 && page.items.size() == 5 && page.items.back().id == many.front().id);
         q.offset = 5000;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == 130 && page.items.empty());
         q.limit = 0;                                                                                                              // (a limit of 0 is one: the route refuses it, the store does not guess more)
         q.offset = 3;
-        page = d.store.query(q, kNoRecordings);
+        page = d.store.query(q, kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.items.size() == 1 && page.items[0].id == many[126].id);
     } TEST_END();
 
@@ -393,7 +395,7 @@ int main() {
         const auto find = [&](const std::string& text) {
             HistoryQuery q;
             q.text = text;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(find("50%"), ids_at(v, {0}));
         ASSERT_EQ(find("%"), ids_at(v, {0}));                          // (a lone % is a percent sign, not "everything")
@@ -424,7 +426,7 @@ int main() {
         const auto find = [&](const std::string& text) {
             HistoryQuery q;
             q.text = text;
-            return ids_of(d.store.query(q, kNoRecordings));
+            return ids_of(d.store.query(q, kNoRecordings, HistoryStore::Door::Owner));
         };
         ASSERT_EQ(find("pip (bot, hard)"), ids_at(v, {0}));
         ASSERT_EQ(find("Pip (bot, Hard)"), ids_at(v, {0}));
@@ -451,24 +453,24 @@ int main() {
             return Recording::Watch;
         };
         HistoryQuery q;
-        const HistoryPage plain = d.store.query(q, state);
+        const HistoryPage plain = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(plain.count == 8 && asked.empty());                                                       // (no filter by the recording: never asked)
         q.rec = HistoryQuery::Rec::Watch;
-        ASSERT_EQ(ids_of(d.store.query(q, state)), ids_at(all, {7, 6, 5}));
+        ASSERT_EQ(ids_of(d.store.query(q, state, HistoryStore::Door::Owner)), ids_at(all, {7, 6, 5}));
         ASSERT_EQ(asked.size(), size_t{8});                                                                    // (each once)
         q.rec = HistoryQuery::Rec::Old;
-        ASSERT_EQ(ids_of(d.store.query(q, state)), ids_at(all, {4, 3}));
+        ASSERT_EQ(ids_of(d.store.query(q, state, HistoryStore::Door::Owner)), ids_at(all, {4, 3}));
         q.rec = HistoryQuery::Rec::Removed;
         q.limit = 2;
         q.offset = 1;
-        HistoryPage page = d.store.query(q, state);
+        HistoryPage page = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.count == 3 && ids_of(page) == ids_at(all, {1, 0}));                                  // (the whole count, the window cut from it)
         q.mode = HistoryQuery::Mode::HighestScore;
         q.format = HistoryQuery::Format::OneVsOne;
         q.limit = 50;
         q.offset = 0;
         asked.clear();
-        page = d.store.query(q, state);
+        page = d.store.query(q, state, HistoryStore::Door::Owner);
         ASSERT_TRUE(ids_of(page) == ids_at(all, {0}) && asked.size() == 3);                                   // (asked only for the 1v1 matches of the original's rules: 0, 3 and 4)
         ASSERT_TRUE(page.items[0].seats.size() == 2);
     } TEST_END();
@@ -615,7 +617,7 @@ int main() {
         ASSERT_TRUE(again >= 5 && again <= 9);
     } TEST_END();
 
-    TEST_CASE("HS2.10 Sixteen thousand matches: the page of a plain list reads two statements for its seats whatever its size, and the heavy lists of a visitor end inside their box (measured with the real clock, with generous margins)") {
+    TEST_CASE("HS2.10 Sixteen thousand matches: the page of a plain list reads two statements for its seats whatever its size, and the heavy lists of a visitor end inside their box (the box is proved with a deterministic clock; the real clock only has a generous ceiling, the best of three runs)") {
         Db d;
         ASSERT_TRUE(d.ok && fill_synthetic(d.database, 16000));
         HistoryStore store(d.database);
@@ -633,15 +635,46 @@ int main() {
         heavy[1].text = "zzzz";
         heavy[2].sort = HistoryQuery::Sort::Score;
         heavy[2].text = "zzzzzzzzz";
+        // THE BOX, DETERMINISTICALLY. Every reading of this clock is one millisecond later, and the database reads it about every kProgressOps steps of a statement, so a box of 15 ms is 15 looks: a query that is
+        // heavier than that must be refused (TooHeavy, the store still available) after about that many readings, whatever the machine does meanwhile. (Before, this was measured with the wall clock, and a run
+        // that the scheduler held up for 60 ms under a parallel load failed it without any fault in the store.) A box that is not enforced gives an answer after no readings or after thousands.
         for (const HistoryQuery& q : heavy) {
-            d.database.exec("SELECT 1");
-            HistoryStore fresh(d.database);                                          // (a full budget for each)
-            ASSERT_TRUE(fresh.prepare(why));
-            const auto t = std::chrono::steady_clock::now();
-            const HistoryPage page = fresh.query(q, removed, HistoryStore::Door::Public);
-            ASSERT_TRUE(since(t) < 60);                                               // (the box is 15 ms; the margin is for a slow machine)
-            ASSERT_TRUE(page.ok || page.fail == HistoryPage::Fail::TooHeavy);
-            ASSERT_TRUE(fresh.available());
+            TickClock ticks;
+            HistoryStore::Config config;
+            config.clock_us = [&ticks]() { return ticks(); };
+            HistoryStore boxed(d.database, config);
+            ASSERT_TRUE(boxed.prepare(why));
+            ticks.set_step(1000);                                                       // (from here: a reading is a millisecond later than the one before; the count starts at 0)
+            const HistoryPage page = boxed.query(q, removed, HistoryStore::Door::Public);
+            ASSERT_TRUE(!page.ok && page.fail == HistoryPage::Fail::TooHeavy);
+            ASSERT_TRUE(ticks.calls >= 15 && ticks.calls <= 15 + 4);                    // (the start, 15 looks until the deadline, the bill of the budget)
+            ASSERT_TRUE(boxed.available());
+        }
+        // THE SAME WITH THE REAL CLOCK, as a ceiling only: the box is 15 ms, a query that is not boxed takes 25 to 125 ms. A run can be held up by the machine (a parallel load, a runner that is shared: a thread that
+        // waits for a core for 60 ms is not a store that ignores its box), so the best of up to eight runs of the same query must be under the ceiling: it costs one run on a quiet machine, and a store that ignores its box
+        // fails all eight (each takes 25 ms or more of work whatever the load).
+        for (const HistoryQuery& q : heavy) {
+            long long best = 1000000;
+            for (int attempt = 0; attempt < 8 && best >= 60; ++attempt) {
+                d.database.exec("SELECT 1");
+                HistoryStore fresh(d.database);                                          // (a full budget for each)
+                ASSERT_TRUE(fresh.prepare(why));
+                const auto t = std::chrono::steady_clock::now();
+                const HistoryPage page = fresh.query(q, removed, HistoryStore::Door::Public);
+                best = std::min<long long>(best, since(t));                               // (the box is 15 ms; the margin is for a slow machine)
+                ASSERT_TRUE(page.ok || page.fail == HistoryPage::Fail::TooHeavy);
+                ASSERT_TRUE(fresh.available());
+            }
+            ASSERT_TRUE(best < 60);
+        }
+        // THE PRODUCTION CLOCK IS WIRED IN: a store with no injected clock pays for its public queries with the time they really take, so a run of heavy ones uses up the budget (100 ms, earned back at 50 ms a second) and the
+        // answer becomes Busy. A clock that stood still would never bill anything. (A count of tries, not a time: a slow machine bills more for each, so it gets there sooner.)
+        {
+            HistoryStore real(d.database);
+            ASSERT_TRUE(real.prepare(why));
+            int tries = 0;
+            while (tries < 400 && real.query(heavy[1], removed, HistoryStore::Door::Public).fail != HistoryPage::Fail::Busy) ++tries;
+            ASSERT_TRUE(tries < 400);
         }
         // a list without a filter is a few ms whatever the size of the table, and a page of 100 with seats is read by statements that do not grow with it
         for (int k = 0; k < 100; ++k) {
@@ -650,9 +683,26 @@ int main() {
         }
         HistoryQuery q;
         q.limit = 100;
-        const auto t = std::chrono::steady_clock::now();
-        const HistoryPage page = store.query(q, kNoRecordings, HistoryStore::Door::Owner);
-        ASSERT_TRUE(since(t) < 500);
+        {   // the work of that page, counted and not timed: the clock reads a microsecond later each time it is looked at (the database looks every kProgressOps steps), so the readings are the steps / 200. A page
+            // of 100 with its seats takes about 30 of them here; the bound is twice that, a pin on the work of the page (the count, the page, one statement for the seats) that no machine can move.
+            TickClock work;
+            HistoryStore::Config config;
+            config.clock_us = [&work]() { return work(); };
+            HistoryStore counted(d.database, config);
+            ASSERT_TRUE(counted.prepare(why));
+            work.set_step(1);
+            const HistoryPage counted_page = counted.query(q, kNoRecordings, HistoryStore::Door::Owner);
+            ASSERT_TRUE(counted_page.ok && counted_page.items.size() == 100);
+            ASSERT_TRUE(work.calls >= 10 && work.calls <= 60);
+        }
+        HistoryPage page;
+        long long fastest = 1000000;
+        for (int attempt = 0; attempt < 8 && fastest >= 500; ++attempt) {                  // (the best of up to eight: a few ms of work, and a run that the machine holds up for half a second is not the store's)
+            const auto t = std::chrono::steady_clock::now();
+            page = store.query(q, kNoRecordings, HistoryStore::Door::Owner);
+            fastest = std::min<long long>(fastest, since(t));
+        }
+        ASSERT_TRUE(fastest < 500);
         ASSERT_TRUE(page.ok && page.items.size() == 100 && page.count == 16100);
         for (const HistoryRecord& r : page.items) ASSERT_EQ(r.seats.size(), size_t{2});              // (the seats of all hundred, from one statement)
         // the plan of the seats statement: one search of the key for a page, not one for each record
@@ -732,7 +782,7 @@ int main() {
         db::Database other;                                                         // (another connection takes a table away, as a broken file or a full disk would)
         ASSERT_TRUE(other.open(d.path()).ok());
         ASSERT_TRUE(other.exec("ALTER TABLE history_seats RENAME TO history_seats_away").ok());
-        HistoryPage page = d.store.query(HistoryQuery(), kNoRecordings);
+        HistoryPage page = d.store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_FALSE(page.ok);
         ASSERT_TRUE(!d.store.available() && !d.store.unavailable_reason().empty());
         HistoryRecord got;
@@ -760,7 +810,7 @@ int main() {
         ASSERT_TRUE(d.store.available() && d.store.unavailable_reason().empty() && d.store.count() == all.size());
         notes = d.store.take_notes();
         ASSERT_TRUE(notes.size() == 1 && contains(notes[0], "available"));
-        page = d.store.query(HistoryQuery(), kNoRecordings);
+        page = d.store.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
         ASSERT_TRUE(page.ok && page.count == all.size());
         d.store.maintain(ms + 3 * HistoryStore::kRetryMs);                          // (an available store has nothing to retry)
         ASSERT_TRUE(d.store.available() && d.store.take_notes().empty());

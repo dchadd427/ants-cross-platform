@@ -30,6 +30,9 @@ TOOL = os.path.join(REPO, "tools", "deploy_wait.py")
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import deploy_wait as dw     # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quick_http     # noqa: E402
+
 
 class FakeTime:
     """A clock that moves when the script sleeps (and by `poll_seconds` for every poll: a request takes time)."""
@@ -208,7 +211,7 @@ class Serving:
     """A real HTTP server on 127.0.0.1 with a scripted answer, for the length of a `with`."""
 
     def __init__(self, *script):
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Scripted)
+        self.server = quick_http.QuickThreadingHTTPServer(("127.0.0.1", 0), Scripted)
         self.server.daemon_threads = True
         self.server.script = list(script)
         self.server.hits = 0

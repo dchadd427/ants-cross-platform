@@ -650,7 +650,7 @@ check "two clients play in a room next to the flood room (the match runs)" "$VIC
 QUIET_RATE="$(tick_rate "$VICTIM" "$CTL" 6)"      # (from its first tick: the dialog's 5 s first; the floods below are measured while it plays)
 check "the referee of that match ticks about 20 times a second without a flood ($(rate_text "$QUIET_RATE"))" "$(rate_in_band "${QUIET_RATE%% *}"; echo $?)"
 flood() {      # flood KIND ROOM SECONDS [HONEST]: a raw client says Hello for ROOM, sends HONEST frames of KIND (0: none) and waits for their answers, then writes frames of KIND as fast as it can for SECONDS;
-               # prints how many Pongs it got back for the honest ones and how many for the flood
+               # prints how many Pongs it got back for the honest ones, how many for the flood, and the milliseconds from just before its Hello to the last Pong it received (the time that the server's bucket had to refill in)
     python3 - "$GAME_PORT" "$2" "$1" "$3" "${PROTOCOL:-0}" "${4:-0}" <<'PY'
 import socket, struct, sys, time
 port, room, kind, secs, protocol, honest = int(sys.argv[1]), sys.argv[2], sys.argv[3], float(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
@@ -661,6 +661,7 @@ def str8(t):
 hello = bytes([1]) + struct.pack('<H', protocol) + str8('Evil') + struct.pack('<H', 0) + bytes([255]) + str8(room) + str8('') + bytes(16) + struct.pack('<I', 0) + bytes([0, 0])     # (protocol 10: no key, no turns; protocol 15: the platform byte, 0 = not told; protocol 16: the client kind, 0 = a game; and no create block)
 message = bytes([24, 0, 0, 0, 0, 255, 255]) if kind == 'startreq' else bytes([10]) + struct.pack('<II', 1, 0)       # (protocol 13: a StartRequest is the type, a fill level for each of the four seats, 0 = none, and the two team bytes, 255 = none)
 sock = socket.create_connection(('127.0.0.1', port), timeout=5)
+began = time.time()          # (before the first byte, so that the server's bucket, which is filled by the first message, has had no more time than this to refill)
 sock.sendall(frame(hello))
 received = b''
 def count_pongs():           # the Pongs in `received` (whole frames are taken off it)
@@ -676,6 +677,7 @@ def count_pongs():           # the Pongs in `received` (whole frames are taken o
     received = received[pos:]
     return found
 honest_pongs = 0
+last_pong = began            # when the last Pong was taken off the socket: no answer was given later than this, so the bucket refilled for at most the time from `began` to here
 if honest:                   # an honest burst, under the budget: nobody is thrown out and nothing is lost, so every one of them is answered (10 s for the answers)
     try:
         sock.sendall(frame(message) * honest)
@@ -689,7 +691,10 @@ if honest:                   # an honest burst, under the budget: nobody is thro
             if not data:
                 break
             received += data
-            honest_pongs += count_pongs()
+            found = count_pongs()
+            honest_pongs += found
+            if found:
+                last_pong = time.time()
     except OSError:
         pass                 # (thrown out: the pongs that came before are counted)
 sock.setblocking(False)
@@ -713,12 +718,17 @@ while time.time() < end:
         pass
     except OSError:
         break
-    pongs += count_pongs()
-print(honest_pongs, pongs)
+    found = count_pongs()
+    pongs += found
+    if found:
+        last_pong = time.time()
+print(honest_pongs, pongs, int((last_pong - began) * 1000) + 1)
 PY
 }
 FLOOD_BURST=1000      # the budget of a connection as docs/NETWORK_PORT.md ("A budget of messages per connection") states it, written here and not read from flood.hpp: a check that follows the source cannot see a budget that was cut
 FLOOD_RATE=1000       # a second
+FLOOD_LAG_MS=300      # the server stamps every message of one pass of its loop with the reading of the clock that began the pass; a pass that the scheduler holds up stamps what it then reads too early (up to this much, under load)
+FLOOD_SLACK=2         # messages: the server's clock has whole milliseconds
 for KIND in startreq ping; do
     FLOODROOM="E2E-FLOOD-$KIND-$RANDOM"
     curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":4,\"code\":\"$FLOODROOM\",\"seed\":5}" "$CTL/rooms"
@@ -745,17 +755,22 @@ for KIND in startreq ping; do
     if [ "$KIND" = "startreq" ]; then
         check "startreq flood: it had a seat and was out at its 24th request (16 are free, each of the next eight is a violation): the rest was never read" "$([ "$(field_of "$FLOODROOM" ignored_start_requests)" = "24" ]; echo $?)"
     else
-        read -r HONEST_PONGS FLOOD_PONGS < "$WORK/flood_$KIND.out"
+        read -r HONEST_PONGS FLOOD_PONGS FLOOD_SPAN_MS < "$WORK/flood_$KIND.out"
+        PONG_CEILING=$((FLOOD_BURST + FLOOD_RATE * (${FLOOD_SPAN_MS:-0} + FLOOD_LAG_MS) / 1000 + FLOOD_SLACK))
         # What this detects. The server's limit is a bucket of FLOOD_BURST messages that refills at FLOOD_RATE a second (flood.hpp; docs/NETWORK_PORT.md, "A budget of messages per connection"; written above and not read from
         # the source, so that a budget that was cut or raised is seen); a message beyond it is a violation, and eight throw the sender out. (1) AN HONEST BURST IS ANSWERED WHOLE: the flooder first says $HONEST pings, a tenth
         # under the burst, so nobody is thrown out and the connection stays whole (nothing is lost on the way), and every one must be answered, on any machine: the count is exact (900 of 900 in 80 of 80 floods under 16 and 40
         # busy loops). A server that answers no ping (0 of 900) or throws a client out early fails it: with the burst cut to 100, 400 or 600 the flooder is out after 105, 424, 626 pongs. A burst cut to 850 is seen now and then (880 to 900 of 900), one cut to 900 or more not at all.
-        # (2) THE FLOOD IS NOT ANSWERED BEYOND A SECOND'S WORTH: it then floods for 4 s, and the pongs of both together must not pass the burst and half a second of its refill (a slow machine reads for longer before the
-        # violation, and a macOS runner of CI got 1305 pongs of the flood alone): a budget that is raised to 2000, 5000 or off (a million) fails it (2178, 5279 and about 80000 pongs); one raised to 1200 or less is not seen. Only
-        # an upper bound can be made of the flood's own count: the server throws the flooder out with its pings unread, the connection is reset, and what the flooder had not taken by then is lost (it reads 18 to 360 of the
+        # (2) THE FLOOD IS NOT ANSWERED BEYOND WHAT THE BUCKET HAD TIME TO GIVE: it then floods for 4 s, and the pongs of both together must not pass the burst plus the refill of the time that really went by, which the flooder
+        # measures itself (from just before its Hello to the last Pong it took off the socket, so the server answered nothing later) and prints as $FLOOD_SPAN_MS; FLOOD_LAG_MS is the stamping lag of the server's loop under load (see above) and FLOOD_SLACK the
+        # whole milliseconds of its clock. A fixed ceiling (the burst and half a second of refill, 1500) was too tight for a slow or loaded machine, which reads for longer before the violation and so is owed more refill (a macOS runner of CI
+        # got 1305 pongs of the flood alone, and a run that lasts longer than half a second has no ceiling that is right for it), and loose for a quick one; this one follows the time that really went by and cannot be passed by the documented
+        # bucket, however slow the run. A budget that is raised to 2000, 5000 or off (a million) still fails it (2178, 5279 and about 80000 pongs against a ceiling of 1000 + 1000 a second of the span + 302, some 1350 on a quiet machine); a
+        # refill rate that is raised fails it as well, because the span is the real time. One raised to 1300 or less is not seen (as before).
+        # Only an upper bound can be made of the flood's own count: the server throws the flooder out with its pings unread, the connection is reset, and what the flooder had not taken by then is lost (it reads 18 to 360 of the
         # 140 that are sent, with 16 and 40 busy loops on 4 cores): the old check, which asked for 1000 pongs in all, failed in 2 of 7 runs of the whole part and in 9 of 16 floods under 16 busy loops.
         check "ping flood: an honest burst of $HONEST pings (under the burst of $FLOOD_BURST) is answered whole ($HONEST_PONGS pongs)" "$([ "${HONEST_PONGS:-0}" -eq "$HONEST" ]; echo $?)"
-        check "ping flood: the flood is not answered beyond a second's worth ($((HONEST_PONGS + FLOOD_PONGS)) pongs of millions of pings; at most $((FLOOD_BURST + FLOOD_RATE / 2)))" "$([ $((${HONEST_PONGS:-0} + ${FLOOD_PONGS:-0})) -le $((FLOOD_BURST + FLOOD_RATE / 2)) ]; echo $?)"
+        check "ping flood: the flood is not answered beyond what the bucket gave in the time it had ($((HONEST_PONGS + FLOOD_PONGS)) pongs of millions of pings in ${FLOOD_SPAN_MS} ms; at most $PONG_CEILING = $FLOOD_BURST + $FLOOD_RATE a second of that + $FLOOD_SLACK)" "$([ $((${HONEST_PONGS:-0} + ${FLOOD_PONGS:-0})) -le "$PONG_CEILING" ]; echo $?)"
     fi
     check "$KIND flood: the control interface answered within a second all the time (worst: ${WORST} s)" "$(python3 -c "print(0 if $WORST < 1.0 else 1)")"
     check "$KIND flood: the match in the other room kept its clock (ticks a second: $(python3 -c "print(round(($TICKS_B - $TICKS_A) / $FLOOD_SECS, 1))"); it was 8.6 on a loaded machine before)" "$(python3 -c "print(0 if ($TICKS_B - $TICKS_A) / $FLOOD_SECS > 14 else 1)")"
