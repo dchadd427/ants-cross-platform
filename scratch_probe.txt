@@ -1,4 +1,0 @@
-A: x y
-B: x y
-C: x\\u2002y
-D: x\\ y
