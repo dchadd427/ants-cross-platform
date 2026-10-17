@@ -23,6 +23,11 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- The map maker has a first page, mapmaker.html: make a Classic or an Extended map, open a map file from your computer, look around it, see its checks and download it. Drawing comes next.
+
 ## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
 
 **For players:**

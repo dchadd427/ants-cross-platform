@@ -100,7 +100,7 @@ COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html
 
 # The map core for the browser (docs/MAP_FORMAT.md, "In the browser"): lvl_core.js + lvl_core.wasm (the module of its own that the same build makes) and the wrapper that a page loads with it.
-# No page loads them yet (the map maker's page is a later pull request); the web job runs the module in node from this image (tests/scripts/lvl_core_check.js).
+# The map maker's page (mapmaker.html, below) loads them; the web job also runs the module in node from this image (tests/scripts/lvl_core_check.js, tests/scripts/web_mapmaker_core_check.js).
 COPY --from=builder /src/build_web/lvl_core/lvl_core.js /src/build_web/lvl_core/lvl_core.wasm /usr/share/nginx/html/
 COPY web/lvl_core_api.js /usr/share/nginx/html/lvl_core_api.js
 
@@ -137,6 +137,9 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
+
+# The map maker (docs/MAP_EDITOR.md): web/mapmaker.html with its scripts and style in web/front/ (copied above) and the map core's module (lvl_core.js, lvl_core.wasm and lvl_core_api.js, copied above)
+COPY web/mapmaker.html /usr/share/nginx/html/mapmaker.html
 
 # The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from every footer, with no placeholder to fill in
 COPY web/legal.html /usr/share/nginx/html/legal.html

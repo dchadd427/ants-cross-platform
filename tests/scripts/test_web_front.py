@@ -45,6 +45,7 @@ PICTURES = {
 FONT_FILES = ("LibreFranklin-Medium.ttf", "LibreFranklin-OFL.txt")
 STYLE_FILES = ("classic.css",)          # the look of the other pages (the front page keeps its own inline copy): not made by the tool, not used by lobby.html
 SCRIPT_FILES = ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js")    # what the lobby page loads, in this order: its rules (pure, no browser), its client of network protocol 16 (tests/scripts/test_web_lobby_net.py), the chat box (tests/scripts/test_web_lobby_chat.py), the rematch's strip (tests/scripts/test_web_rematch.py; the game page loads it too) the game type's rows and control (tests/scripts/test_web_game_type.py) and the map list: scripts, not pictures
+MAPMAKER_FILES = ("mapmaker.css", "mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_app.js")      # the map maker page's own style and scripts (web/mapmaker.html; tests/scripts/test_web_mapmaker.py): not the lobby's, not pictures
 LOBBY_STYLES = ("map_picker.css", "lobby_chat.css", "rematch.css", "game_type.css")     # the stylesheets that the lobby page links after its own <style>, in this order: the map list's (it moved out of the page, which is at the line limit of tools/check_hygiene.py), the chat box's and the rematch's (the game page links it too)
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
@@ -218,7 +219,7 @@ class Sheet:
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_exactly_the_files_that_the_tool_makes_the_shared_stylesheet_the_lobbys_stylesheets_and_the_scripts(self):
-        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS)))
+        self.assertEqual(sorted(os.listdir(FRONT)), sorted(list(PICTURES) + list(FONT_FILES) + list(STYLE_FILES) + list(LOBBY_STYLES) + list(SCRIPT_FILES) + list(UNLOADED_SCRIPTS) + list(MAPMAKER_FILES)))
 
     def test_every_picture_is_a_png_of_the_size_that_the_page_gives_it(self):
         for name, size in PICTURES.items():
@@ -618,7 +619,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)

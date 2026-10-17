@@ -48,6 +48,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [The original program](docs/ORIGINAL_PROGRAM.md): reverse engineering, what the remake takes from the original and what it adds, and the differences made on purpose
 - [`GAME_REVERSE_ENGINEERING.md`](docs/GAME_REVERSE_ENGINEERING.md): the specification of the original game, system by system
 - [`MAP_FORMAT.md`](docs/MAP_FORMAT.md): the map file (`.lvl`): its layout as the remake reads and writes it, the limits, the rules of a map that loads in the original, the round-trip law of the writer, the dictionary and the blank map of a new map, `lvl_tool`, the core in the browser (`lvl_core.wasm`)
+- [`MAP_EDITOR.md`](docs/MAP_EDITOR.md): the map maker's page: the two kinds of map, the rules that keep a map from ever being written over, the pull requests of the editor and which are done, how the page is made
 - [`NETWORK_PORT.md`](docs/NETWORK_PORT.md): the network design and the protocol by version
 - [`BOTS.md`](docs/BOTS.md): the computer players: the rule, the architecture, the levels and tactics, the known limits (and [`docs/reverse_engineering/bomb_gates.md`](docs/reverse_engineering/bomb_gates.md) for the bomb-gate analysis and universal gate-goal planner)
 - [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
