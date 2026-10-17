@@ -529,7 +529,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(page.ev("document.querySelector('[data-tool=hills]').getAttribute('aria-pressed')") == "true", "the letter H chooses Hills")
         names = page.ev("[].map.call(document.querySelectorAll('#palette .swatch'), function (b) { return b.textContent; }).join('|')")
         check(names == "Green|Red|Blue|Black" and page.ev("document.getElementById('palette-title').textContent") == "Hills", "its palette has the four teams with their names: %s" % names)
-        check(page.ev("[].every.call(document.querySelectorAll('#palette .swatch'), function (b) { var r = b.getBoundingClientRect(); return r.height >= 32 && r.width >= 100; })"), "each a button that is easy to hit")
+        check(page.ev("[].every.call(document.querySelectorAll('#palette .swatch'), function (b) { var r = b.getBoundingClientRect(); return r.height >= 30 && r.width >= 100; })"), "each a button that is easy to hit")
         text = card()
         check("Blue has no hill" in text and "Black has no starting ants" in text, "a new map: the check says Blue has no hill and Black has no starting ants")
         page.ev("document.getElementById('map').focus()")

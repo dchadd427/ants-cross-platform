@@ -214,7 +214,7 @@ class TheCodeRuns(unittest.TestCase):
             "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
             "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && state.tool === 'hills'; },", "door: function () { return false; },"),
             "a pile of one stage": ("mapmaker_tools.js", "[Blocks.MIN_STAGES, Blocks.MAX_STAGES]", "[1, Blocks.MAX_STAGES]"),
-            "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; showPalette(); }", "function chooseTeam(id) { showPalette(); }"),
+            "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }", "function chooseTeam(id) { fits = ''; showPalette(); }"),
             "a place with no room that is refused in silence": ("mapmaker_tools.js", "if (change.error) { if (env.say) env.say(", "if (change.error) { if (false) env.say("),
             "a thing put that the canvas is not told of": ("mapmaker_tools.js", "if (dirty) changed(dirty);\n            else {", "if (false) changed(dirty);\n            else {"),
             "a change that only gave the dictionary a name that the page is not told of": ("mapmaker_tools.js", "if (env.file() !== was) env.onEdit();", "void 0;"),

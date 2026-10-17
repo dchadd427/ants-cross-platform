@@ -93,7 +93,7 @@ function caseB(maps) {
         const r = Math.min(f0.rows - 1, 1), c = Math.min(f0.columns - 1, 1);
         ed.act(Blocks.placeStart(ed.file, 1, r, c, 3));
         if (Blocks.layout(ed.file).ok2) ed.act(Blocks.placePile(ed.file, r, c, 4));
-        if (f0.rows > 3 && f0.columns > 3) ed.act(Blocks.placeHill(ed.file, 2, 1, 1));
+        if (f0.rows > 3 && f0.columns > 3) { const h = Blocks.placeHill(ed.file, 2, 1, 1); if (!h.error) ed.act(h); }           // (a hill that would touch another team's is refused)
         const e = ed.begin('erase', null);
         e.stamp(r, c, 3);
         e.end();

@@ -704,8 +704,10 @@ function caseI() {
         const g = editorOn(makeMap(version, 20, 24, 486));
         g.act(Blocks.placeHill(g.file, 1, 6, 6));
         put(g.file, 2, 12, 13, 302, 1, version === 8 ? (12 | (13 << 8)) : 0);
+        put(g.file, 2, 11, 12, 303, 1, version === 8 ? (11 | (12 << 8)) : 0); put(g.file, 2, 10, 12, 303, 0, version === 8 ? (11 | (12 << 8)) : 1);       // (a bigger object: one cell under the hill, one beside it)
         g.act(Blocks.placeHill(g.file, 3, 12, 12));
         check(hillFootprint(g.file, 247).length === 16 && Edit.tile(g.file, 2, 12 * 24 + 13) === 245 && hillFootprint(g.file, 245).length === 16, 'a hill put over an object takes the object away; the other team\'s hill beside it stays' + tag);
+        check(Edit.tile(g.file, 2, 10 * 24 + 12) === 0x7FFE && Edit.tile(g.file, 2, 11 * 24 + 12) === 245, 'a bigger object that is partly under the hill goes whole: its cell beside the hill goes too' + tag);
         check(/Red\u2019s hill is here/.test(Blocks.placeHill(g.file, 3, 8, 8).error), 'and one that would touch the Red hill is refused' + tag);
         // a short dictionary grows by itself, and the page is told through the rebase hook
         let rebased = 0;
