@@ -13,6 +13,8 @@ constexpr uint32_t LVL_EXPECTED_VERSION = 8;      // the Classic map: the only v
 constexpr uint32_t LVL_EXTENDED_VERSION = 9;      // the Extended map: this remake only (docs/MAP_FORMAT.md, "Version 9")
 constexpr uint32_t LVL_GAME_MODE_STANDARD = 1;   // what the shipped maps hold; the original stores the dword (map + 0x74) and never reads it again, so it is no condition
 constexpr uint16_t LVL_EMPTY_TILE = 0x7FFE; // 32,766 = Empty interactive overlay sentinel
+constexpr uint32_t LVL_CLASSIC_ROW_WALL = 90;       // a Classic map of more rows has a wall in the original: its path finder never enters tile row 90 (the 91st row), so ants cannot cross it;
+                                                    // a Classic map made now is limited to this many rows (LevelLimits::for_new_maps), a taller one is an Extended map (docs/MAP_FORMAT.md)
 constexpr uint32_t LVL_MAX_GRID_SIDE = 256;       // rows and columns of a grid the remake hosts (the anchor bytes of a layer-2 object are 8 bit)
 // What no LevelLimits can exceed once a place accepts Extended maps (LevelLimits::allow_extended): the hard ceiling of the version 9 format. A reader refuses a header that
 // announces more before it allocates anything, and a file of more bytes before it reads one.
@@ -72,11 +74,14 @@ struct LevelLimits {
     bool allow_extended{false};                                       // may a version 9 file or level pass (an Extended map)? false for LevelLimits{} and for_new_maps()
     size_t max_description_bytes{LVL_EXTENDED_MAX_DESCRIPTION};       // the description of a version 9 level (a version 8 description is the file's 30 bytes)
 
-    /// A map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 10,000 cells and 130 a side,
-    /// so that every map of the library fits (Bomb Races has 129 columns); a file of at most 512 KB is read as it is (every file of the library: BOMBERWORLD's
+    /// A Classic map that is made or brought in now (the map maker, a map brought into one game, a map submitted for the library): at most 90 rows (LVL_CLASSIC_ROW_WALL:
+    /// the original's path finder never enters tile row 90, so a taller map has an invisible wall across it, in the original too), 130 columns and 10,000 cells, so that
+    /// every map of the library fits (at most 81 rows; Bomb Races has 129 columns); a file of at most 512 KB is read as it is (every file of the library: BOMBERWORLD's
     /// 235,594 bytes are mostly bytes after its egg word, which a rewrite drops), and its canonical file may have 144 KB, so that a 100 x 100 map with the largest
-    /// dictionary fits with room for its blocks
-    static constexpr LevelLimits for_new_maps() noexcept { return LevelLimits{130, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION}; }
+    /// dictionary fits with room for its blocks. A taller map is an Extended map (for_extended_maps).
+    static constexpr LevelLimits for_new_maps() noexcept {
+        return LevelLimits{LVL_CLASSIC_ROW_WALL, 130, LVL_MAX_DICTIONARY_ENTRIES, 512u * 1024u, 10000, 144u * 1024u, false, LVL_EXTENDED_MAX_DESCRIPTION};
+    }
 
     /// An Extended map (version 9) that is made or brought in now: at most 262,144 cells (512 x 512, any shape) and 1,024 a side, a file of at most 4 MiB is read and
     /// its canonical file may have 3.5 MiB (a 512 x 512 map is 3.1 MiB), the dictionary of 1,344 names, a description of 255 bytes. A Classic map (version 8) is
@@ -107,10 +112,18 @@ struct LevelLimits {
     // the same for a level of `version`: a Classic map (anything but 9) keeps the 256 a side of its format whatever the limits say
     constexpr uint32_t rows_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || rows() < LVL_MAX_GRID_SIDE ? rows() : LVL_MAX_GRID_SIDE; }
     constexpr uint32_t columns_for(uint32_t version) const noexcept { return version == LVL_EXTENDED_VERSION || columns() < LVL_MAX_GRID_SIDE ? columns() : LVL_MAX_GRID_SIDE; }
+    /// Is a Classic grid of `rows` refused because of the wall at row 90 (the limits hold a Classic map to LVL_CLASSIC_ROW_WALL rows, and it has more)? false for an Extended map.
+    constexpr bool refuses_for_wall(uint32_t version, uint32_t rows) const noexcept {
+        return version != LVL_EXTENDED_VERSION && rows > rows_for(version) && rows_for(version) <= LVL_CLASSIC_ROW_WALL && rows > LVL_CLASSIC_ROW_WALL;
+    }
     constexpr uint32_t cells_for(uint32_t version) const noexcept {
         return version == LVL_EXTENDED_VERSION || cells() < LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE ? cells() : LVL_MAX_GRID_SIDE * LVL_MAX_GRID_SIDE;
     }
 };
+
+/// The sentence that refuses a Classic map of more than LVL_CLASSIC_ROW_WALL rows where the limits hold a new Classic map to it (the reader and the writer say it in the same words):
+/// "the grid has 91 rows x 10 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?"
+std::string rows_beyond_wall_text(uint32_t rows, uint32_t columns);
 
 /**
  * @brief One finding about a map file: what is wrong (or odd), how the original treats it and what the remake does.

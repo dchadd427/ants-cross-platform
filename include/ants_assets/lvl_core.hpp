@@ -12,7 +12,7 @@
 
 namespace ants::assets::lvl_core {
 
-/// The limits a call applies. NewMap (the default of the page) is LevelLimits::for_new_maps(): at most 10,000 cells and 130 a side, a file of at most 512 KB read,
+/// The limits a call applies. NewMap (the default of the page) is LevelLimits::for_new_maps(): at most 90 rows, 130 columns and 10,000 cells, a file of at most 512 KB read,
 /// 144 KB written. Game is LevelLimits{}: what the game itself reads (256 a side, no cap on the file). Extended is LevelLimits::for_extended_maps(): a place that also takes
 /// Extended maps (version 9), at most 1,024 a side and 262,144 cells, a file of 4 MiB read and 3.5 MiB written; a Classic map (version 8) keeps its 256 a side there.
 enum class Profile : uint32_t { NewMap = 0, Game = 1, Extended = 2 };

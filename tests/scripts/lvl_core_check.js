@@ -276,7 +276,7 @@ function main() {
             const bomber = library.find((c) => c.id === 'bomberworld').bytes;
             const round = () => {
                 c2.readReport(bomber); c2.checkOriginal(bomber); const rw = c2.rewrite(bomber); c2.sameLevel(bomber, rw.bytes);
-                c2.blank(100, 100, 485, 6, 10);
+                c2.blank(90, 90, 485, 6, 10);
                 for (const c of hostile.filter((h) => h.bytes.length < 200000)) { c2.readReport(c.bytes); c2.rewrite(c.bytes); }
             };
             round(); round();                                              // warm-up: the allocator settles

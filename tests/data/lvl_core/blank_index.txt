@@ -1,12 +1,14 @@
 blank_31x31_g485_e6_m10	0	16940	3d1b39e86252b06f
 blank_40x40_g485_e6_m10	0	24608	3f19a4078633913c
 blank_60x60_g485_e6_m10	0	48608	aecd00b5eea3bfbc
-blank_100x100_g485_e6_m10	0	125408	26e7dca85b22e31c
+blank_90x90_g485_e6_m10	0	102608	fe4c8aa0e41f0a04
 blank_31x31_g486_e9_m12	0	16951	5f80a79bcafccde1
 blank_1x1_g485_e6_m10	0	5420	49077e99ecb8b24f
-blank_101x100_g485_e6_m10	1	-	a blank map of 101 rows x 100 columns cannot be written: the grid has 101 rows x 100 columns, 10100 cells, more than the 10000 allowed here
-blank_131x10_g485_e6_m10	1	-	a blank map of 131 rows x 10 columns cannot be written: the grid has 131 rows x 10 columns, more than the 130 x 130 allowed here
-blank_10x131_g485_e6_m10	1	-	a blank map of 10 rows x 131 columns cannot be written: the grid has 10 rows x 131 columns, more than the 130 x 130 allowed here
+blank_91x10_g485_e6_m10	1	-	a blank map of 91 rows x 10 columns cannot be written: the grid has 91 rows x 10 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?
+blank_100x100_g485_e6_m10	1	-	a blank map of 100 rows x 100 columns cannot be written: the grid has 100 rows x 100 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?
+blank_131x10_g485_e6_m10	1	-	a blank map of 131 rows x 10 columns cannot be written: the grid has 131 rows x 10 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?
+blank_10x131_g485_e6_m10	1	-	a blank map of 10 rows x 131 columns cannot be written: the grid has 10 rows x 131 columns, more than the 90 x 130 allowed here
+blank_90x112_g485_e6_m10	1	-	a blank map of 90 rows x 112 columns cannot be written: the grid has 90 rows x 112 columns, 10080 cells, more than the 10000 allowed here
 blank_0x10_g485_e6_m10	1	-	a blank map needs 1 to 65535 rows and columns
 blank_10x0_g485_e6_m10	1	-	a blank map needs 1 to 65535 rows and columns
 blank_70000x10_g485_e6_m10	1	-	a blank map needs 1 to 65535 rows and columns

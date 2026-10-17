@@ -8,7 +8,7 @@
 // rewrite and blank, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
-// `profile`: "new_map" (the default: the limits of a new Classic map, at most 10,000 cells and 130 a side, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
+// `profile`: "new_map" (the default: the limits of a new Classic map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
 // Extended maps, version 9: at most 1,024 a side and 262,144 cells, 4 MiB read; a Classic map keeps its 256 a side there).
 // The interface version (LvlCore.EXPECTED_INTERFACE is the one this script needs; LvlCore.moduleVersion(module) is the one a module has, 0 for a module without the call): a page that
 // wants to refuse an older module with its own words asks before wrap(), which also throws.
