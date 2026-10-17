@@ -1,7 +1,7 @@
 /* The helpers that the pages of the match history share (docs/REPLAYS.md "The match pages"): the list of every match (matches.html), one match (match.html), the matches that run now (live.html) and the
    "Stats" of the game page in replay mode (shell.html). Plain functions with no page in them, so that tests/scripts/web_history_check.js runs them on a table, and two small parts that touch a document
    (which they are given): the pictures of the maps and the panel of stats on the game page. Everything that comes from the server (a name that a player typed, a map, an id) is TEXT: the pages put it in with textContent and
-   never as markup. A record is read defensively: a key that this file does not know is skipped, a number that is not one is 0, a word that is not one of the server's falls back to a plain default. */
+   never as markup. The pages that load this file (match.html, matches.html) ship together with it, and the site serves .html and .js with Cache-Control "no-cache, must-revalidate" (docker/nginx.conf), so the two are never from different releases. A record is read defensively: a key that this file does not know is skipped, a number that is not one is 0, a word that is not one of the server's falls back to a plain default. */
 (function (root, factory) {
     'use strict';
     var api = factory(root);
@@ -49,12 +49,17 @@
             if (bot === 'Bot') return name ? name + ' (bot)' : 'Bot';
             return name ? name + ' (bot, ' + bot + ')' : 'Bot (' + bot + ')';
         }
-        return name || (COLORS.indexOf(s.colour) !== -1 ? s.colour : '');
+        return name || colorOf(s);
+    }
+    // A seat's color: the key `color`, else the older `colour` that a server of an earlier release writes (docs/REPLAYS.md); '' when it is neither of the four
+    function colorOf(seat) {
+        var s = seat && typeof seat === 'object' ? seat : {};
+        return COLORS.indexOf(s.color) !== -1 ? s.color : COLORS.indexOf(s.colour) !== -1 ? s.colour : '';
     }
     function seatsOf(rec) {
         var out = [];
         (rec && Array.isArray(rec.seats) ? rec.seats : []).forEach(function (s) {
-            if (s && typeof s === 'object' && COLORS.indexOf(s.colour) !== -1) out.push(s);
+            if (s && typeof s === 'object' && colorOf(s)) out.push(s);
         });
         return out;
     }
@@ -148,14 +153,14 @@
         { key: 'format', label: 'Format', options: [['all', 'Any format'], ['1v1', '1 v 1'], ['team', 'Teams'], ['ffa', 'Free for all']] },
         { key: 'result', label: 'Result', options: [['all', 'Any result'], ['decided', 'Decided'], ['draw', 'Draw'], ['cut', 'Cut short']] },
         { key: 'rec', label: 'Replay', options: [['all', 'Any replay'], ['watch', 'Can be watched'], ['old', 'Older version'], ['removed', 'Removed']] },
-        { key: 'colour', label: 'Color', options: [['all', 'Any color'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
+        { key: 'color', label: 'Color', options: [['all', 'Any color'], ['green', 'Green'], ['red', 'Red'], ['blue', 'Blue'], ['black', 'Black']] },
         { key: 'mode', label: 'Mode', options: [['all', 'Any mode'], ['highest-score', 'Highest score'], ['187', '187']] }
     ];
     var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['score', 'Highest score'], ['kills', 'Most kills'], ['hatched', 'Most hatched'], ['long', 'Longest'], ['short', 'Shortest']];
     var SORT_KEYS = { score: ['Top score', 'score'], kills: ['Most kills', 'killed'], hatched: ['Most hatched', 'hatched'] };       // what a sort by a count shows on each card
     var Q_MAX = 40;                                      // the server's limit for a search text
 
-    function defaults() { return { who: 'all', format: 'all', result: 'all', rec: 'all', colour: 'all', mode: 'all', sort: 'new', q: '', page: 1 }; }
+    function defaults() { return { who: 'all', format: 'all', result: 'all', rec: 'all', color: 'all', mode: 'all', sort: 'new', q: '', page: 1 }; }
     function has(list, value) { for (var i = 0; i < list.length; i++) if (list[i][0] === value) return true; return false; }
     // A search text as the server takes it: printable ASCII only, blanks trimmed and folded, at most 40 characters (a character outside the range is dropped, as the game makes a "?" of it)
     function cleanQuery(s) {
@@ -169,7 +174,8 @@
         var st = defaults(), q;
         try { q = new URLSearchParams(search); } catch (e) { return st; }
         if (has(WHO, q.get('who'))) st.who = q.get('who');
-        FILTERS.forEach(function (f) { if (has(f.options, q.get(f.key))) st[f.key] = q.get(f.key); });
+        // (an old bookmark says colour=: the older spelling of color=, read when color= is not there)
+        FILTERS.forEach(function (f) { var v = q.get(f.key); if (v === null && f.key === 'color') v = q.get('colour'); if (has(f.options, v)) st[f.key] = v; });
         if (has(SORTS, q.get('sort'))) st.sort = q.get('sort');
         st.q = cleanQuery(q.get('q'));
         var page = parseInt(q.get('page'), 10);
@@ -179,7 +185,7 @@
     // The address of a page of the list (matches.html?...: the same words as the server's, so that a link can be shared and read)
     function urlOf(st, page) {
         var d = defaults(), parts = [];
-        ['who', 'format', 'result', 'rec', 'colour', 'mode', 'sort'].forEach(function (k) { if (st[k] !== d[k]) parts.push(k + '=' + st[k]); });
+        ['who', 'format', 'result', 'rec', 'color', 'mode', 'sort'].forEach(function (k) { if (st[k] !== d[k]) parts.push(k + '=' + st[k]); });
         if (st.q) parts.push('q=' + encodeQuery(st.q));
         var p = page === undefined ? st.page : page;
         if (p > 1) parts.push('page=' + p);
@@ -192,11 +198,11 @@
     // What to ask the server for a state: the list with no query at all (the newest 50, cached by the site and not held to the server's budget) serves the first two pages of the default view; every
     // filter, search, sort and later page is a query (docs/REPLAYS.md "The match history": 2 a second for each address, a box of 15 ms) that asks for exactly one page
     function planOf(st) {
-        var d = defaults(), plain = ['who', 'format', 'result', 'rec', 'colour', 'mode', 'sort', 'q'].every(function (k) { return st[k] === d[k]; }) && st.page <= 2;
+        var d = defaults(), plain = ['who', 'format', 'result', 'rec', 'color', 'mode', 'sort', 'q'].every(function (k) { return st[k] === d[k]; }) && st.page <= 2;
         if (plain) return { query: '', skip: (st.page - 1) * PAGE, take: PAGE };
         var parts = [];
         if (st.who === 'people') parts.push('who=people'); else if (st.who === 'computers') parts.push('who=computers');
-        ['format', 'result', 'rec', 'colour', 'mode'].forEach(function (k) { if (st[k] !== 'all') parts.push(k + '=' + st[k]); });
+        ['format', 'result', 'rec', 'color', 'mode'].forEach(function (k) { if (st[k] !== 'all') parts.push(k + '=' + st[k]); });
         if (st.sort !== 'new') parts.push('sort=' + st.sort);
         if (st.q) parts.push('q=' + encodeQuery(st.q));
         parts.push('limit=' + PAGE, 'offset=' + (st.page - 1) * PAGE);
@@ -320,7 +326,7 @@
         function mk(tag, className, content) { var n = doc.createElement(tag); if (className) n.className = className; if (content !== undefined) n.textContent = content; return n; }
         function num(seat, key) { return whole(seat[key]); }
         function seatName(seat, side, rec) {
-            var d = mk('div', 'nm'), sq = mk('i'); sq.setAttribute('data-c', seat.colour); d.appendChild(sq); d.appendChild(mk('span', '', seatLabel(seat)));
+            var d = mk('div', 'nm'), sq = mk('i'); sq.setAttribute('data-c', colorOf(seat)); d.appendChild(sq); d.appendChild(mk('span', '', seatLabel(seat)));
             if (side.winner && rec.draw !== true) d.appendChild(mk('span', 'won', 'Won'));
             if (seat.left === true) d.appendChild(mk('span', 'left', 'Left early'));
             return d;
@@ -343,7 +349,7 @@
                     td.appendChild(mk('span', 'sub', 'Bombs set ' + num(seat, 'bombs_planted') + ', defused ' + num(seat, 'bombs_defused') + ', fires lit ' + num(seat, 'fires_lit'))); tr.appendChild(td);
                     all.forEach(function (c) { var n = num(seat, c.key); tr.appendChild(mk('td', n ? '' : 'zero', numberText(n))); });
                     tb.appendChild(tr);
-                    sq.setAttribute('data-c', seat.colour); top.appendChild(sq); top.appendChild(mk('span', 'nmt', seatLabel(seat))); if (won) top.appendChild(mk('span', 'won', 'Won')); if (seat.left === true) top.appendChild(mk('span', 'left', 'Left early')); card.appendChild(top);
+                    sq.setAttribute('data-c', colorOf(seat)); top.appendChild(sq); top.appendChild(mk('span', 'nmt', seatLabel(seat))); if (won) top.appendChild(mk('span', 'won', 'Won')); if (seat.left === true) top.appendChild(mk('span', 'left', 'Left early')); card.appendChild(top);
                     [[all, 'g'], [extra, 'g two']].forEach(function (grp) { var g = mk('div', grp[1]); grp[0].forEach(function (c) { cell(c, num(seat, c.key), g); }); card.appendChild(g); });
                     cards.appendChild(card);
                 });
@@ -388,7 +394,7 @@
     return {
         PAGE: PAGE, ID_RE: ID_RE, FILE_RE: FILE_RE, COLORS: COLORS, WHO: WHO, FILTERS: FILTERS, SORTS: SORTS, Q_MAX: Q_MAX,
         idOf: idOf, fileOfId: fileOfId, idOfFile: idOfFile, numberText: numberText, formatText: formatText, modeText: modeText,
-        seatLabel: seatLabel, seatsOf: seatsOf, sidesOf: sidesOf, sideName: sideName, scoreText: scoreText, winnerSide: winnerSide, noWinnerText: noWinnerText, playersText: playersText, howEnded: howEnded, bestOf: bestOf, shareOf: shareOf,
+        seatLabel: seatLabel, colorOf: colorOf, seatsOf: seatsOf, sidesOf: sidesOf, sideName: sideName, scoreText: scoreText, winnerSide: winnerSide, noWinnerText: noWinnerText, playersText: playersText, howEnded: howEnded, bestOf: bestOf, shareOf: shareOf,
         columnsOf: columnsOf, recState: recState, detailsOf: detailsOf, rankedOf: rankedOf,
         defaults: defaults, cleanQuery: cleanQuery, stateOf: stateOf, urlOf: urlOf, encodeQuery: encodeQuery, planOf: planOf, activeOf: activeOf, sortLabel: sortLabel, sortKeyOf: sortKeyOf,
         rangeText: rangeText, pagerOf: pagerOf, problemOf: problemOf, pictures: pictures, mapFact: mapFact, replayStats: replayStats

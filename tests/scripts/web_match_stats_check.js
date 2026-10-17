@@ -29,7 +29,7 @@ const document = { createElement: (t) => new Node(t), createElementNS: (ns, t) =
 const STYLE = { '--c-green': '#79bf93', '--c-red': '#d4707f', '--c-blue': '#8f8fd6', '--c-black': '#b3afb9' };
 const S = MS.sections(document, (name) => STYLE[name]);
 
-function seat(i, name, bot, extra) { return Object.assign({ seat: i, colour: ['Green', 'Red', 'Blue', 'Black'][i], name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, extra || {}); }
+function seat(i, name, bot, extra) { return Object.assign({ seat: i, color: ['Green', 'Red', 'Blue', 'Black'][i], name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, extra || {}); }
 function record(details, extra) {
     return Object.assign({ v: 1, id: 'ants-TREASURE-20261015-051557Z', ended: 1792041357, map: 'TREASURE.LVL', game: 'v0.12.41', turns: 14405, seconds: 720, finished: true, quitter: null, mode: 'highest-score', format: '2v2', draw: false, result: 'decided', computers_only: false,
         seats: [seat(0, 'Gory', ''), seat(1, 'Dethcon', ''), seat(2, 'Finn', 'Hard', { winner: true }), seat(3, 'Cocoa', 'Hard')], rows: [{ seats: [2], score: 2040, killed: 3, lost: 4, hatched: 0, winner: true }],

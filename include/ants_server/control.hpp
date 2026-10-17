@@ -24,8 +24,8 @@
 //   GET    /replays/<file> -> 200 the .antsrep file (application/octet-stream); 404
 //   DELETE /replays/<file> -> 200 {"deleted": "<file>"}; 404; 500 (the file is in the list but could not be deleted)
 //   GET    /history[?filters] -> 200 {"history": [record without bombs and fires, "recording" ("watch", "old", "removed"), "file"], "count", "total", "offset", "limit", "keep_days", "sim_rules"}: the match history
-//                                    (history_store.hpp, docs/REPLAYS.md "The match history"), newest first; the filters are limit (1 - 100, default 50), offset, sort, format, result, who, rec, colour, mode
-//                                    (all | highest-score | 187) and q, each at most once (400 with the key named); 404 when the server keeps no history; 503 while its database does not answer
+//                                    (history_store.hpp, docs/REPLAYS.md "The match history"), newest first; the filters are limit (1 - 100, default 50), offset, sort, format, result, who, rec, color, mode
+//                                    (all | highest-score | 187) and q, each at most once (400 with the key named; colour= is the older spelling of color=, still accepted, but not together with it); 404 when the server keeps no history; 503 while its database does not answer
 //   GET    /history/<id>   -> 200 the stored record with "recording", "file" and "keep_days"; 404; 503
 //   DELETE /history/<id>   -> 200 {"deleted": "<id>"}; 404; 500/503 (the database would not take the change); the record goes for good, a marker stays while its recording is kept
 //   (with --replay-port the server also has a PUBLIC, read-only door with no secret: GET /replays -> 200 {"replays": [...], "count", "keep_days"}, the newest 200 files that this build can read, each as above

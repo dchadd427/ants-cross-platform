@@ -261,22 +261,37 @@ SPELLING_SKIPPED = (
     "third_party/",            # other people's code
 )
 _NOTICE = re.escape("This map cannot be played with these %ss." % BRITISH)    # the server's notice, which the web lobby matches word for word (protocol 21)
-_KEY = (r"""["'`]%s["'`]""" % BRITISH,                                          # the key "%s" of a match record's seats (GET /history, stored in the history) and of its filter
-        r"\b%s=" % BRITISH,                                                      # the query parameter of GET /history and of the pages' addresses (bookmarks)
-        r"\.%s\b|\b%s:" % (BRITISH, BRITISH))                                    # the same key as a property or object key
-_KEY_LIST = r"\brec, %s\b" % BRITISH                                            # the sentence that lists the filter names (a comment or the server's error text)
-SPELLING_KEPT = {              # file -> patterns that may keep the British word on a line (by place, so that `x = q.<word>` anywhere else is found)
+# The British forms that still exist, each by place so that `x = q.<word>` anywhere else is found: the older spelling is accepted and written for one release (docs/REPLAYS.md, "The match history")
+_QUOTED = r"""["'`]%s["'`]""" % BRITISH      # the key "<word>" of a seat in a match record (written next to color, read by the pages when color is missing), and the older parameter's name in code and prose
+_PARAM = r"\b%s=" % BRITISH                  # the query parameter <word>= of GET /history (still accepted), in the server, its tests and the notes
+_PROP = r"\.%s\b" % BRITISH                 # the same key read as a property
+_OBJKEY = r"\b%s:" % BRITISH                 # ... or written as an object key (a test's older record)
+SPELLING_KEPT = {              # file -> patterns that may keep the British word on a line
     # the wire notice: the server's text, the lobby page that compares with it, the tests that pin it
     "include/ants_net/protocol.hpp": [_NOTICE], "web/front/lobby_rules.js": [_NOTICE], "tests/scripts/test_web_lobby_rules.py": [_NOTICE],
     "tests/scripts/web_lobby_rules_check.js": [_NOTICE], "tests/test_net/test_lockstep_protocols.cpp": [_NOTICE],
+    # the older spelling of the history's color: the alias in the query, the deprecated key of a record, the pages' fallback, the note, and the tests of each
+    "src/ants_server/control_history.cpp": [_QUOTED, _PARAM], "src/ants_server/history_record.cpp": [_QUOTED], "include/ants_server/control.hpp": [_PARAM],
+    "docker/nginx.conf": [_PARAM], "web/history_page.js": [_QUOTED, _PARAM, _PROP], "docs/REPLAYS.md": [_QUOTED, _PARAM],
+    "tests/test_server/test_history_record.cpp": [_QUOTED], "tests/test_server/test_history_store.cpp": [_QUOTED, _PARAM],
+    "tests/scripts/test_nginx_history.py": [_QUOTED, _PARAM], "tests/scripts/web_history_check.js": [_PARAM, _OBJKEY],
+    "tests/scripts/web_matches_check.py": [_QUOTED], "tests/scripts/test_web_matches.py": [_PROP, _QUOTED],
 }
-for _f in ("src/ants_server/history_record.cpp", "src/ants_server/control_history.cpp", "web/history_page.js", "web/match.html", "web/matches.html",
-           "docs/REPLAYS.md", "docker/nginx.conf", "tests/test_server/test_history_record.cpp", "tests/test_server/test_history_store.cpp",
-           "tests/scripts/test_nginx_history.py", "tests/scripts/web_history_check.js", "tests/scripts/web_matches_check.py",
-           "tests/scripts/test_web_matches.py", "tests/scripts/web_match_stats_check.js"):       # the files that write or read the history record's key or the parameter
-    SPELLING_KEPT[_f] = list(_KEY)
-for _f in ("src/ants_server/control_history.cpp", "include/ants_server/control.hpp", "docker/nginx.conf"):    # the three places that list the filter names
-    SPELLING_KEPT.setdefault(_f, []).append(_KEY_LIST)
+
+
+def check_spelling_table(root, files, kept=None):
+    """A kept pattern that no line of its file uses is a finding: the table stays as short as the older spelling's remaining places."""
+    kept = SPELLING_KEPT if kept is None else kept
+    out = []
+    for rel, patterns in sorted(kept.items()):
+        if rel not in files:
+            out.append("%s: in the spelling table but not tracked (remove it from the table)" % rel)
+            continue
+        lines = read_bytes(root, rel).decode("utf-8", "replace").splitlines()
+        for pat in patterns:
+            if not any(re.search(pat, line) for line in lines):
+                out.append("%s: the kept spelling pattern %s is used by no line (remove it from SPELLING_KEPT)" % (rel, pat))
+    return out
 
 
 def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
@@ -290,7 +305,7 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
         data = read_bytes(root, rel)
         if looks_binary(data):
             continue
-        allowed = re.compile("|".join(kept[rel]), re.I) if kept.get(rel) else None
+        allowed = re.compile("|".join(kept[rel])) if kept.get(rel) else None      # (case-sensitive: only the lower-case forms are kept)
         for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
             if SPELLING_WORD.search(allowed.sub("", line) if allowed else line):
                 out.append("%s:%d: British spelling (AGENTS.md, Spelling: American English; write the American spelling of color)" % (rel, n))
@@ -300,7 +315,8 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
 def run_checks(root):
     files = tracked_files(root)
     return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files))
+            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files)
+            + check_spelling_table(root, files))
 
 
 def list_numbers(root):

@@ -40,7 +40,7 @@ READY = live.READY
 
 
 def seat(n, color, name, bot, **kw):
-    s = {"seat": n, "colour": color, "name": name, "bot": bot, "score": 0, "killed": 0, "lost": 0, "hatched": 0, "bombs_planted": 0, "bombs_defused": 0, "fires_lit": 0, "left": False, "winner": False}
+    s = {"seat": n, "color": color, "colour": color, "name": name, "bot": bot, "score": 0, "killed": 0, "lost": 0, "hatched": 0, "bombs_planted": 0, "bombs_defused": 0, "fires_lit": 0, "left": False, "winner": False}
     s.update(kw)
     return s
 
@@ -109,11 +109,11 @@ BY_ID[ID_DOLLAR] = record(ID_DOLLAR, NOW - 3 * 86400, "Ant$&s$'x.lvl", "1v1", [s
 SORTS = {"new": lambda r: (-r["ended"], r["id"]), "old": lambda r: (r["ended"], r["id"]), "long": lambda r: (-r["turns"], -r["ended"]), "short": lambda r: (r["turns"], -r["ended"]),
          "kills": lambda r: (-max(s["killed"] for s in r["seats"]), -r["ended"]), "score": lambda r: (-max(s["score"] for s in r["seats"]), -r["ended"]), "hatched": lambda r: (-max(s["hatched"] for s in r["seats"]), -r["ended"])}
 WORDS = {"who": ("all", "people", "computers"), "format": ("all", "1v1", "team", "ffa"), "result": ("all", "decided", "draw", "cut"), "rec": ("all", "watch", "old", "removed"),
-         "colour": ("all", "green", "red", "blue", "black"), "mode": ("all", "highest-score", "187"), "sort": tuple(SORTS)}
+         "color": ("all", "green", "red", "blue", "black"), "mode": ("all", "highest-score", "187"), "sort": tuple(SORTS)}
 
 
 def label(s):
-    return "%s (bot, %s)" % (s["name"], s["bot"]) if s["name"] and s["bot"] else "Bot (%s)" % s["bot"] if s["bot"] else s["name"] or s["colour"]
+    return "%s (bot, %s)" % (s["name"], s["bot"]) if s["name"] and s["bot"] else "Bot (%s)" % s["bot"] if s["bot"] else s["name"] or s["color"]
 
 
 def listing(query):
@@ -121,6 +121,7 @@ def listing(query):
     pairs = urllib.parse.parse_qsl(query, keep_blank_values=True)
     q = {}
     for k, v in pairs:
+        k = "color" if k == "colour" else k                                  # (the older spelling of the same key; both together are "twice")
         if k in q:
             return 400, {"error": "the key " + k + " is there twice"}
         if k not in WORDS and k not in ("q", "limit", "offset"):
@@ -139,8 +140,8 @@ def listing(query):
     for key, field in (("result", "result"), ("rec", "recording"), ("mode", "mode")):
         if q.get(key, "all") != "all":
             rs = [r for r in rs if r[field] == q[key]]
-    if q.get("colour", "all") != "all":
-        rs = [r for r in rs if any(s["colour"].lower() == q["colour"] for s in r["seats"])]
+    if q.get("color", "all") != "all":
+        rs = [r for r in rs if any(s["color"].lower() == q["color"] for s in r["seats"])]
     if q.get("q"):
         t = q["q"].lower()
         rs = [r for r in rs if t in r["map"].lower() or any(t in label(s).lower() for s in r["seats"])]
@@ -163,6 +164,7 @@ class MatchesDoor(live.Door):
     def __init__(self):
         super().__init__()
         self.history = "ok"                              # ok | busy (503) | off (404 as a server with no history answers) | down (500)
+        self.seat_keys = "both"                          # both (this server) | old (an earlier server: only "colour") | new (only "color"): the keys of each seat
 
     @staticmethod
     def send(h, code, body, ctype="text/plain"):
@@ -176,6 +178,18 @@ class MatchesDoor(live.Door):
         h.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         h.end_headers()
         h.wfile.write(body)
+
+    def keyed(self, body):
+        """The body as a server of the chosen age writes it: a seat has both color keys, only the older one or only the new one."""
+        if self.seat_keys == "both":
+            return body
+        drop = "color" if self.seat_keys == "old" else "colour"
+        text = json.dumps(body)
+        data = json.loads(text)
+        for rec in data.get("history", [data]) if isinstance(data, dict) else []:
+            for st in rec.get("seats", []) if isinstance(rec, dict) else []:
+                st.pop(drop, None)
+        return data
 
     def route(self, h, path):
         query = urllib.parse.urlparse(h.path).query
@@ -198,11 +212,11 @@ class MatchesDoor(live.Door):
                 return self.send(h, 500, "{}", "application/json")
             if path == "/history":
                 code, body = listing(query)
-                return self.js(h, code, body)
+                return self.js(h, code, self.keyed(body))
             ident = path[len("/history/"):]
             if query or ident not in BY_ID:
                 return self.js(h, 404, {"error": "no such match"})
-            return self.js(h, 200, BY_ID[ident])
+            return self.js(h, 200, self.keyed(BY_ID[ident]))
         m = re.match(r"^/replays/(ants-[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(?:-[0-9]{1,4})?\.antsrep)$", path)
         if m:
             return self.send(h, 200, live.fake_file(live.TURNS_END, 1, m.group(1)[:-len(".antsrep")]), "application/octet-stream")
@@ -294,6 +308,18 @@ def main():
             check(until(tab, "document.querySelector('#body .m:nth-child(2) .tv img') && document.querySelector('#body .m:nth-child(2) .tv img').getAttribute('src') === '/maps/previews/Pond.webp'") is True and hits("/maps") == ["/maps"], "a map of the players has the picture of the server's list, which is asked for once")
             labels = tab.ev("[].map.call(document.querySelectorAll('#body .m .side-col .rec'), function (r) { return r.textContent; })")
             check(set(labels) == {"Replay"}, "every match of the first page can be watched: its mark says Replay (%s)" % sorted(set(labels)))
+            for keys in ("old", "new"):                       # a page against a server of an earlier release (the older key alone) and one that has dropped it (the new key alone)
+                door.seat_keys = keys
+                open_page(tab, "/matches.html")
+                check(until(tab, cards + " === 25") is True and tab.ev("document.querySelectorAll('#body .sq i').length > 0 && [].every.call(document.querySelectorAll('#body .sq i'), function (i) { return ['Green', 'Red', 'Blue', 'Black'].indexOf(i.getAttribute('data-c')) !== -1; })"), "seats with the key %s only: every color square has its color" % ("colour" if keys == "old" else "color"))
+            door.seat_keys = "both"
+            for spelling in ("color", "colour"):             # the address of the page: the new spelling, and an old bookmark that must go on working
+                with door.lock:
+                    door.hits[:] = []
+                open_page(tab, "/matches.html?%s=blue" % spelling)
+                check(until(tab, "document.getElementById('s-color') && document.getElementById('s-color').value === 'blue' && " + cards + " > 0") is True and hits("/history") == ["/history?color=blue&limit=25&offset=0"], "matches.html?%s=blue: the select says Blue and the page asks the server color=blue: %s" % (spelling, hits("/history")))
+            open_page(tab, "/matches.html")
+            check(until(tab, cards + " === 25") is True, "the plain address is the list again")
             door.set(live=[live.ID, live.OTHER])
             check(until(tab, "!document.getElementById('live-btn').hidden && document.getElementById('live-btn').textContent === '2 live now'") is True, "two matches are on: the button 'Live now' says so and goes to the live page (%s)" % tab.ev("document.getElementById('live-btn').getAttribute('href')"))
             shot(tab, "list")

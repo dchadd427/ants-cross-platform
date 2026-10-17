@@ -58,8 +58,8 @@ ITEM_ID = GOOD_IDS[0]
 OTHER_ID = GOOD_IDS[1]
 GONE_ID = "ants-GONE-20261008-143209Z"                                                        # (the stand-in knows no such match and says so)
 # The queries of the page: every word of every filter of the server's list (control.cpp parse_history_query), percent escapes and '+' as a browser writes a search
-GOOD_QUERIES = ["", "limit=20", "limit=100&offset=40&sort=score", "format=1v1&result=decided&who=people&rec=watch&colour=green", "sort=hatched&format=ffa&who=computers&rec=removed&colour=black",
-                "q=Bot+%28Hard%29", "q=%41%62%63", "q=Ann", "mode=187", "mode=highest-score&format=1v1&sort=kills", "limit=50&offset=0&sort=new&format=team&result=draw&who=all&rec=old&colour=red&q=" + "a" * 120, "x", "a=b=c", "q=a-b.c_d"]
+GOOD_QUERIES = ["", "limit=20", "limit=100&offset=40&sort=score", "format=1v1&result=decided&who=people&rec=watch&color=green", "sort=hatched&format=ffa&who=computers&rec=removed&colour=black", "color=blue", "colour=blue", "color=red&colour=red",
+                "q=Bot+%28Hard%29", "q=%41%62%63", "q=Ann", "mode=187", "mode=highest-score&format=1v1&sort=kills", "limit=50&offset=0&sort=new&format=team&result=draw&who=all&rec=old&color=red&q=" + "a" * 120, "x", "a=b=c", "q=a-b.c_d"]
 BAD_QUERIES = ["q=<x>", "q=a;b", 'q="x"', "q=a b", "q=a'b", "q=a|b", "q=a\\b", "q=a/b", "q=a?b", "q=a#b", "q=a:b", "q=a,b", "q=é", "q=*", "q=(x)", "q=a@b", "q=a!b", "q=a$b", "q=" + "a" * 500,
                "q=" + "%41" * 134]
 LIST_REQUEST = "GET /history HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
@@ -121,7 +121,7 @@ class TheLocations(unittest.TestCase):
         words = set(re.findall(r'"([a-z0-9]+)"', parser))
         record = read("include", "ants_server", "history_record.hpp")
         words |= set(re.findall(r'kHistoryMode(?:Score|187) = "([a-z0-9-]+)"', record))                  # (the two words of the mode filter are the constants of the record)
-        self.assertTrue({"limit", "offset", "sort", "format", "result", "who", "rec", "colour", "mode", "q", "1v1", "ffa", "team", "decided", "draw", "cut", "computers", "people", "removed", "watch", "old",
+        self.assertTrue({"limit", "offset", "sort", "format", "result", "who", "rec", "color", "colour", "mode", "q", "1v1", "ffa", "team", "decided", "draw", "cut", "computers", "people", "removed", "watch", "old",
                          "187", "highest-score"} <= words)
         pattern = query_pattern()
         for word in words:
@@ -333,7 +333,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(len(seen), 2)
         for one in seen:
             self.assertEqual((one["method"], one["args"], one["cl"], one["te"], one["up"], one["conn"], one["st"], one["host"]), ("GET", "-", "-", "-", "-", "close", "200", "127.0.0.1"))
-        for query in ("limit=5&sort=old", "q=Bot+%28Hard%29&format=1v1", "limit=100&offset=40&sort=hatched&format=ffa&result=cut&who=people&rec=watch&colour=black"):
+        for query in ("limit=5&sort=old", "q=Bot+%28Hard%29&format=1v1", "limit=100&offset=40&sort=hatched&format=ffa&result=cut&who=people&rec=watch&color=black"):
             before_list = len(self.sent("/history"))
             status, _, body = self.ask("GET", "/history?" + query)
             self.assertEqual(status, 200, query)
@@ -362,6 +362,15 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.stub_lines(before + 11) - before, 11)                           # eight asks of one match: none came from a cache
         self.assertEqual(self.ask("GET", "/history")[2], first[2])                            # (the list without a query is still the one entry: the queries did not take its place)
         self.assertEqual(self.stub_lines() - before, 11)
+
+    def test_the_two_spellings_of_the_color_filter_are_both_let_through_and_each_is_cached_under_its_own_arguments(self):
+        time.sleep(6.5)                                                                       # (the allowance of the searches is paid for)
+        before = self.stub_lines()
+        for query in ("color=red", "colour=red"):
+            for _ in range(2):
+                status, _, body = self.ask("GET", "/history?" + query)
+                self.assertEqual((status, body), (200, ('{"history":[],"count":0,"query":"%s"}' % query).encode()))      # (the query goes on to the byte; the server decides)
+        self.assertEqual(self.stub_lines(before + 2) - before, 2)                             # two asks of each spelling: one request each (the raw arguments are the key)
 
     def test_the_404_of_a_match_that_the_server_does_not_know_passes_with_its_json_and_is_asked_every_time(self):
         before = self.stub_lines()

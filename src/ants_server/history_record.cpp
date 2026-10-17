@@ -48,7 +48,9 @@ bool row_has(const HistoryRow& r, int seat) {
 JsonValue seat_json(const HistorySeat& s, bool full) {
     JsonValue o = JsonValue::make_object();
     o.set("seat", JsonValue::make_int(s.seat));
-    o.set("colour", JsonValue::make_string(kColors[s.seat < sim::MAX_PLAYERS ? s.seat : 0]));
+    const char* const color = kColors[s.seat < sim::MAX_PLAYERS ? s.seat : 0];
+    o.set("color", JsonValue::make_string(color));
+    o.set("colour", JsonValue::make_string(color));        // deprecated, the same value: older pages read this key; it goes in a later release (docs/REPLAYS.md)
     o.set("name", JsonValue::make_string(s.name));
     o.set("bot", JsonValue::make_string(s.bot));
     o.set("score", JsonValue::make_int(s.score));
