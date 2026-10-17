@@ -1,0 +1,4 @@
+{"bytes":19315,"profile":"extended","loaded":false,"reason":"the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known, the file is not read",
+"findings":[
+{"severity":"fatal","code":"rules_out_of_range","message":"the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known, the file is not read","team":-1,"count":1}
+]}

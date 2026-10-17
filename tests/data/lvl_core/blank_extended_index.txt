@@ -1,0 +1,16 @@
+blank_extended_31x31_g485_e6_m10	0	16918	781b0122c2efcd36
+blank_extended_90x90_g485_e6_m10	0	102586	27fd9fdb4c1be60d
+blank_extended_91x5_g485_e6_m10	0	10846	87812b6c3cfbffa5
+blank_extended_100x100_g485_e6_m10	0	125386	725dd323f1bc3154
+blank_extended_300x400_g485_e6_m10	0	1445386	d612de53d9f22e50
+blank_extended_256x1024_g485_e6_m10	0	3151114	0df3e867a4cba82b
+blank_extended_1024x256_g486_e9_m12	0	3151125	bee35ece61104f66
+blank_extended_512x512_g485_e6_m10	0	3151114	80b9bc7e507cee54
+blank_extended_1x1_g485_e6_m10	0	5398	b93b104added0a36
+blank_extended_513x512_g485_e6_m10	1	-	a blank map of 513 rows x 512 columns cannot be written: the grid has 513 rows x 512 columns, 262656 cells, more than the 262144 allowed here
+blank_extended_1025x1_g485_e6_m10	1	-	a blank map of 1025 rows x 1 columns cannot be written: the grid has 1025 rows x 1 columns, more than the 1024 x 1024 allowed here
+blank_extended_1x1025_g485_e6_m10	1	-	a blank map of 1 rows x 1025 columns cannot be written: the grid has 1 rows x 1025 columns, more than the 1024 x 1024 allowed here
+blank_extended_0x10_g485_e6_m10	1	-	a blank map needs 1 to 65535 rows and columns
+blank_extended_10x70000_g485_e6_m10	1	-	a blank map needs 1 to 65535 rows and columns
+blank_extended_31x31_g1344_e6_m10	1	-	the ground tile is a tile id from 0 to 1343
+blank_extended_31x31_g485_e70000_m10	1	-	the eggs and the minutes are numbers from 0 to 65535

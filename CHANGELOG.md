@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - Under the hood: the tests are faster and steadier on slow or busy machines (the flood-control checks follow the time that really went by, the match history's timing test counts work instead of milliseconds, and the test servers no longer look up host names); nothing changes in the game or on the site.
 
+## v0.12.69 - 2026-10-17 - Extended maps: the browser module does conversions and the per-kind check
+
+**For players:**
+- Under the hood: the map code in the browser module can now make a blank Extended map, turn a Classic map into an Extended one and back (with plain reasons and notes, each with a stable code), check either kind and tell a page the limits of each; a page can refuse an older module. No page uses it yet; nothing changes in the game or on the site.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/15c56b6b...0372a2e2), [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
+
 ## v0.12.68 - 2026-10-17 - Extended maps: the checker per kind and the 90-row limit for new Classic maps
 
 **For players:**

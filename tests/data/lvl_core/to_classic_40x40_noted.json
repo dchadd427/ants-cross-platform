@@ -1,0 +1,6 @@
+{"to":"classic","from":"extended","ok":true,"bytes":24608,
+"reasons":[],
+"notes":[
+{"code":"description_30_bytes","message":"the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns"},
+{"code":"rules_extended_dropped","message":"the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, and a long path order can fail)"}
+]}
