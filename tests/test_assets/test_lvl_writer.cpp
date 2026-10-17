@@ -1724,7 +1724,7 @@ void w7_extended_maps() {
         // a grid beyond the limits gets no cell and nothing of its size is allocated
         LevelData none;
         const size_t held = peak_of([&] { none = blank_extended_level(0xFFFFFFFFu, 0xFFFFFFFFu, names); });
-        CHECK_MSG(none.layer1_terrain.empty() && held <= kSlack, std::to_string(held));         // (the 64 KiB are the table of the tile ids that dictionary_of_used_tiles keeps)
+        CHECK_MSG(none.layer1_terrain.empty() && none.layer2_interactive.empty() && held <= kSlack + 4096, std::to_string(held));   // (the 64 KiB are the table of the tile ids that dictionary_of_used_tiles keeps, and the library's own small blocks add a few bytes that differ by standard library: 39 on MSVC; a grid of 2^32-1 x 2^32-1 would be 51 GB)
         CHECK(refused_with(write_level(none, e), "more than the 1024 x 1024 allowed here"));
     });
 
