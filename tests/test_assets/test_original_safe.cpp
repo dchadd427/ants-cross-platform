@@ -846,7 +846,7 @@ LevelData with_rows(const LevelData& base, uint32_t rows) {
     return l;
 }
 
-const std::string kWallWarning = "ants cannot cross the 91st row of a taller map, in the original game too, so it plays otherwise than the map shows (a Classic map made now has at most 90 rows; "
+const std::string kWallWarning = "ants cannot enter or cross the 91st row of a taller map, in the original game too, so it plays otherwise than the map shows (a Classic map made now has at most 90 rows; "
                                  "an Extended map has no such wall)";
 
 // TINY as an Extended map
@@ -916,7 +916,7 @@ void s6_kinds() {
         m = check_map(with_rows(tiny(), 91));
         CHECK(!m.works && m.headline == "Does not work in the original game" && m.has(Code::RowsBeyondWall));
         // the sentence of a grid beyond 256 is the kind's
-        const std::string too_big = "too big for a Classic map (256 at most a side); make it an Extended map?";
+        const std::string too_big = "too big for a Classic map (at most 256 a side); make it an Extended map?";
         m = check_map(with_rows(tiny(), 257));
         CHECK(!m.works && m.has(Code::GridTooLarge) && m.report.first(Code::GridTooLarge)->message == too_big && !m.report.first(Code::GridTooLarge)->place_limit);
         CHECK(std::count_if(m.report.issues.begin(), m.report.issues.end(), [](const OriginalSafeIssue& i) { return i.code == Code::GridTooLarge; }) == 1);     // (one finding, not a second one as a limit of the place)
@@ -977,7 +977,7 @@ void s6_kinds() {
         const LevelData ext = tiny_extended();
         const LevelLimits limits = LevelLimits::for_extended_maps();
         // a rule broken in both kinds: the same code, severity and sentence
-        auto same_words = [&](const char* what, Code code, Severity severity, const std::function<void(LevelData&)>& break_it) {
+        auto same_words = [&](const char* what, Code code, Severity severity, const std::function<void(LevelData&)>& break_it, bool same_text = true) {
             LevelData c = classic;
             LevelData e = ext;
             break_it(c);
@@ -988,7 +988,7 @@ void s6_kinds() {
             const OriginalSafeIssue* ei = er.report.first(code);
             CHECK_MSG(ci != nullptr && ei != nullptr, what);
             if (ci == nullptr || ei == nullptr) return;
-            CHECK_MSG(ci->message == ei->message && ci->severity == severity && ei->severity == severity && ci->row == ei->row && ci->column == ei->column && ci->team == ei->team &&
+            CHECK_MSG((!same_text || ci->message == ei->message) && (same_text || ei->message.find("original") == std::string::npos) && ci->severity == severity && ei->severity == severity && ci->row == ei->row && ci->column == ei->column && ci->team == ei->team &&
                           ci->count == ei->count,
                       std::string(what) + ": " + ci->message + " / " + ei->message);
             CHECK_MSG(!er.works && er.headline == "Does not work in the new version" && er.badge == "New version only", what);
@@ -1004,9 +1004,9 @@ void s6_kinds() {
             }
             l.anthill_spawns.assign(kept.begin(), kept.end());
         });
-        same_words("a tile of the ground beyond the dictionary", Code::TileOutsideDictionary, Severity::Fatal, [](LevelData& l) { l.layer1_terrain[at(l, 3, 3)].tile_index = 1300; });
-        same_words("a tile of an object beyond the dictionary", Code::TileOutsideDictionary, Severity::Fatal, [](LevelData& l) { l.layer2_interactive[at(l, 12, 12)] = MapCell{1301, 0, 0}; });
-        same_words("a cell without ground", Code::GroundMissing, Severity::Fatal, [](LevelData& l) { l.layer1_terrain[at(l, 3, 3)].tile_index = LVL_EMPTY_TILE; });
+        same_words("a tile of the ground beyond the dictionary", Code::TileOutsideDictionary, Severity::Fatal, [](LevelData& l) { l.layer1_terrain[at(l, 3, 3)].tile_index = 1300; }, false);
+        same_words("a tile of an object beyond the dictionary", Code::TileOutsideDictionary, Severity::Fatal, [](LevelData& l) { l.layer2_interactive[at(l, 12, 12)] = MapCell{1301, 0, 0}; }, false);
+        same_words("a cell without ground", Code::GroundMissing, Severity::Fatal, [](LevelData& l) { l.layer1_terrain[at(l, 3, 3)].tile_index = LVL_EMPTY_TILE; }, false);
         same_words("a start marker outside the map", Code::StartMarkerOutsideMap, Severity::Fatal, [](LevelData& l) {
             for (AnthillSpawn& sp : l.anthill_spawns) {
                 if (sp.team_id == 0) { sp.y = 40; break; }
@@ -1024,12 +1024,27 @@ void s6_kinds() {
             pile.y = 4;
             pile.x = 4;
             l.food_schedules.push_back(pile);
-        });
+        }, false);
+        // the sentences of the remake profile do not talk about a game that cannot load the map (the original-safe ones keep their words)
+        {
+            LevelData c = classic;
+            LevelData e = ext;
+            c.layer1_terrain[at(c, 3, 3)].tile_index = 1300;
+            e.layer1_terrain[at(e, 3, 3)].tile_index = 1300;
+            CHECK(check_original_safe(c).first(Code::TileOutsideDictionary)->message ==
+                  "one ground cell uses a tile beyond the dictionary of 670 names (row 3, column 3: tile 1300): the original reads past its tables there");
+            CHECK(check_map(e, limits).report.first(Code::TileOutsideDictionary)->message ==
+                  "one ground cell uses a tile beyond the dictionary of 670 names (row 3, column 3: tile 1300): the dictionary has no name for that tile");
+        }
         // a wrong dictionary and an empty grid
         {
             LevelData e = ext;
             e.tile_dictionary.assign(1345, ".");
             CHECK(check_map(e, limits).has(Code::DictionaryTooLarge));
+            CHECK(check_map(e, limits).report.first(Code::DictionaryTooLarge)->message == "the dictionary has 1345 names: a map holds at most 1,344");
+            LevelData c = classic;
+            c.tile_dictionary.assign(1345, ".");
+            CHECK(check_original_safe(c).first(Code::DictionaryTooLarge)->message == "the dictionary has 1345 names: the original's table holds 1,344 and more overrun it");
             e = ext;
             e.height.val = 0;
             e.layer1_terrain.clear();
@@ -1211,6 +1226,8 @@ void s6_kinds() {
         int classic_works = 0;
         int extended_works = 0;
         int walls = 0;
+        int anchor_maps = 0;
+        unsigned long anchor_cells = 0;
         size_t most_rows = 0;
         for (const std::string& path : paths) {
             const std::vector<uint8_t> bytes = read_map(path);
@@ -1229,11 +1246,17 @@ void s6_kinds() {
             const MapCheckReport e = check_map(up.level, LevelLimits::for_extended_maps());
             CHECK_MSG(e.kind == MapKind::Extended && e.badge == "New version only" && e.has(Code::NotForOriginal) && !e.has(Code::RowsBeyondWall), path);
             extended_works += e.works ? 1 : 0;
+            if (const OriginalSafeIssue* a = e.report.first(Code::ObjectAnchorOutsideMap)) {
+                ++anchor_maps;
+                anchor_cells += a->count;
+                CHECK_MSG(a->severity == Severity::Info, path);       // (a note, never a failure)
+            }
             CHECK_MSG(!c.works || e.works, path + ": works in the original game, not in the new version");
             if (e.works) CHECK_MSG(up.level.validate(0x0F, LevelLimits::for_extended_maps()).playable, path);
         }
         std::cout << "\n    " << classic_works << " Classic maps work in the original game, " << extended_works << " work as Extended maps in the new version; the most rows: " << most_rows << "\n";
         CHECK(classic_works == kLibraryWorks && walls == 0 && most_rows <= 81u);
+        CHECK_MSG(anchor_maps == 73 && anchor_cells == 1592u, std::to_string(anchor_maps) + " maps, " + std::to_string(anchor_cells) + " cells");      // objects whose anchor byte points outside the grid, as converted
         CHECK_MSG(extended_works == kLibraryWorksAsExtended, std::to_string(extended_works));
     });
 }

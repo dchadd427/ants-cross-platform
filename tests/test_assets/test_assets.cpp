@@ -1231,7 +1231,7 @@ void test_suite_6c_loader_parity(const std::string& map_dir) {
         }
         // the grid: 91 rows, 131 columns, or more than 10,000 cells, are the game's map and no new map's
         struct Grid { uint32_t rows; uint32_t columns; const char* words; };
-        const char* const wall = "a Classic map made now has at most 90 rows (ants cannot cross the 91st row of a taller map, in the original game too); make it an Extended map?";
+        const char* const wall = "a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?";
         for (const Grid& g : {Grid{131, 1, wall}, Grid{91, 1, wall}, Grid{1, 131, "1 rows x 131 columns, more than the 90 x 130 allowed here"},
                               Grid{101, 100, wall}, Grid{100, 101, wall},
                               Grid{90, 112, "90 rows x 112 columns, 10080 cells, more than the 10000 allowed here"}}) {

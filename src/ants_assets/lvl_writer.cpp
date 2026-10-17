@@ -562,7 +562,7 @@ std::vector<Reason> classic_reasons(const LevelData& level, std::vector<Reason>*
     if (level.version == LVL_EXTENDED_VERSION && rows > LVL_CLASSIC_ROW_WALL) {
         // the conversion makes a NEW Classic map, and a new Classic map has at most 90 rows (the wall at row 90); a Classic map that is Classic already is copied as it is
         why.push_back({"rows_beyond_wall", "this map has " + num(rows) + " rows; a Classic map made now has at most " + num(LVL_CLASSIC_ROW_WALL) +
-                                               " (ants cannot cross the 91st row of a taller map, in the original game too): crop it to " + num(LVL_CLASSIC_ROW_WALL) +
+                                               " (ants cannot enter or cross the 91st row of a taller map, in the original game too): crop it to " + num(LVL_CLASSIC_ROW_WALL) +
                                                " rows first, or keep it an Extended map"});
     }
     const uint64_t cells = static_cast<uint64_t>(rows) * columns;

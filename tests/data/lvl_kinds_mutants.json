@@ -360,7 +360,7 @@
   {
    "id": "classic_big_grid_keeps_the_originals_sentence",
    "file": "src/ants_assets/lvl_checker.cpp",
-   "old": "i.message = \"too big for a Classic map (\" + num(LVL_MAX_GRID_SIDE) + \" at most a side); make it an Extended map?\";",
+   "old": "i.message = \"too big for a Classic map (at most \" + num(LVL_MAX_GRID_SIDE) + \" a side); make it an Extended map?\";",
    "new": "i.message = i.message;",
    "build": [
     "test_original_safe"
@@ -492,6 +492,36 @@
    "file": "src/ants_assets/lvl_checker.cpp",
    "old": "\" has no hill\", -1, -1, team);",
    "new": "\" has no hill here\", -1, -1, team);",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_tile_sentence_talks_about_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(original ? \"): the original reads past its tables there\" : \"): the dictionary has no name for that tile\")",
+   "new": "\"): the original reads past its tables there\"",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "remake_dictionary_sentence_talks_about_the_original",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "(original ? \" names: the original's table holds 1,344 and more overrun it\" : \" names: a map holds at most 1,344\")",
+   "new": "\" names: the original's table holds 1,344 and more overrun it\"",
+   "build": [
+    "test_original_safe"
+   ],
+   "test": "./build/tests/test_assets/test_original_safe"
+  },
+  {
+   "id": "library_anchor_note_count",
+   "file": "src/ants_assets/lvl_checker.cpp",
+   "old": "anchor_row >= static_cast<int64_t>(rows) || anchor_column >= static_cast<int64_t>(columns)) anchors.see(row, column);",
+   "new": "anchor_row >= static_cast<int64_t>(rows) + 1 || anchor_column >= static_cast<int64_t>(columns)) anchors.see(row, column);",
    "build": [
     "test_original_safe"
    ],

@@ -97,7 +97,7 @@ void file_findings(const LevelData& level, Findings& f) {
     }
 }
 
-void tiles_beyond_dictionary(const Tally& t, const char* one, const char* many, size_t names, Findings& f, bool in_a_pile = false) {
+void tiles_beyond_dictionary(const Tally& t, const char* one, const char* many, size_t names, Findings& f, bool original, bool in_a_pile = false) {
     if (t.count == 0) return;
     std::string where;
     if (in_a_pile) {
@@ -107,7 +107,7 @@ void tiles_beyond_dictionary(const Tally& t, const char* one, const char* many, 
     }
     f.add(Code::TileOutsideDictionary, Severity::Fatal,
           (t.count == 1 ? std::string("one ") + one + " uses a tile" : num(t.count) + " " + many + " use tiles") + " beyond the dictionary of " + num(names) + " names " + where +
-              ": tile " + num(t.tile) + "): the original reads past its tables there",
+              ": tile " + num(t.tile) + (original ? "): the original reads past its tables there" : "): the dictionary has no name for that tile"),
           t.row, t.column, -1, t.count);
 }
 
@@ -332,13 +332,14 @@ OriginalSafeReport profile_of(const LevelData& level, bool remake) {
     if (original && grid && rows > LVL_CLASSIC_ROW_WALL) {
         // the original's path finder never enters tile row 90 (the 91st row): ants cannot cross it, in any Classic map taller than that (docs/MAP_FORMAT.md, "The row-90 wall")
         f.add(Code::RowsBeyondWall, Severity::Warning,
-              "the map has " + num(rows) + " rows: ants cannot cross the 91st row of a taller map, in the original game too, so it plays otherwise than the map shows (a Classic map made now has "
+              "the map has " + num(rows) + " rows: ants cannot enter or cross the 91st row of a taller map, in the original game too, so it plays otherwise than the map shows (a Classic map made now has "
               "at most 90 rows; an Extended map has no such wall)",
               static_cast<int32_t>(LVL_CLASSIC_ROW_WALL), -1, -1, rows - LVL_CLASSIC_ROW_WALL);
     }
     const size_t names = level.tile_dictionary.size();
     if (names > LVL_MAX_DICTIONARY_ENTRIES) {
-        f.add(Code::DictionaryTooLarge, Severity::Fatal, "the dictionary has " + num(names) + " names: the original's table holds 1,344 and more overrun it");
+        f.add(Code::DictionaryTooLarge, Severity::Fatal,
+              "the dictionary has " + num(names) + (original ? " names: the original's table holds 1,344 and more overrun it" : " names: a map holds at most 1,344"));
     }
 
     // every tile inside the dictionary (0x10067a5: the remap table has one word per name and is read with the raw index; 0x100665a then indexes a 0x540-entry
@@ -364,19 +365,19 @@ OriginalSafeReport profile_of(const LevelData& level, bool remake) {
             if (beyond(stage.tile_id)) stages.see(pile.y, pile.x, stage.tile_id);
         }
     }
-    tiles_beyond_dictionary(ground, "ground cell", "ground cells", names, f);
-    tiles_beyond_dictionary(objects, "object cell", "object cells", names, f);
-    tiles_beyond_dictionary(records, "entry of the list of start markers and plants", "entries of the list of start markers and plants", names, f);
-    tiles_beyond_dictionary(stages, "food stage", "food stages", names, f, true);
+    tiles_beyond_dictionary(ground, "ground cell", "ground cells", names, f, original);
+    tiles_beyond_dictionary(objects, "object cell", "object cells", names, f, original);
+    tiles_beyond_dictionary(records, "entry of the list of start markers and plants", "entries of the list of start markers and plants", names, f, original);
+    tiles_beyond_dictionary(stages, "food stage", "food stages", names, f, original, true);
     if (beyond(level.ambient_tile_or_sound)) {
         f.add(Code::TileOutsideDictionary, Severity::Fatal,
-              "the default ant type is tile " + num(level.ambient_tile_or_sound) + ", beyond the dictionary of " + num(names) + " names: the original reads past its tables there");
+              "the default ant type is tile " + num(level.ambient_tile_or_sound) + ", beyond the dictionary of " + num(names) + (original ? " names: the original reads past its tables there" : " names: the dictionary has no name for that tile"));
     }
     // the ground (FUN_01008af7: the terrain class is a table of the 1,344 ids, read with the layer-1 tile; 0x7FFE is past its end)
     if (no_ground.count != 0) {
         f.add(Code::GroundMissing, Severity::Fatal,
               (no_ground.count == 1 ? std::string("one cell has no ground tile") : num(no_ground.count) + " cells have no ground tile") + " (the empty tile 32766; " +
-                  (no_ground.count == 1 ? "" : "the first at ") + place(no_ground.row, no_ground.column) + "): the original reads its terrain table past its end there",
+                  (no_ground.count == 1 ? "" : "the first at ") + place(no_ground.row, no_ground.column) + (original ? "): the original reads its terrain table past its end there" : "): every cell needs a ground tile"),
               no_ground.row, no_ground.column, -1, no_ground.count);
     }
 
@@ -411,12 +412,12 @@ OriginalSafeReport profile_of(const LevelData& level, bool remake) {
         }
         if (empty.count == 1) {
             f.add(Code::FoodPileWithoutStages, Severity::Fatal,
-                  "the food pile at " + place(empty.row, empty.column) + " has no stages: the original stops reading the food there and reads the rest of the map from the wrong place",
+                  "the food pile at " + place(empty.row, empty.column) + " has no stages" + (original ? ": the original stops reading the food there and reads the rest of the map from the wrong place" : ": a food pile needs at least one stage"),
                   empty.row, empty.column);
         } else if (empty.count > 1) {
             f.add(Code::FoodPileWithoutStages, Severity::Fatal,
                   num(empty.count) + " food piles have no stages (the first at " + place(empty.row, empty.column) +
-                      "): the original stops reading the food at the first and reads the rest of the map from the wrong place",
+                      (original ? "): the original stops reading the food at the first and reads the rest of the map from the wrong place" : "): a food pile needs at least one stage"),
                   empty.row, empty.column, -1, empty.count);
         }
     }
@@ -519,7 +520,7 @@ OriginalSafeReport profile_of(const LevelData& level, bool remake) {
         }
         if (remake) {
             // an object whose anchor lies outside the grid (LevelData::object_anchor: relative in an Extended map, the sum modulo 256 up to 256 x 256). A note: the anchor of a
-            // converted Classic map can point outside (13 cells of 8 library maps do), and the object itself is where its cell is.
+            // converted Classic map can point outside (1,592 cells of 73 library maps do), and the object itself is where its cell is.
             Tally anchors;
             for (size_t i = 0; i < level.layer2_interactive.size(); ++i) {
                 const uint32_t row = static_cast<uint32_t>(i / columns);
@@ -651,7 +652,7 @@ MapCheckReport extended_not_accepted() {
 void classic_wording(OriginalSafeReport& report) {
     for (OriginalSafeIssue& i : report.issues) {
         if (i.code == Code::GridTooLarge && !i.place_limit && i.severity == Severity::Fatal) {
-            i.message = "too big for a Classic map (" + num(LVL_MAX_GRID_SIDE) + " at most a side); make it an Extended map?";
+            i.message = "too big for a Classic map (at most " + num(LVL_MAX_GRID_SIDE) + " a side); make it an Extended map?";
         }
     }
 }

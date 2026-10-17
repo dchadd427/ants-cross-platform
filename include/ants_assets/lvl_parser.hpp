@@ -122,7 +122,7 @@ struct LevelLimits {
 };
 
 /// The sentence that refuses a Classic map of more than LVL_CLASSIC_ROW_WALL rows where the limits hold a new Classic map to it (the reader and the writer say it in the same words):
-/// "the grid has 91 rows x 10 columns: a Classic map made now has at most 90 rows (ants cannot cross the 91st row of a taller map, in the original game too); make it an Extended map?"
+/// "the grid has 91 rows x 10 columns: a Classic map made now has at most 90 rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?"
 std::string rows_beyond_wall_text(uint32_t rows, uint32_t columns);
 
 /**

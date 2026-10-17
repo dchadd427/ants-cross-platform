@@ -761,7 +761,7 @@ int selftest() {
         const Run three = run_words({"check", marker_path, "--roster", "14"});
         t.check(three.status == 0 && has(three.out, "marker.lvl: plays with red, blue and black; notes:") && has(three.out, "  note start_marker_outside_grid: "),
                 "check --roster 14: red, blue and black play, the marker is a note");
-        // a grid of 131 columns: a map of the game, not a new map (130 a side at the most)
+        // a grid of 131 columns: a map of the game, not a new map (130 columns at the most)
         LevelData wide = blank_level(4, 131, std::vector<std::string>(1344, "n"));
         const std::string wide_path = file_of("wide.lvl", write_level(wide).bytes);
         t.check(run_words({"check", wide_path}).status == 0, "check: 4 x 131 plays");
@@ -986,7 +986,7 @@ int selftest() {
                     run_words({"check", ext, "--extended", "--new-map"}).status == 2,
                 "check --extended: with --original, --roster or --new-map it is exit 2");
         const Run wall = run_words({"check", dir.file("tall91_game.lvl"), "--original"});
-        t.check(wall.status == 1 && has(wall.out, "warning rows_beyond_wall: the map has 91 rows: ants cannot cross the 91st row of a taller map"),
+        t.check(wall.status == 1 && has(wall.out, "warning rows_beyond_wall: the map has 91 rows: ants cannot enter or cross the 91st row of a taller map"),
                 "check --original: a Classic map of 91 rows (the game's own limits) has the wall as a warning: " + wall.out);
         const Run too_big = run_words({"blank", dir.file("too_big.lvl"), "--extended", "--rows", "600", "--columns", "600"});
         t.check(too_big.status == 1 && has(too_big.out, "360000 cells, more than the 262144 allowed here") && !fs::exists(dir.file("too_big.lvl")), "blank --extended: 600 x 600 has too many cells: " + too_big.out);

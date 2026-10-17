@@ -258,7 +258,7 @@ std::string version_not_supported_text(uint32_t version) {
 std::string rows_beyond_wall_text(uint32_t rows, uint32_t columns) {
     static_assert(LVL_CLASSIC_ROW_WALL == 90, "the sentence says the 91st row");
     return "the grid has " + std::to_string(rows) + " rows x " + std::to_string(columns) + " columns: a Classic map made now has at most " + std::to_string(LVL_CLASSIC_ROW_WALL) +
-           " rows (ants cannot cross the 91st row of a taller map, in the original game too); make it an Extended map?";
+           " rows (ants cannot enter or cross the 91st row of a taller map, in the original game too); make it an Extended map?";
 }
 
 namespace {
