@@ -22,6 +22,7 @@
 //   --rotate          play every distinct arrangement of the given bots over the given seats (up to 24 for four different bots): seats are not symmetric on a map,
 //                     so a comparison of bots must rotate them
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
+//   --game-mode M     the rules of every match: highest-score (the original's game, the default) or 187 (no food, the kills are the score, docs/GAMEPLAY.md); the report names the mode only when it is 187
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
 //   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did
 //                     (counts of attack orders, raids, walls, ...) to stderr when a match is over.
@@ -447,6 +448,7 @@ struct Options {
     bool rotate{false};
     uint32_t repeat{1};
     bool replay_check{false};
+    sim::GameMode game_mode{sim::GameMode::HighestScore};   // --game-mode: the rules of every match of the run
     std::string save_replays;                      // a folder: every match is kept there as a replay (the server's store names and keeps them; the site's list shows them)
     unsigned threads{1};
     std::string out;
@@ -462,7 +464,7 @@ struct Options {
 void print_usage(std::FILE* to) {
     std::fprintf(to,
         "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
+        "                 [--game-mode highest-score|187] [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
@@ -471,6 +473,7 @@ void print_usage(std::FILE* to) {
         "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
         "                     saboteur rusher aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
         "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
+        "  --game-mode M      highest-score (the original's game, default) or 187 (no food, the kills are the score)\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"
@@ -728,6 +731,17 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         if (v == 0) ai::without_war_batch(p);
         return true;
     }
+    if (key == "brawl") return flag(p.brawl187);
+    if (key == "bretreat") { p.brawl.retreat_hp = static_cast<uint8_t>(v); return true; }
+    if (key == "breturn") { p.brawl.return_hp = static_cast<uint8_t>(v); return true; }
+    if (key == "bper") { p.brawl.per_target = static_cast<uint32_t>(v); return true; }
+    if (key == "bcrowd") { p.brawl.crowd = static_cast<uint32_t>(v); return true; }
+    if (key == "bhp") { p.brawl.hp_weight = static_cast<uint32_t>(v); return true; }
+    if (key == "bregap") { p.brawl.regap_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "bx1") { p.brawl.x1 = static_cast<int32_t>(v); return true; }
+    if (key == "bx2") { p.brawl.x2 = static_cast<int32_t>(v); return true; }
+    if (key == "bx3") { p.brawl.x3 = static_cast<int32_t>(v); return true; }
+    if (key == "bx4") { p.brawl.x4 = static_cast<int32_t>(v); return true; }                                     // the 187 brawl (0: the bot as it was before it: the food game's tasks in 187 too)
     if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
@@ -943,6 +957,11 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
                 if (other.seat == spec.seat) { err = "--seat: seat " + std::to_string(static_cast<unsigned>(spec.seat)) + " given twice"; return false; }
             }
             o.seats.push_back(spec);
+        } else if (s == "--game-mode") {
+            if (!value("--game-mode", v)) return false;
+            uint8_t mode = 0;
+            if (!net::parse_game_mode_name(v, mode)) { err = "--game-mode needs 'highest-score' or '187', not '" + v + "'"; return false; }
+            o.game_mode = static_cast<sim::GameMode>(mode);
         } else if (s == "--ticks") {
             if (!value("--ticks", v)) return false;
             if (v == "full") o.ticks = 0;
@@ -1201,6 +1220,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.bots = j.bots;
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
+    s.game_mode = o.game_mode;
     s.record = record;
     s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
     for (const ai::BotSpec& b : j.bots) {
@@ -1236,6 +1256,7 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     head.map_hash = m.file_hash;
     head.seed = spec.seed;
     head.fog = false;
+    head.set_mode(static_cast<uint8_t>(spec.game_mode));
     for (const ai::BotSpec& b : job.bots) {
         if (b.seat >= sim::MAX_PLAYERS) return;
         head.roster = static_cast<uint8_t>(head.roster | (1u << b.seat));
@@ -1243,6 +1264,7 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     }
     sim::SimulationEngine sim;
     sim.set_fog_of_war_enabled(false);
+    sim.set_game_mode(spec.game_mode);
     sim.init(m.level, spec.seed, head.roster);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) sim.set_player_name(seat, ((head.roster >> seat) & 1u) != 0 ? head.names[seat] : std::string());
     replay::Recorder rec(head);
@@ -1411,6 +1433,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     j.field_bool("rotate", o.rotate);
     j.field("repeat", uint64_t{o.repeat});
     j.field_bool("replay_check", o.replay_check);
+    if (o.game_mode != sim::GameMode::HighestScore) j.field("game_mode", sim::game_mode_name(o.game_mode));      // (only when it is not the original's game: a report of the original rules is the report of before)
     j.end_object();
     j.key("matches");
     j.begin_array();
