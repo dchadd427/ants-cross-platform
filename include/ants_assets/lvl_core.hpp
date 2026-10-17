@@ -38,7 +38,7 @@ Result check_original(const uint8_t* data, size_t size, Profile profile);
 /// or "extended": by the remake profile, which the original cannot load), "judged", "works" (Classic: works in the original game; Extended: works in the new version),
 /// "fits_the_place", "headline" ("Works in the original game", "Works in the new version", ...), "badge" ("New version only" for an Extended map, else "") and "findings" (as
 /// check_original's, in the checker's order and words). An Extended map under a profile that does not take them (new_map, game) is not judged: the finding
-/// extended_not_accepted_here. Always status 0.
+/// extended_not_accepted_here. Status 0, or 1 for a profile that does not exist.
 Result check_map(const uint8_t* data, size_t size, Profile profile);
 
 /// The canonical bytes of the file (read, then write_level): the same map, in the form the writer keeps. Status 1 with the sentence of lvl_tool when the file does not load,

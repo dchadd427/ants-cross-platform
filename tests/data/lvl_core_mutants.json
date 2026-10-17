@@ -33,6 +33,16 @@
    "test": "./build/tests/test_assets/test_lvl_core"
   },
   {
+   "id": "blank_extended_makes_the_cells_of_a_refused_grid",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "blank_extended_level(rows, columns, names, limits) :",
+   "new": "blank_extended_level(rows, columns, names, LevelLimits::format_ceiling()) :",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
    "id": "conversion_goes_the_other_way",
    "file": "src/ants_assets/lvl_core.cpp",
    "old": "to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level)",

@@ -58,14 +58,25 @@ uint32_t lvl_interface_version();
 static long g_allow = -1;
 static void (*volatile g_release)(void*) = std::free;     // (called through a pointer: a compiler that sees free() beside new warns of a mismatch)
 
+static unsigned long long g_bytes = 0;      // every byte asked of operator new so far (a test reads the difference)
+
 void* operator new(std::size_t n) {
     if (g_allow == 0) throw std::bad_alloc();
     if (g_allow > 0) --g_allow;
+    g_bytes += n;
     if (void* p = std::malloc(n == 0 ? 1 : n)) return p;
     throw std::bad_alloc();
 }
+// the nothrow forms (std::stable_partition asks for its buffer with one) are replaced too, so that new and delete of the program always pair up (AddressSanitizer: alloc-dealloc-mismatch)
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept {
+    if (g_allow == 0) return nullptr;
+    if (g_allow > 0) --g_allow;
+    g_bytes += n;
+    return std::malloc(n == 0 ? 1 : n);
+}
 void operator delete(void* p) noexcept { g_release(p); }
 void operator delete(void* p, std::size_t) noexcept { g_release(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { g_release(p); }
 
 namespace {
 
@@ -453,6 +464,18 @@ void c6_no_memory() {
         }
     }
     g_allow = -1;
+    // a grid beyond the Extended limits is refused (status 1) before its cells are made: nothing of its size is asked of the heap (the limits are the Extended ones, not the format's ceiling)
+    const unsigned long long before = g_bytes;
+    const lvl_core::Result huge = lvl_core::blank_extended(2048, 2048, 485, 6, 10);
+    const lvl_core::Result tall = lvl_core::blank_extended(1025, 10, 485, 6, 10);
+    CHECK_MSG(huge.status == 1 && tall.status == 1, "beyond the Extended limits: " + huge.payload.substr(0, 60));
+    CHECK_MSG(g_bytes - before < 4000000ull, "no cell of a refused grid is made: " + std::to_string(g_bytes - before) + " bytes");
+    for (const long allow : {0L, 1L, 5L, 50L, 400L}) {
+        g_allow = allow;
+        const lvl_core::Result r = lvl_core::blank_extended(2048, 2048, 485, 6, 10);
+        g_allow = -1;
+        CHECK_MSG(r.status == 1 || r.status == 2, "refused or out of memory, never an answer: " + std::to_string(r.status));
+    }
     CHECK_MSG(faults > 200, "the injected failures were met: " + std::to_string(faults));
 }
 
