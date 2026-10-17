@@ -58,6 +58,8 @@ cp -f "${SCRIPT_DIR}/web/match_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
 cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                                                                                                                                             # ... and the countdown's Fullscreen button
+cp -f "${BUILD_DIR}/lvl_core/lvl_core.js" "${BUILD_DIR}/lvl_core/lvl_core.wasm" "${DIST_DIR}/"                                                                                    # the map core for the browser (docs/MAP_FORMAT.md, "In the browser")
+cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"

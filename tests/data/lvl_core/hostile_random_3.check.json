@@ -1,0 +1,4 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"fatal","code":"version_not_8","message":"header version 1229390691, the original reads version 8 only (0x1006386): it shows \"The MAP you tried to play is the wrong version\" and goes on without a map","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false}
+]}

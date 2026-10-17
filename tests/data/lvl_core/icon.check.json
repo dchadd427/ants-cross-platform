@@ -1,0 +1,8 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"warning","code":"hill_without_entrance","message":"the hill of Red has no entrance: none of its 11 cells is marked as the entrance","row":4,"column":23,"team":1,"count":11,"place_limit":false},
+{"severity":"warning","code":"hill_without_entrance","message":"the hill of Black has no entrance: none of its 13 cells is marked as the entrance","row":23,"column":4,"team":3,"count":13,"place_limit":false},
+{"severity":"note","code":"hill_not_whole","message":"the hill of Green is not whole: 3 cells (the first at row 4, column 4) differ from the 4 x 4 hill around its entrance (row 5, column 5)","row":4,"column":4,"team":0,"count":3,"place_limit":false},
+{"severity":"note","code":"hill_not_whole","message":"the hill of Blue is not whole: 3 cells (the first at row 4, column 23) differ from the 4 x 4 hill around its entrance (row 5, column 24)","row":4,"column":23,"team":2,"count":3,"place_limit":false},
+{"severity":"note","code":"tile_not_drawn","message":"15 cells use tiles that the dictionary names \".\" (the first at row 4, column 5: tile 1): the original does not load their pictures, so it does not draw them","row":4,"column":5,"team":-1,"count":15,"place_limit":false}
+]}

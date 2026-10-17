@@ -1,0 +1,6 @@
+{"judged":true,"works_in_original_game":false,"fits_the_place":true,
+"findings":[
+{"severity":"fatal","code":"file_cut_in_block_4","message":"the file ends inside its list of flower droppers: the original keeps the complete records it read, goes on to read the places that were never filled, and leaves the number of eggs each team starts with to chance","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false},
+{"severity":"warning","code":"description_too_long","message":"the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)","row":-1,"column":-1,"team":-1,"count":1,"place_limit":false},
+{"severity":"note","code":"tile_not_drawn","message":"one cell uses a tile that the dictionary names \".\" (row 0, column 30: tile 88): the original does not load its picture, so it does not draw it","row":0,"column":30,"team":-1,"count":1,"place_limit":false}
+]}

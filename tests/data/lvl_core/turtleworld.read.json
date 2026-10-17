@@ -1,0 +1,6 @@
+{"bytes":58381,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":10,"description":"TURTLES RULE MUHAHAHA","description_bytes":21,
+"rows":60,"columns":60,"dictionary_names":1325,"tile_ids_used":134,"eggs":6,"default_type_tile":32766,"food_piles":4,"waypoints":15,
+"teams":[{"team":"green","start_markers":6,"hill_cells":16},{"team":"red","start_markers":6,"hill_cells":16},{"team":"blue","start_markers":6,"hill_cells":16},{"team":"black","start_markers":6,"hill_cells":16}],
+"playable":true,
+"findings":[]}

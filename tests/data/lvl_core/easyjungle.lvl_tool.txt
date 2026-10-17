@@ -1,0 +1,4 @@
+Easy jungle.lvl: works in the original game; notes:
+  note hill_not_whole: the hill of Blue is not whole: 15 cells (the first at row 45, column 5) differ from the 4 x 4 hill around its entrance (row 46, column 6)
+  note tile_not_drawn: one cell uses a tile that the dictionary names "." (row 39, column 7: tile 254): the original does not load its picture, so it does not draw it
+  note object_outside_map: one waypoint stands outside the map (row 106, column 67): the original ignores it

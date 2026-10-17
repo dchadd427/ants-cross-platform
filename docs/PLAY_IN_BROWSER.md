@@ -220,4 +220,6 @@ The web image serves it at `/asset_catalog/`; `tests/scripts/test_web_catalog.py
 
 ## See also
 
+The map core (reader, checker, writer) also runs in the browser as a module of its own, for the map maker: [`MAP_FORMAT.md`](MAP_FORMAT.md#in-the-browser). No page loads it yet.
+
 [`MULTIPLAYER.md`](MULTIPLAYER.md) (network play), [`SERVER.md`](SERVER.md) (the dedicated server), [`CONTROLS.md`](CONTROLS.md) (menus, mouse, keyboard), [`TOUCH.md`](TOUCH.md) (touch), [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md) (the picture and the audio), [`BUILD_AND_RUN.md`](BUILD_AND_RUN.md), [`NETWORK_PORT.md`](NETWORK_PORT.md) (design and measurements), and the short front page of the repository, [`../README.md`](../README.md).

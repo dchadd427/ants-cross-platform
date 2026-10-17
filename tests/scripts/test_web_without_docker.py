@@ -268,7 +268,7 @@ class TheReplay(Scratch):
 @unittest.skipUnless(LINUX and shutil.which("sed") and shutil.which("python3"), "the Dockerfile's RUN lines use GNU tools: Linux")
 class TheRealDockerfileReplayed(Scratch):
     """The Dockerfile of the repository, step by step, with a fake Emscripten: `emcmake cmake -B build_web` makes the folder and `cmake --build build_web` makes what the compile makes (the page
-    is web/shell.html with its script tag, and the game's three files). Everything else is the Dockerfile's own."""
+    is web/shell.html with its script tag, the game's three files and the map core's two). Everything else is the Dockerfile's own."""
 
     @classmethod
     def setUpClass(cls):
@@ -277,7 +277,8 @@ class TheRealDockerfileReplayed(Scratch):
         write(os.path.join(cls.base, "bin", "cmake"),
               "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
               "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"
-              "echo game > \"$out/index.js\"; echo wasm > \"$out/index.wasm\"; head -c 4096 /dev/zero > \"$out/index.data\"\n", 0o755)
+              "echo game > \"$out/index.js\"; echo wasm > \"$out/index.wasm\"; head -c 4096 /dev/zero > \"$out/index.data\"\n"
+              "mkdir -p build_web/lvl_core; echo core > build_web/lvl_core/lvl_core.js; echo wasm > build_web/lvl_core/lvl_core.wasm\n", 0o755)
         env = dict(os.environ, PATH=os.path.join(cls.base, "bin") + os.pathsep + os.environ["PATH"])
         steps = wd.parse_dockerfile(read("Dockerfile"))
         cls.site, cls.said = {}, {}
@@ -303,7 +304,7 @@ class TheRealDockerfileReplayed(Scratch):
             return f.read()
 
     def test_the_files_that_the_image_has_are_there(self):
-        for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
+        for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "lvl_core.js", "lvl_core.wasm", "lvl_core_api.js", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
                      os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))

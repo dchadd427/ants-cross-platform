@@ -99,6 +99,11 @@ COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/
 # the lobby unless the address is a game's (?join=: docker/nginx.conf), so index.html is still what every old game address opens.
 RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html
 
+# The map core for the browser (docs/MAP_FORMAT.md, "In the browser"): lvl_core.js + lvl_core.wasm (the module of its own that the same build makes) and the wrapper that a page loads with it.
+# No page loads them yet (the map maker's page is a later pull request); the web job runs the module in node from this image (tests/scripts/lvl_core_check.js).
+COPY --from=builder /src/build_web/lvl_core/lvl_core.js /src/build_web/lvl_core/lvl_core.wasm /usr/share/nginx/html/
+COPY web/lvl_core_api.js /usr/share/nginx/html/lvl_core_api.js
+
 # Copy favicon assets
 COPY web/favicon.* /usr/share/nginx/html/
 

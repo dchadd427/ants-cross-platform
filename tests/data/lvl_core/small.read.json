@@ -1,0 +1,6 @@
+{"bytes":34190,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":8,"description":"Small map for fast game","description_bytes":23,
+"rows":40,"columns":40,"dictionary_names":1326,"tile_ids_used":86,"eggs":2,"default_type_tile":32766,"food_piles":5,"waypoints":2,
+"teams":[{"team":"green","start_markers":4,"hill_cells":16},{"team":"red","start_markers":4,"hill_cells":16},{"team":"blue","start_markers":4,"hill_cells":16},{"team":"black","start_markers":4,"hill_cells":16}],
+"playable":true,
+"findings":[]}

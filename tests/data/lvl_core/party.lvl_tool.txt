@@ -1,0 +1,2 @@
+ANTS_PARTY-V.3.0.5.lvl: does not work in the original game: the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)
+  warning description_too_long: the description is 30 bytes long: at most 29 fit, because the original reads 30 bytes and a text needs a zero byte at its end (a letter outside a to z takes 2 or 3 bytes)

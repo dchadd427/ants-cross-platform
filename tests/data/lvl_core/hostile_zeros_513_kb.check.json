@@ -1,0 +1,4 @@
+{"judged":false,"works_in_original_game":false,"fits_the_place":false,
+"findings":[
+{"severity":"fatal","code":"file_too_large","message":"the file has 525312 bytes, more than the 524288 allowed here: nothing of it is read","row":-1,"column":-1,"team":-1,"count":1,"place_limit":true}
+]}

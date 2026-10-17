@@ -1,0 +1,4 @@
+{"bytes":19312,"profile":"new_map","loaded":false,"reason":"the file ends inside the block 1 (start markers and plants) (byte 19312 of 19312): the original's loader throws \"System read file error.\" there and the game does not start",
+"findings":[
+{"severity":"fatal","code":"truncated","message":"the file ends inside the block 1 (start markers and plants) (byte 19312 of 19312): the original's loader throws \"System read file error.\" there and the game does not start","team":-1,"count":1}
+]}

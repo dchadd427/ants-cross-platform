@@ -1,0 +1,9 @@
+{"bytes":19128,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":13,"description":"Conquer Stratgey! But Dont Die","description_bytes":30,
+"rows":31,"columns":31,"dictionary_names":670,"tile_ids_used":28,"eggs":0,"default_type_tile":65,"food_piles":1,"waypoints":1,
+"teams":[{"team":"green","start_markers":6,"hill_cells":16},{"team":"red","start_markers":6,"hill_cells":16},{"team":"blue","start_markers":6,"hill_cells":16},{"team":"black","start_markers":6,"hill_cells":16}],
+"playable":true,
+"findings":[
+{"severity":"warning","code":"waypoint_block_truncated","message":"block 4 announces 1 waypoints and the file ends inside record #0, after its cell: the original catches the read error inside its loader and goes on with what it has read, 0 complete waypoints (its table has 1 slots; the others stay uninitialised, and its dropper poll walks every slot when the map has a flower); the remake keeps the complete waypoints only","team":-1,"count":1},
+{"severity":"warning","code":"egg_stock_missing","message":"the egg stock word was not read: the original leaves that field uninitialised (heap memory), the remake gives every team 0 eggs","team":-1,"count":1}
+]}

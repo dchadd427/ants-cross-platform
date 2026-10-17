@@ -226,6 +226,31 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(lvl_tool PRIVATE ants_assets ants_test_paths)
 endif()
 
+# The map core for the browser (docs/MAP_FORMAT.md, "In the browser"): lvl_core.js + lvl_core.wasm, a module of its own (no SDL, no game code, no file system) that offers the
+# reader, the checker, the writer, the blank map and the comparison of two levels behind a small C interface (src/ants_assets/lvl_core_c.cpp). It is built with the web build
+# (the web image carries it) and compiles its own copy of the map sources with wasm exceptions on, so that a failure inside the core is caught and never ends the page.
+#   emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core      ->  build_web/lvl_core/lvl_core.{js,wasm}
+if(EMSCRIPTEN)
+    add_executable(lvl_core
+        src/ants_assets/lvl_core_c.cpp
+        src/ants_assets/lvl_core.cpp
+        src/ants_assets/lvl_parser.cpp
+        src/ants_assets/lvl_writer.cpp
+        src/ants_assets/lvl_checker.cpp
+        src/ants_assets/chd_parser.cpp
+        src/ants_assets/mirroring.cpp
+    )
+    target_include_directories(lvl_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_options(lvl_core PRIVATE -Oz -flto -fwasm-exceptions)
+    set(ANTS_LVL_CORE_EXPORTS "_lvl_alloc,_lvl_free,_lvl_read_report,_lvl_check_original,_lvl_rewrite,_lvl_blank,_lvl_same_level,_lvl_result_status,_lvl_result_size,_lvl_result_data,_lvl_interface_version")
+    set_target_properties(lvl_core PROPERTIES
+        OUTPUT_NAME "lvl_core"
+        SUFFIX ".js"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lvl_core"
+        LINK_FLAGS "-Oz -flto -fwasm-exceptions --no-entry -sMODULARIZE=1 -sEXPORT_NAME=createLvlCore -sENVIRONMENT=web,worker,node -sFILESYSTEM=0 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16777216 -sMAXIMUM_MEMORY=268435456 -sSTACK_SIZE=524288 -sMALLOC=emmalloc -sASSERTIONS=0 -sEXPORTED_FUNCTIONS=${ANTS_LVL_CORE_EXPORTS} -sEXPORTED_RUNTIME_METHODS=HEAPU8"
+    )
+endif()
+
 # Testing
 if(EMSCRIPTEN)
     option(BUILD_TESTS "Build test executables" OFF)

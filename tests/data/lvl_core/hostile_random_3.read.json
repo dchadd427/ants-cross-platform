@@ -1,0 +1,4 @@
+{"bytes":100000,"profile":"new_map","loaded":false,"reason":"header version 1229390691, the original reads version 8 only (0x1006386): it shows \"The MAP you tried to play is the wrong version\" and goes on without a map",
+"findings":[
+{"severity":"fatal","code":"wrong_version","message":"header version 1229390691, the original reads version 8 only (0x1006386): it shows \"The MAP you tried to play is the wrong version\" and goes on without a map","team":-1,"count":1}
+]}

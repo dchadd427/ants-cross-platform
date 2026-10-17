@@ -1,0 +1,6 @@
+{"bytes":19312,"profile":"new_map","loaded":true,"reason":"",
+"version":8,"mode":1,"minutes":6,"description":"Tiny map with no PowerUps","description_bytes":25,
+"rows":31,"columns":31,"dictionary_names":670,"tile_ids_used":93,"eggs":3,"default_type_tile":32766,"food_piles":14,"waypoints":0,
+"teams":[{"team":"green","start_markers":3,"hill_cells":16},{"team":"red","start_markers":3,"hill_cells":16},{"team":"blue","start_markers":3,"hill_cells":16},{"team":"black","start_markers":3,"hill_cells":16}],
+"playable":true,
+"findings":[]}
