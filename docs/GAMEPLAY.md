@@ -243,7 +243,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 
 ## 187 (a game type of the remake)
 
-The room's **game type** is either *Highest score* (the original's game, everything above) or **187**, the remake's own: a fight with no food. The type is chosen with the room, is the same on every machine and is written into the replay (`GameMode`, `include/ants_sim/game_mode.hpp`). A match that does not ask for it plays exactly as before and keeps its state hash.
+The room's **game type** (in the browser lobby the leader picks it with the **Game type** field under the map, [PLAY_IN_BROWSER.md](PLAY_IN_BROWSER.md#game-type); the room shows a `187` tag) is either *Highest score* (the original's game, everything above) or **187**, the remake's own: a fight with no food. The type is chosen with the room, is the same on every machine and is written into the replay (`GameMode`, `include/ants_sim/game_mode.hpp`). A match that does not ask for it plays exactly as before and keeps its state hash.
 
 In 187, on any map:
 

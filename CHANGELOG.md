@@ -28,6 +28,13 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **187 on screen.** When a room plays 187 (the food-free game where kills decide: a server room that was made for it, or a game started with `--game-mode 187`), the chat log begins with "Game started! Most kills wins." and says "<Name> (<Color>) is out of ants!" once, to every player, when a team has no ant, egg or hatch left. The results page has its own look: the headings Kills, Ants lost and Ants left, and a line at the top that says how the match ended ("<Name> is the last colony standing!", "Time is up. The most kills wins!" or "Nobody is left. The most kills wins!"), also on the 4:3 page, where it takes two lines. The lobby has no way to pick 187 yet; that comes in a later release, and games of the original's rules look as before.
 
+## v0.12.66 - 2026-10-16 - Lobby: the leader can pick the game type (187)
+
+**For players:**
+- **The lobby has a Game type control.** The leader picks the game type from a list under the map (a drop-down on a computer, a bottom sheet on a phone): Highest score, the original game, or 187, a fight with no food where the most kills wins. The room shows a 187 tag by its name, and the other players see a read-only "Game type" line that changes as soon as the leader picks. A new room starts with the leader's last choice in that browser. The computer players are not good at 187 yet (they still play their food game); that is being worked on.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a011f5d6...cb6892ad), [Game type in the lobby](docs/PLAY_IN_BROWSER.md#game-type)
+
 ## v0.12.65 - 2026-10-16 - Extended maps: the map file version 9 in the core
 
 **For players:**

@@ -105,7 +105,7 @@
         if (room.teamA !== NO_TEAM && room.teamB !== NO_TEAM && room.teamA < PLAYERS && room.teamB < PLAYERS) { out[room.teamA] = 1; out[room.teamB] = 1; }
         return out;
     }
-    // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, slots: [{ kind: person | open | bot | nobody, ... }], sides }.
+    // The room as the page shows it: { you, leader (-1: none), guest, starting, map (key or ''), mapFile, mode (the game type's number: 0 when the room says none), slots: [{ kind: person | open | bot | nobody, ... }], sides }.
     // A color that a person holds shows the person; any other shows what the leader's plan says (the plan of a color that a person holds is what comes back when the person leaves).
     // A person whom the room counts as a game before any START, whose game runs in a browser (or did not say), is on the results screen of the match: the seat that the server keeps for them in the rematch
     // (docs/SERVER.md "Lobby rooms"; a game of the desktop gets no seat kept, it joins like anybody): `results: true`, only then.
@@ -125,7 +125,7 @@
             } else slots.push({ kind: plan === 4 ? 'nobody' : 'open' });
         }
         var m = mapOfFile(room.map);
-        return { you: room.you, leader: leader, guest: room.you !== leader, starting: !!room.starting, map: m ? m.key : '', mapFile: room.map, slots: slots, sides: sidesOfRoom(room) };
+        return { you: room.you, leader: leader, guest: room.you !== leader, starting: !!room.starting, map: m ? m.key : '', mapFile: room.map, slots: slots, sides: sidesOfRoom(room), mode: typeof room.mode === 'number' ? room.mode : 0 };
     }
     function playing(model) {
         var out = [];
@@ -210,8 +210,9 @@
     }
 
     // ---- what the leader asks the room (PlanMsg, SeatMove) --------------------------------------------------------------------------------------------------------------------------
-    // The plan as the leader wants it: { map: file name or '' (the room's own stays), kinds: four plan values, teamA, teamB, mode }. The page has no control for the game type, so it sends the room's own mode back
-    // (a leader that chose 187 by another way, the control interface or a native host, keeps it when the page changes the map). `change` can hold { map: key, seat + kind: a plan word, teams: sides }.
+    // The plan as the leader wants it: { map: file name or '' (the room's own stays), kinds: four plan values, teamA, teamB, mode }. Every plan carries a game type: the room's own
+    // (a leader that chose 187 by another way, the control interface or a native host, keeps it when the page changes the map), or the one in `change`. `change` can hold { map: key, seat + kind: a plan word,
+    // teams: sides, mode: the number of a game type of front/game_modes.js (the control of front/game_type.js) }.
     function planWith(room, model, change) {
         var kinds = room.plan.slice(), teamA = room.teamA, teamB = room.teamB, map = '';
         if (change && change.map && mapByKey(change.map)) map = mapByKey(change.map).file;
@@ -226,9 +227,21 @@
             teamA = t2.teamA; teamB = t2.teamB;
         }
         var plan = { map: map, kinds: kinds, teamA: teamA, teamB: teamB };
-        if (typeof room.mode === 'number') plan.mode = room.mode;
+        if (change && typeof change.mode === 'number') plan.mode = change.mode;
+        else if (typeof room.mode === 'number') plan.mode = room.mode;
         return plan;
     }
+    // The leader's pick of a game type is the room's mode for every plan that the page sends until a Room message says it (a plan that is built from the last Room alone would carry the old mode back and
+    // undo the pick): withMode gives the room as the page means it (`pending` is a mode number, -1 for none), pendingAfter what is still pending once `room` has come (none when the room says it,
+    // when the page does not lead, or when START was pressed)
+    function withMode(room, pending) {
+        if (!(pending >= 0)) return room;
+        var out = {};
+        for (var k in room) if (Object.prototype.hasOwnProperty.call(room, k)) out[k] = room[k];
+        out.mode = pending;
+        return out;
+    }
+    function pendingAfter(pending, room, model) { return pending >= 0 && !model.guest && !room.starting && room.mode !== pending ? pending : -1; }
     function sidesOfPair(a, b) { var out = [0, 0, 0, 0]; if (a !== NO_TEAM && b !== NO_TEAM && a < PLAYERS && b < PLAYERS) { out[a] = 1; out[b] = 1; } return out; }
     // The colors that would play if the plan were `kinds`: every color that a person holds, and every other color whose plan is a bot
     function playingAfter(model, kinds) {
@@ -426,7 +439,7 @@
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
-        planWith: planWith, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
+        planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,
         notBack: notBack, startNote: startNote
     };
 });
