@@ -35,11 +35,6 @@ public:
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
 
-    // ---- for the tests and the reports ----
-    uint32_t attacks_ordered() const noexcept { return attacks_ordered_; }
-    uint32_t retreats_ordered() const noexcept { return retreats_ordered_; }
-    uint32_t marches_ordered() const noexcept { return marches_ordered_; }
-
 private:
     enum class Kind : uint8_t { None, Attack, Home, March };
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -69,9 +64,6 @@ private:
     std::map<uint32_t, Fight> fights_;   // by victim
     std::map<std::pair<uint32_t, uint32_t>, Refusal> refusals_;
     std::map<std::pair<uint32_t, uint32_t>, uint64_t> shun_;   // (own ant, enemy ant) -> until when the pair is left alone: an attack that showed "can't go" (the enemy stands where no walk joins them)
-    uint32_t attacks_ordered_{0};
-    uint32_t retreats_ordered_{0};
-    uint32_t marches_ordered_{0};
 };
 
 }  // namespace ants::ai

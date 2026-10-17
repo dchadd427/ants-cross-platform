@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- **The computer players fight in 187.** They go for your ants, gang up on one ant at a time, send hurt ants home to heal and come back, and wait at your hill when nobody is in reach.
+- **The computer players fight in 187.** They go for your ants, a few on each, send hurt ants home to heal and come back, and wait at your hill when none can be reached.
 
 **Details:** [the 187 bots](docs/BOT_187.md)
 

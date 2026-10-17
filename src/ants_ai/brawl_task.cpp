@@ -121,7 +121,6 @@ void BrawlTask::step(TaskContext& c) {
         for (const uint32_t id : going_home) {
             Job& job = jobs_[id];
             job = Job{Kind::Home, 0, home.entrance, now, kPending, false};
-            ++retreats_ordered_;
         }
         c.orders.move(going_home, home.entrance, Priority::Urgent);
     }
@@ -241,7 +240,6 @@ void BrawlTask::step(TaskContext& c) {
         c.orders.attack(ants, f->tile, Priority::Urgent);
         fight.ordered = now;
         fight.tile = f->tile;
-        ++attacks_ordered_;
     }
     for (auto it = fights_.begin(); it != fights_.end();) {
         if (pack.find(it->first) == pack.end()) it = fights_.erase(it);
@@ -272,7 +270,6 @@ void BrawlTask::step(TaskContext& c) {
                 if (job.kind == Kind::March && job.sent != kPending && now < job.sent + params_.march_gap_ticks) continue;
                 job = Job{Kind::March, 0, dest, now, kPending, false};
                 go.push_back(id);
-                ++marches_ordered_;
             }
             if (!go.empty()) c.orders.move(go, dest, Priority::Normal);
         }

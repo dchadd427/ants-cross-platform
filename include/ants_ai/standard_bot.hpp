@@ -117,7 +117,6 @@ public:
     const FerryTask& ferry() const noexcept { return ferry_; }
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
-    const BrawlTask& brawl() const noexcept { return brawl_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)

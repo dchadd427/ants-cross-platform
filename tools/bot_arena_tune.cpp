@@ -176,12 +176,17 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         return true;
     }
     if (key == "brawl") return flag(p.brawl187);
-    if (key == "bretreat") { p.brawl.retreat_hp = static_cast<uint8_t>(v); return true; }
-    if (key == "breturn") { p.brawl.return_hp = static_cast<uint8_t>(v); return true; }
-    if (key == "bper") { p.brawl.per_target = static_cast<uint32_t>(v); return true; }
-    if (key == "bcrowd") { p.brawl.crowd = static_cast<uint32_t>(v); return true; }
-    if (key == "bhp") { p.brawl.hp_weight = static_cast<uint32_t>(v); return true; }
-    if (key == "bregap") { p.brawl.regap_ticks = static_cast<uint32_t>(v); return true; }
+    if (key.size() > 1 && key[0] == 'b' && (key == "bretreat" || key == "breturn" || key == "bper" || key == "bcrowd" || key == "bhp" || key == "bregap")) {     // the numbers of the 187 brawl (docs/BOT_187.md)
+        if (v < 0 || v > (key == "bretreat" || key == "breturn" ? 10 : 100000)) { err = key + " is a number from 0 to " + (key == "bretreat" || key == "breturn" ? "10 (hit points)" : "100000"); return false; }
+        const uint32_t u = static_cast<uint32_t>(v);
+        if (key == "bretreat") p.brawl.retreat_hp = static_cast<uint8_t>(u);
+        else if (key == "breturn") p.brawl.return_hp = static_cast<uint8_t>(u);
+        else if (key == "bper") p.brawl.per_target = u;
+        else if (key == "bcrowd") p.brawl.crowd = u;
+        else if (key == "bhp") p.brawl.hp_weight = u;
+        else p.brawl.regap_ticks = u;
+        return true;
+    }
     if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
