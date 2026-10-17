@@ -4,7 +4,8 @@
   - the code is RUN (node, when it is installed): the reader of a file, the view (pan and zoom, that a frame draws only the tiles on the screen), the sizes and their sentences, the checks
     card and the colors of the tiles (tests/scripts/web_mapmaker_check.js), the drawing (the brush, a stroke, fill, undo and redo as small patches, the dictionary, the palette and the tools
     on a fake page: tests/scripts/web_mapmaker_edit_check.js), and the checks are shown able to fail: broken copies of the scripts are refused by them;
-  - the reader's view of all 540 maps of the library is compared with a second reading of the same files here, in Python, with struct (rows, columns and a digest of every tile);
+  - the reader's view of all 540 maps of the library is compared with a second reading of the same files here, in Python, with struct (rows, columns and a digest of every tile, and the lists
+    of starting ants and food piles after the layers: tests/scripts/web_mapmaker_blocks_check.js, with broken copies that it must refuse);
   - the page and the real map core together (tests/scripts/web_mapmaker_core_check.js) when a built module is there ($ANTS_LVL_CORE_DIR, or build_web/lvl_core); without one it says so, and
     the web job of the CI runs it from the image;
   - the page's side is read from the source: the markup, the scripts in their order, every id that the code asks for, what the buttons do, the refusal of a module of another interface
@@ -28,7 +29,8 @@ DIALOG_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_dialog_check
 EDIT_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edit_check.js")
 CORE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_core_check.js")
 NODE = shutil.which("node")
-SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_palette.js", "mapmaker_edit.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
+BLOCKS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_blocks_check.js")
+SCRIPTS = ("mapmaker_file.js", "mapmaker_tiles.js", "mapmaker_edit.js", "mapmaker_blocks.js", "mapmaker_palette.js", "mapmaker_view.js", "mapmaker_sizes.js", "mapmaker_checks.js", "mapmaker_dialog.js", "mapmaker_canvas.js", "mapmaker_tools.js", "mapmaker_app.js")
 
 
 def read(*parts):
@@ -66,6 +68,44 @@ def read_map(path):
         words.append(struct.unpack_from("<H", data, layer1 + 6 * i)[0])
         words.append(struct.unpack_from("<H", data, layer2 + 6 * i)[0])
     return rows, columns, hashlib.sha256(words.tobytes()).hexdigest()
+
+
+def read_blocks(path):
+    """what the page reads of the two lists after the layers, read here with struct: (block 1 reads, block 2 reads, records, start markers of tile 152 to 155, piles as 'row,column,units,points,threshold,tile,...')"""
+    with open(os.path.join(REPO, path), "rb") as f:
+        data = f.read()
+    names = struct.unpack_from("<H", data, 40)[0] + 1
+    at = 42 + 11 * names
+    rows, columns = struct.unpack_from("<II", data, at)
+    rows &= 0xFFFF
+    columns &= 0xFFFF
+    at += 8 + 12 * rows * columns
+    if at + 2 > len(data):
+        return (0, 0, 0, (0, 0, 0, 0), 0, "")
+    count = struct.unpack_from("<H", data, at)[0]
+    if at + 2 + 6 * count > len(data):
+        return (0, 0, 0, (0, 0, 0, 0), 0, "")
+    marks = [0, 0, 0, 0]
+    for i in range(count):
+        tile = struct.unpack_from("<H", data, at + 2 + 6 * i)[0]
+        if 152 <= tile <= 155:
+            marks[tile - 152] += 1
+    at += 2 + 6 * count
+    if at + 2 > len(data):
+        return (1, 0, count, tuple(marks), 0, "")
+    piles = []
+    n = struct.unpack_from("<H", data, at)[0]
+    at += 2
+    for _ in range(n):
+        if at + 10 > len(data):
+            return (1, 0, count, tuple(marks), 0, "")
+        row, column, units, points, stages = struct.unpack_from("<HHHHH", data, at)
+        if stages == 0 or at + 10 + 4 * stages > len(data):
+            return (1, 0, count, tuple(marks), 0, "")
+        flat = [v for k in range(stages) for v in struct.unpack_from("<HH", data, at + 10 + 4 * k)]
+        piles.append(",".join(str(v) for v in [row, column, units, points] + flat))
+        at += 10 + 4 * stages
+    return (1, 1, count, tuple(marks), len(piles), ";".join(piles))
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -110,7 +150,8 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=EDIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page", "H the canvas on a fake page"):
+        for part in ("A the brush and the line", "B strokes", "C fill", "D undo and redo", "E the dictionary", "F the palette", "G the tools on a fake page", "H the canvas on a fake page", "H2 a tap tool on the canvas", "I hills",
+                     "J starting ants and food piles", "J2 the history of the lists is bounded", "K Hills, Ants and Food on a fake page"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_drawing_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -128,10 +169,53 @@ class TheCodeRuns(unittest.TestCase):
             "a stroke that forgets the first words of a cell it touches twice": ("mapmaker_edit.js", "if (seen[key]) return;\n                seen[key] = 1;", "seen[key] = 1;"),
             "a dictionary that grows without telling its length": ("mapmaker_edit.js", "wr(out, file.dictAt, id);", "void 0;"),
             "a name written over a name that is there": ("mapmaker_edit.js", "if (b[slot] === 0x2E && b[slot + 1] === 0 && name)", "if (name)"),
-            "a patch that holds a copy of the map": ("mapmaker_edit.js", "return { keys: Uint32Array.from(k), before: Uint16Array.from(b), after: Uint16Array.from(a) };", "return { keys: Uint32Array.from(k), before: Uint16Array.from(b.concat(new Array(1000).fill(0))), after: Uint16Array.from(a) };"),
+            "a patch that holds a copy of the map": ("mapmaker_edit.js", "var patch = { keys: Uint32Array.from(k), before: Uint16Array.from(b), after: Uint16Array.from(a) };", "var patch = { keys: Uint32Array.from(k), before: Uint16Array.from(b.concat(new Array(1000).fill(0))), after: Uint16Array.from(a) };"),
             "a name of the palette that is not the game's": ("mapmaker_palette.js", "[302, 'smlrock1', 'Rock 1']", "[302, 'smlrock0', 'Rock 1']"),
             "a power-up of the wrong tile": ("mapmaker_palette.js", "[64, 'pu_bomb', 'Bomber ant power-up']", "[65, 'pu_bomb', 'Bomber ant power-up']"),
-            "Hills that can be chosen before they exist": ("mapmaker_palette.js", "{ id: 'hills', label: 'Hills', key: 'h', draws: false }", "{ id: 'hills', label: 'Hills', key: 'h', draws: true }"),
+            "Hills that cannot be chosen": ("mapmaker_palette.js", "{ id: 'hills', label: 'Hills', key: 'h', places: true, palette: true }", "{ id: 'hills', label: 'Hills', key: 'h', palette: true }"),
+            "a hill that is drawn with a brush": ("mapmaker_palette.js", "{ id: 'hills', label: 'Hills', key: 'h', places: true, palette: true }", "{ id: 'hills', label: 'Hills', key: 'h', draws: true, palette: true }"),
+            "Food that is not on the letter F": ("mapmaker_palette.js", "{ id: 'food', label: 'Food', key: 'f', places: true, palette: true }", "{ id: 'food', label: 'Food', key: 'v', places: true, palette: true }"),
+            "a team with another color than its hill": ("mapmaker_palette.js", "color: Tiles.TEAMS[t.key]", "color: Tiles.TEAMS.red"),
+            "a hill whose entrance is not flagged": ("mapmaker_blocks.js", "r === row && c === column ? 1 : 0, word);", "0, word);"),
+            "a hill in a version 9 map that names its anchor by a number that only version 8 means": ("mapmaker_blocks.js", "var word = file.version === 8 ?", "var word = file.version === 0 ?"),
+            "a hill of 3 columns": ("mapmaker_blocks.js", "for (r = row - 1; r <= row + 2; r++) for (c = column - 1; c <= column + 2; c++) {\n            var word", "for (r = row - 1; r <= row + 2; r++) for (c = column - 1; c <= column + 1; c++) {\n            var word"),
+            "a hill that does not leave the place it was in": ("mapmaker_blocks.js", "for (i = 0; i < old.length; i++) putCell(change, old[i], EMPTY2, 0, 0);", "void 0;"),
+            "a hill that takes half of the hill it is put over": ("mapmaker_blocks.js", "if (Edit.tile(file, 2, idx) !== EMPTY2) takeObject(file, change, idx);", "if (Edit.tile(file, 2, idx) !== EMPTY2) putCell(change, idx, EMPTY2, 0, 0);"),
+            "a hill that is put where half of it is off the map": ("mapmaker_blocks.js", "if (row < 1 || column < 1 || row + 2 >= file.rows", "if (row < 0 || column < 0 || row + 2 >= file.rows"),
+            "a hill whose tile the dictionary is not told of": ("mapmaker_blocks.js", "addName(change, t.hill, t.hillName);", "void 0;"),
+            "ants that all stand on one cell": ("mapmaker_blocks.js", "return good.concat(rest).slice(0, count);", "return good.concat(rest).slice(0, count).map(function (c) { return good[0] || c; });"),
+            "ants of a team that take the plants and the other teams' ants with them": ("mapmaker_blocks.js", "if (lay.records[i].tile === t.marker) { if (insertAt < 0)", "if (true) { if (insertAt < 0)"),
+            "a number of ants that is not kept in its range": ("mapmaker_blocks.js", "var n = clampTo(count, MIN_ANTS, MAX_ANTS), cells", "var n = count, cells"),
+            "ants put on objects and on solid ground": ("mapmaker_blocks.js", "if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0) good.push(item); else rest.push(item);", "good.push(item);"),
+            "ants put on the ants of another team": ("mapmaker_blocks.js", "if (taken[idx]) continue;", "void 0;"),
+            "a splice that holds more than what changed": ("mapmaker_blocks.js", "while (head < old.length && head < next.length && old[head] === next[head]) head++;", "void 0;"),
+            "a pile whose stages are one short": ("mapmaker_blocks.js", "4: { units: 30, points: 25, stages: [[30, 264], [20, 265], [10, 266], [0, EMPTY2]] },", "4: { units: 30, points: 25, stages: [[30, 264], [20, 265], [0, EMPTY2]] },"),
+            "a food tile with another name than the game's": ("mapmaker_blocks.js", "280: 'fdfrl1'", "280: 'fdfrl2'"),
+            "a pile that is put on a pile and leaves both": ("mapmaker_blocks.js", "if (p.row === row && p.column === column) takePileCells(file, change, p); else list.push", "if (p.row === row && p.column === column) takePileCells(file, change, p); list.push"),
+            "a pile taken away that leaves its cell of layer 2": ("mapmaker_blocks.js", "if (tile !== EMPTY2 && stageTiles(pile).indexOf(tile) >= 0) takeObject(file, change, idx);", "void 0;"),
+            "an eraser that does not know a pile by its body": ("mapmaker_blocks.js", "(anchor >= 0 && ix.piles[anchor] || []).forEach(function (k) { hits[k] = true; any = true; });", "void 0;"),
+            "a food list with a pile that has no stages that is changed": ("mapmaker_blocks.js", "if (stages === 0 || at + 10 + 4 * stages > b.length) return out;", "if (at + 10 + 4 * stages > b.length) return out;"),
+            "an eraser that asks what else goes after it took the object away": ("mapmaker_edit.js", "var more = hooks.erase ? hooks.erase(f, idx) : null, n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx);", "var n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx), more = hooks.erase ? hooks.erase(f, idx) : null;"),
+            "an undo that puts the splices back in the order they were made": ("mapmaker_edit.js", "var s = list[forward ? i : list.length - 1 - i],", "var s = list[i],"),
+            "a stroke that goes on with the bytes from before a splice": ("mapmaker_edit.js", "f = self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));", "self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));"),
+            "a patch that forgets its splices": ("mapmaker_edit.js", "if (splices.length) patch.splices = splices.slice();", "void 0;"),
+            "a step with only a splice in it that is not kept": ("mapmaker_edit.js", "if (patch.keys.length || patch.splices) history.push(patch);", "if (patch.keys.length) history.push(patch);"),
+            "a history that weighs a splice as nothing": ("mapmaker_edit.js", "n += 1 + ((patch.splices[i].removed.length + patch.splices[i].inserted.length + 15) >> 4);", "n += 0;"),
+            "a splice that is put at a place counted from the start of the file": ("mapmaker_edit.js", "at = self.file.blocksAt + s.rel,", "at = s.rel,"),
+            "a tap tool that begins a stroke": ("mapmaker_tools.js", "tapOnly: function () { return !!editor && places(); },", "tapOnly: function () { return false; },"),
+            "a hill whose square is one cell": ("mapmaker_tools.js", "(state.tool === 'hills' ? Blocks.HILL : 1)", "1"),
+            "a hill without its door marked": ("mapmaker_tools.js", "door: function () { return !!editor && state.tool === 'hills'; },", "door: function () { return false; },"),
+            "a pile of one stage": ("mapmaker_tools.js", "[Blocks.MIN_STAGES, Blocks.MAX_STAGES]", "[1, Blocks.MAX_STAGES]"),
+            "a team that cannot be chosen": ("mapmaker_tools.js", "function chooseTeam(id) { state.team = id; showPalette(); }", "function chooseTeam(id) { showPalette(); }"),
+            "a place with no room that is refused in silence": ("mapmaker_tools.js", "if (change.error) { if (env.say) env.say(", "if (change.error) { if (false) env.say("),
+            "a thing put that the canvas is not told of": ("mapmaker_tools.js", "if (dirty) changed(dirty);\n            else {", "if (false) changed(dirty);\n            else {"),
+            "a change that only gave the dictionary a name that the page is not told of": ("mapmaker_tools.js", "if (env.file() !== was) env.onEdit();", "void 0;"),
+            "an eraser that does not take ants and piles": ("mapmaker_tools.js", "Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt })", "Edit.create(file, { rebase: env.rebase })"),
+            "a stepper that goes past the most ants": ("mapmaker_tools.js", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, Blocks.MAX_ANTS]", "return state.tool === 'ants' ? [Blocks.MIN_ANTS, 99]"),
+            "a sheet whose stepper does not change the page's number": ("mapmaker_tools.js", "more.addEventListener('click', function () { stepBy(1); show(); onChange(); });", "more.addEventListener('click', function () { show(); onChange(); });"),
+            "a line under the palette that does not say what the map has": ("mapmaker_tools.js", "if (state.tool === 'ants') return who + ': ' + (facts.ants[state.team]", "if (state.tool === 'ants') return who + ': ' + (false"),
+            "a tap tool that is turned into a stroke by the canvas": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly();", "var tapTool = false;"),
+            "a tap that does not put": ("mapmaker_canvas.js", "if (placing && tap) painter.begin(tap);", "void 0;"),
             "undo that the keys do not reach": ("mapmaker_tools.js", "if (k === 'z') {", "if (k === 'q') {"),
             "a letter that is a tool while typing in a box": ("mapmaker_tools.js", "|| typing(e.target)) return;", ") return;"),
             "a letter that is a tool while a dialog is open": ("mapmaker_tools.js", "if (e.defaultPrevented || !editor || env.busy() ||", "if (e.defaultPrevented || !editor ||"),
@@ -147,7 +231,7 @@ class TheCodeRuns(unittest.TestCase):
             "a name written in the dictionary that the page is not told of": ("mapmaker_tools.js", "if (made.named || made.grew) env.onEdit();", "void 0;"),
             "an undo that does not tell the canvas": ("mapmaker_tools.js", "            canvas.markDirty(dirty);\n            canvas.refreshMini();", "            canvas.refreshMini();"),
             "a Fill that stays on": ("mapmaker_tools.js", "state.fill = false;                                    // (Fill is for one click: the next press paints again)", "void 0;"),
-            "a tile the dictionary cannot hold that is refused in silence": ("mapmaker_tools.js", "if (env.say) env.say(", "if (false) env.say("),
+            "a tile the dictionary cannot hold that is refused in silence": ("mapmaker_tools.js", "if (made.error) { if (env.say) env.say(", "if (made.error) { if (false) env.say("),
             "a palette button that does not open the sheet": ("mapmaker_tools.js", "host.tile.addEventListener('click', openPicker);", "void 0;"),
             "a sheet whose tile is not chosen": ("mapmaker_tools.js", "b.addEventListener('click', function () { chooseTile(item.id); ctl.close(); });", "b.addEventListener('click', function () { ctl.close(); });"),
             "a stroke that goes on after the mouse button was let go outside": ("mapmaker_canvas.js", "if (e.pointerType === 'mouse' && e.buttons === 0) return endStroke();", "void 0;"),
@@ -155,7 +239,7 @@ class TheCodeRuns(unittest.TestCase):
             "a stroke that goes on after the window lost the focus": ("mapmaker_canvas.js", "win.addEventListener('blur', function () { if (stroke) endStroke(); });", "void 0;"),
             "a stroke that goes on after the page was hidden": ("mapmaker_canvas.js", "doc.addEventListener('visibilitychange', function () { if (stroke && doc.visibilityState === 'hidden') endStroke(); });", "void 0;"),
             "a finger that paints before it is known not to be the first of two": ("mapmaker_canvas.js", "if (mouse) startStroke(e.pointerId, cell); else pending = { id: e.pointerId, cell: cell };", "startStroke(e.pointerId, cell);"),
-            "a brush that does not reach the painter": ("mapmaker_tools.js", "size: function () { return editor && paints() ? state.brush : 0; },", "size: function () { return editor && paints() ? 1 : 0; },"),
+            "a brush that does not reach the painter": ("mapmaker_tools.js", "(paints() ? state.brush : (places()", "(paints() ? 1 : (places()"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
@@ -168,6 +252,47 @@ class TheCodeRuns(unittest.TestCase):
                         f.write(text.replace(old, new))
                     done = run_check(tmp, EDIT_CHECK)
                 self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_the_lists_of_the_library_pass_their_checks(self):
+        done = run_check(script=BLOCKS_CHECK)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failed", done.stdout)
+        for part in ("A the lists of the library are written back as they are", "B changes and undo, byte for byte", "C a hill taken away and put back", "D only what is named changes"):
+            self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
+
+    def test_the_lists_check_can_fail_on_broken_copies_of_the_scripts(self):
+        mutants = {
+            "a pile that is one byte too long": ("mapmaker_blocks.js", "pile = { rel: at - base, length: 10 + 4 * stages,", "pile = { rel: at - base, length: 11 + 4 * stages,"),
+            "a record of block 1 that is read from the wrong place": ("mapmaker_blocks.js", "column: rd(b, at + 6 + 6 * i) });", "column: rd(b, at + 4 + 6 * i) });"),
+            "a list that is written with the wrong count": ("mapmaker_blocks.js", "wr(out, 0, records.length);", "wr(out, 0, records.length + 1);"),
+            "a splice that is not the exact piece": ("mapmaker_blocks.js", "return { rel: rel + head, removed: old.slice(head, old.length - tail), inserted: next.slice(head, next.length - tail) };", "return { rel: rel + head, removed: old.slice(head, old.length - tail + 1), inserted: next.slice(head, next.length - tail) };"),
+            "a hill put back that is anchored somewhere else": ("mapmaker_blocks.js", "var word = file.version === 8 ? ((row & 255) | ((column & 255) << 8))", "var word = file.version === 8 ? ((column & 255) | ((row & 255) << 8))"),
+            "a team's ants put that touch the pile list": ("mapmaker_blocks.js", "var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(records));", "var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length + 2, block1Bytes(records));"),
+            "an undo that gives back every byte but the lists": ("mapmaker_edit.js", "self.file = hooks.rebase(spliceAt(self.file.bytes, at, out.length, into));", "void 0;"),
+        }
+        for what, (name, old, new) in mutants.items():
+            with self.subTest(what):
+                text = read("web", "front", name)
+                self.assertEqual(text.count(old), 1, "the text that this mutant changes is not in %s exactly once: %s" % (name, old))
+                with tempfile.TemporaryDirectory() as tmp:
+                    for script in SCRIPTS:
+                        shutil.copy(os.path.join(FRONT, script), os.path.join(tmp, script))
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                        f.write(text.replace(old, new))
+                    done = run_check(tmp, BLOCKS_CHECK)
+                self.assertNotEqual(done.returncode, 0, "the check did not notice: " + what)
+
+    def test_the_lists_of_every_map_are_read_as_a_second_reading_does(self):
+        done = subprocess.run([NODE, BLOCKS_CHECK, "--list-blocks"], capture_output=True, text=True, timeout=300)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        seen = {}
+        for line in done.stdout.splitlines():
+            name, ok1, ok2, records, marks, piles, listing = line.split("\t")
+            seen[name] = (int(ok1), int(ok2), int(records), tuple(int(v) for v in marks.split(",")), int(piles), listing)
+        files = library()
+        self.assertEqual(sorted(seen), sorted(files))
+        for path in files:
+            self.assertEqual(seen[path], read_blocks(path), path)
 
     def test_the_reader_sees_every_map_of_the_library_as_a_second_reading_does(self):
         done = subprocess.run([NODE, CHECK, "--list-maps"], capture_output=True, text=True, timeout=300)
@@ -305,13 +430,17 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("overwrite", self.app.lower())
         self.assertIn("a.download = win.MapFile.downloadName(map.name);", self.app, "a download is a new file the browser saves, named by the map")
 
-    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_only_three_of_them_wait(self):
+    def test_the_tools_are_in_the_page_in_the_order_of_the_picture_and_all_seven_work(self):
         tools = re.findall(r'<button class="tool" type="button" data-tool="([a-z]+)"[^>]*>', self.page)
         self.assertEqual(tools, ["ground", "objects", "hills", "ants", "food", "erase", "move"])
         for button in re.findall(r'<button class="tool"[^>]*>', self.page):
             self.assertIn(" disabled", button, "every button starts off until the core is there: " + button)
-        for waiting in ("hills", "ants", "food"):
-            self.assertRegex(self.page, r'data-tool="%s"[^>]*title="Comes in the next update"' % waiting)
+        self.assertNotIn("Comes in the next update", self.page)
+        for tool, letter in (("ground", "G"), ("objects", "O"), ("hills", "H"), ("ants", "A"), ("food", "F"), ("erase", "E"), ("move", "M")):
+            self.assertRegex(self.page, r'data-tool="%s"[^>]*aria-keyshortcuts="%s"' % (tool, letter))
+        for part in ('id="stepper"', 'id="step-less"', 'id="step-more"', 'id="step-val"', 'aria-label="Fewer"', 'aria-label="More"'):
+            self.assertIn(part, self.page, part)
+        self.assertNotIn("come next", self.code["mapmaker_tools.js"])
         self.assertRegex(self.page, r'data-tool="ground" aria-pressed="true"', "Ground is the tool at the start, as in the picture")
         for part in ('id="undo-btn"', 'id="redo-btn"', 'id="fill-btn"', 'id="palette"', 'role="radiogroup"', 'aria-keyshortcuts="Control+Z Meta+Z"', 'data-brush="9"'):
             self.assertIn(part, self.page, part)

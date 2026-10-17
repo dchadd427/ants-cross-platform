@@ -154,12 +154,18 @@
         return { r0: Math.max(0, cur.row - lo), r1: Math.min(file.rows - 1, cur.row + hi), c0: Math.max(0, cur.column - lo), c1: Math.min(file.columns - 1, cur.column + hi) };
     }
 
-    function drawCursor(ctx, view, file, w, h, cur, brush) {
+    // `door`: a dot in the cell itself (a hill's entrance is the cell that is tapped, in the second row and column of its 4 x 4 square)
+    function drawCursor(ctx, view, file, w, h, cur, brush, door) {
         var rect = cursorRect(file, cur, brush);
         if (!rect) return;
         var p = toScreen(view, w, h, rect.r0, rect.c0), s = view.scale, bw = Math.max((rect.c1 - rect.c0 + 1) * s, 6), bh = Math.max((rect.r1 - rect.r0 + 1) * s, 6);
         ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(p.x - 1.5, p.y - 1.5, bw + 3, bh + 3);
         ctx.strokeStyle = '#f6d058'; ctx.lineWidth = 2.5; ctx.strokeRect(p.x - 1.5, p.y - 1.5, bw + 3, bh + 3);
+        if (door) {
+            var q = toScreen(view, w, h, cur.row, cur.column), radius = Math.max(2.5, Math.min(s * 0.22, 9));
+            ctx.beginPath(); ctx.arc(q.x + s / 2, q.y + s / 2, radius, 0, 6.2832);
+            ctx.fillStyle = '#f6d058'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+        }
     }
 
     // One tile again, where a stroke changed it (and no other): the tile's own rectangle, the two grid lines that belong to it and what is drawn over it. Only for tiles of 5 pixels or more.
@@ -208,7 +214,7 @@
             done.rects = drawRects(ctx, view, file, w, h, vis);
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
         } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'));
-        if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush);
+        if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush, opts.door);
         return done;
     }
 

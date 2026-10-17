@@ -38,6 +38,7 @@
         var file = {
             ok: true, bytes: bytes, version: version, kind: version === 9 ? 'extended' : 'classic', rows: rows, columns: columns, cells: cells, layer1: layer1, layer2: layer2,
             dictAt: dictAt, names: names,                   // where the dictionary's word is, and how many names it has
+            blocksAt: end,                                  // where the lists after the layers begin (block 1: docs/MAP_FORMAT.md, "The layout")
             markers: [], food: [],
             // the tile ids of one cell (a cell outside the grid is plain ground: 485)
             tile1: function (r, c) { return r < 0 || c < 0 || r >= rows || c >= columns ? 485 : u16(bytes, layer1 + 6 * (r * columns + c)); },

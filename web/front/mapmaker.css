@@ -35,9 +35,9 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .btn { white-space: nowrap; }
 .btn[disabled] { opacity: .45; cursor: default; }
 .edbody { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 270px; gap: 18px; padding: 8px 28px 28px 28px; }
-.tools { padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.tools { padding: 12px; display: flex; flex-direction: column; gap: 7px; overflow: auto; }
 .tools h3, .side h3 { font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
-.tool { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 15px; text-align: left; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
+.tool { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 15px; text-align: left; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 .tool[disabled] { opacity: .5; cursor: default; }
 .tool[aria-pressed="true"] { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
 .tool i { width: 18px; height: 18px; border-radius: 3px; flex: none; border: 1px solid rgba(0, 0, 0, .5); }
@@ -51,18 +51,32 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .pick i { width: 28px; height: 28px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .55); flex: none; }
 .pick[aria-checked="true"] { border-color: var(--gold); background: #14332b; }
 .pick:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-.toolbtns { display: flex; flex-direction: column; gap: 8px; }
+.toolbtns { display: flex; flex-direction: column; gap: 5px; }
 .tool[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--gold); }
 .palette { display: flex; flex-direction: column; gap: 5px; padding-top: 8px; border-top: 1px solid var(--rule); }
 .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .swatch { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 36px; padding: 0; cursor: pointer; background: #0d1b16; border: 2px solid var(--rule); border-radius: 6px; }
 .swatch i { width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .55); }
 .swatch[aria-checked="true"] { border-color: var(--gold); background: #14332b; box-shadow: 0 0 0 1px #000 inset; }
-.swatch:focus-visible, .eb:focus-visible, .tool:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.swatch:focus-visible, .eb:focus-visible, .tool:focus-visible, .stp:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.swatches[hidden], .stepper[hidden] { display: none; }
+.swatches.teams { grid-template-columns: 1fr; gap: 3px; }
+.swatch.team { justify-content: flex-start; gap: 8px; min-height: 32px; padding: 0 8px; font-size: 14.5px; color: var(--cream); text-align: left; }
+.swatch.team i { flex: none; width: 20px; height: 20px; }
+.tc { box-shadow: 0 0 0 1px rgba(244, 236, 226, .5); }
+.stepper { display: flex; flex-direction: column; gap: 4px; }
+.stl { font-size: 13px; line-height: 1.2; color: var(--muted); }
+.stbtns { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.stp { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; padding: 0; font-size: 22px; font-weight: 500; line-height: 1; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; box-shadow: var(--btn-shadow-sm); touch-action: manipulation; }
+.stp[disabled] { opacity: .45; cursor: default; }
+.stv { min-width: 30px; text-align: center; font-size: 20px; color: var(--cream); }
+.stepper.sheet { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 14px; gap: 12px; }
+.stepper.sheet .stl { font-size: 15px; color: var(--cream); }
+.stepper.sheet .stbtns { gap: 10px; }
+.pickinfo { margin-top: 10px; font-size: 14px; line-height: 1.35; color: var(--muted); }
 .pname { font-size: 14px; color: var(--cream); min-height: 20px; }
-.toolnote { font-size: 12.5px; line-height: 1.3; color: var(--muted); }
+.toolnote { font-size: 12px; line-height: 1.3; color: var(--muted); }
 .toolnote .mob { display: none; }
-.toolnote .later { display: block; margin-top: 6px; }
 .canvaswrap { position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 .cv { position: relative; flex: 1 1 auto; min-height: 0; background: #0b1612; }
 .cv canvas.map { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; cursor: grab; }

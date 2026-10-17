@@ -51,6 +51,8 @@
         }
 
         function brushNow() { return painter ? painter.size() : 0; }
+        function tapOnly() { return !!painter && !!painter.tapOnly && painter.tapOnly(); }
+        function doorNow() { return !!painter && !!painter.door && painter.door(); }
         function markedCell() { return brushNow() > 0 ? (hover || cursor) : cursor; }          // (a tool that paints shows the brush where the mouse is)
 
         // The whole frame can be skipped for a few cells only when the picture is the one of the last whole frame: the same view, the same size, the same map
@@ -86,10 +88,10 @@
                     count++;
                 }
                 if (pixels) View.blitPixels(ctx, scratch, box);
-                if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1);
+                if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1, doorNow());
                 kind = 'cells';
             } else {
-                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1 });
+                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow() });
                 full = { file: file, cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
                 count = -1;
             }
@@ -142,8 +144,9 @@
             var ids = Object.keys(pointers);
             if (ids.length === 1) {
                 var cell = cellOf(p), mouse = e.pointerType === 'mouse', panning = mouse && (e.button === 1 || spaceHeld);
-                var brush = !panning && brushNow() > 0 && !!cell;
-                drag = { x: p.x, y: p.y, moved: false, pan: !brush };
+                var tapTool = !panning && !!cell && tapOnly();                          // (a tool that puts a whole thing with a tap: a drag looks around instead)
+                var brush = !panning && !tapTool && brushNow() > 0 && !!cell;
+                drag = { x: p.x, y: p.y, moved: false, pan: !brush, place: tapTool };
                 if (e.button === 1) e.preventDefault();
                 if (brush) {
                     hover = cell;
@@ -204,7 +207,7 @@
 
         function up(e) {
             if (!pointers[e.pointerId]) return;
-            var p = at(e), cancelled = e.type === 'pointercancel', tapped = drag && drag.pan && !drag.moved && !cancelled, touched = null;
+            var p = at(e), cancelled = e.type === 'pointercancel', tapped = drag && drag.pan && !drag.moved && !cancelled, touched = null, placing = tapped && drag.place;
             delete pointers[e.pointerId];
             pinch = null;
             if (stroke && stroke.id === e.pointerId) {
@@ -219,7 +222,7 @@
             if (Object.keys(pointers).length === 1) { var id = Object.keys(pointers)[0]; drag = { x: pointers[id].x, y: pointers[id].y, moved: true, pan: true }; }
             else if (!Object.keys(pointers).length) drag = null;
             if (touched && !cancelled) { hover = null; select(touched); redraw(); }
-            else if (tapped && file) { select(cellOf(p)); redraw(); }
+            else if (tapped && file) { var tap = cellOf(p); select(tap); if (placing && tap) painter.begin(tap); redraw(); }
         }
 
         function wheel(e) {
@@ -247,7 +250,7 @@
             if (!file || e.ctrlKey || e.metaKey || e.altKey) return;
             var handled = true;
             if (e.key === ' ' && painter) { spaceHeld = true; cursorStyle(); e.preventDefault(); return; }          // (held down: a drag looks around instead of painting)
-            if (e.key === 'Enter' && brushNow() > 0) {                                                                // (the keyboard paints the marked square)
+            if (e.key === 'Enter' && brushNow() > 0) {                                                                // (the keyboard paints or puts at the marked square)
                 e.preventDefault();
                 if (cursor && painter.begin(cursor)) painter.end();
                 return;

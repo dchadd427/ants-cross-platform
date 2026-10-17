@@ -1,7 +1,8 @@
 // The map maker's editing, as plain arithmetic on the bytes of a file (docs/MAP_EDITOR.md): the bytes of the open map are the one copy of the map, a stroke changes them in place, and what
 // it changed is kept as a small patch (the cells that changed with their old and new words, never a copy of the map: a copy is about 3 MB at 512 x 512), so that undo and redo are a patch
 // applied backwards or forwards. Nothing here touches a page: the stroke, the brush, the line between two cells, the fill, the removal of a whole object, the name that a tile needs in the
-// dictionary and the bounded history are all tested on their own (tests/scripts/web_mapmaker_edit_check.js). A plain ES5 script that a page and node can load.
+// dictionary and the bounded history are all tested on their own (tests/scripts/web_mapmaker_edit_check.js). A patch also holds the splices of a CHANGE (mapmaker_blocks.js: a hill, the
+// starting ants, a food pile), the pieces of the file after the layers that it took out and put in, so that they go in the same history as the strokes. A plain ES5 script that a page and node can load.
 //
 // The cells (docs/MAP_FORMAT.md, "The layout"): six bytes each, three words: the tile id, the flags (bit 0 of a layer-2 cell: the cell is the origin of its object) and a third word (a
 // layer-1 cell: 0xCDCD or 0; a layer-2 cell: the anchor of its object, absolute in a version 8 file, a signed offset in a version 9 file).
@@ -116,6 +117,20 @@
         return dirty;
     }
 
+    // What a patch costs the history: a record for each cell, and one for each 16 bytes of a splice (the bytes it took out and the bytes it put in)
+    function weight(patch) {
+        var n = patch.keys.length;
+        for (var i = 0; patch.splices && i < patch.splices.length; i++) n += 1 + ((patch.splices[i].removed.length + patch.splices[i].inserted.length + 15) >> 4);
+        return n;
+    }
+    function spliceAt(bytes, at, removeLength, inserted) {
+        var out = new Uint8Array(bytes.length - removeLength + inserted.length);
+        out.set(bytes.subarray(0, at), 0); out.set(inserted, at); out.set(bytes.subarray(at + removeLength), at + inserted.length);
+        return out;
+    }
+    function sameBytes(bytes, at, want) { if (at < 0 || at + want.length > bytes.length) return false; for (var i = 0; i < want.length; i++) if (bytes[at + i] !== want[i]) return false; return true; }
+
+    // `apply(patch, forward)` puts a patch on the map (cells and splices) and answers the cells to paint again
     function createHistory() {
         var undo = [], redo = [], records = 0, dropped = 0, serial = 0, savedId = 0, savedDropped = 0;
         function lastId() { return undo.length ? undo[undo.length - 1].id : 0; }
@@ -123,11 +138,11 @@
             push: function (patch) {
                 redo = [];
                 patch.id = ++serial;
-                undo.push(patch); records += patch.keys.length;
-                while (undo.length > 1 && (undo.length > MAX_STROKES || records > MAX_RECORDS)) { records -= undo.shift().keys.length; dropped++; }
+                undo.push(patch); records += weight(patch);
+                while (undo.length > 1 && (undo.length > MAX_STROKES || records > MAX_RECORDS)) { records -= weight(undo.shift()); dropped++; }
             },
-            undo: function (file) { var p = undo.pop(); if (!p) return null; records -= p.keys.length; redo.push(p); return applyPatch(file, p, false); },
-            redo: function (file) { var p = redo.pop(); if (!p) return null; undo.push(p); records += p.keys.length; return applyPatch(file, p, true); },
+            undo: function (apply) { var p = undo.pop(); if (!p) return null; records -= weight(p); redo.push(p); return apply(p, false); },
+            redo: function (apply) { var p = redo.pop(); if (!p) return null; undo.push(p); records += weight(p); return apply(p, true); },
             canUndo: function () { return undo.length > 0; },
             canRedo: function () { return redo.length > 0; },
             // no change has been made since the map was opened (or the last change was undone and nothing was ever dropped)
@@ -141,14 +156,27 @@
 
     // ---- the editor: strokes on one open map ----
 
-    // `file` is the reader's view of the bytes (MapFile.parse); `rebase(file)` gives it the new view after the dictionary grew.
-    function create(file) {
+    // `file` is the reader's view of the bytes (MapFile.parse). `hooks.rebase(bytes)` gives the reader's view of other bytes (the dictionary grew, or a splice made the file longer or shorter:
+    // the page reads them again and the canvas keeps its view), `hooks.erase(file, idx)` answers what else the eraser takes from a cell (a change, or null: mapmaker_blocks.js).
+    function create(file, hooks) {
         var history = createHistory(), seen = null;
         var self = { history: history, file: file };
+        hooks = hooks || {};
+
+        // The splices of a patch, put on the bytes in the order they were made (forwards) or the other way round (backwards); the cells of the patch are put first, in place
+        function applyFull(patch, forward) {
+            var dirty = applyPatch(self.file, patch, forward), list = patch.splices || [], i;
+            for (i = 0; i < list.length; i++) {
+                var s = list[forward ? i : list.length - 1 - i], at = self.file.blocksAt + s.rel, out = forward ? s.removed : s.inserted, into = forward ? s.inserted : s.removed;
+                if (!sameBytes(self.file.bytes, at, out)) continue;                      // (cannot be: the patch is the exact inverse of what it was made from)
+                self.file = hooks.rebase(spliceAt(self.file.bytes, at, out.length, into));
+            }
+            return dirty;
+        }
 
         function begin(kind, tileId) {
             if (!seen || seen.length !== 2 * self.file.cells) seen = new Uint8Array(2 * self.file.cells);
-            var f = self.file, keys = [], before = [], dirty = [], closed = false;
+            var f = self.file, keys = [], before = [], dirty = [], splices = [], closed = false;
 
             function touch(layer, idx) {
                 var key = idx * 2 + layer - 1;
@@ -173,11 +201,30 @@
                 touch(1, idx); setCell(f, 1, idx, tileId, flags(f, 1, idx), third(f, 1, idx)); dirty.push(idx);
                 return 1;
             }
-            function putErase(idx) { return tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx); }
+            // A change of mapmaker_blocks.js: the dictionary's names, the cells of layer 2 and the splices of the bytes after the layers, in this order. Returns the cells and splices it made.
+            function change(ch) {
+                var n = 0, i;
+                for (i = 0; i < ch.names.length; i++) {
+                    var made = ensureTile(f, ch.names[i][0], ch.names[i][1]);
+                    if (made.grew) f = self.file = hooks.rebase(made.bytes);
+                }
+                for (i = 0; i < ch.cells.length; i++) { var c = ch.cells[i]; touch(2, c[0]); setCell(f, 2, c[0], c[1], c[2], c[3]); dirty.push(c[0]); n++; }
+                for (i = 0; i < ch.splices.length; i++) {
+                    var s = ch.splices[i];
+                    f = self.file = hooks.rebase(spliceAt(f.bytes, f.blocksAt + s.rel, s.removed.length, s.inserted));
+                    splices.push(s); n++;
+                }
+                return n;
+            }
+            function putErase(idx) {
+                var more = hooks.erase ? hooks.erase(f, idx) : null, n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx);       // (what else goes is asked first: it may be told by the object's anchor)
+                return more ? n + change(more) : n;
+            }
             var put = kind === 'ground' ? putGround : (kind === 'objects' ? putObject : putErase);
 
             var stroke = {
                 kind: kind,
+                change: change,
                 // the brush put on a cell; returns the number of cells that changed
                 stamp: function (row, column, size) {
                     var rect = brushRect(f, row, column, size || 1), n = 0;
@@ -219,22 +266,24 @@
                         if (t === before[3 * i] && fl === before[3 * i + 1] && th === before[3 * i + 2]) continue;
                         k.push(key); b.push(before[3 * i], before[3 * i + 1], before[3 * i + 2]); a.push(t, fl, th);
                     }
-                    return { keys: Uint32Array.from(k), before: Uint16Array.from(b), after: Uint16Array.from(a) };
+                    var patch = { keys: Uint32Array.from(k), before: Uint16Array.from(b), after: Uint16Array.from(a) };
+                    if (splices.length) patch.splices = splices.slice();
+                    return patch;
                 },
                 // the stroke is done: its patch goes to the history. Returns the number of cells it changed.
                 end: function () {
                     if (closed) return 0;
                     closed = true;
                     var patch = stroke.finish();
-                    if (patch.keys.length) history.push(patch);
-                    return patch.keys.length;
+                    if (patch.keys.length || patch.splices) history.push(patch);
+                    return patch.keys.length + (patch.splices ? patch.splices.length : 0);
                 },
                 // the stroke is taken back (a second finger came down): the cells go back, nothing is kept. Returns the cells to paint again.
                 cancel: function () {
                     if (closed) return [];
                     closed = true;
                     var patch = stroke.finish();
-                    return applyPatch(f, patch, false);
+                    return applyFull(patch, false);
                 }
             };
             return stroke;
@@ -242,14 +291,21 @@
 
         self.begin = begin;
         self.rebase = function (next) { self.file = next; };
-        self.undo = function () { return history.undo(self.file); };
-        self.redo = function () { return history.redo(self.file); };
+        // One change of mapmaker_blocks.js as one step of the history. Returns the cells to paint again, or null when it changed nothing.
+        self.act = function (ch) {
+            var stroke = begin('act');
+            stroke.change(ch);
+            var n = stroke.end();
+            return n ? stroke.takeDirty() : null;
+        };
+        self.undo = function () { return history.undo(applyFull); };
+        self.redo = function () { return history.redo(applyFull); };
         return self;
     }
 
     return {
         EMPTY2: EMPTY2, MAX_NAMES: MAX_NAMES, MAX_STROKES: MAX_STROKES, MAX_RECORDS: MAX_RECORDS, BRUSHES: BRUSHES,
-        create: create, createHistory: createHistory, applyPatch: applyPatch, ensureTile: ensureTile, objectCells: objectCells, anchorIndex: anchorIndex, ownAnchor: ownAnchor,
+        create: create, createHistory: createHistory, applyPatch: applyPatch, weight: weight, spliceAt: spliceAt, ensureTile: ensureTile, objectCells: objectCells, anchorIndex: anchorIndex, ownAnchor: ownAnchor,
         brushRect: brushRect, lineCells: lineCells, tile: tile, flags: flags, third: third
     };
 });

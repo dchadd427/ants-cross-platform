@@ -14,8 +14,12 @@ Parts:
              undo and redo (the buttons and the keys), the Move tool, the space key held down and the middle button pan instead of painting, the check of an opened map is run again after the eraser takes
              a hill away and again after undo, a map that was drawn on is handed over as the core writes it, the page asks before a map that was drawn on is left, and on a 512 x 512 map with the
              processor slowed down six times every frame of a stroke is only a few cells (its time is measured);
+  * blocks   1280 x 800, Hills, Ants and Food: a click puts a whole hill for the team that is chosen (the canvas is read pixel by pixel), moving it leaves one, the check says "Blue has no hill" until
+             the hill is there and "Works in the original game" when the four hills, their ants and a pile are, undo and redo bring the check back, the eraser takes a hill, a team's ants and a pile
+             away, a drag looks around and puts nothing, the letters H, A and F choose the tools, and Download hands over what the core writes; then a touch screen (390 x 844): a tap puts, a drag
+             and two fingers do not, and the sheet of a phone has the teams, the stepper and the numbers;
   * layout   nine phone sizes held upright and sideways (667 x 375 to 320 x 568): every control that works lies inside the card it is in and inside the screen, is at least 44 pixels each way, the map
-             keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names;
+             keeps a usable height, and the palette of a phone is one button that opens a sheet of tiles with their names (for Hills, Ants and Food: the teams, the steppers);
   * phone    390 x 844 (portrait) and 844 x 390 (landscape), a touch screen: no sideways scroll, the buttons and the New map dialog are inside the screen, two fingers zoom and one finger pans (Move) or
              paints (a tool), a tap paints a cell, two fingers do not paint;
   * older    a map core of another interface version (the page is given a module that says it is version 1): the page says so and offers a reload, and no button works.
@@ -37,7 +41,7 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "draw", "layout", "phone", "older")
+PARTS = ("desktop", "draw", "blocks", "layout", "phone", "older")
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 
 
@@ -340,8 +344,8 @@ def run_part(part, tab, args, check, tiny, junk):
         page = Page(tab, args.web)
         check(page.open() and page.ready(), "the page starts with its map core")
         tools = json.loads(page.ev("JSON.stringify([].map.call(document.querySelectorAll('[data-tool]'), function (b) { return [b.getAttribute('data-tool'), b.disabled, b.getAttribute('aria-pressed')]; }))"))
-        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["hills", True, "false"], ["ants", True, "false"], ["food", True, "false"], ["erase", False, "false"], ["move", False, "false"]],
-              "Ground is chosen, Hills, Ants and Food wait: %s" % tools)
+        check(tools == [["ground", False, "true"], ["objects", False, "false"], ["hills", False, "false"], ["ants", False, "false"], ["food", False, "false"], ["erase", False, "false"], ["move", False, "false"]],
+              "Ground is chosen, the other six tools are on: %s" % tools)
         check(page.button_off("#undo-btn") and page.button_off("#redo-btn"), "Undo and Redo are off with nothing drawn")
         grass, dirt, water, rock, sand = page.color_of(485), page.color_of(487), page.color_of(476), page.color_of(0, 302), page.color_of(571)
         page.tile(487)
@@ -507,13 +511,232 @@ def run_part(part, tab, args, check, tiny, junk):
         DIALOGS[:] = []
         page.open()
         check(DIALOGS == [], "and does not ask when nothing was drawn")
+
+    elif part == "blocks":
+        print("[web map maker] hills, ants and food, desktop, 1280 x 800")
+        tab.emulate(1280, 800, 1)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts with its map core")
+        rgb = lambda hexa: [int(hexa[i:i + 2], 16) for i in (1, 3, 5)]
+        team_color = {k: rgb(page.ev("MapTiles.TEAMS.%s" % k)) for k in ("green", "red", "blue", "black")}
+        food_color = rgb(page.ev("MapTiles.FOOD"))
+        grass = page.color_of(485)
+        card = lambda: (page.press_act("check"), wait_for(lambda: page.ev("!!document.querySelector('.ccard')")), page.ev("document.querySelector('.ccard').textContent"), page.key("Escape"))[2]
+        page.ev("document.getElementById('map').focus()")
+        page.key("h")
+        check(page.ev("document.querySelector('[data-tool=hills]').getAttribute('aria-pressed')") == "true", "the letter H chooses Hills")
+        names = page.ev("[].map.call(document.querySelectorAll('#palette .swatch'), function (b) { return b.textContent; }).join('|')")
+        check(names == "Green|Red|Blue|Black" and page.ev("document.getElementById('palette-title').textContent") == "Hills", "its palette has the four teams with their names: %s" % names)
+        check(page.ev("[].every.call(document.querySelectorAll('#palette .swatch'), function (b) { var r = b.getBoundingClientRect(); return r.height >= 32 && r.width >= 100; })"), "each a button that is easy to hit")
+        text = card()
+        check("Blue has no hill" in text and "Black has no starting ants" in text, "a new map: the check says Blue has no hill and Black has no starting ants")
+        page.ev("document.getElementById('map').focus()")
+        page.ev("document.querySelector('#palette .swatch:nth-child(3)').click()")
+        check(page.ev("document.getElementById('palette-name').textContent") == "Blue: no hill yet", "Blue is chosen: the line under the palette says no hill yet")
+        spots = {"green": (5, 5), "red": (5, 24), "blue": (24, 5), "black": (24, 24)}
+        order = ("green", "red", "blue", "black")
+        a = page.cell_point(*spots["blue"])
+        page.tab.mouse("mouseMoved", a[0], a[1], button="none")
+        time.sleep(0.2)
+        page.shot(args.shots, "mapmaker-blocks-hill-ghost")
+        page.tab.click(*a)
+        time.sleep(0.3)
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.2)
+        # (the cell that was clicked is the hill's door: it holds the marked square's dot, so it is not read)
+        check(all(page.pixel(*page.cell_point(24 + dr, 5 + dc)) == team_color["blue"] for dr in (-1, 0, 1, 2) for dc in (-1, 0, 1, 2) if (dr, dc) != (0, 0)), "a click puts the Blue hill: 4 x 4 cells in blue, the clicked cell its door")
+        check(page.pixel(*page.cell_point(22, 5)) == grass and page.pixel(*page.cell_point(24, 8)) == grass and page.pixel(*page.cell_point(27, 5)) == grass, "and nothing round it")
+        check(page.ev("document.getElementById('palette-name').textContent") == "Blue: has a hill" and not page.button_off("#undo-btn"), "the line says that Blue has a hill; Undo is on")
+        # moving it
+        m = page.cell_point(14, 14)
+        page.tab.click(*m)
+        time.sleep(0.3)
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(15, 15)) == team_color["blue"] and page.pixel(*page.cell_point(25, 6)) == grass and page.pixel(*page.cell_point(26, 7)) == grass, "a click somewhere else moves the Blue hill: only one for a team")
+        # at the edge: no room, in words, nothing changes
+        e = page.cell_point(0, 0)
+        page.tab.click(*e)
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')")) and "no room" in page.ev("document.querySelector('.dlg').textContent"), "a click at the top left corner says that there is no room for a whole hill")
+        page.key("Escape")
+        check(page.pixel(*page.cell_point(3, 3)) == grass and page.pixel(*page.cell_point(1, 1)) == grass, "and nothing was put")
+        # a drag looks around
+        box = page.box("#map")
+        mx, my = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+        d0 = page.cell_point(10, 18)
+        page.drag(d0[0], d0[1], d0[0] + 60, d0[1] + 40)
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.2)
+        check(page.pixel(*d0) == grass and page.pixel(*page.cell_point(10, 20)) == grass, "a drag of the mouse looks around and puts no hill where it began")
+        for team in order:
+            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (order.index(team) + 1))
+            p = page.cell_point(*spots[team])
+            page.tab.click(*p)
+            time.sleep(0.15)
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.2)
+        check(all(page.pixel(*page.cell_point(spots[t][0] + 1, spots[t][1] + 1)) == team_color[t] for t in order), "the four hills are put, each in its team's color")
+        page.shot(args.shots, "mapmaker-blocks-hills")
+        check(wait_for(lambda: page.state()["check"] == "Does not work in the original game", 4), "the check says it is not ready (the ants are missing)")
+        text = card()
+        check("no hill" not in text and "Green has no starting ants" in text, "no team lacks a hill any more; the ants are still missing: %s" % text[:120])
+        # ants
+        page.ev("document.getElementById('map').focus()")
+        page.key("a")
+        check(page.ev("document.querySelector('[data-tool=ants]').getAttribute('aria-pressed')") == "true" and page.ev("document.getElementById('stepper').hidden") is False, "the letter A chooses Ants: a stepper shows")
+        check(page.ev("document.getElementById('step-val').textContent") == "4", "4 ants to begin with")
+        page.ev("document.getElementById('step-more').click()")
+        page.ev("document.getElementById('step-less').click()")
+        page.ev("document.getElementById('step-less').click()")
+        check(page.ev("document.getElementById('step-val').textContent") == "3", "the stepper makes it 3")
+        for team in order:
+            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (order.index(team) + 1))
+            r, c = spots[team]
+            page.tab.click(*page.cell_point(r + (5 if r < 14 else -3), c + 1))
+            time.sleep(0.15)
+        dots = [page.pixel(*page.cell_point(spots[t][0] + (5 if spots[t][0] < 14 else -3), spots[t][1] + 1)) for t in order]
+        check(dots == [team_color[t] for t in order], "a click puts the team's ants: a dot in its color on the cell that was clicked")
+        r, c = spots["green"]
+        page.tab.mouse("mouseMoved", 5, 5, button="none")
+        time.sleep(0.2)
+        near = [page.pixel(*page.cell_point(r + 5 + dr, c + 1 + dc)) for dr, dc in ((-1, 0), (0, -1), (0, 1))]
+        check(sum(1 for px in near if px == team_color["green"]) >= 2, "the others of the three stand next to it")
+        page.shot(args.shots, "mapmaker-blocks-ants")
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 4), "four hills and four starts of ants: the check says it works in the original game (%s)" % page.state()["check"])
+        # food
+        page.ev("document.getElementById('map').focus()")
+        page.key("f")
+        check(page.ev("document.getElementById('palette-title').textContent") == "Food" and page.ev("document.getElementById('palette').offsetParent === null"), "the letter F chooses Food: a stepper, no teams")
+        for _ in range(2):
+            page.ev("document.getElementById('step-more').click()")
+        check(page.ev("document.getElementById('step-val').textContent") == "6" and page.ev("document.getElementById('step-more').disabled"), "the stepper goes up to 6 stages and stops")
+        page.tab.click(*page.cell_point(15, 15))
+        time.sleep(0.3)
+        check(page.pixel(*page.cell_point(15, 15)) == food_color, "a click puts a food pile (a gold square)")
+        check(page.ev("document.getElementById('palette-name').textContent").endswith("1 pile on the map."), "the line says one pile is on the map: %s" % page.ev("document.getElementById('palette-name').textContent"))
+        page.shot(args.shots, "mapmaker-blocks-food")
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 4), "and the map still works")
+        # undo and redo through the same history: pile, ants, hills
+        page.ev("document.getElementById('map').focus()")
+        page.ctrl_key("z", "KeyZ", 90)
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(15, 15)) != food_color, "Control+Z takes the pile away")
+        for _ in range(4):
+            page.ctrl_key("z", "KeyZ", 90)
+        check(wait_for(lambda: page.state()["check"] == "Does not work in the original game", 4) and "Green has no starting ants" in card(), "four more undos take the ants away: the check says so again")
+        for _ in range(4):
+            page.ctrl_key("y", "KeyY", 89)
+        check(wait_for(lambda: page.state()["check"] == "Works in the original game", 4), "four redos put them back: it works")
+        # erase: a hill, a team's ants, a pile
+        page.tab.click(*page.cell_point(15, 15))                 # (Food is still chosen: the pile is put again)
+        time.sleep(0.2)
+        page.key("e")
+        page.tab.click(*page.cell_point(15, 15))
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(15, 15)) == grass, "the eraser takes the pile away")
+        page.tab.click(*page.cell_point(spots["red"][0] + 5, spots["red"][1] + 1))
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(spots["red"][0] + 5, spots["red"][1] + 1)) == grass and page.pixel(*page.cell_point(spots["red"][0] + 4, spots["red"][1] + 1)) == grass, "the eraser on one ant of Red takes all of Red's ants away")
+        page.tab.click(*page.cell_point(spots["black"][0] + 1, spots["black"][1] + 1))
+        time.sleep(0.2)
+        check(all(page.pixel(*page.cell_point(24 + dr, 24 + dc)) == grass for dr in (-1, 0, 1, 2) for dc in (-1, 0, 1, 2)), "the eraser on a cell of the Black hill takes the whole hill")
+        check(wait_for(lambda: "Does not work" in page.state()["check"], 4), "the check is run again by itself")
+        text = card()
+        check("Red has no starting ants" in text and "Black has no hill" in text, "and the card says which: %s" % text[:140])
+        page.shot(args.shots, "mapmaker-blocks-checks")
+        # download: what the core writes
+        page.ev("window.__blobs = []; var make = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__blobs.push(b); return make(b); }")
+        page.press_act("download")
+        check(wait_for(lambda: page.ev("window.__blobs.length === 1")), "Download hands over the map")
+        head = page.ev("new Promise(function (ok) { window.__blobs[0].slice(0, 8).arrayBuffer().then(function (b) { ok(Array.prototype.join.call(new Uint8Array(b), ',')); }); })")
+        check(head.startswith("8,0,0,0,1,0,0,0") and page.ev("window.__blobs[0].size") > 1000, "written by the core: version 8, mode 1 (%s)" % head)
+        # an Extended map: the same
+        page.press_act("new")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'")) or page.ev("!!document.querySelector('.kinds')"), "New map")
+        if page.ev("!!document.querySelector('.dlg h2') && document.querySelector('.dlg h2').textContent === 'Leave this map?'"):
+            page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Leave without saving'; })[0].click()")
+        check(wait_for(lambda: page.ev("!!document.querySelector('.kinds')")), "New map opens")
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "40")
+        page.type_into("#size-columns", "60")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "40"), "an Extended map of 40 x 60 is made")
+        page.tool("hills")
+        for i, team in enumerate(order):
+            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (i + 1))
+            page.tab.click(*page.cell_point(8 + 20 * (i // 2), 10 + 30 * (i % 2)))
+            time.sleep(0.15)
+        page.tool("ants")
+        for i, team in enumerate(order):
+            page.ev("document.querySelector('#palette .swatch:nth-child(%d)').click()" % (i + 1))
+            page.tab.click(*page.cell_point(14 + 20 * (i // 2) - (i // 2) * 2, 10 + 30 * (i % 2)))
+            time.sleep(0.15)
+        check(wait_for(lambda: page.state()["check"] == "Works in the new version", 4), "an Extended map with four hills and four starts: Works in the new version (%s)" % page.state()["check"])
+        page.shot(args.shots, "mapmaker-blocks-extended")
+        # a touch screen: a tap puts, a drag and two fingers do not
+        print("[web map maker] hills, ants and food, a touch screen, 390 x 844")
+        tab.emulate(390, 844, 2, mobile=True)
+        page = Page(tab, args.web)
+        check(page.open() and page.ready(), "the page starts")
+
+        def touch(kind, points):
+            tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [{"x": x, "y": y, "id": i, "radiusX": 10, "radiusY": 10, "force": .5} for i, (x, y) in points.items()]})
+        page.tool("hills")
+        page.ev("document.getElementById('tile-btn').click()")
+        check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 4), "the button opens the sheet of the four teams")
+        page.ev("document.querySelector('.pick:nth-child(3)').click()")
+        check(page.ev("document.getElementById('tile-name').textContent") == "Blue", "Blue is chosen")
+        p = page.cell_point(24, 5)
+        touch("touchStart", {1: p})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(page.pixel(*page.cell_point(26, 7)) == team_color["blue"] and page.pixel(*page.cell_point(23, 4)) == team_color["blue"], "a tap puts the Blue hill")
+        q = page.cell_point(14, 14)
+        touch("touchStart", {1: q})
+        for i in range(1, 9):
+            touch("touchMove", {1: (q[0] + i * 6, q[1] + i * 3)})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(page.pixel(*q) == grass and page.pixel(*page.cell_point(14, 14)) == grass, "a finger that is dragged looks around: no hill")
+        cx, cy = q
+        touch("touchStart", {1: (cx - 30, cy), 2: (cx + 30, cy)})
+        for i in range(1, 6):
+            touch("touchMove", {1: (cx - 30 - i * 5, cy), 2: (cx + 30 + i * 5, cy)})
+        touch("touchEnd", {})
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(14, 14)) == grass and page.pixel(cx - 35, cy) == grass, "two fingers (a pinch) put nothing")
+        page.ev("document.getElementById('map').focus()")
+        page.key("0")                                            # (the pinch zoomed in: the whole map again, so that the cells are where cell_point says)
+        time.sleep(0.2)
+        page.tool("ants")
+        page.ev("document.getElementById('tile-btn').click()")
+        check(wait_for(lambda: page.ev("document.querySelectorAll('.stepper.sheet .stp').length") == 2), "the sheet of Ants has the teams and the stepper")
+        page.ev("document.querySelector('.stepper.sheet .stbtns .stp:last-child').click()")
+        check(page.ev("document.querySelector('.stepper.sheet output').textContent") == "5" and page.ev("document.getElementById('tile-name').textContent") == "Blue · 5 ants", "its More makes 5 ants: the button says so")
+        page.shot(args.shots, "mapmaker-blocks-sheet-ants")
+        page.key("Escape")
+        g = page.cell_point(20, 12)
+        touch("touchStart", {1: g})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(page.pixel(*page.cell_point(19, 12)) == team_color["blue"] or page.pixel(*page.cell_point(20, 11)) == team_color["blue"] or page.pixel(*page.cell_point(20, 13)) == team_color["blue"], "a tap puts 5 ants of Blue: a dot in its color next to the cell that was tapped")
+        page.ev("document.getElementById('undo-btn').click()")
+        time.sleep(0.2)
+        check(page.pixel(*page.cell_point(19, 12)) != team_color["blue"] and page.pixel(*page.cell_point(20, 13)) != team_color["blue"], "Undo takes the ants away")
+        page.tool("food")
+        h = page.cell_point(10, 20)
+        touch("touchStart", {1: h})
+        touch("touchEnd", {})
+        time.sleep(0.3)
+        check(page.pixel(*page.cell_point(10, 20)) == food_color or page.pixel(*page.cell_point(10, 20))[0] > 200, "a tap puts a food pile (a gold square under the marked square)")
+        page.shot(args.shots, "mapmaker-blocks-phone")
     elif part == "layout":
         for w, h in ((667, 375), (740, 360), (812, 375), (844, 390), (390, 844), (375, 667), (360, 640), (340, 700), (320, 568)):
             print("[web map maker] layout, %d x %d" % (w, h))
             tab.emulate(w, h, 2, mobile=True)
             page = Page(tab, args.web)
             check(page.open() and page.ready(), "the page starts")
-            for tool in ("ground", "objects"):
+            for tool in ("ground", "objects", "hills", "ants", "food", "erase", "move"):
                 page.tool(tool)
                 time.sleep(0.2)
                 found = json.loads(page.ev("""JSON.stringify((function () {
@@ -530,6 +753,7 @@ def run_part(part, tab, args, check, tiny, junk):
                 check(found["bad"] == [] and not found["sideways"], "%d x %d, %s tool: every control lies inside its card and the screen (%s)" % (w, h, tool, found["bad"]))
                 check(found["small"] == [], "%d x %d, %s tool: every control is at least 44 pixels each way (%s)" % (w, h, tool, found["small"]))
                 check(found["canvas"] >= (190 if h > w else 150), "%d x %d: the map is %d pixels high" % (w, h, found["canvas"]))
+            page.tool("objects")
             check(page.ev("!document.getElementById('tile-btn').hidden && document.getElementById('palette').offsetParent === null"), "a phone has the one palette button and not the row of tiles")
             page.ev("document.getElementById('tile-btn').click()")
             check(wait_for(lambda: page.ev("document.querySelectorAll('.pick').length") == 11), "the button opens a sheet of the 11 objects")
@@ -541,6 +765,29 @@ def run_part(part, tab, args, check, tiny, junk):
             check(not page.ev("!!document.querySelector('.dlg')") and page.ev("document.getElementById('tile-name').textContent") == "Rock 3", "a tile of the sheet is chosen and the sheet closes")
             if (w, h) in ((667, 375), (375, 667)):
                 page.shot(args.shots, "mapmaker-layout-%dx%d" % (w, h))
+            # the sheets of Hills, Ants and Food: the teams, the stepper, the number that the button says
+            for tool, picks, stepper in (("hills", 4, False), ("ants", 4, True), ("food", 0, True)):
+                page.tool(tool)
+                time.sleep(0.1)
+                page.ev("document.getElementById('tile-btn').click()")
+                check(wait_for(lambda: page.ev("!!document.querySelector('.dlg h2')")), "%d x %d: the button of %s opens its sheet" % (w, h, tool))
+                found = json.loads(page.ev("""JSON.stringify((function () {
+                    var bad = [], small = [], dlg = document.querySelector('.dlg').getBoundingClientRect();
+                    [].forEach.call(document.querySelectorAll('.dlg button'), function (n) {
+                        if (n.disabled) return;
+                        var b = n.getBoundingClientRect(), name = (n.id || n.textContent || n.className).slice(0, 14);
+                        if (b.width < 43.5 || b.height < 43.5) small.push(name + ' ' + Math.round(b.width) + 'x' + Math.round(b.height));
+                        if (n.closest('.dlg-in') === null && (b.bottom > innerHeight + 1 || b.right > innerWidth + 1)) bad.push(name);
+                    });
+                    return {picks: document.querySelectorAll('.pick').length, stepper: document.querySelectorAll('.stepper.sheet .stp').length, bad: bad, small: small, inside: dlg.bottom <= innerHeight + 1 && dlg.right <= innerWidth + 1 && dlg.left >= -1};
+                })())"""))
+                check(found["picks"] == picks and found["stepper"] == (2 if stepper else 0), "%d x %d: the sheet of %s has %d teams and %s stepper (%s)" % (w, h, tool, picks, "a" if stepper else "no", found))
+                check(found["small"] == [] and found["bad"] == [] and found["inside"], "%d x %d: the sheet of %s is inside the screen and its buttons are 44 pixels (%s %s)" % (w, h, tool, found["small"], found["bad"]))
+                if stepper:
+                    page.ev("document.querySelector('.stepper.sheet .stp:last-child, .stepper.sheet .stbtns .stp:last-child').click()")
+                    check(page.ev("document.getElementById('tile-name').textContent") in ("Green \u00b7 5 ants", "5 stages"), "%d x %d: the stepper of the sheet changes the number that the button says: %s" % (w, h, page.ev("document.getElementById('tile-name').textContent")))
+                page.key("Escape")
+                check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "%d x %d: the sheet of %s closes" % (w, h, tool))
     elif part == "phone":
         for label, w, h in (("portrait", 390, 844), ("landscape", 844, 390), ("narrow", 340, 700)):
             print("[web map maker] phone, %s, %d x %d" % (label, w, h))
