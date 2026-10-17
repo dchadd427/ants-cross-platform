@@ -174,12 +174,15 @@ function caseD(maps) {
 }
 
 const maps = readAll();
-if (argv.includes('--list-blocks')) { listBlocks(maps); process.exit(0); }
-const cases = [['A the lists of the library are written back as they are', caseA], ['B changes and undo, byte for byte', caseB], ['C a hill taken away and put back', caseC], ['D only what is named changes', caseD]];
-for (const [name, fn] of cases) {
-    const before = failures;
-    try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }
-    console.log('RUNNING: ' + name + ' ... ' + (failures === before ? 'PASS' : 'FAIL'));
+// (a list is printed and the script ends by itself: process.exit would cut a long output to a pipe short, as it did on macOS)
+if (argv.includes('--list-blocks')) listBlocks(maps);
+else {
+    const cases = [['A the lists of the library are written back as they are', caseA], ['B changes and undo, byte for byte', caseB], ['C a hill taken away and put back', caseC], ['D only what is named changes', caseD]];
+    for (const [name, fn] of cases) {
+        const before = failures;
+        try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }
+        console.log('RUNNING: ' + name + ' ... ' + (failures === before ? 'PASS' : 'FAIL'));
+    }
+    console.log(checks + ' checks, ' + failures + ' failed');
+    process.exitCode = failures ? 1 : 0;
 }
-console.log(checks + ' checks, ' + failures + ' failed');
-process.exit(failures ? 1 : 0);

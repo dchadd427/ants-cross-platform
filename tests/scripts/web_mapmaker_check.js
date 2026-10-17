@@ -342,13 +342,14 @@ if (argv.includes('--list-maps')) {          // for the Python test, which reads
         const m = File.parse(new Uint8Array(fs.readFileSync(f)));
         console.log([path.relative(ROOT, f), m.rows, m.columns, digestOf(m)].join('\t'));
     }
-    process.exit(0);
 }
-for (const [name, fn] of [['A the file reader', caseA], ['B the view', caseB], ['C the sizes', caseC], ['D the checks card', caseD], ['E the colors of the tiles', caseE]]) {
-    process.stdout.write('  RUNNING: ' + name + ' ... ');
-    const before = failures;
-    try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }
-    if (failures === before) console.log('PASS');
+else {
+    for (const [name, fn] of [['A the file reader', caseA], ['B the view', caseB], ['C the sizes', caseC], ['D the checks card', caseD], ['E the colors of the tiles', caseE]]) {
+        process.stdout.write('  RUNNING: ' + name + ' ... ');
+        const before = failures;
+        try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }
+        if (failures === before) console.log('PASS');
+    }
+    console.log(checks + ' checks, ' + failures + ' failed');
+    process.exitCode = failures ? 1 : 0;
 }
-console.log(checks + ' checks, ' + failures + ' failed');
-process.exit(failures ? 1 : 0);

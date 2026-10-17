@@ -453,12 +453,15 @@ function caseF() {
 }
 
 const maps = readAll();
-if (argv.includes('--list-objects')) { listObjects(maps); process.exit(0); }
-const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['C put and taken away on the library', caseC], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF]];
-for (const [name, fn] of cases) {
-    const before = failures;
-    try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }
-    console.log('RUNNING: ' + name + ' ... ' + (failures === before ? 'PASS' : 'FAIL'));
+// (a list is printed and the script ends by itself: process.exit would cut a long output to a pipe short)
+if (argv.includes('--list-objects')) listObjects(maps);
+else {
+    const cases = [['A solid tiles are the game\'s', caseA], ['B the list is what the library says', caseB], ['C put and taken away on the library', caseC], ['D what is in the way', caseD], ['E edges, a wide map, the dictionary', caseE], ['F small objects are solid too', caseF]];
+    for (const [name, fn] of cases) {
+        const before = failures;
+        try { fn(maps); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }
+        console.log('RUNNING: ' + name + ' ... ' + (failures === before ? 'PASS' : 'FAIL'));
+    }
+    console.log(checks + ' checks, ' + failures + ' failed');
+    process.exitCode = failures ? 1 : 0;
 }
-console.log(checks + ' checks, ' + failures + ' failed');
-process.exit(failures ? 1 : 0);
