@@ -211,7 +211,7 @@ class TheLivePage(unittest.TestCase):
         self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
         self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
         self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.page)
-        for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn\u2019t show matches that are being played.",
+        for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn’t show matches that are being played.",
                       "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
             self.assertIn(words, self.page, words)
         self.assertNotIn("/history", self.page)                                                              # (a running match has no stats: the page does not ask for any)
@@ -251,6 +251,14 @@ class TheGamePagesStats(unittest.TestCase):
     def test_the_frame_of_a_match_page_leaves_by_telling_it(self):
         self.assertIn("if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }", self.page)
         self.assertIn("window.location.assign('/matches.html');", self.page)
+
+    def test_fullscreen_of_the_match_page_is_the_games_own_not_the_frames(self):
+        # the frame holds the game page, whose own Fullscreen button makes the game's stage fullscreen (the picture as large as the screen allows, the bar over it); the frame itself goes only where the page cannot be reached
+        match = read("web", "match.html")
+        self.assertIn("var touched = finger; finger = false;", match)                                        # (a finger is told once: a later key press on the button is none)
+        self.assertIn("if (touched) { try { d.dispatchEvent(new f.contentWindow.PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); } catch (e) { /* no PointerEvent there: the page just is not told of the finger */ } } own.click(); return;", match)
+        self.assertLess(match.index("own.click(); return;"), match.index("var go = f.requestFullscreen"))
+        # (a finger that pressed the button outside the frame is told to the frame: the strip that calls the bar back is there from the start)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the shared code of the match pages was NOT run (tests/scripts/web_history_check.js)")

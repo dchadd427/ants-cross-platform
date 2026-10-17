@@ -30,6 +30,14 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [the map core in the browser](docs/MAP_FORMAT.md#in-the-browser)
 
+## v0.12.61 - 2026-10-16 - Replays: the full screen button fills the screen with the game
+
+**For players:**
+- **On the page of a match, the Fullscreen button of the replay now makes the game fill the screen:** before, it made the whole replay box fullscreen, so the picture stayed small at the top with the controls under it. Now the game itself fills the screen, and the controls lie over it as in a replay opened on its own.
+- **On a phone, a swipe up from the bottom edge brings the controls back at once** in that fullscreen replay (the first swipe was lost before).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2fae1de9...86c50d1b)
+
 ## v0.12.60 - 2026-10-16 - Walled maps: the bots open a pile behind a bomb field
 
 **For players:**
