@@ -6,7 +6,7 @@
 # (tests/scripts/web_live_stub.js), so what it shows is the page's own part. A Chromium-based browser (CHROME=/path/to/it to name one) and python3 are needed, nothing else; without them it says so
 # and exits 0. Exit status: 0 every check passed (or the check could not be made); 1 a check failed.
 #
-#   tests/scripts/test_web_live.sh [--only list|watch|ends|cards|replay|picture|bar] [--shots DIR]
+#   tests/scripts/test_web_live.sh [--only list|watch|ends|cards|replay|rewind|picture|bar|scrub] [--shots DIR]
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 echo "[web live] watching a match that is being played, in a real browser (opt-in: see the header of this script)"
 if ! command -v python3 > /dev/null 2>&1; then

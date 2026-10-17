@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.12.74 - 2026-10-17 - Replays: the scrub bar should jump to where you tap
+
+**For players:**
+- The replay bar: on a phone in fullscreen, tapping it should now jump to that spot instead of the start (a phone is no longer given the mouse lock).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fa324b31...a1dbecfd)
+
 ## v0.12.73 - 2026-10-17 - Map maker: draw and undo (E2)
 
 **For players:**
