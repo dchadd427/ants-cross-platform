@@ -200,6 +200,8 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
         lock = block(self.page, "function requestLock(startAt) {")
         self.assertIn("window.antsFinger", lock.split("return false;")[0])
         self.assertIn("touchSeen = window.antsFinger = touch; syncEdge(); if (touch) releaseLock();", self.glue)
+        self.assertIn("if (ev.pointerType === 'touch' && isLocked() && ev.clientX <= r.left) return -1;", self.glue)       # (a finger at x = 0 under a lock is no tap on the start)
+        self.assertIn("if (dragging && bar.parentNode !== home) return;", self.glue)                          # (the bar is not moved between a press and its release)
 
     def test_the_bar_is_called_from_the_bottom_edge_and_hidden_by_a_swipe_or_the_tab(self):
         for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));",    # (the strip: only for a finger, only while the bar is away)

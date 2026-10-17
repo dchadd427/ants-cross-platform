@@ -26,7 +26,7 @@ Work that is not released yet is written in the same template under a heading th
 ## Next
 
 **For players:**
-- The replay bar: clicking on it now jumps to that spot (on a phone in fullscreen it used to jump to the start).
+- The replay bar: on a phone in fullscreen, tapping it should now jump to that spot instead of the start (a phone is no longer given the mouse lock).
 
 ## v0.12.72 - 2026-10-17 - Map maker: the editor starts (E1)
 

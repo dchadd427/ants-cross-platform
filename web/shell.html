@@ -3496,8 +3496,8 @@
                 lastKey = '';
                 tick();
             }
-            function turnAt(ev) {
-                var r = $('rail').getBoundingClientRect();
+            function turnAt(ev) {                                // -1: no place (a locked browser reports a finger at x = 0: that is no tap on the start)
+                var r = $('rail').getBoundingClientRect(); if (ev.pointerType === 'touch' && isLocked() && ev.clientX <= r.left) return -1;
                 var turn = Math.round(get(VALUE.total) * Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width))));
                 return liveOn ? Math.min(turn, limitTurn()) : turn;
             }
@@ -3517,6 +3517,7 @@
                 var bar = $('rbar');
                 var over = isFullscreen(), home = over ? (isLocked() ? boxElement : stageElement) : null;        // (a locked pointer is held to the picture: the bar lies inside the picture's box then, so that all of it can be reached)
                 cam.fullscreen(over);
+                if (dragging && bar.parentNode !== home) return;                  // (a press on the timeline is going on: moving the bar now would cancel it; pointerup/pointercancel come back here)
                 if (over && bar.parentNode !== home) { home.appendChild(bar); bar.classList.add('over'); wake(); }
                 else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
             };
@@ -3625,20 +3626,19 @@
             var tl = $('tl');
             tl.addEventListener('pointerdown', function (ev) {
                 if (!isReadyToPlay || shown) return;
+                if (ev.pointerType === 'touch') releaseLock(); if ((dragTurn = turnAt(ev)) < 0) return;
                 dragging = true;
                 try { tl.setPointerCapture(ev.pointerId); } catch (e) { /* no capture: the moves still come while the pointer is over */ }
-                dragTurn = turnAt(ev);
                 lastKey = '';
                 tick();
             });
-            tl.addEventListener('pointermove', function (ev) { if (dragging) { dragTurn = turnAt(ev); lastKey = ''; tick(); } });
+            tl.addEventListener('pointermove', function (ev) { if (dragging && turnAt(ev) >= 0) { dragTurn = turnAt(ev); lastKey = ''; tick(); } });
             tl.addEventListener('pointerup', function (ev) {
                 if (!dragging) return;
                 dragging = false;
-                seek(turnAt(ev) / TPS);
-                wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
+                if (turnAt(ev) >= 0) seek(turnAt(ev) / TPS); window.antsReplayPlaceBar(); wake();                                                       // (the touch of the bar ends here: the bar's 3 seconds start now)
             });
-            tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; });
+            tl.addEventListener('pointercancel', function () { dragging = false; lastKey = ''; window.antsReplayPlaceBar(); });
             tl.addEventListener('keydown', function (ev) {
                 var now = get(VALUE.turn) / TPS, total = get(VALUE.total) / TPS;
                 var to = ev.key === 'ArrowRight' ? now + 10 : ev.key === 'ArrowLeft' ? now - 10 : ev.key === 'Home' ? 0 : ev.key === 'End' ? total : null;
