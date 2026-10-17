@@ -48,6 +48,8 @@ enum class OriginalSafeCode : uint8_t {
     TileNotDrawn,            // tile_not_drawn (a note): tiles that the dictionary names "." and that the original does not load
     FoodPileNotShown,        // food_pile_not_shown (a warning): a pile whose stage tile the original does not load: no pile is placed, nobody can see or harvest it
     ObjectOutsideMap,        // object_outside_map (a note): plants and waypoints outside the grid, which the original ignores
+    // an Extended map (version 9)
+    NotForOriginal,          // not_for_original (neither a failure nor a warning): the map is an Extended map, which the original game cannot load (it needs a version 8 file)
 };
 
 /// The stable text of a code ("hill_missing", ...)
@@ -73,17 +75,20 @@ struct OriginalSafeReport {
     std::vector<OriginalSafeIssue> issues;
     bool judged{true};     // false when the file was too large to be read at all: nothing is known of the map
 
-    bool works_in_original_game() const noexcept;      // judged, and no Fatal and no Warning that is a rule of the original (a limit of the place is not one)
+    bool works_in_original_game() const noexcept;      // judged, and no Fatal and no Warning that is a rule of the original (a limit of the place is not one), and not an Extended map
+    bool not_for_original() const noexcept;            // an Extended map (version 9): not a fault of the map, the original cannot load the kind (NotForOriginal, severity Info, the only finding)
     bool fits_the_place() const noexcept;              // no limit of the place (LevelLimits: a new map's grid, dictionary and file size) is broken
     bool has(OriginalSafeCode code) const noexcept;
     const OriginalSafeIssue* first(OriginalSafeCode code) const noexcept;
     std::string describe() const;                      // one line each: "<fatal|warning|note|limit> <code>: <message>"
 };
 
-/// The profile of a level: the editor's map in memory, or a level that the reader made (its load_notes say what its file left out).
+/// The profile of a level: the editor's map in memory, or a level that the reader made (its load_notes say what its file left out). An Extended map (version 9) is not judged by
+/// the original's rules: its one finding is NotForOriginal, a neutral outcome (severity Info, so no Fatal and no Warning), and works_in_original_game() is false.
 OriginalSafeReport check_original_safe(const LevelData& level);
 
-/// The profile of a file: what the reader refuses (with the reader's sentence) or, for a file that loads, the profile of its level.
+/// The profile of a file: what the reader refuses (with the reader's sentence) or, for a file that loads, the profile of its level. A file whose version word is 9 is an
+/// Extended map whatever `limits` allow: it is answered with NotForOriginal alone, without reading it.
 OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const LevelLimits& limits = LevelLimits{});
 
 }  // namespace ants::assets

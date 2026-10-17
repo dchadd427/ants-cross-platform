@@ -218,12 +218,15 @@ const char* to_string(OriginalSafeCode code) noexcept {
         case Code::TileNotDrawn: return "tile_not_drawn";
         case Code::FoodPileNotShown: return "food_pile_not_shown";
         case Code::ObjectOutsideMap: return "object_outside_map";
+        case Code::NotForOriginal: return "not_for_original";
     }
     return "?";
 }
 
+bool OriginalSafeReport::not_for_original() const noexcept { return has(Code::NotForOriginal); }
+
 bool OriginalSafeReport::works_in_original_game() const noexcept {
-    if (!judged) return false;
+    if (!judged || not_for_original()) return false;
     for (const OriginalSafeIssue& i : issues) {
         if (i.severity != LevelProblemSeverity::Info && !i.place_limit) return false;
     }
@@ -252,7 +255,20 @@ std::string OriginalSafeReport::describe() const {
     return text;
 }
 
+namespace {
+
+// The neutral outcome for an Extended map: the original cannot load the kind, which is no fault of the map (docs/MAP_FORMAT.md, "Version 9")
+OriginalSafeReport not_for_original_report() {
+    OriginalSafeReport report;
+    Findings f(report);
+    f.add(Code::NotForOriginal, Severity::Info, "not for the original game (needs a version 8 file): this is an Extended map, version 9, which only this remake loads");
+    return report;
+}
+
+}  // namespace
+
 OriginalSafeReport check_original_safe(const LevelData& level) {
+    if (level.version == LVL_EXTENDED_VERSION) return not_for_original_report();
     OriginalSafeReport report;
     Findings f(report);
     file_findings(level, f);
@@ -475,6 +491,10 @@ OriginalSafeReport check_original_safe(const LevelData& level) {
 }
 
 OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const LevelLimits& limits) {
+    if (data != nullptr && size >= 4 && (static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) | (static_cast<uint32_t>(data[2]) << 16) |
+                                         (static_cast<uint32_t>(data[3]) << 24)) == LVL_EXTENDED_VERSION) {
+        return not_for_original_report();
+    }
     LevelData level;
     LevelValidation read;
     if (level.load_from_memory(data, size, &read, limits)) return check_original_safe(level);
@@ -496,6 +516,7 @@ OriginalSafeReport check_original_safe(const uint8_t* data, size_t size, const L
             switch (p.kind) {
                 case LevelProblemKind::Unreadable: f.add(Code::FileUnreadable, Severity::Fatal, p.message); break;
                 case LevelProblemKind::WrongVersion: f.add(Code::VersionNot8, Severity::Fatal, p.message); break;
+                case LevelProblemKind::VersionNotSupported: f.add(Code::NotForOriginal, Severity::Info, p.message); break;   // (not reached: a version 9 file is answered above)
                 case LevelProblemKind::Truncated: f.add(Code::FileCutShort, Severity::Fatal, p.message); break;
                 case LevelProblemKind::GridEmpty: f.add(Code::GridEmpty, Severity::Fatal, p.message); break;
                 case LevelProblemKind::GridTooLarge: f.add(Code::GridTooLarge, Severity::Fatal, p.message); break;
